@@ -31,15 +31,26 @@
 //! selection window, the never-consult-`fy` rule, and the refusals that
 //! NAME the nearest available period rather than substituting it. Rendering
 //! facts here would be a SECOND implementation of that decider, so this
-//! acquirer leaves `companyfacts.json` untouched under `raw/` for the
-//! renderer to consume.
+//! acquirer CALLS it (step 6) rather than reimplementing any part of it,
+//! and saves `companyfacts.json` untouched under `raw/` as the decider's
+//! input of record.
 //!
-//! NOT YET WIRED: until `render` is called pre-ingest — writing its
-//! `fact_files` into `docs/facts/` and staging its sidecar under `raw/`
-//! where [`install_fact_sidecar`] places it — the corpus this produces
-//! carries PROSE ONLY, and the `sec_facts` tool cannot claim it. That is
-//! the remaining step between here and an installable-by-ticker corpus
-//! that can answer a figure.
+//! # Where the rendered outputs land, and why each one there
+//!
+//! [`render`](crate::sec_facts_render::render) is pure — it returns data
+//! and [`place_rendered`] writes it, mirroring `setup-sec-corpus.sh`'s
+//! placement exactly so the two install paths produce the same corpus:
+//!
+//! - `docs/facts/*.txt` — INGESTED DOCUMENTS. Written BEFORE this
+//!   function returns `docs/`, because the engine extracts from the
+//!   returned directory; a fact file placed after ingest is a fact file
+//!   retrieval never sees.
+//! - `raw/sec_facts.json` — the typed sidecar, STAGED where
+//!   [`install_fact_sidecar`] finds it and copies it into the corpus
+//!   index dir synchronously post-ingest.
+//! - `raw/_unmapped_concepts.json` — the coverage deliverable (F5). In
+//!   `raw/`, not `docs/facts/`, so the `plaintext` extractor never
+//!   ingests it as prose.
 //!
 //! # Glassbox
 //!
@@ -54,6 +65,8 @@ use std::sync::Arc;
 use corpus_engine::engine::{CorpusEngine, CustomAcquirerFn};
 use corpus_engine::error::{Error, Result};
 use serde::{Deserialize, Serialize};
+
+use crate::sec_facts_render::RenderOutput;
 
 /// The `kind` string a recipe names in `[acquire] type = "custom"`.
 pub const KIND: &str = "sec_edgar";
@@ -76,6 +89,26 @@ const TICKERS_URL: &str = "https://www.sec.gov/files/company_tickers.json";
 /// omits `user_agent` entirely. `scripts/setup-sec-corpus.sh:28` carries
 /// the same string for the script path.
 const DEFAULT_USER_AGENT: &str = "commonwealth-ai/0.1 (sec-filings-corpus; alexbryan01@gmail.com)";
+
+/// The concept-normalization registry, compiled in from the CANONICAL
+/// `sovereign-recipes/sec-filings-company/concept-map.toml`.
+///
+/// Vendored rather than read from disk for the same reason corpus-engine
+/// vendors `registry.toml` into its bundled snapshot (`corpus-engine/build.rs`):
+/// an end user installs from the catalog, which fetches `recipe.toml`
+/// alone — the recipe's sibling data files never reach their machine. A
+/// runtime path lookup here would therefore work in the repo and refuse
+/// in the product, which is the one failure mode this corpus exists to
+/// avoid. `include_str!` registers the file as a rebuild dependency, so
+/// the canonical tree and this snapshot cannot drift.
+///
+/// There is still exactly ONE registry: this is a copy of the same
+/// bytes, not a second map. `scripts/setup-sec-corpus.sh` passes the
+/// canonical file to the `sec_facts_render` example by path.
+const CONCEPT_MAP_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../../sovereign-recipes/sec-filings-company/concept-map.toml"
+));
 
 /// Prose part sizing. Each part must become ONE chunk: the engine
 /// prepends the doc title to every chunk AFTER the chunker bounds
@@ -492,6 +525,83 @@ pub fn install_fact_sidecar(corpus_id: &str, indexes_dir: &Path) -> Result<Optio
 }
 
 // ---------------------------------------------------------------------------
+// Placing what the decider rendered
+// ---------------------------------------------------------------------------
+
+/// What [`place_rendered`] wrote, so the caller logs one event instead of
+/// reconstructing it from the filesystem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PlacedFacts {
+    /// `docs/facts/*.txt` written — one per concept that resolved.
+    pub fact_files: usize,
+    /// Typed facts across every concept in the staged sidecar.
+    pub facts: usize,
+    pub concepts: usize,
+    /// Filer XBRL tags the registry does not cover. Not an error — the
+    /// coverage deliverable, and F5's growth chart.
+    pub unmapped: usize,
+    pub filer_tags_total: usize,
+}
+
+/// Write a [`RenderOutput`] into an acquired corpus root, mirroring
+/// `scripts/setup-sec-corpus.sh`'s placement so the ticker path and the
+/// script path produce the same corpus.
+///
+/// A render that resolved NO concept is an `Err`, never a prose-only
+/// corpus written as if it succeeded (ARCH §18.3). The recipe declares
+/// `[authority] tool = "sec_facts"`; installing a corpus that makes that
+/// claim and carries no typed store would put the user in front of a
+/// financial corpus that refuses every figure, with nothing saying why.
+pub fn place_rendered(root: &Path, rendered: &RenderOutput) -> Result<PlacedFacts> {
+    let facts_dir = root.join("docs").join("facts");
+    let raw_dir = root.join("raw");
+    std::fs::create_dir_all(&facts_dir)?;
+    std::fs::create_dir_all(&raw_dir)?;
+
+    let store = rendered.sidecar.as_ref().ok_or_else(|| {
+        Error::Recipe(format!(
+            "the concept map resolved NO figure from this filer's companyfacts \
+             ({}/{} of its XBRL tags are unmapped). Nothing was installed: this \
+             recipe declares `sec_facts` authoritative for its figures, and a \
+             corpus carrying that claim with no typed fact store would refuse \
+             every figure without saying why.",
+            rendered.unmapped.unmapped.len(),
+            rendered.unmapped.filer_tags_total
+        ))
+    })?;
+
+    // Stale fact files from a previous acquisition — of a different
+    // filing or a DIFFERENT COMPANY — would otherwise be ingested
+    // alongside the new ones, and the prose pass does the same.
+    for entry in std::fs::read_dir(&facts_dir)?.flatten() {
+        if entry.path().extension().and_then(|e| e.to_str()) == Some("txt") {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+    for (name, body) in &rendered.fact_files {
+        std::fs::write(facts_dir.join(name), body)?;
+    }
+
+    // Staged, not installed: `install_fact_sidecar` places it in the
+    // index dir once the corpus id is known.
+    let sidecar = serde_json::to_vec_pretty(store)
+        .map_err(|e| Error::Serialization(format!("typed fact store: {e}")))?;
+    std::fs::write(raw_dir.join(FACT_SIDECAR), sidecar)?;
+
+    let unmapped = serde_json::to_vec_pretty(&rendered.unmapped)
+        .map_err(|e| Error::Serialization(format!("unmapped report: {e}")))?;
+    std::fs::write(raw_dir.join("_unmapped_concepts.json"), unmapped)?;
+
+    Ok(PlacedFacts {
+        fact_files: rendered.fact_files.len(),
+        facts: store.concepts.values().map(|c| c.facts.len()).sum(),
+        concepts: store.concepts.len(),
+        unmapped: rendered.unmapped.unmapped.len(),
+        filer_tags_total: rendered.unmapped.filer_tags_total,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // Registration + the networked acquire
 // ---------------------------------------------------------------------------
 
@@ -671,9 +781,8 @@ async fn acquire(params_blob: serde_json::Value, download_dir: PathBuf) -> Resul
         "sec_edgar: cleaned primary document into prose parts");
 
     // ── 5. companyfacts, saved RAW ───────────────────────────────────
-    // Deliberately not interpreted here: `scripts/sec_facts.py::resolve`
-    // is THE one decider (module docs). Rendering facts in this acquirer
-    // would fork it (ARCH §10.6).
+    // Saved uninterpreted: this acquirer never decides what a figure is.
+    // Step 6 hands these bytes to THE one decider (ARCH §10.6).
     let facts_bytes = get_bytes(&client, &companyfacts_url(&cik10), &ua).await?;
     let facts_path = raw_dir.join("companyfacts.json");
     let parsed: serde_json::Value = serde_json::from_slice(&facts_bytes)
@@ -688,6 +797,28 @@ async fn acquire(params_blob: serde_json::Value, download_dir: PathBuf) -> Resul
     tracing::info!(target: "sec_edgar", cik = %cik10, bytes = facts_bytes.len(),
         path = %facts_path.display(),
         "sec_edgar: saved raw companyfacts (not interpreted — the decider owns that)");
+
+    // ── 6. the decider renders; this acquirer only places the files ──
+    // `fiscal_years: None` = the latest 3 available per concept, which is
+    // what every corpus the F1-F6 bars were measured against was rendered
+    // with. Pinning a set here would silently change what an installed
+    // corpus CONTAINS relative to those measurements.
+    let cmap = crate::sec_facts_render::ConceptMap::from_toml(CONCEPT_MAP_TOML)
+        .map_err(|e| Error::Recipe(format!("bundled concept map is unreadable: {e}")))?;
+    let rendered = crate::sec_facts_render::render(crate::sec_facts_render::RenderRequest {
+        companyfacts: &parsed,
+        concept_map: &cmap,
+        ticker: Some(&params.ticker),
+        fiscal_years: None,
+    })
+    .map_err(|e| Error::Recipe(format!("rendering CIK{cik10}'s figures failed: {e}")))?;
+    let placed = place_rendered(&root, &rendered)?;
+    tracing::info!(target: "sec_edgar", cik = %cik10,
+        fact_files = placed.fact_files, facts = placed.facts,
+        concepts = placed.concepts, unmapped = placed.unmapped,
+        filer_tags = placed.filer_tags_total,
+        "sec_edgar: rendered typed figures — fact files staged for ingest, \
+         sidecar staged for the index dir");
 
     // Claimed only now that the acquisition SUCCEEDED — a failed install
     // must not leave a record saying this company is resident.
@@ -989,6 +1120,140 @@ mod tests {
                 .join(FACT_SIDECAR)
                 .exists(),
             "nothing may be written when nothing was staged"
+        );
+    }
+
+    // ── the rendered figures reach the corpus ───────────────────────────
+
+    /// The one place the bundled snapshot and the canonical registry are
+    /// compared. Structural, not remembered (principle 10): edit
+    /// `sovereign-recipes/sec-filings-company/concept-map.toml` and this
+    /// fails at the next build unless the snapshot rebuilt with it.
+    #[test]
+    fn the_bundled_concept_map_is_byte_identical_to_the_canonical_registry() {
+        let canonical = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../sovereign-recipes/sec-filings-company/concept-map.toml");
+        let on_disk = std::fs::read_to_string(&canonical).expect("the canonical map is committed");
+        assert_eq!(
+            CONCEPT_MAP_TOML,
+            on_disk,
+            "the compiled-in map drifted from {}",
+            canonical.display()
+        );
+    }
+
+    fn aapl_companyfacts() -> serde_json::Value {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/sec_facts/aapl-companyfacts.json");
+        serde_json::from_str(&std::fs::read_to_string(&path).expect("fixture is committed"))
+            .expect("fixture parses")
+    }
+
+    fn render_aapl() -> RenderOutput {
+        // Through the BUNDLED map, so this exercises the constant the
+        // product actually installs with — not a second copy read from
+        // disk that could be fine while the binary's is not.
+        let cmap = crate::sec_facts_render::ConceptMap::from_toml(CONCEPT_MAP_TOML)
+            .expect("the bundled map parses");
+        crate::sec_facts_render::render(crate::sec_facts_render::RenderRequest {
+            companyfacts: &aapl_companyfacts(),
+            concept_map: &cmap,
+            ticker: Some("AAPL"),
+            fiscal_years: None,
+        })
+        .expect("the fixture renders")
+    }
+
+    #[test]
+    fn place_rendered_puts_fact_files_where_ingest_reads_and_the_sidecar_where_install_stages() {
+        let root = tempfile::tempdir().expect("tempdir");
+        let rendered = render_aapl();
+        let placed = place_rendered(root.path(), &rendered).expect("placement succeeds");
+
+        assert!(placed.fact_files > 0, "the fixture resolves concepts");
+        assert!(placed.facts > 0, "and typed facts");
+
+        // 1. Ingested documents: under docs/, which is what `acquire`
+        //    returns to the engine.
+        let facts_dir = root.path().join("docs").join("facts");
+        let txt: Vec<_> = std::fs::read_dir(&facts_dir)
+            .expect("docs/facts exists")
+            .flatten()
+            .filter(|e| e.path().extension().and_then(|x| x.to_str()) == Some("txt"))
+            .collect();
+        assert_eq!(
+            txt.len(),
+            placed.fact_files,
+            "every rendered fact file must be on disk before ingest"
+        );
+        let revenue = facts_dir.join("facts-revenue.txt");
+        let body = std::fs::read_to_string(&revenue).expect("revenue rendered for AAPL");
+        assert!(
+            body.contains("accession"),
+            "a fact line must carry its citation: {body}"
+        );
+
+        // 2. The sidecar is STAGED where install_fact_sidecar looks, and
+        //    is NOT in docs/ where the plaintext extractor would ingest it.
+        let staged = root.path().join("raw").join(FACT_SIDECAR);
+        assert!(staged.is_file(), "sidecar staged at raw/{FACT_SIDECAR}");
+        assert!(
+            !facts_dir.join(FACT_SIDECAR).exists(),
+            "the sidecar must not be an ingested document"
+        );
+        assert!(
+            root.path().join("raw").join("_unmapped_concepts.json").is_file(),
+            "the coverage deliverable lands in raw/, not docs/"
+        );
+
+        // 3. What was staged is what the tool will read back.
+        let store: corpus_engine::enrichment::atlas::analysis::sec_facts::SecFactStore =
+            serde_json::from_str(&std::fs::read_to_string(&staged).unwrap())
+                .expect("the staged sidecar parses as the type the tool reads");
+        assert_eq!(store.concepts.len(), placed.concepts);
+    }
+
+    #[test]
+    fn place_rendered_clears_a_previous_companys_fact_files() {
+        // The named failing input: install AAPL, then install MSFT into
+        // the same single-instance corpus. A stale facts-*.txt from the
+        // first company would be ingested alongside the second's.
+        let root = tempfile::tempdir().expect("tempdir");
+        let facts_dir = root.path().join("docs").join("facts");
+        std::fs::create_dir_all(&facts_dir).unwrap();
+        std::fs::write(facts_dir.join("facts-ghost_concept.txt"), "MSFT revenue").unwrap();
+
+        place_rendered(root.path(), &render_aapl()).expect("placement succeeds");
+        assert!(
+            !facts_dir.join("facts-ghost_concept.txt").exists(),
+            "a previous company's fact file must not survive into this corpus"
+        );
+    }
+
+    #[test]
+    fn place_rendered_refuses_a_render_that_resolved_nothing() {
+        // Absence is reported, never a prose-only corpus written as if it
+        // succeeded — the recipe declares sec_facts authoritative.
+        let root = tempfile::tempdir().expect("tempdir");
+        let empty = RenderOutput {
+            fact_files: Vec::new(),
+            sidecar: None,
+            unmapped: crate::sec_facts_render::UnmappedReport {
+                cik: "0000320193".into(),
+                entity: "Apple Inc.".into(),
+                filer_tags_total: 7,
+                covered_by_map: Vec::new(),
+                unmapped: vec!["SomeTag".into()],
+            },
+        };
+        let err = place_rendered(root.path(), &empty)
+            .expect_err("no resolved figure is a refusal, not an empty corpus");
+        let msg = err.to_string();
+        assert!(msg.contains("Nothing was installed"), "{msg}");
+        assert!(msg.contains("sec_facts"), "{msg}");
+        assert!(
+            !root.path().join("raw").join(FACT_SIDECAR).exists(),
+            "nothing may be staged when nothing resolved"
         );
     }
 

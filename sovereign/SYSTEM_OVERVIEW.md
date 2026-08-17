@@ -260,7 +260,13 @@ feeds the `sec_edgar` custom acquirer in
 `sovereign-tools/src/sec_edgar.rs`, registered on the engine at
 `daemon_cmd/bootstrap.rs::build_corpus_engine`, which resolves
 ticker -> CIK, selects the 10-K NAMING every in-window filing it skips,
-and fetches bytes only. SINGLE-INSTANCE — no `id_template` exists in the
+fetches the bytes, and then CALLS the decider (step 6) — `render` with
+`fiscal_years: None`, whose outputs `place_rendered` writes: `docs/facts/*.txt`
+BEFORE the returned `docs/` reaches extraction, the sidecar staged at
+`raw/sec_facts.json` for `install_fact_sidecar`, and `_unmapped_concepts.json`
+in `raw/` so the plaintext extractor never ingests it. A render resolving NO
+concept is an `Err`, never a prose-only corpus carrying an `[authority]`
+claim it cannot honour. SINGLE-INSTANCE — no `id_template` exists in the
 engine, so a second company REPLACES the first and the acquirer says so
 naming both, recording the resident company in
 `_downloads/sec_edgar_resident.json`. Several companies at once still go

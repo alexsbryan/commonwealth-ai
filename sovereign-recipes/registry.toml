@@ -341,9 +341,19 @@ sha256 = ""
 # recipe wins, as for brothers-karamazov-book-1 below.)
 #
 # catalog_status stays `preview` — the install button is deliberately off
-# until the whole journey is proven, including the typed fact store the
-# `sec_facts` tool answers from. Arming it before then would ship a button
-# that installs a corpus which cannot answer a figure.
+# until the whole journey is proven end to end by
+# tests/e2e/real/sec-filings-by-ticker.real.spec.ts, which drives the
+# catalog surface and asserts both an answered figure and a refusal that
+# names what IS available.
+#
+# The integration the earlier `preview` note was waiting on IS now in
+# place: sec_edgar step 6 calls sec_facts_render::render pre-ingest and
+# install_fact_sidecar moves the typed store into the index dir
+# synchronously. What is still missing is the RUN — the spec above has
+# never completed on this host (the real-suite harness fails in its own
+# fixture-corpus ingest during global-setup, before the spec is reached).
+# So the journey is unproven rather than disproven, and an unproven
+# button stays off. See sovereign/DEFAULTS_LEDGER.md.
 [[recipes]]
 id = "sec-filings-company"
 name = "SEC Filings — Single Company (10-K + typed facts)"

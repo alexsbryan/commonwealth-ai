@@ -38,14 +38,25 @@ store (ids cited per row).
   all four engines that can ingest, and `[parameters.ticker]` as the
   user's sole input. `preview` keeps it out of the desktop catalog's
   featured surface — a user cannot arrive at it by browsing.
-- **Why dark rather than shipped:** the acquirer deliberately leaves
-  `companyfacts.json` untouched under `raw/`, because rendering figures
-  here would be a SECOND implementation of the
-  `sec_facts_render::render` decider (ARCH §10.6). Until that renderer
-  is called pre-ingest, an installed corpus carries PROSE ONLY and the
-  `sec_facts` tool cannot claim it. Arming the catalog button now would
-  ship the broken install the F3 bar exists to prevent: a user picks a
-  ticker, waits, and gets a corpus that cannot answer a figure.
+- **Why dark rather than shipped (2026-08-16, superseded — see below):**
+  the acquirer deliberately left `companyfacts.json` untouched under
+  `raw/`, because rendering figures there would be a SECOND
+  implementation of the `sec_facts_render::render` decider (ARCH §10.6).
+  Until that renderer was called pre-ingest, an installed corpus carried
+  PROSE ONLY and the `sec_facts` tool could not claim it.
+- **Why still dark, 2026-08-17 (order `sec-filings-last-mile`, M4):** the
+  reason above is GONE — the acquirer now calls the decider at step 6 and
+  `place_rendered` writes `docs/facts/*.txt` pre-ingest and stages the
+  sidecar where `install_fact_sidecar` already places it synchronously.
+  What is missing now is not code, it is a RUN. The journey has never
+  been executed end to end on this host: three attempts, none of which
+  reached the assertions — a harness livelock in `global-setup`'s own
+  fixture ingest, then a 20.5-minute install that was TOTALLY SILENT
+  because the daemon's tracing allowlist did not carry `sec_edgar`, then
+  a workspace build broken by an unrelated in-flight change. So the
+  install is UNPROVEN, not disproven, and an unproven button stays off.
+  Arming it now would ship exactly the failure F3 exists to prevent, on
+  a guess: a user picks a ticker, waits, and finds out.
 - **Evidence so far, cited:** live against real SEC, not a fixture —
   `svrn recipe test … --params ticker=AAPL --recapture` VERDICT GREEN
   on Apple 10-K accession 0000320193-25-000079. ACQUIRE 5 docs from
@@ -62,6 +73,19 @@ store (ids cited per row).
   (3) the desktop install form exists and passes `ticker`; (4) the F3
   hand-read passes at its registered bar. Any one unmet keeps it
   `preview`.
+- **Condition audit, 2026-08-17 — two met, two `never-ran`:**
+  (1) **MET** — `sec_edgar::acquire` step 6 + `place_rendered`; 4 tests,
+  instrument validated (redirecting the sidecar write reddened exactly
+  one test, two controls in the same file stayed green).
+  (3) **MET** — `RecipeParameterForm.svelte`, rendered from
+  `ParameterSpec.kind` with nothing ticker-specific; 8 tests, one of
+  which renders a DIFFERENT recipe's `int`/`date`/`list` parameters with
+  no new code.
+  (2) and (4) are **`never-ran`, NOT failed** — the e2e that would decide
+  them (`tests/e2e/real/sec-filings-by-ticker.real.spec.ts`) has never
+  reached its assertions. Recording them as failures would put a wrong
+  verdict against work that is probably correct; recording them as met
+  would be the F2 mistake in another costume. They are unmeasured.
 - **Known gap this does NOT cover:** segment figures. The acquirer
   refuses segment concepts because companyfacts is consolidated-only;
   the F2 honesty violation at `e8b9319b` is the same gap seen from the
