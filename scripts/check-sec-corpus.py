@@ -10,8 +10,8 @@
 # answerer that produces B2's figures must refuse B4's questions:
 #   1. retrieve chunks for the question (concept phrasing + period phrasing;
 #      expected values NEVER enter the query);
-#   2. parse typed fact lines out of the retrieved chunks (the line grammar
-#      lives in scripts/sec_facts.py — writer and reader share one parser);
+#   2. parse typed fact lines out of the retrieved chunks (the reader half of
+#      the line grammar — see parse_fact_line below);
 #   3. a figure answer REQUIRES a typed fact line whose concept (tag chain
 #      from the shared concept map) AND period match the question exactly.
 #      Anything else is a refusal that states why: unmapped concept, or a
@@ -23,15 +23,53 @@
 
 import argparse
 import json
+import re
 import sys
 import tomllib
 import urllib.request
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from sec_facts import parse_fact_line  # noqa: E402  (the one line grammar)
 
 DEBUG = False
+
+# ── the rendered-line grammar, READER half ───────────────────────────────────
+# The WRITER is Rust: `sovereign_tools::sec_facts_render::ResolvedFact::
+# fact_line` (order sec-facts-decider-port deleted scripts/sec_facts.py, which
+# used to hold both halves and which this module imported). The two halves now
+# sit on opposite sides of a language boundary, so the shared-parser guarantee
+# is gone and only the Rust side is under parity test. Filed as debt at the
+# port; the durable fix is porting this judge, not re-exporting a regex.
+FACT_LINE_RE = re.compile(
+    r"CIK (?P<cik>\d{10})\) — (?P<label>.+?) \[us-gaap:\s?(?P<tag>.+?)\]: "
+    r"(?P<value_text>.+?) — (?:"
+    r"fiscal year FY(?P<fy_dur>\d{4}) \((?P<start>\d{4}-\d{2}-\d{2}) to (?P<end>\d{4}-\d{2}-\d{2})\)"
+    r"|as of (?P<instant>\d{4}-\d{2}-\d{2}) \(fiscal FY(?P<fy_inst>\d{4}) balance date\)"
+    r")\. Reported in Form (?P<form>\S+), accession (?P<accn>\S+), "
+    r"filed (?P<filed>\d{4}-\d{2}-\d{2})\.")
+
+
+def parse_fact_line(line: str):
+    """Parse one rendered fact line back into its parts, or None."""
+    m = FACT_LINE_RE.search(line)
+    if not m:
+        return None
+    d = m.groupdict()
+    vt = d["value_text"]
+    raw = re.search(r"\(raw: ([-\d,]+)\)", vt)
+    if raw:
+        value, unit = float(raw.group(1).replace(",", "")), "USD"
+    else:
+        vm = re.match(r"([-\d.,]+) (\S+)", vt)
+        if not vm:
+            return None
+        value, unit = float(vm.group(1).replace(",", "")), vm.group(2)
+    return {
+        "cik": d["cik"], "label": d["label"],
+        "tag": d["tag"].replace(" ", ""),
+        "value": value, "unit": unit,
+        "period": ({"start": d["start"], "end": d["end"]} if d["fy_dur"]
+                   else {"start": None, "end": d["instant"]}),
+        "fiscal_year": int(d["fy_dur"] or d["fy_inst"]),
+        "form": d["form"], "accession": d["accn"], "filed": d["filed"],
+    }
 
 
 def dbg(msg):

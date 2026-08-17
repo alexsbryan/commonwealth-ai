@@ -258,9 +258,14 @@ The catalog (`registry.toml`) lists 27 recipes: `wikipedia`,
 per-company 10-K prose + typed XBRL figures, materialized as
 `sec-cik<10-digit>` by `scripts/setup-sec-corpus.sh`; the
 concept-normalization registry is `concept-map.toml` beside the recipe, its
-one decider is `scripts/sec_facts.py` — whose `render` also writes the
-`sec_facts.json` typed-fact sidecar into the corpus index dir for the
-`sec_facts` tool — the retrieval-side bar judge is
+one decider is `sovereign-tools/src/sec_facts_render.rs` — a PURE
+`render(RenderRequest) -> RenderOutput` that turns raw companyfacts + the
+registry into the ingested `facts/*.txt` lines, the `sec_facts.json`
+typed-fact sidecar the `sec_facts` tool answers from, and the
+`_unmapped_concepts.json` coverage deliverable, with all file placement left
+to the caller; it replaced `scripts/sec_facts.py` (deleted, order
+`sec-facts-decider-port`) under a parity test against that Python's committed
+output — the retrieval-side bar judge is
 `scripts/check-sec-corpus.py`, and the product-path fabrication judge is
 `scripts/check-sec-answer-path.py` with its frozen adversarial prereg under
 `prereg/`; see `docs/specs/FINANCIAL_CORPORA.md`), the five
@@ -483,7 +488,8 @@ The SEC filings corpora reuse that same guarantee contract
 (`FINANCIAL_CORPORA.md` §6): the read-only `sec_facts` tool
 (`sovereign-tools/src/sec_facts.rs`, pure lookup/derivation lib in
 `enrichment/atlas/analysis/sec_facts.rs`) answers from the typed
-`sec_facts.json` sidecar with `cited_figures` + `derivation` +
+`sec_facts.json` sidecar written by the one decider
+(`sovereign-tools/src/sec_facts_render.rs`) with `cited_figures` + `derivation` +
 `reproduce`, computes ratios and year-over-year changes in Rust, and
 refuses first-class naming what IS available (coverage, freshness, and
 the consolidated-only source limit). Because financial answers carry

@@ -17,10 +17,21 @@ column without saying they differ.
 `sovereign-recipes/sec-filings-company/` — a template recipe materialized per
 issuer as `sec-cik<10-digit>`, AAPL proven: 10-K prose (95 parts) + XBRL
 companyfacts figures (20 fact files, 24 tags across 20 canonical concepts).
-`scripts/sec_facts.py` renders and is the one decider; `scripts/check-sec-corpus.py`
-judges from retrieval only. B2 10/10 and B4 3/3, with the judge watched failing
-on tampered controls (exit 2 on a confident number for a negative control, exit 1
-on a falsified value).
+`scripts/check-sec-corpus.py` judges from retrieval only. B2 10/10 and B4 3/3,
+with the judge watched failing on tampered controls (exit 2 on a confident
+number for a negative control, exit 1 on a falsified value).
+
+Rendering was `scripts/sec_facts.py` until order `sec-facts-decider-port` (G3)
+moved it to Rust — `sovereign-tools/src/sec_facts_render.rs`, a pure
+`render(RenderRequest) -> RenderOutput` — so an installed corpus carries its
+typed sidecar with no repo script (the M2 precondition). The Python was DELETED
+in that commit: two implementations of alias precedence, period typing,
+annual-filing selection or restatement supersession would be the §15 smell in
+the subsystem whose whole purpose is not to substitute silently. Its behaviour
+is held by the parity test, which asserts the Rust reproduces the Python's
+committed output on a real Apple companyfacts fixture — 20 fact files
+byte-identical, 60 typed facts identical through `SecFactStore`, and all ten
+refusal branches verbatim.
 
 ## §3 Why that is not yet a product — the three gaps, verified
 

@@ -4,7 +4,7 @@
 //!
 //! The product half of FINANCIAL_CORPORA.md §6.2: reads the typed fact
 //! sidecar (`sec_facts.json`, written at corpus setup by
-//! `scripts/sec_facts.py render` — THE one decider for companyfacts) and
+//! `sec_facts_render::render` — THE one decider for companyfacts) and
 //! emits the existing no-confabulated-numbers contract: `cited_figures` +
 //! `derivation` + `reproduce` + raw numeric leaves, exactly as
 //! `parcel_analytics` does, so `handlers/complex_task.rs` harvests it and

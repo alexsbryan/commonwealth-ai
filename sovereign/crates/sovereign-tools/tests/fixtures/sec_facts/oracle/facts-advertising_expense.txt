@@ -1,0 +1,4 @@
+Apple Inc. (AAPL) — Advertising expense — XBRL facts from SEC companyfacts, CIK 0000320193.
+Apple Inc. (AAPL, CIK 0000320193) — Advertising expense [us-gaap:AdvertisingExpense]: $1,100 million USD (raw: 1,100,000,000) — fiscal year FY2013 (2012-09-30 to 2013-09-28). Reported in Form 10-K, accession 0001193125-13-416534, filed 2013-10-30.
+Apple Inc. (AAPL, CIK 0000320193) — Advertising expense [us-gaap:AdvertisingExpense]: $1,200 million USD (raw: 1,200,000,000) — fiscal year FY2014 (2013-09-29 to 2014-09-27). Reported in Form 10-K, accession 0001193125-14-383437, filed 2014-10-27.
+Apple Inc. (AAPL, CIK 0000320193) — Advertising expense [us-gaap:AdvertisingExpense]: $1,800 million USD (raw: 1,800,000,000) — fiscal year FY2015 (2014-09-28 to 2015-09-26). Reported in Form 10-K, accession 0001193125-15-356351, filed 2015-10-28.

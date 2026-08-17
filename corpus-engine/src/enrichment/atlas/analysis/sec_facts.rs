@@ -3,8 +3,10 @@
 //! `sec_facts` tool (spec `sovereign/docs/specs/FINANCIAL_CORPORA.md` §6.2).
 //!
 //! The store is a sidecar (`sec_facts.json`) written at corpus setup time
-//! by `scripts/sec_facts.py render` — THE one decider for interpreting
-//! companyfacts + the concept map (ARCH §10.6). This module never reads
+//! by `sovereign_tools::sec_facts_render::render` — THE one decider for
+//! interpreting companyfacts + the concept map (ARCH §10.6; it was
+//! `scripts/sec_facts.py` until order `sec-facts-decider-port` moved it
+//! into Rust and deleted the Python). This module never reads
 //! companyfacts and never re-selects facts: every fact here was already
 //! selected, restated-superseded, and period-typed by the renderer. Rust's
 //! job is lookup, refusal, and deterministic arithmetic over named facts.

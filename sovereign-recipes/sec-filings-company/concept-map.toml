@@ -1,9 +1,10 @@
 # Concept-normalization map — SEC XBRL (us-gaap) -> canonical concepts.
 #
 # This is DATA, not code (ARCH §2/§4): the mapped concepts are a registry with
-# an open tail. Exactly ONE decider consumes it — scripts/sec_facts.py — which
-# turns (company, concept, period) into a figure or a refusal. Nothing else may
-# interpret this file (§10.6: one decider, one name).
+# an open tail. Exactly ONE decider consumes it —
+# sovereign-tools/src/sec_facts_render.rs — which turns (company, concept,
+# period) into a figure or a refusal. Nothing else may interpret this file
+# (§10.6: one decider, one name).
 #
 # Resolution rule: for a canonical concept, the decider walks `tags` in order
 # and takes the FIRST tag present in the filer's companyfacts, unless a

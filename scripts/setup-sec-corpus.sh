@@ -8,8 +8,12 @@
 # pipeline, same EDGAR URL synthesis, same HTML->text cleaning); differences:
 #   - form type 10-K (latest in window, or --accession pin)
 #   - a second acquire path: data.sec.gov companyfacts JSON, rendered to
-#     per-concept fact .txt files by scripts/sec_facts.py (THE one decider,
-#     driven by sovereign-recipes/sec-filings-company/concept-map.toml)
+#     per-concept fact .txt files by THE one decider — now Rust:
+#     sovereign_tools::sec_facts_render (driven by
+#     sovereign-recipes/sec-filings-company/concept-map.toml), reached here
+#     through its I/O shell, the `sec_facts_render` example binary.
+#     (It replaced scripts/sec_facts.py, deleted at order
+#     sec-facts-decider-port with a parity test standing in its place.)
 #   - every 10-K in the window is LISTED, and every one not selected is
 #     NAMED as skipped — a silent skip fails the order's B1 bar.
 #
@@ -30,7 +34,10 @@ BIN="${SOVEREIGN_CLI:-target/debug/sovereign-cli-llm}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 CANONICAL_RECIPE="${REPO_ROOT}/sovereign-recipes/sec-filings-company/recipe.toml"
 CONCEPT_MAP="${REPO_ROOT}/sovereign-recipes/sec-filings-company/concept-map.toml"
-DECIDER="${REPO_ROOT}/scripts/sec_facts.py"
+# THE one decider's I/O shell. An example, not a product CLI verb: the
+# decider's real consumer is the ticker-driven install (which calls
+# `render` in-process), and this script is the path that supersedes.
+DECIDER="${SEC_FACTS_RENDER:-${REPO_ROOT}/target/debug/examples/sec_facts_render}"
 CACHE_DIR="${HOME}/.svrnmesh/cache/sec"
 TICKERS_JSON="${CACHE_DIR}/company_tickers.json"
 FROM_DATE="2024-01-01"
@@ -60,7 +67,8 @@ command -v python3 >/dev/null 2>&1 || { echo "FATAL: python3 is required" >&2; e
 [[ -n "$ARG" ]] || { echo "FATAL: pass a ticker (e.g. AAPL) or a CIK" >&2; exit 2; }
 [[ -f "$CANONICAL_RECIPE" ]] || { echo "FATAL: template recipe not found at $CANONICAL_RECIPE" >&2; exit 2; }
 [[ -f "$CONCEPT_MAP" ]] || { echo "FATAL: concept map not found at $CONCEPT_MAP" >&2; exit 2; }
-[[ -f "$DECIDER" ]] || { echo "FATAL: decider not found at $DECIDER" >&2; exit 2; }
+# The decider is a build artifact, not a checked-in script: it is built on
+# demand at the render step (§5) rather than pre-flighted here.
 
 mkdir -p "$CACHE_DIR"
 
@@ -196,7 +204,13 @@ jq -e '.facts' "$FACTS_JSON" >/dev/null 2>&1 || {
 # Debug trace names every alias fired; the unmapped-tag list lands as
 # facts/_unmapped_concepts.json — a deliverable, not a log line.
 # (debug log lives under raw/, keeping docs/ ingest-only)
-python3 "$DECIDER" --debug render --map "$CONCEPT_MAP" --facts "$FACTS_JSON" \
+[[ -x "$DECIDER" ]] || {
+  echo "  building the decider: cargo build -p sovereign-tools --example sec_facts_render"
+  (cd "$REPO_ROOT" && cargo build -p sovereign-tools --example sec_facts_render) >&2
+}
+[[ -x "$DECIDER" ]] || { echo "FATAL: fact renderer not built at ${DECIDER}" >&2; exit 1; }
+RUST_LOG="${RUST_LOG:-sec_facts_render=debug}" "$DECIDER" \
+  --map "$CONCEPT_MAP" --facts "$FACTS_JSON" \
   --out "$FACTS_DIR" ${TICKER:+--ticker "$TICKER"} \
   ${FY_ARGS[@]+"${FY_ARGS[@]}"} \
   2> "${RAW_DIR}/render_debug.log"
@@ -204,8 +218,7 @@ echo "  render debug trace (every alias fired): ${RAW_DIR}/render_debug.log"
 # aux json deliverables live under raw/, keeping docs/ ingest-only .txt.
 # sec_facts.json is the typed fact sidecar the Rust `sec_facts` tool answers
 # from — installed into the corpus INDEX dir after `corpus install` below.
-mv "${FACTS_DIR}/_unmapped_concepts.json" "${FACTS_DIR}/_render_manifest.json" \
-   "${FACTS_DIR}/sec_facts.json" "${RAW_DIR}/"
+mv "${FACTS_DIR}/_unmapped_concepts.json" "${FACTS_DIR}/sec_facts.json" "${RAW_DIR}/"
 UNMAPPED_N="$(jq '.unmapped | length' "${RAW_DIR}/_unmapped_concepts.json")"
 TOTAL_N="$(jq '.filer_tags_total' "${RAW_DIR}/_unmapped_concepts.json")"
 echo "  unmapped filer tags: ${UNMAPPED_N}/${TOTAL_N} (named in ${RAW_DIR}/_unmapped_concepts.json)"
@@ -235,7 +248,7 @@ if [[ -n "$SKIP_INSTALL" ]]; then
   echo "Iterate extraction (no model needed):"
   echo "    $BIN recipe test \"$OVERRIDE_RECIPE\" --no-embed --offline"
   echo "Ask THE decider directly (figures + refusals):"
-  echo "    python3 $DECIDER ask --map $CONCEPT_MAP --facts $FACTS_JSON --concept revenue --period FY2025"
+  echo "    $DECIDER --map $CONCEPT_MAP --facts $FACTS_JSON --ask revenue --period FY2025"
   echo "Then install when ready:  $BIN corpus install $CORPUS_ID"
   echo "And place the typed fact sidecar (the Rust sec_facts tool reads it):"
   echo "    cp ${RAW_DIR}/sec_facts.json ~/.svrnmesh/indexes/${CORPUS_ID}/sec_facts.json"
