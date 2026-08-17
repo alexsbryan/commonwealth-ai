@@ -1,0 +1,186 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786947412",
+  "charter_hash": "e029183445b194d4",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedikā Prajñāpāramitā Sūtra). These notes should offer deep analysis and interpretation from various perspectives, exploring its teachings and relevance in contexts such as daily life, the workplace/career, business practices, marriage, parenting, emotional well-being, and interpersonal dynamics.",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "What is the historical date of composition and geographic origin of the Diamond Sutra?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Which specific Buddhist schools or traditions prioritize the study and practice of the Diamond Sutra?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "How do Zen masters interpret the concept of non-attachment in daily life according to the Diamond Sutra?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "In what ways does the Diamond Sutra’s teaching on ego influence conflict resolution strategies in modern workplaces?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Does corporate literature cite the Diamond Sutra as a framework for ethical leadership or sustainable business practices?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "How are marital relationship dynamics analyzed through the lens of interdependence found in Prajnaparamita texts like the Diamond Sutra?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "What parenting philosophies derived from Buddhist mindfulness align with the Diamond Sutra’s emphasis on compassion without attachment?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "Which psychological metrics correlate with emotional well-being outcomes reported by practitioners of Diamond Sutra meditation?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q10",
+      "text": "How do interpersonal communication styles change among individuals who study the Diamond Sutra compared to non-practitioners?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q1",
+      "url": "https://thalira.com/blogs/quantum-codex/diamond-sutra-guide",
+      "title": "The Diamond Sutra: Complete Guide to Vajracchedika | Thalira",
+      "snippet": "The Diamond Sutra (Sanskrit: Vajracchedika Prajnaparamita Sutra, 'Diamond Cutter of Perfect Wisdom') is a foundational Mahayana Buddhist text composed as a dialogue between the Buddha and his disciple Subhuti. It is among the most influential texts in the Prajnaparamita (Perfection of Wisdom) literature, central to Zen Buddhism, and holds the distinction of being the world's oldest dated printed book (868 CE).\n\n### What does the Diamond Sutra teach? [...] Quick Answer\n\nThe Diamond Sutra is a Mahayana Buddhist text teaching sunyata (emptiness) through paradox: using the formula \"X is not X, therefore it is called X\" to cut through conceptual grasping. Central to Zen Buddhism, it is also the world's oldest dated printed book (868 CE), preserved in the British Library.\n\nWritten by Thalira Research Team\n\nLast Updated: April 2026\n\nTable of Contents [...] The Diamond Sutra's teaching on merit can be used as a direct contemplative practice in daily life. The next time you perform a generous act - giving money, time, attention, or care - notice the mental movement afterward: the subtle sense of \"I gave,\" the expectation of gratitude or karmic return, the pleasant self-image of \"I am a generous person.\" This is merit-grasping. The practice is to give fully and then let the act go completely - no ledger, no score, no self-congratulation. This is not",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-4",
+      "query_id": "q1",
+      "url": "https://www.amazon.ca/Diamond-Perfection-Wisdom-Sutra-Prajnaparamita/dp/1505672422",
+      "title": "The Diamond Perfection of Wisdom Sutra: Vajracchedika Prajnaparamita Sutra: Scharpenburg, Daniel: 9781505672428: Books - Amazon.ca",
+      "snippet": "##### Whole Foods Market We Believe in Real Food\n\n   ##### Amazon Renewed Refurbished tech you can trust\n\n   ##### Blink Smart Security for Every Home\n\n   Conditions of Use\n   Privacy Notice\n   Cookies Notice\n   Interest-Based Ads\n\n© 1996-2026, Amazon.com, Inc. or its affiliates\n\n   Amazon.com.ca ULC | 40 King Street W 47th Floor, Toronto, Ontario, Canada, M5H 3Y2 |1-877-586-3230 [...] Your Account\n\n   Your Account\n   Your Orders\n   Keep shopping for\n   Your Recommendations\n   Your Subscribe & Save Items\n   Your Prime Membership\n   Memberships & Subscriptions\n   Your Amazon Credit Card\n   Manage Your Content and Devices\n   Your Music Library\n   Your Prime Video\n   Your Amazon Photos\n   Your Apps & Devices\n   Create your free business account\n\nSign in\n\nNew customer? Start here.\n\n\n\nOther New from $7.84)\n\nPaperback from $7.84\n\n $7.84 $7.84 [...] Image 16  Jenna   _5 out of 5 stars_ \n##### Deep teachings made easy to understand",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-5",
+      "query_id": "q1",
+      "url": "https://www.thriftbooks.com/w/the-diamond-sutra-the-perfection-of-wisdom_red-pine_sanskrit/534255",
+      "title": "Vajracchedikā Prajñāpāramitā Sūtra book by Anonymous",
+      "snippet": "ThriftBooks\nThriftBooks\nThriftBooks\nPaperback The Diamond Sutra Book\n\nISBN: 1582432562\n\nISBN13: 9781582432564\n\n# The Diamond Sutra\n\nFull Star\nFull Star\nFull Star\nFull Star\nFull Star\n\n## Select Format\n\n## Select Condition ThriftBooks Help Icon\n\nThriftBooks Help Icon\n\n## Recommended\n\nFormat: Paperback\n\nCondition: New\n\n## Book Overview\n\nRelated Subjects\n\n## Customer Reviews\n\n### They don't call it \"Perfection of Wisdom\" for nothing!\n\n### A superb volume [...] ### The Buddhist text that even cuts like a diamond through Buddhism\n\n### The most useful rendering of the Vajracchedika in English\n\n### The Diamond Sutra\n\n### Popular Categories\n\n### Website\n\n### My Account\n\n### Partnerships\n\n### Quick Help\n\n### About Us\n\n### Follow Us\n\nGoDaddy Verified and Secured",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-6",
+      "query_id": "q1",
+      "url": "https://sureshotbooks.com/products/the-diamond-perfection-of-wisdom-sutra-vajracchedika-prajnaparamita-sutra-9781505672428",
+      "title": "The Diamond Perfection of Wisdom Sutra: Vajracchedika Prajnaparamita S",
+      "snippet": "The Diamond Sutra is a Mahayana (Buddhist) sutra from the \"Perfection of Wisdom\" genre, and emphasizes the practice of non-abiding and non-attachment. The full Sanskrit title of this text is the Vajracchedika Prajnaparamita. This new version by Daniel Scharpenburg is written to make the text more readily available to a modern audience.  \n  \nAuthor: Daniel Scharpenburg  \nPublisher: Createspace Independent Publishing Platform  \nPublished: 01/09/2015  \nPages: 46  \nBinding Type: Paperback [...] Weight: 0.12lbs  \nSize: 7.99h x 5.00w x 0.10d  \nISBN13: 9781505672428  \nISBN10: 1505672422  \nBISAC Categories:  \n- Religion | Buddhism | Sacred Writings [...] Paperback copy of The Diamond Perfection of Wisdom Sutra, also known as Vajracchedika Prajnaparamita Sutra, by Createspace.\n\n Roll over image to zoom in Click on image to zoom\n\nPaperback copy of The Diamond Perfection of Wisdom Sutra, also known as Vajracchedika Prajnaparamita Sutra, by Createspace.\n\n/\n\n﻿\n\n### CUSTOMER REVIEWS\n\nWrite A Review\n\nWrite A Review\n\nBe the first to review this product.\n\n Opens in a new window.",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-4",
+      "web-5"
+    ],
+    "eps_admits": [
+      "web-6"
+    ],
+    "below_cut": [
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-9",
+      "web-0",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-9",
+      "web-1",
+      "web-3",
+      "web-4",
+      "web-6",
+      "web-6",
+      "web-7",
+      "web-9",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-1",
+      "web-0",
+      "web-2",
+      "web-5",
+      "web-7",
+      "web-8",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-8"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

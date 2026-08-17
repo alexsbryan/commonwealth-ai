@@ -1,0 +1,14 @@
+{
+ "delta": "hybrid - local",
+ "pooled_delta": -0.5134453781512605,
+ "local_pooled": 0.8705882352941177,
+ "hybrid_pooled": 0.35714285714285715,
+ "bootstrap": {
+  "n_resamples": 10000,
+  "seed": 4234932947,
+  "dropped_undefined": 2,
+  "ci95_lower": -0.6231769181991123,
+  "ci95_upper": -0.39411764705882346
+ },
+ "descriptive_verdict": "met"
+}

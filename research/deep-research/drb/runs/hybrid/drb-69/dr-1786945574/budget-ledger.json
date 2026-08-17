@@ -1,0 +1,140 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1786945574",
+  "charter_hash": "f2d480b692da6cda",
+  "allowance": {
+    "web-fetch:pages": 4,
+    "web-search:web": 4
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945581,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945583,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945585,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945587,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1786945589,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-fetch:pages": 4,
+    "web-search:web": 4
+  },
+  "remaining": {
+    "web-fetch:pages": 0,
+    "web-search:web": 0
+  }
+}

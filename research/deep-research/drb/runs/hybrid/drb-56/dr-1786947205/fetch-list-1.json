@@ -1,0 +1,120 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786947205",
+  "charter_hash": "e8db23e20fe5dbc8",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "What is the general mathematical formula for equilibrium bidding strategies in a first-price sealed-bid auction with asymmetric bidders",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Measure: Formula/Equation; Entities: First-price sealed-bid auctions, two bidders, independent private values, different distributions",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q1",
+      "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf",
+      "title": "[PDF] Numerical Analysis of Asymmetric First Price Auctions",
+      "snippet": "to certain classes of 210 MARSHALL ET AL. bidders. 17 The extension of our baseline algorithm that is discussed in this subsection applies to either of the two scenarios considered above but, for ease of notation, we restrict our attention to the one discussed in Section 3. We now assume that the bidders in the k~ and k 2 coalitions draw their (individual) valuation from different distributions with distribution functions F~ and F2, respectively. Let h(t) = Fi(hi(t)), i = 1, 2, (38) so that the [...] which constitutes a special case of a more general problem for which Lebrun (1991, Chap. 3) establishes the existence and uniqueness of a Nash equilibrium in pure strategies. Under the alternative scenario, the k 2 remaining bidders act noncoopera- tively. Hence k 2 + 1 participants will be active at the main auction, of which k z draw their valuation from independent uniform distributions on [0, 1] and the last one from the distribution corresponding to the highest of k 1 independent uniforms [...] of the gaps in the literature with respect to bidder asymmetry. 1 These papers establish uniqueness and existence of the equilibrium at a first price auction when two bidders draw independent and private valuations from heterogeneous distributions. In addition, Maskin and Riley (1991) provide surprising revenue nonequivalence theorems. Our own interest in asymmetric auctions stems from analysis of collu- sive behavior among bidders. If all bidders are ex ante homogeneous then collusion among",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-1",
+      "query_id": "q1",
+      "url": "https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf",
+      "title": "[PDF] THE THEORY OF FIRST-PRICE, SEALED-BID AUCTIONS",
+      "snippet": "7. In a first-price sealed bid auction with buyer’s values drawn from the same probability distribution that is common knowledge, we know that Nash equilibrium strategies are for each buyer to bid his Conditional Second Values (CSV); i.e., given his own value, find the conditional expectation of the highest value of the remaining bidders, conditioned on its being less than his value. In the asymmetric value auction described above, the CSV of B is the expectation of bidder C's value given it is [...] MN(v)]/B N(v). This differential equation has the solution B(v) = t[(J-1)G(t) J-2 M(t)G N(t)+G(t) J-1 MN(t)]dt/[G(v) J-1 M(v). Since M(v) = M(B(v)), this relationship given G and M defines B(v) implicitly, and it will not be possible to obtain an explicit form for B(v) in most cases. 6. Asymmetric auctions . Consider a first-price sealed bid auction of a single item with two bidders, B and C. Suppose that there is an announced reservation price of 300. Suppose resale is prohibited. Bidder B [...] Summarizing, the optimal bidding strategies in the first-price sealed-bid auction are asymmetric. The average bid for B is 302.5878 and the average bid for C is 300 if vC = 300 and 330.6853 if vC = 800, an overall average of 315.3426. Thus, B bids higher than its CSV of 300, while C bids substantially less than its CSV of 400 in the case vC = 800. The expected revenue to the seller is 316.937 versus the expected CSV of 350 that it could attain in a second-price sealed-bid auction. Thus, this",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-2",
+      "query_id": "q1",
+      "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+      "title": "[PDF] Numerical Solutions of Asymmetric, First-Price, Independent Private ...",
+      "snippet": "1 1 Introduction In this paper, we propose a powerful numerical algorithm to solve ﬁrst-price, single-object auctions, where bidders draw Independent and Private Values (hereafter IPV) from hetero-geneous distributions, allowing for subsets of bidders to collude and for a set reserve price. [...] In the present paper, we generalize the MMRS algorithm to a much broader class of ﬁrst-price, asymmetric IPV auction and procurement problems, allowing for arbitrary num-bers of (subgroups of) players independently drawing their valuations from arbitrary dis-tributions. Common distributions (exponential, Weibull, beta, normal, lognormal,...) are offered as options in the program. Additional distributions can easily be added by users in the form of a subroutine. Our program takes care of [...] Bidders are ex-ante heterogeneous. Each bidder belongs to one of n types. Each type is characterized by a distribution function Fi on a common support [v, v]. There are ki bidders in group i for a total of N = ∑n i=1ki (potential) bidders.",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-3",
+      "query_id": "q1",
+      "url": "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+      "title": "8 Minutes to Master Solving Sealed Bid First Price Auction Problems",
+      "snippet": "there's a piece of art in the middle of the room and each of bill and dave are going to write down how much they want to bid for the art how much they want to pay if they win the art they are going to make those bids separately so that the other person can't see what they're writing down they're going to seal them in an envelope and drop them in this beautifully drawn big box then after the auction is over one person who is not a player is going to open up both those envelopes figure out who [...] the distribution is going to randomly assign the valuation of the art to both bill and dave then bill is going to make a bid dave is going to make a bid they're doing it simultaneously but we can write it sort of as a sequential game it's basically the same thing and then we are going to see what happens how does bill's bid stack up dave's bid if bill has the higher bid then he is going to get the payoff of his valuation minus his bid dave is walking away with nothing a tie is pretty unlikely [...] is pretty unlikely considering that we have every real number between zero and one but if for some reason that happens then they're each going to take away half of the payoff if they win and if dave's bid is bigger than bill's bid then well bill gets nothing and dave gets his valuation minus the bid that he put in all right so the way we are going to do this is we are going to start thinking about this from dave's perspective dave is trying to maximize his expected payoff so first before we get",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-1",
+      "web-2"
+    ],
+    "eps_admits": [
+      "web-3"
+    ],
+    "below_cut": [
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-9",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-9",
+      "web-8",
+      "web-5"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

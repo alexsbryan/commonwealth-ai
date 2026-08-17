@@ -1,0 +1,464 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786946762",
+  "charter_hash": "651bc656181e0894",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Based on the evidence provided, here is a synthesis of the information regarding the Prajñāpāramitā sutras and related Buddhist texts:\n\n**Or",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "There is scholarly debate regarding its chronology relative to other texts; while Japanese scholars traditionally consider the *Diamond Sūtr",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Key Texts Themes Prajñāpāraparamitā sutras focus figure Bodhisattva",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "In the **8,000**-line *Prajñāpāparamitā sūtra*, a Bodhisattva is defined as one who experiences everything without attachment (*asakti*) and",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "A central theme across these texts is that all phenomena (*dharmas*) are illusory, like dreams or mirages; even Buddhahood and Nirvana are t",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "The term *Prajñāpāra mīta* means \"Perfection of Wisdom\" or \"Perfection of Transcendental Wisdom,\" which leads to discerning pristine cogniti",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Diamond Sutra Vajracchedikā Sūtra prominent Mahāyāna within Chan/Zen tradition",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "11 868 famous physical copy Tang dynasty Chinese version dated May",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "1900 1907 woodblock-printed book found among Dunhuang manuscripts Daoist monk Wang Yuanlu sold Aurel Stein",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Diamond_Sutra#Abstract"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "It holds the distinction of being the earliest dated printed book and contains an explicit public domain dedication stating it was created f",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q11",
+      "text": "Commentaries Related Texts Important Prajñāpārama pita include Kumārajīva’s massive commentary Dazhidulun",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "**1509**) on the *Pañcaviśatisāhasrikā* version, translated between **344** and **413** CE [estate-2].",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q13",
+      "text": "Kūkai produced a Tantric commentary in the 9th century (**9**), which is noted as the first known of its kind [estate-2].",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q14",
+      "text": "Xuanzang also determined to render an unabridged volume faithful to the original of **600** fascicles [estate-2].",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q15",
+      "text": "East Asian Buddhism particularly within Zen/Chan traditions drew inspiration various scriptures including Diamond Sutra other influential texts include Lotus Sūtra",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q16",
+      "text": "term buddha-nature buddhadhatu explicitly mentioned Lotus Sūtra Japanese scholars Hajime Nakamura Akira Hirakawa suggest implicitly present",
+      "from_gap_id": "g18",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q17",
+      "text": "Chinese commentators pointed to the story of Bodhisattva Never Disparaging in chapter **20** as evidence for this implicit teaching [estate-",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q18",
+      "text": "Additionally, the Sutta Piaka includes medium-length suttas, with a count of **152** in one specific nikaya [estate-1].",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q19",
+      "text": "What is the historical origin and dating of the Diamond Sutra, specifically comparing the earliest extant printed version from 868 CE with earlier Sanskrit manuscripts?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q20",
+      "text": "Measure: Date (year), Count (number of extant manuscripts)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q21",
+      "text": "Entities: China (Dunhuang), India, Years (7th-9th century CE)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q22",
+      "text": "How does the concept of Śūnyatā (emptiness) function as a central philosophical metric in Mahayana Buddhism compared to Theravada interpretations?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q23",
+      "text": "Measure: Conceptual definition/philosophical framework comparison",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q24",
+      "text": "Entities: Mahayana Buddhism, Theravada Buddhism, Schools of Buddhist philosophy",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q25",
+      "text": "What is the structural composition and chapter count of the Vajracchedikā Prajñāpāramitā Sūtra in standard translations?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q26",
+      "text": "Measure: Count (number of chapters/vargas), Length (word/syllable count)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q27",
+      "text": "Entities: Diamond Sutra texts, Translations (Kumārajīva, Xuanzang, etc.)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q28",
+      "text": "How has the recitation frequency of the Diamond Sutra influenced its preservation rate among Chinese Buddhist communities over centuries?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q29",
+      "text": "Measure: Rate (frequency of recitation), Share (percentage of monastic libraries containing the text)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q30",
+      "text": "Entities: Chinese Buddhism, Monasteries, Historical periods",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "562707",
+      "query_id": "q4",
+      "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_Bodhisattva_and_Prajñāpāramitā",
+      "title": "Prajnaparamita",
+      "snippet": " non-dual (advaya) as well as transcendental. Literally, the term could be translated as \"knowledge gone to the other (shore)\", or transcendental knowledge. The Aṣṭasāhasrikā Prajñāpāramitā Sūtra says:",
+      "content": "Prajnaparamita\n\nA key theme of the Prajñāpāramitā sutras is the figure of the Bodhisattva (literally: awakening-being) which is defined in the 8,000-line Prajñāpāramitā sutra as:\n\nA Bodhisattva is then a being that experiences everything \"without attachment\" (asakti) and sees reality or suchness (Tathātā) as it is. The Bodhisattva is the main ideal in Mahayana (Great Vehicle), which sees the goal of the Buddhist path as becoming a Buddha for the sake of all sentient beings, not just yourself:\n\nA central quality of the Bodhisattva is their practice of Prajñāpāramitā, a most deep (gambhīra) state of knowledge which is an understanding of reality arising from analysis as well as meditative insight. It is non-conceptual and non-dual (advaya) as well as transcendental. Literally, the term could be translated as \"knowledge gone to the other (shore)\", or transcendental knowledge. The Aṣṭasāhasrikā Prajñāpāramitā Sūtra says:",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "562701",
+      "query_id": "q11",
+      "url": "https://en.wikipedia.org/wiki/Prajnaparamita#China",
+      "title": "Prajnaparamita",
+      "snippet": "Asian Buddhism is the Dazhidulun (大智度論, T no. 1509), a massive commentary on the Pañcaviṃśatisāhasrikā Prajñāpāramitā translated by Kumārajīva (344–413 CE). There are also later commentaries from Zen Buddhists on the Heart and Diamond sutra and Kūkai 's commentary (9th century) is the first-known Tantric commentary.",
+      "content": "Prajnaparamita\n\nhis decision, Xuanzang determined to render an unabridged, complete volume, faithful to the original of 600 fascicles.\n\nAn important PP text in East Asian Buddhism is the Dazhidulun (大智度論, T no. 1509), a massive commentary on the Pañcaviṃśatisāhasrikā Prajñāpāramitā translated by Kumārajīva (344–413 CE). There are also later commentaries from Zen Buddhists on the Heart and Diamond sutra and Kūkai 's commentary (9th century) is the first-known Tantric commentary.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "562678",
+      "query_id": "q6",
+      "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+      "title": "Prajnaparamita",
+      "snippet": "Prajnaparamita\n\nPrajñāpāramitā means the \"Perfection of Wisdom\" or \"Perfection of Transcendental Wisdom\". Prajñāpāramitā practices lead to discerning pristine cognition in a self-reflexively aware way, of seeing the nature of reality. There is a particular body of Mahayana sutras (scriptures) on this wisdom, and they form the practice sadhanas, such as the Heart Sutra. The Transcendent Wisdom of the Prajanaparamita also transcends any single vehicle (yana) of Buddhist philosophy, as explained in the \"Heart Sutra\" through the replies Avalokiteshvara gives to Shariputra's question of how",
+      "content": "Prajnaparamita\n\nPrajñāpāramitā means the \"Perfection of Wisdom\" or \"Perfection of Transcendental Wisdom\". Prajñāpāramitā practices lead to discerning pristine cognition in a self-reflexively aware way, of seeing the nature of reality. There is a particular body of Mahayana sutras (scriptures) on this wisdom, and they form the practice sadhanas, such as the Heart Sutra. The Transcendent Wisdom of the Prajanaparamita also transcends any single vehicle (yana) of Buddhist philosophy, as explained in the \"Heart Sutra\" through the replies Avalokiteshvara gives to Shariputra's question of how should sons and daughters of noble qualities practice the Prajnaparamita: \"All the Buddhas of the three times by relying on the Prajnaparamita Awaken completely",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "1570837",
+      "query_id": "q10",
+      "url": "https://en.wikipedia.org/wiki/Diamond_Sutra",
+      "title": "Diamond Sutra",
+      "snippet": " the words of the British Library, \"the earliest dated printed book\". It is also the first known creative work with an explicit public domain dedication, as its colophon at the end states that it was created \"for universal free distribution\".",
+      "content": "Diamond Sutra\n\nThe Diamond Sutra is a Mahāyāna Buddhist sutra from the genre of Prajñāpāramitā sutras. Translated into a variety of languages over a broad geographic range, the Diamond Sūtra is one of the most influential Mahayana sutras in East Asia, and it is particularly prominent within the Chan tradition, along with the Heart Sutra. A copy of the Tang dynasty–Chinese version of the Diamond Sūtra was found among the Dunhuang manuscripts in 1900 by Daoist monk Wang Yuanlu and sold to Aurel Stein in 1907. They are dated back to 11 May 868. It is, in the words of the British Library, \"the earliest dated printed book\". It is also the first known creative work with an explicit public domain dedication, as its colophon at the end states that it was created \"for universal free distribution\".",
+      "engine": "corpus",
+      "score": 0.03306011110544205,
+      "custody": "personal"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "562707",
+      "562701",
+      "562678"
+    ],
+    "eps_admits": [
+      "1570837"
+    ],
+    "below_cut": [
+      "1570837",
+      "82301",
+      "562691",
+      "562707",
+      "1572660",
+      "600324",
+      "79596",
+      "462065",
+      "333638",
+      "421363",
+      "1467815",
+      "562708",
+      "421359",
+      "527653",
+      "1613130",
+      "562696",
+      "1570842",
+      "83566",
+      "562701",
+      "562701",
+      "231057",
+      "846674",
+      "687991",
+      "1814352",
+      "1814320",
+      "1756353",
+      "1621221",
+      "79588",
+      "1570844",
+      "82288",
+      "1796237",
+      "1477607",
+      "562683",
+      "562691",
+      "562679",
+      "919008",
+      "1162212",
+      "421355",
+      "1605661",
+      "1431674",
+      "899977",
+      "1685919",
+      "765560",
+      "868076",
+      "562721",
+      "562711",
+      "562694",
+      "1056540",
+      "1685974",
+      "953905",
+      "421325",
+      "1814340",
+      "600314",
+      "462065",
+      "919009",
+      "421328",
+      "1661750",
+      "231065",
+      "35343",
+      "79600",
+      "79509",
+      "1261260",
+      "351354",
+      "421348",
+      "1186785",
+      "1570840",
+      "562703",
+      "1570838",
+      "1570837",
+      "1004703",
+      "1570837",
+      "286166",
+      "421328",
+      "1000906",
+      "813356",
+      "1336139",
+      "421353",
+      "1814305",
+      "338614",
+      "82295",
+      "1570840",
+      "562706",
+      "562706",
+      "480580",
+      "1928869",
+      "82286",
+      "562685",
+      "765539",
+      "1094790",
+      "1602504",
+      "562706",
+      "474039",
+      "376763",
+      "1226684",
+      "1613127",
+      "421381",
+      "919009",
+      "1275307",
+      "965526",
+      "1691156",
+      "1908436",
+      "35328",
+      "421760",
+      "1884551",
+      "35330",
+      "953130",
+      "1864064",
+      "724514",
+      "1605689",
+      "1096230",
+      "1736905",
+      "472265",
+      "562701",
+      "1425730",
+      "1605638",
+      "79508",
+      "82290"
+    ],
+    "threshold": 0.03333333507180214,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

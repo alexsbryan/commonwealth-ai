@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786944073",
+  "charter_hash": "c35bc6f7d92a5c99",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the maximum number of qubits demonstrated in a single trapped-ion quantum processor as of 2023",
+      "Which companies or research institutions have achieved logical qubit error rates below one percent using ion trap systems",
+      "What is the current gate fidelity percentage for two-qubit operations in leading neutral atom and trapped ion architectures",
+      "How many physical ions are required to encode a single fault-tolerant logical qubit in surface code implementations",
+      "What is the average cost per qubit for commercial trapped-ion quantum computing hardware compared to superconducting alternatives",
+      "What is the projected market size in billions of US dollars for scalable quantum computing by 2030 based on industry reports"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

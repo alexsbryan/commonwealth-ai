@@ -1,0 +1,592 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786944328",
+  "charter_hash": "5c7154d9188d2eef",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Parkinson’s disease (PD) is a neurodegenerative disorder of the central nervous system that affects both motor and non-motor systems .",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "20 defining motor symptoms include tremor bradykinesia rigidity postural instability non-motor constipation anosmia mood disorders REM sleep behavior disorder may precede years",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "disease progresses patients may experience Parkinson's dementia falls neuropsychiatric problems like psychosis sleep abnormalities",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "74% 1990 2016 12 2040 number cases increased projections suggest total rise million patients",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Epidemiology"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "disease invariably progresses time",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "Historically before effective medication untreated individuals expected lose independent ambulation average eight years bedridden ten",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q7",
+      "text": "15 levodopa treatment progression high dependency may take years",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "1967 Severity often measured using scales Unified Parkinson's Disease Rating Scale UPDRS Hoehn Yahr originally published",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "Hoehn Yahr scale defines five basic stages progression",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "Treatment Options known cure Parkinson’s disease management typically involves holistic approach including lifestyle modifications physical therapy medication",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q11",
+      "text": "Medications work increasing dopamine levels mimicking effects",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "Levodopa remains effective treatment motor symptoms",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q13",
+      "text": "Other pharmacological options include COMT inhibitors dopamine agonists MAO-B dopa decarboxylase like carbidopa",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q14",
+      "text": "Surgical interventions considered drug therapy insufficient causes intolerable side effects",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q15",
+      "text": "Surgery divided lesional procedures Deep Brain Stimulation DBS",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q16",
+      "text": "DBS involves implanting neurostimulator send electrical impulses areas thalamus globus pallidus subthalamic nucleus",
+      "from_gap_id": "g18",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q17",
+      "text": "Lesional therapies involve creating lesions to suppress overactivity in specific brain regions .",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q18",
+      "text": "Psychological Impact Comorbidities Living Parkinson’s can lead significant stressors including depression reduced self-esteem health psychologists help patients manage",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q19",
+      "text": "19 Impulse-control disorders affect approximately percent all patients positively correlated dopamine agonist use",
+      "from_gap_id": "g21",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Neuropsychiatric"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q20",
+      "text": "Notable Figures Public Awareness understanding Parkinson’s increased through diagnoses among",
+      "from_gap_id": "g24",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q21",
+      "text": "2013 2019 Singer Linda Ronstadt revealed her diagnosis August though doctors revised progressive supranuclear palsy late",
+      "from_gap_id": "g25",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Linda_Ronstadt#Personal_life"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q22",
+      "text": "Actor Michael",
+      "from_gap_id": "g26",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q23",
+      "text": "29 Fox diagnosed age founded Michael",
+      "from_gap_id": "g27",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q24",
+      "text": "Fox Foundation in **2000**, which has raised over $**2 billion** for research .",
+      "from_gap_id": "g28",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q25",
+      "text": "38 42 Boxer Muhammad Ali showed signs age diagnosed until",
+      "from_gap_id": "g29",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q26",
+      "text": "40 2004 Cyclist Davis Phinney diagnosed age started his foundation",
+      "from_gap_id": "g30",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Notable_cases"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q27",
+      "text": "Journalist Jeremy Paxman’s experience with the disease was highlighted in a documentary released in October **2022**, where he recorded his ",
+      "from_gap_id": "g31",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q28",
+      "text": "What are the motor symptoms associated with early-stage Parkinson's disease?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q29",
+      "text": "What are the non-motor warning signs in stage 1 Parkinson's disease?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q30",
+      "text": "What is the prevalence of REM sleep behavior disorder as a prodromal sign of Parkinson's?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q31",
+      "text": "What are the key functional decline indicators in moderate (stage 3) Parkinson's disease?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q32",
+      "text": "Which specific behavioral changes signal caregiver intervention needs in advanced Parkinson's?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q33",
+      "text": "What is the success rate of Deep Brain Stimulation for tremor reduction?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q34",
+      "text": "How does post-operative care affect quality of life scores after DBS surgery?",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "364008",
+      "query_id": "q2",
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+      "title": "Parkinson's disease",
+      "snippet": "omic or sensory nervous system, mood, behavior, sleep patterns, and cognition.\n\nNon-motor symptoms may precede the onset of motor symptoms by up to 20 years. These include constipation, anosmia, mood disorders, and REM sleep behavior disorder among others. In general, motor symptoms such as postural instability and gait abnormalities tend to appear as the disease progresses.",
+      "content": "Parkinson's disease\n\nThe defining symptoms affect the motor system and include tremor, bradykinesia, rigidity, and postural instability. Other symptoms may affect the autonomic or sensory nervous system, mood, behavior, sleep patterns, and cognition.\n\nNon-motor symptoms may precede the onset of motor symptoms by up to 20 years. These include constipation, anosmia, mood disorders, and REM sleep behavior disorder among others. In general, motor symptoms such as postural instability and gait abnormalities tend to appear as the disease progresses.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "364080",
+      "query_id": "q6",
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+      "title": "Parkinson's disease",
+      "snippet": "ressively in the early stages of the disease and more slowly later. Untreated, individuals are expected to lose independent ambulation after an average of eight years and be bedridden after 10 years. Medication has improved the prognosis of motor symptoms. In people taking levodopa, the progression time of symptoms to a stage of high dependency from caregivers may be over 15 years.",
+      "content": "Parkinson's disease\n\nPD invariably progresses with time. A severity rating method known as the Unified Parkinson's disease rating scale (UPDRS) is the most commonly used metric for a clinical study. A modified version known as the MDS-UPDRS is also used. An older scaling method known as the Hoehn and Yahr scale (originally published in 1967), and a similar scale known as the Modified Hoehn and Yahr scale, have been used. The Hoehn and Yahr scale defines five basic stages of progression.\n\nMotor symptoms may advance aggressively in the early stages of the disease and more slowly later. Untreated, individuals are expected to lose independent ambulation after an average of eight years and be bedridden after 10 years. Medication has improved the prognosis of motor symptoms. In people taking levodopa, the progression time of symptoms to a stage of high dependency from caregivers may be over 15 years.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "364080",
+      "query_id": "q8",
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+      "title": "Parkinson's disease",
+      "snippet": "PDRS) is the most commonly used metric for a clinical study. A modified version known as the MDS-UPDRS is also used. An older scaling method known as the Hoehn and Yahr scale (originally published in 1967), and a similar scale known as the Modified Hoehn and Yahr scale, have been used. The Hoehn and Yahr scale defines five basic stages of progression.\n\nMotor symptoms may advance aggressively in the early stages of the disease and more slowly later. Untreated, individuals are expected to lose independent ambulation after an average of eight years and be bedridden after 10 years. Medication has ",
+      "content": "Parkinson's disease\n\nPD invariably progresses with time. A severity rating method known as the Unified Parkinson's disease rating scale (UPDRS) is the most commonly used metric for a clinical study. A modified version known as the MDS-UPDRS is also used. An older scaling method known as the Hoehn and Yahr scale (originally published in 1967), and a similar scale known as the Modified Hoehn and Yahr scale, have been used. The Hoehn and Yahr scale defines five basic stages of progression.\n\nMotor symptoms may advance aggressively in the early stages of the disease and more slowly later. Untreated, individuals are expected to lose independent ambulation after an average of eight years and be bedridden after 10 years. Medication has improved the prognosis of motor symptoms. In people taking levodopa, the progression time of symptoms to a stage of high dependency from caregivers may be over 15 years.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    },
+    {
+      "id": "364080",
+      "query_id": "q9",
+      "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+      "title": "Parkinson's disease",
+      "snippet": "known as the Hoehn and Yahr scale (originally published in 1967), and a similar scale known as the Modified Hoehn and Yahr scale, have been used. The Hoehn and Yahr scale defines five basic stages of progression.\n\nMotor symptoms may advance aggressively in the early stages of the disease and more slowly later. Untreated, individuals are expected to lose independent ambulation after an average of eight years and be bedridden after 10 years. Medication has improved the prognosis of motor symptoms. In people taking levodopa, the progression time of symptoms to a stage of high dependency from care",
+      "content": "Parkinson's disease\n\nPD invariably progresses with time. A severity rating method known as the Unified Parkinson's disease rating scale (UPDRS) is the most commonly used metric for a clinical study. A modified version known as the MDS-UPDRS is also used. An older scaling method known as the Hoehn and Yahr scale (originally published in 1967), and a similar scale known as the Modified Hoehn and Yahr scale, have been used. The Hoehn and Yahr scale defines five basic stages of progression.\n\nMotor symptoms may advance aggressively in the early stages of the disease and more slowly later. Untreated, individuals are expected to lose independent ambulation after an average of eight years and be bedridden after 10 years. Medication has improved the prognosis of motor symptoms. In people taking levodopa, the progression time of symptoms to a stage of high dependency from caregivers may be over 15 years.",
+      "engine": "corpus",
+      "score": 0.03333333507180214,
+      "custody": "personal"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "364008",
+      "364080",
+      "364080"
+    ],
+    "eps_admits": [
+      "364080"
+    ],
+    "below_cut": [
+      "364080",
+      "364003",
+      "364003",
+      "364053",
+      "364085",
+      "364080",
+      "364057",
+      "364058",
+      "1127942",
+      "364001",
+      "364042",
+      "364012",
+      "394411",
+      "364062",
+      "364006",
+      "1127953",
+      "641232",
+      "500796",
+      "641288",
+      "641296",
+      "364060",
+      "1308343",
+      "364006",
+      "1273709",
+      "364057",
+      "364053",
+      "364008",
+      "364017",
+      "364061",
+      "364053",
+      "364003",
+      "1576691",
+      "641230",
+      "364009",
+      "364005",
+      "525210",
+      "1255535",
+      "364008",
+      "364023",
+      "641232",
+      "364062",
+      "1127924",
+      "119205",
+      "1127940",
+      "364059",
+      "394411",
+      "1304702",
+      "535050",
+      "364022",
+      "364014",
+      "364080",
+      "364068",
+      "81587",
+      "641281",
+      "1076534",
+      "201476",
+      "1304701",
+      "364061",
+      "364044",
+      "364019",
+      "1127940",
+      "1903835",
+      "1218920",
+      "364080",
+      "364081",
+      "364086",
+      "1190272",
+      "803768",
+      "1529915",
+      "434703",
+      "932229",
+      "364064",
+      "1569258",
+      "1920926",
+      "1817209",
+      "891543",
+      "364091",
+      "193309",
+      "364080",
+      "1304681",
+      "1784674",
+      "1222907",
+      "636087",
+      "1900028",
+      "1456970",
+      "1590210",
+      "1909492",
+      "1565643",
+      "1885203",
+      "537081",
+      "364070",
+      "1034272",
+      "461074",
+      "820852",
+      "918749",
+      "1170073",
+      "1550460",
+      "364007",
+      "1805825",
+      "1402876",
+      "823376",
+      "715451",
+      "1413644",
+      "1943438",
+      "364082",
+      "691637",
+      "364041",
+      "831219",
+      "1927114",
+      "1673768",
+      "57347",
+      "1913952",
+      "53110",
+      "1772668",
+      "364041",
+      "1875696",
+      "1864538"
+    ],
+    "threshold": 0.03333333507180214,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

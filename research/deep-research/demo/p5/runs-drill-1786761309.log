@@ -1,0 +1,13 @@
+=== fab-poisoned: fab-poisoned ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/p5/runs/fab-poisoned/fab-poisoned.console.log)
+=== fab-clean: fab-clean ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/p5/runs/fab-clean/fab-clean.console.log)
+=== inj-poisoned: inj-poisoned ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/p5/runs/inj-poisoned/inj-poisoned.console.log)
+=== inj-clean: inj-clean ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/p5/runs/inj-clean/inj-clean.console.log)
+=== p5-poisoned: p5-poisoned ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/p5/runs/p5-poisoned/p5-poisoned.console.log)
+=== p5-clean: p5-clean ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/p5/runs/p5-clean/p5-clean.console.log)
+=== all six flights done ===

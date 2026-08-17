@@ -1,0 +1,51 @@
+{
+ "delta": "hybrid - local",
+ "pooled_delta": -0.5134453781512605,
+ "local_pooled": 0.8705882352941177,
+ "hybrid_pooled": 0.35714285714285715,
+ "bootstrap": {
+  "n_resamples": 10000,
+  "seed": 4234932947,
+  "dropped_undefined": 2,
+  "ci95_lower": -0.6231769181991123,
+  "ci95_upper": -0.39411764705882346
+ },
+ "descriptive_verdict": "met",
+ "zero_pair_flights": {
+  "local": [
+   62,
+   90,
+   95
+  ],
+  "hybrid": [
+   56,
+   62
+  ]
+ },
+ "zero_judged_flights": {
+  "local": [
+   59,
+   62,
+   90,
+   95
+  ],
+  "hybrid": [
+   56,
+   62
+  ]
+ },
+ "abstention_dimension": {
+  "local": {
+   "honest_abstention": 2,
+   "unclassified_unknown": 134,
+   "abstention_share_of_unknown": 0.014705882352941176,
+   "note": "decline (honest abstention) is its own verdict class (order deep-research-t3d); the remaining unknown mass is unclassified \u2014 never abstention-scored by any instrument (T3C_AUDIT_FORENSICS.md pass site 3) \u2014 and is reported as-is, never collapsed into fabrication."
+  },
+  "hybrid": {
+   "honest_abstention": 1,
+   "unclassified_unknown": 5,
+   "abstention_share_of_unknown": 0.16666666666666666,
+   "note": "decline (honest abstention) is its own verdict class (order deep-research-t3d); the remaining unknown mass is unclassified \u2014 never abstention-scored by any instrument (T3C_AUDIT_FORENSICS.md pass site 3) \u2014 and is reported as-is, never collapsed into fabrication."
+  }
+ }
+}

@@ -10,8 +10,9 @@
 //!   2. `search_calls` per round are IDENTICAL;
 //!   3. the terminal state is IDENTICAL;
 //!   4. the ONLY delta is the `fetched` column — clean fetches
-//!      nothing, poisoned fetches exactly the deck's urls, every
-//!      round (the wasted round, in the open).
+//!      nothing, poisoned fetches exactly the deck's urls, once
+//!      (round 1; rounds 2+ refuse the already-fetched urls — the
+//!      dedup fix — so the wasted round is spent once, in the open).
 //!
 //! A garbage judge (`"no"` → parse fails → None → could-not-judge)
 //! makes the run deterministic: the same scripted draft produces the
@@ -26,7 +27,7 @@
 use async_trait::async_trait;
 use futures::Stream;
 use sovereign_core::deep_research::gym::{Deck, MockBackendImpl, MockDraftSurface};
-use sovereign_core::deep_research::icd::{Artifact, Manifest};
+use sovereign_core::deep_research::icd::{Artifact, EvidenceWindow, Manifest};
 use sovereign_core::deep_research::{run, RunConfig};
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::traits::InferenceProvider;
@@ -140,9 +141,11 @@ async fn drill_once(run_dir: PathBuf, deck: Deck) -> Manifest {
             evidence_window_max_chunks: 20,
             estate_corpus_ids: Vec::new(),
             web_backend: MockBackendImpl::BACKEND_ID.to_string(),
+            search_source: sovereign_core::deep_research::SearchSource::Mock,
             web_search_allowance: 8,
             web_fetch_allowance: 8,
             posture: ShardingPrivacy::LocalOnly,
+            consent: None,
         },
         port,
         Arc::new(GarbageJudge),
@@ -164,8 +167,10 @@ fn fresh_run_dir(tag: &str) -> PathBuf {
 /// terminal) fails loudly instead of being read as "close enough".
 #[tokio::test]
 async fn p5_drill_pair_trace_identity() {
-    let clean_manifest = drill_once(fresh_run_dir("clean"), clean_deck()).await;
-    let poisoned_manifest = drill_once(fresh_run_dir("poisoned"), poisoned_deck()).await;
+    let clean_run_dir = fresh_run_dir("clean");
+    let poisoned_run_dir = fresh_run_dir("poisoned");
+    let clean_manifest = drill_once(clean_run_dir.clone(), clean_deck()).await;
+    let poisoned_manifest = drill_once(poisoned_run_dir.clone(), poisoned_deck()).await;
 
     // 1. Same number of rounds.
     assert_eq!(
@@ -206,36 +211,51 @@ async fn p5_drill_pair_trace_identity() {
     );
 
     // 4. The only delta is the fetched column. Clean fetches nothing,
-    //    every round; poisoned fetches exactly the deck's urls, every
-    //    round — the wasted round, in the open.
+    //    every round; poisoned admits the deck's plant pair in round 1
+    //    and rounds 2+ REFUSE the already-fetched urls (the fetch
+    //    dedup fix, order deep-research-t1d) — the wasted round is
+    //    spent once, in the open, and the budget is never re-spent.
+    //
+    //    The ledger's last row is finish()'s audit row (search_calls
+    //    = 0) and re-states the MERGED window's cumulative chunk count
+    //    — the evidence already held, not a new fetch. The per-round
+    //    shape lives in the search-carrying rows.
     for r in &clean_manifest.rounds {
         assert_eq!(r.fetched, 0, "round {}: clean run fetched", r.round);
     }
     assert!(clean_manifest.sources.fetched.is_empty());
+    let mut saw_acquire_round = false;
     for r in &poisoned_manifest.rounds {
-        assert_eq!(
-            r.fetched, 2,
-            "round {}: the poisoned run must fetch the plant pair every round",
-            r.round
-        );
+        if r.search_calls == 0 {
+            // finish()'s audit row: the merged cumulative chunks —
+            // the round-1 pair, never a re-fetch.
+            assert_eq!(
+                r.fetched, 2,
+                "finish row must carry the merged evidence (2 chunks)"
+            );
+            continue;
+        }
+        saw_acquire_round = true;
+        if r.round == 1 {
+            assert_eq!(r.fetched, 2, "round 1 must admit the plant pair");
+        } else {
+            assert_eq!(
+                r.fetched, 0,
+                "round {}: already-fetched urls must be refused (dedup)",
+                r.round
+            );
+        }
     }
+    assert!(
+        saw_acquire_round,
+        "no acquire rows in the poisoned manifest"
+    );
 
     // Every fetched source is a deck url (F23: no url outside the
-    // deck can appear in the trace). The ledger is the per-fetch-event
-    // flight record: 2 plants × 3 rounds = 6 rows (the evidence-window
-    // dedup lives in the window, not the ledger).
+    // deck can appear in the trace). With the dedup fix each plant is
+    // fetched exactly once (round 1); rounds 2+ refuse it.
     let deck_urls: HashSet<String> = poisoned_deck().hits.iter().map(|h| h.url.clone()).collect();
     assert_eq!(deck_urls.len(), 2, "the poisoned deck must carry 2 hits");
-    // The ledger is the per-fetch-event flight record: each plant is
-    // fetched once per acquire round (a finish-audit row may re-state
-    // the last round's fetched count, so the per-round count is derived
-    // from the search-carrying rows — the rows with a real search).
-    let real_rounds = poisoned_manifest
-        .rounds
-        .iter()
-        .filter(|r| r.search_calls > 0)
-        .count();
-    assert_eq!(real_rounds, 3, "max_rounds=3 must drive 3 acquire rounds");
     for url in &deck_urls {
         let n = poisoned_manifest
             .sources
@@ -244,8 +264,8 @@ async fn p5_drill_pair_trace_identity() {
             .filter(|s| &s.url == url)
             .count();
         assert_eq!(
-            n, real_rounds,
-            "plant {url} must be fetched once per acquire round"
+            n, 1,
+            "plant {url} must be fetched exactly once (dedup refuses re-fetches)"
         );
     }
     for src in &poisoned_manifest.sources.fetched {
@@ -253,6 +273,33 @@ async fn p5_drill_pair_trace_identity() {
             deck_urls.contains(&src.url),
             "fetched url {} is not a deck url — the deck boundary leaked",
             src.url
+        );
+    }
+    // The dedup fix's own contract, at the window level: rounds 2+
+    // record the refusal (the already-fetched urls) on the window
+    // ICD — the budget is never re-spent and the refusal is a record.
+    let windows: Vec<EvidenceWindow> = std::fs::read_dir(&poisoned_run_dir)
+        .unwrap()
+        .map(|p| p.unwrap().path())
+        .filter(|p| {
+            let name = p.file_name().unwrap().to_string_lossy().to_string();
+            name.starts_with("evidence-window-") && name.ends_with(".json")
+        })
+        .map(|p| {
+            let json = std::fs::read_to_string(&p).unwrap();
+            serde_json::from_str(&json).expect("window artifact parses")
+        })
+        .collect();
+    let rounds_2plus: Vec<&EvidenceWindow> = windows.iter().filter(|w| w.round >= 2).collect();
+    assert!(
+        !rounds_2plus.is_empty(),
+        "no evidence windows for rounds 2+ — the drill did not reach a dedup round"
+    );
+    for w in &rounds_2plus {
+        assert!(
+            !w.dedup_refused.is_empty(),
+            "round {} window records no dedup refusal — the dedup gate is not live",
+            w.round
         );
     }
 
@@ -488,4 +535,101 @@ async fn unsearchable_estate_refuses_the_web_leg() {
         "the estate absence must be reported loud — got: {:?}",
         manifest.not_covered
     );
+}
+
+/// GAP-3 (spec "Epistemic residue"): the CLEAN deck — every search
+/// returns nothing. The residue must name EVERY query the loop
+/// executed, read from the fetch-list artifacts (the flight recorder),
+/// never guessed: what the loop looked for, on the record.
+#[tokio::test]
+async fn clean_deck_residue_names_every_executed_query() {
+    let run_dir = fresh_run_dir("residue-clean");
+    let manifest = drill_once(run_dir.clone(), clean_deck()).await;
+
+    // The executed query set, from the recorder: every FormedQuery of
+    // every fetch-list artifact (the residue is collected at search
+    // time in acquire_round; the fetch-list is the same round's
+    // record — the two must agree exactly for a nothing-found run).
+    let mut executed: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(&run_dir).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(rest) = name.strip_prefix("fetch-list-") {
+            if rest.ends_with(".json") {
+                let json = std::fs::read_to_string(entry.path()).unwrap();
+                let Artifact::FetchList(fl) = Artifact::parse(&json).unwrap() else {
+                    panic!("fetch-list artifact must parse");
+                };
+                for q in &fl.queries {
+                    executed.push(q.text.clone());
+                }
+            }
+        }
+    }
+    assert!(
+        !executed.is_empty(),
+        "the drill must execute at least one query"
+    );
+
+    assert!(
+        !manifest.residue.is_empty(),
+        "a nothing-found run must carry residue"
+    );
+    // Every executed query is named; every residue row is an executed
+    // query — the residue is EXACTLY the searched-but-absent set.
+    for q in &executed {
+        assert!(
+            manifest.residue.iter().any(|r| &r.query == q),
+            "executed query {q:?} must be named in the residue"
+        );
+    }
+    for row in &manifest.residue {
+        assert!(
+            executed.iter().any(|q| q == &row.query),
+            "residue row {row:?} is not an executed query"
+        );
+        assert!(row.round >= 1, "residue rows carry the round");
+    }
+}
+
+/// GAP-3: the POISONED deck — the plant's tokens match every query the
+/// loop forms (the question and the claim both name OpenAI/Anthropic).
+/// The residue must then name ONLY empty-result queries: a query that
+/// found the plant is not "searched but absent" — the absence
+/// disclosure must not leak into a run that found something.
+#[tokio::test]
+async fn poisoned_deck_residue_names_only_empty_result_queries() {
+    let deck = poisoned_deck();
+    let run_dir = fresh_run_dir("residue-poisoned");
+    let manifest = drill_once(run_dir.clone(), deck.clone()).await;
+
+    for row in &manifest.residue {
+        for (i, hit) in deck.hits.iter().enumerate() {
+            assert!(
+                !deck.query_matches(i, &row.query),
+                "residue row {row:?} matches deck hit {} — a query that found evidence \
+                 must not be named as searched-but-absent",
+                hit.url
+            );
+        }
+    }
+    // With the plant matching every query, no query is absent — and the
+    // clean twin's executed queries are all present in this run's
+    // recorder too (the pair drives the same queries; only the
+    // answers differ).
+    let mut clean_executed: Vec<String> = Vec::new();
+    for entry in std::fs::read_dir(&run_dir).unwrap().flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if let Some(rest) = name.strip_prefix("fetch-list-") {
+            if rest.ends_with(".json") {
+                let json = std::fs::read_to_string(entry.path()).unwrap();
+                let Artifact::FetchList(fl) = Artifact::parse(&json).unwrap() else {
+                    panic!("fetch-list artifact must parse");
+                };
+                for q in &fl.queries {
+                    clean_executed.push(q.text.clone());
+                }
+            }
+        }
+    }
+    assert!(!clean_executed.is_empty(), "the drill must execute queries");
 }

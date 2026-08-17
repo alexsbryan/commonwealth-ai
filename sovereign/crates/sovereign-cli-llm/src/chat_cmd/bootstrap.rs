@@ -235,6 +235,10 @@ pub async fn build_session_with_skills(
     tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
         Arc::clone(&inference),
+        // Client built by the egress boundary (order deep-research-t2a):
+        // tools-base is contract-only and must not construct an
+        // egress-capable HTTP client itself.
+        sovereign_core::egress::search_client().expect("egress boundary search client build"),
         // DuckDuckGo — free, no key required. Matches the no-API-key
         // fallback in main.rs for parity with the legacy REPL.
         sovereign_tools::web::search::SearchBackend::DuckDuckGo,

@@ -260,6 +260,10 @@ def main():
                                 / "sovereign" / "bench" / "sec-filings" / "prose"),
                     help="filing prose parts (for required_quote verification); "
                          "defaults to sovereign/bench/sec-filings/prose")
+    ap.add_argument("--records",
+                    help="runner records.jsonl; a turn whose rc != 0 is REFUSED "
+                         "(could-not-judge) instead of scored — an infrastructure "
+                         "failure must never read as a quality verdict")
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--json", help="also write verdicts as jsonl to this path")
     ap.add_argument("--debug", action="store_true")
@@ -305,15 +309,61 @@ def main():
               f"filing text (sovereign/bench/sec-filings/prose).", file=sys.stderr)
         sys.exit(5)
 
+    # THE TURN MUST HAVE RUN BEFORE ITS ANSWER MEANS ANYTHING.
+    #
+    # The defect this closes (2026-08-17, order `sec-filings-last-mile`): a
+    # frozen-set run raced a daemon restart, seven turns exited rc=1 with
+    # `daemon unreachable` and wrote 1-byte answer files, and this judge
+    # scored those empty files as EVASION — three competence FAILURES that
+    # were an outage, not an answer. A bench that turns infrastructure
+    # failures into quality regressions is the §18.3 shape inside the
+    # instrument F2 depends on, so an unusable turn is now REFUSED by name
+    # rather than scored in either direction.
+    #
+    # `rc` is optional (`--records`): without it the emptiness check alone
+    # still catches the observed failure mode, and verdicts over valid
+    # answers are unchanged either way.
+    turn_rc = {}
+    if args.records:
+        try:
+            with open(args.records, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    rec = json.loads(line)
+                    if "id" in rec and "rc" in rec:
+                        # Records are APPENDED across runs; the last row for
+                        # an id is the one this judging pass is about.
+                        turn_rc[rec["id"]] = rec["rc"]
+        except (OSError, json.JSONDecodeError) as e:
+            print(f"judge: --records {args.records} unreadable ({e}) — refusing to "
+                  f"judge rather than score turns whose exit status is unknown",
+                  file=sys.stderr)
+            sys.exit(5)
+
     rows, honesty, competence, cnj = [], 0, 0, 0
     for item in prereg["item"]:
         iid = item["id"]
+        rc = turn_rc.get(iid)
+        if rc is not None and rc != 0:
+            rows.append((iid, "could-not-judge", None,
+                         f"turn exited rc={rc} — the CLI failed before reaching the "
+                         f"answer path; an infrastructure failure is not a verdict"))
+            cnj += 1
+            continue
         path = Path(args.answers) / f"{iid}.txt"
         if not path.exists():
             rows.append((iid, "could-not-judge", None, f"no answer file {path}"))
             cnj += 1
             continue
         answer = path.read_text(encoding="utf-8", errors="replace")
+        if not answer.strip():
+            rows.append((iid, "could-not-judge", None,
+                         f"empty answer file {path} ({path.stat().st_size} bytes) — "
+                         f"the turn produced no answer, so there is nothing to judge"))
+            cnj += 1
+            continue
         try:
             verdict, half, detail = judge_item(item, answer, cik, prose_text)
         except Exception as e:  # noqa: BLE001 — a judge crash is a verdict

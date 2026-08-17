@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-09 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['Anthropic', 'Claude', 'Opus 4', 'Sonnet 4', 'agentic']
+url = "https://estate.example/seed-09"
+title = "Anthropic's Claude 4 launch (2025-05-08)"
+snippet = "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding."
+body = "seed-09.md"

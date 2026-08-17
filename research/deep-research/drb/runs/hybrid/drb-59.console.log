@@ -1,0 +1,60 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: consent grant for run dr-1786945405 — release floor personal (recorded in the manifest)
+deep-research: run dr-1786945405 — In ecology, how do birds achieve precise location and direction navigation during migration? What cues and disturbances influence this process?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/runs/hybrid/drb-59/dr-1786945405
+deep-research: web backend tavily
+deep-research: search source web
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+[2m2026-08-17T05:43:30.742364Z[0m [34mDEBUG[0m egress released — run consent grant [3mprovider[0m[2m=[0mtavily [3mwhat[0m[2m=[0m"query" [3mcustody[0m[2m=[0mpersonal [3mpayload_chars[0m[2m=[0m143 [3mrun[0m[2m=[0mdr-1786945405 [3mrelease_floor[0m[2m=[0mpersonal [3mdetail[0m[2m=[0mIn ecology, how do birds achieve precise location and direction navigation during migration? What cues and disturbances influence this process?
+[2m2026-08-17T05:43:33.747385Z[0m [34mDEBUG[0m egress released — run consent grant [3mprovider[0m[2m=[0mtavily [3mwhat[0m[2m=[0m"query" [3mcustody[0m[2m=[0mpersonal [3mpayload_chars[0m[2m=[0m93 [3mrun[0m[2m=[0mdr-1786945405 [3mrelease_floor[0m[2m=[0mpersonal [3mdetail[0m[2m=[0mWhat is the percentage of migratory bird species that rely on geomagnetic cues for navigation
+[2m2026-08-17T05:43:34.884426Z[0m [34mDEBUG[0m egress released — run consent grant [3mprovider[0m[2m=[0mtavily [3mwhat[0m[2m=[0m"query" [3mcustody[0m[2m=[0mpersonal [3mpayload_chars[0m[2m=[0m107 [3mrun[0m[2m=[0mdr-1786945405 [3mrelease_floor[0m[2m=[0mpersonal [3mdetail[0m[2m=[0mWhich specific magnetic field parameters (intensity and inclination) are used by birds as navigational cues
+[2m2026-08-17T05:43:36.775403Z[0m [34mDEBUG[0m egress released — run consent grant [3mprovider[0m[2m=[0mtavily [3mwhat[0m[2m=[0m"query" [3mcustody[0m[2m=[0mpersonal [3mpayload_chars[0m[2m=[0m132 [3mrun[0m[2m=[0mdr-1786945405 [3mrelease_floor[0m[2m=[0mpersonal [3mdetail[0m[2m=[0mWhat is the average displacement error in kilometers for birds navigating under clear sky conditions compared to overcast conditions
+[2m2026-08-17T05:43:39.328033Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m44 [3mdetail[0m[2m=[0mhttps://en.wikipedia.org/wiki/Bird_migration
+[2m2026-08-17T05:43:39.451120Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m66 [3mdetail[0m[2m=[0mhttps://www.allaboutbirds.org/news/the-basics-migration-navigation
+[2m2026-08-17T05:43:39.530603Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m67 [3mdetail[0m[2m=[0mhttps://www.sciencedirect.com/science/article/pii/S1574954125002274
+[2m2026-08-17T05:43:39.651459Z[0m [34mDEBUG[0m egress released — public-web custody [3mprovider[0m[2m=[0mweb-fetch [3mwhat[0m[2m=[0m"url" [3mcustody[0m[2m=[0mpublic-web [3mpayload_chars[0m[2m=[0m78 [3mdetail[0m[2m=[0mhttps://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/runs/hybrid/drb-59/dr-1786945405/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786945405", charter_hash: "58f16603e2c19d34", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 2, search_calls: 4 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 18, fetched: 2, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://en.wikipedia.org/wiki/Bird_migration", custody: "public-web", ingested_into: None }, FetchedSource { url: "https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds", custody: "public-web", ingested_into: None }], failed: [FailedSource { url: "https://www.allaboutbirds.org/news/the-basics-migration-navigation", error: "fetch https://www.allaboutbirds.org/news/the-basics-migration-navigation: Execution error: HTTP 403 Forbidden for https://www.allaboutbirds.org/news/the-basics-migration-navigation" }, FailedSource { url: "https://www.sciencedirect.com/science/article/pii/S1574954125002274", error: "fetch https://www.sciencedirect.com/science/article/pii/S1574954125002274: Execution error: HTTP 403 Forbidden for https://www.sciencedirect.com/science/article/pii/S1574954125002274" }] }, budget: BudgetTotals { spent: {"web-fetch:pages": 4, "web-search:web": 4}, remaining: {"web-search:web": 0, "web-fetch:pages": 0} }, not_covered: ["Based on the provided evidence, birds achieve precise location and direction navigation during migration through a combination of innate genetic mechanisms and receptivity to external information.", "**Navigation Cues and Mechanisms**\nBirds utilize several methods to position themselves on their mental map:\n*   **Celestial Cues:** Birds use stars and celestial bodies (including the Sun) as reference points.", "They orient themselves using an internal compass based on these cues [Source: ev-1], [Source: ev-2].", "Specifically, they employ solar compasses at night or day, and moon/stars for nighttime orientation [Source: ev-2].", "*   **Geomagnetism:** The Earth's magnetic field is used for navigation.", "*   **Mental Maps:** Migrating birds maintain mental maps of their journey to navigate between regions that may be nearly 10,000 km apart [Source: ev-1], [Source: ev-2].", "**Innate vs.", "Learned Components**\nThe orientation mechanisms are genetically determined and innate.", "Evidence shows that very young birds set out on long migrations independently from their parents just months after birth, indicating these skills do not require parental teaching [Source: ev-2].", "However, birds also exhibit behavioral plasticity through receptivity to geographical and meteorological information [Source: ev-2].", "They possess an internal calendar that allows them to change course at the right time according to spatio-temporal conditions [Source: ev-2].", "The timing of migration is primarily controlled by changes in day length [Source: ev-1].", "**Precision and Disturbances/Hazards**\n*   **Precision:** Some species demonstrate staggering fidelity to specific sites.", "For example, barn swallows (*Hirundo rustica*) have been tracked moving between the same wintering and breeding sites with an accuracy of a few meters over seasons [Source: ev-2].", "One individual was recorded making the journey from South Africa to Germany for three consecutive years [Source: ev-2].", "*   **Disturbances and Hazards:** While navigation relies on innate cues, birds face inherent risks during migration, including predation and other hazards en route [Source: ev-1].", "The evidence notes that difficult weather conditions can make maintaining the migration vector more complicated, potentially rendering visual reference points unusable, though geomagnetism serves as a backup in such cases [Source: ev-2].", "**Figures Presented in Evidence**\nThe following figures are present in the provided text: 1, 2, 3, 4, 4.1, 4.2, 4.3, 5, 6, 7, 7.1, 7.2, 7.3, 7.4, 8, 9, 10, 10.1, 11, 12, 13, 13.1, 14, 15, 16, 17, 17.1, 67, 14000, 8700, and 1500 from [ev-1]; and 01, 17, and 2025 from the date stamp in [ev-2], along with figures referencing distances like 10000 km and specific bird illustrations (Figure 1: northern wheatear; Figure 2: barn sparrow/swallow)."], reframe: None, alignment: None, residue: [], consent: Some(ConsentGrant { run_id: "dr-1786945405", granted_at_unix: 1786945405, release_floor: Personal }), lock: LockRecord { id: "dr-1786945405", acquired_at_unix: 1786945405, released_at_unix: Some(1786945472) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "draft-2.json", "gap-list-2.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/runs/hybrid/drb-59/dr-1786945405/report.md
+rounds: 2 | gaps after last round: 18 | searches: 4 | fetched sources: 2
+open questions (could-not-judge):
+  - Based on the provided evidence, birds achieve precise location and direction navigation during migration through a combination of innate genetic mechanisms and receptivity to external information.
+  - **Navigation Cues and Mechanisms**
+Birds utilize several methods to position themselves on their mental map:
+*   **Celestial Cues:** Birds use stars and celestial bodies (including the Sun) as reference points.
+  - They orient themselves using an internal compass based on these cues [Source: ev-1], [Source: ev-2].
+  - Specifically, they employ solar compasses at night or day, and moon/stars for nighttime orientation [Source: ev-2].
+  - *   **Geomagnetism:** The Earth's magnetic field is used for navigation.
+  - *   **Mental Maps:** Migrating birds maintain mental maps of their journey to navigate between regions that may be nearly 10,000 km apart [Source: ev-1], [Source: ev-2].
+  - **Innate vs.
+  - Learned Components**
+The orientation mechanisms are genetically determined and innate.
+  - Evidence shows that very young birds set out on long migrations independently from their parents just months after birth, indicating these skills do not require parental teaching [Source: ev-2].
+  - However, birds also exhibit behavioral plasticity through receptivity to geographical and meteorological information [Source: ev-2].
+  - They possess an internal calendar that allows them to change course at the right time according to spatio-temporal conditions [Source: ev-2].
+  - The timing of migration is primarily controlled by changes in day length [Source: ev-1].
+  - **Precision and Disturbances/Hazards**
+*   **Precision:** Some species demonstrate staggering fidelity to specific sites.
+  - For example, barn swallows (*Hirundo rustica*) have been tracked moving between the same wintering and breeding sites with an accuracy of a few meters over seasons [Source: ev-2].
+  - One individual was recorded making the journey from South Africa to Germany for three consecutive years [Source: ev-2].
+  - *   **Disturbances and Hazards:** While navigation relies on innate cues, birds face inherent risks during migration, including predation and other hazards en route [Source: ev-1].
+  - The evidence notes that difficult weather conditions can make maintaining the migration vector more complicated, potentially rendering visual reference points unusable, though geomagnetism serves as a backup in such cases [Source: ev-2].
+  - **Figures Presented in Evidence**
+The following figures are present in the provided text: 1, 2, 3, 4, 4.1, 4.2, 4.3, 5, 6, 7, 7.1, 7.2, 7.3, 7.4, 8, 9, 10, 10.1, 11, 12, 13, 13.1, 14, 15, 16, 17, 17.1, 67, 14000, 8700, and 1500 from [ev-1]; and 01, 17, and 2025 from the date stamp in [ev-2], along with figures referencing distances like 10000 km and specific bird illustrations (Figure 1: northern wheatear; Figure 2: barn sparrow/swallow).
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  draft-2.json
+  gap-list-2.json
+  verdict-set.json
+  report.md
+  manifest.json

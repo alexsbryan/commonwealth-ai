@@ -1,0 +1,945 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1786944522",
+  "charter_hash": "d576c45cead6a54b",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "**Report: Tablet-Style Devices for Payments and SaaS Applications**\n\n**1.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "Major Manufacturers, Device Models, and Configurations**\n\nBased on the provided evidence, specific device models (e.g., iPad Mini 6th Gen) are mentioned only in the context of general tablet definitions or history, not specifically as payment/SaaS hardware configurations.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "However, major manufacturers and their strategic positioning regarding tablets suitable for business use include:\n\n*   **Apple:** Held majority use in North America, Western Europe, Japan, Australia, and most of the Americas [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "As of 2021, Apple held the largest manufacturer market share globally [Source: estate-2].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "estate-1",
+        "estate-1",
+        "estate-2"
+      ],
+      "citations": [
+        {
+          "evidence_id": "estate-1",
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+          "chunk_id": "estate-1"
+        },
+        {
+          "evidence_id": "estate-1",
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+          "chunk_id": "estate-1"
+        },
+        {
+          "evidence_id": "estate-2",
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+          "chunk_id": "estate-2"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Tablet_computer",
+          "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+          "https://en.wikipedia.org/wiki/Thunderbolt_(interface)#Apple_devices"
+        ],
+        "support_chunks": 3,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c5",
+      "text": "*   **Samsung:** Android reigned over the market with 65% share by early 2016, followed by Samsung's strong presence (implied by its VP comments) [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "By 2021, Samsung was the second-largest manufacturer after Apple [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "*   **Lenovo:** Listed as a third major manufacturer alongside Apple and Samsung in terms of global market share as of 2021 [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Lenovo also delayed deployment of tablets until after 2011 when Android was optimized for them [Source: estate-2].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "*   **Microsoft:** Released devices such as the Surface slate tablet, hybrids, and convertibles running Windows 8/RT starting in 2012 [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "Dell included Thunderbolt 3 ports in XPS Series and Alienware laptops (which can function as hybrid tablet/laptop systems) [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "**Configurations for Business/SaaS Use:**\nCustomized business tablets are built to meet specific hardware and software needs.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "Examples include:\n*   **Hardware Customization:** Embedding professional-grade GPS antennas for transportation companies instead of consumer-grade modules; ruggedizing devices for field use; using resistive touchscreens [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "*   **Software Customization:** Removing unnecessary functions like internet browsers to reduce cellular data costs; adding custom package management software [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "*   **OS Options:** Devices may run Android (including low-cost ARM systems), Windows 8/RT, or specialized firmware like Fire OS (Kindle) or Kindle firmware, which provide their own app stores rather than relying on Google Play [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c15",
+      "text": "**2.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "Images of These Devices**\n\nThe provided evidence does not contain images.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "It references an image caption for the \"iPad Mini (6th generation)\" in a Wikipedia article context but does not include the actual visual asset [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "Therefore, no images can be included in this report based strictly on the provided text.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "**3.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c20",
+      "text": "Primary Use Cases and Scenarios**\n\n*   **Sales and B2B Activities:** As of 2014, around **23%** of B2B companies had deployed tablets for sales-related activities [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c21",
+      "text": "*   **Work/Professional Use:** In early 2016 Samsung vice president Gary Riding stated that tablets were only doing well among those using them for work [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c22",
+      "text": "Newer models were designed with keyboards and styluses to reflect these changing professional uses [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c23",
+      "text": "*   **Field Operations (e.g., Transportation):** Customized tablets are used in transportation sectors.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c24",
+      "text": "Hardware may include specialized GPS antennas; software may be stripped of non-essential apps like browsers to manage data costs associated with employee cellular network usage [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c25",
+      "text": "*   **SaaS Consumption:** Tablets serve as endpoints for Software as a Service (SaaS) applications, such as productivity software like Google Docs and Office Online, which are hosted centrally by providers [Source: estate-1] [Source: estate-2].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "estate-1",
+        "estate-1",
+        "estate-2",
+        "ev-2"
+      ],
+      "citations": [
+        {
+          "evidence_id": "estate-1",
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+          "chunk_id": "estate-1"
+        },
+        {
+          "evidence_id": "estate-1",
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+          "chunk_id": "estate-1"
+        },
+        {
+          "evidence_id": "estate-2",
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+          "chunk_id": "estate-2"
+        },
+        {
+          "evidence_id": "ev-2",
+          "url": "https://en.wikipedia.org/wiki/Tablet_computer#Sales",
+          "chunk_id": "ev-2"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/Cloud_computing#Software_as_a_service_(SaaS)",
+          "https://en.wikipedia.org/wiki/Software",
+          "https://en.wikipedia.org/wiki/Tablet_computer#Sales",
+          "https://en.wikipedia.org/wiki/Tablet_computer#Types"
+        ],
+        "support_chunks": 4,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c26",
+      "text": "This allows businesses to reduce IT operational costs by outsourcing hardware/software maintenance [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c27",
+      "text": "**4.",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c28",
+      "text": "Market Penetration, Usage Scenarios, Price Ranges, and Installed Base by Region**\n\n**Global Installed Base and Trends:**\n*   As of 2021 there were **1.28 billion** tablet users worldwide [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c29",
+      "text": "*   Tablet sales did not increase in 2015 [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c30",
+      "text": "**Regional Breakdown (Based on Evidence):**\n\n*   **North America & Western Europe:** Apple’s iPad held majority use in these regions as well as Japan, Australia, and most of Americas [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c31",
+      "text": "These are classified among the four regions with high numbers of ATMs per million people (though this statistic refers to ATMs, it highlights developed market infrastructure; for tablets, the evidence specifically cites iPad dominance) [Source: estate-1] [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c32",
+      "text": "*Note: The ATM density data is specific to financial machines, not tablets.*\n*   **Asia (excluding China/Russia), Africa, Eastern Europe:** Android tablets were more popular in these regions [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c33",
+      "text": "By early 2016 Android held a **65%** global market share vs Apple's 26% and Windows' 9% [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c34",
+      "text": "*   **Japan/Korea:** Part of East Asia.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c35",
+      "text": "Japan was listed as having majority use for iPads in the earlier period [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c36",
+      "text": "Korea is part of the \"three major Northeast Asian economies\" definition by the World Bank but no specific tablet usage stats are provided beyond the general regional trends [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://en.wikipedia.org/wiki/East_Asia#Definitions"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c37",
+      "text": "**Price Ranges:**\nThe evidence states that newer models (as of early 2016) were more expensive than previous generations, reflecting their design for keyboards and styluses [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c38",
+      "text": "However, no specific price ranges or currency values are provided in the text.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c39",
+      "text": "**Typical Usage Scenarios & Penetration Details:**\n*   **B2B Sales:** 23% penetration among B2B companies as of 2014 [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c40",
+      "text": "*   **Developer Targeting:** In Feb 2014, 93% of mobile app developers targeted smartphones vs 83% targeting tablets [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c41",
+      "text": "This suggests a lower relative market focus/penetration compared to phones at that time.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c42",
+      "text": "*   **South America/Latin America:** The evidence mentions additional demand for ATMs in Latin America but does not provide specific tablet usage statistics or installed base numbers for this region beyond the general statement that Apple held majority use in \"most of the Americas\" (which typically includes North and South) [Source: estate-1] [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c43",
+      "text": "**Specific Data Points from Evidence:**\n*   Global Tablet OS Market Share (Early 2016): Android **65%**, Apple **26%**, Windows **9%** [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c44",
+      "text": "*   Apple's Market Share Decline: Dropped below **25%** by 2015/early 2016 period context [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c45",
+      "text": "*   Total Users (2021): **1.28 billion** [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c46",
+      "text": "Based on the evidence provided, here is a synthesis of the data regarding tablet computers, marketing contexts, and related technologies:\n\n**Tablet Market Trends and Usage (2014–2016)**\nAs of February 2014, mobile app development was heavily skewed toward smartphones, with **93%** of developers targeting them compared to **83%** targeting tablets [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c47",
+      "text": "In terms of business deployment, around **23%** of B2B companies had deployed tablets for sales-related activities by 2014 [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c48",
+      "text": "Regional usage varied significantly in this period; Apple’s iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas, while Android tablets were more popular in Asia (excluding China and Russia), Africa, and Eastern Europe [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c49",
+      "text": "By 2015, tablet sales did not increase.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c50",
+      "text": "Although Apple remained the largest seller, its market share declined below **25%** [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c51",
+      "text": "In early 2016, Samsung vice president Gary Riding noted that tablets performed well primarily among users employing them for work [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c52",
+      "text": "By early 2016 the operating system market landscape showed Android reigning with **65%**, followed by Apple at **26%**, and Windows holding a distant third with **9%** [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c53",
+      "text": "Newer models during this period were more expensive and designed for keyboards and styluses to reflect changing usage patterns [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c54",
+      "text": "**Tablet Categories and Customization**\nTablets can be grouped by physical size, operating system, input/output technology, and uses [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c55",
+      "text": "Some tablets are shipped with Android Go [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c56",
+      "text": "Customized business tablets address specific hardware and software needs; for example, a transportation company might embed professional-grade GPS antennas or remove unnecessary functions like internet browsers to reduce data costs [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c57",
+      "text": "**Operating Systems and Software History**\n*   **Android:** Designed primarily for mobile devices, the first Android tablets were released in 2009.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c58",
+      "text": "Vendors such as Motorola and Lenovo delayed deployment until after 2011, when Android was reworked (specifically with version 3.0 Honeycomb) to support larger screens [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c59",
+      "text": "In 2012, Microsoft released Windows 8 and Windows RT for ARM-based devices, accompanied by slate tablets, hybrids, and convertibles like the Surface [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c60",
+      "text": "**Thunderbolt Interface**\nThunderbolt technology saw significant adoption shifts.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c61",
+      "text": "Thunderbolt 3 was introduced in late 2015.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c62",
+      "text": "Dell was the first to include Thunderbolt 3 ports in laptops (XPS Series and Alienware range), followed by Apple including them on Macs in 2016 [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c63",
+      "text": "Adoption widened as Thunderbolt 3 uses the USB-C connector standard and later became part of the USB4 standard [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c64",
+      "text": "**Cloud Computing and Marketing Context**\nMarketing is defined as satisfying and retaining customers, often conducted via B2B or B2C channels [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c65",
+      "text": "Software as a Service (SaaS) allows businesses to reduce IT operational costs by outsourcing maintenance, though it carries risks regarding data security if unauthorized access occurs [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c66",
+      "text": "SaaS applications are typically priced on a monthly or yearly flat fee per user basis [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c67",
+      "text": "**Current Market Data (2021)**\nAs of 2021, there were **1.28 billion** tablet users worldwide according to Statista [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c68",
+      "text": "Apple held the largest manufacturer market share at that time, followed by Samsung and Lenovo [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ]
+}

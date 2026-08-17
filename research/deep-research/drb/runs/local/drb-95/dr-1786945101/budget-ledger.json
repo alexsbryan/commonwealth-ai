@@ -1,0 +1,35 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1786945101",
+  "charter_hash": "7ec4c581a0e40ed8",
+  "allowance": {
+    "web-search:corpus": 12,
+    "web-fetch:pages": 12
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "corpus",
+      "units": 1,
+      "at_unix": 1786945176,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "corpus",
+      "units": 1,
+      "at_unix": 1786945179,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-search:corpus": 2
+  },
+  "remaining": {
+    "web-search:corpus": 10,
+    "web-fetch:pages": 12
+  }
+}

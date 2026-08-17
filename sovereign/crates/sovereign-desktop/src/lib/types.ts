@@ -2074,6 +2074,162 @@ export type WorkflowRunProgress =
   | { kind: "complete"; ok: number; failed: number; corpus: string | null }
   | { kind: "failed"; error: string };
 
+// ── Deep research (scene 1 — order deep-research-t3b) ──────────
+// Mirror `DrCapabilities` / `DrRunHandle` / `DeepResearchRunEvent` /
+// `DrReport` & friends in `deep_research_commands.rs`. The desktop is a
+// DRIVER over the CLI verb's contract: the live view and the report view
+// render ONLY what the driver read from the verb's run-dir artifacts.
+
+/// What the installed verb can do, probed from its own `--help`. The UI
+/// gates affordances on `flags` (e.g. the Resume button needs `--resume`).
+export interface DrCapabilities {
+  cli_path: string | null;
+  flags: string[];
+  /** Why the verb could not be probed, when it could not. Absence is
+   *  reported, never defaulted. */
+  error: string | null;
+}
+
+/// Handle returned by `dr_start`. The UI listens on `channel` with
+/// `listen<DeepResearchRunProgress>(channel, handler)`.
+export interface DrRunHandle {
+  job_id: string;
+  channel: string;
+}
+
+/// One progress event from a running deep-research job, tagged on `kind`.
+/// `live` events are the run-dir snapshot (round, the gate's named gap
+/// list, budget ledger, consent status); `report_ready` carries the checked
+/// report built from the verb's own artifacts.
+export type DeepResearchRunProgress =
+  | { kind: "started"; run_id: string; run_dir: string }
+  | {
+      kind: "live";
+      round: number | null;
+      stage: string;
+      gaps: DrGap[];
+      budget: DrBudget;
+      consent: DrConsent | null;
+    }
+  | { kind: "report_ready"; report: DrReport }
+  | { kind: "failed"; error: string };
+
+/// One named gap from `gap-list-<round>.json` — the gate's compass output.
+export interface DrGap {
+  id: string;
+  text: string;
+}
+
+/// The budget ledger's spent/remaining, keyed by meter.
+export interface DrBudget {
+  spent: Record<string, number>;
+  remaining: Record<string, number>;
+}
+
+/// The run's typed consent grant as recorded in the charter (absent =
+/// default-deny: the web leg refused non-public-web payloads).
+export interface DrConsent {
+  release_floor: string;
+  granted_at_unix: number;
+}
+
+/// What the operator typed at the Ask entry (camelCase on the wire).
+export interface DrStartOptions {
+  maxRounds?: number | null;
+  corpora: string[];
+  consent?: string | null;
+  search?: number | null;
+  fetch?: number | null;
+  resumeRunId?: string | null;
+}
+
+/// One prior run on the shelf. A run without a manifest is `interrupted`
+/// (the resume affordance's raw material).
+export interface DrRunSummary {
+  run_id: string;
+  question: string | null;
+  created_at_unix: number | null;
+  terminal_state: string;
+  rounds: number;
+  report_present: boolean;
+  consent: DrConsent | null;
+}
+
+/// The checked report + its verdict dimensions — rendered from the verb's
+/// artifacts, never re-invented.
+export interface DrReport {
+  run_id: string;
+  question: string;
+  terminal_state: string;
+  report_md: string;
+  claims: DrFinalClaim[];
+  not_covered: string[];
+  residue: DrResidueRow[];
+  reframe: DrReframe | null;
+  alignment: DrAlignment | null;
+  budget: DrBudget;
+  rounds: DrRoundRow[];
+  consent: DrConsent | null;
+  constitution: DrConstitution;
+}
+
+export interface DrFinalClaim {
+  id: string;
+  text: string;
+  verdict: string;
+  status: string;
+  citations: DrCitation[];
+  corroboration: DrCorroboration | null;
+}
+
+export interface DrCitation {
+  evidence_id: string;
+  url: string;
+  chunk_id: string;
+}
+
+export interface DrCorroboration {
+  origins: string[];
+  support_chunks: number;
+  floor: number;
+  passes_floor: boolean;
+}
+
+export interface DrResidueRow {
+  query: string;
+  round: number;
+}
+
+export interface DrReframe {
+  round: number;
+  original_question: string;
+  reframed_question: string;
+  reason: string;
+}
+
+export interface DrAlignment {
+  round: number;
+  original_question: string;
+  redirected_question: string;
+  reason: string;
+}
+
+export interface DrRoundRow {
+  round: number;
+  gaps_before: number;
+  gaps_after: number;
+  fetched: number;
+  search_calls: number;
+}
+
+/// The (g) position property over [passed] claims: every figure traced in
+/// the claim's evidence. Empty `violations` = the position holds.
+export interface DrConstitution {
+  passed_claims: number;
+  violations: string[];
+  unresolved: number;
+}
+
 /// One entry in the `enrich_list_corpora` response. `created_at`
 /// is an ISO-8601 UTC string; the panel sorts newest-first.
 export interface EnrichedCorpusSummary {

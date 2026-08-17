@@ -1,0 +1,10 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1786940564 — How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?
+deep-research: run dir research/deep-research/demo/demo8/runs/dr-1786940564
+deep-research: web backend tavily
+deep-research: search source web
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.6-35B-A3B-MTP-UD-Q6_K, embed Qwen3-Embedding-0.6B-Q8_0)
+2026-08-17T04:22:49.830599Z DEBUG egress refused — egress refused: query with personal custody to tavily — no run consent grant — the boundary is default-deny for non-public-web payloads (grant absent — default-deny) custody=personal what=query target=tavily grant_present=false reason=no run consent grant — the boundary is default-deny for non-public-web payloads
+deep-research: run failed: web search: web search refused: egress refused: query with personal custody to tavily — no run consent grant — the boundary is default-deny for non-public-web payloads (grant absent — default-deny)

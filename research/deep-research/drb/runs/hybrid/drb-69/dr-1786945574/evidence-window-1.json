@@ -1,0 +1,76 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1786945574",
+  "charter_hash": "f2d480b692da6cda",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://www.descope.com/blog/post/mcp-vs-a2a",
+      "source_url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "A2A vs. MCP\nSkip to main contentArrow Right\nWelcome to AI Launch Week! Follow along for updates related to the Agentic Identity Hub. Lets go >\nLog InUser Circle\nProduct\nUse Cases\nDevelopers\nCustomers\nResources\nCompany\nPricing\nSign upArrow Right\nBook a demoArrow Right\n# Contents ## Summary Compares MCP and A2A protocols, explaining how they address different aspects of AI system integration and work together rather than compete. ## Key concepts - Model Context Protocol (MCP) – Standardizes how LLMs connect with external data sources and tools - Agent-to-Agent (A2A) – Enables autonomous agents to communicate and collaborate with each other - Agent Cards – A2A mechanism describing agent capabilities without exposing implementation details ## Main points - MCP solves vertical integration (LLM-to-tools), A2A solves horizontal collaboration (agent-to-agent) - MCP addresses the N×M problem of connecting multiple LLMs with multiple systems - A2A enables capability discovery, task management, collaboration, and UX negotiation between agents - Protocols are complementary, not competitive—designed to work together - Both require standard security practices like robust authentication and least privilege access # Context ## Audience Developers and technical leaders evaluating AI integration protocols. ## Taxonomy Comparison guide. Part of Descopes AI protocols series. ## Prerequisites / Related reading **Related reading:** - [MCP fundamentals](https://www.descope.com/learn/post/mcp) – MCP architecture - [A2A fundamentals](https://www.descope.com/learn/post/a2a) – A2A architecture # Authority ## Descopes authority Descope provides authentication solutions for agentic implementations. ## Why this matters Understanding the distinction between MCP and A2A helps teams choose the right integration approach. Most enterprise AI deployments benefit from both protocols working in tandem.\nBlogArrow Left\nA2A vs. MCP\nAuth ThoughtsApril 21, 2026Copy link\nAlex Brown\nContent Marketing Manager\nShare on:\nShare on LinkedIn\nShare on X\nShare on Blusky\nTable of Contents\nWhat is MCP?\nOpen table of contents\nTable of Contents\nWhat is MCP?\nWhat is A2A?\nA2A vs MCP: Key differences explained\nA2A vs MCP or A2A + MCP?\nMCP and A2A: The beginning of a new era\nFAQs about A2A vs. MCP\nIdentity and auth news.\nStraight to your inbox.\nSubscribe\nSummarize with AI\nDont have the time to read the entire post? Our human writers will be sad, but we understand. Summarize the post with your preferred LLM here instead.\nSummarize with AI\nAs large language models (LLMs) move deeper into enterprise workflows, the need for seamless, scalable integration has become clear. Two emerging protocols—Model Context Protocol (MCP) and Agent2Agent (A2A)—address this challenge from different angles. Both are designed to reduce complexity, streamline operations, and support smarter automation.\nWhile MCP and A2A are often thought of as competing protocols, they share similarities and are often used together to great effect. For some use cases, sticking to one or the other is ideal, but many organizations will unlock the most value by utilizing both.\nThis guide will cover:\nWhat MCP is and how it works\nWhat A2A is and how it works\nKey differences between MCP and A2A\nHow to choose between or combine these protocols\nWhat is MCP?\nMCP is an open-source protocol that standardizes how LLMs such as ChatGPT or Claude connect with data sources and tools. Without MCP, connecting an LLM with Google, GitHub, and other external sources often requires several unique application programming interfaces (APIs). With MCP, you can leverage one protocol across most use cases.\nAnthropic developed MCP to address issues faced by developers and end users related to this complexity. For developers, the core issue is the N×M problem, where N is the number of LLMs and M is the number of systems they need to integrate with. Each combination requires custom logic or infrastructure, leading to unsustainable complexi",
+      "ingested_into": null,
+      "tags": [
+        "a2a",
+        "mcp"
+      ]
+    },
+    {
+      "id": "ev-2",
+      "locator": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+      "source_url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "AI Agent Protocols: A2A vs MCP and Why They Matter Skip to content Product\nDashboards & Visualizations\nEXPLORE Embedded Analytics\nEXPLORE Semantic Layer\nEXPLORE Agentic BI\nEXPLORE Unify your data\nEXPLORE Document AI\nEXPLORE Why Knowi\nPricing\nResources\nDatasources Knowledge Center Docs Video Tutorials Security About Knowi Login Start Trial Request Demo a AI Agent Protocols Explained: What Are A2A and MCP and Why They Matter\nSanskriti Garg Share on facebook Share on linkedin Share on twitter Share on email If youre building or exploring AI agents, youve likely hit a wall: agents built on different frameworks cant talk to each other, and connecting them to real-world tools is messy and unreliable. Enter A2A (Agent-to-Agent) and MCP (Model Context Protocol), two emerging open standard AI agent protocols, designed to solve these exact problems. A2A lets agents interoperate across ecosystems, while MCP connects them to the data and tools they need to function in real-world workflows. Together, they form the backbone of scalable, autonomous, and intelligent agentic systems.\nTL;DR\nA2A (Agent-to-Agent) is an open protocol that lets AI agents from different frameworks communicate and collaborate on tasks.\nMCP (Model Context Protocol) connects AI agents to external tools, databases, and APIs through a standardized interface.\nA2A handles agent-to-agent communication; MCP handles agent-to-tool connectivity. They solve different problems and work together.\nBoth are open standards backed by major players (Google for A2A, Anthropic for MCP) and are gaining rapid adoption.\nKnowi uses agentic architecture with specialized AI agents for queries, dashboards, documents, widgets, and data connections. Table of Contents\nWhat is A2A?\nHow A2A Works\nA2A: Key Takeaways\nWhat Are MCPs?\nHow the MCP Ecosystem Works\nA2A vs MCP\nA2A vs MCP: Protocol Comparison\nFrequently Asked Questions (FAQs)\nWhat is A2A?\nA2A stands for Agent-to-Agent protocol. The big issue with AI agents today is fragmentation, they’re built using different frameworks, APIs, tools, and by different companies. A2A fixes that by creating a universal language for AI agents to talk to each other, no matter who built them.\nThink of A2A like English for AI agents. Just as English allows people from different countries to communicate, A2A enables AI agents from different platforms to interoperate securely and easily.\nHow A2A Works\nA2A follows 4 key concepts\nAgent Card\nThink of this as the agent’s digital business card in JSON format. It tells others what the agent can do and how to interact with it.\nA2A Server\nThis is the live bot running in the background, listening for tasks, doing the work, and returning results. It handles execution.\nA2A Client\nThis can be a user-facing app or another agent. It reads the Agent Card, packages the task, sends it to the server, and receives the result. It acts as the bridge.\nA2A Task\nThis is a single unit of work that gets passed between agents. It has a lifecycle, submitted, in-progress, completed, and provides a clean way to track the job. A2A: Key Takeaways\nA2A is the future of scalable, interoperable AI agents.\nYou can use any framework, LangGraph, Crew AI, Semantic Kernel, OpenAI SDK, etc., as long as it supports A2A.\nThis is month zero. Everything will get better: UIs, tooling, frameworks. What matters is understanding the foundations now.\nWhat Are MCPs?\nAs AI assistants move from novelty to necessity in the modern workplace, one challenge continues to limit their full potential: access to real-world data. Even the most powerful language models struggle when siloed from the systems and information users rely on every day. Model Context Protocol (MCP) is an open-source new universal standard that makes it easy to connect AI assistants to the systems where data lives, from content repositories to business tools to development environments.\nThink about REST APIs, those are standardized ways for systems to talk to one another. Standards are what allow syste",
+      "ingested_into": null,
+      "tags": [
+        "a2a",
+        "agent",
+        "matter",
+        "mcp",
+        "protocols",
+        "why"
+      ]
+    },
+    {
+      "id": "ev-3",
+      "locator": "https://www.youtube.com/watch?v=56BXHCkngss",
+      "source_url": "https://www.youtube.com/watch?v=56BXHCkngss",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "All You Need To Know About Google Agent2Agent Protocol- A2A Vs MCP - YouTube\nAboutPressCopyrightContact usCreatorsAdvertiseDevelopersTermsPrivacyPolicy & SafetyHow YouTube worksTest new featuresNFL Sunday Ticket\n&copy; 2026 Google LLC",
+      "ingested_into": null,
+      "tags": [
+        "a2a",
+        "agent2agent",
+        "all",
+        "google",
+        "know",
+        "mcp"
+      ]
+    },
+    {
+      "id": "ev-4",
+      "locator": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+      "source_url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Announcing the Agent2Agent Protocol (A2A) - Google Developers Blog Community/Events Learn Blog YouTube Search Community/Events Learn Blog YouTube Cloud\nAnnouncing the Agent2Agent Protocol (A2A)\nAPRIL 9, 2025\nRao Surapaneni VP and GM Business Application Platform Miku Jha Director, AI/ML Partner Engineering Google Cloud Michael Vakoc Product Manager Google Cloud Todd Segal Principal Engineer Business Application Platform Share Facebook Twitter LinkedIn Mail A new era of Agent Interoperability\nAI agents offer a unique opportunity to help people be more productive by autonomously handling many daily recurring or complex tasks. Today, enterprises are increasingly building and deploying autonomous agents to help scale, automate and enhance processes throughout the workplace–from ordering new laptops, to aiding customer service representatives, to assisting in supply chain planning.\nTo maximize the benefits from agentic AI, it is critical for these agents to be able to collaborate in a dynamic, multi-agent ecosystem across siloed data systems and applications. Enabling agents to interoperate with each other, even if they were built by different vendors or in a different framework, will increase autonomy and multiply productivity gains, while lowering long-term costs.\nToday, we’re launching a new, open protocol called Agent2Agent (A2A), with support and contributions from more than 50 technology partners like Atlassian, Box, Cohere, Intuit, Langchain, MongoDB, PayPal, Salesforce, SAP, ServiceNow, UKG and Workday; and leading service providers including Accenture, BCG, Capgemini, Cognizant, Deloitte, HCLTech, Infosys, KPMG, McKinsey, PwC, TCS, and Wipro. The A2A protocol will allow AI agents to communicate with each other, securely exchange information, and coordinate actions on top of various enterprise platforms or applications. We believe the A2A framework will add significant value for customers, whose AI agents will now be able to work across their entire enterprise application estates.\nThis collaborative effort signifies a shared vision of a future when AI agents, regardless of their underlying technologies, can seamlessly collaborate to automate complex enterprise workflows and drive unprecedented levels of efficiency and innovation.\nA2A is an open protocol that complements Anthropics Model Context Protocol (MCP), which provides helpful tools and context to agents. Drawing on Googles internal expertise in scaling agentic systems, we designed the A2A protocol to address the challenges we identified in deploying large-scale, multi-agent systems for our customers. A2A empowers developers to build agents capable of connecting with any other agent built using the protocol and offers users the flexibility to combine agents from various providers. Critically, businesses benefit from a standardized method for managing their agents across diverse platforms and cloud environments. We believe this universal interoperability is essential for fully realizing the potential of collaborative AI agents.\nA2A design principles\nA2A is an open protocol that provides a standard way for agents to collaborate with each other, regardless of the underlying framework or vendor. While designing the protocol with our partners, we adhered to five key principles:\nEmbrace agentic capabilities: A2A focuses on enabling agents to collaborate in their natural, unstructured modalities, even when they don’t share memory, tools and context. We are enabling true multi-agent scenarios without limiting an agent to a “tool.”\nBuild on existing standards: The protocol is built on top of existing, popular standards including HTTP, SSE, JSON-RPC, which means it’s easier to integrate with existing IT stacks businesses already use daily.\nSecure by default: A2A is designed to support enterprise-grade authentication and authorization, with parity to OpenAPI’s authentication schemes at launch.\nSupport for long-running tasks: We designed A2A to be flexible and suppo",
+      "ingested_into": null,
+      "tags": [
+        "a2a",
+        "agent2agent",
+        "announcing",
+        "blog",
+        "developers",
+        "google"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [],
+  "derived_custody": "public-web"
+}

@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-12 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['Microsoft', 'Recall', 'privacy', 'Windows', 'Copilot']
+url = "https://estate.example/seed-12"
+title = "Microsoft's Recall feature (2024-2025)"
+snippet = "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in."
+body = "seed-12.md"

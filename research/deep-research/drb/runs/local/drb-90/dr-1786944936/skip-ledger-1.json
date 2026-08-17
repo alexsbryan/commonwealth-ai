@@ -1,0 +1,929 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786944936",
+  "charter_hash": "72510a8029eece11",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Attention#Multitasking_and_divided_attention",
+      "title": "Attention",
+      "score": 0.03333333507180214,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Obstacles",
+      "title": "Self-driving car",
+      "score": 0.03333333507180214,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Advanced_driver_assistance_system",
+      "title": "Self-driving car",
+      "score": 0.03333333507180214,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Japan",
+      "title": "Tort",
+      "score": 0.03306011110544205,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Law_of_Japan#Torts",
+      "title": "Law of Japan",
+      "score": 0.03306011110544205,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Contract#Damages",
+      "title": "Contract",
+      "score": 0.032786883413791656,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Controlled-access_highway#Germany",
+      "title": "Controlled-access highway",
+      "score": 0.03253968432545662,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mobile_phone#While_driving",
+      "title": "Mobile phone",
+      "score": 0.03226646035909653,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Aiding_and_abetting",
+      "title": "Aiding and abetting",
+      "score": 0.03226646035909653,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Legal_liability#Liability_as_it_relates_to_employers_and_employees",
+      "title": "Legal liability",
+      "score": 0.03226646035909653,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Japan",
+      "title": "Tort",
+      "score": 0.03201844170689583,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Rationale_for_liability",
+      "title": "Self-driving car",
+      "score": 0.0320020467042923,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Contract_law",
+      "title": "Tort",
+      "score": 0.0317540317773819,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Japan",
+      "title": "Tort",
+      "score": 0.0313725508749485,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Smartphone#While_driving",
+      "title": "Smartphone",
+      "score": 0.03128054738044739,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Smartphone#While_driving",
+      "title": "Smartphone",
+      "score": 0.03125763311982155,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Aiding_and_abetting",
+      "title": "Aiding and abetting",
+      "score": 0.03125763311982155,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Lidar#Object_detection_for_transportation_systems",
+      "title": "Lidar",
+      "score": 0.03102453239262104,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn",
+      "title": "Autobahn",
+      "score": 0.03095238283276558,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Regulation",
+      "title": "Self-driving car",
+      "score": 0.030751174315810204,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Legal_liability#Theories_of_liability",
+      "title": "Legal liability",
+      "score": 0.03055037185549736,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#SAE_classification",
+      "title": "Self-driving car",
+      "score": 0.03028232976794243,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Aiding_and_abetting",
+      "title": "Aiding and abetting",
+      "score": 0.030117753893136978,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#British_definitions",
+      "title": "Self-driving car",
+      "score": 0.03009049780666828,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Legal_liability#Theories_of_liability",
+      "title": "Legal liability",
+      "score": 0.029726775363087654,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Oil_crisis_of_the_1970s",
+      "title": "Autobahn",
+      "score": 0.029411764815449715,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Smartphone#While_driving",
+      "title": "Smartphone",
+      "score": 0.0292735043913126,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Self-driving",
+      "title": "Self-driving car",
+      "score": 0.028850145637989044,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Abstract",
+      "title": "Autobahn",
+      "score": 0.02878725901246071,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Since_reunification",
+      "title": "Autobahn",
+      "score": 0.02877846732735634,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Aiding_and_abetting",
+      "title": "Aiding and abetting",
+      "score": 0.028717949986457825,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Travel_speeds",
+      "title": "Autobahn",
+      "score": 0.028438886627554893,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Eyes-on/hands-on",
+      "title": "Self-driving car",
+      "score": 0.028404511511325836,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+      "title": "Negligence",
+      "score": 0.02838164195418358,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Regulation",
+      "title": "Self-driving car",
+      "score": 0.028021348640322685,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Specific_performance#Examples",
+      "title": "Specific performance",
+      "score": 0.027984343469142914,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Contract#Contracts_across_jurisdictions",
+      "title": "Contract",
+      "score": 0.0279720276594162,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Driving#Mental_skill",
+      "title": "Driving",
+      "score": 0.027912385761737823,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Traffic_collision#Driver_impairment",
+      "title": "Traffic collision",
+      "score": 0.02767319232225418,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tesla,_Inc.#Autopilot_and_Full_Self-Driving",
+      "title": "Tesla, Inc.",
+      "score": 0.027587518095970154,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Negligence#Breach_of_duty",
+      "title": "Negligence",
+      "score": 0.027497194707393646,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Lidar#Autonomous_vehicles",
+      "title": "Lidar",
+      "score": 0.02715098112821579,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Car#Autonomous_car",
+      "title": "Car",
+      "score": 0.027120493352413177,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Google_Waymo",
+      "title": "Self-driving car",
+      "score": 0.026754073798656464,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Vehicle_insurance#Netherlands",
+      "title": "Vehicle insurance",
+      "score": 0.02674258127808571,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Japan",
+      "title": "Tort",
+      "score": 0.026655348017811775,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Text_messaging#Texting_while_walking",
+      "title": "Text messaging",
+      "score": 0.0265975221991539,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Public_liability",
+      "title": "Public liability",
+      "score": 0.02633402682840824,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Contract#Philippine_contract_law",
+      "title": "Contract",
+      "score": 0.026137303560972214,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Since_reunification",
+      "title": "Autobahn",
+      "score": 0.026013514026999474,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Artificial_Intelligence",
+      "title": "Self-driving car",
+      "score": 0.025833334773778915,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#German_reunification",
+      "title": "Autobahn",
+      "score": 0.02581612393260002,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Contract#Contracts_across_jurisdictions",
+      "title": "Contract",
+      "score": 0.02580752596259117,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Conflict_of_laws",
+      "title": "Tort",
+      "score": 0.02579493820667267,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Japan",
+      "title": "Japan",
+      "score": 0.025694893673062325,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Brake#Electronic_brake_system",
+      "title": "Brake",
+      "score": 0.02527821995317936,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Since_reunification",
+      "title": "Autobahn",
+      "score": 0.02461491897702217,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Travel_speeds",
+      "title": "Autobahn",
+      "score": 0.02380952425301075,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mediation#Liability",
+      "title": "Mediation",
+      "score": 0.023669468238949776,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Damages#Breach_of_contract_duty_-_(ex_contract)",
+      "title": "Damages",
+      "score": 0.02361111156642437,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Attention#Multitasking_and_divided_attention",
+      "title": "Attention",
+      "score": 0.021749408915638924,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Law_of_Japan#Torts",
+      "title": "Law of Japan",
+      "score": 0.01666666753590107,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Eurovision_Song_Contest",
+      "title": "Eurovision Song Contest",
+      "score": 0.01666666753590107,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Japan",
+      "title": "Tort",
+      "score": 0.01666666753590107,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Autobahn#Abstract",
+      "title": "Autobahn",
+      "score": 0.016393441706895828,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Level_2_–_Partial_Automation",
+      "title": "Self-driving car",
+      "score": 0.016393441706895828,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Level_2_–_Partial_Automation",
+      "title": "Self-driving car",
+      "score": 0.016393441706895828,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/United_States_Declaration_of_Independence",
+      "title": "United States Declaration of Independence",
+      "score": 0.016393441706895828,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Interceptor_aircraft#United_States",
+      "title": "Interceptor aircraft",
+      "score": 0.016393441706895828,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Security",
+      "title": "Self-driving car",
+      "score": 0.016129031777381897,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Charging_station#Direct_current_(DC)",
+      "title": "Charging station",
+      "score": 0.016129031777381897,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Japan",
+      "title": "Tort",
+      "score": 0.016129031777381897,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Rule_of_law#Japan",
+      "title": "Rule of law",
+      "score": 0.016129031777381897,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Chief_executive_officer",
+      "title": "Chief executive officer",
+      "score": 0.016129031777381897,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Mobileye_System",
+      "title": "Self-driving car",
+      "score": 0.016129031777381897,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Japan",
+      "title": "Tort",
+      "score": 0.016129031777381897,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Law_of_Japan#General_provisions",
+      "title": "Law of Japan",
+      "score": 0.01587301678955555,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Bill_Clinton",
+      "title": "Bill Clinton",
+      "score": 0.01587301678955555,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Independent_music#Emergence_as_a_style",
+      "title": "Independent music",
+      "score": 0.01587301678955555,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Common_law#Common_law_evolves_to_meet_changing_social_needs_and_improved_understanding",
+      "title": "Common law",
+      "score": 0.01587301678955555,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_of_things#Abstract",
+      "title": "Internet of things",
+      "score": 0.01587301678955555,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Mobileye_System",
+      "title": "Self-driving car",
+      "score": 0.01587301678955555,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Lackland_Air_Force_Base",
+      "title": "Lackland Air Force Base",
+      "score": 0.01587301678955555,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/McDonald%27s#COVID-19_pandemic",
+      "title": "McDonald's",
+      "score": 0.015625,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Tesla",
+      "title": "Self-driving car",
+      "score": 0.015625,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/%C3%85land#Economy",
+      "title": "Åland",
+      "score": 0.015625,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/The_Empire_Strikes_Back#Cultural_impact",
+      "title": "The Empire Strikes Back",
+      "score": 0.015625,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Taxi_Driver#Plot",
+      "title": "Taxi Driver",
+      "score": 0.015625,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mike_Conway",
+      "title": "Mike Conway",
+      "score": 0.015625,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Motorized_scooter#Safety",
+      "title": "Motorized scooter",
+      "score": 0.015384615398943424,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+      "title": "Truck driver",
+      "score": 0.015384615398943424,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Truck_driver#Working_conditions",
+      "title": "Truck driver",
+      "score": 0.015384615398943424,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Instrumentation#Automotive",
+      "title": "Instrumentation",
+      "score": 0.015384615398943424,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Civil_law_(legal_system)#Countries_with_civil_law_systems",
+      "title": "Civil law (legal system)",
+      "score": 0.015384615398943424,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Truck_driver#United_States",
+      "title": "Truck driver",
+      "score": 0.01515151560306549,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Self-driving_car#Commercialization",
+      "title": "Self-driving car",
+      "score": 0.01515151560306549,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Variation_between_common_law_jurisdictions",
+      "title": "Tort",
+      "score": 0.01515151560306549,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Filing_(law)#Filing_fees",
+      "title": "Filing (law)",
+      "score": 0.01515151560306549,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Traffic_collision#Other",
+      "title": "Traffic collision",
+      "score": 0.01515151560306549,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Vehicle_insurance#Vehicle_classification",
+      "title": "Vehicle insurance",
+      "score": 0.01515151560306549,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/24_Hours_of_Le_Mans",
+      "title": "24 Hours of Le Mans",
+      "score": 0.014925372786819935,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tort#Republic_of_China",
+      "title": "Tort",
+      "score": 0.014925372786819935,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/S&P/TSX_Composite_Index",
+      "title": "S&P/TSX Composite Index",
+      "score": 0.014925372786819935,
+      "rank": 108,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Biosecurity#Role_of_education",
+      "title": "Biosecurity",
+      "score": 0.014925372786819935,
+      "rank": 109,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/2026_Iran_war_ceasefire",
+      "title": "2026 Iran war ceasefire",
+      "score": 0.014705882407724857,
+      "rank": 110,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Traffic_collision#Assured_clear_distance_ahead",
+      "title": "Traffic collision",
+      "score": 0.014705882407724857,
+      "rank": 111,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Economy_of_China#Electric_vehicle_industry",
+      "title": "Economy of China",
+      "score": 0.014492753893136978,
+      "rank": 112,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Japan",
+      "title": "Japan",
+      "score": 0.014492753893136978,
+      "rank": 113,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Vehicle_insurance#Vehicle_classification",
+      "title": "Vehicle insurance",
+      "score": 0.014492753893136978,
+      "rank": 114,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Driving#Driver_training",
+      "title": "Driving",
+      "score": 0.014492753893136978,
+      "rank": 115,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Law_of_Japan#Legal_professions",
+      "title": "Law of Japan",
+      "score": 0.014285714365541935,
+      "rank": 116,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Audi#Logistics",
+      "title": "Audi",
+      "score": 0.014285714365541935,
+      "rank": 117,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Limit_of_a_function#Pointwise_limits_and_uniform_limits",
+      "title": "Limit of a function",
+      "score": 0.014084506779909134,
+      "rank": 118,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Lawyer#Cultural_perception",
+      "title": "Lawyer",
+      "score": 0.014084506779909134,
+      "rank": 119,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Radar",
+      "title": "Radar",
+      "score": 0.014084506779909134,
+      "rank": 120,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

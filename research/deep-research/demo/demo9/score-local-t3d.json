@@ -1,0 +1,2236 @@
+{
+ "arm": "local",
+ "subset": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/query.subset.jsonl",
+ "judge_pin": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+ "n_tasks": 10,
+ "replay": {
+  "label": "t3d",
+  "source": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo9/score-local.json",
+  "numbers": "copied verbatim from the frozen old-instrument report (same scorer, same run — nothing recomputed)",
+  "verdict_recoverable": false,
+  "verdict_recovery_note": "per-fact judge verdicts were dropped at stat time by the old instrument (T3C_AUDIT_FORENSICS.md pass site 6); the 35B verdicts are not recoverable from the frozen artifacts without re-judging. Per-fact rows below reconstruct fact text + url from the frozen arm dirs with verdict=null — absence reported, never defaulted (§18.3).",
+  "decline_shape_telemetry": {
+   "count": 2,
+   "pairs_scanned": 219,
+   "basis": "DECLINE_SHAPE (the ONE decline implementation, §10.6 — the union of the two copies, ported verbatim from sovereign-desktop e2e lib/classify.mjs) applied to the recovered paired fact text. The forensics' pass-site-4 count (7) is not mechanically reproducible by any single basis (union regex on paired facts: 3; raw claim text: 15; the gate's answer_declines zoo: 9); this instrument's count supersedes it — a named substitution (§18.3, pre-registration.md T3d)."
+  }
+ },
+ "tasks": [
+  {
+   "id": 56,
+   "topic": "Finance & Business",
+   "pairs": 12,
+   "counts": {
+    "supported": 0,
+    "unsupported": 2,
+    "unknown": 10,
+    "errors": 0
+   },
+   "zero_pair": false,
+   "zero_judged": false,
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "The text defines various types of auctions  and mentions that in a first-price auction, a dummy bid is an unfavourable bid designed so as not to become the winning bid , but it explicitly states that it \"does not provide mathematical solutions or methods for asymmetric bidders in first-price sealed-bid contexts.\"",
+     "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 2,
+     "fact": "The text defines various types of auctions (such as English, silent, all-pay, and Chinese auctions)  and mentions that in a first-price auction, a dummy bid can be an unfavourable bid designed not to become the winning bid , but it does not provide mathematical solutions or methods for asymmetric bidders in first-price sealed-bid contexts.",
+     "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 3,
+     "fact": "The figures present in the evidence are: **1979**: Associated with the British television series *The House of Caradus*, specifically the episode 'For Love or Money' .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 4,
+     "fact": "**68**: The number of languages listed in the Wikipedia interface section .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 5,
+     "fact": "**1, 2, 2.1, 2.2, 2.3, 3, 4, 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11, 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7, 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3**: These are section and subsection numbers from the Wikipedia table of contents for the \"Auction\" article .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 6,
+     "fact": "**7**: Section number for Terminology in the Wikipedia table of contents .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 7,
+     "fact": "*Correction*: Looking closely at the provided text block `6.2.3 Suggested opening bid (SOB) 7 Terminology 8 JEL classification`, section 8 is indeed JEL classification .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 8,
+     "fact": "No, looking at `7 Terminology 8 JELclassification 9 Seealso`, yes, 9 is See also .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 9,
+     "fact": "I will include it if required by the strict \"every evidence-supported figure must appear\" instruction.) Including all listed figures: 1979 4, 3 68 1, 2, 3 (History section), 4 (Types section) Subsections under Types: 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 Contexts sections: 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 Bidding strategy sections: 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3 Terminology (7) JEL classification (8) See also (9) Notes (10), References (11), Further reading (12) 1808 (Date of Christie's auction room photo caption)",
+     "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 10,
+     "fact": "I will include it if required by the strict \"every evidence-supported figure must appear\" instruction.) Including all listed figures: 1979 4, 3 68 1, 2, 3 (History section), 4 (Types section) Subsections under Types: 4.1, 4.2, 4.2.1, 4.2.2, 4.2.3, 4.3, 4.4, 4.5, 4.6, 4.7, 4.8, 4.9, 4.10, 4.11 Contexts sections: 5, 5.1, 5.2, 5.3, 5.4, 5.5, 5.6, 5.7 Bidding strategy sections: 6, 6.1, 6.1.1, 6.2, 6.2.1, 6.2.2, 6.2.3 Terminology (7) JEL classification (8) See also (9) Notes (10), References (11), Further reading (12) 1808 (Date of Christie's auction room photo caption)",
+     "url": "https://en.wikipedia.org/wiki/Auction#Properties_of_auctioned_goods",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 11,
+     "fact": "Based on the provided evidence, several specific figures and dates are mentioned in relation to auctions: The year **1979** is associated with the British television series *The House of Caradus*, specifically an episode titled 'For Love or Money' .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 12,
+     "fact": "In the context of a plot device from the British TV series *Lovejoy*, a watercolour by Jessie Webb was inflated during an auction; this occurred in series **4**, episode **3** .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Visibility_of_bids",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    }
+   ],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 310,
+   "cost_usd": 0.000775
+  },
+  {
+   "id": 58,
+   "topic": "Science & Technology",
+   "pairs": 28,
+   "counts": {
+    "supported": 2,
+    "unsupported": 4,
+    "unknown": 22,
+    "errors": 0
+   },
+   "zero_pair": false,
+   "zero_judged": false,
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Rarity and Mechanisms in Eukaryotes Horizontal gene transfer is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 2,
+     "fact": "While HGT is a major factor in bacterial evolution and common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 3,
+     "fact": "Multicellular eukaryotes generally possess mechanisms to prevent horizontal gene transfer, such as separated germ cells .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 4,
+     "fact": "This barrier helps maintain sharply delineated lineages leading back to a Last Universal Common Ancestor (LUCA), rather than creating a complex network with many ancestors that would result from extensive continuous gene transfer .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 5,
+     "fact": "Consequently, while large-scale transfers occurred between prokaryotic ancestors of eukaryotic cells during the acquisition of chloroplasts and mitochondria, subsequent HGT events are relatively limited compared to microbial systems .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 6,
+     "fact": "Specific Instances in Plants A prominent example of significant HGT in plants is found in *Amborella*, an understory plant .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 7,
+     "fact": "Because *Amborella* grows in intimate contact with shade- and moisture-dependent organisms such as algae, lichens, and mosses, it is exposed to potential genetic exchange .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 8,
+     "fact": "Sequencing its mitochondrial genome revealed that for every gene of its own origin, it contains about six versions from the genomes of associated plants and algae .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 9,
+     "fact": "This scale of transfer was considered surprising given the typical rarity of HGT in multicellular eukaryotes .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 10,
+     "fact": "Specific Instances in Animals HGT has been documented in various animal groups, though often involving simpler or specific lineages rather than complex mammals like humans: **Bdelloid Rotifers:** These eukaryotic organisms appear to have received a range of genes from bacteria, fungi, and plants .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 11,
+     "fact": "**Insects and Yeast:** Evidence suggests horizontal gene transfers may have occurred from bacteria to yeast (*Saccharomyces cerevisiae*) and the adzuki bean beetle (*Callosobruchus chinensis*) .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 12,
+     "fact": "**Viruses as Vectors:** Viruses can facilitate HGT by carrying DNA between organisms, allowing for gene transfer even across biological domains .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 13,
+     "fact": "Evolutionary Significance and Benefits The evolutionary significance of these transfers varies by organism: **Unclear Significance in Plants:** In the case of *Amborella*, it is not yet clear whether the extensive horizontal gene transfer contributes to its apparent stability and conservatism or has other physiological benefits .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 14,
+     "fact": "**Adaptive Functions in General Eukaryotes:** While rare, when HGT does occur in eukaryotes (such as protists and algae), it often involves genes of bacterial origin .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 15,
+     "fact": "**Human Context:** The evidence notes that lateral gene transfer to humans from bacteria *may* play a role in cancer .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 16,
+     "fact": "However, there is no confirmation of widespread horizontal transfers into the human lineage comparable to those seen in *Amborella* or rotifers, nor details on functional genes transferred for evolutionary adaptation .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 17,
+     "fact": "Conclusion While HGT is well-studied in microbial systems where it drives rapid evolution (e.g., antibiotic resistance) , its occurrence in plants and animals is rare due to biological barriers like separated germ cells .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 18,
+     "fact": "Conclusion While HGT is well-studied in microbial systems where it drives rapid evolution (e.g., antibiotic resistance) , its occurrence in plants and animals is rare due to biological barriers like separated germ cells .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 19,
+     "fact": "While these events demonstrate that cross-domain transfer can occur outside of microbes, the specific adaptive benefits remain unclear for many complex eukaryotes, contrasting with the clear survival advantages seen in prokaryotic HGT .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 20,
+     "fact": "Other Organisms** Horizontal gene transfer is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 21,
+     "fact": "While HGT is an important factor in bacterial evolution and common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 22,
+     "fact": "Although rare in eukaryotes generally, specific examples include protists, algae, bdelloid rotifers, yeast (*Saccharomyces cerevisiae*), and the adzuki bean beetle (*Callosobruchus chinensis*) receiving genes from bacteria or other sources , .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 23,
+     "fact": "Although rare in eukaryotes generally, specific examples include protists, algae, bdelloid rotifers, yeast (*Saccharomyces cerevisiae*), and the adzuki bean beetle (*Callosobruchus chinensis*) receiving genes from bacteria or other sources , .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 24,
+     "fact": "**Specific Claims Regarding Humans** The provided text mentions that \"It has been suggested that lateral gene transfer to humans from bacteria may play a role in cancer\" .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 25,
+     "fact": "However, the evidence does not provide further details on the extent of HGT within the human genome itself, nor does it confirm widespread horizontal transfers into the human lineage comparable to those seen in plants like *Amborella* (which contains many foreign mitochondrial genes) or rotifers .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 26,
+     "fact": "The texts generally note that multicellular eukaryotes have mechanisms to prevent HGT, such as separated germ cells .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 27,
+     "fact": "They only cite a suggestion regarding a potential link between bacterial lateral gene transfer and cancer in humans, while emphasizing that HGT is primarily significant in prokaryotes and certain unicellular or simple multicellular organisms rather than complex mammals , .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 28,
+     "fact": "They only cite a suggestion regarding a potential link between bacterial lateral gene transfer and cancer in humans, while emphasizing that HGT is primarily significant in prokaryotes and certain unicellular or simple multicellular organisms rather than complex mammals , .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    }
+   ],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 221,
+   "cost_usd": 0.0005525
+  },
+  {
+   "id": 59,
+   "topic": "Science & Technology",
+   "pairs": 25,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 25,
+    "errors": 0
+   },
+   "zero_pair": false,
+   "zero_judged": true,
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "The timing of these migrations is primarily controlled by changes in day length, which trigger hormonal responses .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 2,
+     "fact": "**Navigation Cues:** **Celestial Navigation:** Diurnal migrants use the sun as a compass, compensating for its changing position throughout the day using an internal clock .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 3,
+     "fact": "Nocturnal migrants utilize a stellar compass based on constellations surrounding Polaris .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 4,
+     "fact": "Some species, such as Procellariiformes (e.g., albatrosses and shearwaters), rely heavily on astronomical cues; when disoriented or lost, they have been observed flying in circles \"as if lost\" until these cues are regained .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 5,
+     "fact": "**Geomagnetic Sensing:** Birds can detect the Earth's magnetic field through specialized photoreceptors, aiding in orientation alongside celestial methods .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 6,
+     "fact": "Studies on Cory’s shearwaters demonstrated that birds rendered anosmic (unable to smell) via zinc sulphate treatment took significantly longer to return home compared to control birds or those subjected only to magnetic disturbances .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 7,
+     "fact": "In one study where birds were released 800 km from their nests, anosmic birds did not arrive until the next day, whereas control birds returned before nightfall .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 8,
+     "fact": "**Visual and Mental Maps:** Birds also use visual landmarks and mental maps formed through experience and site attachment  .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 9,
+     "fact": "Long-distance migrants often form attachments to specific breeding and wintering sites during dispersal as young birds, exhibiting high site-fidelity thereafter .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 10,
+     "fact": "Studies involving Cory’s shearwaters released hundreds of kilometers from home tested both magnetic and olfactory disturbances .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 11,
+     "fact": "The evidence indicates that anosmic birds took longer to home than magnetically disturbed or control birds, highlighting the significant impact of losing olfactory cues on navigation efficiency in these species .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 12,
+     "fact": "Historical experiments further illustrate navigational precision; for example, a Manx shearwater released in Boston returned to its colony in Wales within 13 days, covering 5,150 km (3,200 mi) .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 13,
+     "fact": "Similarly, some tubenoses migrate up to 14,000 km (8,700 mi), and the Arctic tern holds the record with journeys exceeding 19,000 km annually  .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": "estate-1",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 14,
+     "fact": "Based on the provided evidence, here is a synthesis of bird migration facts: **Migration Patterns and Records** Bird migration is a seasonal movement between breeding and wintering grounds that typically occurs twice a year, moving from north to south or vice versa .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 15,
+     "fact": "Approximately 1,800 of the world's 10,000 bird species migrate long distances annually in response to seasons .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 16,
+     "fact": "Shorter migrations are also common, such as altitudinal movements in mountains like the Andes and Himalayas .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 17,
+     "fact": "Diurnal migrants often use the sun for daytime navigation, compensating for its changing position using an internal clock, while nocturnal migrants may use a stellar compass based on constellations surrounding Polaris .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 18,
+     "fact": "Additional navigational tools include magnetoreception (detecting the Earth's magnetic field), visual landmarks, olfactory cues, and mental maps  .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 19,
+     "fact": "Research indicates that some species rely heavily on astronomical cues; for instance, Procellariiformes were observed flying in circles when lost, implying reliance on these cues .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 20,
+     "fact": "In studies involving Cory’s shearwaters released hundreds to **800 km** from their home colonies, birds rendered anosmic (unable to smell) via zinc sulphate treatment took significantly longer to return than control birds or those subjected only to magnetic disturbances .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 21,
+     "fact": "Control birds often returned before nightfall, whereas anosmic birds did not arrive until the next day .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 22,
+     "fact": "**Timing and Genetics** The timing of migration is primarily controlled by changes in day length, which signal hormonal changes in the bird's body  .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 23,
+     "fact": "The control of migration itself appears to be genetically determined and a primitive trait present even in non-migratory species, though navigation involves both endogenous programs and learning .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 24,
+     "fact": "Long-distance migrants are believed to disperse as young birds, forming attachments to specific breeding and wintering sites where they exhibit high site-fidelity .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 25,
+     "fact": "Other methods include observing flocks at night through telescopes and noting the direction pigeons vanish on the horizon during homing studies .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    }
+   ],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 135,
+   "cost_usd": 0.0003375
+  },
+  {
+   "id": 62,
+   "topic": "Science & Technology",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "errors": 0
+   },
+   "zero_pair": true,
+   "zero_judged": true,
+   "fact_rows": [],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 124,
+   "cost_usd": 0.00031
+  },
+  {
+   "id": 65,
+   "topic": "Science & Technology",
+   "pairs": 42,
+   "counts": {
+    "supported": 0,
+    "unsupported": 22,
+    "unknown": 20,
+    "errors": 0
+   },
+   "zero_pair": false,
+   "zero_judged": false,
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "While traditional agricultural engineering focuses on infrastructure such as irrigation, drainage, and flood water control systems , and agricultural biotechnology utilizes genetic tools to modify traits like disease resistance and growth rate , there is a growing need to integrate precise physical modeling with dynamic system theories.",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 2,
+     "fact": "While traditional agricultural engineering focuses on infrastructure such as irrigation, drainage, and flood water control systems , and agricultural biotechnology utilizes genetic tools to modify traits like disease resistance and growth rate , there is a growing need to integrate precise physical modeling with dynamic system theories.",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 3,
+     "fact": "This approach aligns with the broader trend where computers play an increasingly important role in scientific endeavors through computer-aided technologies .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 4,
+     "fact": "Control theory provides a mathematical model based on differential equations describing the relationship between input and output .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 5,
+     "fact": "In the context of phenotypic analysis, this framework can be adapted to monitor \"process variables\" (such as grain dimensions or developmental stages) against desired set points, using error signals to guide automated imaging or processing adjustments .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 6,
+     "fact": "The discipline overlaps significantly with other fields; notably, computational models allow researchers to enhance understanding of complex systems by formulating real-world problems into solvable formats, a method that has moved from computer science into areas like psychology and biological sciences .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 7,
+     "fact": "As Computer-Aided Design (CAD) becomes more prevalent, it serves as a viable method for creating virtual models of existing physical parts .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 8,
+     "fact": "For grain analysis, the process involves measuring the physical object using **3D** scanning technologies such as laser scanners or industrial CT scanning .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 9,
+     "fact": "The resulting data, often represented as a point cloud, lacks topological information; therefore, this must be converted into a triangular-faced mesh or reconstructed to recover design intent in terms of simple analytical surfaces (e.g., planes, cylinders) and NURBS surfaces to produce a Boundary Representation CAD model .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 10,
+     "fact": "This allows engineers to create detailed 3D models and schematics without relying solely on manual measurement .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 11,
+     "fact": "Application of Control Theory Principles** The core of the analysis relies on control systems engineering, which applies control theory to design equipment with desired behaviors .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 12,
+     "fact": "The difference, or error signal, generates corrective feedback .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 13,
+     "fact": "Although historically rooted in industrial automation, control theory is useful wherever feedback occurs, including life sciences and operations research .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 14,
+     "fact": "By treating the growth or imaging process as a controlled system, researchers can ensure stability and optimality in data acquisition .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 15,
+     "fact": "Design Implementation and Simulation** The design utilizes CAD software to create **3D** models and **2D** drawings of grain structures .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 16,
+     "fact": "These digital mockups allow for analysis without expensive physical prototypes .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 17,
+     "fact": "While ergonomic simulation specifically uses Digital Human Models (DHMs) with inverse kinematics to mimic human postures in virtual environments like manufacturing facilities , similar physics-based modeling techniques using 3D graphics can be adapted for agricultural products.",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 18,
+     "fact": "Practice Gaps** A critical aspect of this design is addressing the gap between theoretical models and practical application, which scholars frame as a knowledge transfer challenge .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 19,
+     "fact": "Academics are often criticized for not transferring research knowledge to practitioners, leading to skepticism about whether theoretical models (such as complex control equations) are relevant to field work .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 20,
+     "fact": "The theoretical basis was advanced by contributors including Edward Routh in **1874**, Charles Sturm and Adolf Hurwitz in **1895**, who contributed to stability criteria .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 21,
+     "fact": "Furthermore, from **1922** onwards, Nicolas Minorsky developed PID (Proportional-Integral-Derivative) control theory .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 22,
+     "fact": "Based on the provided evidence, here is a synthesis of information regarding engineering disciplines, control theory, and related technologies: **Control Engineering and Theory** Control engineering (also known as automation engineering) is an interdisciplinary field that applies **control theory** to design systems with desired behaviors .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 23,
+     "fact": "The discipline uses sensors to measure process output and provides corrective feedback via error signals (the difference between a set point and actual value) to achieve stability and optimality .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 24,
+     "fact": "Control theory itself is a mathematical model based on differential equations describing the relationship between input and output .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 25,
+     "fact": "Edward Routh contributed in **1874**, Charles Sturm and Adolf Hurwitz in **1895**, establishing stability criteria .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 26,
+     "fact": "From **1922** onwards, Nicolas Minorsky developed PID control theory .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 27,
+     "fact": "Applications of control theory extend beyond industry into life sciences, computer engineering, sociology, and operations research .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 28,
+     "fact": "**Engineering Tools and Simulation** Computers play an increasingly vital role in modern engineering through Computer-Aided Design (CAD), which allows for the creation of 3D models, 2D drawings, and schematics .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 29,
+     "fact": "Reverse engineering utilizes these tools by measuring existing physical parts via **3D** scanning technologies (such as laser scanners or CMMs) to reconstruct them into virtual models .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 30,
+     "fact": "This process converts point clouds into triangular-faced meshes or Boundary Representation CAD models using analytical surfaces like planes and cylinders .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 31,
+     "fact": "Ergonomic simulation uses 3D graphics and physics-based models to animate \"Digital Human Models\" (DHMs) within virtual environments, mimicking human postures and mechanical loads in settings such as airplanes or manufacturing facilities .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 32,
+     "fact": "These simulations utilize inverse kinematics for posing DHMs .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 33,
+     "fact": "**Agricultural Engineering and Biotechnology** Agricultural engineers manage tasks including irrigation, drainage, flood control systems, and environmental impact assessments .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 34,
+     "fact": "Agricultural biotechnology (agritech) involves modifying living organisms using tools like genetic engineering and tissue culture to create crops with desirable traits such as disease resistance, improved flavor, or faster growth rates .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 35,
+     "fact": "Practice** There is an ongoing scholarly discussion regarding the gap between theoretical models and practical application in professions such as medicine, law, and engineering .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 36,
+     "fact": "This gap is framed variously as a failure of knowledge transfer from academics to practitioners, or as a result of differing ontologies and epistemologies used by researchers versus practitioners .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 37,
+     "fact": "Some scholars argue that research does not produce theory relevant to practice .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 38,
+     "fact": "**Summary of Figures:** **3**: Refers to 3D graphics/models mentioned in simulation and CAD contexts , .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 39,
+     "fact": "**Summary of Figures:** **3**: Refers to 3D graphics/models mentioned in simulation and CAD contexts , .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 40,
+     "fact": "**3, 2**: Likely refers to the creation of \"3D models\" and \"2D drawings\" via CAD software .",
+     "url": "https://en.wikipedia.org/wiki/Simulation#Ergonomics",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 41,
+     "fact": "**1895**: The year Adolf Hurwitz contributed to stability criteria .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 42,
+     "fact": "**1922**: The starting point for Nicolas Minorsky’s development of PID control theory .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    }
+   ],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 179,
+   "cost_usd": 0.0004475
+  },
+  {
+   "id": 69,
+   "topic": "Software Development",
+   "pairs": 13,
+   "counts": {
+    "supported": 0,
+    "unsupported": 8,
+    "unknown": 5,
+    "errors": 0
+   },
+   "zero_pair": false,
+   "zero_judged": false,
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "The available documents discuss other topics such as: **TCP Ossification:** Recommendations for preventing it (encrypting metadata) and QUIC as a protocol designed with anti-ossification properties .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 2,
+     "fact": "**IPv6:** Its features, subnet size standardization to 64 bits, and addressing architecture defined in RFC 4291 .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 3,
+     "fact": "**IMAP History:** The evolution from IMAP2 (RFC 1064, 1988; RFC 1176, 1990) which introduced command/response tagging .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 4,
+     "fact": "**Google Services:** Google's introduction of encrypted connections since 2012 , the \"Caffeine\" search architecture update announced in June 2010 claiming 50% fresher results , and the announcement of Google Fiber in February 2010 targeting 50,000 to 500,00 customers  and Project Fi in April 2015 .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": "estate-1",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 5,
+     "fact": "**Google Services:** Google's introduction of encrypted connections since 2012 , the \"Caffeine\" search architecture update announced in June 2010 claiming 50% fresher results , and the announcement of Google Fiber in February 2010 targeting 50,000 to 500,00 customers  and Project Fi in April 2015 .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": "estate-2",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 6,
+     "fact": "Based on the provided evidence, here is a synthesis of the technical protocols, engineering processes, and corporate developments: **Network Protocols and Architecture** The Internet Protocol suite was originally implemented as the Transmission Control Program in **1974** by Cerf, Yogen Dalal, and Carl Sunshine .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 7,
+     "fact": "This design relied on the end-to-end principle, pioneered by Louis Pouzin in the CYCLADES network, which posits that intelligence should reside at the edge nodes rather than within the network itself .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 8,
+     "fact": "The Transmission Control Protocol (TCP) operates at the transport layer, providing host-to-host connectivity and handling handshaking details while abstracting network connections from applications via a socket interface .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 9,
+     "fact": "QUIC is noted as the first IETF transport protocol designed with deliberate anti-ossification properties .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 10,
+     "fact": "It introduced command/response tagging and served as the first publicly distributed version of the protocol .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 11,
+     "fact": "CAD tools can optimize volume reduction without compromising quality and use finite element methods to calculate stress and displacement throughout a part .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 12,
+     "fact": "To mitigate issues such as governmental blocking of services, Google introduced encrypted connections globally in that year .",
+     "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 13,
+     "fact": "In February **2010**, Google announced the Fiber project, an experimental ultra-high-speed broadband network targeting between **50,000** and **500,000** customers in select American cities; this initiative later moved to Alphabet's Access division following corporate restructuring .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    }
+   ],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 107,
+   "cost_usd": 0.0002675
+  },
+  {
+   "id": 78,
+   "topic": "Health",
+   "pairs": 43,
+   "counts": {
+    "supported": 6,
+    "unsupported": 13,
+    "unknown": 24,
+    "errors": 0
+   },
+   "zero_pair": false,
+   "zero_judged": false,
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Health Warning Signs by Stage of Parkinson’s Disease Parkinson's disease (PD) progresses over time, affecting both motor and non-motor systems .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 2,
+     "fact": "The potential warning signs vary depending on the stage of the disease: **Prodromal/Early Non-Motor Phase:** Non-motor symptoms may precede the onset of motor symptoms by up to 20 years .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 3,
+     "fact": "Early signs include constipation, anosmia (loss of smell), mood disorders, and REM sleep behavior disorder .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 4,
+     "fact": "**Motor Symptoms:** As the disease develops, defining motor symptoms emerge, including tremor, bradykinesia (slowness of movement), rigidity, and postural instability , collectively known as parkinsonism .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 5,
+     "fact": "**Motor Symptoms:** As the disease develops, defining motor symptoms emerge, including tremor, bradykinesia (slowness of movement), rigidity, and postural instability , collectively known as parkinsonism .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 6,
+     "fact": "Untreated individuals were historically expected to lose independent ambulation after an average of eight years and be bedridden after ten years, though medication can extend this timeline significantly .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 7,
+     "fact": "**Advanced Stages:** In advanced stages, patients may experience Parkinson's disease dementia, falls, and neuropsychiatric problems such as sleep abnormalities, psychosis, mood swings, or behavioral changes .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 8,
+     "fact": "Additionally, impulse-control disorders occur in approximately 19 percent of all patients .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 9,
+     "fact": "If a patient begins to fall frequently or loses independent ambulation, immediate care adjustments are needed .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 10,
+     "fact": "**Inability to Perform Daily Tasks:** In late-stage dementia associated with PD (or Lewy body dementia), patients may turn increasingly inward, require assistance with most personal care, and lose recognition of familiar faces  and .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 11,
+     "fact": "**Inability to Perform Daily Tasks:** In late-stage dementia associated with PD (or Lewy body dementia), patients may turn increasingly inward, require assistance with most personal care, and lose recognition of familiar faces  and .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 12,
+     "fact": "They may also fail to recognize common dangers like hot stoves or realize they need to use the bathroom, leading to incontinence if unsupervised .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 13,
+     "fact": "These disorders are positively correlated with the use of dopamine agonists .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 14,
+     "fact": "**Neuropsychiatric Symptoms:** The emergence of psychosis, severe mood swings, or sleep abnormalities warrants medical attention .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 15,
+     "fact": "**Depression and Self-Esteem:** Living with PD can lead to depression and reduced self-esteem due to stressors like adopting a \"sick person\" identity; health psychologists recommend support in these areas .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 16,
+     "fact": "Daily Life Adjustments and Support Strategies for DBS Patients Deep Brain Stimulation (DBS) is recommended for people who have motor fluctuations and tremor inadequately controlled by medication, or those intolerant to medication but lacking severe neuropsychiatric problems .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 17,
+     "fact": "While the provided text does not detail specific daily adjustments *unique* solely to post-operative DBS care, it offers general management strategies applicable to patients undergoing surgical intervention when drug therapy fails: **Medical Management:** **Device Monitoring:** DBS involves implanting a neurostimulator that sends electrical impulses to specific brain areas such as the thalamus, globus pallidus, or subthalamic nucleus .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 18,
+     "fact": "Regular medical follow-up is implied to ensure the device functions correctly and addresses symptoms like tremors and motor fluctuations .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 19,
+     "fact": "Patients should continue with a holistic approach combining lifestyle modifications and physical therapy to improve quality of life .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 20,
+     "fact": "**Psychological Support:** Health psychologists can support patients in adjusting to life with an illness, improving self-management, and maintaining quality of life through social support networks .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 21,
+     "fact": "For example, connecting with other survivors or caregivers (as seen in Jeremy Paxman’s experience) can help mitigate isolation .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 22,
+     "fact": "**Medication Review:** Since DBS is often used when drug therapy is insufficient, ongoing medication management remains part of the treatment plan alongside surgical intervention  and [source: estate-2].",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 23,
+     "fact": "Parkinson’s disease (PD) is a neurodegenerative disorder of the central nervous system that affects both motor and non-motor systems .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 24,
+     "fact": "The defining motor symptoms include tremor, bradykinesia, rigidity, and postural instability , while non-motor symptoms such as constipation, anosmia, mood disorders, and REM sleep behavior disorder may precede these by up to 20 years .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 25,
+     "fact": "As the disease progresses, patients may experience Parkinson's disease dementia, falls, and neuropsychiatric problems like psychosis or sleep abnormalities .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 26,
+     "fact": "The number of cases increased by **74%** from **1990** to **2016**, and projections suggest the total will rise to over **12 million** patients by **2040** .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 27,
+     "fact": "Historically, before effective medication, untreated individuals were expected to lose independent ambulation after an average of eight years and be bedridden after ten years .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 28,
+     "fact": "With levodopa treatment, progression to high dependency may take over 15 years .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 29,
+     "fact": "Severity is often measured using scales such as the Unified Parkinson's Disease Rating Scale (UPDRS) or the Hoehn and Yahr scale, which was originally published in **1967** .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 30,
+     "fact": "The Hoehn and Yahr scale defines five basic stages of progression .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 31,
+     "fact": "**Treatment Options** There is no known cure for Parkinson’s disease; management typically involves a holistic approach including lifestyle modifications, physical therapy, and medication .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 32,
+     "fact": "Levodopa remains the most effective treatment for motor symptoms .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 33,
+     "fact": "Other pharmacological options include COMT inhibitors, dopamine agonists, MAO-B inhibitors, and dopa decarboxylase inhibitors like carbidopa .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 34,
+     "fact": "Surgery is divided into lesional procedures and Deep Brain Stimulation (DBS) .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 35,
+     "fact": "DBS involves implanting a neurostimulator to send electrical impulses to areas such as the thalamus, globus pallidus, or subthalamic nucleus .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 36,
+     "fact": "Lesional therapies involve creating lesions to suppress overactivity in specific brain regions .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 37,
+     "fact": "**Psychological Impact and Comorbidities** Living with Parkinson’s can lead to significant psychological stressors, including depression and reduced self-esteem, which health psychologists help patients manage .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 38,
+     "fact": "Impulse-control disorders affect approximately **19 percent** of all PD patients and are positively correlated with dopamine agonist use .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Prognosis",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 39,
+     "fact": "Singer Linda Ronstadt revealed her diagnosis in August **2013**, though doctors revised it to progressive supranuclear palsy in late **2019** .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 40,
+     "fact": "Fox Foundation in **2000**, which has raised over $**2 billion** for research .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 41,
+     "fact": "Boxer Muhammad Ali showed signs at age **38** but was not diagnosed until he was **42** .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 42,
+     "fact": "Cyclist Davis Phinney, diagnosed at age **40**, started his foundation in **2004** .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 43,
+     "fact": "Journalist Jeremy Paxman’s experience with the disease was highlighted in a documentary released in October **2022**, where he recorded his final episode of *University Challenge* on October 15, **2022** .",
+     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    }
+   ],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 194,
+   "cost_usd": 0.000485
+  },
+  {
+   "id": 83,
+   "topic": "Hardware",
+   "pairs": 56,
+   "counts": {
+    "supported": 3,
+    "unsupported": 25,
+    "unknown": 28,
+    "errors": 0
+   },
+   "zero_pair": false,
+   "zero_judged": false,
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "However, major manufacturers and their strategic positioning regarding tablets suitable for business use include: **Apple:** Held majority use in North America, Western Europe, Japan, Australia, and most of the Americas .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 2,
+     "fact": "As of 2021, Apple held the largest manufacturer market share globally .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": "estate-1",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 3,
+     "fact": "As of 2021, Apple held the largest manufacturer market share globally .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": "estate-2",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 4,
+     "fact": "**Samsung:** Android reigned over the market with 65% share by early 2016, followed by Samsung's strong presence (implied by its VP comments) .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 5,
+     "fact": "By 2021, Samsung was the second-largest manufacturer after Apple .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 6,
+     "fact": "**Lenovo:** Listed as a third major manufacturer alongside Apple and Samsung in terms of global market share as of 2021 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 7,
+     "fact": "Lenovo also delayed deployment of tablets until after 2011 when Android was optimized for them .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 8,
+     "fact": "**Microsoft:** Released devices such as the Surface slate tablet, hybrids, and convertibles running Windows 8/RT starting in 2012 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 9,
+     "fact": "Dell included Thunderbolt 3 ports in XPS Series and Alienware laptops (which can function as hybrid tablet/laptop systems) .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 10,
+     "fact": "Examples include: **Hardware Customization:** Embedding professional-grade GPS antennas for transportation companies instead of consumer-grade modules; ruggedizing devices for field use; using resistive touchscreens .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 11,
+     "fact": "**Software Customization:** Removing unnecessary functions like internet browsers to reduce cellular data costs; adding custom package management software .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 12,
+     "fact": "**OS Options:** Devices may run Android (including low-cost ARM systems), Windows 8/RT, or specialized firmware like Fire OS (Kindle) or Kindle firmware, which provide their own app stores rather than relying on Google Play  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 13,
+     "fact": "**OS Options:** Devices may run Android (including low-cost ARM systems), Windows 8/RT, or specialized firmware like Fire OS (Kindle) or Kindle firmware, which provide their own app stores rather than relying on Google Play  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 14,
+     "fact": "It references an image caption for the \"iPad Mini (6th generation)\" in a Wikipedia article context but does not include the actual visual asset .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Sales",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": true
+    },
+    {
+     "idx": 15,
+     "fact": "Primary Use Cases and Scenarios** **Sales and B2B Activities:** As of 2014, around **23%** of B2B companies had deployed tablets for sales-related activities .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 16,
+     "fact": "**Work/Professional Use:** In early 2016 Samsung vice president Gary Riding stated that tablets were only doing well among those using them for work .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 17,
+     "fact": "Newer models were designed with keyboards and styluses to reflect these changing professional uses .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 18,
+     "fact": "Hardware may include specialized GPS antennas; software may be stripped of non-essential apps like browsers to manage data costs associated with employee cellular network usage .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 19,
+     "fact": "**SaaS Consumption:** Tablets serve as endpoints for Software as a Service (SaaS) applications, such as productivity software like Google Docs and Office Online, which are hosted centrally by providers  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": "estate-1",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 20,
+     "fact": "**SaaS Consumption:** Tablets serve as endpoints for Software as a Service (SaaS) applications, such as productivity software like Google Docs and Office Online, which are hosted centrally by providers  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": "estate-2",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 21,
+     "fact": "**SaaS Consumption:** Tablets serve as endpoints for Software as a Service (SaaS) applications, such as productivity software like Google Docs and Office Online, which are hosted centrally by providers  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Sales",
+     "evidence_id": "ev-2",
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 22,
+     "fact": "This allows businesses to reduce IT operational costs by outsourcing hardware/software maintenance .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 23,
+     "fact": "Market Penetration, Usage Scenarios, Price Ranges, and Installed Base by Region** **Global Installed Base and Trends:** As of 2021 there were **1.28 billion** tablet users worldwide .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 24,
+     "fact": "Tablet sales did not increase in 2015 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 25,
+     "fact": "**Regional Breakdown (Based on Evidence):** **North America & Western Europe:** Apple’s iPad held majority use in these regions as well as Japan, Australia, and most of Americas .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 26,
+     "fact": "These are classified among the four regions with high numbers of ATMs per million people (though this statistic refers to ATMs, it highlights developed market infrastructure; for tablets, the evidence specifically cites iPad dominance)  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 27,
+     "fact": "*Note: The ATM density data is specific to financial machines, not tablets.* **Asia (excluding China/Russia), Africa, Eastern Europe:** Android tablets were more popular in these regions .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 28,
+     "fact": "By early 2016 Android held a **65%** global market share vs Apple's 26% and Windows' 9% .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 29,
+     "fact": "Japan was listed as having majority use for iPads in the earlier period .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 30,
+     "fact": "Korea is part of the \"three major Northeast Asian economies\" definition by the World Bank but no specific tablet usage stats are provided beyond the general regional trends .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": true
+    },
+    {
+     "idx": 31,
+     "fact": "**Price Ranges:** The evidence states that newer models (as of early 2016) were more expensive than previous generations, reflecting their design for keyboards and styluses .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 32,
+     "fact": "**Typical Usage Scenarios & Penetration Details:** **B2B Sales:** 23% penetration among B2B companies as of 2014 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 33,
+     "fact": "**Developer Targeting:** In Feb 2014, 93% of mobile app developers targeted smartphones vs 83% targeting tablets .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 34,
+     "fact": "**South America/Latin America:** The evidence mentions additional demand for ATMs in Latin America but does not provide specific tablet usage statistics or installed base numbers for this region beyond the general statement that Apple held majority use in \"most of the Americas\" (which typically includes North and South)  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 35,
+     "fact": "**Specific Data Points from Evidence:** Global Tablet OS Market Share (Early 2016): Android **65%**, Apple **26%**, Windows **9%** .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 36,
+     "fact": "Apple's Market Share Decline: Dropped below **25%** by 2015/early 2016 period context .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 37,
+     "fact": "Total Users (2021): **1.28 billion** .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 38,
+     "fact": "Based on the evidence provided, here is a synthesis of the data regarding tablet computers, marketing contexts, and related technologies: **Tablet Market Trends and Usage (2014–2016)** As of February 2014, mobile app development was heavily skewed toward smartphones, with **93%** of developers targeting them compared to **83%** targeting tablets .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 39,
+     "fact": "In terms of business deployment, around **23%** of B2B companies had deployed tablets for sales-related activities by 2014 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 40,
+     "fact": "Regional usage varied significantly in this period; Apple’s iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas, while Android tablets were more popular in Asia (excluding China and Russia), Africa, and Eastern Europe .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 41,
+     "fact": "Although Apple remained the largest seller, its market share declined below **25%** .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 42,
+     "fact": "In early 2016, Samsung vice president Gary Riding noted that tablets performed well primarily among users employing them for work .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 43,
+     "fact": "By early 2016 the operating system market landscape showed Android reigning with **65%**, followed by Apple at **26%**, and Windows holding a distant third with **9%** .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 44,
+     "fact": "Newer models during this period were more expensive and designed for keyboards and styluses to reflect changing usage patterns .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 45,
+     "fact": "**Tablet Categories and Customization** Tablets can be grouped by physical size, operating system, input/output technology, and uses .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 46,
+     "fact": "Some tablets are shipped with Android Go .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 47,
+     "fact": "Customized business tablets address specific hardware and software needs; for example, a transportation company might embed professional-grade GPS antennas or remove unnecessary functions like internet browsers to reduce data costs .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 48,
+     "fact": "Vendors such as Motorola and Lenovo delayed deployment until after 2011, when Android was reworked (specifically with version 3.0 Honeycomb) to support larger screens .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 49,
+     "fact": "In 2012, Microsoft released Windows 8 and Windows RT for ARM-based devices, accompanied by slate tablets, hybrids, and convertibles like the Surface .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 50,
+     "fact": "Dell was the first to include Thunderbolt 3 ports in laptops (XPS Series and Alienware range), followed by Apple including them on Macs in 2016 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 51,
+     "fact": "Adoption widened as Thunderbolt 3 uses the USB-C connector standard and later became part of the USB4 standard .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 52,
+     "fact": "**Cloud Computing and Marketing Context** Marketing is defined as satisfying and retaining customers, often conducted via B2B or B2C channels .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 53,
+     "fact": "Software as a Service (SaaS) allows businesses to reduce IT operational costs by outsourcing maintenance, though it carries risks regarding data security if unauthorized access occurs .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 54,
+     "fact": "SaaS applications are typically priced on a monthly or yearly flat fee per user basis .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 55,
+     "fact": "**Current Market Data (2021)** As of 2021, there were **1.28 billion** tablet users worldwide according to Statista .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    },
+    {
+     "idx": 56,
+     "fact": "Apple held the largest manufacturer market share at that time, followed by Samsung and Lenovo .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Customized_business_tablet",
+     "evidence_id": null,
+     "verdict": null,
+     "verdict_recoverable": false,
+     "decline_shape": false
+    }
+   ],
+   "pairs_recovered": true,
+   "decline_shape_count": 2,
+   "wall_s": 414,
+   "cost_usd": 0.001035
+  },
+  {
+   "id": 90,
+   "topic": "Crime & Law",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "errors": 0
+   },
+   "zero_pair": true,
+   "zero_judged": true,
+   "fact_rows": [],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 165,
+   "cost_usd": 0.0004125
+  },
+  {
+   "id": 95,
+   "topic": "Religion",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "errors": 0
+   },
+   "zero_pair": true,
+   "zero_judged": true,
+   "fact_rows": [],
+   "pairs_recovered": true,
+   "decline_shape_count": 0,
+   "wall_s": 443,
+   "cost_usd": 0.0011075
+  }
+ ],
+ "pooled_fabrication": 0.8705882352941177,
+ "paper_mean_fabrication": 0.92437343358396,
+ "pooled_citation_accuracy": 0.12941176470588234,
+ "bootstrap": {
+  "n_resamples": 10000,
+  "seed": 4234932947,
+  "dropped_undefined": 2,
+  "ci95_lower": 0.7241379310344828,
+  "ci95_upper": 1.0
+ },
+ "references": {
+  "primary": {
+   "agent": "perplexity-Research",
+   "fabrication": 0.1737
+  },
+  "secondary": {
+   "agent": "openai-deepresearch",
+   "fabrication": 0.2499
+  }
+ },
+ "verdict_primary": "failed",
+ "mean_cost_usd": 0.0005729999999999999,
+ "cost_proxy_usd": 1.45,
+ "zero_pair_flights": {
+  "count": 3,
+  "ids": [
+   62,
+   90,
+   95
+  ],
+  "contribution": "pairs=0 -> per the declared drop rule each contributes fab=1.0 to the paper mean (pre-registration T2b, 'Local 62/90/95'); the pooled mean is unaffected (they carry no pairs). Reported as their own rows — never silently folded into the pooled mean (order deep-research-t3d)."
+ },
+ "zero_judged_flights": {
+  "count": 4,
+  "ids": [
+   59,
+   62,
+   90,
+   95
+  ],
+  "contribution": "pairs>0 but supported+unsupported == 0 -> N_u=0 -> Acc=0 -> fab=1.0 in the paper mean, the declared N_u=0->1 rule (pre-registration line 2226-2237)."
+ },
+ "graded_telemetry": {
+  "grounded": 11,
+  "hallucination": 74,
+  "honest_abstention": 2,
+  "unclassified_unknown": 134,
+  "caveated_ood": null,
+  "answered_novalue": null,
+  "ladder_notes": "projection of the verdict channel onto the chaos graded ladder (chaos_monkey.rs score_answer). caveated_ood / answered_novalue need score_answer's critic — the pre-registered 122B graded pass — and are null here (unmeasured, never defaulted, §18.3). honest_abstention is the mechanical DECLINE_SHAPE count over the recovered pair text: the old instrument had no decline class, so judge-emittable declines are unrecoverable from the frozen artifacts (T3C_AUDIT_FORENSICS.md pass site 4)."
+ },
+ "abstention_dimension": {
+  "honest_abstention": 2,
+  "unclassified_unknown": 134,
+  "abstention_share_of_unknown": 0.014705882352941176,
+  "note": "decline (honest abstention) is its own verdict class (order deep-research-t3d); the remaining unknown mass is unclassified — never abstention-scored by any instrument (T3C_AUDIT_FORENSICS.md pass site 3) — and is reported as-is, never collapsed into fabrication."
+ },
+ "elapsed_s": 0.0
+}

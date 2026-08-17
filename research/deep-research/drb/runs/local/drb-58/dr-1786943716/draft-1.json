@@ -1,0 +1,60 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786943716",
+  "charter_hash": "da6e6558590a414d",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the provided evidence, here is a synthesis regarding horizontal gene transfer (HGT) and its relationship to human evolution:\n\n**Prevalence in Humans vs. Other Organisms**\nHorizontal gene transfer is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring [Source: estate-1]. While HGT is an important factor in bacterial evolution and common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear [Source: estate-1]. Although rare in eukaryotes generally, specific examples include protists, algae, bdelloid rotifers, yeast (*Saccharomyces cerevisiae*), and the adzuki bean beetle (*Callosobruchus chinensis*) receiving genes from bacteria or other sources [Source: estate-1], [Source: estate-2].\n\n**Specific Claims Regarding Humans**\nThe provided text mentions that \"It has been suggested that lateral gene transfer to humans from bacteria may play a role in cancer\" [Source: estate-1]. However, the evidence does not provide further details on the extent of HGT within the human genome itself, nor does it confirm widespread horizontal transfers into the human lineage comparable to those seen in plants like *Amborella* (which contains many foreign mitochondrial genes) or rotifers [Source: estate-1]. The texts generally note that multicellular eukaryotes have mechanisms to prevent HGT, such as separated germ cells [Source: estate-1].\n\n**Conclusion**\nThe provided documents do not contain sufficient information to detail specific examples of functional genes transferred from bacteria to humans for evolutionary adaptation. They only cite a suggestion regarding a potential link between bacterial lateral gene transfer and cancer in humans, while emphasizing that HGT is primarily significant in prokaryotes and certain unicellular or simple multicellular organisms rather than complex mammals [Source: estate-1], [Source: estate-2].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Abstract",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Challenge_to_the_tree_of_life",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Gene#Origins_of_new_genes",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Amborella#Genomic_and_evolutionary_considerations",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://en.wikipedia.org/wiki/Microbiome#Abstract",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://en.wikipedia.org/wiki/Microevolution#Gene_flow",
+      "custody": "personal"
+    }
+  ]
+}

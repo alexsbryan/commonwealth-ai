@@ -277,6 +277,13 @@ pub async fn run_enrich(args: &[String]) -> i32 {
 #[cfg(test)]
 mod integration_tests;
 
+/// R-5 red — a personal-corpus chunk must not reach a remote-model
+/// payload via the enrich --provider dispatch (order
+/// deep-research-t2a). Fails at HEAD; green once the egress
+/// boundary refuses before any request leaves the machine.
+#[cfg(test)]
+mod egress_reds;
+
 /// Shared test helpers across `enrich_cmd` test modules.
 ///
 /// `std::env::set_var("HOME", …)` is process-wide state; tests that

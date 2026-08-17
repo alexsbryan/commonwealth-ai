@@ -28,6 +28,10 @@ thiserror = { workspace = true }
 # that the MCP tool layer serializes. Workspace baseline is `derive`.
 serde = { workspace = true }
 
+# `scip_meta` outcomes blob (exporter succeeded/skipped) stamped on
+# every rebuild by `export_to_live`. One dependency, no model needed.
+serde_json = { workspace = true }
+
 # Async runtime. Workspace baseline carries `rt`, `sync`, `process`,
 # `time`, `macros`, `fs` — all of which scip uses.
 tokio = { workspace = true }

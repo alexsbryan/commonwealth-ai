@@ -1,0 +1,87 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1786945222",
+  "charter_hash": "cabb39a9e9b392a9",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 2,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 13,
+      "fetched": 2,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+        "custody": "public-web",
+        "ingested_into": null
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+        "custody": "public-web",
+        "ingested_into": null
+      }
+    ],
+    "failed": [
+      {
+        "url": "https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/horizontal-gene-transfer",
+        "error": "fetch https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/horizontal-gene-transfer: Execution error: HTTP 403 Forbidden for https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/horizontal-gene-transfer"
+      },
+      {
+        "url": "https://academic.oup.com/ismecommun/article/4/1/ycae073/7671050",
+        "error": "fetch https://academic.oup.com/ismecommun/article/4/1/ycae073/7671050: Execution error: HTTP 403 Forbidden for https://academic.oup.com/ismecommun/article/4/1/ycae073/7671050"
+      }
+    ]
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 4,
+      "web-search:web": 4
+    },
+    "remaining": {
+      "web-search:web": 0,
+      "web-fetch:pages": 0
+    }
+  },
+  "not_covered": [
+    "Based on the provided evidence, here is an evaluation of Horizontal Gene Transfer (HGT) in plants and animals:\n\n**Evolutionary Significance and Mechanisms in Eukaryotes**\nHorizontal gene transfer is defined as the movement of genetic material between organisms other than by vertical transmission from parent to offspring [Source: ev-1].",
+    "While HGT is a primary mechanism for antibiotic resistance spread in bacteria, it also occurs in eukaryotes, including plants and animals [Source: ev-1][Source: ev-2].",
+    "In these systems, HGT has influenced scientific understanding of higher-order evolution [Source: ev-1].",
+    "A classic example cited is the transfer of DNA from mitochondria and chloroplasts to the nucleus following their acquisition by eukaryotes [Source: ev-2].",
+    "**HGT Between Bacteria and Animals**\nEvidence indicates that horizontal gene transfer between bacteria and animals is increasingly described.",
+    "These transfers are often associated with intimate relationships, such as those between endosymbionts and their invertebrate hosts (particularly insects and nematodes) or found in asexual animals [Source: ev-2].",
+    "Such vertically inherited transfers have the potential to influence animal evolution [Source: ev-2].",
+    "The text notes that while these lifestyles might promote HGT, it is difficult to ascertain this definitively due to non-random sampling of genome sequencing projects and a lack of systematic analysis [Source: ev-2].",
+    "**HGT Involving Plants**\nThe evidence lists several specific categories where plant-to-other or other-to-plant transfer occurs, including \"Bacteria to plants,\" \"Plant to plant,\" \"Plants to animals,\" \"Plant to fungus,\" and \"Plant to bacteria\" [Source: ev-1].",
+    "However, the provided text does not detail the frequency, specific examples, or evolutionary benefits for most of these plant-specific interactions beyond listing them as occurring.",
+    "The evidence mentions that large-scale genome sequencing has improved understanding but highlights a \"lack of systematic analysis\" [Source: ev-2].",
+    "Therefore, I cannot confirm from the given text whether these events are considered \"very rare\" or identify the specific evolutionary advantages driving them.",
+    "In summary, the evidence confirms HGT occurs between bacteria and animals (often via endosymbiosis) and lists various plant-mediated transfer pathways, but it lacks detailed data on the frequency or specific adaptive significance for most non-microbial examples beyond general statements about their role in evolution [Source: ev-1][Source: ev-2]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": {
+    "run-id": "dr-1786945222",
+    "granted-at-unix": 1786945222,
+    "release-floor": "personal"
+  },
+  "lock": {
+    "id": "dr-1786945222",
+    "acquired_at_unix": 1786945222,
+    "released_at_unix": 1786945405
+  }
+}

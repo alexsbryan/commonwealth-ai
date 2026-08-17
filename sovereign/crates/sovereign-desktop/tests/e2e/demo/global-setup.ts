@@ -74,6 +74,21 @@ export default async function demoGlobalSetup(): Promise<void> {
   // SOVEREIGN_DEMO=1 skips planting.
   process.env.SOVEREIGN_REAL_PROFILE_DIR ??= "demo-profile";
 
+  // B10's film runs through the desktop's `dr_start` with a deterministic
+  // surface: the bank v1 report-class deck (search/fetch from the deck,
+  // drafts still via the real daemon). The driver appends these verb
+  // flags verbatim when SOVEREIGN_DEMO_DR_FLAGS is set (declared in
+  // quality/env-flags.toml); every real flow leaves it unset. Values
+  // must not contain spaces (the driver splits on whitespace).
+  const repoRoot = path.resolve(CRATE_ROOT, "../../..");
+  const deck = path.join(repoRoot, "research", "deep-research", "bank", "v1", "deck");
+  if (!fs.existsSync(path.join(deck, "deck.toml"))) {
+    throw new Error(
+      `[demo-setup] B10's mock deck missing: ${deck} — the bank v1 deck must exist to film deep research`,
+    );
+  }
+  process.env.SOVEREIGN_DEMO_DR_FLAGS ??= `--backend mock --mock-deck ${deck}`;
+
   // One run id for the whole invocation, stamped HERE because global-setup
   // runs exactly once while the worker (and so beat.ts) reloads on every
   // test failure. Workers inherit this env, restarts included, which keeps

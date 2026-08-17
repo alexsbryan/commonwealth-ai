@@ -328,30 +328,52 @@ fn verdict_set_verdicts_and_citations() {
         .iter()
         .filter(|c| c.verdict == Verdict::CouldNotJudge)
         .count();
-    assert_eq!(passed, 4);
-    assert_eq!(open, 1);
-    // Every passed claim has a citation that resolves to a window chunk.
-    for c in v.claims.iter().filter(|c| c.verdict == Verdict::Passed) {
-        assert_eq!(c.citations.len(), 1, "claim {} must cite one chunk", c.id);
-        assert_eq!(c.citations[0].chunk_id, c.citations[0].evidence_id);
-        assert!(
-            urls.contains(&c.citations[0].url.as_str()),
-            "claim {} cites unresolvable url {}",
-            c.id,
-            c.citations[0].url
-        );
-    }
-    // The open question carries its flag (always flag, never remove).
-    let open_claim = v
+    // GAP-2 regeneration: every single-origin support set capped — 4
+    // passed claims (each citing one chunk from one source) downgraded
+    // to could-not-judge with the floor's record; the 5th claim was
+    // already open (all-absent witness).
+    assert_eq!(passed, 0);
+    assert_eq!(open, 5);
+    // Every floor-capped claim carries the corroboration record: the
+    // single origin named, the chunk count on the record (counted, never
+    // the origin count), the floor constant, and the false verdict.
+    let capped: Vec<_> = v
         .claims
         .iter()
-        .find(|c| c.verdict == Verdict::CouldNotJudge)
-        .unwrap();
+        .filter(|c| c.corroboration.as_ref().is_some_and(|r| !r.passes_floor))
+        .collect();
+    assert_eq!(
+        capped.len(),
+        4,
+        "the four former passes must be floor-capped"
+    );
+    for c in &capped {
+        let rec = c.corroboration.as_ref().unwrap();
+        assert_eq!(rec.floor, 2);
+        assert_eq!(rec.support_chunks, 1, "claim {} cited one chunk", c.id);
+        assert_eq!(rec.origins.len(), 1);
+        assert!(
+            urls.contains(&rec.origins[0].as_str()),
+            "claim {} names an unresolvable origin {}",
+            c.id,
+            rec.origins[0]
+        );
+        assert_eq!(
+            c.evidence_ids.len(),
+            0,
+            "a capped claim carries no citations"
+        );
+        assert!(c.flag.as_deref().unwrap().contains("single-origin support"));
+    }
+    // The all-absent open question keeps its own flag (always flag,
+    // never remove) and NO corroboration record — the witness downgrade
+    // fired before the floor.
+    let open_claim = v.claims.iter().find(|c| c.corroboration.is_none()).unwrap();
     assert!(open_claim
         .flag
         .as_deref()
         .unwrap()
-        .contains("open question"));
+        .contains("extracted specifics absent"));
 }
 
 #[test]
@@ -368,8 +390,14 @@ fn manifest_closes_the_run() {
     assert_eq!(m.sources.fetched.len(), 4);
     assert!(m.sources.failed.is_empty());
     assert_eq!(m.budget.spent["web-search:duckduckgo"], 4);
-    assert_eq!(m.not_covered.len(), 1);
-    assert!(m.not_covered[0].contains("lattice trusses"));
+    // GAP-2 regeneration: the four single-origin claims joined the open
+    // set — the run-close record must not hide them.
+    assert_eq!(m.not_covered.len(), 5);
+    assert!(m.not_covered.iter().any(|t| t.contains("lattice trusses")));
+    assert!(m
+        .not_covered
+        .iter()
+        .any(|t| t.contains("completed in 1873")));
     assert!(m.lock.released_at_unix.is_some());
     assert!(m.lock.released_at_unix.unwrap() >= m.lock.acquired_at_unix);
 }
@@ -413,6 +441,7 @@ fn renderer_is_pinned_by_the_golden_report() {
             supporting_chunk_ids: c.evidence_ids.clone(),
             empty_evidence_window: false,
             reason: None,
+            corroboration: c.corroboration.clone(),
         })
         .collect();
     let claims = final_claims(&audits, &window);
@@ -423,6 +452,7 @@ fn renderer_is_pinned_by_the_golden_report() {
         RUN_ID,
         None,
         None,
+        &[],
     );
     let golden = load("report.md");
     assert_eq!(

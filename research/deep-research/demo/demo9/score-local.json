@@ -1,0 +1,162 @@
+{
+ "arm": "local",
+ "subset": "query.subset.jsonl",
+ "judge_pin": "Qwen3.6-35B-A3B-MTP-UD-Q6_K",
+ "n_tasks": 10,
+ "tasks": [
+  {
+   "id": 56,
+   "topic": "Finance & Business",
+   "pairs": 12,
+   "counts": {
+    "supported": 0,
+    "unsupported": 2,
+    "unknown": 10,
+    "errors": 0
+   },
+   "wall_s": 310,
+   "cost_usd": 0.000775
+  },
+  {
+   "id": 58,
+   "topic": "Science & Technology",
+   "pairs": 28,
+   "counts": {
+    "supported": 2,
+    "unsupported": 4,
+    "unknown": 22,
+    "errors": 0
+   },
+   "wall_s": 221,
+   "cost_usd": 0.0005525
+  },
+  {
+   "id": 59,
+   "topic": "Science & Technology",
+   "pairs": 25,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 25,
+    "errors": 0
+   },
+   "wall_s": 135,
+   "cost_usd": 0.0003375
+  },
+  {
+   "id": 62,
+   "topic": "Science & Technology",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "errors": 0
+   },
+   "wall_s": 124,
+   "cost_usd": 0.00031
+  },
+  {
+   "id": 65,
+   "topic": "Science & Technology",
+   "pairs": 42,
+   "counts": {
+    "supported": 0,
+    "unsupported": 22,
+    "unknown": 20,
+    "errors": 0
+   },
+   "wall_s": 179,
+   "cost_usd": 0.0004475
+  },
+  {
+   "id": 69,
+   "topic": "Software Development",
+   "pairs": 13,
+   "counts": {
+    "supported": 0,
+    "unsupported": 8,
+    "unknown": 5,
+    "errors": 0
+   },
+   "wall_s": 107,
+   "cost_usd": 0.0002675
+  },
+  {
+   "id": 78,
+   "topic": "Health",
+   "pairs": 43,
+   "counts": {
+    "supported": 6,
+    "unsupported": 13,
+    "unknown": 24,
+    "errors": 0
+   },
+   "wall_s": 194,
+   "cost_usd": 0.000485
+  },
+  {
+   "id": 83,
+   "topic": "Hardware",
+   "pairs": 56,
+   "counts": {
+    "supported": 3,
+    "unsupported": 25,
+    "unknown": 28,
+    "errors": 0
+   },
+   "wall_s": 414,
+   "cost_usd": 0.001035
+  },
+  {
+   "id": 90,
+   "topic": "Crime & Law",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "errors": 0
+   },
+   "wall_s": 165,
+   "cost_usd": 0.0004125
+  },
+  {
+   "id": 95,
+   "topic": "Religion",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "errors": 0
+   },
+   "wall_s": 443,
+   "cost_usd": 0.0011075
+  }
+ ],
+ "pooled_fabrication": 0.8705882352941177,
+ "paper_mean_fabrication": 0.92437343358396,
+ "pooled_citation_accuracy": 0.12941176470588234,
+ "bootstrap": {
+  "n_resamples": 10000,
+  "seed": 4234932947,
+  "dropped_undefined": 2,
+  "ci95_lower": 0.7241379310344828,
+  "ci95_upper": 1.0
+ },
+ "references": {
+  "primary": {
+   "agent": "perplexity-Research",
+   "fabrication": 0.1737
+  },
+  "secondary": {
+   "agent": "openai-deepresearch",
+   "fabrication": 0.2499
+  }
+ },
+ "verdict_primary": "failed",
+ "mean_cost_usd": 0.0005729999999999999,
+ "cost_proxy_usd": 1.45,
+ "elapsed_s": 115.2
+}

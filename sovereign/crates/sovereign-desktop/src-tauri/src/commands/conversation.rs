@@ -365,8 +365,8 @@ pub async fn submit_information_search(
     conversation_id: Option<String>,
 ) -> Result<SearchAugmentation, String> {
     use sovereign_tools::web::search::{
-        BraveBackendImpl, BudgetView, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy,
-        SelectInputs, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+        BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, SearchPrivacy, SelectInputs,
+        TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
     };
 
     let query = query.trim();
@@ -435,11 +435,34 @@ pub async fn submit_information_search(
 
     let orchestrator = SearchOrchestrator::new(Arc::new(registry));
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .map_err(|e| format!("reqwest client build: {e}"))?;
-    let budget = BudgetView::new();
+    // The ONE egress boundary (order deep-research-t2a): the client is
+    // built by sovereign-core's egress module (the F26 census enforces
+    // that this file constructs no reqwest client of its own), and the
+    // query egress passes the boundary's release gate BEFORE it leaves.
+    let client = sovereign_core::egress::search_client()
+        .map_err(|e| format!("egress boundary search client build: {e}"))?;
+    let provider_static: &'static str = match config_snapshot.search_backend.provider.as_str() {
+        "tavily" => "tavily",
+        "brave" => "brave",
+        _ => "duckduckgo",
+    };
+    // The click IS the user's action and the query IS the user's own
+    // words — the release rule's user-formed-query clause (what=="query"
+    // && user_formed) covers this egress without a grant.
+    sovereign_core::egress::verify(
+        &sovereign_core::egress::EgressPayload {
+            privacy: SearchPrivacy::External {
+                provider: provider_static,
+            },
+            custody: sovereign_contracts::types::Custody::Personal,
+            what: "query",
+            target: provider_static,
+            detail: query,
+            user_formed: true,
+        },
+        None,
+    )
+    .map_err(|r| format!("web search refused: {r}"))?;
     let prefer = match config_snapshot.search_backend.provider.as_str() {
         "tavily" => &["tavily", "duckduckgo"][..],
         "brave" => &["brave", "duckduckgo"][..],
@@ -461,7 +484,6 @@ pub async fn submit_information_search(
                 max_privacy: SearchPrivacy::External {
                     provider: "duckduckgo",
                 },
-                budget: &budget,
                 prefer,
             },
         )

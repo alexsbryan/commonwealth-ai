@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-04 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['OpenAI', 'o3', 'o4-mini', 'reasoning', 'ARC-AGI']
+url = "https://estate.example/seed-04"
+title = "OpenAI o3 and o4-mini (2025-04-16)"
+snippet = "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use."
+body = "seed-04.md"

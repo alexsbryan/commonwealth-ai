@@ -1,0 +1,14 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786976220",
+  "charter_hash": "fe46bd9f260d0907",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "No evidence was retrieved this round.",
+  "citations": []
+}

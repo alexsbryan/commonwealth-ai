@@ -1,0 +1,24 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1786945508",
+  "charter_hash": "ababa7060973b453",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "As an agricultural engineering researcher focusing on 3D reconstruction and phenotypic analysis of crop grains, please develop a design report utilizing modern control theory, alongside other relevant theoretical methods and models, for the tasks of modeling, analysis, and design pertinent to my research area.",
+      "hits": []
+    },
+    {
+      "query": "As an agricultural engineering researcher focusing on 3D reconstruction and phenotypic analysis of crop grains, please develop a design report utilizing modern control theory, alongside other relevant theoretical methods and models, for the tasks of modeling, analysis, and design pertinent to my research area",
+      "hits": []
+    }
+  ],
+  "estate_answer": "No evidence was retrieved this round."
+}

@@ -55,7 +55,7 @@ pub use capability_map::{
 };
 pub use error::{Error, Result};
 pub use scip_graph::{
-    BlastEntry, BlastRadiusResult, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
-    ScipRefRecord, ScipSymbolRecord, SymbolRow, SCHEMA_VERSION,
+    BlastEntry, BlastRadiusResult, LiveExport, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
+    ScipRefRecord, ScipSymbolRecord, SymbolRow, REBUILD_COALESCED, SCHEMA_VERSION,
 };
 pub use trace::{build_symbol_trace, render_trace, CallSite, SymbolTrace};

@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786945746",
+  "charter_hash": "408749ec66d0d879",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What are the early motor and non-motor symptoms of Parkinson's disease?",
+      "Which specific clinical signs indicate progression to moderate stages of Parkinson's disease?",
+      "What behavioral or physical changes signal severe stage Parkinson's disease requiring intervention?",
+      "At what percentage of functional decline should family members seek immediate medical advice for a Parkinson's patient?",
+      "How many patients with Parkinson's disease undergo Deep Brain Stimulation surgery annually in major cities?",
+      "What is the average cost of Deep Brain Stimulation surgery per city or region?",
+      "By what percentage does quality of life improve after Deep Brain Stimulation compared to medication alone?",
+      "What daily living adjustments reduce fall risk by half in post-DBS Parkinson's patients?"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

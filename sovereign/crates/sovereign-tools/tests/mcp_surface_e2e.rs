@@ -13,9 +13,13 @@
 //! The unit tests inside `mcp_surface.rs` cover the static contract
 //! (alias map shape, retired ids excluded). This file covers the
 //! dynamic behaviour: a populated `ToolRegistry` rendered via
-//! `render_tools_list` produces the expected canonical + deprecated
-//! mirror entries, and renamed tools' `descriptor().id` matches the
-//! canonical name.
+//! `render_tools_list` produces exactly the canonical entries, and
+//! renamed tools' `descriptor().id` matches the canonical name.
+//!
+//! Since 2026-08-17 the deprecated mirrors are no longer advertised
+//! — they cost every session the duplicate schema of six tools. The
+//! aliases remain accepted at dispatch via `resolve_alias`, and both
+//! halves are asserted so neither can drift away alone.
 
 #![cfg(feature = "treesitter")]
 
@@ -76,10 +80,10 @@ fn renamed_tool_descriptor_ids_are_canonical() {
 }
 
 /// `render_tools_list` against a registry containing all renamed
-/// tools emits one canonical entry per tool plus one deprecated
-/// mirror per legacy alias whose target is exposed.
+/// tools emits one canonical entry per tool and NO alias mirrors —
+/// aliases live on the `tools/call` rewrite path only.
 #[test]
-fn render_tools_list_includes_canonical_and_aliases() {
+fn render_tools_list_emits_canonical_only() {
     let engine = empty_engine();
     let graph = empty_graph();
     let dir = tempfile::tempdir().unwrap();
@@ -119,29 +123,34 @@ fn render_tools_list_includes_canonical_and_aliases() {
         );
     }
 
-    // Each legacy alias appears as a deprecated mirror with the
-    // appropriate description prefix.
-    for (legacy, canonical) in MCP_TOOL_ALIASES {
-        if !is_mcp_exposed(canonical) {
-            continue;
-        }
-        let entry = listed
-            .iter()
-            .find(|t| t["name"].as_str() == Some(*legacy))
-            .unwrap_or_else(|| panic!("missing alias mirror {legacy}"));
-        let desc = entry["description"].as_str().unwrap_or("");
+    // No legacy alias is advertised (changed 2026-08-17). The mirrors
+    // duplicated the full schema of every renamed tool into every
+    // session's context — measured at 9,435 chars ≈ 2,550 tokens —
+    // to offer fresh clients a name they should never choose.
+    for (legacy, _canonical) in MCP_TOOL_ALIASES {
         assert!(
-            desc.starts_with(&format!("(deprecated alias for `{canonical}`)")),
-            "alias {legacy} description not marked deprecated: {desc:?}"
+            !names.contains(legacy),
+            "deprecated alias {legacy} should not be advertised, got {names:?}"
         );
-        // The canonical and alias entries advertise identical input
-        // schemas — calling `find_callers(symbol)` validates the
-        // same way as `callers(symbol)`.
-        let canonical_entry = listed
-            .iter()
-            .find(|t| t["name"].as_str() == Some(*canonical))
-            .unwrap();
-        assert_eq!(entry["inputSchema"], canonical_entry["inputSchema"]);
+    }
+
+    // Exactly the canonicals, nothing more: catches a mirror creeping
+    // back in under a name this loop does not enumerate.
+    assert_eq!(
+        listed.len(),
+        6,
+        "expected only the 6 canonical entries, got {names:?}"
+    );
+
+    // Compatibility is preserved on the CALL path, not the list path.
+    // Asserted here so a later cleanup cannot quietly delete the
+    // rewrite along with the advertisement (ARCH §18.6).
+    for (legacy, canonical) in MCP_TOOL_ALIASES {
+        assert_eq!(
+            resolve_alias(legacy),
+            *canonical,
+            "alias {legacy} must still resolve at dispatch time"
+        );
     }
 }
 

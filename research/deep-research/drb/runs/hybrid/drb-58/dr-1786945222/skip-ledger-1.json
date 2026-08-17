@@ -1,0 +1,257 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786945222",
+  "charter_hash": "cabb39a9e9b392a9",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://www.tandfonline.com/doi/full/10.1080/13102818.2021.1985612",
+      "title": "Contribution of plant–bacteria interactions to horizontal gene transfer in plants",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://nph.onlinelibrary.wiley.com/doi/10.1046/j.1469-8137.2003.00697.x",
+      "title": "Horizontal gene transfer in the phytosphere - Van Elsas - 2003",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11131428",
+      "title": "Widespread horizontal gene transfer between plants and bacteria",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.08.25.505314.full",
+      "title": "Widespread horizontal gene transfer between plants and their microbiota | bioRxiv",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+      "title": "Widespread of horizontal gene transfer events in eukaryotes | bioRxiv",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12448838",
+      "title": "Mechanisms, detection, and impact of horizontal gene transfer in plant functional evolution",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/356081749_Contribution_of_plant-bacteria_interactions_to_horizontal_gene_transfer_in_plants",
+      "title": "(PDF) Contribution of plant–bacteria interactions to horizontal gene ...",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cell.com/molecular-plant/fulltext/S1674-2052(22)00049-1",
+      "title": "Major episodes of horizontal gene transfer drove the evolution of land plants",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/topics/neuroscience/horizontal-gene-transfer",
+      "title": "Horizontal Gene Transfer - an overview",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41467-024-45154-w",
+      "title": "Horizontal gene transfer is predicted to overcome the diversity limit of competing microbial species | Nature Communications",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2012.00027/full",
+      "title": "Assessing the Probability of Detection of Horizontal Gene Transfer Events ...",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+      "title": "Horizontal Gene Transfer Happens More Often Than Anyone Thought | The Scientist",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+      "title": "Widespread of horizontal gene transfer events in eukaryotes - bioRxiv",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.quantamagazine.org/dna-jumps-between-animal-species-no-one-knows-how-often-20210609",
+      "title": "DNA Jumps Between Animal Species. No One Knows How Often. | Quanta Magazine",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+      "title": "Horizontal gene transfer between bacteria and animals - PMC",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://elifesciences.org/reviewed-preprints/97647",
+      "title": "Widespread Horizontal Gene Transfer Among Animal Viruses",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41597-026-07354-5",
+      "title": "A compendium of horizontal gene transfers in Metazoa | Scientific Data",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://institut-curie.org/scientific-event/how-do-genes-venture-unknown-mavericksa-new-vector-horizontal-gene-transfer-animals-23-04-2026",
+      "title": "How do genes venture into the unknown? Mavericksa new vector of horizontal gene transfer in animals - Institut Curie",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/ismej/article/20/1/wraf275/8377246",
+      "title": "Co-occurrence is associated with horizontal gene transfer ...",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.08.25.505314.full",
+      "title": "Widespread horizontal gene transfer between plants and their microbiota",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S2214574523000329",
+      "title": "Sidestepping Darwin: horizontal gene transfer from plants to insects",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12711439",
+      "title": "Reassessing Interkingdom Horizontal Gene Transfer Suggests Limited Influence on Plant Genomes",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sci.news/biology/plant-transcriptomes-07740.html",
+      "title": "Researchers Generate Gene Sequences for 1,124 Plant Species, Illuminate One Billion Years of Evolution | Biology, Genetics | Sci-News.com",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/ncomms2148",
+      "title": "Widespread impact of horizontal gene transfer on plant colonization of land | Nature Communications",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://nph.onlinelibrary.wiley.com/doi/10.1111/nph.16022",
+      "title": "On the evolutionary significance of horizontal gene transfers in ...",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://globalplantcouncil.org/1000-plants",
+      "title": "1000 Plants",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ebsco.com/research-starters/science/horizontal-gene-transfer",
+      "title": "Horizontal gene transfer | Science | Research Starters | EBSCO Research",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=BiRc2FGh71o",
+      "title": "What is Horizontal Gene Transfer?",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms",
+      "title": "Mechanisms and Research Advances of Horizontal Gene ...",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/379324240_Widespread_Horizontal_Gene_Transfer_Among_Animal_Viruses",
+      "title": "Widespread Horizontal Gene Transfer Among Animal Viruses",
+      "score": 0.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://coruzzilab.bio.nyu.edu/research/evolutionary-genomics",
+      "title": "Evolutionary Genomics",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

@@ -1,0 +1,937 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786944221",
+  "charter_hash": "dcc6b967d6bc54c0",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+      "title": "Transmission Control Protocol",
+      "score": 0.03333333507180214,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+      "title": "Communication protocol",
+      "score": 0.03333333507180214,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+      "title": "Communication protocol",
+      "score": 0.03333333507180214,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Engineering_design_process#Detailed_design",
+      "title": "Engineering design process",
+      "score": 0.03333333507180214,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/History_of_the_Internet#CYCLADES",
+      "title": "History of the Internet",
+      "score": 0.032522473484277725,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+      "title": "Communication protocol",
+      "score": 0.032522473484277725,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Google_Search#Dedicated_encrypted_search_page",
+      "title": "Google Search",
+      "score": 0.03226646035909653,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Protocol#Reliability",
+      "title": "Internet Protocol",
+      "score": 0.03205128386616707,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3",
+      "title": "Transport Layer Security",
+      "score": 0.03201844170689583,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Abstract",
+      "title": "Transmission Control Protocol",
+      "score": 0.03201844170689583,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Process_engineering#Overview",
+      "title": "Process engineering",
+      "score": 0.03201844170689583,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Wire_image_and_ossification",
+      "title": "Transmission Control Protocol",
+      "score": 0.0320020467042923,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Email#Message_format",
+      "title": "Email",
+      "score": 0.0320020467042923,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP3",
+      "title": "Internet Message Access Protocol",
+      "score": 0.0317540317773819,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#IMAP2bis",
+      "title": "Internet Message Access Protocol",
+      "score": 0.03154495730996132,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design",
+      "title": "Computer-aided design",
+      "score": 0.0313725508749485,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#Original_IMAP",
+      "title": "Internet Message Access Protocol",
+      "score": 0.03131881356239319,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+      "title": "Transmission Control Protocol",
+      "score": 0.03125763311982155,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Engineering_design_process#Common_stages_of_the_engineering_design_process",
+      "title": "Engineering design process",
+      "score": 0.03125763311982155,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_protocol_suite#Formal_specification_and_standards",
+      "title": "Internet protocol suite",
+      "score": 0.03095238283276558,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Engineering#Computer_use",
+      "title": "Engineering",
+      "score": 0.03083491325378418,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3",
+      "title": "Transport Layer Security",
+      "score": 0.03077651560306549,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol",
+      "title": "Internet Message Access Protocol",
+      "score": 0.03055037185549736,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Protocol#Version_history",
+      "title": "Internet Protocol",
+      "score": 0.030477948486804962,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Protocol_operation",
+      "title": "Transmission Control Protocol",
+      "score": 0.030414745211601257,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol#Mail_processing_model",
+      "title": "Simple Mail Transfer Protocol",
+      "score": 0.030414745211601257,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_protocol_suite#Abstract",
+      "title": "Internet protocol suite",
+      "score": 0.030365770682692528,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transport_Layer_Security#Description",
+      "title": "Transport Layer Security",
+      "score": 0.030365770682692528,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Packet_switching#Invention_and_development",
+      "title": "Packet switching",
+      "score": 0.030365297570824623,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Historical_origin",
+      "title": "Transmission Control Protocol",
+      "score": 0.029877368360757828,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.029857397079467773,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/CYCLADES#Abstract",
+      "title": "CYCLADES",
+      "score": 0.02964426949620247,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#Abstract",
+      "title": "Internet Message Access Protocol",
+      "score": 0.029571646824479103,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Manufacturing_engineering#Modern_tools",
+      "title": "Manufacturing engineering",
+      "score": 0.0295138880610466,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Performance",
+      "title": "Transmission Control Protocol",
+      "score": 0.029411764815449715,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_protocol_suite#Transport_layer",
+      "title": "Internet protocol suite",
+      "score": 0.029386531561613083,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Wire_image_and_ossification",
+      "title": "Transmission Control Protocol",
+      "score": 0.029138512909412384,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Engineering_design_process#Feasibility",
+      "title": "Engineering design process",
+      "score": 0.02904040366411209,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Email#Message_format",
+      "title": "Email",
+      "score": 0.028693530708551407,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_service_provider#Mailbox_providers",
+      "title": "Internet service provider",
+      "score": 0.028629031032323837,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Freeform_CAD",
+      "title": "Computer-aided design",
+      "score": 0.028624001890420914,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Communication_protocol#History",
+      "title": "Communication protocol",
+      "score": 0.02853124588727951,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/File_Transfer_Protocol#History_of_FTP_servers",
+      "title": "File Transfer Protocol",
+      "score": 0.028445512056350708,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/CYCLADES",
+      "title": "CYCLADES",
+      "score": 0.02817460335791111,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#List_of_software_packages",
+      "title": "Computer-aided design",
+      "score": 0.028138529509305954,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Automotive_design#Design_development_cycle",
+      "title": "Automotive design",
+      "score": 0.028006266802549362,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_protocol_suite#Transport_layer",
+      "title": "Internet protocol suite",
+      "score": 0.027973394840955734,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Automation#CAD_AI",
+      "title": "Automation",
+      "score": 0.027887694537639618,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/HTTP#HTTP_data_exchange",
+      "title": "HTTP",
+      "score": 0.02788461558520794,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Telecommunications_engineering#Computer_networks_and_the_Internet",
+      "title": "Telecommunications engineering",
+      "score": 0.0277777798473835,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Manufacturing_engineering#Drafting",
+      "title": "Manufacturing engineering",
+      "score": 0.02767319232225418,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Abstract",
+      "title": "Computer-aided design",
+      "score": 0.02765064872801304,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/HTTP",
+      "title": "HTTP",
+      "score": 0.027598019689321518,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.02743280678987503,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/HTTP",
+      "title": "HTTP",
+      "score": 0.02742537297308445,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Mechanical_engineering#Finite_element_analysis",
+      "title": "Mechanical engineering",
+      "score": 0.027263008058071136,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Performance",
+      "title": "Transmission Control Protocol",
+      "score": 0.027222223579883575,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/ARPANET#Network_Control_Protocol",
+      "title": "ARPANET",
+      "score": 0.027205882593989372,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.02686202898621559,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_censorship_in_Iran",
+      "title": "Internet censorship in Iran",
+      "score": 0.026655348017811775,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Simple_Mail_Transfer_Protocol#Mail_processing_model",
+      "title": "Simple Mail Transfer Protocol",
+      "score": 0.02638888917863369,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design",
+      "title": "Computer-aided design",
+      "score": 0.025991562753915787,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transport_Layer_Security#TLS_1.3",
+      "title": "Transport Layer Security",
+      "score": 0.025904204696416855,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol",
+      "title": "Transmission Control Protocol",
+      "score": 0.025728709995746613,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Content_delivery_network#Content_networking_techniques",
+      "title": "Content delivery network",
+      "score": 0.0257086344063282,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Process_design#Abstract",
+      "title": "Process design",
+      "score": 0.025603391230106354,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Development",
+      "title": "Transmission Control Protocol",
+      "score": 0.025528455153107643,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Email#History",
+      "title": "Email",
+      "score": 0.025485625490546227,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Robert_Kahn_(computer_scientist)#The_Internet",
+      "title": "Robert Kahn (computer scientist)",
+      "score": 0.02546333521604538,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/ARPANET#Abstract",
+      "title": "ARPANET",
+      "score": 0.025458570569753647,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Finite_element_method#Finite_element_and_fast_fourier_transform_(FFT)_methods",
+      "title": "Finite element method",
+      "score": 0.025418275967240334,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Metal_casting#Casting_process_simulation",
+      "title": "Metal casting",
+      "score": 0.025245442986488342,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/History_of_the_Internet#TCP/IP",
+      "title": "History of the Internet",
+      "score": 0.025015633553266525,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Process_design#Design_process",
+      "title": "Process design",
+      "score": 0.02486870437860489,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Content_delivery_network#Technology",
+      "title": "Content delivery network",
+      "score": 0.024785801768302917,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Protocol#Security",
+      "title": "Internet Protocol",
+      "score": 0.024322345852851868,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Structural_analysis#Methods_using_numerical_approximation",
+      "title": "Structural analysis",
+      "score": 0.024115297943353653,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Manufacturing#Abstract",
+      "title": "Manufacturing",
+      "score": 0.023910582065582275,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#Disadvantages",
+      "title": "Internet Message Access Protocol",
+      "score": 0.023822791874408722,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/History_of_the_Internet#Transition_towards_the_Internet",
+      "title": "History of the Internet",
+      "score": 0.023796193301677704,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/ARPANET#Network_applications",
+      "title": "ARPANET",
+      "score": 0.02346717193722725,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Computer-aided_design#Software",
+      "title": "Computer-aided design",
+      "score": 0.023392613977193832,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Process_engineering#History_of_process_engineering",
+      "title": "Process engineering",
+      "score": 0.022753717377781868,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Message_Access_Protocol#Security",
+      "title": "Internet Message Access Protocol",
+      "score": 0.022549759596586227,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Flow_network",
+      "title": "Flow network",
+      "score": 0.02251739427447319,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/IRC#Technical_information",
+      "title": "IRC",
+      "score": 0.02198864333331585,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Communication_protocol#Wire_image",
+      "title": "Communication protocol",
+      "score": 0.021937184035778046,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transport_Layer_Security#Applications_and_adoption",
+      "title": "Transport Layer Security",
+      "score": 0.021622253581881523,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/IPv6#RFC_standardization",
+      "title": "IPv6",
+      "score": 0.021405678242444992,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Engineering_design_process#Detailed_design",
+      "title": "Engineering design process",
+      "score": 0.01666666753590107,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/MEDINA#Target_groups/user_groups",
+      "title": "MEDINA",
+      "score": 0.01666666753590107,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/ARPANET#TCP/IP",
+      "title": "ARPANET",
+      "score": 0.016393441706895828,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Gold_mining",
+      "title": "Gold mining",
+      "score": 0.016393441706895828,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_censorship_in_Iran",
+      "title": "Internet censorship in Iran",
+      "score": 0.016393441706895828,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/TIFF#Private_tags",
+      "title": "TIFF",
+      "score": 0.016129031777381897,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Saint_Helena#Media_and_communications",
+      "title": "Saint Helena",
+      "score": 0.016129031777381897,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+      "title": "Communication protocol",
+      "score": 0.016129031777381897,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Radio-frequency_identification#Security_concerns",
+      "title": "Radio-frequency identification",
+      "score": 0.016129031777381897,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Artificial_general_intelligence#Risk_of_loss_of_control_and_human_extinction",
+      "title": "Artificial general intelligence",
+      "score": 0.01587301678955555,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Radio-frequency_identification#Signaling",
+      "title": "Radio-frequency identification",
+      "score": 0.01587301678955555,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/ISO_9660#Rock_Ridge",
+      "title": "ISO 9660",
+      "score": 0.015625,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Denial-of-service_attack#History",
+      "title": "Denial-of-service attack",
+      "score": 0.015625,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Packaging#Package_development_considerations",
+      "title": "Packaging",
+      "score": 0.015625,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_of_things#History",
+      "title": "Internet of things",
+      "score": 0.015384615398943424,
+      "rank": 108,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transport_Layer_Security#Timing_attacks_on_padding",
+      "title": "Transport Layer Security",
+      "score": 0.015384615398943424,
+      "rank": 109,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Transport_Layer_Security#Timing_attacks_on_padding",
+      "title": "Transport Layer Security",
+      "score": 0.015384615398943424,
+      "rank": 110,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Oak",
+      "title": "Oak",
+      "score": 0.015384615398943424,
+      "rank": 111,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/2026_Internet_blackout_in_Iran",
+      "title": "2026 Internet blackout in Iran",
+      "score": 0.01515151560306549,
+      "rank": 112,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Trade_union",
+      "title": "Trade union",
+      "score": 0.01515151560306549,
+      "rank": 113,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Plant_nursery#Planting_stock",
+      "title": "Plant nursery",
+      "score": 0.01515151560306549,
+      "rank": 114,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/HTTPS#Limitations",
+      "title": "HTTPS",
+      "score": 0.014925372786819935,
+      "rank": 115,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/IP_address#IP_versions",
+      "title": "IP address",
+      "score": 0.014492753893136978,
+      "rank": 116,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Tag_rugby#New_Zealand",
+      "title": "Tag rugby",
+      "score": 0.014492753893136978,
+      "rank": 117,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Privacy#User_empowerment",
+      "title": "Privacy",
+      "score": 0.014492753893136978,
+      "rank": 118,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Communication_protocol#Wire_image",
+      "title": "Communication protocol",
+      "score": 0.014084506779909134,
+      "rank": 119,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Internet_Protocol",
+      "title": "Internet Protocol",
+      "score": 0.013513513840734959,
+      "rank": 120,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

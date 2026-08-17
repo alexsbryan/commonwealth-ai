@@ -1,0 +1,3423 @@
+{
+  "method": "declared in pre-registration.md (Ceiling probe \u2014 declaration)",
+  "v0": {
+    "keys": 72,
+    "content_ceiling": 72,
+    "floor_ceiling": 0,
+    "unreachable": [],
+    "rows": [
+      {
+        "seed": "seed-01",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "acquirer",
+          "target",
+          "google",
+          "alphabet",
+          "wiz",
+          "announcement",
+          "date"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-01"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-01",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "32",
+            "b"
+          ]
+        ],
+        "subjects": [
+          "reported",
+          "price",
+          "structure",
+          "approximately",
+          "all-cash",
+          "largest",
+          "acquisition",
+          "google's",
+          "history"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-01"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-01",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "23",
+            "b"
+          ],
+          [
+            "2024",
+            null
+          ]
+        ],
+        "subjects": [
+          "prior",
+          "rejected",
+          "offer",
+          "wiz",
+          "declined",
+          "google",
+          "july"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-01"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-01",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "principal",
+          "wiz",
+          "co-founder",
+          "ceo",
+          "assaf",
+          "rappaport"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-01"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-01",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "google",
+          "acquired",
+          "wiz",
+          "cloud-security",
+          "consolidation",
+          "cloud",
+          "wars'",
+          "battleground",
+          "thomas",
+          "kurian",
+          "buying",
+          "hypergrowth",
+          "security",
+          "platform",
+          "close",
+          "aws",
+          "azure",
+          "ride",
+          "ai-driven",
+          "adoption"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-01"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-01",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "outcome",
+          "deal",
+          "closed",
+          "reported",
+          "completion",
+          "july",
+          "shareholder",
+          "regulatory",
+          "steps"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-01"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-02",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "model",
+          "release",
+          "deepseek-r1",
+          "open",
+          "weights",
+          "paper",
+          "released"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-02"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-02",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "5.6",
+            "m"
+          ]
+        ],
+        "subjects": [
+          "training-economics",
+          "specifics",
+          "deepseek-v3",
+          "released",
+          "reported",
+          "training",
+          "gpu-hours",
+          "claimed",
+          "cost",
+          "us",
+          "export-restricted",
+          "h800",
+          "chips"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-02"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-02",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "technique",
+          "r1's",
+          "reasoning",
+          "produced",
+          "reinforcement",
+          "learning",
+          "grpo",
+          "r1-zero",
+          "trained",
+          "supervised",
+          "fine-tuning"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-02"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-02",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "589",
+            "b"
+          ],
+          [
+            "1",
+            "t"
+          ]
+        ],
+        "subjects": [
+          "market",
+          "event",
+          "nvidia",
+          "lost",
+          "us",
+          "capitalisation",
+          "time",
+          "largest",
+          "single-day",
+          "loss",
+          "stock-market",
+          "history",
+          "erased",
+          "across",
+          "tech",
+          "complex"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-02"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-02",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "open-weights",
+          "frontier-class",
+          "reasoning",
+          "model",
+          "trained",
+          "fraction",
+          "incumbent",
+          "cost",
+          "markets",
+          "repriced",
+          "thesis",
+          "frontier-ai",
+          "capex",
+          "therefore",
+          "nvidia's",
+          "demand",
+          "moated",
+          "compute",
+          "scale"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-02"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-02",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "background",
+          "cause",
+          "us",
+          "export",
+          "controls",
+          "h800",
+          "restrictions",
+          "forced",
+          "chinese",
+          "labs",
+          "toward",
+          "efficiency",
+          "scarcity",
+          "preference",
+          "drove",
+          "economics"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-02"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-03",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "mission",
+          "facts",
+          "crew",
+          "flight",
+          "test",
+          "launched",
+          "astronauts",
+          "butch",
+          "wilmore",
+          "suni",
+          "williams"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-03"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-03",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "failure",
+          "signature",
+          "helium",
+          "leaks",
+          "five",
+          "reaction-control",
+          "system",
+          "rcs",
+          "thruster",
+          "anomalies",
+          "docking",
+          "approach",
+          "docked"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-03"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-03",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "decision",
+          "nasa",
+          "announced",
+          "starliner",
+          "return",
+          "uncrewed",
+          "undocked",
+          "landed",
+          "white",
+          "sands"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-03"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-03",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "9.5",
+            "mo"
+          ],
+          [
+            "8",
+            "dy"
+          ]
+        ],
+        "subjects": [
+          "crew",
+          "consequence",
+          "wilmore",
+          "williams",
+          "returned",
+          "crew-9",
+          "dragon",
+          "roughly",
+          "aloft",
+          "planned"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-03"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-03",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "thruster",
+          "anomalies",
+          "guaranteed",
+          "safe",
+          "deorbit",
+          "burn",
+          "thrusters",
+          "ground-tested",
+          "flight",
+          "condition",
+          "deservicing",
+          "risk",
+          "nasa's",
+          "calculus",
+          "chose",
+          "uncrewed",
+          "return"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-03"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-03",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2014",
+            null
+          ],
+          [
+            "4.2",
+            "b"
+          ],
+          [
+            "2.6",
+            "b"
+          ],
+          [
+            "1.5",
+            "b"
+          ],
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "program",
+          "economics",
+          "starliner",
+          "runs",
+          "fixed-price",
+          "nasa",
+          "contract",
+          "commercial",
+          "crew",
+          "boeing",
+          "spacex",
+          "disclosed",
+          "losses",
+          "cumulative",
+          "reported"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-03"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-03",
+        "key": "K7",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2025",
+            null
+          ],
+          [
+            "400",
+            null
+          ]
+        ],
+        "subjects": [
+          "aftermath",
+          "boeing",
+          "announced",
+          "job",
+          "cuts",
+          "space",
+          "division",
+          "june",
+          "nasa's",
+          "starliner",
+          "certification",
+          "path",
+          "remained",
+          "unresolved"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-03"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-04",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "models",
+          "date",
+          "openai",
+          "released",
+          "o4-mini",
+          "first",
+          "reasoning",
+          "vision",
+          "built",
+          "model",
+          "itself",
+          "bolted",
+          "native",
+          "tool",
+          "use",
+          "web",
+          "search",
+          "code",
+          "interpreter",
+          "trained"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-04"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-04",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "launch",
+          "structure",
+          "api-first",
+          "o4-mini",
+          "available",
+          "developers",
+          "day",
+          "one",
+          "chatgpt",
+          "app"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-04"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-04",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "technique",
+          "budget",
+          "forcing",
+          "fixed",
+          "maximum",
+          "thought",
+          "task-adaptive",
+          "dynamic",
+          "compute",
+          "harder",
+          "questions",
+          "think",
+          "longer",
+          "openai's",
+          "first",
+          "private",
+          "chain-of-thought",
+          "policy",
+          "reasoning",
+          "tokens",
+          "exposed",
+          "api",
+          "callers",
+          "announced",
+          "o4-mini",
+          "system",
+          "card"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-04"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-04",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "10",
+            null
+          ],
+          [
+            "40",
+            null
+          ],
+          [
+            "1.10",
+            null
+          ],
+          [
+            "4.40",
+            null
+          ]
+        ],
+        "subjects": [
+          "pricing",
+          "million",
+          "tokens",
+          "input",
+          "output",
+          "o4-mini",
+          "order-of-magnitude",
+          "cheaper",
+          "small",
+          "reasoning",
+          "model"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-04"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-04",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "87.5",
+            "%"
+          ],
+          [
+            "85",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "benchmark",
+          "result",
+          "o3's",
+          "record",
+          "arc-agi",
+          "arc-agi-1",
+          "high",
+          "compute",
+          "human",
+          "baseline",
+          "first",
+          "model",
+          "reach"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-04"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-04",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "gpt-5",
+          "yet",
+          "shipping",
+          "openai",
+          "used",
+          "o4-mini",
+          "defend",
+          "reasoning-model",
+          "frontier",
+          "deepseek's",
+          "r1",
+          "cost",
+          "shock",
+          "anthropic's",
+          "agentic-coding",
+          "push",
+          "release",
+          "reframed",
+          "capability",
+          "tool-using",
+          "reasoning",
+          "commodity",
+          "prices",
+          "hour",
+          "ai",
+          "work",
+          "dollar",
+          "framing"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-04"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-05",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "law",
+          "eu",
+          "ai",
+          "act",
+          "world's",
+          "first",
+          "comprehensive",
+          "published",
+          "official",
+          "journal",
+          "entered",
+          "force"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-05"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-05",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "phased",
+          "timeline",
+          "prohibited",
+          "practices",
+          "unacceptable",
+          "risk",
+          "apply",
+          "general-purpose",
+          "ai",
+          "gpai",
+          "model",
+          "obligations",
+          "high-risk",
+          "system",
+          "subset",
+          "applying"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-05"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-05",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "risk",
+          "tiers",
+          "unacceptable",
+          "banned",
+          "outright",
+          "social",
+          "scoring",
+          "certain",
+          "manipulative",
+          "exploitation-of-vulnerability",
+          "uses",
+          "high",
+          "limited",
+          "transparency",
+          "duties",
+          "minimal",
+          "plus",
+          "separate",
+          "gpai",
+          "model",
+          "category",
+          "scaled",
+          "systemic-risk",
+          "status",
+          "flops",
+          "threshold"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-05"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-05",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "35",
+            "m"
+          ],
+          [
+            "7",
+            "%"
+          ],
+          [
+            "15",
+            "m"
+          ],
+          [
+            "3",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "penalties",
+          "fines",
+          "global",
+          "annual",
+          "turnover",
+          "whichever",
+          "higher",
+          "prohibited-practice",
+          "violations",
+          "breaches"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-05"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-05",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2024",
+            null
+          ],
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "institutional",
+          "machinery",
+          "european",
+          "ai",
+          "office",
+          "established",
+          "brussels",
+          "leads",
+          "implementation",
+          "gpai",
+          "code",
+          "practice",
+          "drafted",
+          "broad",
+          "industry",
+          "participation",
+          "including",
+          "openai",
+          "google",
+          "microsoft",
+          "anthropic",
+          "meta",
+          "safe-zone",
+          "interpretation",
+          "obligations"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-05"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-05",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "phased",
+          "entry",
+          "deliberate",
+          "obligations",
+          "land",
+          "institutional",
+          "capacity",
+          "technology",
+          "mature",
+          "schedule",
+          "doubles",
+          "compliance",
+          "roadmap",
+          "brussels",
+          "effect",
+          "exports",
+          "providers",
+          "worldwide",
+          "non-eu",
+          "companies",
+          "adopt",
+          "act's",
+          "rules",
+          "global",
+          "default"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-05"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-06",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "8.5",
+            "m"
+          ]
+        ],
+        "subjects": [
+          "event",
+          "faulty",
+          "crowdstrike",
+          "falcon",
+          "sensor",
+          "content",
+          "update",
+          "rapid",
+          "response",
+          "channel",
+          "file",
+          "crashed",
+          "windows",
+          "machines",
+          "worldwide",
+          "blue-screen",
+          "loops",
+          "roughly",
+          "devices",
+          "affected",
+          "microsoft's",
+          "estimate"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-06"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-06",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2024",
+            null
+          ]
+        ],
+        "subjects": [
+          "root",
+          "cause",
+          "out-of-bounds",
+          "memory",
+          "read",
+          "sensor's",
+          "code",
+          "untrusted",
+          "pointer",
+          "dereference",
+          "triggered",
+          "byte",
+          "input",
+          "passed",
+          "flawed",
+          "content",
+          "validator",
+          "crowdstrike's",
+          "root-cause",
+          "analysis",
+          "august",
+          "missing",
+          "validation",
+          "memory-safety",
+          "defect"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-06"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-06",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "000",
+            null
+          ],
+          [
+            "500",
+            "m"
+          ],
+          [
+            "911",
+            null
+          ]
+        ],
+        "subjects": [
+          "impact",
+          "airlines",
+          "grounded",
+          "delta",
+          "cancelled",
+          "flights",
+          "took",
+          "costs",
+          "later",
+          "suing",
+          "crowdstrike",
+          "hiring",
+          "david",
+          "boies",
+          "banks",
+          "hospitals",
+          "services",
+          "broadcasters",
+          "outage",
+          "blamed",
+          "exposing",
+          "fragility",
+          "single-vendor",
+          "concentration"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-06"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-06",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "11",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "market",
+          "regulatory",
+          "response",
+          "crowdstrike",
+          "shares",
+          "fell",
+          "following",
+          "monday",
+          "ceo",
+          "george",
+          "kurtz",
+          "testified",
+          "congress",
+          "company",
+          "apologized",
+          "promised",
+          "deployment-process",
+          "changes"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-06"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-06",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "monoculture",
+          "concentration",
+          "one",
+          "security",
+          "agent",
+          "deployed",
+          "enterprise",
+          "scale",
+          "updated",
+          "fast-cadence",
+          "push",
+          "became",
+          "global",
+          "single",
+          "point",
+          "failure",
+          "outage",
+          "canonical",
+          "case",
+          "study",
+          "tension",
+          "rapid",
+          "security-signature",
+          "updates",
+          "staged",
+          "validated",
+          "rollout"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-06"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-06",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "fix",
+          "crowdstrike",
+          "moved",
+          "staged",
+          "phased",
+          "rollouts",
+          "canary",
+          "testing",
+          "added",
+          "sensor-level",
+          "validation",
+          "episode",
+          "drove",
+          "industry-wide",
+          "discussion",
+          "chaos-engineering",
+          "blast-radius",
+          "limits",
+          "endpoint",
+          "agents"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-06"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-07",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "270",
+            "dy"
+          ]
+        ],
+        "subjects": [
+          "law",
+          "protecting",
+          "americans",
+          "foreign",
+          "adversary",
+          "controlled",
+          "applications",
+          "act",
+          "signed",
+          "president",
+          "biden",
+          "required",
+          "bytedance",
+          "divest",
+          "tiktok's",
+          "us",
+          "operations",
+          "within",
+          "extendable",
+          "face",
+          "ban"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-07"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-07",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "legal",
+          "climax",
+          "supreme",
+          "court",
+          "upheld",
+          "law",
+          "curiam",
+          "one",
+          "day",
+          "effective",
+          "date"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-07"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-07",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "14",
+            "hr"
+          ],
+          [
+            "75",
+            "dy"
+          ]
+        ],
+        "subjects": [
+          "shutdown",
+          "reversal",
+          "tiktok",
+          "went",
+          "dark",
+          "us",
+          "roughly",
+          "restored",
+          "president",
+          "trump",
+          "pledged",
+          "pause",
+          "enforcement",
+          "executive",
+          "order",
+          "delayed"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-07"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-07",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "12.5",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "resolution",
+          "oracle-led",
+          "deal",
+          "announced",
+          "bloomberg",
+          "gave",
+          "oracle",
+          "stake",
+          "tiktok's",
+          "us",
+          "operations",
+          "softbank",
+          "investors",
+          "participating",
+          "vice",
+          "president",
+          "jd",
+          "vance",
+          "led",
+          "white",
+          "house",
+          "negotiations",
+          "bytedance",
+          "retained",
+          "majority",
+          "interest"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-07"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-07",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "causal",
+          "link",
+          "national-security",
+          "case",
+          "rested",
+          "chinese",
+          "government",
+          "access",
+          "us",
+          "user",
+          "data",
+          "algorithm",
+          "cfius",
+          "review",
+          "project",
+          "texas",
+          "hosting",
+          "transition",
+          "changed",
+          "resolution",
+          "path",
+          "forced",
+          "divestiture",
+          "restructured",
+          "joint",
+          "venture",
+          "oversight"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-07"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-07",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "outcome",
+          "app",
+          "stayed",
+          "live",
+          "deal",
+          "structured",
+          "joint",
+          "venture",
+          "rather",
+          "outright",
+          "sale",
+          "project",
+          "texas",
+          "us",
+          "user",
+          "data",
+          "oracle's",
+          "cloud",
+          "control",
+          "final",
+          "ownership",
+          "structure",
+          "completed"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-07"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-08",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "liability",
+          "ruling",
+          "judge",
+          "amit",
+          "mehta",
+          "us",
+          "district",
+          "court",
+          "columbia",
+          "ruled",
+          "google",
+          "monopolist",
+          "general",
+          "search",
+          "services",
+          "text",
+          "advertising",
+          "violating",
+          "section",
+          "sherman",
+          "act"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-08"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-08",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "26.3",
+            "b"
+          ],
+          [
+            "2021",
+            null
+          ],
+          [
+            "36",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "theory",
+          "harm",
+          "default-distribution",
+          "deals",
+          "google",
+          "paying",
+          "apple",
+          "samsung",
+          "mozilla",
+          "others",
+          "billions",
+          "default",
+          "search",
+          "engine",
+          "google's",
+          "ceo",
+          "sundar",
+          "pichai",
+          "testified",
+          "company",
+          "paid",
+          "distribution",
+          "trial",
+          "showed",
+          "roughly",
+          "safari",
+          "search-ad",
+          "revenue"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-08"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-08",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2000",
+            null
+          ]
+        ],
+        "subjects": [
+          "remedies",
+          "ruling",
+          "judge",
+          "mehta",
+          "ordered",
+          "structural",
+          "google",
+          "sell",
+          "chrome",
+          "first",
+          "forced",
+          "divestiture",
+          "major",
+          "tech",
+          "company",
+          "microsoft",
+          "case",
+          "longer",
+          "pay",
+          "default",
+          "search",
+          "placement",
+          "revenue-sharing",
+          "agreements",
+          "faces",
+          "limits",
+          "acquisitions",
+          "ai-related",
+          "investments"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-08"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-08",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "ruling",
+          "established",
+          "paying",
+          "default",
+          "placement",
+          "search",
+          "distribution",
+          "exclusionary",
+          "conduct",
+          "defaults",
+          "create",
+          "scale",
+          "creates",
+          "data",
+          "quality",
+          "protects",
+          "self-reinforcing",
+          "loop",
+          "rivals",
+          "break"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-08"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-08",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "appeals",
+          "posture",
+          "google",
+          "appealed",
+          "dc",
+          "circuit",
+          "notice",
+          "filed",
+          "arguing",
+          "trial",
+          "court",
+          "punished",
+          "procompetitive",
+          "innovation",
+          "case's",
+          "final",
+          "outcome",
+          "remained",
+          "pending"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-08"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-09",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "launch",
+          "claude",
+          "opus",
+          "sonnet",
+          "released",
+          "family",
+          "flagship",
+          "fast",
+          "workhorse"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-09"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-09",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "15",
+            null
+          ],
+          [
+            "75",
+            null
+          ],
+          [
+            "3",
+            null
+          ]
+        ],
+        "subjects": [
+          "pricing",
+          "opus",
+          "million",
+          "tokens",
+          "input",
+          "output",
+          "sonnet",
+          "priced",
+          "developer-default",
+          "coding",
+          "model"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-09"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-09",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2.0",
+            null
+          ],
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "headline",
+          "capability",
+          "agentic",
+          "coding",
+          "computer",
+          "use",
+          "claude",
+          "browser",
+          "control",
+          "roughly",
+          "twice",
+          "reliable",
+          "generation's",
+          "launch",
+          "timed",
+          "rise",
+          "code",
+          "defining",
+          "agentic-coding",
+          "product"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-09"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-09",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "4.1",
+            null
+          ],
+          [
+            "4.5",
+            null
+          ]
+        ],
+        "subjects": [
+          "naming",
+          "refinement",
+          "controversy",
+          "refresh",
+          "update",
+          "improved",
+          "coding",
+          "agentic",
+          "reliability",
+          "prices",
+          "rather",
+          "followed",
+          "reported",
+          "internal",
+          "dispute",
+          "anthropic's",
+          "version-naming",
+          "policy"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-09"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-09",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "market",
+          "event",
+          "launch",
+          "landed",
+          "one",
+          "day",
+          "openai's",
+          "gpt-4o",
+          "see",
+          "correction",
+          "rule",
+          "direct",
+          "competitive",
+          "context",
+          "openai",
+          "o-series",
+          "enterprise",
+          "agentic-coding",
+          "gold",
+          "rush",
+          "anthropic",
+          "positioned",
+          "claude",
+          "safest",
+          "reliable",
+          "coding",
+          "agent",
+          "reported",
+          "record",
+          "api",
+          "usage"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-09"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-09",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2025",
+            null
+          ],
+          [
+            "183",
+            "b"
+          ]
+        ],
+        "subjects": [
+          "outcome",
+          "driven",
+          "claude",
+          "code",
+          "adoption",
+          "anthropic",
+          "raised",
+          "large",
+          "funding",
+          "round",
+          "late",
+          "september",
+          "reported",
+          "valuation",
+          "cementing",
+          "position",
+          "coding-agent",
+          "leader"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-09"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-10",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "release",
+          "gpt-5",
+          "mini",
+          "released",
+          "available",
+          "free",
+          "users",
+          "immediately",
+          "deliberate",
+          "shift",
+          "give-away-the-frontier",
+          "pricing"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-10"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-10",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "unification",
+          "gpt-5",
+          "retired",
+          "separate",
+          "o-series",
+          "products",
+          "o4-mini",
+          "o3-mini",
+          "o3-pro",
+          "folded",
+          "gpt-5's",
+          "internal",
+          "reasoning",
+          "modes",
+          "openai's",
+          "pitch",
+          "model'",
+          "model",
+          "thinks",
+          "one",
+          "picker"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-10"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-10",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "features",
+          "million-token",
+          "context",
+          "window",
+          "native",
+          "image",
+          "generation",
+          "built",
+          "separate",
+          "model",
+          "deep",
+          "research",
+          "integrated",
+          "file",
+          "upload",
+          "web",
+          "search",
+          "box"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-10"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-10",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "20",
+            null
+          ],
+          [
+            "200",
+            null
+          ],
+          [
+            "1.25",
+            null
+          ],
+          [
+            "10",
+            null
+          ],
+          [
+            "0.25",
+            null
+          ],
+          [
+            "2",
+            null
+          ]
+        ],
+        "subjects": [
+          "pricing",
+          "free",
+          "tier",
+          "plus",
+          "month",
+          "unlimited",
+          "gpt-5",
+          "pro",
+          "api",
+          "million",
+          "tokens",
+          "mini"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-10"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-10",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "78.6",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "benchmark",
+          "result",
+          "gpt-5",
+          "scored",
+          "swe-bench",
+          "verified",
+          "mini",
+          "close",
+          "behind",
+          "fraction",
+          "o-series",
+          "prices"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-10"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-10",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "launch",
+          "consolidated",
+          "openai's",
+          "strategy",
+          "around",
+          "one",
+          "unified",
+          "model",
+          "aggressive",
+          "free-tier",
+          "distribution",
+          "reasoning-vs-non-reasoning",
+          "split",
+          "ended",
+          "price",
+          "collapsed",
+          "competitive",
+          "battleground",
+          "moved",
+          "benchmark",
+          "demos",
+          "default",
+          "agency",
+          "models",
+          "act",
+          "answer"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-10"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-11",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "4",
+            "t"
+          ]
+        ],
+        "subjects": [
+          "milestone",
+          "nvidia",
+          "closed",
+          "market",
+          "cap",
+          "first",
+          "company",
+          "history",
+          "close",
+          "apple",
+          "touched",
+          "intraday",
+          "day"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-11"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-11",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "1",
+            "t"
+          ],
+          [
+            "2023",
+            null
+          ],
+          [
+            "2",
+            "t"
+          ],
+          [
+            "2024",
+            null
+          ],
+          [
+            "3",
+            "t"
+          ],
+          [
+            "4",
+            "t"
+          ],
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "trajectory",
+          "mid-",
+          "feb",
+          "june",
+          "july",
+          "multi-hundred-billion-dollar",
+          "run",
+          "first",
+          "half"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-11"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-11",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "500",
+            "b"
+          ],
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "drivers",
+          "blackwell",
+          "accelerator",
+          "demand",
+          "gb200",
+          "gb300",
+          "rack",
+          "systems",
+          "stargate",
+          "project's",
+          "ai-infrastructure",
+          "plan",
+          "hyperscaler",
+          "capex",
+          "guidance",
+          "raised",
+          "repeatedly",
+          "microsoft",
+          "meta",
+          "google",
+          "amazon",
+          "nvidia",
+          "holding",
+          "dominant",
+          "share",
+          "ai-accelerator",
+          "market"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-11"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-11",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "160",
+            null
+          ]
+        ],
+        "subjects": [
+          "framing",
+          "nvidia's",
+          "share",
+          "price",
+          "crossed",
+          "jensen",
+          "huang",
+          "ceo",
+          "framed",
+          "moment",
+          "transition",
+          "training",
+          "inference",
+          "demand",
+          "ai",
+          "factories",
+          "selling",
+          "compute",
+          "commodity"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-11"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-11",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "milestone",
+          "measured",
+          "ai-capex",
+          "supercycle",
+          "market",
+          "priced",
+          "ai",
+          "infrastructure",
+          "largest",
+          "new",
+          "capital",
+          "cycle",
+          "internet",
+          "nvidia",
+          "toll-booth"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-11"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-11",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "500",
+            null
+          ],
+          [
+            "4",
+            "t"
+          ],
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "risk",
+          "backdrop",
+          "concentration",
+          "nvidia's",
+          "weight",
+          "reached",
+          "record",
+          "levels",
+          "club's",
+          "membership",
+          "rotated",
+          "among",
+          "nvidia",
+          "apple",
+          "microsoft"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-11"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-12",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "announcement",
+          "recall",
+          "announced",
+          "copilot",
+          "pc",
+          "launch",
+          "microsoft",
+          "build",
+          "ai",
+          "memory",
+          "feature",
+          "screenshots",
+          "screen",
+          "seconds",
+          "stores",
+          "locally",
+          "makes",
+          "searchable",
+          "photographic"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-12"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-12",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "backlash",
+          "security",
+          "researchers",
+          "notably",
+          "kevin",
+          "beaumont",
+          "showed",
+          "recall's",
+          "screenshots",
+          "stored",
+          "unencrypted",
+          "plaintext",
+          "local",
+          "sqlite",
+          "database",
+          "despite",
+          "microsoft's",
+          "encrypted",
+          "claims",
+          "passwords",
+          "sensitive",
+          "content",
+          "visible",
+          "screen",
+          "captured",
+          "default",
+          "accessible",
+          "process",
+          "running",
+          "user"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-12"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-12",
+        "key": "K3",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2024",
+            null
+          ]
+        ],
+        "subjects": [
+          "reversal",
+          "microsoft",
+          "delayed",
+          "recall",
+          "june",
+          "reversed",
+          "default",
+          "relaunched",
+          "feature",
+          "opt-in",
+          "requires",
+          "windows",
+          "hello",
+          "presence",
+          "detection",
+          "open",
+          "timeline",
+          "excludes",
+          "incognito",
+          "drm",
+          "content"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-12"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-12",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "regulatory",
+          "response",
+          "irish",
+          "data",
+          "protection",
+          "commission",
+          "dpc",
+          "uk",
+          "information",
+          "commissioner's",
+          "office",
+          "raised",
+          "questions",
+          "washington",
+          "state",
+          "attorney",
+          "general",
+          "bob",
+          "ferguson",
+          "opened",
+          "investigation"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-12"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-12",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [],
+        "subjects": [
+          "causal",
+          "link",
+          "feature's",
+          "value",
+          "proposition",
+          "searchable",
+          "local",
+          "memory",
+          "collided",
+          "privacy",
+          "expectations",
+          "data",
+          "default-on",
+          "recorder",
+          "everything",
+          "screen",
+          "including",
+          "passwords",
+          "health",
+          "private",
+          "messages",
+          "security",
+          "claims",
+          "did",
+          "hold",
+          "episode",
+          "became",
+          "ai-pc",
+          "era's",
+          "first",
+          "major",
+          "crisis",
+          "case",
+          "study",
+          "shipping",
+          "ai",
+          "features"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://estate.example/seed-12"
+        ],
+        "origins_total": 1
+      },
+      {
+        "seed": "seed-12",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": false,
+        "figures": [
+          [
+            "2025",
+            null
+          ]
+        ],
+        "subjects": [
+          "aftermath",
+          "revised",
+          "opt-in",
+          "recall",
+          "reached",
+          "general",
+          "availability",
+          "copilot",
+          "pcs",
+          "controversy",
+          "permanently",
+          "shaped",
+          "ai",
+          "pc",
+          "privacy",
+          "conversation"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://estate.example/seed-12"
+        ],
+        "origins_total": 1
+      }
+    ]
+  },
+  "v1": {
+    "keys": 16,
+    "content_ceiling": 13,
+    "floor_ceiling": 15,
+    "rows": [
+      {
+        "seed": "v1",
+        "key": "K1",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "58.1",
+            "%"
+          ],
+          [
+            "51.9",
+            "%"
+          ],
+          [
+            "50.6",
+            "%"
+          ],
+          [
+            "50",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "portland",
+          "dc",
+          "minneapolis",
+          "seattle",
+          "eligible",
+          "tracts",
+          "gentrified",
+          "four",
+          "intensive",
+          "cities"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K2",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "0.5469",
+            null
+          ]
+        ],
+        "subjects": [
+          "nyc",
+          "gini"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+          "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K3",
+        "content_reachable": false,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "7.87",
+            ":1"
+          ],
+          [
+            "7.81",
+            ":1"
+          ],
+          [
+            "172476",
+            null
+          ],
+          [
+            "22095",
+            null
+          ]
+        ],
+        "subjects": [
+          "ratio",
+          "new",
+          "orleans",
+          "boston"
+        ],
+        "missing_figures": [
+          [
+            "7.87",
+            ":1"
+          ],
+          [
+            "7.81",
+            ":1"
+          ],
+          [
+            "172476",
+            null
+          ],
+          [
+            "22095",
+            null
+          ]
+        ],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K4",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [],
+        "subjects": [
+          "atlanta",
+          "dc",
+          "95/20"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all-of subjects (dot-normalized), corrected figureless",
+        "floor_origins": [
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K5",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "325.78",
+            null
+          ],
+          [
+            "2024",
+            null
+          ],
+          [
+            "225",
+            "%"
+          ],
+          [
+            "2000",
+            null
+          ]
+        ],
+        "subjects": [
+          "case-shiller",
+          "july",
+          "january"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K6",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "177",
+            "%"
+          ],
+          [
+            "92",
+            "%"
+          ],
+          [
+            "2000",
+            null
+          ]
+        ],
+        "subjects": [
+          "home",
+          "prices",
+          "median",
+          "household",
+          "income",
+          "compound",
+          "claim",
+          "figures",
+          "trace",
+          "distinct",
+          "sources"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+          "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K7",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "9.6",
+            null
+          ],
+          [
+            "12.2",
+            null
+          ],
+          [
+            "4.6",
+            null
+          ]
+        ],
+        "subjects": [
+          "california",
+          "price-to-income",
+          "national",
+          "average"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K8",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "2000",
+            null
+          ],
+          [
+            "20",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "gentrification",
+          "rate",
+          "doubled",
+          "lower-income",
+          "neighborhoods",
+          "major",
+          "cities",
+          "affected"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K9",
+        "content_reachable": false,
+        "floor_reachable": false,
+        "reason": "journaled cannot-clear (arbiter journal)"
+      },
+      {
+        "seed": "v1",
+        "key": "K10",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "1979",
+            null
+          ]
+        ],
+        "subjects": [
+          "manufacturing",
+          "jobs",
+          "pandemic",
+          "finance",
+          "professional",
+          "services"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K11",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "7",
+            "pp"
+          ],
+          [
+            "2000",
+            null
+          ],
+          [
+            "53",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "white",
+          "share",
+          "urban",
+          "cores",
+          "counties",
+          "majority",
+          "nonwhite"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K12",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "80",
+            "%"
+          ],
+          [
+            "1980",
+            null
+          ]
+        ],
+        "subjects": [
+          "under-45",
+          "population",
+          "growth",
+          "metros"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K13",
+        "content_reachable": false,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "0.7",
+            "pp"
+          ],
+          [
+            "6.7",
+            "pp"
+          ]
+        ],
+        "subjects": [
+          "gentrifying",
+          "neighborhoods",
+          "poverty",
+          "non-gentrifying",
+          "low-income"
+        ],
+        "missing_figures": [
+          [
+            "0.7",
+            "pp"
+          ]
+        ],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K14",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [],
+        "subjects": [
+          "residents",
+          "historically",
+          "black",
+          "gentrifying",
+          "neighborhoods",
+          "move",
+          "poorer",
+          "non-gentrifying",
+          "areas",
+          "displacement",
+          "pattern"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": ">=2 subjects in deck (base figureless)",
+        "floor_origins": [
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K15",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "100",
+            null
+          ],
+          [
+            "2014",
+            null
+          ],
+          [
+            "2007",
+            null
+          ],
+          [
+            "2000",
+            null
+          ]
+        ],
+        "subjects": [
+          "largest",
+          "metros",
+          "inequality",
+          "significantly",
+          "higher",
+          "post-",
+          "acceleration"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+          "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      },
+      {
+        "seed": "v1",
+        "key": "K16",
+        "content_reachable": true,
+        "floor_reachable": true,
+        "figures": [
+          [
+            "35",
+            "%"
+          ],
+          [
+            "31",
+            "%"
+          ],
+          [
+            "19",
+            "%"
+          ]
+        ],
+        "subjects": [
+          "educational",
+          "gentrification",
+          "urban",
+          "residents",
+          "ba",
+          "suburban",
+          "rural"
+        ],
+        "missing_figures": [],
+        "missing_subjects": [],
+        "window_rule": "all figures + >=1 subject in deck",
+        "floor_origins": [
+          "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+          "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+          "https://smartasset.com/data-studies/income-inequality-2024",
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+          "https://www.terry.uga.edu/news/gentrification-by-the-numbers/"
+        ],
+        "origins_total": 11
+      }
+    ]
+  }
+}

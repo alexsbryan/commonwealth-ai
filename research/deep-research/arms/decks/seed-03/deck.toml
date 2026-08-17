@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-03 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['Starliner', 'Boeing', 'NASA', 'Wilmore', 'uncrewed']
+url = "https://estate.example/seed-03"
+title = "Boeing Starliner's uncrewed return decision (2024-2025)"
+snippet = "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn."
+body = "seed-03.md"

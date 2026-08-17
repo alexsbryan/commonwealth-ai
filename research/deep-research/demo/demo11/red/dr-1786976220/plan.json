@@ -1,0 +1,22 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786976220",
+  "charter_hash": "fe46bd9f260d0907",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "What is the percentage change in median home prices for major U.S. cities between 1980 and 2024?",
+      "What is the Gini index of income inequality for major U.S. cities from 1980 to 2024?",
+      "What is the share of renter-occupied housing units spending more than 30% of their income on rent (rent burden) in major U.S. cities over time?",
+      "What is the rate of population displacement measured by changes in racial or ethnic composition in gentrifying neighborhoods across four decades?"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1980",
+      "2024"
+    ]
+  }
+}

@@ -14,6 +14,26 @@
 //! Custody is stamped here, by code, never by a model (R-2/R-6): estate
 //! hits carry `personal` (a local corpus is the operator's own data), web
 //! hits carry `public-web`. The loop's gate refuses unknown provenance.
+//!
+//! `--backend mock --mock-deck DIR` (the P5 drill surface): the port's
+//! search/fetch legs are served from the deck directory (`deck.toml` +
+//! body files, the deep-research search gym's format) instead of the
+//! network — the loop's `web_backend` is the mock's closed-set id, so a
+//! run can be flown against a planted source with the real daemon still
+//! doing the drafting (`MockDraftSurface::Delegated`). Additive: the
+//! default path is unchanged.
+//!
+//! `--resume DIR` (order deep-research-t3a): an interrupted run
+//! restores its state from `<DIR>/checkpoint.json` and continues at the
+//! next round — ledger continuity included. The checkpoint's frozen
+//! config is the identity: flags the operator did NOT pass inherit the
+//! checkpoint's values (bare `--resume DIR` is the canonical shape), and
+//! every explicitly-passed flag is verified against the frozen config
+//! flag-by-flag (a conflicting one refuses, naming the flag); the
+//! backend identity comes from the launch sidecar
+//! (`resume-input.json`). The verb also closes every run by ingesting
+//! its fetched evidence into `dr-estate-<run_id>` — the local cache a
+//! later run's `--corpora` reads before the web leg.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
@@ -23,16 +43,23 @@ use oicp_client::RemoteApiProvider;
 use sovereign_contracts::types::CompletionRequest;
 use sovereign_contracts::types::Speed;
 use sovereign_core::deep_research::estate::{
-    read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
 };
-use sovereign_core::deep_research::icd::{CorpusEntry, Plan};
-use sovereign_core::deep_research::{run, RunConfig, RunOutcome};
+use sovereign_core::deep_research::gym::{
+    CorpusSurface, Deck, MockBackendImpl, MockDraftSurface, ProviderEmbed,
+};
+use sovereign_core::deep_research::icd::ICD_VERSION;
+use sovereign_core::deep_research::icd::{CorpusEntry, EvidenceWindow, Plan, Survey};
+use sovereign_core::deep_research::{
+    read_checkpoint, resume, run, RunConfig, RunOutcome, SearchSource,
+};
+use sovereign_core::egress::{ConsentGrant, EgressPayload};
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Custody;
 
-use corpus_engine::index::CorpusIndex;
+use corpus_engine::index::{CorpusIndex, InsertChunk};
 
 /// The canonical index directory (the estate).
 fn indexes_dir() -> PathBuf {
@@ -84,29 +111,6 @@ fn corpus_chunk_count(dir: &std::path::Path) -> i64 {
 ///     anchored on "were" at the sentence end and cut "July 20, 1969";
 ///   - the window leads 200 chars before the anchor so the answer
 ///     sentence's context survives the cut.
-fn estate_snippet(content: &str, query: &str, max: usize) -> String {
-    // English function words of length >= 4. Small by design: only the
-    // words that measurably mis-anchor the window; content terms pass.
-    const FUNCTION_WORDS: [&str; 16] = [
-        "when", "were", "what", "where", "which", "with", "will", "have", "from", "that", "this",
-        "they", "them", "then", "than", "there",
-    ];
-    let terms: Vec<String> = query
-        .split(|c: char| !c.is_alphanumeric())
-        .filter(|w| w.len() >= 4)
-        .filter(|w| !FUNCTION_WORDS.contains(&w.to_ascii_lowercase().as_str()))
-        .map(|w| w.to_ascii_lowercase())
-        .collect();
-    let lower = content.to_ascii_lowercase();
-    let deepest = terms.iter().filter_map(|t| lower.find(t)).max();
-    if let Some(center) = deepest {
-        let start = center.saturating_sub(200);
-        let end = (start + max).min(content.len());
-        return content[start..end].to_string();
-    }
-    content.chars().take(max).collect()
-}
-
 /// The port implementation for the CLI: real estate, real network, real
 /// daemon. All inference goes through one `RemoteApiProvider` against the
 /// local daemon's `/v1` surface — the loop never touches a frontier.
@@ -114,7 +118,11 @@ struct CliResearchPort {
     provider: Arc<dyn InferenceProvider>,
     client: reqwest::Client,
     orchestrator: sovereign_tools_base::web::search::SearchOrchestrator,
-    budget: sovereign_tools_base::web::search::BudgetView,
+    /// The run's typed consent grant (order deep-research-t2a): the
+    /// port carries it to the egress boundary for every web-leg
+    /// dispatch. `None` is default-deny — the web leg refuses
+    /// non-public-web payloads (the run's machine-formed queries).
+    consent: Option<ConsentGrant>,
     /// True iff the operator's Tavily key was present at port
     /// construction. The ONE source of the loop's web-backend default
     /// (`default_web_backend`); no second read of the env var exists.
@@ -124,11 +132,12 @@ struct CliResearchPort {
 }
 
 impl CliResearchPort {
-    fn new(provider: Arc<dyn InferenceProvider>) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .expect("reqwest client build");
+    fn new(provider: Arc<dyn InferenceProvider>, consent: Option<ConsentGrant>) -> Self {
+        // The boundary's search-client factory — the ONE construction
+        // site for clients that carry query egress (F26 census:
+        // everything else in this file is LocalDaemon).
+        let client =
+            sovereign_core::egress::search_client().expect("egress boundary search client build");
         let mut registry = sovereign_tools_base::web::search::WebSearchRegistry::new();
         // DuckDuckGo is the zero-config fallback — always registered
         // (the same fallback-first shape the desktop uses).
@@ -154,16 +163,17 @@ impl CliResearchPort {
             "deep-research: web backends: tavily {}, duckduckgo (fallback)",
             if tavily_keyed { "keyed" } else { "absent" }
         );
-        // Budget from the house defaults (budget.tavily daily_calls =
-        // 100 et al.) — the orchestrator's untracked=unlimited default
-        // would otherwise apply on this CLI path.
-        let mut budget = sovereign_tools_base::web::search::BudgetView::new();
-        for (id, entry) in
-            &sovereign_tools_base::web::search::assets::BackendsConfig::from_default_toml()
-                .budget
-                .per_backend
-        {
-            budget.set(id, entry.daily_calls);
+        // The web-leg consent posture is declared once here and
+        // carried to the boundary at every dispatch.
+        match &consent {
+            Some(g) => eprintln!(
+                "deep-research: consent grant for run {} — release floor {} (recorded in the manifest)",
+                g.run_id, g.release_floor
+            ),
+            None => eprintln!(
+                "deep-research: no consent grant — the web leg is default-deny for \
+                 non-public-web payloads (--consent <public-web|peer|personal> to release)"
+            ),
         }
         let orchestrator =
             sovereign_tools_base::web::search::SearchOrchestrator::new(Arc::new(registry));
@@ -177,7 +187,7 @@ impl CliResearchPort {
             provider,
             client,
             orchestrator,
-            budget,
+            consent,
             tavily_keyed,
             indexes: indexes_dir(),
             daemon_endpoint,
@@ -254,9 +264,26 @@ impl ResearchPort for CliResearchPort {
             for r in results {
                 hits.push(PortHit {
                     id: r.chunk_id.unwrap_or_default().to_string(),
-                    url: r.url.clone().unwrap_or_else(|| format!("estate:{id}")),
+                    // The locator carries the CHUNK id (t1g rung 2 —
+                    // the estate window's `estate:<corpus>:<chunk>`
+                    // convention): a corpus-level-only locator made
+                    // every chunk of a corpus identical to the
+                    // window's dedup-by-url, collapsing multi-hit
+                    // estate searches to one chunk (journaled in the
+                    // t1g declaration). Synthetic chunks (chunk_id
+                    // None — atlas-virtual summaries, one per corpus)
+                    // keep the corpus-level locator, which is correct
+                    // for them.
+                    url: r.url.clone().unwrap_or_else(|| {
+                        format!("estate:{id}:{}", r.chunk_id.unwrap_or_default())
+                    }),
                     title: r.title.unwrap_or_default(),
                     snippet: estate_snippet(&r.content, query, 600),
+                    // The BODY rides the hit (t1h — the triage
+                    // boundary: the term-centered snippet cut can miss
+                    // the digits; the decider reads the body). Parity
+                    // with the gym's corpus surface — one shape.
+                    content: Some(r.content.clone()),
                     score: r.score as f64,
                     source: format!("estate:{id}"),
                     custody: Custody::Personal,
@@ -287,6 +314,24 @@ impl ResearchPort for CliResearchPort {
                 ))
             }
         };
+        // The egress boundary's release rule, before any request is
+        // built (order deep-research-t2a, rung 3): the run's queries
+        // are MACHINE-formed (the loop's gap templates — the user's
+        // question folded with estate residue), so they carry the
+        // run's consent grant; without one the leg refuses, typed,
+        // naming what was withheld.
+        sovereign_core::egress::verify(
+            &EgressPayload {
+                privacy: sovereign_tools_base::web::search::SearchPrivacy::External { provider },
+                custody: Custody::Personal,
+                what: "query",
+                target: provider,
+                detail: query,
+                user_formed: false,
+            },
+            self.consent.as_ref(),
+        )
+        .map_err(|r| format!("web search refused: {r}"))?;
         let out = self
             .orchestrator
             .search(
@@ -297,7 +342,6 @@ impl ResearchPort for CliResearchPort {
                     max_privacy: sovereign_tools_base::web::search::SearchPrivacy::External {
                         provider,
                     },
-                    budget: &self.budget,
                     prefer: &[provider],
                 },
             )
@@ -318,6 +362,8 @@ impl ResearchPort for CliResearchPort {
                 url: r.url,
                 title: r.title,
                 snippet: r.snippet,
+                // Web results carry no body through this surface.
+                content: None,
                 score: 0.0,
                 source: format!("web:{backend}"),
                 custody: Custody::PublicWeb,
@@ -326,6 +372,53 @@ impl ResearchPort for CliResearchPort {
     }
 
     async fn web_fetch(&self, url: &str) -> Result<String, String> {
+        // The estate scheme (t1g rung 2): `estate:<corpus_id>:<chunk_id>`
+        // — the corpus IS the evidence store, the chunk's own content
+        // is the fetch. The acquisition's corpus-source hits fetch
+        // through here; a malformed or missing locator refuses loudly.
+        if let Some(rest) = url.strip_prefix("estate:") {
+            let (id, chunk) = rest.split_once(':').ok_or_else(|| {
+                format!("malformed estate locator: {url} (expected estate:<corpus_id>:<chunk_id>)")
+            })?;
+            let chunk_id: u64 = chunk.parse().map_err(|_| {
+                format!("malformed estate locator: {url} (chunk id `{chunk}` is not an id)")
+            })?;
+            let dir = self.indexes.join(id);
+            if !corpus_searchable(&dir) {
+                return Err(format!(
+                    "estate fetch {url}: corpus `{id}` is not searchable"
+                ));
+            }
+            let index = CorpusIndex::open(&dir)
+                .await
+                .map_err(|e| format!("estate fetch {url}: open corpus `{id}`: {e}"))?;
+            let stored = index
+                .get_chunks(&[chunk_id])
+                .await
+                .map_err(|e| format!("estate fetch {url}: {e}"))?;
+            return stored
+                .into_iter()
+                .next()
+                .map(|c| c.content)
+                .ok_or_else(|| format!("estate fetch {url}: chunk {chunk_id} not found"));
+        }
+        // The fetch URL is a public-web payload (it came from web
+        // search hits) — the boundary releases it unconditionally and
+        // traces the egress event.
+        sovereign_core::egress::verify(
+            &EgressPayload {
+                privacy: sovereign_tools_base::web::search::SearchPrivacy::External {
+                    provider: "web-fetch",
+                },
+                custody: Custody::PublicWeb,
+                what: "url",
+                target: url,
+                detail: url,
+                user_formed: false,
+            },
+            self.consent.as_ref(),
+        )
+        .map_err(|r| format!("fetch refused: {r}"))?;
         sovereign_tools_base::web::extract::fetch_and_extract(&self.client, url)
             .await
             .map_err(|e| format!("fetch {url}: {e}"))
@@ -375,6 +468,65 @@ impl ResearchPort for CliResearchPort {
         Ok(resp.text)
     }
 
+    async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
+        // t1d fix 2 (breadth): the acquisition frontier — a constrained
+        // draft asking for the question's decomposition, one sub-
+        // question per line. Same inference leg as the drafts
+        // (Speed::Slow, temperature 0.4) with NO url allowlist: the
+        // frontier is a question list, not report content, and must not
+        // cite. Lines are parsed deterministically (marker-stripped,
+        // deduped, capped at the shared FRONTIER_MAX).
+        //
+        // t1e (figure-hunting): the instruction asks, generically, what
+        // measures and numbers each sub-question implies — an index, a
+        // ratio, a share, a rate, a count, a median, a price, a
+        // percentage change — and the entities (cities, years) they
+        // involve, so the search can retrieve the DATA the question
+        // asks for. SHAPE, never the test: no bank vocabulary, no named
+        // measures from any deck — the draft names the measures from
+        // its own knowledge. The loop's deterministic fold-in
+        // (acquisition::figure_hunt_frontier) then guarantees every
+        // sub-question carries a specifier structurally.
+        let prompt = format!(
+            "Decompose the research question into sub-questions that a web search could answer. \
+             For each sub-question, name the specific measure or statistic it implies — an index, \
+             a ratio, a share, a rate, a count, a median, a price, a percentage change — and the \
+             entities it involves (cities, years), so a search for the data can retrieve it. If the \
+             question implies specific numbers, name them. One sub-question per line, no citations, \
+             no numbering, no commentary.\n\nQuestion: {question}"
+        );
+        let resp = self
+            .provider
+            .complete(&CompletionRequest {
+                prompt,
+                system_message: None,
+                preferred_speed: Speed::Slow,
+                max_tokens: None,
+                temperature: Some(0.4),
+                structured_output: None,
+                think_budget: None,
+                url_allowlist: None,
+                ..Default::default()
+            })
+            .await
+            .map_err(|e| format!("plan-subquestions ask: {e}"))?;
+        let mut out: Vec<String> = Vec::new();
+        for line in resp.text.lines() {
+            let line = line.trim().trim_start_matches(['-', '*', ' ']).trim();
+            let line = line
+                .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')')
+                .trim();
+            if line.is_empty() || out.contains(&line.to_string()) {
+                continue;
+            }
+            out.push(line.to_string());
+            if out.len() >= sovereign_core::deep_research::estate::FRONTIER_MAX {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
     async fn alignment_decision(
         &self,
         _plan: &Plan,
@@ -391,32 +543,192 @@ impl ResearchPort for CliResearchPort {
     }
 }
 
+/// The ONE port construction (order deep-research-t3a): `auto` — the
+/// real network port; `mock` — the deck's search/fetch surface with
+/// drafts delegated to the real port, and (when the search source is
+/// corpus) the estate's REAL indexes as the acquisition surface. Used
+/// by both the fresh launch and the resume — one implementation, one
+/// decider, never two constructions that can drift.
+async fn build_port(
+    backend: &str,
+    mock_deck_dir: Option<&Path>,
+    search_source: SearchSource,
+    corpora: &[String],
+    provider: Arc<dyn InferenceProvider>,
+    consent: Option<ConsentGrant>,
+) -> Result<(Arc<dyn ResearchPort>, String), String> {
+    if backend == "mock" {
+        let deck_dir = mock_deck_dir.ok_or("--backend mock requires --mock-deck DIR")?;
+        let deck = Deck::load(deck_dir).map_err(|e| format!("mock deck load failed: {e}"))?;
+        let real = Arc::new(CliResearchPort::new(provider.clone(), consent.clone()));
+        let mock = if search_source == SearchSource::Corpus {
+            let mut indexes = Vec::new();
+            let mut missing = Vec::new();
+            for id in corpora {
+                let dir = indexes_dir().join(id);
+                if !corpus_searchable(&dir) {
+                    missing.push(id.clone());
+                    continue;
+                }
+                match CorpusIndex::open(&dir).await {
+                    Ok(i) => indexes.push(i),
+                    Err(e) => return Err(format!("open corpus `{id}`: {e}")),
+                }
+            }
+            if !missing.is_empty() {
+                return Err(format!(
+                    "--search-source corpus: corpus not searchable at the estate: {} — a \
+                     named corpus is never silently skipped",
+                    missing.join(", ")
+                ));
+            }
+            MockBackendImpl::with_corpus(
+                deck,
+                MockDraftSurface::Delegated(real),
+                CorpusSurface {
+                    indexes,
+                    embed: Box::new(ProviderEmbed(provider.clone())),
+                },
+            )
+        } else {
+            MockBackendImpl::new(deck, MockDraftSurface::Delegated(real))
+        };
+        Ok((Arc::new(mock), MockBackendImpl::BACKEND_ID.to_string()))
+    } else {
+        let real = Arc::new(CliResearchPort::new(provider.clone(), consent));
+        let web_backend = real.default_web_backend().to_string();
+        Ok((real, web_backend))
+    }
+}
+
+/// The launch-sidecar (order deep-research-t3a): the run's backend
+/// identity, written by the verb into the run dir before launch and
+/// read back on `--resume` — the operator's `--backend`/`--mock-deck`
+/// flags are verified against it flag-by-flag, never silently
+/// substituted.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ResumeInput {
+    icd: String,
+    version: u32,
+    run_id: String,
+    backend: String,
+    #[serde(default)]
+    mock_deck_dir: Option<String>,
+}
+
 /// `svrn deep-research "<question>" [--run-dir DIR] [--max-rounds N]
 /// [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N]
-/// [--fetch N]`
+/// [--fetch N] [--backend auto|mock] [--mock-deck DIR]
+/// [--search-source mock|corpus|web] [--consent public-web|peer|personal]
+/// [--resume DIR]`
 pub async fn cmd_deep_research(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
-             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N]"
+             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
+             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus|web] \
+             [--consent public-web|peer|personal] [--resume DIR]"
         );
         return 0;
     }
     let mut question: Option<String> = None;
     let mut run_dir = std::env::temp_dir().join("deep-research-runs");
+    let mut run_dir_explicit = false;
+    let mut resume_dir: Option<PathBuf> = None;
     let mut max_rounds = 3u32;
     let mut corpora: Vec<String> = Vec::new();
     let mut code_set_k = 3usize;
     let mut eps_quota = 0.1f64;
     let mut search_allowance = 4u32;
     let mut fetch_allowance = 4u32;
+    // Which flags the operator ACTUALLY passed (order deep-research-t3a):
+    // a `--resume` inherits the checkpoint's frozen values for flags that
+    // were NOT passed — only explicitly-passed flags are verified against
+    // the frozen config, and a conflicting one refuses, naming it. The
+    // fresh-launch path never reads these.
+    let mut max_rounds_explicit = false;
+    let mut corpora_explicit = false;
+    let mut code_set_k_explicit = false;
+    let mut eps_quota_explicit = false;
+    let mut search_allowance_explicit = false;
+    let mut fetch_allowance_explicit = false;
+    let mut search_source_explicit = false;
+    let mut backend_explicit = false;
+    let mut mock_deck_explicit = false;
+    // The P5 drill surface (additive; default `auto` = the real
+    // network). `--backend mock` serves search/fetch from the deck
+    // directory, drafts via the real daemon.
+    let mut backend = "auto".to_string();
+    let mut mock_deck_dir: Option<PathBuf> = None;
+    // The acquisition search source (t1g rung 2; rung 3 = web, order
+    // deep-research-t2a): a closed set, decided once here — `mock`
+    // (default), `corpus`, or `web`.
+    let mut search_source = SearchSource::Mock;
+    // The run-scoped consent grant's release floor (order
+    // deep-research-t2a): `None` = default-deny — the web leg refuses
+    // non-public-web payloads without a grant. The grant itself is
+    // built once the run id exists (frozen into the charter, FR-3).
+    let mut consent_floor: Option<Custody> = None;
 
     let mut i = 0;
     while i < args.len() {
         match args[i].as_str() {
+            "--backend" => {
+                i += 1;
+                backend = args.get(i).cloned().unwrap_or_default();
+                backend_explicit = true;
+            }
+            "--search-source" => {
+                i += 1;
+                match SearchSource::parse(args.get(i).map(String::as_str).unwrap_or_default()) {
+                    Some(s) => search_source = s,
+                    None => {
+                        eprintln!(
+                            "deep-research: unknown search source {:?} — the closed set is \
+                             mock | corpus | web",
+                            args.get(i).map(String::as_str).unwrap_or_default()
+                        );
+                        return 1;
+                    }
+                }
+                search_source_explicit = true;
+            }
+            "--consent" => {
+                i += 1;
+                let s = args.get(i).map(String::as_str).unwrap_or_default();
+                match Custody::parse_wire(s) {
+                    Some(c) if c != Custody::Unknown => consent_floor = Some(c),
+                    _ => {
+                        eprintln!(
+                            "deep-research: unknown consent class {:?} — the closed set is \
+                             public-web | peer | personal",
+                            s
+                        );
+                        return 1;
+                    }
+                }
+            }
+            "--mock-deck" => {
+                i += 1;
+                mock_deck_dir = Some(PathBuf::from(args.get(i).cloned().unwrap_or_default()));
+                mock_deck_explicit = true;
+            }
             "--run-dir" => {
                 i += 1;
                 run_dir = PathBuf::from(args.get(i).cloned().unwrap_or_default());
+                run_dir_explicit = true;
+            }
+            // T3a: resume an interrupted run from its run dir. The
+            // checkpoint's frozen config is the identity — the flags
+            // below are verified against it, not applied to it.
+            "--resume" => {
+                i += 1;
+                let p = PathBuf::from(args.get(i).cloned().unwrap_or_default());
+                if p.as_os_str().is_empty() {
+                    eprintln!("deep-research: --resume requires a run dir argument (--resume DIR)");
+                    return 1;
+                }
+                resume_dir = Some(p);
             }
             "--max-rounds" => {
                 i += 1;
@@ -424,6 +736,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                     .get(i)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(max_rounds);
+                max_rounds_explicit = true;
             }
             "--corpora" => {
                 i += 1;
@@ -436,6 +749,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                             .collect()
                     })
                     .unwrap_or_default();
+                corpora_explicit = true;
             }
             "--code-set-k" => {
                 i += 1;
@@ -443,6 +757,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                     .get(i)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(code_set_k);
+                code_set_k_explicit = true;
             }
             "--eps-quota" => {
                 i += 1;
@@ -450,6 +765,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                     .get(i)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(eps_quota);
+                eps_quota_explicit = true;
             }
             "--search" => {
                 i += 1;
@@ -457,6 +773,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                     .get(i)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(search_allowance);
+                search_allowance_explicit = true;
             }
             "--fetch" => {
                 i += 1;
@@ -464,22 +781,58 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                     .get(i)
                     .and_then(|s| s.parse().ok())
                     .unwrap_or(fetch_allowance);
+                fetch_allowance_explicit = true;
             }
             s if question.is_none() => question = Some(s.to_string()),
             _ => {
-                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N]");
+                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus|web] [--consent public-web|peer|personal] [--resume DIR]");
                 return 1;
             }
         }
         i += 1;
     }
-    let Some(question) = question else {
+    // The backend is a closed set: a misspelled or unregistered backend
+    // must refuse, never silently route (§18.3 — the mock itself
+    // refuses any other backend id).
+    if backend != "auto" && backend != "mock" {
+        eprintln!("deep-research: unknown backend {backend:?} — the closed set is auto | mock");
+        return 1;
+    }
+    if backend == "mock" && mock_deck_dir.is_none() {
+        eprintln!("deep-research: --backend mock requires --mock-deck DIR");
+        return 1;
+    }
+    if backend != "mock" && mock_deck_dir.is_some() {
+        eprintln!("deep-research: --mock-deck requires --backend mock (no silent substitution)");
+        return 1;
+    }
+    // The corpus source acquires from the estate's corpus-search
+    // surface: a run that asks for the corpus source without naming
+    // any corpus would search nothing — refused loudly, never a
+    // silent empty.
+    if search_source == SearchSource::Corpus && corpora.is_empty() {
+        eprintln!("deep-research: --search-source corpus requires --corpora id1,id2");
+        return 1;
+    }
+    // A fresh launch needs a question; a resume refuses one (the
+    // checkpoint's question is the frozen identity). Naming both a run
+    // dir and a resume dir would name two run dirs — refused.
+    if question.is_none() && resume_dir.is_none() {
         eprintln!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
-             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N]"
+             [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
+             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus|web] \
+             [--consent public-web|peer|personal] [--resume DIR]"
         );
         return 1;
-    };
+    }
+    if resume_dir.is_some() && run_dir_explicit {
+        eprintln!(
+            "deep-research: --run-dir cannot be combined with --resume — the resumed run dir \
+             is the --resume argument"
+        );
+        return 1;
+    }
 
     // Daemon + models: the loop is local-only, but it still needs the
     // local daemon's embed + draft surface.
@@ -509,19 +862,97 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         }
     };
 
+    // T3a: the resume gate. The checkpoint's frozen config is the
+    // identity; the operator's flags are verified against it
+    // flag-by-flag (each mismatch refuses, naming the flag). The
+    // question, consent grant, and allowances come from the
+    // checkpoint — nothing is re-decided.
+    if let Some(resume_dir) = resume_dir {
+        // Only EXPLICITLY-passed flags are verified against the frozen
+        // config (the checkpoint's values are the default for flags the
+        // operator did not pass — bare `--resume DIR` inherits the whole
+        // config). A conflicting explicit flag refuses below, naming it.
+        return match resume_run_inner(
+            &resume_dir,
+            &draft_model,
+            &embed_model,
+            &endpoint,
+            max_rounds_explicit.then_some(max_rounds),
+            corpora_explicit.then_some(corpora.as_slice()),
+            code_set_k_explicit.then_some(code_set_k),
+            eps_quota_explicit.then_some(eps_quota),
+            search_allowance_explicit.then_some(search_allowance),
+            fetch_allowance_explicit.then_some(fetch_allowance),
+            search_source_explicit.then_some(search_source),
+            consent_floor,
+            backend_explicit.then_some(backend.as_str()),
+            mock_deck_explicit.then_some(mock_deck_dir.as_deref()),
+            question.as_deref(),
+        )
+        .await
+        {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("deep-research: --resume refused: {e}");
+                1
+            }
+        };
+    }
+
+    // A fresh launch was validated to carry a question above; the
+    // resume branch already returned for the resume shape.
+    let question = question.expect("a fresh launch has a question (validated above)");
+
     let run_id = format!("dr-{}", now_unix());
     let run_dir = run_dir.join(&run_id);
 
+    // The run-scoped consent grant (order deep-research-t2a): minted
+    // once, here, from the operator's `--consent` class — then frozen
+    // (FR-3) into both the port (the egress boundary's check) and the
+    // RunConfig (the manifest record). Default-deny: no flag, no
+    // grant, non-public-web egress refuses.
+    let consent: Option<ConsentGrant> = consent_floor.map(|release_floor| ConsentGrant {
+        run_id: run_id.clone(),
+        granted_at_unix: now_unix(),
+        release_floor,
+    });
+
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&endpoint, None, &draft_model, 8192));
-    let port = Arc::new(CliResearchPort::new(provider.clone()));
-    // The web backend default is decided once, by the port, from the
-    // operator's key presence (tavily when keyed, duckduckgo otherwise).
-    let web_backend = port.default_web_backend().to_string();
+    // The ONE port construction (shared with the resume path — see
+    // build_port): `--backend mock` serves search/fetch from the deck
+    // directory with drafting delegated to the real port (the daemon);
+    // the corpus source attaches the estate's real indexes.
+    let (port, web_backend) = match build_port(
+        &backend,
+        mock_deck_dir.as_deref(),
+        search_source,
+        &corpora,
+        provider.clone(),
+        consent.clone(),
+    )
+    .await
+    {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("deep-research: {e}");
+            return 1;
+        }
+    };
 
     eprintln!("deep-research: run {run_id} — {question}");
     eprintln!("deep-research: run dir {}", run_dir.display());
     eprintln!("deep-research: web backend {web_backend}");
+    eprintln!("deep-research: search source {}", search_source.as_str());
+    if backend == "mock" {
+        eprintln!(
+            "deep-research: mock deck {} (search/fetch served from the deck; drafts delegated)",
+            mock_deck_dir.as_deref().expect("validated above").display()
+        );
+    }
+    if search_source == SearchSource::Corpus {
+        eprintln!("deep-research: corpus source over: {}", corpora.join(", "));
+    }
     eprintln!("deep-research: daemon {endpoint} (draft {draft_model}, embed {embed_model})");
 
     let config = RunConfig {
@@ -535,20 +966,481 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         evidence_window_max_chunks: 20,
         estate_corpus_ids: corpora,
         web_backend,
+        search_source,
         web_search_allowance: search_allowance,
         web_fetch_allowance: fetch_allowance,
         posture: ShardingPrivacy::LocalOnly,
+        consent,
     };
 
-    let outcome = match run(config, port, provider, Arc::new(AtomicBool::new(false))).await {
+    // The launch sidecar (order deep-research-t3a): the run's backend
+    // identity, recorded BEFORE launch so a later `--resume` verifies
+    // the operator's flags against it flag-by-flag (never a silent
+    // substitution). Written by the verb, read by the verb.
+    if let Err(e) = std::fs::create_dir_all(&run_dir) {
+        eprintln!("deep-research: create run dir {}: {e}", run_dir.display());
+        return 1;
+    }
+    let sidecar = ResumeInput {
+        icd: "resume_input".to_string(),
+        version: ICD_VERSION,
+        run_id: run_id.clone(),
+        backend: backend.clone(),
+        mock_deck_dir: mock_deck_dir
+            .as_ref()
+            .map(|p| p.to_string_lossy().to_string()),
+    };
+    let sidecar_json = match serde_json::to_string_pretty(&sidecar) {
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("deep-research: resume sidecar serialize: {e}");
+            return 1;
+        }
+    };
+    if let Err(e) = std::fs::write(run_dir.join("resume-input.json"), sidecar_json) {
+        eprintln!("deep-research: resume sidecar write: {e}");
+        return 1;
+    }
+
+    let mut outcome = match run(
+        config,
+        port,
+        provider.clone(),
+        Arc::new(AtomicBool::new(false)),
+    )
+    .await
+    {
         Ok(o) => o,
         Err(e) => {
             eprintln!("deep-research: run failed: {e}");
             return 1;
         }
     };
+    // The run-close estate ingest (scene 6 of the dr-journey bar): the
+    // run's fetched evidence lands in `dr-estate-<run_id>`, stamped
+    // indexes-built and ingestion-complete — retrieval-visible without
+    // a manual ritual. A failed ingest fails the verb loudly; it never
+    // passes in silence.
+    if let Err(e) = ingest_run_estate(&mut outcome, &provider, &embed_model).await {
+        eprintln!("deep-research: estate ingest failed: {e}");
+        return 1;
+    }
     print_summary(&outcome);
     0
+}
+
+/// `--resume DIR` (order deep-research-t3a): restore an interrupted
+/// run's state from its checkpoint and continue at the next round.
+/// Every refusal is typed and names what was withheld:
+///   - the checkpoint envelope (read_checkpoint — malformed /
+///     inconsistent / foreign),
+///   - a passed question (the checkpoint's question is the frozen
+///     identity),
+///   - the launch sidecar (resume-input.json — unreadable, malformed,
+///     or belonging to another run),
+///   - each EXPLICITLY-passed flag that conflicts with the checkpoint's
+///     frozen config (--max-rounds, --search, --fetch, --code-set-k,
+///     --eps-quota, --corpora, --search-source, --consent) or the
+///     sidecar (--backend, --mock-deck). A flag the operator did NOT
+///     pass inherits the checkpoint's frozen value — bare `--resume
+///     DIR` is the canonical resume shape.
+/// The core's resume_start adds the charter-hash, config-identity,
+/// ledger-continuity, and live-lock gates behind this surface.
+async fn resume_run_inner(
+    resume_dir: &Path,
+    draft_model: &str,
+    embed_model: &str,
+    endpoint: &str,
+    max_rounds: Option<u32>,
+    corpora: Option<&[String]>,
+    code_set_k: Option<usize>,
+    eps_quota: Option<f64>,
+    search_allowance: Option<u32>,
+    fetch_allowance: Option<u32>,
+    search_source: Option<SearchSource>,
+    consent_floor: Option<Custody>,
+    backend: Option<&str>,
+    mock_deck_dir: Option<Option<&Path>>,
+    question: Option<&str>,
+) -> Result<(), String> {
+    let cp = read_checkpoint(resume_dir)?;
+    let mut c = cp.config.clone();
+    // The operator's named dir IS the state home (order
+    // deep-research-t3a, measured red: the core anchored on
+    // cp.config.run_dir — the LAUNCH dir — so a `--resume` of a COPY
+    // resumed and closed the ORIGINAL run, and a tampered copy's
+    // deadbeef checkpoint was never even read). `run_dir` is a
+    // location, not an identity field (the charter — the identity —
+    // never included it; config_mismatch does not compare it): the
+    // checkpoint records where the run LAUNCHED, `--resume <dir>`
+    // anchors where it CONTINUES. All state reads/writes below go to
+    // the named dir.
+    c.run_dir = resume_dir.to_path_buf();
+
+    if let Some(q) = question {
+        return Err(format!(
+            "a question argument ({q:?}) substitutes for the checkpoint's frozen question — \
+             resume without one"
+        ));
+    }
+
+    // The launch sidecar: the run's backend identity. A run launched
+    // before the sidecar existed has no verifiable identity — refused,
+    // never assumed.
+    let sidecar_path = resume_dir.join("resume-input.json");
+    let raw = std::fs::read_to_string(&sidecar_path).map_err(|e| {
+        format!(
+            "{sidecar_path:?} is unreadable ({e}) — the run's backend identity cannot be \
+             verified (a run launched before the sidecar existed cannot be resumed)"
+        )
+    })?;
+    let sidecar: ResumeInput =
+        serde_json::from_str(&raw).map_err(|e| format!("{sidecar_path:?} is malformed: {e}"))?;
+    if sidecar.icd != "resume_input" || sidecar.version != ICD_VERSION {
+        return Err(format!(
+            "{sidecar_path:?} is not a resume sidecar (icd {:?}, version {}) — foreign or \
+             tampered",
+            sidecar.icd, sidecar.version
+        ));
+    }
+    if sidecar.run_id != c.run_id {
+        return Err(format!(
+            "{sidecar_path:?} belongs to run {} but the checkpoint is run {} — mismatched run \
+             dir",
+            sidecar.run_id, c.run_id
+        ));
+    }
+
+    // Flag-by-flag identity — an EXPLICITLY-passed flag is verified
+    // against the frozen config; a flag the operator did NOT pass
+    // inherits the checkpoint's value (bare `--resume DIR` resumes with
+    // the exact state the run was interrupted with). Each refusal names
+    // the flag AND the checkpoint's value, so the operator sees exactly
+    // what to drop.
+    if let Some(max_rounds) = max_rounds {
+        if max_rounds != c.max_rounds {
+            return Err(format!(
+                "--max-rounds {max_rounds} differs from the checkpoint's {} — a resume keeps \
+                 the frozen config",
+                c.max_rounds
+            ));
+        }
+    }
+    if let Some(search_allowance) = search_allowance {
+        if search_allowance != c.web_search_allowance {
+            return Err(format!(
+                "--search {search_allowance} differs from the checkpoint's {} — a resume keeps \
+                 the frozen budget",
+                c.web_search_allowance
+            ));
+        }
+    }
+    if let Some(fetch_allowance) = fetch_allowance {
+        if fetch_allowance != c.web_fetch_allowance {
+            return Err(format!(
+                "--fetch {fetch_allowance} differs from the checkpoint's {} — a resume keeps \
+                 the frozen budget",
+                c.web_fetch_allowance
+            ));
+        }
+    }
+    if let Some(code_set_k) = code_set_k {
+        if code_set_k != c.code_set_k {
+            return Err(format!(
+                "--code-set-k {code_set_k} differs from the checkpoint's {} — a resume keeps \
+                 the frozen config",
+                c.code_set_k
+            ));
+        }
+    }
+    if let Some(eps_quota) = eps_quota {
+        if eps_quota != c.eps_quota {
+            return Err(format!(
+                "--eps-quota {eps_quota} differs from the checkpoint's {} — a resume keeps the \
+                 frozen config",
+                c.eps_quota
+            ));
+        }
+    }
+    if let Some(corpora) = corpora {
+        if corpora != c.estate_corpus_ids.as_slice() {
+            return Err(format!(
+                "--corpora {} differs from the checkpoint's {} — a resume keeps the frozen \
+                 corpus set",
+                corpora.join(","),
+                c.estate_corpus_ids.join(",")
+            ));
+        }
+    }
+    if let Some(search_source) = search_source {
+        if search_source != c.search_source {
+            return Err(format!(
+                "--search-source {} differs from the checkpoint's {} — a resume keeps the \
+                 frozen source",
+                search_source.as_str(),
+                c.search_source.as_str()
+            ));
+        }
+    }
+    if let Some(backend) = backend {
+        if backend != sidecar.backend {
+            return Err(format!(
+                "--backend {backend} differs from the run's recorded {} — the backend is part \
+                 of the run's identity",
+                sidecar.backend
+            ));
+        }
+    }
+    match mock_deck_dir {
+        Some(Some(given)) => match sidecar.mock_deck_dir.as_deref() {
+            Some(recorded) if given.to_string_lossy() != recorded => {
+                return Err(format!(
+                    "--mock-deck {} differs from the run's recorded {recorded} — the deck is \
+                     part of the run's identity",
+                    given.display()
+                ));
+            }
+            None => {
+                return Err(
+                    "--mock-deck was given but the run's sidecar records no deck — the run did \
+                     not launch from a mock deck"
+                        .to_string(),
+                );
+            }
+            _ => {}
+        },
+        // Omitted: the sidecar's recorded deck IS the identity — the
+        // port is rebuilt from it below, never from the operator's flags.
+        _ => {}
+    }
+    // The consent grant is frozen in the checkpoint (FR-3): a
+    // contradicting flag refuses; an omitted flag keeps the grant.
+    match (consent_floor, &c.consent) {
+        (Some(f), Some(g)) if f != g.release_floor => {
+            return Err(format!(
+                "--consent {} differs from the checkpoint's frozen {} — the grant is part of \
+                 the run's identity",
+                f.as_str(),
+                g.release_floor.as_str()
+            ));
+        }
+        (Some(_), None) => {
+            return Err(
+                "--consent was given but the checkpoint's run has no consent grant — resume \
+                 without it"
+                    .to_string(),
+            );
+        }
+        _ => {}
+    }
+
+    let run_id = c.run_id.clone();
+    eprintln!(
+        "deep-research: resume {run_id} — continuing at round {}",
+        cp.written_after_round + 1
+    );
+    eprintln!("deep-research: run dir {}", resume_dir.display());
+    eprintln!("deep-research: question {}", c.question);
+    eprintln!("deep-research: web backend {}", c.web_backend);
+    if sidecar.backend == "mock" {
+        eprintln!(
+            "deep-research: mock deck {} (search/fetch served from the deck; drafts delegated)",
+            sidecar.mock_deck_dir.as_deref().unwrap_or("?")
+        );
+    }
+    if c.search_source == SearchSource::Corpus {
+        eprintln!(
+            "deep-research: corpus source over: {}",
+            c.estate_corpus_ids.join(", ")
+        );
+    }
+    eprintln!("deep-research: daemon {endpoint} (draft {draft_model}, embed {embed_model})");
+
+    let provider: Arc<dyn InferenceProvider> =
+        Arc::new(RemoteApiProvider::new(endpoint, None, draft_model, 8192));
+    // The port is rebuilt from the SIDECAR's identity + the
+    // checkpoint's config — never from the operator's flags (those
+    // were verified equal above).
+    let (port, _web_backend) = build_port(
+        &sidecar.backend,
+        sidecar.mock_deck_dir.as_deref().map(Path::new),
+        c.search_source,
+        &c.estate_corpus_ids,
+        provider.clone(),
+        c.consent.clone(),
+    )
+    .await?;
+    let mut outcome = resume(c, port, provider.clone(), Arc::new(AtomicBool::new(false)))
+        .await
+        .map_err(|e| format!("resume failed: {e}"))?;
+    if let Err(e) = ingest_run_estate(&mut outcome, &provider, embed_model).await {
+        return Err(format!("estate ingest failed: {e}"));
+    }
+    print_summary(&outcome);
+    Ok(())
+}
+
+/// The run-close estate ingest (order deep-research-t3a — scene 6 of
+/// the dr-journey bar, the local cache): every source the run
+/// actually fetched (the round-1 survey's estate hits + every
+/// evidence-window's chunks, deduped by source url) is ingested into
+/// the run's estate corpus `dr-estate-<run_id>`, stamped
+/// indexes-built and ingestion-complete (the two stamps listing AND
+/// retrieval check — no manual ritual), and stamped `ingested_into`
+/// on the manifest's fetched sources. A later run's `--corpora
+/// dr-estate-<run_id>` reads the corpus BEFORE the web leg and cites
+/// `estate:dr-estate-<run_id>:` locators — the cache that means we do
+/// not always rebuild from web search.
+async fn ingest_run_estate(
+    outcome: &mut RunOutcome,
+    provider: &Arc<dyn InferenceProvider>,
+    embed_model: &str,
+) -> Result<(), String> {
+    let corpus_id = format!("dr-estate-{}", outcome.manifest.run_id);
+    let corpus_dir = indexes_dir().join(&corpus_id);
+    if corpus_dir.exists() {
+        eprintln!("deep-research: estate corpus {corpus_id} already exists — skip (idempotent)");
+        return Ok(());
+    }
+    let run_dir = outcome
+        .report_path
+        .parent()
+        .ok_or_else(|| "the run's report path has no parent (no run dir)".to_string())?
+        .to_path_buf();
+
+    // Collect the run's evidence: window chunks + survey hits,
+    // deduped by source url (survey first — its chunks carry the
+    // estate locators the windows repeat).
+    let mut collected: Vec<(String, Option<String>, String)> = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    let survey_path = run_dir.join("survey-1.json");
+    if let Ok(raw) = std::fs::read_to_string(&survey_path) {
+        if let Ok(survey) = serde_json::from_str::<Survey>(&raw) {
+            for q in &survey.searched {
+                for hit in &q.hits {
+                    if let Some(content) = hit.content.as_deref().filter(|c| !c.trim().is_empty()) {
+                        let url = hit.url.clone().unwrap_or_else(|| {
+                            format!("estate:{}:{}", hit.corpus_id, hit.chunk_id)
+                        });
+                        if seen.insert(url.clone()) {
+                            collected.push((url, Some(hit.chunk_id.clone()), content.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut window_paths: Vec<PathBuf> = std::fs::read_dir(&run_dir)
+        .map_err(|e| format!("read run dir {}: {e}", run_dir.display()))?
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .map(|n| n.starts_with("evidence-window-") && n.ends_with(".json"))
+                .unwrap_or(false)
+        })
+        .collect();
+    window_paths.sort();
+    for path in window_paths {
+        let raw =
+            std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        let window: EvidenceWindow =
+            serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
+        for chunk in &window.chunks {
+            if chunk.content.trim().is_empty() {
+                continue;
+            }
+            let url = if chunk.source_url.is_empty() {
+                chunk.locator.clone()
+            } else {
+                chunk.source_url.clone()
+            };
+            if seen.insert(url.clone()) {
+                collected.push((url, Some(chunk.locator.clone()), chunk.content.clone()));
+            }
+        }
+    }
+    if collected.is_empty() {
+        eprintln!("deep-research: run fetched no content — estate corpus {corpus_id} not created");
+        return Ok(());
+    }
+
+    // Embed + insert through the ONE embed path (ProviderEmbed — the
+    // same surface the estate leg uses).
+    let mut pairs: Vec<(InsertChunk, Vec<f32>)> = Vec::with_capacity(collected.len());
+    let mut dim = 0usize;
+    for (url, title, content) in &collected {
+        let embedding = provider
+            .embed(content)
+            .await
+            .map_err(|e| format!("embed estate chunk `{url}`: {e}"))?;
+        if dim == 0 {
+            dim = embedding.len();
+        }
+        pairs.push((
+            InsertChunk {
+                content: content.clone(),
+                title: title.clone(),
+                url: Some(url.clone()),
+                metadata: None,
+                content_hash: None,
+                source_doc_id: Some(url.clone()),
+                source_file: None,
+                code: Default::default(),
+                unit_id: None,
+            },
+            embedding,
+        ));
+    }
+    let index = CorpusIndex::create_with_sharing(
+        &corpus_dir,
+        &corpus_id,
+        &corpus_id,
+        embed_model,
+        dim,
+        false,
+        Some(false),
+        "dr-estate",
+    )
+    .await
+    .map_err(|e| format!("create estate corpus {corpus_id}: {e}"))?;
+    index
+        .insert_batch(&pairs)
+        .await
+        .map_err(|e| format!("insert into estate corpus {corpus_id}: {e}"))?;
+    // Index build is best-effort (a warn; a small corpus's IVF/FTS
+    // matters less than the stamps below).
+    if let Err(e) = index.build_indexes(true, true, None).await {
+        eprintln!("deep-research: estate corpus {corpus_id}: index build warned: {e}");
+    }
+    // The two stamps retrieval and listing check — mark_indexes_built
+    // MUST stamp; a failure propagates (an invisible corpus would be
+    // a silent failure).
+    index
+        .mark_indexes_built()
+        .map_err(|e| format!("stamp indexes-built on {corpus_id}: {e}"))?;
+    index
+        .mark_ingestion_complete()
+        .map_err(|e| format!("stamp ingestion-complete on {corpus_id}: {e}"))?;
+
+    // Stamp the manifest's fetched sources and re-write the record.
+    let ingested: std::collections::BTreeSet<&String> =
+        collected.iter().map(|(url, _, _)| url).collect();
+    for f in &mut outcome.manifest.sources.fetched {
+        if ingested.contains(&f.url) {
+            f.ingested_into = Some(corpus_id.clone());
+        }
+    }
+    let manifest_json = serde_json::to_string_pretty(&outcome.manifest)
+        .map_err(|e| format!("manifest serialize: {e}"))?;
+    std::fs::write(run_dir.join("manifest.json"), manifest_json)
+        .map_err(|e| format!("manifest re-write: {e}"))?;
+    eprintln!(
+        "deep-research: estate corpus {corpus_id} built — {} chunks (retrieval-visible)",
+        pairs.len()
+    );
+    Ok(())
 }
 
 fn print_summary(outcome: &RunOutcome) {
@@ -585,7 +1477,7 @@ fn now_unix() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::estate_snippet;
+    use sovereign_core::deep_research::estate::estate_snippet;
 
     /// Measured fixture (demo re-ask dr-1786727099): the Smithsonian
     /// timeline chunk's 240-char prefix is nav + donate blurb; the

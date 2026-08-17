@@ -1,0 +1,241 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786945574",
+  "charter_hash": "f2d480b692da6cda",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://turingitlabs.com/mcp-vs-a2a-what-google-and-anthropics-protocols-mean-for-your-projects",
+      "title": "MCP vs A2A: What Google and Anthropic’s Protocols Mean for Your Projects - Turing IT Labs",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://leanware.co/insights/a2a-vs-mcp-protocol-comparison",
+      "title": "A2A vs MCP: AI Agent Protocol Comparison Guide | Analysis",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://aishwaryasrinivasan.substack.com/p/a2a-vs-mcp-the-two-protocols-reshaping",
+      "title": "A2A vs MCP: The Two Protocols Reshaping How AI Systems ...",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://workos.com/blog/mcp-vs-a2a",
+      "title": "MCP vs. A2A: Which AI agent protocol should you use?",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://auth0.com/blog/mcp-vs-a2a",
+      "title": "MCP vs A2A: A Guide to AI Agent Communication Protocols",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://fleeceai.app/blog/google-a2a-protocol-explained-2026",
+      "title": "Google A2A Protocol Explained: Multi-Agent in 2026 | Fleece AI",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "Google A2A Protocol: How Agent-to-Agent Coordination ...",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide",
+      "title": "Google's Agent2Agent Protocol Explained",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A/blob/main/docs/specification.md",
+      "title": "A2A/docs/specification.md at main · a2aproject/A2A - GitHub",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=UIU95bJgpXk",
+      "title": "What is the A2A Protocol?",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+      "title": "Announcing the Agent2Agent Protocol (A2A)\n            \n            \n            - Google Developers Blog",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://cloud.google.com/blog/products/ai-machine-learning/agent2agent-protocol-is-getting-an-upgrade",
+      "title": "Agent2Agent protocol (A2A) is getting an upgrade",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cybage.com/blog/mastering-google-s-a2a-protocol-the-complete-guide-to-agent-to-agent-communication",
+      "title": "Mastering Google's A2A Protocol: The Complete Guide to Agent ... - Cybage",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://atlan.com/know/google-a2a-protocol",
+      "title": "Google A2A Protocol: How Agent-to-Agent Coordination ...",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ibm.com/think/topics/agent2agent-protocol",
+      "title": "What is A2A protocol (Agent2Agent)?",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://medium.com/@saeedhajebi/a2a-protocol-an-in-depth-guide-78387f992f59",
+      "title": "Medium",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+      "title": "Announcing the Agent2Agent Protocol (A2A)\n            \n            \n            - Google Developers Blog",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2505.12490v3",
+      "title": "Improving Google A2A Protocol: Protecting Sensitive Data ... - arXiv",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://github.com/a2aproject/A2A",
+      "title": "a2aproject/A2A: Agent2Agent (A2A) is an open protocol ...",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "title": "Google's Agent2Agent (A2A) Protocol: A New Era of AI Agent ...",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cybage.com/blog/mastering-google-s-a2a-protocol-the-complete-guide-to-agent-to-agent-communication",
+      "title": "Mastering Google's A2A Protocol: The Complete Guide to Agent ... - Cybage",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "title": "Introducing the Model Context Protocol - Anthropic",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Model_Context_Protocol",
+      "title": "Model Context Protocol - Wikipedia",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/396678686_The_Model_Context_Protocol_MCP_Emergence_Technical_Architecture_and_the_Future_of_Agentic_AI_Infrastructure",
+      "title": "The Model Context Protocol (MCP): Emergence, Technical ...",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://modelcontextprotocol.io/specification/2026-07-28",
+      "title": "Specification",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=kQmXtrmQ5Zg",
+      "title": "Building Agents with Model Context Protocol",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://anthropic.skilljar.com/model-context-protocol-advanced-topics",
+      "title": "Model Context Protocol: Advanced Topics - Anthropic Courses",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.truefoundry.com/blog/mcp",
+      "title": "What Is MCP? Use Cases & Benefits Explained",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://modelcontextprotocol.io/docs/2026-07-28/getting-started/intro",
+      "title": "Model Context Protocol",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

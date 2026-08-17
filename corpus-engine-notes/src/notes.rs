@@ -3496,6 +3496,15 @@ impl NoteStore {
     /// All filters from [`read_notes`] apply. Scope filtering is a post-match
     /// step (like `kinds`) because the FTS5 index is not aware of the `scope`
     /// column — see `idx_notes_scope_feature` for the recency path.
+    ///
+    /// Rows that are identical-content duplicates of an earlier row in the
+    /// candidate pool — same `kind`, `content` AND `related_entity`
+    /// (harvest-era flood: the same commit-message note written once per
+    /// corpus session, distinct `session_id`s) — collapse to ONE
+    /// representative row BEFORE the final truncate, so the N-1 duplicates
+    /// never consume limit slots. The collapse is named, never silent
+    /// (§18.3): [`read_notes_scoped_outcome`] returns the count, and every
+    /// collapse fires a `notes`-target tracing event.
     pub async fn read_notes_scoped(
         &self,
         query: Option<&str>,
@@ -3506,14 +3515,42 @@ impl NoteStore {
         include_retired: bool,
         scope_filter: &ScopeFilter,
     ) -> Result<Vec<NoteRow>> {
+        Ok(self
+            .read_notes_scoped_outcome(
+                query,
+                symbols,
+                files,
+                kinds,
+                limit,
+                include_retired,
+                scope_filter,
+            )
+            .await?
+            .rows)
+    }
+
+    /// Same read as [`read_notes_scoped`], with the collapse count.
+    ///
+    /// The count is REPORTED, never silent (§18.3) — the MCP `notes`
+    /// tool surfaces it as `collapsed_duplicates` in its response.
+    pub async fn read_notes_scoped_outcome(
+        &self,
+        query: Option<&str>,
+        symbols: &[String],
+        files: &[String],
+        kinds: &[String],
+        limit: usize,
+        include_retired: bool,
+        scope_filter: &ScopeFilter,
+    ) -> Result<NoteReadOutcome> {
         let cap = limit.min(100);
-        // `scope` is the only filter still applied post-fetch; SQL covers
-        // kinds, symbols, and files via WHERE so the LIMIT window no longer
-        // hides notes that match an exact symbol/file/kind written outside
-        // the most-recent N rows. Over-fetch only when the residual
-        // scope_filter is active.
-        let post_fetch_active = !scope_filter_is_no_op(scope_filter);
-        let fetch_limit = if post_fetch_active { cap * 10 } else { cap };
+        // Over-fetch for the two post-SQL passes that can remove rows:
+        // the residual scope filter and content-duplicate collapse.
+        // Without the margin either pass would consume limit slots the
+        // caller paid for (the harvest-era flood put N identical rows at
+        // the top of the pool and ate the whole window). Mirrors the
+        // semantic path's pool sizing — one decider, one number (§10.6).
+        let fetch_limit = notes_read_pool_size(limit);
 
         let retired_clause = if include_retired {
             ""
@@ -3626,13 +3663,25 @@ impl NoteStore {
             }
         };
 
-        let mut out: Vec<NoteRow> = rows
+        let filtered: Vec<NoteRow> = rows
             .into_iter()
             .filter(|n| scope_matches(n, scope_filter))
             .collect();
 
+        let (mut out, collapsed) = collapse_content_duplicates(filtered);
+        if collapsed > 0 {
+            tracing::info!(
+                target = "notes",
+                collapsed,
+                query = query.unwrap_or(""),
+                "notes: collapsed duplicate-content rows (same kind/content/related_entity)"
+            );
+        }
         out.truncate(cap);
-        Ok(out)
+        Ok(NoteReadOutcome {
+            rows: out,
+            collapsed,
+        })
     }
 
     /// Full, un-windowed scan of every note — the maintenance / rationalization
@@ -3780,6 +3829,12 @@ impl NoteStore {
     /// `semantic_query` is `None` OR the embed call errors, we
     /// fall back to the existing FTS5-only path silently. The
     /// caller never has to know whether T1 is wired.
+    ///
+    /// Identical-content duplicate collapse applies exactly as in
+    /// [`read_notes_scoped`]: rows sharing `kind`/`content`/
+    /// `related_entity` collapse to one representative before the
+    /// final truncate, and the count is reported via
+    /// [`read_notes_scoped_semantic_outcome`].
     #[allow(clippy::too_many_arguments)]
     pub async fn read_notes_scoped_semantic(
         &self,
@@ -3792,6 +3847,35 @@ impl NoteStore {
         scope_filter: &ScopeFilter,
         semantic_query: Option<&str>,
     ) -> Result<Vec<NoteRow>> {
+        Ok(self
+            .read_notes_scoped_semantic_outcome(
+                query,
+                symbols,
+                files,
+                kinds,
+                limit,
+                include_retired,
+                scope_filter,
+                semantic_query,
+            )
+            .await?
+            .rows)
+    }
+
+    /// Same read as [`read_notes_scoped_semantic`], with the collapse
+    /// count (REPORTED, never silent — §18.3).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn read_notes_scoped_semantic_outcome(
+        &self,
+        query: Option<&str>,
+        symbols: &[String],
+        files: &[String],
+        kinds: &[String],
+        limit: usize,
+        include_retired: bool,
+        scope_filter: &ScopeFilter,
+        semantic_query: Option<&str>,
+    ) -> Result<NoteReadOutcome> {
         let weight = read_embed_weight_env();
 
         // Fast path: any of these conditions short-circuits to the
@@ -3801,7 +3885,7 @@ impl NoteStore {
         // assert byte equivalence.
         if weight == 0.0 || semantic_query.is_none() || self.embed_fn.get().is_none() {
             return self
-                .read_notes_scoped(
+                .read_notes_scoped_outcome(
                     query,
                     symbols,
                     files,
@@ -3826,7 +3910,7 @@ impl NoteStore {
                     "notes: semantic query embed failed; falling back to FTS5-only"
                 );
                 return self
-                    .read_notes_scoped(
+                    .read_notes_scoped_outcome(
                         query,
                         symbols,
                         files,
@@ -3839,12 +3923,14 @@ impl NoteStore {
             }
         };
 
-        // Over-fetch candidate pool: 10x the requested limit, capped
-        // at 200, capped further by the SQLite per-statement bound.
-        // The candidate union must be wide enough that cosine-only
-        // winners aren't pre-truncated by BM25 (and vice versa).
+        // Over-fetch candidate pool via `notes_read_pool_size`: 10x the
+        // requested limit, clamped to [100, 500] (the SQLite
+        // per-statement bound). The candidate union must be wide enough
+        // that cosine-only winners aren't pre-truncated by BM25 (and
+        // vice versa) — and that content-duplicate collapse has rows to
+        // recover slots from before the final truncate.
         let cap = limit.min(100);
-        let pool_size = (limit.saturating_mul(10)).clamp(100, 500);
+        let pool_size = notes_read_pool_size(limit);
 
         // Pull the BM25 candidate pool (when query set) and the
         // cosine candidate pool from `note_embeddings` separately,
@@ -3914,11 +4000,21 @@ impl NoteStore {
             .collect();
         scored.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
 
-        let mut out: Vec<NoteRow> = scored
+        let filtered: Vec<NoteRow> = scored
             .into_iter()
             .map(|(row, _)| row)
             .filter(|n| scope_matches(n, scope_filter))
             .collect();
+
+        let (mut out, collapsed) = collapse_content_duplicates(filtered);
+        if collapsed > 0 {
+            tracing::info!(
+                target = "notes",
+                collapsed,
+                query = query.unwrap_or(""),
+                "notes: collapsed duplicate-content rows (same kind/content/related_entity)"
+            );
+        }
         out.truncate(cap);
 
         tracing::debug!(
@@ -3927,7 +4023,10 @@ impl NoteStore {
             pool_total = out.len(),
             "notes: semantic blend applied"
         );
-        Ok(out)
+        Ok(NoteReadOutcome {
+            rows: out,
+            collapsed,
+        })
     }
 
     /// Return reflection notes for the developer-facing `sovereign reflect` command.
@@ -4232,15 +4331,62 @@ fn sqlite_err(e: rusqlite::Error) -> Error {
     Error::Io(std::io::Error::other(format!("NoteStore sqlite: {e}")))
 }
 
-/// Returns `true` when the note matches the caller's scope predicate.
+/// Result of a notes read with content-duplicate collapse applied.
 ///
-/// Default `ScopeFilter` (no scopes, no feature_id) always matches — the
-/// True when the scope filter has no predicate to apply (empty scopes AND
-/// no feature_id). Used by `read_notes_scoped` to decide whether the SQL
-/// LIMIT can be tight (`cap`) or whether the post-fetch scope filter still
-/// needs over-fetch headroom (`cap * 10`).
-fn scope_filter_is_no_op(filter: &ScopeFilter) -> bool {
-    filter.scopes.is_empty() && filter.feature_id.is_none()
+/// The MCP `notes` tool returns this shape's rows and names
+/// `collapsed` in its response (ARCH §18.3 — the count is reported,
+/// never silent).
+pub struct NoteReadOutcome {
+    /// Candidate pool with identical-content duplicates collapsed to
+    /// one representative row each, truncated to the caller's limit.
+    pub rows: Vec<NoteRow>,
+    /// How many duplicate rows were collapsed (0 when none existed).
+    pub collapsed: usize,
+}
+
+/// Candidate-pool sizing for the two post-SQL passes that can remove
+/// rows (the residual scope filter, content-duplicate collapse): 10x
+/// the requested limit, clamped to [100, 500] (the SQLite
+/// per-statement bound). One decider for both read paths (§10.6).
+fn notes_read_pool_size(limit: usize) -> usize {
+    limit.saturating_mul(10).clamp(100, 500)
+}
+
+/// Collapse rows that are identical-content duplicates of an earlier
+/// row in the candidate pool — same `kind`, same `content`, same
+/// `related_entity` (order notes-read-content-dedup).
+///
+/// The harvest-era defect: the same commit-message note is written once
+/// per corpus session (distinct `session_id`s) and never deduped at
+/// write, because `content_hash` folds in `session_id` (see
+/// [`NoteStore::has_active_note_with_content`]). The READ collapses:
+/// the FIRST row in pool order (BM25 rank / recency / blend score) is
+/// kept as the representative; every later row sharing the key is
+/// counted and dropped. `related_entity` is part of the key because
+/// harvest notes carry the COMMIT HASH there — two commits with the
+/// same message (distinct hashes) are distinct notes and must not
+/// merge (that is the multiplicity signal the key must preserve).
+///
+/// Returns (kept rows, collapsed count). The count is reported, never
+/// silent (§18.3) — callers name it in the response / tracing.
+fn collapse_content_duplicates(rows: Vec<NoteRow>) -> (Vec<NoteRow>, usize) {
+    let mut seen: std::collections::HashSet<(String, String, Option<String>)> =
+        std::collections::HashSet::with_capacity(rows.len());
+    let mut collapsed = 0usize;
+    let mut out = Vec::with_capacity(rows.len());
+    for row in rows {
+        let key = (
+            row.kind.clone(),
+            row.content.clone(),
+            row.related_entity.clone(),
+        );
+        if seen.insert(key) {
+            out.push(row);
+        } else {
+            collapsed += 1;
+        }
+    }
+    (out, collapsed)
 }
 
 /// legacy [`NoteStore::read_notes`] wrapper uses this to preserve behavior.
@@ -7539,5 +7685,319 @@ mod tests {
         assert_eq!(bytes.len(), v.len() * 4);
         let decoded = embedding_from_le_bytes(&bytes).unwrap();
         assert_eq!(decoded, v);
+    }
+
+    // ── Content-duplicate collapse (order notes-read-content-dedup) ──
+
+    /// The harvest-era duplicate flood: the same commit-message note
+    /// harvested once per corpus session lands as N rows with identical
+    /// (kind, content, related_entity) and distinct session_ids —
+    /// `content_hash` folds in `session_id`, so the write-side dedup
+    /// (`has_active_note_with_content` doc) never fires for exactly this
+    /// case. The READ must collapse them to ONE representative row
+    /// BEFORE the final truncate — the N-1 duplicates must not consume
+    /// limit slots — and the collapse must be named, never silent
+    /// (§18.3). The outcome channel (`read_notes_scoped_outcome`)
+    /// reports the count.
+    #[tokio::test]
+    async fn identical_content_harvest_duplicates_collapse_to_one_row() {
+        let store = make_store().await;
+        let commit_hash = "00e33f1bbaaad006e651b58390ebc8584b79f108";
+        let dup_content =
+            "feat(bench): chaos --naked true-baseline (bare model, no prompts/retrieval)";
+        for session in [
+            "harvest-commonwealth",
+            "harvest-sovereign",
+            "harvest-corpus-engine",
+            "harvest-commonwealth-ai",
+        ] {
+            store
+                .write_note_full_v9(
+                    "decision",
+                    dup_content,
+                    vec![],
+                    vec![],
+                    session,
+                    NoteScope::Global,
+                    None,
+                    Some(commit_hash),
+                    NoteSource::Committed,
+                    None,
+                    None,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+        // A distinct note that must survive the limit-slot budget once
+        // the duplicates collapse.
+        store
+            .write_note_full_v9(
+                "decision",
+                "the real chaos decision: what actually matters",
+                vec![],
+                vec![],
+                "session-a",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        // Generous read: every row lands in the pool; the four dupes
+        // must collapse to one.
+        let all = store
+            .read_notes_scoped(None, &[], &[], &[], 100, false, &ScopeFilter::default())
+            .await
+            .unwrap();
+        assert_eq!(all.len(), 2, "4 duplicate rows must collapse to 1");
+        assert_eq!(
+            all.iter().filter(|r| r.content == dup_content).count(),
+            1,
+            "exactly one representative row for the duplicated content"
+        );
+        assert!(all
+            .iter()
+            .any(|r| r.content.contains("what actually matters")));
+
+        // Query path (bm25) — the same collapse must apply.
+        let q = store
+            .read_notes_scoped(
+                Some("chaos"),
+                &[],
+                &[],
+                &["decision".into()],
+                100,
+                false,
+                &ScopeFilter::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(q.len(), 2);
+        assert_eq!(q.iter().filter(|r| r.content == dup_content).count(), 1);
+
+        // Slot budget: limit=2 with 5 matching rows. The collapse must
+        // happen on the candidate pool BEFORE the final truncate — a
+        // collapse after truncate is the bug again (the duplicates would
+        // still consume the slots the caller paid for).
+        let tight = store
+            .read_notes_scoped(
+                Some("chaos"),
+                &[],
+                &[],
+                &["decision".into()],
+                2,
+                false,
+                &ScopeFilter::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(tight.len(), 2);
+        assert_eq!(tight.iter().filter(|r| r.content == dup_content).count(), 1);
+        assert!(tight
+            .iter()
+            .any(|r| r.content.contains("what actually matters")));
+
+        // The count is named, never silent (§18.3): the outcome channel
+        // reports exactly how many rows were collapsed.
+        let outcome = store
+            .read_notes_scoped_outcome(
+                Some("chaos"),
+                &[],
+                &[],
+                &["decision".into()],
+                100,
+                false,
+                &ScopeFilter::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            outcome.collapsed, 3,
+            "4 dupes − 1 representative = 3 collapsed"
+        );
+        assert_eq!(outcome.rows.len(), 2);
+        assert_eq!(
+            outcome
+                .rows
+                .iter()
+                .filter(|r| r.content == dup_content)
+                .count(),
+            1
+        );
+    }
+
+    /// The dedup key is (kind, content, related_entity) —
+    /// `related_entity` is load-bearing: harvest notes carry the COMMIT
+    /// HASH there, so two commits with the same message (distinct
+    /// hashes) are distinct notes and must NOT collapse. This is the
+    /// multiplicity signal the order's "not worth continuing if" clause
+    /// named — the key must preserve it.
+    #[tokio::test]
+    async fn dedup_key_keeps_distinct_related_entities_apart() {
+        let store = make_store().await;
+        for (session, hash) in [
+            (
+                "harvest-commonwealth",
+                "8a6c97fc589c6263df07cbf183c36ca471e9664b",
+            ),
+            (
+                "harvest-corpus-engine",
+                "82efa96d0f6742b710664766ef0d185253587e63",
+            ),
+        ] {
+            store
+                .write_note_full_v9(
+                    "reflection",
+                    "docs(bench): document chaos --naked in help text",
+                    vec![],
+                    vec![],
+                    session,
+                    NoteScope::Global,
+                    None,
+                    Some(hash),
+                    NoteSource::Committed,
+                    None,
+                    None,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+        let rows = store
+            .read_notes_scoped(
+                Some("document"),
+                &[],
+                &[],
+                &["reflection".into()],
+                10,
+                false,
+                &ScopeFilter::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 2, "different related_entity ⇒ distinct notes");
+        let dupes = rows
+            .iter()
+            .filter(|r| r.content == "docs(bench): document chaos --naked in help text")
+            .count();
+        assert_eq!(dupes, 2);
+        let outcome = store
+            .read_notes_scoped_outcome(
+                Some("document"),
+                &[],
+                &[],
+                &["reflection".into()],
+                10,
+                false,
+                &ScopeFilter::default(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            outcome.collapsed, 0,
+            "commit hashes differ ⇒ nothing collapses"
+        );
+    }
+
+    /// The blend path (`read_notes_scoped_semantic` — the MCP `notes`
+    /// tool's default ride) collapses the same harvest duplicates and
+    /// reports the count through the outcome channel. The FTS5-only
+    /// fast path is exercised implicitly (weight=0 / no embed_fn), so
+    /// this test wires the mock embed to force the blend branch.
+    #[tokio::test]
+    async fn semantic_read_collapses_identical_content_duplicates() {
+        let embed: EmbedFn = Arc::new(|text: &str| {
+            let len = text.len() as f32;
+            let v = vec![len, len + 1.0, len + 2.0, len + 3.0];
+            Box::pin(async move { Ok(v) })
+        });
+        let store = make_store().await.with_embed_fn(embed);
+        let dup_content =
+            "feat(bench): chaos --naked true-baseline (bare model, no prompts/retrieval)";
+        for session in ["harvest-commonwealth", "harvest-sovereign"] {
+            store
+                .write_note_full_v9(
+                    "decision",
+                    dup_content,
+                    vec![],
+                    vec![],
+                    session,
+                    NoteScope::Global,
+                    None,
+                    Some("00e33f1bbaaad006e651b58390ebc8584b79f108"),
+                    NoteSource::Committed,
+                    None,
+                    None,
+                    false,
+                )
+                .await
+                .unwrap();
+        }
+        store
+            .write_note_full_v9(
+                "decision",
+                "the real chaos decision: what actually matters",
+                vec![],
+                vec![],
+                "session-a",
+                NoteScope::Global,
+                None,
+                None,
+                NoteSource::Agent,
+                None,
+                None,
+                false,
+            )
+            .await
+            .unwrap();
+
+        let outcome = store
+            .read_notes_scoped_semantic_outcome(
+                Some("chaos"),
+                &[],
+                &[],
+                &["decision".into()],
+                100,
+                false,
+                &ScopeFilter::default(),
+                Some("chaos"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            outcome.collapsed, 1,
+            "2 dupes − 1 representative = 1 collapsed"
+        );
+        assert_eq!(outcome.rows.len(), 2);
+        assert_eq!(
+            outcome
+                .rows
+                .iter()
+                .filter(|r| r.content == dup_content)
+                .count(),
+            1
+        );
+
+        // The plain semantic read returns the collapsed rows.
+        let rows = store
+            .read_notes_scoped_semantic(
+                Some("chaos"),
+                &[],
+                &[],
+                &["decision".into()],
+                100,
+                false,
+                &ScopeFilter::default(),
+                Some("chaos"),
+            )
+            .await
+            .unwrap();
+        assert_eq!(rows.len(), 2);
     }
 }

@@ -1,0 +1,39 @@
+{
+  "icd": "charter",
+  "version": 1,
+  "run_id": "dr-1786946203",
+  "question": "Analyze the complex issue of liability allocation in accidents involving vehicles with advanced driver-assistance systems (ADAS) operating in a shared human-machine driving context. Your analysis should integrate technical principles of ADAS, existing legal frameworks, and relevant case law to systematically examine the boundaries of responsibility between the driver and the system. Conclude with proposed regulatory guidelines or recommendations.",
+  "seed_id": null,
+  "created_at_unix": 1786946203,
+  "charter": {
+    "max_rounds": 3,
+    "evidence_window_max_chunks": 20,
+    "containment": {
+      "trigger": "judge-supported",
+      "extraction_max_tokens": 32,
+      "specifics_max": 4
+    },
+    "triage": {
+      "code_set_k": 3,
+      "eps_quota": 0.1
+    },
+    "budget": {
+      "web_search_queries": 4,
+      "web_fetch_pages": 4
+    },
+    "custody": {
+      "stamp_required": true,
+      "unknown_refuses": true
+    },
+    "url_constraint": {
+      "enabled": true,
+      "layer": "sovereign-inference:UrlAllowlistConstraint"
+    },
+    "consent": {
+      "run-id": "dr-1786946203",
+      "granted-at-unix": 1786946203,
+      "release-floor": "personal"
+    }
+  },
+  "frozen": true
+}

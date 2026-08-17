@@ -30,6 +30,8 @@ use crate::runtime::grounding::value_present_in_chunks;
 use crate::traits::InferenceProvider;
 use std::sync::Arc;
 
+use super::figure_tokens;
+
 /// The witness's configuration — frozen in the run charter at launch
 /// (FR-3).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -175,6 +177,21 @@ fn appears_in_body(specific: &str, evidence: &str) -> bool {
 /// The witness's deterministic presence check over the extracted
 /// specifics (C-class — the same matcher discipline as
 /// `value_present_in_chunks`: whole specifics, never raw nouns).
+///
+/// Numeric-specificity rule (order deep-research-t1h, pre-registered —
+/// the t1g honesty red): when the claim's specifics include
+/// numeric-class specifics (their tokenization via `figure_tokens` —
+/// the one figure decider — is non-empty), at least one NUMERIC
+/// specific must be present for the witness to fire. Thematic presence
+/// alone can no longer mask numeric absence: the t1g v1 flight's
+/// [passed] c1 restated the question's era years ("1980", "2024")
+/// which the window did not carry — its numeric absence was masked by
+/// "American cities"/"Gentrification" presence in the window
+/// (verdict-set.json c1, evidence-window-1.json). Downgrade-only: the
+/// rule only ever REMOVES the witness's fire, pushing a claim toward
+/// the all-absent downgrade (CouldNotJudge at most) — it never
+/// converts a pass into a fail, and the floor/witness are never
+/// weakened.
 pub fn witness_presence(specifics: &[String], evidence: &[String]) -> bool {
     let stripped: Vec<String> = evidence.iter().map(|e| strip_citation_spans(e)).collect();
     let joined = stripped.join("\n");
@@ -182,7 +199,40 @@ pub fn witness_presence(specifics: &[String], evidence: &[String]) -> bool {
     // stripped evidence. A specific that only ever appears inside
     // heading-shaped lines counts as absent.
     let present = |s: &str| value_present_in_chunks(s, &stripped) && appears_in_body(s, &joined);
+    let numeric_class: Vec<&String> = specifics
+        .iter()
+        .filter(|s| !figure_tokens(s).is_empty())
+        .collect();
+    if !numeric_class.is_empty() {
+        return numeric_class.iter().any(|s| present(s));
+    }
     specifics.iter().any(|s| present(s))
+}
+
+/// The claim's OWN figure tokens absent from the evidence — C-class,
+/// extraction-independent (order deep-research-t1h, pre-registered;
+/// the t1g partial-trace red). The extractor can drop a claim figure
+/// (the probe dropped "2024" from c1's specifics while the claim
+/// itself carried it — gap-list-2.json vs verdict-set.json c1, probe
+/// dr-1786928663), so the numeric-class rule over the EXTRACTED
+/// specifics cannot see the absence; the claim's own text cannot drop
+/// its figures. One matcher discipline: citation spans stripped on
+/// BOTH sides (the evidence, and the claim itself — the battery's
+/// seed-01 flight caught the citation-leak class: "[Source: ev-1]"
+/// tokenized "1" from the citation tail and downgraded every claim;
+/// the span is citation machinery, not claim content),
+/// heading-shaped lines do not count, deduplicated.
+pub fn missing_claim_figures(claim: &str, evidence: &[String]) -> Vec<String> {
+    let stripped: Vec<String> = evidence.iter().map(|e| strip_citation_spans(e)).collect();
+    let joined = stripped.join("\n");
+    let present = |s: &str| value_present_in_chunks(s, &stripped) && appears_in_body(s, &joined);
+    let mut out: Vec<String> = Vec::new();
+    for f in figure_tokens(&strip_citation_spans(claim)) {
+        if !present(&f) && !out.contains(&f) {
+            out.push(f);
+        }
+    }
+    out
 }
 
 /// Is this specific witnessable? A bare artifact noun proves nothing
@@ -292,6 +342,32 @@ pub async fn containment_witness(
 ) -> WitnessOutcome {
     if claim.trim().is_empty() || chunks.is_empty() {
         return WitnessOutcome::not_witnessable("trigger not met: empty claim or evidence window");
+    }
+    // The t1h strengthen (order deep-research-t1h, pre-registered — the
+    // t1g partial-trace red): the claim's OWN figure tokens are checked
+    // against the evidence BEFORE extraction. The extractor can drop a
+    // claim figure — the probe's c1 carried "2024" in "(1980–2024)" but
+    // the specifics came back ["1980","2000","University of Georgia"],
+    // so the numeric-class rule fired on "1980" and the claim passed
+    // with an untraced figure (verdict-set.json c1 [passed],
+    // evidence-window-1.json carries no 2024). Any claim figure absent
+    // from the evidence is untraced, full stop: deterministic,
+    // extraction-independent, BOTH polarities (a negative claim with
+    // absent figures is unverifiable — downgraded, never passed).
+    // Downgrade-only: this path only ever REMOVES the witness's fire
+    // (→ the all-absent CouldNotJudge); the floor/witness are never
+    // weakened.
+    let untraced = missing_claim_figures(claim, chunks);
+    if !untraced.is_empty() {
+        return WitnessOutcome {
+            ran: true,
+            specifics: Vec::new(),
+            all_absent: true,
+            reason: Some(format!(
+                "claim figures absent from the evidence — untraced: {}",
+                untraced.join(", ")
+            )),
+        };
     }
     let (system, user) = extraction_prompt(claim, config.specifics_max);
     let req = crate::types::CompletionRequest {
@@ -428,6 +504,131 @@ mod tests {
             &["constraining model spend".to_string()],
             &evidence
         ));
+    }
+
+    /// RED (order deep-research-t1h — the honesty rule, pre-registered;
+    /// the t1g break is the named red): thematic presence can no
+    /// longer mask numeric absence. The v1 flight's [passed] c1
+    /// restated the question's era years ("1980", "2024") which the
+    /// window did not carry — "American cities"/"Gentrification" in
+    /// the window masked the numeric absence and the witness fired
+    /// (verdict-set.json c1, evidence-window-1.json). Watched red at
+    /// HEAD: the mixed set fired the witness; after the rule, the
+    /// numeric class must decide. Downgrade-only: the rule only ever
+    /// removes the witness's fire (→ the all-absent CouldNotJudge
+    /// path); the numeric class present still fires.
+    #[test]
+    fn thematic_presence_does_not_mask_numeric_absence() {
+        let evidence = vec![
+            "Gentrification particularly accelerated as Americans opted to pursue urban lifestyles. American cities have experienced a fundamental transformation.".to_string(),
+        ];
+        // The t1g c1 shape: numeric + thematic specifics, only the
+        // thematic present in the evidence.
+        assert!(
+            !witness_presence(
+                &[
+                    "1980".to_string(),
+                    "2024".to_string(),
+                    "American cities".to_string(),
+                    "Gentrification".to_string(),
+                ],
+                &evidence
+            ),
+            "the witness must NOT fire: the numeric specifics are absent, \
+             thematic presence alone cannot mask them"
+        );
+        // A numeric specific actually in the evidence fires the
+        // witness — the rule never weakens the true-positive path.
+        assert!(witness_presence(
+            &[
+                "1980".to_string(),
+                "2024".to_string(),
+                "Gentrification".to_string(),
+            ],
+            &vec!["American cities changed after 1980 and through 2024.".to_string()]
+        ));
+        // Pure-thematic sets keep the legacy ANY-present semantics.
+        assert!(witness_presence(
+            &["American cities".to_string(), "Gentrification".to_string()],
+            &evidence
+        ));
+    }
+
+    /// RED (order deep-research-t1h — the t1g partial-trace shape,
+    /// pre-registered): claim figures are tokenized from the claim's
+    /// OWN text by the one figure decider — the en-dash splits, the
+    /// tokenizer never consults the LLM extraction, which can drop a
+    /// figure (the probe dropped "2024" from c1's specifics while the
+    /// claim itself carried it — gap-list-2.json vs verdict-set.json,
+    /// probe dr-1786928663).
+    #[test]
+    fn claim_figures_are_extraction_independent() {
+        assert_eq!(
+            figure_tokens("1980–2024"),
+            vec!["1980".to_string(), "2024".to_string()],
+            "the en-dash separates the two figures"
+        );
+        assert_eq!(
+            figure_tokens("…transformations since 1980."),
+            vec!["1980".to_string()]
+        );
+    }
+
+    /// RED (order deep-research-t1h — the t1g partial-trace shape,
+    /// pre-registered): a claim figure the evidence does not carry is
+    /// reported absent, extraction-independent. Citation spans are
+    /// stripped before the check — a figure that appears only inside a
+    /// span is not present.
+    #[test]
+    fn untraced_claim_figure_is_reported_absent() {
+        let evidence = vec![
+            "American cities have experienced a fundamental transformation since 1980.".to_string(),
+            "Gentrification accelerated after 2000 [Source: University of Georgia].".to_string(),
+        ];
+        let claim = "American cities changed across four decades (1980–2024), with gentrification accelerating after 2000.";
+        assert_eq!(
+            missing_claim_figures(claim, &evidence),
+            vec!["2024".to_string()],
+            "1980 and 2000 are traced; 2024 is the untraced figure"
+        );
+        // A figure that appears only inside a citation span is not
+        // present — spans are stripped before the check.
+        let span_only = vec![
+            "American cities changed since 1980.".to_string(),
+            "See the appendix [Source: docs/2024/final.pdf].".to_string(),
+        ];
+        assert_eq!(
+            missing_claim_figures("The 2024 report concluded the transformation.", &span_only),
+            vec!["2024".to_string()]
+        );
+        // Fully traced → empty.
+        assert!(missing_claim_figures(
+            "American cities changed since 1980 and after 2000.",
+            &evidence
+        )
+        .is_empty());
+    }
+
+    /// RED (order deep-research-t1h — the t1h battery's seed-01 flight
+    /// caught the citation-leak class, 2026-08-16): every claim citing
+    /// "ev-1" was downgraded "untraced: 1" — the digit came from the
+    /// CLAIM'S OWN citation tail, not its content. The evidence side
+    /// was stripped; the claim side was not. Citation spans are
+    /// stripped from the claim before tokenizing its figures — the
+    /// same strip contract as the evidence side (one strip, both
+    /// sides).
+    #[test]
+    fn claim_citation_spans_do_not_leak_figures() {
+        let evidence = vec![
+            "Google announced on 2025-03-18 that it had agreed to acquire Wiz for approximately $32 billion in an all-cash deal.".to_string(),
+        ];
+        let claim = "Google acquired Wiz for approximately $32 billion in an all-cash deal, announced on 2025-03-18 [Source: ev-1].";
+        assert_eq!(
+            missing_claim_figures(claim, &evidence),
+            Vec::<String>::new(),
+            "the 'ev-1' citation tail is citation machinery, not claim content — \
+             the claim's figures (32, 2025, 03, 18) are all present"
+        );
     }
 
     #[test]

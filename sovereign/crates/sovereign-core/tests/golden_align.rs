@@ -286,6 +286,7 @@ fn render_golden(
             supporting_chunk_ids: c.evidence_ids.clone(),
             empty_evidence_window: false,
             reason: None,
+            corroboration: None,
         })
         .collect();
     let claims = final_claims(&audits, &window);
@@ -294,7 +295,7 @@ fn render_golden(
         Some(a) => &a.redirected_question,
         None => QUESTION,
     };
-    render_report(question, &claims, v.run_id.as_str(), None, alignment)
+    render_report(question, &claims, v.run_id.as_str(), None, alignment, &[])
 }
 
 #[test]

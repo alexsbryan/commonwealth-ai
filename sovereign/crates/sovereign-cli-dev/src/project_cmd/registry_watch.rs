@@ -350,7 +350,7 @@ fn format_graph_age(secs: u64) -> String {
     }
 }
 
-async fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
+pub(crate) async fn daemon_get(path: &str) -> Result<serde_json::Value, String> {
     let url = format!("{}{path}", super::daemon_base());
     let client = reqwest::Client::builder()
         .timeout(std::time::Duration::from_secs(5))

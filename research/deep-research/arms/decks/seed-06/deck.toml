@@ -1,0 +1,11 @@
+version = 1
+
+# The v0 ESTATE deck for seed-06 — the estate exemplar document for the seed's
+# question (see arms/decks/README.md for the provenance + single-origin shape).
+
+[[hit]]
+match = ['CrowdStrike', 'Falcon', 'outage', 'Windows', '8.5 million']
+url = "https://estate.example/seed-06"
+title = "The CrowdStrike outage (2024-07-19)"
+snippet = "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices."
+body = "seed-06.md"

@@ -429,6 +429,44 @@ typed into a design file. If the caption says it, the machine reported it.
 
 **Exports.** `b9-shelf` — outro clip.
 
+### B10 — Deep research: a question, a budget, a checked report
+
+**Claim.** Ask with a budget and a typed release; watch the rounds, the
+gate's named gaps, and the budget ledger live; read the checked report
+with its verdicts — every `[passed]` figure traced in the evidence.
+
+**Choreography.** Chat empty state → Deep research. The Ask entry: the
+question typed, rounds/search/fetch budget, the estate-first corpus
+chips, and the consent grant — default-deny standing, then a typed
+public-web release. Start the run; the live view renders the round, the
+gate's gap list, the budget ledger, and the consent-grant status — all
+read from the run dir the verb writes. The run closes; the report view
+renders the verb's own checked report: claims with verdict + corroboration
+accounting, residue, reframe, and the constitution position. Find it in
+Library.
+
+**Proof.**
+- The live view's stage/round/run-id, meters (`N spent` / `N remaining`),
+  and consent status appear **after** the verb names its run dir — the
+  desktop renders the run-dir artifacts, never a second state source.
+- The report view's question and body are the verb's artifacts.
+- The constitution position (order t3b's (g)): `dr-constitution` reads
+  "Position holds — N [passed] claims, every figure traced in the
+  evidence" or the honest zero-claim variant; `dr-constitution-violations`
+  is **absent** — a named violation turns the beat red.
+- The Library handoff: `Find it in Library` lands on the Library surface.
+
+**Determinism.** The run is served from the bank v1 report-class deck
+(`SOVEREIGN_DEMO_DR_FLAGS` → `--backend mock --mock-deck <deck>`, set in
+demo global-setup, declared in `quality/env-flags.toml`): search/fetch
+resolve against the deck, drafts still run on the real daemon. The deck
+is the single evidence source, so the constitution check is asserted for
+real. Consent honesty: the typed public-web grant is recorded in the
+run's charter; the deck serves every hit, so nothing leaves the machine —
+the caption says exactly that.
+
+**Exports.** `b10-deep-research`. GIF on the `report-ready` mark.
+
 ---
 
 ## 3. Beat → surface → risk
@@ -444,6 +482,7 @@ typed into a design file. If the caption says it, the machine reported it.
 | B7 | Pi | Hand-recorded by physics (§2.1); the claim rides on the bench report, not on the footage |
 | B8 | Ask (code) | Retrieval must land on code, not on tests describing code |
 | B9 | Library | Nothing — but the caption numbers must stay live-read |
+| B10 | Ask → Deep research → Library | A real run is minutes long; the constitution position must hold against the deck-served evidence |
 
 ---
 

@@ -1,0 +1,273 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1786945181",
+  "charter_hash": "25047f37a84000a2",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+      "title": "8 Minutes to Master Solving Sealed Bid First Price Auction Problems",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+      "title": "[PDF] Asymmetric First-Price Auctions with Uniform Distributions: Analytic ...",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://python.quantecon.org/two_auctions.html",
+      "title": "140. First-Price and Second-Price Auctions — Intermediate Quantitative Economics with Python",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://brocku.ca/repec/pdf/0504.pdf",
+      "title": "asymmetricfpa24.dvi",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://kasberger.github.io/assets/pdf/fpa_robust.pdf",
+      "title": "[PDF] Robust Bidding in First-Price Auctions: - Bernhard Kasberger",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://archive.math.arizona.edu/rbt/auctions.PDF",
+      "title": "[PDF] EQUILIBRIUM BIDDING STRATEGIES IN COMMON-VALUE SEALED-BID ...",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2608.00334v1",
+      "title": "Pure-Strategy Equilibrium in the Generalized First-Price Auction",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://brocku.ca/repec/pdf/0504.pdf",
+      "title": "[PDF] A Simple Approach to Analyzing Asymmetric First Price Auctions",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://kasberger.github.io/assets/pdf/fpa_moment.pdf",
+      "title": "[PDF] An Equilibrium Model of the First-Price Auction with Strategic ...",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf",
+      "title": "[PDF] Numerical Analysis of Asymmetric First Price Auctions",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://drpress.org/ojs/index.php/jid/article/download/33679/32955",
+      "title": "[PDF] Price Sealed-Bid Auctions: A Bayesian Nash Equilibrium ...",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "http://www.econport.org/content/handbook/auctions/auctionsexperiments/auctionsbneandfirstprice.html",
+      "title": "EconPort - Bayesian Nash Equilibrium in First-Price Auctions",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+      "title": "8 Minutes to Master Solving Sealed Bid First Price Auction Problems",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://econtheory.org?f=4555",
+      "title": "Theoretical Economics | The Econometric Society",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ifaamas.org/Proceedings/aamas2020/pdfs/p1458.pdf",
+      "title": "Bayesian Nash Equilibrium in First-Price Auction with Discrete",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/pdf/1906.09403",
+      "title": "Bayesian Nash Equilibrium in First-Price Auction with ...",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ideas.repec.org/a/eee/ecolet/v263y2026ics0165176526001369.html",
+      "title": "Uniqueness of equilibrium in asymmetric first-price auctions",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://users.eecs.northwestern.edu/~hartline/papers/unique-bne-EC-13.pdf",
+      "title": "Proceedings Article Auctions with Unique Equilibria",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://vinci.cs.uiowa.edu/~hjp/download/HoCE.pdf",
+      "title": "On the Numerical Solution of Equilibria in Auction Models ...",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dl.acm.org/doi/abs/10.5555/3398761.3398929",
+      "title": "Bayesian Nash Equilibrium in First-Price Auction with Discrete Value Distributions | Proceedings of the 19th International Conference on Autonomous Agents and MultiAgent Systems",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.carloalberto.org/wp-content/uploads/2018/11/no.291.pdf",
+      "title": "On the Numerical Solution of Equilibria in Auction Models ...",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/333993469_Bayesian_Nash_Equilibrium_in_First-Price_Auction_with_Discrete_Value_Distributions",
+      "title": "(PDF) Bayesian Nash Equilibrium in First-Price Auction with Discrete Value Distributions",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://economics.mit.edu/sites/default/files/inline-files/Lectures+19-21+-+Bayesian+Nash+Equilibria,+Auctions+and+Introduction+to+Social+Learning.pdf",
+      "title": "6.207/14.15: Networks Lectures 19-21: Incomplete Information: Bayesian Nash",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://hackernoon.com/bid-shading-fundamentals-traditional-techniques-and-algorithms-part-1",
+      "title": "Bid Shading Fundamentals: Traditional Techniques and ...",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2009.09259v1",
+      "title": "Bid Shading by Win-Rate Estimation and Surplus Maximization",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://epom.com/blog/programmatic/bid-shading",
+      "title": "Bid Shading Alchemy: Turning Your Cost Management Strategy into Gold",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.anderson.ucla.edu/sites/default/files/document/2025-09/bidding%20strategies%20in%20ad%20auctions%20Sep%202025.pdf",
+      "title": "[PDF] Slim Shading in Ad Auctions: Adjustment of Bidding Strategies to ...",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions",
+      "title": "(PDF) Linear Bid in Asymmetric First-Price Auctions - ResearchGate",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ifo.de/DocDL/cesifo1_wp10312.pdf",
+      "title": "Nonparametric Estimation of Sponsored Search Auctions ...",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://papers.ssrn.com/sol3/Delivery.cfm/6463482.pdf?abstractid=6463482&mirid=1",
+      "title": "[PDF] Bid Shading as Option Pricing",
+      "score": 0.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "http://www.parisschoolofeconomics.com/compte-olivier/Chapter11Auctions.pdf",
+      "title": "[PDF] Auctions - Paris School of Economics",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ungated.research.bowdoin.edu/article/3958",
+      "title": "Bid Shading and Bidder Surplus in the US Treasury Auction System",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.freewheel.com/insights/blog/what-is-bid-shading",
+      "title": "The Ins and Outs of Bid Shading | FreeWheel",
+      "score": 0.0,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}
