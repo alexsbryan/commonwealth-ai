@@ -55,10 +55,22 @@ pub const KIND: &str = "sec_edgar";
 
 const TICKERS_URL: &str = "https://www.sec.gov/files/company_tickers.json";
 
-/// SEC's fair-access policy requires a declaring User-Agent; requests
-/// without one are throttled or refused. Overridable per-recipe via the
-/// `user_agent` param so a redistributor can name their own contact.
-const DEFAULT_USER_AGENT: &str = "commonwealth-ai/0.1 (sovereign corpus installer)";
+/// SEC's fair-access policy requires a User-Agent that names a REACHABLE
+/// CONTACT, not merely a product. Measured 2026-08-16, same URL, same
+/// second, one variable changed:
+///
+/// ```text
+/// UA "commonwealth-ai/0.1 (sovereign corpus installer)"                    -> 403
+/// UA "commonwealth-ai/0.1 (sec-filings-corpus; alexbryan01@gmail.com)"     -> 200
+/// ```
+///
+/// So a contactless default is not a stylistic choice, it is a
+/// guaranteed refusal. The recipe supplies the real value through the
+/// `contact` parameter, where the user can SEE it and replace it with
+/// their own; this constant is only the fallback for a params blob that
+/// omits `user_agent` entirely. `scripts/setup-sec-corpus.sh:28` carries
+/// the same string for the script path.
+const DEFAULT_USER_AGENT: &str = "commonwealth-ai/0.1 (sec-filings-corpus; alexbryan01@gmail.com)";
 
 /// Prose part sizing. Each part must become ONE chunk: the engine
 /// prepends the doc title to every chunk AFTER the chunker bounds
@@ -496,10 +508,21 @@ async fn get_bytes(client: &reqwest::Client, url: &str, ua: &str) -> Result<Vec<
         .send()
         .await?;
     let status = resp.status();
+    if status == reqwest::StatusCode::FORBIDDEN {
+        // The single most likely cause, named precisely rather than left
+        // as a generic HTTP failure: SEC refuses a User-Agent that does
+        // not carry a reachable contact.
+        return Err(Error::Recipe(format!(
+            "SEC refused the request (403) for {url}. Its fair-access policy requires a \
+             User-Agent naming a REACHABLE CONTACT — a product name alone is refused. \
+             This install sent `{ua}`. Supply your own with the recipe's `contact` \
+             parameter. Nothing was installed."
+        )));
+    }
     if !status.is_success() {
         return Err(Error::Recipe(format!(
-            "SEC returned {status} for {url}. SEC's fair-access policy requires a \
-             declaring User-Agent and throttles bursts; nothing was installed."
+            "SEC returned {status} for {url} (User-Agent `{ua}`). SEC throttles bursts; \
+             nothing was installed."
         )));
     }
     Ok(resp.bytes().await?.to_vec())

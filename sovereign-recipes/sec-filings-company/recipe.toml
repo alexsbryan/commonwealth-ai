@@ -38,7 +38,7 @@
 #             full-size chunks from titled docs are structurally over-limit.
 #             See setup-proxy-corpus.sh's header for why local_file beats
 #             the http_api acquirer for EDGAR documents.
-#   facts/  — per-concept XBRL fact files rendered by scripts/sec_facts.py
+#   facts/  — per-concept XBRL fact files rendered by sec_facts_render
 #             (THE one decider) from data.sec.gov companyfacts via the
 #             concept-map.toml registry. Rendered, not extracted in-engine:
 #             the `json` extractor cannot carry companyfacts (content_field
@@ -80,6 +80,19 @@ type = "string"
 description = "Stock ticker of the company to install, e.g. AAPL. A bare CIK also works. Resolved against SEC's company_tickers.json — an unknown symbol is refused by name, never matched to a near neighbour."
 required = true
 
+# SEC's fair-access policy refuses a User-Agent that does not name a
+# REACHABLE CONTACT — measured 2026-08-16 against company_tickers.json:
+# a product-only UA gets 403, the same request with a contact gets 200.
+# So this is not optional politeness, it is the difference between an
+# install and a refusal. Defaulted so a ticker stays the only thing a
+# user MUST supply, and declared (rather than hidden in a constant) so
+# the value being sent on their behalf is visible and replaceable.
+[parameters.contact]
+type = "string"
+description = "Contact address sent to SEC in the User-Agent, as its fair-access policy requires. Replace with your own if you would rather SEC contacted you about this traffic."
+default = "alexbryan01@gmail.com"
+required = false
+
 # ─── Acquisition ─────────────────────────────────────────────────────
 #
 # `sec_edgar` (sovereign-tools, registered on the engine at
@@ -95,7 +108,7 @@ required = true
 [acquire]
 type = "custom"
 kind = "sec_edgar"
-params = { ticker = "{ticker}" }
+params = { ticker = "{ticker}", user_agent = "commonwealth-ai/0.1 (sec-filings-corpus; {contact})" }
 
 # Authority declaration (FINANCIAL_CORPORA §7.3): the `sec_facts` tool is
 # AUTHORITATIVE for this corpus's figures. Its typed store answers with
@@ -126,7 +139,8 @@ vector = true
 # No [enrichment] table: the product bars are carried elsewhere (order
 # sec-filings-harden, FINANCIAL_CORPORA.md §6). Figures reach the user via the
 # `sec_facts` tool (sovereign-tools) reading the typed sidecar sec_facts.json
-# that scripts/sec_facts.py render writes and setup-sec-corpus.sh installs
+# that sovereign-tools/src/sec_facts_render.rs writes and the install path
+# places
 # into the corpus INDEX dir; explanations (F4) ride retrieval over prose/ with
 # quote_verification's verbatim-or-demoted bar. Atom-level `investigation`
 # enrichment (SCHEMA.md:114) remains a later-order candidate.

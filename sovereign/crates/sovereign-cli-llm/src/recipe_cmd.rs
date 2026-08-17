@@ -576,7 +576,12 @@ fn build_stub_engine() -> CorpusEngine {
     // Use a temporary location for downloads; the engine's index_dir is
     // unused since we never write a production index.
     let tmp = std::env::temp_dir().join("sovereign-recipe-test");
-    CorpusEngine::new(tmp.clone(), tmp, stub_embed)
+    let engine = CorpusEngine::new(tmp.clone(), tmp, stub_embed);
+    // `recipe test`'s one networked step is the frozen-sample capture,
+    // which runs the recipe's real acquirer. A recipe naming a custom
+    // kind is untestable unless that kind is registered here too.
+    sovereign_tools::sec_edgar::register(&engine);
+    engine
 }
 
 // ── `recipe publish` ─────────────────────────────────────────────────────────
