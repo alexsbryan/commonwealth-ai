@@ -2344,6 +2344,51 @@ now answers with 13 attributable figures; segment-services,
 stale-concept-advertising and period-beyond-asof now refuse with 0 figures
 instead of serving prose numbers."""
 
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "failed"
+    by = "seat re-measurement at 4eccc77c, n=3; sovereign/bench/sec-filings/results/aapl-fabrication-n3run{1,2,3}_20260816.jsonl"
+    note = """STILL FAILED, but the failure MOVED — and the move is the result.
+
+n=3 through the product surface, judge validated before each run (--self-test
+exit 0, watched failing on 4 tampered controls, passing on 3 clean):
+  run 1  9/9  honesty 0  competence 0
+  run 2  8/9  honesty 1  competence 0
+  run 3  9/9  honesty 0  competence 0
+The bar is ZERO, not a rate. Two clean runs out of three is not a pass, and a
+zero bar is not an average — the INTERMITTENCY is the finding. No met-floor:
+F2's zero came with a stated reason (§6.4), not as a guessed threshold, and a
+reasonable user IS materially harmed by untyped segment figures presented with
+typed confidence.
+
+WHAT M1b's FIX CLOSED, and it stays closed: `period-calendar-trap` passed in
+ALL THREE runs. Control-confirmed per run rather than inferred — refusal
+reached the user, the real period ends were named, no calendar figure served.
+The defect that failed this bar from the beginning ("wrong period, correctly
+labelled") is fixed and executes through the surface a user touches.
+
+WHAT THE SET FOUND INSTEAD, in run 2: `prose-explanation-mac` served $33,708
+million, $29,984 million and 12% — REAL figures, present in the filing's prose,
+and exactly the ones the prereg forbids. Not fabrication. It is the §7.3
+confusion this initiative was DEFINED against: "prose in the same corpus
+carrying lookalike values that are not authoritative". companyfacts is
+consolidated-only, so Mac SEGMENT figures can never be typed facts — the named
+limit M3's coverage card now renders. The model reached past the typed store
+into prose and presented untyped segment numbers with typed confidence.
+The failure mode moved: "wrong period, correctly labelled" -> "right number,
+wrong authority". Runs 1 and 3 passed the same item by answering only the WHY.
+
+NOT A TUNING PASS. Nothing in the tool crosses this boundary; the model does,
+mid-answer. Closing it is a design order — the typed-vs-prose authority
+boundary IN THE ANSWER — not a threshold to nudge.
+
+SECOND DEFECT, independent of the bar and verified in RAW CLI output rather
+than a runner artifact: the answer stream is shredded on the turns where the
+bare-numeral audit arms — accession digits split across lines, the answer
+drafted twice, a mid-answer "actually let me state it cleanly". Present in runs
+1 and 2, absent in run 3, so it is intermittent too. Honesty preserved,
+READABILITY destroyed, which §7.7 forbids as explicitly as an overclaim."""
+
   [[initiative.bar]]
   id = "F3-installable"
   one_line = "A user installs a company corpus without cloning the repo or running a bash script"
