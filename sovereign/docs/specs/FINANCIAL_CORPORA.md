@@ -195,11 +195,42 @@ supplied values and the UI affordance shown to the user". The desktop already
 has `corpus_get_recipe_parameters` and `corpus_install_with_parameters`
 (`sovereign-desktop/src-tauri/src/recipe_commands.rs`). No new install UI.
 
+**CORRECTION (2026-08-16, order sec-filings-install-journey).** "No new install
+UI" was wrong. The two Tauri commands exist and so do their typed TS wrappers,
+and the daemon route genuinely threads parameters end to end
+(`routes_internal/corpus_ingest.rs:803-815` resolves them onto the recipe before
+ingest spawns). But `grep -rn 'RecipeParameters|installWithParameters'` over the
+desktop `src/` returns hits in `lib/api.ts` ONLY: no component calls either. The
+plumbing is complete; the form that drives it does not exist and must be built.
+
 ### §7.2 The four scenes
 
 1. **Catalog** — user sees "SEC Filings — Single Company" (F3, landed).
 2. **Install asks a question, not a config** — "Which company?" -> `AAPL`,
    rendered from `ParameterSpec.kind`, interpolated into `[acquire]`.
+
+   **CORRECTION (2026-08-16, same order).** "Interpolated into `[acquire]`" was
+   wrong for this corpus, and the difference is not cosmetic. `[parameters]`
+   does string SUBSTITUTION; ticker -> filing is RESOLUTION. The document URL
+   must be COMPOSED from three parallel arrays in the submissions JSON
+   (`form[i]` / `accessionNumber[i]` / `primaryDocument[i]`), and `http_api`'s
+   `FollowConfig.document_url_path` is a JSONPath selecting URL *strings* it
+   fetches verbatim — no join, no templating, no chaining. So no placeholder in
+   any built-in acquirer reaches the filing. This CONFIRMS `proxy-company`'s
+   `http_api`-vs-`local_file` finding from a second endpoint rather than
+   reversing it. The ticker interpolates into a CUSTOM acquirer
+   (`sovereign-tools/src/sec_edgar.rs`, kind `sec_edgar`) which does the
+   resolution; the scene the user sees is unchanged.
+
+   Also settled here: the corpus is SINGLE-INSTANCE. Install resolves the
+   recipe by `corpus_id` and installs under the recipe's own `[corpus] id`
+   (`corpus_ingest.rs:157,768`), and no per-install id derivation exists —
+   `id_template` is absent from the whole workspace. Every parameterized recipe
+   is therefore single-instance today (`federal-register-presidential` has
+   `[parameters.year]` against a fixed id). Installing a second company
+   REPLACES the first, and the acquirer states that naming both companies.
+   Multi-company from the catalog needs id derivation taught to the install
+   route, progress, status, uninstall and mesh-sharing — a seam, priced as one.
 3. **Corpus card states what it can answer** — concepts covered, period range,
    as-of filing, and the named limits ("segment figures such as Services revenue
    are not available; SEC's consolidated API does not carry them"). This is F5

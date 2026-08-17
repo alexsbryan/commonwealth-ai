@@ -332,17 +332,22 @@ parent_corpus_id = "enron-sample"
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/enron-sample-multi-wide/recipe.toml"
 sha256 = ""
 
-# Template recipe (on_demand): never installed under this id. A user installs
-# a company by ticker — scripts/setup-sec-corpus.sh <TICKER> materializes a
-# per-company override (sec-cik<10-digit>) with prose + typed XBRL facts +
-# the sec_facts.json sidecar the `sec_facts` tool answers from. Registered so
-# the catalog names the capability and fetch_recipe() can resolve the template
-# (`sha256 = ""` -> the bundled in-repo recipe wins, as for
-# brothers-karamazov-book-1 below).
+# Installed by TICKER: `[parameters.ticker]` feeds the `sec_edgar` acquirer,
+# which resolves the symbol to a CIK, selects the 10-K and fetches the bytes.
+# One company at a time under this id — a second install is a NAMED
+# replacement, not a silent swap. Several companies at once still go through
+# scripts/setup-sec-corpus.sh, which materializes CIK-keyed overrides, so the
+# two paths' namespaces cannot collide. (`sha256 = ""` -> the bundled in-repo
+# recipe wins, as for brothers-karamazov-book-1 below.)
+#
+# catalog_status stays `preview` — the install button is deliberately off
+# until the whole journey is proven, including the typed fact store the
+# `sec_facts` tool answers from. Arming it before then would ship a button
+# that installs a corpus which cannot answer a figure.
 [[recipes]]
 id = "sec-filings-company"
 name = "SEC Filings — Single Company (10-K + typed facts)"
-description = "A public company's SEC Form 10-K prose plus typed XBRL figures that answer with fiscal-period basis and accession citation, or refuse naming what IS available — never approximated. Install per company by ticker via scripts/setup-sec-corpus.sh (e.g. AAPL -> sec-cik0000320193); the template is never installed directly."
+description = "A public company's SEC Form 10-K prose plus typed XBRL figures that answer with fiscal-period basis and accession citation, or refuse naming what IS available — never approximated. Pick the company by ticker at install time (e.g. AAPL). Holds one company at a time; installing another replaces it, and says so."
 license = "Public Domain (17 USC §105 — SEC filings)"
 size_compressed_gb = 0.01
 size_indexed_gb = 0.05

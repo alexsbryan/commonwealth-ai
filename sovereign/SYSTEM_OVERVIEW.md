@@ -254,9 +254,19 @@ The catalog (`registry.toml`) lists 27 recipes: `wikipedia`,
 `openalex`, `gutenberg`, `gutenberg-work`, `crs_reports`, `us-code`,
 `olc-opinions`, `scotus-opinions`, `federal-register-presidential`,
 `conversations-anthropic`, `conversations-chatgpt`,
-`sec-filings-company` (template, never installed under its own id:
-per-company 10-K prose + typed XBRL figures, materialized as
-`sec-cik<10-digit>` by `scripts/setup-sec-corpus.sh`; the
+`sec-filings-company` (one public company's 10-K prose + typed XBRL
+figures, installed BY TICKER under its own id: `[parameters.ticker]`
+feeds the `sec_edgar` custom acquirer in
+`sovereign-tools/src/sec_edgar.rs`, registered on the engine at
+`daemon_cmd/bootstrap.rs::build_corpus_engine`, which resolves
+ticker -> CIK, selects the 10-K NAMING every in-window filing it skips,
+and fetches bytes only. SINGLE-INSTANCE — no `id_template` exists in the
+engine, so a second company REPLACES the first and the acquirer says so
+naming both, recording the resident company in
+`_downloads/sec_edgar_resident.json`. Several companies at once still go
+through `scripts/setup-sec-corpus.sh`, which materializes CIK-keyed
+`sec-cik<10-digit>` overrides with a `local_file` acquire, so the two
+paths' namespaces cannot collide; the
 concept-normalization registry is `concept-map.toml` beside the recipe, its
 one decider is `sovereign-tools/src/sec_facts_render.rs` — a PURE
 `render(RenderRequest) -> RenderOutput` that turns raw companyfacts + the
