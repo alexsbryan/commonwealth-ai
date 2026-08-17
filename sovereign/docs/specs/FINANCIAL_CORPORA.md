@@ -302,11 +302,23 @@ paper. Sequenced so each step is judgeable on its own; each names what it closes
 
 | # | Step | Closes | Status |
 |---|---|---|---|
-| M1 | `[authority]` block + deterministic `claims()` + F2 paired proof | F2; makes F5/F6 judgeable at all | IN FLIGHT (`sec-filings-harden`) |
-| M2 | `[parameters]` ticker block + install path that is not a repo script | F3 **properly** | NOT STARTED |
-| M3 | Coverage card in desktop — concepts, period range, as-of, named limits | F5, F6 on the USER surface | NOT STARTED, UNOWNED |
+| M1 | `[authority]` block + deterministic `claims()` + F2 paired proof | F2; makes F5/F6 judgeable at all | LANDED (`8a38ecad`, `4eccc77c`) |
+| M1b | `ToolContext` carries the turn's question; the tool CHECKS the period it was asked for | F2 — 9/9, both halves zero | LANDED (`d8154c36`, `4eccc77c`) |
+| M2 | `[parameters]` ticker block + install path that is not a repo script | F3 **properly** | IN FLIGHT (`sec-filings-install-journey`) |
+| M2.5 | Scene 4 proven **through the desktop**, not the CLI | F2 on the surface the user actually touches | NOT STARTED |
+| M3 | Coverage card in desktop — concepts, period range, as-of, named limits | F5, F6 on the USER surface | IN FLIGHT (`sec-filings-coverage-card`) |
 | M4 | Engine burn-down (`8ac55cf8`, `9c5929be`) | neither — clears debt this program filed | operator: "at the end" |
 | M5 | Second filer, then widening | F1 beyond one-filer proof | parked (`sec-filings-mag7`) |
+
+**M2.5 added 2026-08-16** (seat, under the operator's grant to run this
+initiative to completion). It is a VERIFICATION step, not a re-scope: no bar
+moves and no scene is dropped. It exists because F2's 9/9 was measured through
+`sovereign-cli chat ask`, and the desktop reaching the same tool is an
+INFERENCE. That inference is exactly the class that cost this program an hour
+on 2026-08-16 — `chat` execs into `sovereign-cli-llm`, not the daemon, and a
+22h-stale sibling made a landed fix read as broken (note 32f6b353). §7.2 scene 4
+says "user asks a question"; a CLI harness is not that user. Same prereg, same
+judge, different driver.
 
 **Named, not scheduled:** dimensional/segment facts from the filing's own XBRL
 instance (companyfacts is consolidated-only); 10-Q so a quarter is not a refusal
