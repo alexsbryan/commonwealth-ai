@@ -616,6 +616,12 @@ pub async fn bootstrap_with_progress(
             sovereign_tools::search::SearchTool::with_orchestrator(
                 Arc::clone(&store),
                 Arc::clone(&inference),
+                // Client built by the egress boundary (order
+                // deep-research-t2a): tools-base is contract-only and
+                // must not construct an egress-capable HTTP client
+                // itself.
+                sovereign_core::egress::search_client()
+                    .expect("egress boundary search client build"),
                 orchestrator,
             ),
         ));

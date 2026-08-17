@@ -18,10 +18,14 @@ pub use assets::{
     DEFAULT_BACKENDS_TOML, SYSTEM_PROMPT, TOOL_DESCRIPTION,
 };
 pub use backend_trait::{
-    BraveBackendImpl, DuckDuckGoBackendImpl, MockBackendImpl, SearchCost, SearchPrivacy,
-    TavilyBackendImpl, WebSearchBackend, WebSearchRegistry,
+    BraveBackendImpl, DuckDuckGoBackendImpl, MockBackendImpl, SearchCost, TavilyBackendImpl,
+    WebSearchBackend, WebSearchRegistry,
 };
-pub use orchestrator::{BudgetView, OrchestratedSearch, SearchOrchestrator, SelectInputs};
+// The privacy posture type moved down to the shared contract crate
+// (so the egress boundary in sovereign-core can consult it); kept
+// here at its historical path so every importer is unaffected.
+pub use orchestrator::{OrchestratedSearch, SearchOrchestrator, SelectInputs};
+pub use sovereign_contracts::types::SearchPrivacy;
 
 use std::collections::HashSet;
 use std::path::PathBuf;

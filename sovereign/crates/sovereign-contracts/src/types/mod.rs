@@ -167,6 +167,8 @@ pub use epistemic::{
 };
 mod custody;
 pub use custody::{join_custody, ChunkCustody, Custody, CUSTODY_META_KEY};
+mod search_privacy;
+pub use search_privacy::SearchPrivacy;
 mod grounding_verdict;
 pub use grounding_verdict::{
     AnswerSegment, DeciderId, GroundingDecision, GroundingVerdict, SegmentKind,

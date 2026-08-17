@@ -317,9 +317,35 @@ impl KnowledgeLookupTool {
         query: &str,
     ) -> Vec<Evidence> {
         use crate::web::search::backend_trait::SearchPrivacy;
-        use crate::web::search::orchestrator::{BudgetView, SelectInputs};
-        let client = reqwest::Client::new();
-        let budget = BudgetView::default();
+        use crate::web::search::orchestrator::SelectInputs;
+        // The ONE egress boundary (order deep-research-t2a): the
+        // client is built by sovereign-core's egress module (the F26
+        // census enforces that this file constructs no reqwest client
+        // of its own), and the query egress passes the release gate
+        // BEFORE it leaves. The query echoes the user's own question —
+        // the release rule's user-formed-query clause (what=="query" &&
+        // user_formed) covers this egress without a grant. A refusal
+        // falls through to an empty web row set (the fn's degraded-but-
+        // valid contract, documented above).
+        let client =
+            sovereign_core::egress::search_client().expect("egress boundary search client build");
+        if let Err(refusal) = sovereign_core::egress::verify(
+            &sovereign_core::egress::EgressPayload {
+                privacy: SearchPrivacy::External { provider: "any" },
+                custody: sovereign_contracts::types::Custody::Personal,
+                what: "query",
+                target: "web-search",
+                detail: query,
+                user_formed: true,
+            },
+            None,
+        ) {
+            tracing::warn!(
+                refusal = %refusal,
+                "knowledge_lookup: web escalation refused by the egress boundary"
+            );
+            return Vec::new();
+        }
         let prefer: Vec<&str> = Vec::new();
         let inputs = SelectInputs {
             query,
@@ -330,7 +356,6 @@ impl KnowledgeLookupTool {
             // only Local backends are configured this falls back
             // to an empty result set.
             max_privacy: SearchPrivacy::External { provider: "any" },
-            budget: &budget,
             prefer: &prefer,
         };
         let result = orchestrator.search(&client, inputs).await;

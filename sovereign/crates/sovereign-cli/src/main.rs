@@ -1053,6 +1053,14 @@ async fn async_main() {
                 // web search, custody-stamped fetch, gap-audited rounds.
                 // In-process and dev-gated like posture: it needs the
                 // oicp client + tools-base web backend, not the daemon.
+                //
+                // The egress boundary's glassbox contract (order
+                // deep-research-t2a): every egress decision — released
+                // or refused — is traced at debug under
+                // `sovereign_core::egress`; the loop only shows them
+                // if a subscriber exists, so the verb installs one.
+                // RUST_LOG still overrides the default filter.
+                util::tracing_init::init_tracing("sovereign_cli=info,sovereign_core::egress=debug");
                 let code = deep_research_cmd::cmd_deep_research(&raw_args[1..]).await;
                 std::process::exit(code);
             }

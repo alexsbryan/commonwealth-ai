@@ -38,6 +38,7 @@ use sovereign_core::deep_research::gym::{
 };
 use sovereign_core::deep_research::icd::{CorpusEntry, Plan};
 use sovereign_core::deep_research::{run, RunConfig, RunOutcome, SearchSource};
+use sovereign_core::egress::{ConsentGrant, EgressPayload};
 use sovereign_core::oicp::ShardingPrivacy;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
@@ -102,7 +103,11 @@ struct CliResearchPort {
     provider: Arc<dyn InferenceProvider>,
     client: reqwest::Client,
     orchestrator: sovereign_tools_base::web::search::SearchOrchestrator,
-    budget: sovereign_tools_base::web::search::BudgetView,
+    /// The run's typed consent grant (order deep-research-t2a): the
+    /// port carries it to the egress boundary for every web-leg
+    /// dispatch. `None` is default-deny — the web leg refuses
+    /// non-public-web payloads (the run's machine-formed queries).
+    consent: Option<ConsentGrant>,
     /// True iff the operator's Tavily key was present at port
     /// construction. The ONE source of the loop's web-backend default
     /// (`default_web_backend`); no second read of the env var exists.
@@ -112,11 +117,12 @@ struct CliResearchPort {
 }
 
 impl CliResearchPort {
-    fn new(provider: Arc<dyn InferenceProvider>) -> Self {
-        let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(30))
-            .build()
-            .expect("reqwest client build");
+    fn new(provider: Arc<dyn InferenceProvider>, consent: Option<ConsentGrant>) -> Self {
+        // The boundary's search-client factory — the ONE construction
+        // site for clients that carry query egress (F26 census:
+        // everything else in this file is LocalDaemon).
+        let client =
+            sovereign_core::egress::search_client().expect("egress boundary search client build");
         let mut registry = sovereign_tools_base::web::search::WebSearchRegistry::new();
         // DuckDuckGo is the zero-config fallback — always registered
         // (the same fallback-first shape the desktop uses).
@@ -142,16 +148,17 @@ impl CliResearchPort {
             "deep-research: web backends: tavily {}, duckduckgo (fallback)",
             if tavily_keyed { "keyed" } else { "absent" }
         );
-        // Budget from the house defaults (budget.tavily daily_calls =
-        // 100 et al.) — the orchestrator's untracked=unlimited default
-        // would otherwise apply on this CLI path.
-        let mut budget = sovereign_tools_base::web::search::BudgetView::new();
-        for (id, entry) in
-            &sovereign_tools_base::web::search::assets::BackendsConfig::from_default_toml()
-                .budget
-                .per_backend
-        {
-            budget.set(id, entry.daily_calls);
+        // The web-leg consent posture is declared once here and
+        // carried to the boundary at every dispatch.
+        match &consent {
+            Some(g) => eprintln!(
+                "deep-research: consent grant for run {} — release floor {} (recorded in the manifest)",
+                g.run_id, g.release_floor
+            ),
+            None => eprintln!(
+                "deep-research: no consent grant — the web leg is default-deny for \
+                 non-public-web payloads (--consent <public-web|peer|personal> to release)"
+            ),
         }
         let orchestrator =
             sovereign_tools_base::web::search::SearchOrchestrator::new(Arc::new(registry));
@@ -165,7 +172,7 @@ impl CliResearchPort {
             provider,
             client,
             orchestrator,
-            budget,
+            consent,
             tavily_keyed,
             indexes: indexes_dir(),
             daemon_endpoint,
@@ -292,6 +299,24 @@ impl ResearchPort for CliResearchPort {
                 ))
             }
         };
+        // The egress boundary's release rule, before any request is
+        // built (order deep-research-t2a, rung 3): the run's queries
+        // are MACHINE-formed (the loop's gap templates — the user's
+        // question folded with estate residue), so they carry the
+        // run's consent grant; without one the leg refuses, typed,
+        // naming what was withheld.
+        sovereign_core::egress::verify(
+            &EgressPayload {
+                privacy: sovereign_tools_base::web::search::SearchPrivacy::External { provider },
+                custody: Custody::Personal,
+                what: "query",
+                target: provider,
+                detail: query,
+                user_formed: false,
+            },
+            self.consent.as_ref(),
+        )
+        .map_err(|r| format!("web search refused: {r}"))?;
         let out = self
             .orchestrator
             .search(
@@ -302,7 +327,6 @@ impl ResearchPort for CliResearchPort {
                     max_privacy: sovereign_tools_base::web::search::SearchPrivacy::External {
                         provider,
                     },
-                    budget: &self.budget,
                     prefer: &[provider],
                 },
             )
@@ -363,6 +387,23 @@ impl ResearchPort for CliResearchPort {
                 .map(|c| c.content)
                 .ok_or_else(|| format!("estate fetch {url}: chunk {chunk_id} not found"));
         }
+        // The fetch URL is a public-web payload (it came from web
+        // search hits) — the boundary releases it unconditionally and
+        // traces the egress event.
+        sovereign_core::egress::verify(
+            &EgressPayload {
+                privacy: sovereign_tools_base::web::search::SearchPrivacy::External {
+                    provider: "web-fetch",
+                },
+                custody: Custody::PublicWeb,
+                what: "url",
+                target: url,
+                detail: url,
+                user_formed: false,
+            },
+            self.consent.as_ref(),
+        )
+        .map_err(|r| format!("fetch refused: {r}"))?;
         sovereign_tools_base::web::extract::fetch_and_extract(&self.client, url)
             .await
             .map_err(|e| format!("fetch {url}: {e}"))
@@ -490,13 +531,14 @@ impl ResearchPort for CliResearchPort {
 /// `svrn deep-research "<question>" [--run-dir DIR] [--max-rounds N]
 /// [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N]
 /// [--fetch N] [--backend auto|mock] [--mock-deck DIR]
-/// [--search-source mock|corpus]`
+/// [--search-source mock|corpus|web] [--consent public-web|peer|personal]`
 pub async fn cmd_deep_research(args: &[String]) -> i32 {
     if args.iter().any(|a| a == "--help" || a == "-h") {
         println!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
              [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
-             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus]"
+             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus|web] \
+             [--consent public-web|peer|personal]"
         );
         return 0;
     }
@@ -513,9 +555,15 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     // directory, drafts via the real daemon.
     let mut backend = "auto".to_string();
     let mut mock_deck_dir: Option<PathBuf> = None;
-    // The acquisition search source (t1g rung 2): a closed set,
-    // decided once here — `mock` (default) or `corpus`.
+    // The acquisition search source (t1g rung 2; rung 3 = web, order
+    // deep-research-t2a): a closed set, decided once here — `mock`
+    // (default), `corpus`, or `web`.
     let mut search_source = SearchSource::Mock;
+    // The run-scoped consent grant's release floor (order
+    // deep-research-t2a): `None` = default-deny — the web leg refuses
+    // non-public-web payloads without a grant. The grant itself is
+    // built once the run id exists (frozen into the charter, FR-3).
+    let mut consent_floor: Option<Custody> = None;
 
     let mut i = 0;
     while i < args.len() {
@@ -531,8 +579,23 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                     None => {
                         eprintln!(
                             "deep-research: unknown search source {:?} — the closed set is \
-                             mock | corpus",
+                             mock | corpus | web",
                             args.get(i).map(String::as_str).unwrap_or_default()
+                        );
+                        return 1;
+                    }
+                }
+            }
+            "--consent" => {
+                i += 1;
+                let s = args.get(i).map(String::as_str).unwrap_or_default();
+                match Custody::parse_wire(s) {
+                    Some(c) if c != Custody::Unknown => consent_floor = Some(c),
+                    _ => {
+                        eprintln!(
+                            "deep-research: unknown consent class {:?} — the closed set is \
+                             public-web | peer | personal",
+                            s
                         );
                         return 1;
                     }
@@ -595,7 +658,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
             }
             s if question.is_none() => question = Some(s.to_string()),
             _ => {
-                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus]");
+                eprintln!("Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus|web] [--consent public-web|peer|personal]");
                 return 1;
             }
         }
@@ -628,7 +691,8 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         eprintln!(
             "Usage: svrn deep-research \"<question>\" [--run-dir DIR] [--max-rounds N] \
              [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N] [--fetch N] \
-             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus]"
+             [--backend auto|mock] [--mock-deck DIR] [--search-source mock|corpus|web] \
+             [--consent public-web|peer|personal]"
         );
         return 1;
     };
@@ -664,6 +728,17 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     let run_id = format!("dr-{}", now_unix());
     let run_dir = run_dir.join(&run_id);
 
+    // The run-scoped consent grant (order deep-research-t2a): minted
+    // once, here, from the operator's `--consent` class — then frozen
+    // (FR-3) into both the port (the egress boundary's check) and the
+    // RunConfig (the manifest record). Default-deny: no flag, no
+    // grant, non-public-web egress refuses.
+    let consent: Option<ConsentGrant> = consent_floor.map(|release_floor| ConsentGrant {
+        run_id: run_id.clone(),
+        granted_at_unix: now_unix(),
+        release_floor,
+    });
+
     let provider: Arc<dyn InferenceProvider> =
         Arc::new(RemoteApiProvider::new(&endpoint, None, &draft_model, 8192));
     // `--backend mock`: search/fetch are served from the deck
@@ -679,7 +754,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
                 return 1;
             }
         };
-        let real = Arc::new(CliResearchPort::new(provider.clone()));
+        let real = Arc::new(CliResearchPort::new(provider.clone(), consent.clone()));
         // The corpus source (t1g rung 2): the mock serves its estate
         // leg from the estate's REAL corpus indexes — the compounding
         // corpus is a search source, opened read-only, queried with
@@ -722,7 +797,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         };
         (Arc::new(mock), MockBackendImpl::BACKEND_ID.to_string())
     } else {
-        let real = Arc::new(CliResearchPort::new(provider.clone()));
+        let real = Arc::new(CliResearchPort::new(provider.clone(), consent.clone()));
         // The web backend default is decided once, by the port, from
         // the operator's key presence (tavily when keyed, duckduckgo
         // otherwise).
@@ -760,6 +835,7 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         web_search_allowance: search_allowance,
         web_fetch_allowance: fetch_allowance,
         posture: ShardingPrivacy::LocalOnly,
+        consent,
     };
 
     let outcome = match run(config, port, provider, Arc::new(AtomicBool::new(false))).await {

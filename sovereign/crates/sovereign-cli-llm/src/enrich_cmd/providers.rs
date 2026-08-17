@@ -207,6 +207,25 @@ pub struct ResolvedProvider {
     pub structured_output_configured: bool,
 }
 
+/// The derived base URL of THIS client's own daemon — the
+/// normalization the built-in `local` entry gets. The ONE derivation
+/// rule (order deep-research-t2a): the egress gate in
+/// `inference_client.rs` compares a resolved provider's `base_url`
+/// against this to decide local-daemon dispatch (never leaves the
+/// machine) vs remote payload (boundary-gated). Backwards compat:
+/// existing atlas configs pass the bare host `http://localhost:9741`
+/// as `base_url`; auto-append `/v1` when the base doesn't already
+/// carry a /vN/ segment, so the dispatcher's
+/// `{base_url}/chat/completions` construction lands at
+/// `/v1/chat/completions`.
+pub(crate) fn local_daemon_base(raw: &str) -> String {
+    if raw.contains("/v1") || raw.contains("/v2") || raw.contains("/v3") {
+        raw.to_string()
+    } else {
+        format!("{}/v1", raw.trim_end_matches('/'))
+    }
+}
+
 /// Registry of every configured provider plus the synthesized
 /// built-in `local` entry. Cheap to clone (Arcs internally would be
 /// nice; for now we hold it by reference at the call site).
@@ -292,19 +311,7 @@ impl ProviderRegistry {
         // Always synthesize the built-in `local` provider, unless
         // the operator explicitly redefined it. Idempotent: if
         // `local` is in the config file, theirs wins.
-        // Backwards compat: existing atlas configs pass the bare
-        // host `http://localhost:9741` as `base_url`. Auto-append
-        // `/v1` when the base doesn't already carry a /vN/ segment,
-        // so the dispatcher's `{base_url}/chat/completions`
-        // construction lands at `/v1/chat/completions`.
-        let local_base = if local_base_url.contains("/v1")
-            || local_base_url.contains("/v2")
-            || local_base_url.contains("/v3")
-        {
-            local_base_url.to_string()
-        } else {
-            format!("{}/v1", local_base_url.trim_end_matches('/'))
-        };
+        let local_base = local_daemon_base(local_base_url);
         providers
             .entry("local".to_string())
             .or_insert_with(|| ResolvedProvider {

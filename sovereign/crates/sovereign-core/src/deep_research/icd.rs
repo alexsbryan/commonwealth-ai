@@ -196,6 +196,14 @@ pub struct CharterValues {
     pub budget: BudgetAllowance,
     pub custody: CustodyPolicy,
     pub url_constraint: UrlConstraintPolicy,
+    /// The run's consent grant, frozen into the charter at launch
+    /// (order deep-research-t2a, Instrument 2 — FR-3). Absent when the
+    /// operator gave no `--consent` (default-deny): the web leg then
+    /// refuses non-public-web payloads. Serialized only when present —
+    /// a no-grant run's charter is byte-identical to the pre-t2a
+    /// shape.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub consent: Option<crate::egress::ConsentGrant>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -688,6 +696,11 @@ pub struct Manifest {
     /// search found something (the section then renders nothing).
     #[serde(default)]
     pub residue: Vec<ResidueRow>,
+    /// The run-scoped consent grant (order deep-research-t2a) — the
+    /// manifest record of the operator's typed release for this run
+    /// (default-deny: absent on a run that released nothing).
+    #[serde(default)]
+    pub consent: Option<crate::egress::ConsentGrant>,
     pub lock: LockRecord,
 }
 

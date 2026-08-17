@@ -29,8 +29,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use sovereign_tools::web::search::{
-    BudgetView, SearchOrchestrator, SearchPrivacy, SelectInputs, TavilyBackendImpl,
-    WebSearchRegistry,
+    SearchOrchestrator, SearchPrivacy, SelectInputs, TavilyBackendImpl, WebSearchRegistry,
 };
 
 const ENV_KEY: &str = "SOVEREIGN_TAVILY_API_KEY";
@@ -75,7 +74,6 @@ async fn tavily_real_query_returns_citable_results() {
     registry.register(Arc::new(backend));
     let orchestrator = SearchOrchestrator::new(Arc::new(registry));
 
-    let budget = BudgetView::new(); // untracked = unlimited
     let out = orchestrator
         .search(
             &client,
@@ -83,7 +81,6 @@ async fn tavily_real_query_returns_citable_results() {
                 query: "rust programming language",
                 max_results: 5,
                 max_privacy: SearchPrivacy::External { provider: "tavily" },
-                budget: &budget,
                 prefer: &["tavily"],
             },
         )
@@ -152,7 +149,6 @@ async fn tavily_invalid_key_degrades_gracefully() {
     registry.register(Arc::new(backend));
     let orchestrator = SearchOrchestrator::new(Arc::new(registry));
 
-    let budget = BudgetView::new();
     let out = orchestrator
         .search(
             &client,
@@ -160,7 +156,6 @@ async fn tavily_invalid_key_degrades_gracefully() {
                 query: "anything",
                 max_results: 5,
                 max_privacy: SearchPrivacy::External { provider: "tavily" },
-                budget: &budget,
                 prefer: &["tavily"],
             },
         )

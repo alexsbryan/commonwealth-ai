@@ -24,6 +24,13 @@ use std::path::{Path, PathBuf};
 /// The meter families this build knows. An unknown family refuses.
 pub const FAMILY_WEB_SEARCH: &str = "web-search";
 pub const FAMILY_WEB_FETCH: &str = "web-fetch";
+/// The t2b frontier-judge family (order deep-research-t2a, R-6).
+/// INERT until t2b wires the judge dispatch: the family is declared
+/// (so the closed set is complete and a t2b spend compiles against
+/// the ONE decider) but nothing in t2a calls it and no allowance is
+/// ever seeded for it — an attempted spend refuses
+/// `no-allowance-or-exhausted`, the fail-closed default.
+pub const FAMILY_FRONTIER_KEY: &str = "frontier-key";
 
 /// The fetch meter's one key.
 pub const KEY_FETCH_PAGES: &str = "pages";
@@ -100,7 +107,10 @@ impl SpendDecider {
         units: u32,
         at_unix: i64,
     ) -> Result<SpendVerdict, String> {
-        if family != FAMILY_WEB_SEARCH && family != FAMILY_WEB_FETCH {
+        if family != FAMILY_WEB_SEARCH
+            && family != FAMILY_WEB_FETCH
+            && family != FAMILY_FRONTIER_KEY
+        {
             return Ok(SpendVerdict::Refuse {
                 family: family.to_string(),
                 key: key.to_string(),
@@ -248,8 +258,19 @@ mod tests {
             }
         );
         // Unknown family → refuse.
-        let v = d.allow("frontier-key", "o3", 1, 0).await.unwrap();
+        let v = d.allow("no-such-family", "o3", 1, 0).await.unwrap();
         assert!(matches!(v, SpendVerdict::Refuse { ref reason, .. } if reason == "unknown-family"));
+        // The t2b frontier-key family is DECLARED but INERT (order
+        // deep-research-t2a, R-6): no allowance is ever seeded for
+        // it in t2a, so an attempted spend refuses fail-closed —
+        // the same no-allowance verdict as any unseeded meter.
+        let v = d
+            .allow(FAMILY_FRONTIER_KEY, "frontier-judge", 1, 0)
+            .await
+            .unwrap();
+        assert!(
+            matches!(v, SpendVerdict::Refuse { ref reason, .. } if reason == "no-allowance-or-exhausted")
+        );
         // Unknown fetch key → refuse.
         let v = d
             .allow(FAMILY_WEB_FETCH, "unknown-key", 1, 0)
@@ -290,12 +311,13 @@ mod tests {
             serde_json::from_str(&std::fs::read_to_string(tmp.join("budget-ledger.json")).unwrap())
                 .unwrap();
         assert_eq!(ledger.icd, "budget_ledger");
-        // Five journaled decisions: the "brave" no-allowance refusal,
-        // two duckduckgo allows, the exhausted refusal, and the
+        // Six journaled decisions: the "brave" no-allowance refusal,
+        // the inert frontier-key no-allowance refusal, two duckduckgo
+        // allows, the exhausted refusal, and the
         // insufficient-allowance refusal. The unknown-family and
         // unknown-key refusals are programmer-error guards, not spend
         // decisions — they are refused before the journal, deliberately.
-        assert_eq!(ledger.entries.len(), 5);
+        assert_eq!(ledger.entries.len(), 6);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 }

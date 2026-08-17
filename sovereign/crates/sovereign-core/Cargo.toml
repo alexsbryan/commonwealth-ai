@@ -29,6 +29,11 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
 thiserror = { workspace = true }
+# The egress boundary (`src/egress.rs`, order deep-research-t2a): the
+# ONE construction site for clients that carry remote-model payloads
+# and search-query egress. The F26 census enforces that no other file
+# constructs a reqwest client.
+reqwest = { workspace = true }
 uuid = { workspace = true }
 futures = { workspace = true }
 tokio = { workspace = true }

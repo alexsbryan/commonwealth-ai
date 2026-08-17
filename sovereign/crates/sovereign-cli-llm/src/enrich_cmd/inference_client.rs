@@ -18,7 +18,12 @@ use corpus_engine::enrichment::pipeline::{
 use corpus_engine::error::{Error, Result};
 use corpus_engine::types::EmbedFn;
 
-use super::providers::{parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider};
+use sovereign_contracts::types::{Custody, SearchPrivacy};
+use sovereign_core::egress::{model_client, verify, ConsentGrant, EgressPayload};
+
+use super::providers::{
+    local_daemon_base, parse_model_spec, ProviderKind, ProviderRegistry, ResolvedProvider,
+};
 
 /// Default chat request timeout. Phase 1 extract on a 27B-Q6 model
 /// emitting up to 16k tokens of structured JSON can run 5–15 minutes
@@ -91,6 +96,27 @@ pub struct DaemonInferenceClient {
     /// model ids without a `provider:` prefix route to `local`,
     /// preserving prior behavior.
     providers: Arc<ProviderRegistry>,
+    /// The egress boundary (order deep-research-t2a): the custody
+    /// class this client declares for payloads it would send to a
+    /// REMOTE provider. Default `Personal` — an enrich extraction
+    /// chunk is the estate's own content and must never leave the
+    /// machine without a consent grant. Local-daemon dispatch (the
+    /// built-in `local` provider) is never gated — that traffic
+    /// never leaves the machine.
+    payload_custody: Custody,
+    /// Run-scoped consent grant, consulted at the boundary when a
+    /// remote provider is resolved. Default `None` — default-deny:
+    /// a remote-provider dispatch refuses with a typed message
+    /// naming what was withheld (the R-5 red, green). The t2b seat
+    /// lands the grant surface for enrich; until then the refusal is
+    /// the product behavior.
+    consent: Option<ConsentGrant>,
+    /// The derived base URL of THIS client's own daemon (the same
+    /// normalization the built-in `local` entry gets — see
+    /// `providers::local_daemon_base`). The gate compares a resolved
+    /// provider's `base_url` against this to tell local-daemon
+    /// dispatch from a remote payload.
+    local_base: String,
 }
 
 /// Cumulative token usage for a chat client. Atomic counters keep
@@ -138,12 +164,16 @@ impl DaemonInferenceClient {
         chat_model: impl Into<String>,
         embed_model: impl Into<String>,
     ) -> Result<Self> {
-        let client = reqwest::Client::builder().timeout(CHAT_TIMEOUT).build()?;
+        // The ONE egress boundary (order deep-research-t2a): the
+        // chat client is built by sovereign-core's egress module (the
+        // F26 census counts this file's remaining sites LocalDaemon),
+        // with enrich's documented 1800s hang headroom passed in.
+        let client = model_client(CHAT_TIMEOUT)?;
         let base_url_str = base_url.into();
         let providers = Arc::new(ProviderRegistry::load_default(&base_url_str));
         Ok(Self {
             client,
-            base_url: base_url_str,
+            base_url: base_url_str.clone(),
             chat_model: chat_model.into(),
             embed_model: embed_model.into(),
             max_output_tokens: None,
@@ -152,7 +182,22 @@ impl DaemonInferenceClient {
             phase_overrides: BTreeMap::new(),
             usage: Arc::new(TokenUsageLedger::default()),
             providers,
+            // Default-deny at t2a: a personal-corpus chunk to a
+            // remote provider refuses unless a consent grant covers
+            // it (the R-5 red → green). The t2b seat lands the grant
+            // surface for enrich.
+            payload_custody: Custody::Personal,
+            consent: None,
+            local_base: local_daemon_base(&base_url_str),
         })
+    }
+
+    /// Install the run-scoped consent grant consulted at the egress
+    /// boundary when a remote provider is resolved. `None` (the
+    /// default) is default-deny.
+    pub fn with_consent(mut self, consent: Option<ConsentGrant>) -> Self {
+        self.consent = consent;
+        self
     }
 
     /// Install per-phase request-shape overrides — temperature,
@@ -359,6 +404,32 @@ impl DaemonInferenceClient {
             model_id
         };
         let effective_max_tokens = max_tokens.or(provider.default_max_tokens);
+        // The egress boundary (order deep-research-t2a, R-5): a
+        // resolved provider whose endpoint is NOT this client's own
+        // daemon is a remote payload — it passes the ONE release gate
+        // BEFORE any request is built. Default custody Personal + no
+        // grant → typed refusal naming what was withheld. Dispatch to
+        // the built-in local provider (endpoint == this daemon) never
+        // leaves the machine and skips the gate.
+        if provider.base_url != self.local_base {
+            verify(
+                &EgressPayload {
+                    privacy: SearchPrivacy::External {
+                        provider: match provider.kind {
+                            ProviderKind::Anthropic => "anthropic",
+                            ProviderKind::OpenaiCompatible => "openai-compatible",
+                        },
+                    },
+                    custody: self.payload_custody,
+                    what: "chunk",
+                    target: &provider.name,
+                    detail: &prompt.user,
+                    user_formed: false,
+                },
+                self.consent.as_ref(),
+            )
+            .map_err(|r| Error::Safety(format!("{r}")))?;
+        }
         match provider.kind {
             ProviderKind::OpenaiCompatible => {
                 self.complete_openai_compatible(

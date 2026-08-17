@@ -228,6 +228,9 @@ pub struct ManifestInput {
     pub alignment: Option<super::icd::AlignmentRecord>,
     /// GAP-3: the epistemic residue — every searched-but-absent query.
     pub residue: Vec<ResidueRow>,
+    /// The run-scoped consent grant (order deep-research-t2a) — the
+    /// manifest record of what the operator released for this run.
+    pub consent: Option<crate::egress::ConsentGrant>,
     pub lock: LockRecord,
 }
 
@@ -248,6 +251,7 @@ pub fn build_manifest(input: ManifestInput) -> Manifest {
         reframe: input.reframe,
         alignment: input.alignment,
         residue: input.residue,
+        consent: input.consent,
         lock: input.lock,
     }
 }

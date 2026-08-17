@@ -56,6 +56,12 @@ use crate::traits::InferenceProvider;
 pub enum SearchSource {
     Mock,
     Corpus,
+    /// The rung-3 variant (order deep-research-t2a): the real web
+    /// leg through the ONE acquisition decider. Dispatches to the
+    /// port's `web_search` identically to `Mock`; the port stamps
+    /// web hits `Custody::PublicWeb`, and the run's consent grant
+    /// gates the query egress at the boundary (default-deny).
+    Web,
 }
 
 impl SearchSource {
@@ -64,6 +70,7 @@ impl SearchSource {
         match s {
             "mock" => Some(SearchSource::Mock),
             "corpus" => Some(SearchSource::Corpus),
+            "web" => Some(SearchSource::Web),
             _ => None,
         }
     }
@@ -72,6 +79,7 @@ impl SearchSource {
         match self {
             SearchSource::Mock => "mock",
             SearchSource::Corpus => "corpus",
+            SearchSource::Web => "web",
         }
     }
 }
@@ -79,13 +87,15 @@ impl SearchSource {
 /// The budget ledger's key for the acquisition search — ONE decider
 /// shared by the allowance map, the continue-to-web gate, and the
 /// per-query spend: the source's key (`corpus` for the corpus source,
-/// the web backend id for the mock). A second key derivation would let
-/// the gate and the spend disagree — the shape that silently ended a
-/// corpus-source run before it searched.
+/// `web` for the web source, the web backend id for the mock). A
+/// second key derivation would let the gate and the spend disagree —
+/// the shape that silently ended a corpus-source run before it
+/// searched.
 fn source_budget_key(source: SearchSource, web_backend: &str) -> String {
     match source {
         SearchSource::Mock => web_backend.to_string(),
         SearchSource::Corpus => "corpus".to_string(),
+        SearchSource::Web => "web".to_string(),
     }
 }
 
@@ -109,6 +119,12 @@ pub struct RunConfig {
     pub web_search_allowance: u32,
     pub web_fetch_allowance: u32,
     pub posture: ShardingPrivacy,
+    /// The run's typed consent grant (order deep-research-t2a) —
+    /// operator-issued once at launch (the CLI's `--consent <class>`),
+    /// frozen into the charter (FR-3), carried by the port to the
+    /// egress boundary, and recorded in the run manifest. `None` is
+    /// default-deny: non-public-web egress refuses.
+    pub consent: Option<crate::egress::ConsentGrant>,
 }
 
 /// The run's terminal report card.
@@ -871,6 +887,7 @@ impl Controller {
             reframe: self.reframe_record.clone(),
             alignment: self.alignment_record.clone(),
             residue: self.residue.clone(),
+            consent: self.config.consent.clone(),
             lock: LockRecord {
                 id: self.lock.id.clone(),
                 acquired_at_unix: self.lock.acquired_at_unix,
@@ -1118,7 +1135,10 @@ impl Controller {
         // R4 search through the ONE decider (web-search family). The
         // SOURCE is a closed set decided once at launch (t1g rung 2):
         // Mock — the deck's term-ranked surface; Corpus — the estate's
-        // corpus-search surface. Same ledger, same allowance — the
+        // corpus-search surface; Web (rung 3, order deep-research-t2a)
+        // — the real web leg through the port, routed identically to
+        // Mock (the port's web_search carries the run's consent grant
+        // to the egress boundary). Same ledger, same allowance — the
         // protocol is unchanged, only the source routes differently. A
         // refused query spends nothing and is journaled in the budget
         // ledger — the ledger is the record.
@@ -1134,7 +1154,7 @@ impl Controller {
             }
             self.search_calls += 1;
             let hits = match self.config.search_source {
-                SearchSource::Mock => self
+                SearchSource::Mock | SearchSource::Web => self
                     .port
                     .web_search(&self.config.web_backend, &query.text, 10)
                     .await
@@ -1389,6 +1409,7 @@ fn build_charter(config: &RunConfig) -> Charter {
                 enabled: true,
                 layer: "sovereign-inference:UrlAllowlistConstraint".to_string(),
             },
+            consent: config.consent.clone(),
         },
         frozen: true,
     }
@@ -1516,6 +1537,7 @@ mod tests {
             web_search_allowance: 4,
             web_fetch_allowance: 4,
             posture: ShardingPrivacy::LocalOnly,
+            consent: None,
         }
     }
 

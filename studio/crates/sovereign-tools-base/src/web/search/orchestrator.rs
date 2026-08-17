@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Search orchestrator — picks a backend per call, respects privacy
-//! and budget, emits tracing, handles fallback.
+//! Search orchestrator — picks a backend per call, respects privacy,
+//! emits tracing, handles fallback.
 //!
 //! The orchestrator is where the policy lives. The trait
-//! (`WebSearchBackend`) says nothing about caching, retry, budget,
-//! or selection — those are orchestrator concerns per ARCH §5.1
+//! (`WebSearchBackend`) says nothing about caching, retry, or
+//! selection — those are orchestrator concerns per ARCH §5.1
 //! (interface segregation). The registry (`WebSearchRegistry`)
 //! holds the open set of backends; the orchestrator filters and
 //! orders that set for each request.
@@ -16,80 +16,48 @@
 //!      privacy gate per ARCH §7.1 — a `LocalOnly` request *cannot
 //!      reach* an External backend because it's never in the
 //!      candidate set.
-//!   3. Filter: drop External backends whose remaining budget is 0.
-//!      Local backends are exempt (they have no cost).
-//!   4. Order by the operator's preference list. Backends not
+//!   3. Order by the operator's preference list. Backends not
 //!      explicitly preferred sort to the end in registry order.
-//!   5. Try each in turn. On `Err`, log + fall through. On `Ok`,
+//!   4. Try each in turn. On `Err`, log + fall through. On `Ok`,
 //!      return immediately.
-//!   6. If every candidate failed (or there were none), return a
+//!   5. If every candidate failed (or there were none), return a
 //!      synthetic 0-results response with `warn!` per ARCH §9.2.
 //!      This is recoverable degradation — the model gets to say
 //!      "no results found" rather than the request hard-failing.
+//!
+//! Per-backend spend is NOT an orchestrator concern since the
+//! budget decider move (order deep-research-t2a, R-6): spend is
+//! gated once, run-scoped, fail-closed, by the `SpendDecider` in
+//! sovereign-core (`deep_research::budget`) — the ONE budget
+//! decider in the workspace. The orchestrator's per-backend
+//! budget-view types and the `SelectInputs` budget field were
+//! removed with that move (R-6 names their identifiers).
 //!
 //! Every selection emits a tracing event per ARCH §9.1 so the
 //! operator can answer "why did this query go to backend X instead
 //! of Y?" from `tracing=debug` alone.
 
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use super::backend_trait::{SearchPrivacy, WebSearchBackend, WebSearchRegistry};
 use super::SearchResult;
 
-/// Per-backend remaining budget. Keys are backend ids
-/// (`"tavily"`, `"brave"`, …). Local backends don't appear
-/// (they're not budget-gated).
-///
-/// The orchestrator only reads this; the budget store
-/// (a separate concern — SQLite-backed counter that resets daily)
-/// owns the writes. Phase 2 ships the read interface; the budget
-/// store lives in its own follow-up so the orchestrator's seams
-/// stay testable without the storage layer.
-#[derive(Debug, Clone, Default)]
-pub struct BudgetView {
-    remaining: HashMap<String, u32>,
-}
-
-impl BudgetView {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    /// Test/fixture helper: every external backend at zero.
-    /// Drives the "all-external-drop" invariant test.
-    pub fn all_zero() -> Self {
-        let mut v = Self::new();
-        v.remaining.insert("tavily".into(), 0);
-        v.remaining.insert("brave".into(), 0);
-        v.remaining.insert("duckduckgo".into(), 0);
-        v
-    }
-
-    pub fn set(&mut self, backend_id: &str, units: u32) {
-        self.remaining.insert(backend_id.to_string(), units);
-    }
-
-    /// Remaining units for a backend. Returns `None` when the
-    /// backend isn't tracked (local backends, or external backends
-    /// the operator hasn't configured a budget for — in which case
-    /// the orchestrator treats them as unlimited).
-    pub fn remaining(&self, backend_id: &str) -> Option<u32> {
-        self.remaining.get(backend_id).copied()
-    }
-}
-
 /// Inputs to one selection call. Built per-request from:
 /// - the agent loop's tool-call args (query, max_results)
 /// - the request's OICP privacy posture (max_privacy)
-/// - the daemon-wide budget view (budget)
 /// - the operator config (`default_backends.toml` — Phase 4)
+///
+/// No budget field: per-backend spend is NOT an orchestrator concern
+/// since the budget decider move (order deep-research-t2a, R-6) —
+/// spend is gated once, run-scoped, fail-closed, by the `SpendDecider`
+/// in sovereign-core. The orchestrator's per-backend budget-view
+/// types and the `SelectInputs` budget field were removed with that
+/// move; the census's R-6 forbidden identifiers are zero here.
 #[derive(Debug)]
 pub struct SelectInputs<'a> {
     pub query: &'a str,
     pub max_results: usize,
     pub max_privacy: SearchPrivacy,
-    pub budget: &'a BudgetView,
     /// Operator preference order. Backends listed earlier are tried
     /// first. Backends not listed sort to the end (registry-arbitrary
     /// order among them). Empty slice = no preference, use registry
@@ -137,7 +105,7 @@ impl SearchOrchestrator {
             tracing::warn!(
                 query_len = inputs.query.len(),
                 max_privacy = ?inputs.max_privacy,
-                "search: no candidate backends survived privacy + budget filter \
+                "search: no candidate backends survived the privacy filter \
                  — returning synthetic 0-results"
             );
             return OrchestratedSearch {
@@ -194,7 +162,6 @@ impl SearchOrchestrator {
             .registry
             .iter()
             .filter(|b| b.privacy().rank() <= max_rank)
-            .filter(|b| budget_allows(b.as_ref(), inputs.budget))
             .cloned()
             .collect();
 
@@ -211,21 +178,6 @@ impl SearchOrchestrator {
                 .unwrap_or((1, 0))
         });
         surviving
-    }
-}
-
-/// "Is this backend's budget non-zero (or untracked)?" — the
-/// orchestrator's gate. Local backends always pass; external
-/// backends pass if either (a) no budget entry exists (untracked
-/// = unlimited per `BudgetView::remaining` contract) or (b) the
-/// entry is > 0.
-fn budget_allows(backend: &dyn WebSearchBackend, budget: &BudgetView) -> bool {
-    if !matches!(backend.privacy(), SearchPrivacy::External { .. }) {
-        return true;
-    }
-    match budget.remaining(backend.id()) {
-        Some(0) => false,
-        Some(_) | None => true,
     }
 }
 
@@ -318,12 +270,10 @@ mod tests {
         let registry = registry_with(vec![Arc::new(tavily), Arc::new(mock)]);
         let orch = SearchOrchestrator::new(registry);
 
-        let budget = BudgetView::new();
         let cands = orch.candidates(&SelectInputs {
             query: "anything",
             max_results: 5,
             max_privacy: SearchPrivacy::Local,
-            budget: &budget,
             prefer: &[],
         });
         let ids: Vec<&str> = cands.iter().map(|b| b.id()).collect();
@@ -348,69 +298,14 @@ mod tests {
         let registry = registry_with(vec![Arc::new(tavily)]);
         let orch = SearchOrchestrator::new(registry);
 
-        let budget = BudgetView::new(); // untracked = unlimited
         let cands = orch.candidates(&SelectInputs {
             query: "anything",
             max_results: 5,
             max_privacy: SearchPrivacy::External { provider: "any" },
-            budget: &budget,
             prefer: &[],
         });
         let ids: Vec<&str> = cands.iter().map(|b| b.id()).collect();
         assert_eq!(ids, vec!["tavily"]);
-    }
-
-    #[tokio::test]
-    async fn external_drop_when_budget_zero() {
-        let tavily = StubBackend {
-            id: "tavily",
-            privacy: SearchPrivacy::External { provider: "tavily" },
-            cost: Some(SearchCost {
-                units_per_call: 1,
-                denomination: "tavily-credits",
-            }),
-            outcome: StubOutcome::Ok(vec![one_result("https://tavily/x")]),
-        };
-        let registry = registry_with(vec![Arc::new(tavily)]);
-        let orch = SearchOrchestrator::new(registry);
-
-        let budget = BudgetView::all_zero();
-        let cands = orch.candidates(&SelectInputs {
-            query: "anything",
-            max_results: 5,
-            max_privacy: SearchPrivacy::External { provider: "any" },
-            budget: &budget,
-            prefer: &[],
-        });
-        assert!(
-            cands.is_empty(),
-            "all-zero budget must drop every external backend"
-        );
-    }
-
-    #[tokio::test]
-    async fn local_backend_unaffected_by_budget() {
-        // Local backends have no cost — they should never be
-        // filtered out by the budget gate, even when "all zero".
-        let mock = StubBackend {
-            id: "mock",
-            privacy: SearchPrivacy::Local,
-            cost: None,
-            outcome: StubOutcome::Ok(vec![one_result("https://local/x")]),
-        };
-        let registry = registry_with(vec![Arc::new(mock)]);
-        let orch = SearchOrchestrator::new(registry);
-
-        let budget = BudgetView::all_zero();
-        let cands = orch.candidates(&SelectInputs {
-            query: "anything",
-            max_results: 5,
-            max_privacy: SearchPrivacy::External { provider: "any" },
-            budget: &budget,
-            prefer: &[],
-        });
-        let ids: Vec<&str> = cands.iter().map(|b| b.id()).collect();
-        assert_eq!(ids, vec!["mock"]);
     }
 
     #[tokio::test]
@@ -436,12 +331,10 @@ mod tests {
         let registry = registry_with(vec![Arc::new(brave), Arc::new(tavily)]);
         let orch = SearchOrchestrator::new(registry);
 
-        let budget = BudgetView::new();
         let cands = orch.candidates(&SelectInputs {
             query: "anything",
             max_results: 5,
             max_privacy: SearchPrivacy::External { provider: "any" },
-            budget: &budget,
             // Operator prefers tavily first, then brave.
             prefer: &["tavily", "brave"],
         });
@@ -473,7 +366,6 @@ mod tests {
         let orch = SearchOrchestrator::new(registry);
 
         let client = reqwest::Client::new();
-        let budget = BudgetView::new();
         let out = orch
             .search(
                 &client,
@@ -481,7 +373,6 @@ mod tests {
                     query: "x",
                     max_results: 5,
                     max_privacy: SearchPrivacy::External { provider: "any" },
-                    budget: &budget,
                     prefer: &["tavily", "brave"],
                 },
             )
@@ -508,7 +399,6 @@ mod tests {
         let orch = SearchOrchestrator::new(registry);
 
         let client = reqwest::Client::new();
-        let budget = BudgetView::new();
         let out = orch
             .search(
                 &client,
@@ -516,7 +406,6 @@ mod tests {
                     query: "x",
                     max_results: 5,
                     max_privacy: SearchPrivacy::External { provider: "any" },
-                    budget: &budget,
                     prefer: &[],
                 },
             )
@@ -530,7 +419,6 @@ mod tests {
         let registry = Arc::new(WebSearchRegistry::new());
         let orch = SearchOrchestrator::new(registry);
         let client = reqwest::Client::new();
-        let budget = BudgetView::new();
         let out = orch
             .search(
                 &client,
@@ -538,7 +426,6 @@ mod tests {
                     query: "x",
                     max_results: 5,
                     max_privacy: SearchPrivacy::External { provider: "any" },
-                    budget: &budget,
                     prefer: &[],
                 },
             )
@@ -575,7 +462,6 @@ aliases = ["test query"]
         r.register(Arc::new(mock));
         let orch = SearchOrchestrator::new(Arc::new(r));
         let client = reqwest::Client::new();
-        let budget = BudgetView::new();
         let out = orch
             .search(
                 &client,
@@ -583,7 +469,6 @@ aliases = ["test query"]
                     query: "test query",
                     max_results: 5,
                     max_privacy: SearchPrivacy::Local,
-                    budget: &budget,
                     prefer: &[],
                 },
             )

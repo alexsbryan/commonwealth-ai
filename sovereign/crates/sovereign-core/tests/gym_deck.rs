@@ -145,6 +145,7 @@ async fn drill_once(run_dir: PathBuf, deck: Deck) -> Manifest {
             web_search_allowance: 8,
             web_fetch_allowance: 8,
             posture: ShardingPrivacy::LocalOnly,
+            consent: None,
         },
         port,
         Arc::new(GarbageJudge),

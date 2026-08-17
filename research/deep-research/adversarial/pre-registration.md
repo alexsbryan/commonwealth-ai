@@ -1481,3 +1481,263 @@ caught the leak class the probe could not (digit-bearing citation
 tails); the class is pre-registered (amendment 2) and the invalidated
 flights were removed, never scored. No measurement exists under the
 leak.
+
+---
+
+## T2a egress boundary — declaration (order deep-research-t2a, declared 2026-08-16 BEFORE any code change or flight, §18.6)
+
+The order's lane is Boundary-first: the two red-first tests (R-5, F26)
+already land the named reds before the boundary code, and the census is
+validated before it measures. This section pre-registers the instrument
+changes that follow — the rung-3 search source, the run-scoped consent
+gate, and the SpendDecider frontier-key arm — before any flight (the
+DEMO-8 flight at the end of the order).
+
+### Instrument 1 — the rung-3 search source (closed set grows: `mock | corpus | web`)
+
+`SearchSource` (sovereign-core `deep_research::mod.rs`) gains a `Web`
+variant: `parse "web"` / `as_str "web"` / source budget key `"web"`.
+`acquire_round`'s dispatch treats `Web` identically to `Mock` — the
+port's `web_search` leg. The port already stamps web hits
+`Custody::PublicWeb` (code, never a model — R-2/R-6); the rung-3
+instrument change is the closed-set variant + dispatch arm, nothing
+else. A `--search-source web` run egresses queries to the configured
+web backend; a `--backend mock` + `--search-source web` run serves the
+web leg from the deck (no egress — the P5 drill shape).
+
+### Instrument 2 — the run-scoped consent grant (default-deny)
+
+The egress boundary (`sovereign-core/src/egress.rs`, the ONE choke
+point for remote-model calls AND query egress) releases a payload iff:
+
+1. the payload's custody is `PublicWeb` (the bar's unconditional
+   release), OR
+2. a run-scoped `ConsentGrant { run_id, granted_at_unix,
+   release_floor: Custody }` covers the payload's custody (floor
+   `personal` covers all; `peer` covers peer + public-web; `public-web`
+   covers public-web only), OR
+3. the payload is a QUERY formed verbatim by the user (the tool path —
+   `user_formed`, declared by the caller, never by a model) — the
+   user's own words leaving at the user's own action.
+
+Everything else refuses, typed, naming what was withheld (custody
+class, what was leaving, the missing/insufficient grant). `Unknown`
+custody always refuses. Every egress event — released or refused — is
+traced at `tracing=debug` (provider/target, payload class, custody
+proof, grant run id when one released it).
+
+The CLI verb gains `--consent <class>` (`public-web | peer | personal`
+— the closed set, a release floor). The grant is frozen into the
+charter at launch (FR-3), carried by the port AND recorded in the run
+manifest (`manifest.json` gains `consent`). Default: no flag, no grant,
+web-search egress refuses — the DEMO-8 refusal case. Enrich's
+`--provider` dispatch absorbs the same boundary with the client's
+defaults `payload_custody = Personal`, `consent = None` — the R-5 red
+turns green with zero assertion changes.
+
+### Instrument 3 — the SpendDecider frontier-key arm (inert until t2b)
+
+`SpendDecider` (sovereign-core `deep_research::budget.rs`, the ONE
+run-scoped fail-closed budget decider — R-6) gains `FAMILY_FRONTIER_KEY`
+("frontier-key") with the fail_closed_table test extended to pin it.
+The arm is INERT until t2b wires the frontier-judge dispatch; nothing
+in t2a calls it. The studio decider is REMOVED in the same commit:
+`budget_allows` (orchestrator.rs), `SelectInputs.budget` +
+`BudgetView` (web/search), `check_budget` / `decrement_budget`
+(search.rs). The R-6 census's forbidden identifiers
+(`budget_allows`, `decrement_budget`, `BudgetView`) go to zero across
+every production src tree, and the census gains a path-scoped check
+that `sovereign-tools-base/src/search.rs` no longer contains a budget
+decider (the global identifier check cannot forbid `check_budget`
+because sovereign-core's conversation-FRAME check is a different
+concept).
+
+### Instrument 4 — the census's boundary row (the same commit as the boundary)
+
+The F26 registry changes WITH the boundary code, in the same commit
+(review-moment contract): `egress.rs` is registered `Boundary` with its
+construction count; `inference_client.rs` drops `RemotePayload` 4 →
+`LocalDaemon` 3 (the chat client construction moves into the
+boundary); `deep_research_cmd.rs` drops `QueryEgress` 2 → `LocalDaemon`
+1 (the probe); `knowledge_lookup/mod.rs` loses its construction (row
+removed); the studio `web/mod.rs` row reclassifies to the fetch site
+(`InboundOnly`). The census is the instrument — it fails on any
+registry/count drift, and the gate is the two reds re-run green.
+
+### What is NOT changing
+
+The bar texts (dr-egress, dr-budget-one-decider) are frozen; only the
+transitions flip, on measured evidence. The deck/mock flight path
+egresses nothing (its search/fetch legs are local) — no consent
+required there, and the measurement batteries are unaffected. The
+`check_budget` name stays legal globally because the conversation-FRAME
+schema check (frame.rs/conv_frame.rs/session_state.rs) is a different
+concept; the tools-base search decider is removed by path.
+
+### Amendment 2026-08-16 (same day, BEFORE the gates — the landing review's discoveries)
+
+Three findings from the landing review, recorded before any gate or
+flight (append-only, §18.6):
+
+1. **The desktop Search-the-web card carried an egress-class client at
+   the red.** The census's red registry counted
+   `sovereign-desktop/.../commands/conversation.rs` as `LocalDaemon 1`
+   — the landing re-home review found that site is the
+   Search-the-web card's orchestrator client, dispatching External
+   queries (DDG/Brave/Tavily) — an egress-class construction the red
+   census mislabeled. Correction: the red was FIVE egress-class sites,
+   not four (inference_client, deep_research_cmd, knowledge_lookup,
+   web/mod, conversation.rs). The landing re-homes conversation.rs's
+   construction into the boundary (`egress::search_client()`, injected
+   like every host), routes its query egress through `verify` with
+   `user_formed: true` (the card click IS the user's own action with
+   the user's own words — the release rule's clause 3 covers it
+   without a grant), drops its `BudgetView` usage with the decider
+   removal (Instrument 3's "zero across every production src tree"
+   covers it), and the row is removed with the site.
+
+2. **`model_client` takes the timeout as a parameter.** Enrich's chat
+   path carries its documented 1800s hang headroom (Phase-1 extract on
+   a 27B model legitimately runs 5–15 minutes; the 120s draft default
+   would have silently killed real campaigns — verified 2026-04-25).
+   The boundary's remote-model factory is
+   `model_client(timeout: Duration)` — one construction site, caller
+   names the policy. The census `Boundary` row still counts 2 sites.
+
+3. **The decider removal's full wake.** Beyond orchestrator.rs and
+   search.rs: the `BudgetView` re-export in `web/search/mod.rs` was
+   dropped; the two real-network e2e tests (duckduckgo_real_e2e,
+   tavily_real_e2e) lost their budget-view usage (TestOnly — compile
+   surface only); `WebSearchTool::new` was removed (its only caller,
+   the recipe-agent live trial, now injects the boundary client); the
+   three production hosts (server main.rs, desktop state.rs, chat
+   bootstrap) inject `egress::search_client()` at construction. No
+   count in Instrument 4 changes beyond the conversation.rs row above.
+
+4. **The release rule's `covers` comparison was inverted — the gate
+   caught it before any flight.** `ConsentGrant::covers` compared
+   `restrictiveness(payload) >= restrictiveness(floor)`; with
+   PublicWeb=0 < Peer=1 < Personal=2 that released a *personal*
+   payload under a *public-web* grant — the exact inversion of the
+   pre-registered contract (Instrument 2: "`public-web` covers
+   public-web only"). The unit test
+   `grant_floor_covers_and_refuses_by_class` (already in the tree,
+   unchanged) failed: `verify` returned `Ok(())` where the pinned
+   semantics require a typed refusal. Fix: `<=` in `covers()`
+   (egress.rs), implementation aligned to the declared contract;
+   no test weakened, no assertion changed. Recorded here BEFORE the
+   DEMO-8 flight (append-only, §18.6).
+
+### Amendment 2026-08-16 (post-gate, pre-flight — the egress-trace observability gap)
+
+The gate chain verified the boundary's code paths; the DEMO-8 flight
+would have been the first live egress. One gap found while preparing
+the flight's trace capture, recorded BEFORE any flight (append-only,
+§18.6):
+
+**The deep-research verb installs no tracing subscriber.** The egress
+boundary's contract (egress.rs module doc: "Every egress event —
+released or refused — is traced at `tracing=debug` under this
+module's target") is unobservable on a flight: `cmd_deep_research` is
+reached from a dispatch arm in sovereign-cli `main.rs` that never
+calls `init_tracing`, so the boundary's `debug!` events compile to
+no-ops. Instrument change (the demo's "egress trace in the
+artifacts" needs the trace to exist): the `deep-research` dispatch
+arm calls `util::tracing_init::init_tracing("sovereign_cli=info,sovereign_core::egress=debug")`
+— the egress decisions (released, with provider + payload class +
+custody + grant run id + floor; refused, with what was withheld) are
+visible at debug on EVERY flight by default (glassbox, ARCH §9), and
+`RUST_LOG` still overrides (the flight captures stderr with the
+filter explicit). No decision path changes; observability only.
+
+## Execution record — T2a (append-only, written after the flights)
+
+Order deep-research-t2a, lane Boundary-first. Every instrument change
+above was declared and recorded BEFORE any flight; this section is
+written after. Nothing below re-negotiates a pre-registered contract.
+
+### What ran, in order
+
+1. **The reds, red-first.** R-5 (`sovereign/crates/sovereign-cli-llm/
+   src/enrich_cmd/egress_reds.rs:96` — a personal-corpus chunk must
+   not reach a remote payload via `enrich --provider`) failed at HEAD
+   and passes with ZERO assertion changes after the fix. R-6 (the F26
+   census) counted FIVE egress-class remote client construction sites
+   outside any boundary at HEAD (inference_client, deep_research_cmd,
+   knowledge_lookup, web/mod, conversation.rs); after the landing the
+   census registers ZERO outside the boundary and the r6 gate scans
+   every production src tree for the retired fail-open deciders
+   (`budget_allows`, `decrement_budget`, `BudgetView`, path-scoped
+   `check_budget`) and reads zero — enforced as a build gate in the
+   standard test suite.
+2. **The ONE boundary** (`sovereign-core/src/egress.rs`): the single
+   choke point for remote-model calls AND query egress, with the
+   release rule pre-registered in Instrument 2 — public-web custody
+   releases unconditionally; a run-scoped ConsentGrant releases what
+   its floor covers; a user-formed query releases; everything else
+   refuses typed, naming what was withheld; Unknown always refuses.
+   The landing review discovered the release-rule inversion (`>=` in
+   `covers()`, released personal under a public-web grant): the
+   pre-existing unit test caught it, the implementation was aligned to
+   the declared contract (Amendment 4), and the flight evidence below
+   measures the corrected rule.
+3. **The one decider** (`deep_research::budget`): run-scoped,
+   fail-closed, hash-seeded at launch (mod.rs), every decision
+   journaled to the run's budget-ledger.json (the ICD artifact); the
+   frontier-key family declared and INERT until t2b — no allowance is
+   ever seeded (the `fail_closed_table` test pins
+   `no-allowance-or-exhausted`).
+4. **Two flights of the SAME question and source**, differing in one
+   flag, after the observability amendment made the boundary's
+   decisions visible at `tracing=debug` on every flight:
+   - dr-1786940564, `--search-source web`, no `--consent`: the first
+     query egress REFUSED before any request was built — `egress
+     refused: query with personal custody to tavily — no run consent
+     grant — the boundary is default-deny for non-public-web payloads
+     (grant absent — default-deny)`. Exit 1, loud; run dir has NO
+     fetch list (zero acquisition spend, zero egress); the ledger
+     journals the single attempted spend (the allowance unit is
+     consumed by the attempt, recorded first).
+   - dr-1786940569, `--search-source web --consent personal`: the
+     grant minted once at launch (run id + floor, frozen in the
+     charter, recorded in the manifest, carried by the port); egress
+     trace shows 4 query releases under the run grant and 4 url
+     releases on public-web custody; every hit engine `web`, every
+     fetched source and every evidence-window chunk custody
+     `public-web`; ledger 8 allows to exactly 0 remaining across both
+     families; terminal `done-partial` with truncation declared; 21
+     verdict-stamped claims (1 passed, 20 could-not-judge).
+5. **The transitions.** dr-egress and dr-budget-one-decider written
+   `to = "met"` on 2026-08-16 with the measured evidence in
+   `quality/initiative-bars.toml` (validated: 13 dr- bars, both met
+   transitions present, 62 additions / 0 deletions vs HEAD); the bar
+   transitions carried verbatim into DEMO-8's bars.md, never
+   hand-typed.
+
+### Measured verdicts
+
+| Gate | Result |
+|---|---|
+| R-5 red-first test | failed at HEAD → passed, zero assertion changes |
+| F26 census (r5 boundary row) | 5 outside-boundary sites at HEAD → 0 after landing, build-gated |
+| F26 census (r6 decider gate) | retired identifiers read 0 in all production src trees |
+| egress unit suite | 9/9 incl. `grant_floor_covers_and_refuses_by_class` |
+| refusal flight | exit 1, typed refusal naming what was withheld, zero egress |
+| consent flight | exit 0 done-partial, 8 allows journaled, custody stamps on every chunk |
+| verify-demo8.sh | all 7 committed-artifact strips pass; live strips (current binary: refusal re-run exit 1 + typed refusal; raw run dir: hits/chunks all public-web) pass |
+| lint --full | exit 0 (13.5s warm) |
+| test --full | 9907 pass / 0 fail, exit 0 |
+
+DEMO-8 (research/deep-research/demo/demo8/) holds the flight artifacts
+— report, manifest, charter, egress trace, refusal transcript + exit
+code, both ledgers, bars.md, and the verify script that re-checks them.
+
+### What the boundary refused to do
+
+The consent flight's web evidence could not attribute a single claim
+to the web's figures (corroboration floor + extracted-specifics-absent
+— 20 of 21 claims could-not-judge, declared in the report). The loop
+did NOT render the web's numbers as facts it could not support. That
+is the honesty machinery doing its pre-existing job on a NEW source —
+the honesty constitution is untouched by this order (t2b carries the
+DRB re-measurement arms).

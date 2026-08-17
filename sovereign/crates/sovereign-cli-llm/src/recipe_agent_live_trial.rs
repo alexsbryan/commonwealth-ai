@@ -1408,8 +1408,13 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         &chat_model,
         8192,
     ));
-    registry.register(Box::new(sovereign_tools::web::WebSearchTool::new(
+    registry.register(Box::new(sovereign_tools::web::WebSearchTool::with_backend(
         inference_for_search,
+        // Client built by the egress boundary (order deep-research-t2a):
+        // tools-base is contract-only and must not construct an
+        // egress-capable HTTP client itself.
+        sovereign_core::egress::search_client().expect("egress boundary search client build"),
+        sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
     let tool_defs = registry_to_tool_defs(&registry);
     eprintln!("Tools:      {} registered", tool_defs.len());

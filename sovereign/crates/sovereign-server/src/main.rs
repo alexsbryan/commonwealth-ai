@@ -409,6 +409,10 @@ async fn main() {
     tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
         Arc::clone(&store),
         Arc::clone(&inference),
+        // Client built by the egress boundary (order deep-research-t2a):
+        // tools-base is contract-only and must not construct an
+        // egress-capable HTTP client itself.
+        sovereign_core::egress::search_client().expect("egress boundary search client build"),
         sovereign_tools::web::search::SearchBackend::DuckDuckGo,
     )));
     #[cfg(not(feature = "net-tools"))]

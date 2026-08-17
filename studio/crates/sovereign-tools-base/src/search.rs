@@ -40,13 +40,24 @@ impl SearchTool {
     /// Create a search tool with web fallback (legacy direct-
     /// backend constructor). Kept for the eight existing call
     /// sites; new code should prefer `with_orchestrator()`.
+    ///
+    /// `client` is INJECTED since the egress boundary move (order
+    /// deep-research-t2a, R-6/F26): this crate is contract-only and
+    /// must not construct an egress-capable HTTP client — the host
+    /// builds it via `sovereign_core::egress::search_client()` and
+    /// passes it in.
     pub fn with_web(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
+        client: reqwest::Client,
         backend: SearchBackend,
     ) -> Self {
         Self {
-            web: Some(WebSearchTool::with_backend(Arc::clone(&inference), backend)),
+            web: Some(WebSearchTool::with_backend(
+                Arc::clone(&inference),
+                client,
+                backend,
+            )),
             store,
             inference,
         }
@@ -56,15 +67,21 @@ impl SearchTool {
     /// trait-based orchestrator. Per the Phase 6 migration in
     /// `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md`, production
     /// callers should reach for this constructor to pick up the
-    /// orchestrator's privacy + budget + fallback chain.
+    /// orchestrator's privacy + fallback chain.
+    ///
+    /// `client` is INJECTED since the egress boundary move (order
+    /// deep-research-t2a): the host builds it via
+    /// `sovereign_core::egress::search_client()`.
     pub fn with_orchestrator(
         store: Arc<dyn StateStore>,
         inference: Arc<dyn InferenceProvider>,
+        client: reqwest::Client,
         orchestrator: Arc<SearchOrchestrator>,
     ) -> Self {
         Self {
             web: Some(WebSearchTool::with_orchestrator(
                 Arc::clone(&inference),
+                client,
                 orchestrator,
             )),
             store,
@@ -214,49 +231,20 @@ impl SearchTool {
             None => return Vec::new(),
         };
 
-        // Check budget.
-        if !self.check_budget().await {
-            return Vec::new();
-        }
-
+        // No budget gate here since the budget decider move (order
+        // deep-research-t2a, R-6): spend is gated once, run-scoped,
+        // fail-closed, by the SpendDecider in sovereign-core — the
+        // ONE budget decider in the workspace. The monthly "web"
+        // SQLite counter that used to live here was removed with
+        // that move; a second decider would let the gates disagree
+        // (the shape R-6 names).
         let search_queries = web.to_search_queries(query).await;
         let results = web.execute_searches(&search_queries).await;
         if results.is_empty() {
             return Vec::new();
         }
 
-        // Decrement budget.
-        self.decrement_budget().await;
-
         web.extract_content(&results, WEB_EXTRACT_LIMIT).await
-    }
-
-    async fn check_budget(&self) -> bool {
-        // If no budget record exists, web search is allowed (no limit configured).
-        let budget = match self.store.get_search_budget("web").await {
-            Ok(Some(b)) => b,
-            _ => return true,
-        };
-        let now = now();
-        // Reset if past reset date.
-        if now > budget.reset_date {
-            return true;
-        }
-        budget.used_this_month < budget.monthly_limit
-    }
-
-    async fn decrement_budget(&self) {
-        if let Ok(Some(mut budget)) = self.store.get_search_budget("web").await {
-            let now = now();
-            if now > budget.reset_date {
-                budget.used_this_month = 1;
-                // Set next reset to ~30 days from now.
-                budget.reset_date = now + 30 * 86400;
-            } else {
-                budget.used_this_month += 1;
-            }
-            let _ = self.store.update_search_budget(&budget).await;
-        }
     }
 
     async fn synthesize(

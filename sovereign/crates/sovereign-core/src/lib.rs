@@ -22,7 +22,12 @@ pub mod archive_classifier;
 pub mod claim_class_classifier;
 pub mod current_info_classifier;
 pub mod deep_research;
+// The egress boundary — the ONE choke point for remote-model calls
+// and search-query egress (order deep-research-t2a, R10). The F26
+// census registers this exact file as the `Boundary` class; a
+// reqwest client construction anywhere else fails the build gate.
 pub mod effort_classifier;
+pub mod egress;
 pub mod lessons;
 pub mod pipeline;
 pub mod plan_grammar;

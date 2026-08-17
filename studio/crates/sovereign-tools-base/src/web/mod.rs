@@ -12,9 +12,7 @@ use sovereign_contracts::traits::{InferenceProvider, Tool};
 use sovereign_contracts::types::*;
 
 use self::extract::fetch_and_extract;
-use self::search::{
-    BudgetView, SearchBackend, SearchOrchestrator, SearchPrivacy, SearchResult, SelectInputs,
-};
+use self::search::{SearchBackend, SearchOrchestrator, SearchPrivacy, SearchResult, SelectInputs};
 
 // ─── WebSearchTool ─────────────────────────────────────────────
 
@@ -28,8 +26,7 @@ use self::search::{
 /// (see `sovereign/docs/PRODUCTION_SEARCH_INTEGRATION.md`):
 ///
 /// - **Legacy**: a single concrete `SearchBackend` enum value. Set by
-///   `new()` and `with_backend()`. The original API; eight call sites
-///   still use it.
+///   `with_backend()`. The original API; the legacy call sites use it.
 /// - **Orchestrated**: an `Arc<SearchOrchestrator>` that picks a
 ///   backend per call from a registry, filtering by privacy and
 ///   budget. Set by `with_orchestrator()`. New code (desktop's Phase 6
@@ -48,36 +45,46 @@ pub struct WebSearchTool {
 }
 
 impl WebSearchTool {
-    /// Create with DuckDuckGo (free, zero-config default). Legacy
-    /// path — new callers should prefer
-    /// `with_orchestrator()`.
-    pub fn new(inference: Arc<dyn InferenceProvider>) -> Self {
-        Self::with_backend(inference, SearchBackend::DuckDuckGo)
-    }
-
     /// Create with a specific search backend. Legacy path; kept for
-    /// back-compat with the eight existing call sites that pass a
-    /// `SearchBackend` enum value.
-    pub fn with_backend(inference: Arc<dyn InferenceProvider>, backend: SearchBackend) -> Self {
+    /// back-compat with the existing call sites that pass a
+    /// `SearchBackend` enum value. (The old zero-argument-default
+    /// `new()` was removed with the egress boundary move, order
+    /// deep-research-t2a: every construction must inject the
+    /// boundary-built client.)
+    ///
+    /// `client` is INJECTED since the egress boundary move (order
+    /// deep-research-t2a): this crate is contract-only and must not
+    /// construct an egress-capable HTTP client (the F26 census is the
+    /// gate) — the host builds it via
+    /// `sovereign_core::egress::search_client()`.
+    pub fn with_backend(
+        inference: Arc<dyn InferenceProvider>,
+        client: reqwest::Client,
+        backend: SearchBackend,
+    ) -> Self {
         Self {
             inference,
-            client: default_client(),
+            client,
             backend: Some(backend),
             orchestrator: None,
         }
     }
 
     /// Create with the trait-based orchestrator. The orchestrator
-    /// holds the registry and applies privacy + budget filtering on
-    /// every selection. Per the Phase 6 migration, this is the
-    /// constructor production code should reach for.
+    /// holds the registry and applies privacy filtering on every
+    /// selection. Per the Phase 6 migration, this is the constructor
+    /// production code should reach for.
+    ///
+    /// `client` is INJECTED since the egress boundary move (order
+    /// deep-research-t2a): see `with_backend`.
     pub fn with_orchestrator(
         inference: Arc<dyn InferenceProvider>,
+        client: reqwest::Client,
         orchestrator: Arc<SearchOrchestrator>,
     ) -> Self {
         Self {
             inference,
-            client: default_client(),
+            client,
             backend: None,
             orchestrator: Some(orchestrator),
         }
@@ -173,7 +180,6 @@ impl WebSearchTool {
     /// constructors set one) returns empty.
     async fn do_one_search(&self, query: &str, max_results: usize) -> Vec<SearchResult> {
         if let Some(orch) = &self.orchestrator {
-            let budget = BudgetView::new(); // Phase 6.5: thread real budget through
             let out = orch
                 .search(
                     &self.client,
@@ -185,7 +191,6 @@ impl WebSearchTool {
                         // privacy postures. Future: receive the
                         // request's OICP privacy and tighten this.
                         max_privacy: SearchPrivacy::External { provider: "any" },
-                        budget: &budget,
                         // Empty prefer: registry order. Operator
                         // override comes through BackendsConfig in a
                         // follow-up wiring step (currently the
@@ -487,15 +492,7 @@ impl Tool for WebFetchTool {
     }
 }
 
-/// Build the reqwest client both WebSearchTool constructors share.
-/// 15s timeout matches the per-call budget the search backends
-/// (DuckDuckGo's two endpoints, Tavily, Brave) expect; redirect
-/// limit of 5 catches typical 30x chains without letting a
-/// redirect loop hang the request.
-fn default_client() -> reqwest::Client {
-    reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .unwrap_or_default()
-}
+// (Removed with the egress boundary move, order deep-research-t2a:
+// the search client is now injected — hosts build it via
+// `sovereign_core::egress::search_client()`. The F26 census
+// registers this file `InboundOnly` for the fetch client only.)
