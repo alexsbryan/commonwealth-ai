@@ -2534,3 +2534,29 @@ printed), the strip-3c fix demonstrated, and the verify script — all
 strips pass against the measured outcome; the failed prediction is the
 headline, never silenced. bars.md is generated verbatim from
 score-report-t2c.json.
+
+## T2d — the open-bar dispositions — EXECUTION RECORD (order deep-research-t2d, appended 2026-08-17)
+
+No gate change in this order — dispositions and consolidation (Lane: verification over authorship, no new mechanisms, no instrument patches — that space closed at t2c, directive 03a0ab98). This section records the four open-bar dispositions the t2c close named; dispositions journaled, never silent. Consolidation record: research/deep-research/notes/dispositions-t2d.md.
+
+### 1. dr-compass — failed (disposition), convergence hypothesis banked
+
+R-12 measured 0/12 seven times (t1c, t1d, t1e, t1f, t1g, t1h, t2c), every measurement journaled inside a dr-local-loop failed transition (bars.toml 2026-08-14..2026-08-17). The structural cause is on the record: the v0 decks are single-origin and the corroboration floor is never weakened — dr-corroboration is MET (a claim whose support set has <2 distinct origins caps at could-not-judge, F22 gym.rs:828), so every round-N audit grows the gap set (1->7->7, 1->15->27, v1 1->26): strict shrink on >=10/12 is structurally unreachable under the met corroboration mechanism on the single-origin v0 estate. Disposition: the bar's `failed` transition written (quality/initiative-bars.toml, dr-compass on 2026-08-17) naming the seven measurements and the structural cause; the convergence hypothesis BANKED as a heap item — the re-cut path runs THROUGH the corroboration mechanism on a multi-origin estate (a re-cut order builds or designates an estate whose evidence spans >=2 distinct origins per claim and re-runs R-12's 12-question battery with the floor as the verdict dimension, as the mechanism already is); NOT an instrument patch. Bar text FROZEN; this disposition is not a re-cut.
+
+### 2. dr-estate-integrity — met (verified at HEAD)
+
+Transition written by the VERIFIED outcome (bars.toml, dr-estate-integrity on 2026-08-17). Clause verification at HEAD, READ-ONLY:
+
+- (a) R6 stance item 2 — fetch failures recorded absent per-source: mod.rs:1276-1277 (F17 comment at the call site), mod.rs:1295-1299 (window.fetch_failures -> failed_sources), mod.rs:944 (report card); fetch.rs:9-11 (module contract), fetch.rs:62-84 (terminal-poll failure records EVERY planned fetch absent:true, spends nothing), fetch.rs:91-131 (per-fetch failures absent:true); F2 deck pins the per-fetch path (gym.rs:1066, gym.rs:1167). VERIFIED.
+- (b) F17 — ingest-laundering asserts loud: the T1 F17 wire is the terminal-state poll (PLAN.md §4 T1); declared estate.rs:106-108, polled FIRST in fetch_round (fetch.rs:62-64), the Err branch is the loud assert (fetch.rs:63-84); fetch-side stamp watched by fetch.rs's custody tests (gym.rs:823, fetch.rs:397). Named residual: the terminal-poll Err branch has no dedicated failing-terminal unit test (deterministic branch; F2 deck pins the adjacent per-fetch path). VERIFIED.
+- (c) F18 — dead-inference enrichment asserts loud: gym.rs:824 names the v1 disposition — "enrich_window is C-class tags in v1 (no inference to die); the faithful-mode asserts are the T2 R7 regime" — a named substitution, §18.3; consistent with enrich.rs:7-10 and enrich.rs:112-143; watched/named discipline pinned by gym.rs:850. VERIFIED.
+
+Red check (F17/F18 asserts fail at HEAD): not red — the deep_research battery passes 88/88 (nextest, sovereign-vulkan toolbox, 2026-08-17).
+
+### 3. Attribution — t1b serves: amendment
+
+dr-corroboration, dr-residue, dr-reframe read met by t1b (verdict directive 90a064c4) but no order's serves: named them — the coverage headline. Fixed: .sovereign/features/deep-research-t1b/order.md serves: now names all three (closed-order frontmatter amendment; the evidence events were already on record: met transitions citing b939bcf6, d2119001 + 8b41d725, 5169e236).
+
+### 4. Run-evidence tidiness — runs-drill-1786761309.log
+
+The untracked t2c battery evidence demo/p5/runs-drill-1786761309.log is already committed — swept into commit 07750430 ("noun convergence") by the noun-convergence session's commit while this order was being drafted (seat-confirmed: HEAD moved 586c1839 -> 07750430, working tree clean). Nothing further to do — no .gitignore addition, no second commit; the file is tracked at HEAD.

@@ -1952,6 +1952,37 @@ seeds ~= 3.6-4 h per compass pass — the weekly tier."""
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
 
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "failed"
+  by = "order deep-research-t2d — the open-bar disposition (dr-compass): R-12 measured 0/12 seven times, each journaled inside a dr-local-loop failed transition; the structural cause on the record; the convergence hypothesis banked as a backlog item (no instrument patch — that space closed at t2c, directive 03a0ab98)"
+  note = """R-12 0/12 measured SEVEN times (t1c, t1d, t1e, t1f, t1g, t1h,
+  t2c), every measurement journaled inside a dr-local-loop `failed`
+  transition in this file (2026-08-14 .. 2026-08-17): t1c — "every
+  round-N audit GROWS the gap set because the corroboration floor
+  caps every single-origin claim (1->7->7, 1->15->27, v1 1->26)";
+  t1d — "structural: the v0 decks are single-origin, the
+  corroboration floor is never weakened, so every audit caps claims
+  and gap sets only grow"; t1e — "structural (single-origin decks +
+  unweakened floor, same shape as t1d)"; t1f — "structural,
+  unchanged shape"; t1g — "structural, unchanged shape, fifth
+  consecutive"; t1h — "structural, sixth consecutive"; t2c —
+  "structural, unchanged shape, seventh consecutive". The structural
+  cause is on the record: the v0 decks are single-origin and the
+  corroboration floor is never weakened — dr-corroboration is MET
+  (a claim whose support set has <2 distinct origins caps at
+  could-not-judge; F22 gym.rs:828, the floor is downgrade-only per
+  this file's dr-corroboration met transition), so every round-N
+  audit caps claims and the gap set only grows: strict shrink on
+  >=10/12 is structurally unreachable under the met corroboration
+  mechanism on the single-origin v0 estate. The convergence
+  hypothesis is BANKED as a heap item (backlog: the re-cut path runs
+  THROUGH the corroboration mechanism on a multi-origin estate); the
+  instrument-patch space is closed (t2c, directive 03a0ab98). This
+  disposition is not a re-cut; the bar text is FROZEN; the red (R-12:
+  convergence at bank scale never observed) stands measured, seven
+  times. Full record: research/deep-research/notes/dispositions-t2d.md."""
+
 [[initiative.bar]]
 id = "dr-compass-handrun"
 one_line = "T0 hand-run: each round's gap set is a strict subset of the previous round's and the gaps are search-actionable, on 3 questions"
@@ -1993,6 +2024,47 @@ split out to dr-estate-visible, which carries the evidence."""
   on = "2026-08-13"
   to = "declared"
   by = "research/deep-research/PLAN.md §6, approved unedited (directive 0411b48f)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "met"
+  by = "order deep-research-t2d — clause verification at HEAD, READ-ONLY (sovereign/crates/sovereign-core/src/deep_research/); the deep_research battery passes 88/88 in the sovereign-vulkan toolbox"
+  note = """All three clauses VERIFIED at HEAD (asserts exist, pass, wired
+  — not presumed); the transition is written by the verified outcome.
+  (a) R6 stance item 2 — fetch failures recorded absent per-source:
+  the module contract at fetch.rs:9-11 ("fetch failures are recorded
+  absent per-source"); the terminal-poll failure path records EVERY
+  planned fetch absent:true and spends nothing (fetch.rs:62-84); the
+  per-fetch failure path records each failure absent:true
+  (fetch.rs:91-131); the run record carries them —
+  window.fetch_failures -> run failed_sources (mod.rs:1276-1277,
+  mod.rs:1295-1299) -> the report card (mod.rs:944). The F2 deck pins
+  the per-fetch path (gym.rs:1066
+  deck_url_in_hit_and_fail_parses_and_fail_wins_at_fetch, gym.rs:1167
+  web_fetch_fail_is_an_err_with_the_deck_reason).
+  (b) F17 — ingest-laundering asserts loud: the T1 F17 wire is the
+  terminal-state poll (PLAN.md §4 T1: "R6 (+ terminal-state poll,
+  F17)"); declared at estate.rs:106-108 ("Err -> the round records
+  every planned fetch as an absent failure and spends nothing"),
+  polled FIRST in fetch_round (fetch.rs:62-64), the Err branch is the
+  loud assert (fetch.rs:63-84); the fetch-side custody stamp is
+  watched by fetch.rs's custody tests (F17 row at gym.rs:823;
+  custody_join_max_restrictiveness at fetch.rs:397). Named residual,
+  not a clause failure: the terminal-poll Err branch has no dedicated
+  failing-terminal unit test — the branch is deterministic and the F2
+  deck pins the adjacent per-fetch failure path.
+  (c) F18 — dead-inference enrichment asserts loud: the v1 disposition
+  is NAMED at gym.rs:824 — "enrich_window is C-class tags in v1 (no
+  inference to die); the faithful-mode asserts are the T2 R7 regime" —
+  a named substitution per ARCH_PRINCIPLES.md §18.3, never silent;
+  consistent with enrich.rs:7-10 (tags derived deterministically, no
+  model, no invented metadata) and enrich_window's own tests
+  (enrich.rs:112-143). The watched/named discipline over the whole
+  F-table is pinned by f_table_every_row_is_watched_or_named
+  (gym.rs:850). Red check (the bar's red: F17/F18 asserts fail at
+  HEAD): not red — the deep_research battery passes 88/88 (nextest,
+  sovereign-vulkan toolbox, 2026-08-17). Evidence consolidation:
+  research/deep-research/notes/dispositions-t2d.md."""
 
 [[initiative.bar]]
 id = "dr-estate-visible"
