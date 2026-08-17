@@ -36,8 +36,9 @@ use icd::{
     TriageConfig, UrlConstraintPolicy, WindowChunk,
 };
 use render::{build_manifest, final_claims, not_covered, render_report, ManifestInput};
+use serde::{Deserialize, Serialize};
 use state::{Event, RunLock, State};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -52,7 +53,7 @@ use crate::traits::InferenceProvider;
 /// (web-search family, key `corpus`, same allowance) to the estate's
 /// corpus-search surface. The source is recorded on every artifact
 /// (SearchHit.engine `mock` | `corpus` — glassbox).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum SearchSource {
     Mock,
     Corpus,
@@ -101,7 +102,13 @@ fn source_budget_key(source: SearchSource, web_backend: &str) -> String {
 
 /// Everything a run needs at launch. Values are frozen into the
 /// charter at launch (FR-3); nothing here is re-read mid-run.
-#[derive(Debug, Clone)]
+///
+/// Serialize/Deserialize (order deep-research-t3a): the config rides
+/// the resume checkpoint (`checkpoint.json`) — the resume restores
+/// the run from the checkpoint's config and verifies the operator's
+/// re-passed flags against it. The charter hash recomputed from this
+/// config is the tamper check.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunConfig {
     pub run_id: String,
     pub question: String,
@@ -150,6 +157,161 @@ pub async fn run(
         .await?
         .drive()
         .await
+}
+
+/// The resume checkpoint (order deep-research-t3a) — the run's state
+/// persisted after every completed round, the restore surface for
+/// `--resume <run-id>`. Written by the controller at the two round
+/// push sites (drive's main body and the GAP-4 reframe branch), always
+/// with the machine at `Rounding` — the invariant: `written_after_round
+/// == rounds.len()`, checked at read. The envelope binds the checkpoint
+/// to the run: run_id + charter_hash + the full config (the charter
+/// hash recomputed from `config` at restore is the tamper check — a
+/// checkpoint whose config does not hash to its own charter_hash is
+/// refused).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunCheckpoint {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    /// How many rounds had COMPLETED when the checkpoint was written.
+    /// The resume continues at `written_after_round + 1`.
+    pub written_after_round: u32,
+    /// The frozen launch config (FR-3) — the resume's identity.
+    pub config: RunConfig,
+    // ── the restore-able controller state ────────────────────────────
+    pub question: String,
+    pub frontier: Vec<String>,
+    pub frontier_question: Option<String>,
+    pub figure_specifiers: Vec<String>,
+    pub reframe_record: Option<ReframeRecord>,
+    pub alignment_record: Option<AlignmentRecord>,
+    pub re_plans: u32,
+    pub residue: Vec<ResidueRow>,
+    pub windows: Vec<EvidenceWindow>,
+    pub prior_gap_texts: Vec<String>,
+    pub prior_gaps: Vec<Gap>,
+    pub web_refused: bool,
+    pub window_capped: bool,
+    pub search_calls: u32,
+    pub rounds: Vec<RoundRow>,
+    pub fetched_sources: Vec<FetchedSource>,
+    pub failed_sources: Vec<FailedSource>,
+    pub artifacts: Vec<String>,
+    pub aborted_at_round: Option<u32>,
+}
+
+/// Resume a run interrupted after round N (order deep-research-t3a):
+/// restore the controller from `checkpoint.json`, continue at N+1, with
+/// the budget ledger restored from its journal (continuity — a resume
+/// that can double-spend is refused, never weakened). Every refusal is
+/// typed and names the defect: a missing run dir, an already-closed run
+/// (manifest present — completed or aborted), a missing/malformed/
+/// tampered checkpoint, a foreign or tampered ledger, a re-passed
+/// config that does not match the checkpoint, and a live second run
+/// (F19 — the stale lock file of a dead process is acquirable, the
+/// operator's `--resume` is the visible act).
+pub async fn resume(
+    config: RunConfig,
+    port: Arc<dyn ResearchPort>,
+    provider: Arc<dyn InferenceProvider>,
+    abort: Arc<AtomicBool>,
+) -> Result<RunOutcome, String> {
+    Controller::resume_start(config, port, provider, abort)
+        .await?
+        .drive()
+        .await
+}
+
+/// Read + verify the run's checkpoint envelope (order
+/// deep-research-t3a). The icd/version envelope and the
+/// round-consistency invariant are checked here; the charter-hash,
+/// config-identity, and ledger-continuity checks live in
+/// `resume_start` (they need the caller's config). Public: the CLI
+/// verb's `--resume` gate reads the checkpoint through the same
+/// reader (one decider, one name).
+pub fn read_checkpoint(run_dir: &Path) -> Result<RunCheckpoint, String> {
+    let path = run_dir.join("checkpoint.json");
+    let raw = std::fs::read_to_string(&path).map_err(|e| {
+        format!(
+            "no checkpoint at {path:?} — the run never completed a round, nothing to resume ({e})"
+        )
+    })?;
+    let cp: RunCheckpoint =
+        serde_json::from_str(&raw).map_err(|e| format!("checkpoint malformed at {path:?}: {e}"))?;
+    if cp.icd != "run_checkpoint" || cp.version != icd::ICD_VERSION {
+        return Err(format!(
+            "checkpoint at {path:?} is not a run checkpoint (icd {:?}, version {}) — \
+             foreign or tampered",
+            cp.icd, cp.version
+        ));
+    }
+    if cp.written_after_round as usize != cp.rounds.len() {
+        return Err(format!(
+            "checkpoint at {path:?} is inconsistent: written_after_round {} but {} rounds \
+             recorded — tampered",
+            cp.written_after_round,
+            cp.rounds.len()
+        ));
+    }
+    Ok(cp)
+}
+
+/// Field-by-field config identity for the resume gate (order
+/// deep-research-t3a). Returns the first mismatching field's name, or
+/// None when the configs are identical. Explicit (names the field),
+/// C-class, never a model.
+fn config_mismatch(a: &RunConfig, b: &RunConfig) -> Option<&'static str> {
+    if a.run_id != b.run_id {
+        return Some("run_id");
+    }
+    if a.question != b.question {
+        return Some("question");
+    }
+    if a.seed_id != b.seed_id {
+        return Some("seed_id");
+    }
+    // `run_dir` is deliberately NOT compared (order deep-research-t3a,
+    // measured red): it is the resume LOCATION, not an identity field —
+    // the charter (the identity, FR-3) never included it. The
+    // operator's `--resume <dir>` anchors the run at that dir even when
+    // the dir is a faithful copy of the launch dir; `run_id` +
+    // question + budget + charter fields are the identity.
+    if a.max_rounds != b.max_rounds {
+        return Some("max_rounds");
+    }
+    if a.code_set_k != b.code_set_k {
+        return Some("code_set_k");
+    }
+    if a.eps_quota != b.eps_quota {
+        return Some("eps_quota");
+    }
+    if a.evidence_window_max_chunks != b.evidence_window_max_chunks {
+        return Some("evidence_window_max_chunks");
+    }
+    if a.estate_corpus_ids != b.estate_corpus_ids {
+        return Some("estate_corpus_ids");
+    }
+    if a.web_backend != b.web_backend {
+        return Some("web_backend");
+    }
+    if a.search_source != b.search_source {
+        return Some("search_source");
+    }
+    if a.web_search_allowance != b.web_search_allowance {
+        return Some("web_search_allowance");
+    }
+    if a.web_fetch_allowance != b.web_fetch_allowance {
+        return Some("web_fetch_allowance");
+    }
+    if a.posture != b.posture {
+        return Some("posture");
+    }
+    if a.consent != b.consent {
+        return Some("consent");
+    }
+    None
 }
 
 fn aborted(flag: &AtomicBool) -> bool {
@@ -479,6 +641,11 @@ struct Controller {
     failed_sources: Vec<FailedSource>,
     artifacts: Vec<String>,
     aborted_at_round: Option<u32>,
+    /// Order deep-research-t3a: the round count a resume restored from
+    /// (`None` on a fresh run). `drive()` skips the launch head
+    /// (charter/plan/align — the checkpoint verified them) and the
+    /// completed rounds when `Some`.
+    resumed_after_round: Option<u32>,
 }
 
 impl Controller {
@@ -563,8 +730,191 @@ impl Controller {
             figure_specifiers: Vec::new(),
             artifacts: Vec::new(),
             aborted_at_round: None,
+            resumed_after_round: None,
         };
         Ok(ctl)
+    }
+
+    /// Order deep-research-t3a: restore an interrupted run. The verb
+    /// rebuilds the port from the checkpoint's config + the launch
+    /// sidecar and calls [`resume`]; this is the authoritative gate —
+    /// every refusal is typed, and the ledger-continuity refusal (a
+    /// resume that could double-spend budget) is the order's
+    /// not-worth-continuing-if line.
+    async fn resume_start(
+        config: RunConfig,
+        port: Arc<dyn ResearchPort>,
+        provider: Arc<dyn InferenceProvider>,
+        abort: Arc<AtomicBool>,
+    ) -> Result<Controller, String> {
+        if !config.run_dir.exists() {
+            return Err(format!(
+                "nothing to resume: run dir {} does not exist",
+                config.run_dir.display()
+            ));
+        }
+        // An already-closed run refuses: a completed or gracefully
+        // aborted run is terminal (manifest present). A SIGKILLed run
+        // has NO manifest — that is the resumable shape.
+        let manifest_path = config.run_dir.join("manifest.json");
+        if manifest_path.exists() {
+            let state = std::fs::read_to_string(&manifest_path)
+                .ok()
+                .and_then(|j| serde_json::from_str::<serde_json::Value>(&j).ok())
+                .and_then(|v| {
+                    v.get("terminal_state")
+                        .and_then(|t| t.as_str().map(String::from))
+                })
+                .unwrap_or_else(|| "unknown".to_string());
+            return Err(format!(
+                "nothing to resume: the run already closed (terminal state {state}) — \
+                 a completed or aborted run is not resumable"
+            ));
+        }
+        let cp = read_checkpoint(&config.run_dir)?;
+        // The charter hash recomputed from the checkpoint's config is
+        // the config's tamper check (FR-3: the charter derives from
+        // the config alone).
+        let charter = build_charter(&cp.config);
+        charter.validate()?;
+        if hash_charter(&charter) != cp.charter_hash {
+            return Err(
+                "checkpoint tampered: the run's config does not hash to the checkpoint's \
+                 charter_hash — a modified checkpoint is refused, never silently restored"
+                    .to_string(),
+            );
+        }
+        // The re-passed config must BE the checkpoint's config — field
+        // by field, naming the first mismatch (the verb rebuilds the
+        // config from the checkpoint, so this is the backstop against
+        // a caller error or a tampered re-pass).
+        if let Some(field) = config_mismatch(&config, &cp.config) {
+            return Err(format!(
+                "resume mismatch: {field} does not match the checkpoint — \
+                 a run resumes with the state it was interrupted with, never a modified one"
+            ));
+        }
+        // Ledger continuity: the decider is restored from the run's
+        // journal — the entries replay spent/remaining (the journal is
+        // the record), and a foreign or tampered ledger refuses. A
+        // resume that can double-spend budget is worse than none.
+        let decider = SpendDecider::restore(
+            &cp.run_id,
+            &cp.charter_hash,
+            &allowance_map(&cp.config),
+            &config.run_dir.join("budget-ledger.json"),
+        )?;
+        // The stale-lock-tolerant re-acquisition: a SIGKILLed run's
+        // lock file remains (Drop never ran) — the flock discriminates
+        // a live second run (refuses, F19) from a dead process's stale
+        // file (acquirable — `--resume` is the visible act).
+        let lock = RunLock::acquire(&config.run_dir, &config.run_id)?;
+        let tau = audit::run_tau();
+        let containment = ContainmentConfig {
+            extraction_max_tokens: charter.charter.containment.extraction_max_tokens,
+            specifics_max: charter.charter.containment.specifics_max,
+        };
+        // The staged re-frame input is re-read like start() (the loop
+        // never consumes the file; the restored reframe_record
+        // prevents a second fire — at most once per run, FR-1).
+        let reframe_input = match std::fs::read_to_string(config.run_dir.join("reframe-input.json"))
+        {
+            Ok(json) => Some(serde_json::from_str::<ReframeInput>(&json).map_err(|e| {
+                format!(
+                    "reframe-input.json in {} is malformed: {e}",
+                    config.run_dir.display()
+                )
+            })?),
+            Err(_) => None,
+        };
+        let ctl = Controller {
+            config,
+            port,
+            provider,
+            abort,
+            charter,
+            charter_hash: cp.charter_hash.clone(),
+            tau,
+            containment,
+            decider,
+            lock,
+            state: State::Rounding, // the checkpoint invariant: written at Rounding
+            question: cp.question.clone(),
+            reframe_input,
+            reframe_record: cp.reframe_record.clone(),
+            alignment_record: cp.alignment_record.clone(),
+            re_plans: cp.re_plans,
+            residue: cp.residue.clone(),
+            windows: cp.windows.clone(),
+            prior_gap_texts: cp.prior_gap_texts.clone(),
+            prior_gaps: cp.prior_gaps.clone(),
+            web_refused: cp.web_refused,
+            window_capped: cp.window_capped,
+            search_calls: cp.search_calls,
+            rounds: cp.rounds.clone(),
+            fetched_sources: cp.fetched_sources.clone(),
+            failed_sources: cp.failed_sources.clone(),
+            frontier: cp.frontier.clone(),
+            frontier_question: cp.frontier_question.clone(),
+            figure_specifiers: cp.figure_specifiers.clone(),
+            artifacts: cp.artifacts.clone(),
+            aborted_at_round: cp.aborted_at_round,
+            resumed_after_round: Some(cp.written_after_round),
+        };
+        tracing::info!(
+            target: "deep_research",
+            run_id = %ctl.config.run_id,
+            resumed_after_round = cp.written_after_round,
+            "resume: state restored from checkpoint.json — continuing at round {}",
+            cp.written_after_round + 1
+        );
+        Ok(ctl)
+    }
+
+    /// Order deep-research-t3a: persist the run's state after a
+    /// completed round — the resume surface. Written only at the two
+    /// round-push sites in drive(), where the machine is at `Rounding`
+    /// (the invariant `read_checkpoint` checks). Atomic: tmp + rename,
+    /// so a crash mid-write never leaves a half checkpoint (a torn
+    /// checkpoint is worse than none — it would restore a lie).
+    fn write_checkpoint(&mut self) -> Result<(), String> {
+        let cp = RunCheckpoint {
+            icd: "run_checkpoint".to_string(),
+            version: icd::ICD_VERSION,
+            run_id: self.config.run_id.clone(),
+            charter_hash: self.charter_hash.clone(),
+            written_after_round: self.rounds.len() as u32,
+            config: self.config.clone(),
+            question: self.question.clone(),
+            frontier: self.frontier.clone(),
+            frontier_question: self.frontier_question.clone(),
+            figure_specifiers: self.figure_specifiers.clone(),
+            reframe_record: self.reframe_record.clone(),
+            alignment_record: self.alignment_record.clone(),
+            re_plans: self.re_plans,
+            residue: self.residue.clone(),
+            windows: self.windows.clone(),
+            prior_gap_texts: self.prior_gap_texts.clone(),
+            prior_gaps: self.prior_gaps.clone(),
+            web_refused: self.web_refused,
+            window_capped: self.window_capped,
+            search_calls: self.search_calls,
+            rounds: self.rounds.clone(),
+            fetched_sources: self.fetched_sources.clone(),
+            failed_sources: self.failed_sources.clone(),
+            artifacts: self.artifacts.clone(),
+            aborted_at_round: self.aborted_at_round,
+        };
+        let json =
+            serde_json::to_string_pretty(&cp).map_err(|e| format!("checkpoint serialize: {e}"))?;
+        let path = self.config.run_dir.join("checkpoint.json");
+        let tmp = path.with_extension("tmp");
+        std::fs::write(&tmp, json).map_err(|e| format!("checkpoint write {tmp:?}: {e}"))?;
+        std::fs::rename(&tmp, &path).map_err(|e| format!("checkpoint commit {path:?}: {e}"))?;
+        if !self.artifacts.iter().any(|a| a == "checkpoint.json") {
+            self.artifacts.push("checkpoint.json".to_string());
+        }
+        Ok(())
     }
 
     /// The decider's journal path is ALWAYS the run dir's
@@ -970,32 +1320,42 @@ impl Controller {
 
     /// The main drive — every state change through `State::transition`.
     async fn drive(&mut self) -> Result<RunOutcome, String> {
-        // Initializing → Planning: the frozen charter (FR-3).
-        if aborted(&self.abort) {
-            self.aborted_at_round = Some(0);
-            return self.land_aborted().await;
-        }
-        let charter = self.charter.clone();
-        self.write_artifact("charter.json", &charter)?;
-        self.step(Event::CharterWritten)?;
+        // Initializing → Planning: the frozen charter (FR-3). A resumed
+        // run skips the launch head entirely — the checkpoint verified
+        // the charter, the plan artifacts are on disk, and the machine
+        // was restored at Rounding (order deep-research-t3a).
+        let resumed_after = self.resumed_after_round;
+        if resumed_after.is_none() {
+            if aborted(&self.abort) {
+                self.aborted_at_round = Some(0);
+                return self.land_aborted().await;
+            }
+            let charter = self.charter.clone();
+            self.write_artifact("charter.json", &charter)?;
+            self.step(Event::CharterWritten)?;
 
-        // Planning: the plan ICD. STEER 2: the launch plan passes the
-        // pre-acquisition alignment gate — shown the plan and its
-        // acceptance shapes, the port confirms (or redirects the
-        // question, re-planning through the SAME PlanWritten row)
-        // BEFORE any acquisition spend.
-        if aborted(&self.abort) {
-            self.aborted_at_round = Some(0);
-            return self.land_aborted().await;
+            // Planning: the plan ICD. STEER 2: the launch plan passes the
+            // pre-acquisition alignment gate — shown the plan and its
+            // acceptance shapes, the port confirms (or redirects the
+            // question, re-planning through the SAME PlanWritten row)
+            // BEFORE any acquisition spend.
+            if aborted(&self.abort) {
+                self.aborted_at_round = Some(0);
+                return self.land_aborted().await;
+            }
+            self.ensure_frontier().await?; // t1d fix 2: the launch frontier
+            self.write_plan_artifact()?; // plan.json
+            self.step(Event::PlanWritten)?; // → Align
+            self.align_plan().await?; // Proceed → Rounding; a redirect re-plans through the same row
         }
-        self.ensure_frontier().await?; // t1d fix 2: the launch frontier
-        self.write_plan_artifact()?; // plan.json
-        self.step(Event::PlanWritten)?; // → Align
-        self.align_plan().await?; // Proceed → Rounding; a redirect re-plans through the same row
 
-        // The round loop.
+        // The round loop. A resumed run continues at
+        // `written_after_round + 1` — the checkpoint restored the
+        // controller state and the budget ledger, so the completed
+        // rounds are never re-run (no re-spend of drafts or searches).
         let max_rounds = self.config.max_rounds;
-        for round in 1..=max_rounds {
+        let first_round = resumed_after.unwrap_or(0) + 1;
+        for round in first_round..=max_rounds {
             self.step(Event::RoundStarted)?; // → Surveying
             if aborted(&self.abort) {
                 self.aborted_at_round = Some(round);
@@ -1118,6 +1478,12 @@ impl Controller {
                     self.write_plan_artifact()?; // plan-2.json (re-plan 1)
                     self.step(Event::PlanWritten)?; // → Align — the re-plan passes the alignment gate
                     self.align_plan().await?; // Proceed → Rounding; a second redirect re-plans again
+                                              // T3a: the reframe round is a real round in the
+                                              // ledger, so the resume checkpoint lands here too —
+                                              // a crash mid-reframe re-fires the branch from
+                                              // reframe-input.json (idempotent; it searched and
+                                              // fetched nothing).
+                    self.write_checkpoint()?;
                     continue; // the reframed question drives the next round
                 }
             }
@@ -1153,6 +1519,12 @@ impl Controller {
                 fetched,
                 search_calls: self.search_calls - search_before,
             });
+            // T3a: the resume checkpoint lands at BOTH round-push sites
+            // (here + the reframe branch) — the machine is at Rounding,
+            // written_after_round == rounds.len(), and the round's
+            // artifacts (evidence-window-N.json etc.) are on disk. A
+            // SIGKILL from here forward resumes at round + 1.
+            self.write_checkpoint()?;
             // acquire_round returns with the loop state at Rounding.
         }
 
@@ -1366,13 +1738,22 @@ impl Controller {
         std::fs::write(&report_path, report).map_err(|e| format!("report write: {e}"))?;
         self.artifacts.push("report.md".to_string());
 
-        self.rounds.push(RoundRow {
-            round,
-            gaps_before,
-            gaps_after,
-            fetched: window.chunks.len(),
-            search_calls: 0,
-        });
+        // The terminal row is the round this finish closes. A finish
+        // called mid-round (NoNewGaps / BudgetExhausted) pushes; the
+        // TAIL call (max_rounds reached, gaps still open) lands after
+        // the final round's loop row — pushing again would duplicate
+        // the round (measured in the t3a resume tests: a high-budget
+        // 3-round flight recorded rounds [1,2,3,3]). One row per
+        // round, always.
+        if self.rounds.last().map(|r| r.round) != Some(round) {
+            self.rounds.push(RoundRow {
+                round,
+                gaps_before,
+                gaps_after,
+                fetched: window.chunks.len(),
+                search_calls: 0,
+            });
+        }
 
         // The terminal chain: Auditing → Synthesizing → Rendering → Done.
         let event = if self.prior_gap_texts.is_empty() && !truncated {
@@ -1480,7 +1861,18 @@ fn build_charter(config: &RunConfig) -> Charter {
 }
 
 fn hash_charter(charter: &Charter) -> String {
-    let json = serde_json::to_string(charter).unwrap_or_default();
+    // The wall clock must not leak into the identity hash (order
+    // deep-research-t3a, measured red dr-1786979612): the charter is
+    // rebuilt from the checkpoint's config at `--resume`, and a
+    // `created_at_unix` field would make the hash differ from the
+    // launch-time value whenever a second ticks between launch and
+    // resume — an honest resume would always refuse as "tampered".
+    // The identity is the config-derived content only; the timestamp
+    // is a record, not an identity (regression test
+    // charter_hash_is_time_independent).
+    let mut hashed = charter.clone();
+    hashed.created_at_unix = 0;
+    let json = serde_json::to_string(&hashed).unwrap_or_default();
     format!("{:016x}", fnv1a(json.as_bytes()))
 }
 
@@ -2389,5 +2781,380 @@ mod tests {
             "a claim the floor did not cap keeps the prose template — \
              the fold-in rides it as it always has (t1e)"
         );
+    }
+
+    // ── T3a resume surface (order deep-research-t3a) ─────────────────
+
+    /// A small deck-backed port for the resume flights: one hit matched
+    /// by a query term, drafts scripted. Rounds iterate while the
+    /// audit keeps abstaining (NoProvider), so a high-budget flight
+    /// reaches the round loop's terminal tail.
+    fn resume_deck_port() -> super::gym::MockBackendImpl {
+        use super::gym::{Deck, MockBackendImpl, MockDraftSurface};
+        let deck_toml = "version = 1\n\
+             [[corpus]]\n\
+             corpus_id = \"resume-city\"\n\
+             kind = \"documents\"\n\
+             chunks_count = 1\n\
+             searchable = true\n\
+             custody = \"personal\"\n\
+             [[hit]]\n\
+             match = [\"Gini\"]\n\
+             url = \"https://gym.example/resume-city\"\n\
+             title = \"resume city page\"\n\
+             snippet = \"About Gini.\"\n\
+             body = \"resume-city.md\"\n";
+        let body = "The Gini index of income inequality in New York rose from 0.50 in 1980 to \
+                    0.55 in 2024.";
+        let deck = Deck::parse(deck_toml, &[("resume-city.md", body)]).expect("deck builds");
+        MockBackendImpl::new(
+            deck,
+            MockDraftSurface::Scripted(
+                "Which cities show the highest Gini index of income inequality?".to_string(),
+            ),
+        )
+    }
+
+    /// The SIGKILL artifact state: a completed flight's run dir with
+    /// the TERMINAL chain removed (manifest/verdict-set/report) — what
+    /// a kill mid-flight leaves: checkpoint + ledger + windows on
+    /// disk, NO manifest (the resumable shape; a manifest marks the
+    /// run terminal and refuses).
+    fn simulate_kill(run_dir: &Path) {
+        for name in ["manifest.json", "verdict-set.json", "report.md"] {
+            let _ = std::fs::remove_file(run_dir.join(name));
+        }
+    }
+
+    /// Flight 1 of the resume pair: a deck-backed mock flight to
+    /// completion, then the SIGKILL artifact state. Returns the
+    /// (config, run_dir).
+    async fn resume_flight(dir: &std::path::Path) -> (RunConfig, PathBuf) {
+        let run_dir = dir.join("runs").join("dr-resume-flight");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = super::gym::MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 40;
+        cfg.web_fetch_allowance = 40;
+        cfg.run_id = "dr-resume-flight".to_string();
+        cfg.question = "How did income inequality change in American cities?".to_string();
+        run(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("flight 1 completes");
+        simulate_kill(&run_dir);
+        (cfg, run_dir)
+    }
+
+    #[tokio::test]
+    async fn checkpoint_round_trips_with_the_invariant() {
+        let dir = std::env::temp_dir().join(format!("dr-cp-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-cp");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = super::gym::MockBackendImpl::BACKEND_ID.to_string();
+        cfg.web_search_allowance = 40;
+        cfg.web_fetch_allowance = 40;
+        cfg.run_id = "dr-cp".to_string();
+        cfg.question = "How did income inequality change in American cities?".to_string();
+        run(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("flight completes");
+
+        let cp = read_checkpoint(&run_dir).expect("checkpoint readable after a completed flight");
+        assert_eq!(cp.icd, "run_checkpoint");
+        assert_eq!(cp.version, super::icd::ICD_VERSION);
+        assert_eq!(
+            cp.written_after_round as usize,
+            cp.rounds.len(),
+            "the checkpoint invariant: written_after_round == rounds.len()"
+        );
+        assert_eq!(cp.run_id, "dr-cp");
+        assert_eq!(cp.config.run_id, cfg.run_id);
+        assert_eq!(cp.config.question, cfg.question);
+        assert_eq!(cp.config.max_rounds, cfg.max_rounds);
+        // The manifest's round rows are one-per-round — the tail finish
+        // never duplicates the final round (measured: a high-budget
+        // 3-round flight recorded [1,2,3,3] before the guard).
+        let manifest: super::icd::Manifest = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("manifest.json")).expect("manifest exists"),
+        )
+        .expect("manifest parses");
+        let rounds: Vec<u32> = manifest.rounds.iter().map(|r| r.round).collect();
+        assert_eq!(rounds, (1..=rounds.len() as u32).collect::<Vec<u32>>());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_continues_at_n_plus_one_with_ledger_continuity() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, run_dir) = resume_flight(&dir).await;
+        let cp1 = read_checkpoint(&run_dir).expect("flight-1 checkpoint");
+        let ledger1: super::icd::BudgetLedger = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("budget-ledger.json")).expect("ledger 1"),
+        )
+        .expect("ledger 1 parses");
+
+        let outcome2 = resume(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("resume drives to a terminal state");
+        let ledger2: super::icd::BudgetLedger = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("budget-ledger.json")).expect("ledger 2"),
+        )
+        .expect("ledger 2 parses");
+
+        // Ledger continuity — the double-spend discriminator: a restart
+        // would RE-CREATE the ledger (a new decider journals a fresh
+        // empty one); a resume replays the entries and appends. Spent
+        // never decreases, remaining never increases.
+        assert_eq!(ledger2.run_id, ledger1.run_id);
+        assert_eq!(ledger2.allowance, ledger1.allowance);
+        assert!(
+            ledger2.entries.len() >= ledger1.entries.len(),
+            "the restored ledger must carry flight-1's journal entries — a restart would reset them"
+        );
+        for (meter, spent1) in &ledger1.spent {
+            assert!(
+                ledger2.spent.get(meter).copied().unwrap_or(0) >= *spent1,
+                "no spend is ever forgotten across a resume ({meter})"
+            );
+        }
+        for (meter, remaining1) in &ledger1.remaining {
+            assert!(
+                ledger2.remaining.get(meter).copied().unwrap_or(0) <= *remaining1,
+                "no allowance is ever re-minted across a resume ({meter})"
+            );
+        }
+
+        // Rounds advance, never duplicate, never skip.
+        let rounds = &outcome2.manifest.rounds;
+        assert!(!rounds.is_empty(), "the resumed run records its rounds");
+        let mut seen = std::collections::BTreeSet::new();
+        for (i, r) in rounds.iter().enumerate() {
+            assert_eq!(
+                r.round as usize,
+                i + 1,
+                "rounds stay contiguous — no re-run, no skip"
+            );
+            assert!(seen.insert(r.round), "no round is ever executed twice");
+        }
+        assert!(
+            rounds.len() >= cp1.rounds.len(),
+            "the resumed run adds rounds, never forgets them"
+        );
+        // The checkpoint advanced (or the run finished the tail) and
+        // the invariant holds on the restored checkpoint too.
+        let cp2 = read_checkpoint(&run_dir).expect("checkpoint readable after resume");
+        assert_eq!(cp2.written_after_round as usize, cp2.rounds.len());
+        assert!(
+            cp2.written_after_round >= cp1.written_after_round,
+            "the resume never rewinds the round count"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_terminal_run() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-term-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-resume-term");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = super::gym::MockBackendImpl::BACKEND_ID.to_string();
+        cfg.run_id = "dr-resume-term".to_string();
+        run(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("flight completes (manifest present)");
+        let e = resume(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a completed run is terminal — resume must refuse");
+        assert!(e.contains("already closed"), "{e}");
+        assert!(e.contains("terminal state"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_mismatched_config() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-mismatch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, _run_dir) = resume_flight(&dir).await;
+        let mut tampered = cfg.clone();
+        tampered.question = "A different question entirely?".to_string();
+        let e = resume(
+            tampered,
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a modified config must refuse");
+        assert!(e.contains("resume mismatch"), "{e}");
+        assert!(e.contains("question"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn resume_refuses_a_tampered_checkpoint() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-tamper-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, run_dir) = resume_flight(&dir).await;
+
+        // A checkpoint whose charter_hash no longer matches its own
+        // config refuses (FR-3: the charter derives from the config —
+        // a modified checkpoint is never silently restored).
+        let path = run_dir.join("checkpoint.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("checkpoint on disk"))
+                .expect("checkpoint parses");
+        v["charter_hash"] = serde_json::json!("deadbeef");
+        std::fs::write(&path, serde_json::to_string(&v).unwrap()).expect("tamper written");
+        let e = resume(
+            cfg.clone(),
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a tampered charter_hash must refuse");
+        assert!(e.contains("tampered"), "{e}");
+
+        // A checkpoint whose round count disagrees with its own rounds
+        // list refuses at the ENVELOPE (read_checkpoint's invariant) —
+        // fresh flight in a fresh dir for an honest checkpoint.
+        let dir2 = std::env::temp_dir().join(format!("dr-resume-tamper2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir2);
+        let (_cfg2, run_dir2) = resume_flight(&dir2).await;
+        let path2 = run_dir2.join("checkpoint.json");
+        let mut v2: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path2).expect("checkpoint 2 on disk"))
+                .expect("checkpoint 2 parses");
+        v2["written_after_round"] = serde_json::json!(7); // 7 rounds recorded? no — 3
+        std::fs::write(&path2, serde_json::to_string(&v2).unwrap()).expect("tamper 2 written");
+        let e = read_checkpoint(&run_dir2).expect_err("an inconsistent checkpoint must refuse");
+        assert!(e.contains("inconsistent"), "{e}");
+        let _ = std::fs::remove_dir_all(&dir);
+        let _ = std::fs::remove_dir_all(&dir2);
+    }
+
+    /// The regression pin for the measured red dr-1786979612 (order
+    /// deep-research-t3a): the launch-time charter hash used to include
+    /// `created_at_unix`, so a resume a second later rebuilt the charter
+    /// with a fresh timestamp, the hash differed, and an HONEST resume
+    /// refused as "tampered" (the demo flight measured it; the unit
+    /// tests were only passing because their flights were same-second
+    /// fast). The identity hash must be a pure function of the config.
+    #[test]
+    fn charter_hash_is_time_independent() {
+        let mut cfg = demo_config(std::env::temp_dir().join("dr-hash-time"));
+        cfg.question = "How did income inequality change in American cities?".to_string();
+        let first = hash_charter(&build_charter(&cfg));
+        std::thread::sleep(std::time::Duration::from_secs(2));
+        let second = hash_charter(&build_charter(&cfg));
+        assert_eq!(
+            first, second,
+            "the charter hash changed across a 2s gap — a wall-clock field \
+             (created_at_unix) leaks into the identity hash"
+        );
+    }
+
+    fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(dst)?;
+        for entry in std::fs::read_dir(src)? {
+            let entry = entry?;
+            let target = dst.join(entry.file_name());
+            if entry.file_type()?.is_dir() {
+                copy_dir(&entry.path(), &target)?;
+            } else {
+                std::fs::copy(entry.path(), target)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The regression pin for the measured red (order
+    /// deep-research-t3a): `--resume <dir>` must anchor the run at the
+    /// NAMED dir. A faithful copy of a killed run dir resumes into the
+    /// COPY (its own checkpoint read, its own state written, the
+    /// ORIGINAL untouched); a tampered copy refuses at the hash before
+    /// any state write. Before the fix the core anchored on
+    /// cp.config.run_dir (the LAUNCH dir): a copy's resume resumed and
+    /// closed the ORIGINAL run, and a tampered copy's deadbeef
+    /// checkpoint was never even read.
+    #[tokio::test]
+    async fn resume_of_a_copy_anchors_at_the_named_dir() {
+        let dir = std::env::temp_dir().join(format!("dr-resume-copy-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (cfg, run_dir) = resume_flight(&dir).await;
+
+        // A faithful copy: same killed shape, same charter_hash.
+        let copy = dir.join("runs").join("dr-resume-copy");
+        copy_dir(&run_dir, &copy).expect("run dir copied");
+        let mut cfg_copy = cfg.clone();
+        cfg_copy.run_dir = copy.clone();
+
+        // The copy resumes and closes IN THE COPY; the original stays
+        // in the killed shape (this is the anchor property).
+        resume(
+            cfg_copy,
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("a faithful copy resumes");
+        assert!(copy.join("manifest.json").exists(), "the COPY closed");
+        assert!(
+            !run_dir.join("manifest.json").exists(),
+            "the ORIGINAL must stay untouched — the resume anchored at the named dir, \
+             not at the checkpoint's launch dir"
+        );
+
+        // A TAMPERED copy refuses at the hash before any state write.
+        let tampered = dir.join("runs").join("dr-resume-copy-tampered");
+        copy_dir(&run_dir, &tampered).expect("tampered copy made");
+        let path = tampered.join("checkpoint.json");
+        let mut v: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        v["charter_hash"] = serde_json::json!("deadbeef");
+        std::fs::write(&path, serde_json::to_string(&v).unwrap()).unwrap();
+        let mut cfg_tampered = cfg;
+        cfg_tampered.run_dir = tampered.clone();
+        let e = resume(
+            cfg_tampered,
+            Arc::new(resume_deck_port()),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect_err("a tampered copy must refuse");
+        assert!(e.contains("tampered"), "{e}");
+        assert!(
+            !tampered.join("manifest.json").exists(),
+            "a refused resume writes no state"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

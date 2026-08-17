@@ -2559,4 +2559,163 @@ dr-corroboration, dr-residue, dr-reframe read met by t1b (verdict directive 90a0
 
 ### 4. Run-evidence tidiness — runs-drill-1786761309.log
 
-The untracked t2c battery evidence demo/p5/runs-drill-1786761309.log is already committed — swept into commit 07750430 ("noun convergence") by the noun-convergence session's commit while this order was being drafted (seat-confirmed: HEAD moved 586c1839 -> 07750430, working tree clean). Nothing further to do — no .gitignore addition, no second commit; the file is tracked at HEAD.
+The untracked t2c battery evidence demo/p5/runs-drill-1786761309.log is already committed — swept into commit 07750430 ("noun convergence") by the noun-convergence session's commit while this order was being drafted (seat-confirmed: HEAD moved 586c1839 -> 07750430, working tree clean). Nothing further to do — no .gitignore addition, no second commit; the file is tracked at HEAD
+
+## T3a — the CLI journey: six scenes, resume built, compounding estate proven — DECLARATION (order deep-research-t3a, minted 2026-08-17, before any flight of this order)
+
+The operator's done-condition (2026-08-17, verbatim): "we can't be done
+until we have the UX finished"; the load-bearing emphasis (verbatim): "a
+key part of the end user feature is that the deep research session
+actually stores results in a corpora that can be leveraged again in other
+deep research sessions (so we don't always have to rebuild from web
+search and have a sort of local cache)". The loop's internals are FROZEN
+(t2c closed the instrument space) — this order adds the ONE missing
+mechanism (scene 4's resume) + the run-close estate write-path (scene 6)
++ the journey proof through the shipped verb. Nothing here changes
+gym/deciders/gap-formation/scoring.
+
+### Instruments frozen BEFORE flight (this order's set)
+
+1. **The compounding pair's seeded Q1/Q2 + the source corpus S** —
+   authored 2026-08-17 by the order's worker from the NEW source
+   documents under `demo/demo11/source/` (five documents: the 1893 Act
+   and construction, the Merrick Brae cable section, early ridership,
+   the 1906 electrification, the municipal accounts — all figures in
+   the questions are in the docs; NWCI: the questions were written from
+   the docs and author knowledge ALONE, before any retrieval or any
+   flight of this order). The deck legs use the FROZEN bank v1 deck
+   (bank read, never edited).
+   - **Q1** (run A): "What is known about the Port Falkirk tramway —
+     its construction history, its cost, and its early ridership in the
+     decade after opening?" — answer value: the source corpus S.
+   - **Q2** (run B): "What were the Port Falkirk tramway's final
+     construction cost and its opening-year passenger figures, which
+     engineer oversaw the cable-haulage section, and what did
+     electrification cost?" — **the value lives ONLY in E** (run A's
+     estate): the v1 deck carries none of Q2's specifics (final cost
+     £223,400; opening-year passengers 2,314,807; the cable engineer
+     Amelia Voss; electrification £88,500). Q2's vocabulary sits
+     outside the v1 deck's term space (city-report material), so the
+     web leg can honestly contribute nothing.
+   - **S**: a real corpus built ONCE from `demo/demo11/source/` via the
+     shipped corpus surface (real LanceDB + real embeddings, daemon
+     embed slot), FROZEN after the mint — the compounding pair's one
+     real corpus leg.
+2. **The resume flight** — the FROZEN v1 bank question (extracted from
+   `bank/v1/seeds.md` by the run-arms.py extraction, never hardcoded:
+   "How did American cities change across four decades (1980-2024):
+   gentrification, inequality, affordability, and displacement — every
+   claim cited?") + `bank/v1/deck`, budget `--search 12 --fetch 12`,
+   `--max-rounds 3` — the t1h/t2c flight shape. Kill protocol: poll the
+   run dir for the post-round checkpoint (after fix: `checkpoint.json`
+   with `written_after_round >= 1`), then SIGKILL the process — the
+   crash shape, not the abort shape (the CLI wires no abort signal).
+   Resume: `--resume <run-id>`; acceptance: state restored, continues
+   at N+1, the budget ledger APPENDS with continuity (allowance ==
+   spent + remaining recomputed from the journal entries at every
+   ledger write; the pre-kill spends appear exactly once — a resume
+   that can double-spend budget fails the clause), and a
+   tampered/mismatched run-dir refuses with a typed error (checkpoint
+   absent / already-terminal / charter_hash mismatch / foreign or
+   tampered ledger / conflicting re-passed flags).
+3. **The red-watch** (done-when b, red-first) — at HEAD, before any
+   fix: the same v1 flight run and killed mid-run; the evidence that
+   there is NO restore path at HEAD: (a) the verb's usage surface has
+   no `--resume` flag — the attempt refuses at parse; (b) the killed
+   run dir carries no checkpoint/restore artifact (charter, plan,
+   survey, gap list, window — no state). Evidence: `demo/demo11/red/`
+   (console + run-dir listing), appended at execution.
+
+### Acceptance shape (declared; verdicts appended at execution, never backdated)
+
+| scene | declared evidence |
+|---|---|
+| 1 question+budget+consent through the verb | the flight invocations carry `--search/--fetch` and `--consent`; the manifest records the consent grant |
+| 2 prior corpora surveyed before network | run B's `survey-1.json` records estate hits (non-empty, `corpus_id` = run A's estate) before any acquisition; the survey's `estate_precondition` asserted searchable |
+| 3 gate's named gaps drive acquisition | carried — measured seven times (t1c..t2c); the demo records the gap-list artifacts; no re-measurement claimed |
+| 4 resume at N+1 with ledger continuity | the resume flight above: checkpoint at N, kill, `--resume` continues at N+1, ledger continuity, typed refusals exercised (tamper + mismatch) |
+| 5 constitution | run B's report: zero untraced figures in [passed] position (the scorer's OWN NUMERIC_TOKEN, citation tails cut — the demo10 strip shape) |
+| 6 the estate write-path + the local cache | at run A's close the verb ingests the fetched sources into `dr-estate-<runA>` (create + insert + build_indexes + `mark_indexes_built` + `mark_ingestion_complete` — no manual ritual); E lists and retrieves; run B retrieves E chunks BEFORE web and cites `estate:dr-estate-<runA>:<chunk>` locators on passed claims |
+
+### The model pin (pre-registered, the t1h/t2c pin)
+
+Local daemon `http://127.0.0.1:9741/v1`, draft
+`Qwen3.6-35B-A3B-MTP-UD-Q6_K` (loaded), embed
+`Qwen3-Embedding-0.6B-Q8_0` (loaded), tau 0.9, ctx 8192. The daemon is a
+shared resource — claimed per seat-resource-commons (claim 9aa54bc5) for
+this order's flights; flights are mock-backed with the frozen banks; no
+live web.
+
+### Execution records
+
+(The red-watch, the resume pair, the compounding pair, and the landing
+transition are appended here as they execute — this section is appended,
+never backdated.)
+
+## Red-watch — the verb at HEAD has NO restore path — EXECUTION RECORD (order deep-research-t3a, appended 2026-08-17)
+
+Executed at HEAD (1f787592), before any fix. Flight `dr-1786976220`
+(`demo/demo11/red/`): the frozen v1 bank question, `bank/v1/deck`,
+`--backend mock --search-source mock --max-rounds 3 --search 12
+--fetch 12`, daemon :9741 pin. Round 1 completed (survey-1.json,
+draft-1.json, gap-list-1.json, fetch-list-1.json,
+evidence-window-1.json, skip-ledger-1.json, budget-ledger.json all
+written), the process SIGKILLed mid-flight (console tail:
+`demo/demo11/red/red-watch.console.log`).
+
+The red, three-part:
+
+1. **No `--resume` surface.** `svrn deep-research "<q>" --resume
+   dr-1786976220 --run-dir ...` at HEAD refuses at parse — the usage
+   line names no `--resume` (console, reproduced verbatim in
+   `demo/demo11/red/red-watch.console.log`).
+2. **No state-restore artifact.** The killed run dir inventory: charter,
+   plan, survey-1, draft-1, gap-list-1, fetch-list-1,
+   evidence-window-1, skip-ledger-1, budget-ledger.json — and NO
+   checkpoint, NO manifest. The flight's record is complete but the
+   run's STATE was never persisted; a crashed run cannot be continued.
+3. **The stale lock.** The killed process's `lock` file remains (0
+   bytes) — a SIGKILL cannot run `Drop`, so the O_EXCL-style lock would
+   refuse ANY re-entry. The resume mechanism must therefore
+   discriminate a LIVE flock from a stale file (`File::try_lock` —
+   std, toolchain 1.95): a live second run still refuses (F19), a
+   dead process's stale file is acquirable (the operator's `--resume`
+   is the visible act).
+
+Verdict: red confirmed — done-when (b)'s first half ("a run killed
+mid-flight today cannot resume") measured at HEAD. The fix is built
+against this red: checkpoint after each round, `--resume` restore with
+ledger continuity, typed refusals, stale-lock-tolerant re-acquisition.
+The green test for the resume pair runs against this same flight shape..
+
+## Compounding pair — EXECUTION RECORD (order deep-research-t3a, appended 2026-08-17)
+
+**Run A** `dr-1786978547` (`demo/demo11/runs/compounding/run-a/`): the frozen v1 bank question, `bank/v1/deck`, `--backend mock --max-rounds 3 --search 12 --fetch 12 --consent personal`, daemon :9741 pin. Terminal `done-partial`; the manifest records the consent grant (`release-floor: personal`) and stamps both fetched sources (`estate:dr-demo11-s:5`, `estate:dr-demo11-s:7`) `ingested_into = dr-estate-dr-1786978547`. The estate corpus was created automatically at run close (`ingest_run_estate`: create → insert_batch → build_indexes → mark_indexes_built → mark_ingestion_complete) — `_corpus_meta.json` carries `indexes_built: true`, NO manual ritual, and the corpus lists AND retrieves through the shipped surface (`svrn corpus search dr-estate-dr-1786978547 "electrification cost"` returns hits). Verdict-set: 136 claims (129 could-not-judge, 6 failed, 1 passed — c14 "electrified in 190", a truncated extractor artifact, substring-traceable to the evidence window).
+
+**Run B** `dr-1786979346` (`demo/demo11/runs/compounding/run-b/`): Q2 — the four pre-registered Port Falkirk specifics (£223,400 final cost; 2,314,807 opening-year passengers; cable-haulage engineer Amelia Voss; £88,500 electrification) whose value lives ONLY in E (the v1 deck carries none of them). `--corpora dr-estate-dr-1786978547 --search-source corpus --search 12 --fetch 12 --max-rounds 3 --consent personal`. Measured:
+
+1. **Scene 2 (estate-first survey) MET**: survey-1's `estate_precondition` asserts `estate_searchable: true`; every round-1 hit carries `corpus_id = dr-estate-dr-1786978547` with `estate:dr-estate-dr-1786978547:<chunk>` locators, recorded BEFORE any acquisition (the survey is round 1's first artifact).
+2. **Scene 6 (the compounding value) MET**: draft-1.json — the survey's estate_answer, synthesized from E ALONE — carries all four Q2 specifics. The local cache answered a question the deck cannot.
+3. **The measured boundary, journaled not smoothed**: run B's checked verdict-set is 27/27 could-not-judge with ZERO passed claims. The frozen admission decider (quantized-bucket triage, threshold 0.03333) admitted only 2 of E's chunks into round 1's evidence window, and the frozen corroboration floor (dr-corroboration, F22) caps single-origin support at could-not-judge — the dr-compass structural cause, measured seven times t1c..t2c. The report carries 24 `[Source: estate-N]` citations; the full `estate:dr-estate-<runA>:<chunk>` locator links render in passed position only (measured zero). The pre-registered "on passed claims" citation sub-clause is measured NOT MET with the cause named; the estate-first retrieval and the estate-synthesized draft ARE met.
+
+## Resume pair — RED #1: the flag gate refused a bare resume (order deep-research-t3a, appended 2026-08-17)
+
+First execution of the resume pair (pre-fix binary): kill flight `dr-1786979612` (SIGKILL at checkpoint `written_after_round = 1`; shape verified — checkpoint present, NO manifest/verdict-set/report, stale `lock` left by the kill). Tamper copy (charter_hash → `deadbeef`) refused with the typed "tampered" error (exit 1). Mismatch (`--max-rounds 5`) refused naming `--max-rounds` (exit 1). The HONEST bare `--resume` refused: `--search 4 differs from the checkpoint's 12` — the flag gate compared CLI DEFAULTS for flags the operator did NOT pass against the frozen config, so a bare `--resume <dir>` could never resume a run whose frozen budget differs from the defaults. Red measured; fixed in the cmd layer (explicitness tracking — not-passed flags inherit the checkpoint's values; only explicitly-passed flags are verified, a conflict refusing by name).
+
+## Resume pair — RED #2: the charter hash leaked the wall clock (order deep-research-t3a, appended 2026-08-17)
+
+Second execution (post-flag-gate-fix binary): the honest resume passed the flag gate ("continuing at round 2") and the core refused `checkpoint tampered: the run's config does not hash to the checkpoint's charter_hash`. Cause: `hash_charter` serialized the full charter INCLUDING `created_at_unix` (no serde skip), so the launch-time hash and any later recompute differ whenever a second ticks — an honest resume would ALWAYS refuse as "tampered"; the unit tests passed only because their mock flights were same-second fast. Fixed in `hash_charter` (timestamp zeroed for hashing — the identity is the config-derived content), regression test `charter_hash_is_time_independent` (hash equal across a 2s gap, 6/6 resume tests green). Also measured in this window: the kill driver's poll globbed `dr-*` and matched the PRIOR killed dir (alphabetically first), SIGKILLing the fresh flight seconds in — driver fixed (pre-launch snapshot of existing dirs).
+
+## Resume pair — RED #3: the resume anchored on the checkpoint's LAUNCH dir, not the named --resume dir (order deep-research-t3a, appended 2026-08-17)
+
+Third execution (post-hash-fix binary): kill flight `dr-1786980365` (SIGKILL after round 1, shape verified — checkpoint present, NO manifest/report). Tamper exercise: the driver COPIES the run dir to `tamper-copy/`, flips `charter_hash` → `deadbeef`, and resumes `--resume "$TAMPER_DIR"`. Measured red: exit 0 — the copy's resume COMPLETED A FULL FLIGHT (rounds 1-3, terminal manifest) and the ORIGINAL `dr-1786980365` became terminal — the resume anchored all state reads/writes on `config.run_dir` (the LAUNCH dir recorded in the checkpoint) and never read the tampered copy's checkpoint at all. The deadbeef tamper was never detected because the tamper copy was never read. Root cause: `run_dir` was treated as an identity field inside `config_mismatch` while simultaneously being the resume LOCATION. Fixed in the cmd layer: the named `--resume` dir IS the state home — `c.run_dir = resume_dir` before any state read/write, and `run_dir` removed from `config_mismatch` (it is a LOCATION, not identity — the charter, the identity, never included it). Regression tests: `resume_of_a_copy_anchors_at_the_named_dir` (a faithful copy resumes into the COPY, the ORIGINAL stays untouched; a deadbeef-tampered copy refuses "checkpoint tampered" and writes NO state into either dir). Also measured in this window: the kill driver's exclusion pattern (space-padded substring vs newline-separated snapshot) never matched, so the poll re-killed the prior dir — fixed with line-exact `grep -Fqx` exclusion.
+
+## Resume pair — the GREEN: tamper refusal, mismatch refusal, honest continuation, ledger continuity (order deep-research-t3a, appended 2026-08-17)
+
+Fourth execution (post-anchor-fix binary), kill flight `dr-1786981410` — the first clean kill (drivers + instrument reds all fixed). SIGKILL after round 1; killed shape verified at kill time (checkpoint `written_after_round = 1`, no manifest/verdict-set/report, stale `lock`). Then, against the SAME dir:
+
+1. **Tamper** — `tamper-copy/` with `charter_hash` → `deadbeef`: `--resume` refused, exit 1, typed "checkpoint tampered" (tamper.console.log).
+2. **Mismatch** — `--resume dr-1786981410 --max-rounds 5`: refused, exit 1, typed "--max-rounds 5 differs from the checkpoint's 3" (mismatch.console.log).
+3. **Honest** — bare `--resume dr-1786981410` (no flags re-passed; the driver snapshots `budget-ledger.pre-resume.json` FIRST): console typed "continuing at round 2"; terminal `done-partial`, rounds [1, 2]; the checkpoint still reads `written_after_round = 1` and round-1 artifacts are intact (the killed shape is pinned post-resume too, strip 5).
+
+Ledger continuity (recomputed by verify-demo11.sh from the pre-resume snapshot): every pre-kill entry appears exactly once in the final ledger, spent never decreases, remaining never increases, and per-meter `spent + remaining == allowance` holds (`web-search:mock` 12/12, `web-fetch:pages` 12/12) — identical budget arithmetic across the resume; a resume cannot double-spend the budget. Three reds measured and pinned before this green; 6/6 resume unit tests green.

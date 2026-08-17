@@ -234,6 +234,10 @@ const HELP: Help = Help {
                 "solve",
                 "Give the daemon a coding goal; it makes the goal test-shaped and iterates to green",
             ),
+            (
+                "deep-research",
+                "Multi-round research session; findings land in an estate corpus later sessions reuse",
+            ),
             ("mesh", "Mesh management (create / join / rotate / status)"),
             (
                 "mobile",
@@ -343,12 +347,17 @@ const DEV_VERBS: &[&str] = &[
     // this binary can actually serve. The `project` dispatch arm does its own
     // per-subcommand split; `refuse_workbench_subcommand` is the gate for the
     // half that still needs the sibling.
+    // `deep-research` is NOT here (order deep-research-t3a graduated it
+    // into the DEFAULT feature set): a blanket intercept would refuse the
+    // verb in the shipped build that actually compiles and serves it. The
+    // dispatch arm is `#[cfg(feature = "deep-research")]`; a build without
+    // the feature falls to the unknown-verb catch-all, like the other
+    // feature-gated arms.
     "atos",
     "tools",
     "status",
     "charter",
     "design",
-    "deep-research",
     "plan",
     "amend",
     "milestone",
@@ -478,10 +487,6 @@ const DEV_SUBCOMMANDS: &[(&str, &str)] = &[
     ("status", "Project / ATOS status report"),
     ("charter", "Create or amend a project charter"),
     ("design", "Capture a design session"),
-    (
-        "deep-research",
-        "Thin local-only research loop (gated corpus + web, custody-stamped)",
-    ),
     ("plan", "Compose + align a project plan"),
     ("amend", "Amend a charter or plan"),
     ("milestone", "Advance or close an ATOS milestone"),
@@ -1051,8 +1056,16 @@ async fn async_main() {
             "deep-research" => {
                 // The thin local-only research loop (T1): gated corpus +
                 // web search, custody-stamped fetch, gap-audited rounds.
-                // In-process and dev-gated like posture: it needs the
-                // oicp client + tools-base web backend, not the daemon.
+                // In the DEFAULT build since deep-research-t3a (order
+                // deep-research-t3a graduated the verb out of the
+                // dev-tools-only surface — oicp client + tools-base web
+                // backend, not the daemon).
+                //
+                // --resume DIR restores an interrupted run from its
+                // checkpoint (continuing at the next round, ledger
+                // continuity included); run close ingests the fetched
+                // evidence into dr-estate-<run_id>, the local cache a
+                // later run's --corpora reads before the web leg.
                 //
                 // The egress boundary's glassbox contract (order
                 // deep-research-t2a): every egress decision — released

@@ -2725,6 +2725,77 @@ declared = "2026-08-13"
   to = "failed"
   by = """Measured on the frozen DRB subset (n=10, pre-registered 2026-08-16, both arms run 2026-08-17, judge pinned local Qwen3.6-35B-A3B-MTP-UD-Q6_K). P4 passed — carried from t1h (63/72 coverage floor, not re-measured). P2 FAILED — hybrid-arm pooled fabrication 0.3571, cluster-bootstrap 95% CI [0.2564, 0.4554] vs the perplexity-Research reference 0.1737 (failed: CI lower >= reference, interval does not straddle). P1 met — max(arm mean cost) $0.000573/task < $1.45 proxy (o3-deep-research, frozen in drb/p1-cost-reference.md). Ship requires P4 AND P2 AND P1; P2 failed, so the bar is failed. Bar text unedited; the full record is in research/deep-research/adversarial/pre-registration.md (EXECUTION RECORD — T2b DRB arms)."""
 
+[[initiative.bar]]
+id = "dr-journey"
+one_line = "The deep research session is a JOURNEY through the shipped `svrn deep-research` surface, and its results compound — fetched sources land in a retrieval-visible estate corpus later sessions retrieve BEFORE the web (the local cache)"
+derives_from = "DEEP_RESEARCH.md R3/R6/R11 (loop, estate, honesty); PLAN.md §4 T3; order deep-research-t3a (operator direction: 'the deep research session actually stores results in a corpora that can be leveraged again in other deep research sessions (so we don't always have to rebuild from web search and have a sort of local cache)')"
+bar = "six scenes through the shipped `svrn deep-research` surface — (1) question+budget+consent; (2) prior corpora (`--corpora`) surveyed before any network call, survey recorded; (3) gate's named gaps drive acquisition; (4) a run interrupted at round N resumes at N+1 with ledger continuity (`--resume`, refusal on mismatch); (5) checked report with zero untraced figures in [passed] position; (6) the completed run's fetched sources ingested into the run's estate corpus, retrieval-visible without a manual ritual, follow-up run retrieves estate chunks BEFORE web and cites estate locators — the local cache. Measured: DEMO-11 — a compounding pair (Q2's answer value lives in Q1's estate) + a resume flight, verb-driven, mock-backed where the banks apply, one real corpus leg. Red: at HEAD the surface had no `--resume` and no estate ingest — the red flight (dr-1786976220, killed mid-run at round 1, 2026-08-17) shows a run dir with no checkpoint and no manifest, and the verb usage names neither flag"
+kill = "a resume that can double-spend budget or lose ledger continuity (spent totals that disagree with the journal, or an allowance re-minted) is worse than none — fail the clause, never weaken it; estate compounding cannot be automated without destabilizing ingest; or the honesty constitution is traded (a figure in [passed] position the demo does not trace)"
+declared = "2026-08-17"
+notes = """Declared by order deep-research-t3a when the sequence reached it
+(seat lifted bars.toml ownership at t2d, commit 1f787592). The resume
+mechanism was red-first: the pre-flight red (dr-1786976220, killed at
+round 1) demonstrated the absent surface — no --resume in usage, no
+checkpoint/manifest in the run dir, stale lock left behind; journaled in
+research/deep-research/adversarial/pre-registration.md (T3a DECLARATION +
+Red-watch EXECUTION RECORD) BEFORE the implementation. The mechanism then
+landed: checkpoint.json written only at the two rounds.push sites,
+ledger continuity by SpendDecider::restore replay (entries are ground
+truth — a resume appends, a restart would re-mint), charter-hash and
+config-identity refusals, terminal refusal on manifest presence. Unit
+proof (sovereign-core deep_research, 2026-08-17): 5 resume tests green,
+incl. resume_continues_at_n_plus_one_with_ledger_continuity. Scene-6
+(estate compounding) is the order's load-bearing end-user feature; the
+measurement is DEMO-11 (research/deep-research/demo/demo11/)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "declared"
+  by = "order deep-research-t3a (bars.toml ownership lifted at t2d, commit 1f787592)"
+
+  [[initiative.bar.transition]]
+  on = "2026-08-17"
+  to = "met"
+  by = "order deep-research-t3a, measured by DEMO-11 (research/deep-research/demo/demo11/, verify-demo11.sh — all strips pass; bars.md scene verdicts artifact-derived)"
+  note = """Six scenes measured through the shipped `svrn deep-research`
+  surface; verb-driven, mock-backed where the banks apply (the frozen
+  bank v1 deck — read, never edited), one real corpus leg (dr-demo11-s).
+  Scene 1 met: frozen v1 question + explicit budget (--search 12
+  --fetch 12 --max-rounds 3) + typed consent grant recorded in the
+  manifest (default-deny stands). Scene 2 met: `--corpora
+  dr-estate-dr-1786978547` surveyed BEFORE any network call — survey-1
+  asserts estate_searchable and every round-1 hit carries
+  estate:<corpus>:<chunk> locators. Scene 3 met (carried, not
+  re-measured: the frozen gap-formation, measured seven times
+  t1c..t2c; the demo records the gap-list artifacts). Scene 4 met over
+  THREE measured reds, each pinned by a regression test (6/6 resume
+  tests green): the flag gate refused a bare resume; the charter hash
+  leaked the wall clock; the resume anchored on the checkpoint's launch
+  dir instead of the operator's named --resume dir (a copy's resume
+  closed the ORIGINAL run). Green: kill flight dr-1786981410 SIGKILLed
+  after round 1 — tampered copy refused (exit 1, typed), conflicting
+  --max-rounds refused (exit 1, typed), bare honest resume continued at
+  round 2, terminal done-partial, rounds [1,2], ledger continuity
+  against the pre-resume snapshot: pre-kill entries appear exactly
+  once, spent never decreases, spent+remaining==allowance per meter
+  (12/12 both meters) — a resume cannot double-spend. Scene 5 met:
+  zero untraced figures in [passed] position across run A (136 claims,
+  1 passed-position) and run B (27 claims, 0 passed), the demo10
+  decider (the scorer's own NUMERIC_TOKEN, citation tails cut). Scene 6
+  met with the measured boundary journaled, not smoothed: run A's
+  fetched sources auto-ingested into the estate corpus
+  dr-estate-dr-1786978547 at run close (indexes_built stamped; the
+  corpus lists AND retrieves through the shipped surface — no manual
+  ritual); run B's estate-first draft carried all four pre-registered
+  Q2 specifics from the estate ALONE (the local cache answered a
+  question the deck cannot); the checked verdicts are 27/27
+  could-not-judge with zero passed — the frozen admission decider and
+  the corroboration floor cap single-origin support (the dr-compass
+  structural cause, measured seven times), so the pre-registered "cites
+  estate locators ON PASSED CLAIMS" sub-clause is NOT met, cause named.
+  Kill clause not triggered: continuity holds, ingest automation is
+  stable, the constitution holds."""
+
 # ==========================================================================
 
 [[initiative]]

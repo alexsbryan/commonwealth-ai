@@ -85,6 +85,24 @@ tempfile = { workspace = true }
 sovereign-cli-shared = { workspace = true }
 
 [features]
+# The shipped build carries the deep-research verb (order
+# deep-research-t3a graduated it out of the dev-tools-only surface).
+# `--backend mock --mock-deck` stays visible/documented; the loop is
+# local-only (oicp-client + sovereign-tools-base are pure reqwest
+# leaves — no llama.cpp, no corpus-engine extras beyond the
+# non-optional dep).
+default = [
+    "deep-research",
+    # The notes/seat daemon routes are UNGATED by design (pin test
+    # seat_watch_daemon_path_is_never_feature_gated; commons-fluency
+    # fix 5) — the route must carry in every contract, never a silent
+    # runtime refusal. reqwest is already a non-optional dep of this
+    # crate, so this costs no new link; without it the default build
+    # cannot compile at all (E0432, measured 2026-08-17 — the gate
+    # only protected the sovereign-cli-daemon binary, which does not
+    # depend on sovereign-cli-shared this way).
+    "sovereign-cli-shared/mcp-client",
+]
 # `dev-tools` re-enables the developer-toolchain verb surface (project
 # lifecycle, ATOS, code intelligence, archaeology) that the default
 # (end-user) build gates out. Most gated verbs exec the
