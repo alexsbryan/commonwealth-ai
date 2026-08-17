@@ -2406,6 +2406,55 @@ with no repo script invocation" and the recipe declares NO [parameters] block,
 so no user can install this corpus without bash. Necessary, not sufficient.
 M2 owns it and is queued ready-to-spawn."""
 
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "failed"
+    by = "order sec-filings-install-journey (M2), commits f6ce9866..dcbd1bb5; integrated gate on main dcbd1bb5 exit 0, 9934/0"
+    note = """ATTEMPTED AND NOT MET. Recorded as `failed` rather than left deferred
+because the order ran, landed code, and did not move the bar — and the worker
+said so in its own report before the seat asked.
+
+WHAT IS PROVEN, and it is the half the order called its central question: a
+ticker resolves to an installed SEC corpus with NO repo script. `svrn recipe
+test --params ticker=AAPL` returned VERDICT GREEN against the real Apple 10-K,
+accession 0000320193-25-000079 — 5 docs acquired from `custom:sec_edgar`, 0
+empty, chunk sizes 2587..2621 against a 3000 limit, FTS rare-token probe
+returning its source chunk. Live SEC, not a fixture.
+
+WHY THE BAR STILL FAILS — three named gaps, none of them hand-waved:
+1. No install FORM component. `corpusGetRecipeParameters` and
+   `corpusInstallWithParameters` exist as Tauri commands AND typed TS wrappers,
+   but NOTHING in the desktop calls either. Spec §7.1's "no new install UI" is
+   half true: the plumbing is end to end, the component does not exist.
+2. `catalog_status = "preview"` still disables the install button — correctly.
+   Arming it before the journey is proven is the F2 failure in another costume.
+   Flip conditions are in DEFAULTS_LEDGER at commit dcbd1bb5, review-by
+   2026-08-30.
+3. The installed corpus is PROSE-ONLY until the ~15-line `sec_facts_render`
+   integration lands, so `sec_facts` cannot claim it — which fails the order's
+   own non-regression clause ("an install path that produces a corpus the tool
+   cannot claim has failed even if recipe test is green"). G3 landed the
+   renderer (8339b95d); the integration was deliberately NOT written in M2's
+   branch because it would not cherry-pick without G3's commit present. One
+   tree now holds both.
+
+A DEFECT FOUND BY REPRODUCING RATHER THAN GUESSING, worth keeping: the first
+live run returned 403. One variable isolated, same URL, same second — a
+User-Agent naming a product with no reachable contact is refused by SEC's
+fair-access policy; with a contact it returns 200. That is a guaranteed failure
+for EVERY user, not a style preference. Fixed as a declared `[parameters.contact]`
+with a default rather than a hidden constant: the ticker stays the only required
+input, but the address sent on the user's behalf is visible and replaceable.
+
+DROPPED BY SEAT RULING, and it made the plan smaller: `sec-<ticker>` corpus ids
+are unreachable without minting `id_template` on CorpusMeta plus teaching the
+install route, progress events, status polling, uninstall and mesh-sharing to
+key on a derived id. Install is single-instance under the recipe's own id, which
+is the existing convention (§19). That retired the CIK-mismatch guard entirely —
+it existed only because a ticker label can collide, and there is no label left.
+Replaced by a NAMED-not-silent replacement record (`Residency::{First, Refresh,
+Replaces}`), durable so the coverage card and the install cannot disagree."""
+
   [[initiative.bar]]
   id = "F4-enrichment"
   one_line = "Why a figure moved returns the filing's own explanation, attributed — never a manufactured one"
@@ -2446,6 +2495,32 @@ the tool and invisible to the user — F2's original gap one layer up. The bar
 says "first-class surface". M3 owns the card and its design is already settled
 by FINANCIAL_CORPORA §7.7 (ethos-determined, not taste)."""
 
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "met"
+    by = "order sec-filings-coverage-card (M3), commit 5a7c6b54; integrated gate on main dcbd1bb5 exit 0, 9934/0"
+    note = """MET AT THE UNIT AND COMPONENT LEVEL — NOT AT THE SCENE LEVEL. Same
+caveat as F6, and it is the worker's own, raised before the seat asked.
+
+DERIVED, NOT AUTHORED, and made structural rather than remembered: `CoverageCard`
+carries NO ratio and NEITHER tag count, so no renderer CAN produce "5% coverage"
+— it is never given the inputs. `CoverageLimit` carries NO severity field, so
+nothing CAN style a refusal as a fault. Capability and boundaries share ONE CSS
+rule pair, so neither can be demoted to fine print without visibly demoting the
+other. §7.7's rules are unrepresentable to violate, not merely followed.
+
+Nothing in the derivation or the component names a company; the second-filer
+test derives a truthful card for a 20-F filer with different concepts and no
+consolidated/untyped limits, asserting no Apple string survives AND that no
+limit it does not have is claimed. A second SEC corpus gets a truthful card
+with zero new copy written.
+
+TWO LIMITS NAMED RATHER THAN GLOSSED: (1) "a second corpus" means a second
+corpus of the SAME declared authority type — a different authority tool would
+need its own store type, which was deliberately not speculatively built.
+(2) Nobody has installed a corpus fresh and looked at the card; that path is
+M2's and F3 is not met. M2.5 closes that."""
+
   [[initiative.bar]]
   id = "F6-freshness"
   one_line = "A corpus knows its as-of filing and refuses periods it cannot cover"
@@ -2462,3 +2537,20 @@ another costume: well-formed, plausible, wrong."""
     note = """DEFERRED for the same reason as F5: freshness refusals work in-tool
 (period-beyond-asof now refuses with 0 figures) but the as-of is not shown on
 any user surface. §7.7 requires as-of always shown; M3 owns it."""
+
+    [[initiative.bar.transition]]
+    on = "2026-08-16"
+    to = "met"
+    by = "order sec-filings-coverage-card (M3), commit 5a7c6b54; integrated gate on main dcbd1bb5 exit 0, 9934/0"
+    note = """MET AT THE UNIT AND COMPONENT LEVEL — NOT AT THE SCENE LEVEL, and the
+distinction is the worker's own, volunteered before the seat asked for it.
+
+As-of form, accession, filed date and latest-period-end render on the card and
+no path omits them. 8 Rust tests + 7 component tests, all verified BY NAME in
+the run artifact against a pre-existing control that moved with its code.
+
+WHAT IS NOT PROVEN: §7.2 scene 3 end to end. Nobody has installed a corpus
+fresh and looked at it — that path is M2's, and M2's own report says F3 is not
+met. Transitioning this to `met` on component evidence is deliberate and the
+evidence is named here so a later reader cannot mistake it for the scene being
+true. M2.5 (spec §8, added 2026-08-16) is the step that closes that gap."""
