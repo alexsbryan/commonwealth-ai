@@ -16,7 +16,7 @@
 # can only guess or ask), Tuning (the bounded loop it may run on a near miss
 # without asking), Stop conditions (what wakes you), Decisions (what you read
 # at close-out). Thresholds are NOT here — bars live in
-# quality/initiative-bars.toml and this file points at their ids (#8). The
+# quality/campaigns/<id>.toml and this file points at their ids (#8). The
 # near-miss protocol and the banking rule are standing, not per campaign:
 # .claude/skills/comaintainer/SKILL.md holds them.
 #
@@ -50,7 +50,7 @@ id: $ID
 status: open
 drafted: $TODAY
 approved: pending
-serves: (unattributed)   # initiative id in quality/initiative-bars.toml
+serves: (unattributed)   # campaign id in quality/campaigns/
 spec: (none)             # the committed doc this executes
 budget: (none)           # sessions / wall-clock / spend
 ---
@@ -154,8 +154,8 @@ open(path, "w", encoding="utf-8").write(text.rstrip() + f"\n\nclosed: {today} ({
 PY
     serves=$(awk -F': *' '/^serves:/{print $2}' "$F" | awk '{print $1}')
     echo "co-campaign: $ID closed ($HOW)"
-    echo "  bars do NOT close with it — transition them in quality/initiative-bars.toml"
-    echo "  (a yellow bar stays OPEN carrying its debt)."
+    echo "  bars do NOT close with it — they move by measurement rows"
+    echo "  (co-lineage.py measure); a yellow bar stays OPEN carrying its debt."
     [ -n "${serves:-}" ] && [ "$serves" != "(unattributed)" ] &&
       echo "  close-out read: scripts/co-lineage.py postmortem $serves"
     ;;

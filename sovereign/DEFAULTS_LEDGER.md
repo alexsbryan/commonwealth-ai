@@ -789,6 +789,74 @@ store (ids cited per row).
   seat's stewardship notes.
 - **Review by:** 2026-08-21.
 
+### Per-commit architecture audit — `CO_ARCH` in `co-sweep.sh` → **GRADUATED 2026-08-17, default ON**
+
+- **Graduated same day it shipped, by operator direction, on an AMENDED
+  bar — not on the bar it was registered against.** The candidate missed
+  bar (c) as written (2.5s/commit); the operator re-anchored the bar to
+  the house tolerance for a quality check ("running tests is about the
+  anchor... realistically it takes 10 mins") and directed the flip. At the
+  shipped config the audit costs ~19s per fired commit and ~2.8 min/night
+  at the sweep's 20-commit cap — inside a lint run per commit, and well
+  inside the ceiling for the night. The seat proposed the amendment and
+  did not make it: a bar moved by the seat after seeing the data it failed
+  is not a bar.
+- **Standing exit condition (operator's words):** "we can modify if it
+  hurts ergonomics too much." That is what review-by asks.
+- **Config shipped:** `window = 8`, `max_sites = 16` in
+  `quality/arch-probes.toml`, chosen from a 4-point sweep on a frozen
+  12-commit set. It is the knee: identical verdicts to the full diff at
+  40% of the cost, and the two cheaper configs judge strictly worse
+  (could-not-judge 0.38 vs 0.25).
+- **Residual, named:** 25% of rule-verdicts are could-not-judge at every
+  config tested. They render as an explicit `C` line in the rollup — the
+  seat sees "not judged", never "clean".
+- **Shipped:** 2026-08-17, same commit as this row.
+  `scripts/co-arch.py` + bars at
+  `gym/comaintainer/PREREG_arch_probes_20260817.md`.
+- **What it does:** per swept commit, judges the added code against the
+  §15 smell rows that code cannot enforce, in ONE batched forced-choice
+  call (A/B/C per rule, ~3 chars per rule). A model-free gate decides
+  which rules can fire and SUPPLIES THE CITATIONS, so no model authors a
+  character of the row; §2.1 is decided by an arm counter and never
+  reaches the model (§7.6). Rows land as `kind:"arch"`, `shadow:true` in
+  `~/.sovereign/comaintainer/verdicts.jsonl`; the seat reads
+  `co-arch.py --rollup`.
+- **Quality bars, all MET on the 27B and re-run at the shipped config:**
+  gate recall 21/21, catch 0.952 on planted violations, **false-B 0.000
+  across 13 hard negatives** (clean code that trips the gate), bit-stable
+  0/39 across repeats. The 4B is DISQUALIFIED and may carry no rule:
+  catch 0.667.
+- **MEASURED AND REFUSED, 2026-08-17 (same day):** bars ran on a restored
+  daemon. Gate recall 21/21 MET; catch 0.952 on the 27B MET; false-B
+  0.000 MET; bit-stability 0/39 MET. **Bar (c) cost MISSED on both
+  engines** — 27B median 5,398ms per fired commit (kill tripped at
+  ≥4,000ms), 4B median 2,509ms against a 2,500ms bar — and the 4B is
+  separately disqualified on catch (0.667). So it stays OFF.
+- **Why cost missed:** the shape is right and decode is genuinely free
+  (5-12 output tokens per commit); the price is PREFILL, measured at
+  ~7-8ms per prompt token. The registration's ~1.2s projection was
+  borrowed from a batched register whose speed came from a shared cached
+  prefix, which a per-commit bundle does not have. Full-bundle candidate:
+  46.3s/commit, well-evidenced. Gate-localised windows: 5.4s/commit but
+  could-not-judge on 6 of 12 real commits — speed bought by removing
+  evidence. Both refused; data in the prereg's RESULTS section.
+- **Open question for the operator (do NOT let the seat self-resolve):**
+  bar (c)'s 2.5s came from an interactive register; this is a nightly
+  batch where the full-bundle candidate costs ~34 min/night and the
+  windowed one ~4 min. Amending the bar to total sweep wall-clock is
+  defensible, but a bar moved after seeing the data it failed is not a
+  bar — so it is the operator's call, not the seat's.
+- **Flip condition (unchanged):** every bar in the prereg met, including
+  whatever bar (c) becomes if the operator amends it, PLUS the standing
+  reporting duty added 2026-08-17 — the real-commit could-not-judge rate
+  reported beside the bank score, because the bank passed while
+  production returned all-C on half the commits.
+- **Settled by:** `~/.sovereign/comaintainer/verdicts.jsonl`
+  (`kind:"arch"`) against the bank's labels;
+  `gym/comaintainer/score_arch.py` is the instrument.
+- **Review by:** 2026-08-24.
+
 ## OWED A ROW — dark capabilities with no flip condition (audit 2026-08-05)
 
 **How this section came about.** Cross-referencing

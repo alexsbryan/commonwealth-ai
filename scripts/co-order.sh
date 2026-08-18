@@ -53,8 +53,8 @@ id: $ID
 status: open
 drafted: $(date +%F)
 approved: pending
-# serves: <initiative-id> [<bar-id> ...] — WHICH DECLARED BARS THIS ORDER MOVES.
-# The bars live in quality/initiative-bars.toml; scripts/co-lineage.py renders
+# serves: <campaign-id> [<bar-id> ...] — WHICH DECLARED BARS THIS ORDER MOVES.
+# The bars live in quality/campaigns/<id>.toml; scripts/co-lineage.py renders
 # coverage against them. Same vocabulary as the backlog header's \`Objective:\`
 # (scripts/BACKLOG.md) — one decider, one name, not a second "what this serves".
 # Leaving it (unattributed) is LEGAL and stays VISIBLE in the rollup's
@@ -277,8 +277,8 @@ if lineage is not None:
         if inits is not None:
             known = {i.id: {b.id for b in i.bars} for i in inits}
             if order.serves_initiative not in known:
-                problems.append(f"serves: names initiative {order.serves_initiative!r}, which "
-                                f"initiative-bars.toml does not declare")
+                problems.append(f"serves: names campaign {order.serves_initiative!r}, which "
+                                f"no file under quality/campaigns/ declares")
             else:
                 unknown = [b for b in order.serves_bars if b not in known[order.serves_initiative]]
                 if unknown:

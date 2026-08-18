@@ -1,0 +1,112 @@
+# Flight rules — read raw. Verdicts come from measurement rows
+# (~/.sovereign/comaintainer/bar-measurements.jsonl), never from prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+id        = "financial-corpora"
+objective = "Financial corpora answer figure questions with basis or refuse"
+spec      = "sovereign/docs/specs/FINANCIAL_CORPORA.md"
+declared  = "2026-08-14"
+status    = "active"
+
+[[bar]]
+id           = "F1-no-special-casing"
+one_line     = "The template carries nothing Apple-specific, and a filer it cannot serve fails BY NAME"
+derives_from = "FINANCIAL_CORPORA.md §4 F1"
+status       = "open"
+
+[[bar]]
+id           = "F2-honesty-in-answer-path"
+one_line     = "The typed-fact-or-refuse rule reaches the user, not just the test harness"
+derives_from = "FINANCIAL_CORPORA.md §4 F2, §3.1"
+status       = "open"
+# RATIFIED 2026-08-17 (directive 0c042797): target-only 1.0, NO floor, no
+# noise_band — the bar is ZERO failures on the frozen 9-item prereg and a floor
+# on an honesty bar licenses occasional fabrication; intermittency IS the
+# signal (basis: product-surface runs 2026-08-16 n=3 = 9/9, 8/9, 9/9).
+target       = 1.0
+direction    = "higher_is_better"
+kill         = "if the zero bar must become a rate to render green, that is a product defect, not a threshold to tune"
+# READ-TIER by operator decision (same directive): parses the newest COMMITTED
+# frozen-set verdicts in sovereign/bench/sec-filings/results/, aggregating
+# EVERY artifact of that newest commit (an n=3 session counts all 27 items —
+# a zero bar is not an average, and picking the cleanest run would be).
+# ref = the commit that landed the artifact, so a value can never be stamped
+# with a HEAD that did not produce it. Staleness is the feature: the number
+# ages visibly (STATIC ARTIFACT / age) until someone runs the frozen set
+# (run_frozen_set.py + check-sec-answer-path.py --json into results/).
+instrument   = '''python3 - <<'PY'
+import glob, json, subprocess, sys
+best = None  # (commit_time, sha) -> newest committed run
+cands = {}
+for p in sorted(glob.glob("sovereign/bench/sec-filings/results/aapl-fabrication-*.jsonl")):
+    out = subprocess.run(["git", "log", "-n1", "--format=%ct %H", "--", p],
+                         capture_output=True, text=True).stdout.split()
+    if len(out) != 2:
+        continue  # uncommitted artifacts cannot attribute a ref — skipped
+    t, sha = int(out[0]), out[1]
+    cands.setdefault((t, sha), []).append(p)
+    if best is None or t > best[0]:
+        best = (t, sha)
+if best is None:
+    sys.exit(3)  # no committed verdicts artifact — absent, named
+rows = []
+for p in cands[best]:
+    rows += [json.loads(l) for l in open(p) if l.strip()]
+if not rows:
+    sys.exit(3)
+n = sum(1 for r in rows if r.get("verdict") == "passed")
+print("aggregated:", ", ".join(cands[best]), file=sys.stderr)
+# artifact = the results DIR: its mtime moves exactly when a new result
+# lands, which is what arms the render's static-artifact tell.
+print(json.dumps({"value": round(n / len(rows), 4), "commit": best[1],
+                  "artifact": "sovereign/bench/sec-filings/results"}))
+PY'''
+
+[[bar]]
+id           = "F3-installable"
+one_line     = "A user installs a company corpus without cloning the repo or running a bash script"
+derives_from = "FINANCIAL_CORPORA.md §4 F3, §3.3"
+status       = "open"
+
+[[bar]]
+id           = "F4-enrichment"
+one_line     = "Why a figure moved returns the filing's own explanation, attributed — never a manufactured one"
+derives_from = "FINANCIAL_CORPORA.md §4 F4, §3.2"
+status       = "open"
+
+[[bar]]
+id           = "F5-coverage-visible"
+one_line     = "The corpus states what it cannot answer, and coverage grows by evidence"
+derives_from = "FINANCIAL_CORPORA.md §4 F5"
+status       = "open"
+# RATIFIED 2026-08-17 (directive 0c042797): the 24/503 mapped-ratio was
+# DROPPED as the wrong measurement (~70% of the 479 unmapped tags are >34-char
+# footnote minutiae; dimensional tags are unattainable by construction). This
+# instruments the bar's FIRST clause, structurally: the corpus STATES what it
+# cannot answer — the coverage block the M3 card derives from is present, its
+# counts are consistent (covered + unmapped == total), and the
+# consolidated_only source limit is disclosed. Boolean: 1.0 or 0.0.
+# DELIBERATELY PROVISIONAL: the real F5 is the second clause — fixable misses
+# over total asks, trending to zero, consolidated_only misses EXCLUDED from
+# the denominator (a source limit to disclose, never a gap to close). That
+# needs the demand-side miss count (resolve_concept, Rust) and is folded into
+# order sec-filings-ship; the cheapest form parses the existing UnmappedConcept
+# tracing from logs a run already produced — no new store, no new cadence.
+target       = 1.0
+direction    = "higher_is_better"
+instrument   = '''python3 - <<'PY'
+import json, os, sys
+p = os.path.expanduser("~/.svrnmesh/indexes/sec-cik0000320193/sec_facts.json")
+if not os.path.exists(p):
+    sys.exit(3)  # artifact absent, named by exit code
+c = json.load(open(p)).get("coverage") or {}
+ok = (all(k in c for k in ("filer_tags_total", "covered_tags",
+                           "unmapped_tags", "consolidated_only"))
+      and c["covered_tags"] + c["unmapped_tags"] == c["filer_tags_total"])
+print(json.dumps({"value": 1.0 if ok else 0.0, "artifact": p}))
+PY'''
+
+[[bar]]
+id           = "F6-freshness"
+one_line     = "A corpus knows its as-of filing and refuses periods it cannot cover"
+derives_from = "FINANCIAL_CORPORA.md §4 F6"
+status       = "open"

@@ -1,3 +1,6 @@
+# ============================================================================
+# ARCHIVED 2026-08-17 — active campaigns live in quality/campaigns/; this file
+# is frozen history. co-lineage.py no longer reads it. Do not add to it.
 # initiative-bars.toml — WHAT AN INITIATIVE PROMISED, as data.
 #
 # Orders have accountability structure: a falsifiable Objective, a Lane, a

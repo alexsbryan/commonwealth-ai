@@ -90,7 +90,10 @@ surfaces only:
    whose Next drifted from Objective, pool state
    (`work_in_flight(scope="", match_mode="file")`).
 4. **Commander** — `./scripts/co-directive-log.sh --stats` + tail
-   `~/.sovereign/comaintainer/verdicts.jsonl`, overrides first.
+   `~/.sovereign/comaintainer/verdicts.jsonl`, overrides first, then
+   `python3 scripts/co-arch.py --rollup` (architecture audit, shadow —
+   counts + sha pointers; every `B` is disposed of as a backlog item or
+   an override, never left to accrue).
 5. **Method** — `target/sovereign-lint/latest`,
    `target/sovereign-test/latest`, contract nightly verdict.
 
@@ -114,10 +117,12 @@ needs re-registering or **a target needs moving (operator-only, always,
 
 Everything else executes and LOGS — each call made under the ambiguity
 policy appends one dated, principle-citing line to Decisions, which is
-the close-out read. Bars stay in `quality/initiative-bars.toml`,
-transcribed from the spec; the campaign names bar ids and never restates
-a threshold (#8). A spec declaring no falsifiable bars is the first
-finding — say it before drafting rungs.
+the close-out read. Bars stay in `quality/campaigns/<id>.toml` —
+screen-sized flight rules, hard-capped at 9 bars, transcribed from the
+spec — and the campaign names bar ids and never restates a threshold
+(#8). (`quality/initiative-bars.toml` is ARCHIVED 2026-08-17, frozen
+history.) A spec declaring no falsifiable bars is the first finding —
+say it before drafting rungs.
 
 ## Near-miss protocol — a guessed threshold must not stall the pool
 
@@ -141,18 +146,21 @@ Copy this into every spawn prompt — the order matters.
 - **3. Instrument can't resolve it?** `could-not-judge` — escalate the
   instrument, not the result (§18.4).
 
-**Yellow is a debt, not a pass, structurally:** `met-floor` is absent
-from `closes_a_bar`, and the loader rejects a yellow missing `review_by`
-or `debt_key`, a `floor` with no measured `floor_basis`, and a band on a
-target-only bar. Never move a target. File the debt as you record it:
+**Yellow is a debt, not a pass, structurally:** only a measured `met`
+(or a `descoped` status edit) closes a bar — `met-floor` is a verdict
+the decider computes and it leaves the bar OPEN. The loader rejects a
+`floor` with no measured `floor_basis`, an instrument with no threshold,
+and a non-numeric target. Never move a target (§18.6). File the debt as
+you record it (the `measure` run prints this line ready-to-run on every
+`met-floor` row):
 
 ```
 scripts/co-backlog-producer.sh --key <bar-id> --title "tune <bar-id> to target" \
-    --objective <initiative-id> --evidence-file <the curve>
+    --objective <campaign-id> --evidence-file <the curve>
 ```
 
-Keyed by bar id, so repeated yellows update one item (#7.5); past
-`review_by` it renders OVERDUE and escalates.
+Keyed by bar id, so repeated yellows update one item (#7.5); the backlog
+heap's existing OVERDUE rendering carries the review pressure.
 
 ## Intake → order → spawn
 
@@ -160,8 +168,8 @@ Keyed by bar id, so repeated yellows update one item (#7.5); past
    initiative altitude, falsifiable done-when,
    not-worth-continuing-if, lane, scope, engine, budget, seams.
    `./scripts/co-order.sh new <id>`, fill; `check` is advisory.
-   **Set `serves:` in the frontmatter** — `<initiative-id> [<bar-id>
-   ...]` from `quality/initiative-bars.toml` (`co-lineage.py list`).
+   **Set `serves:` in the frontmatter** — `<campaign-id> [<bar-id>
+   ...]` from `quality/campaigns/` (`co-lineage.py list`).
    Leaving it `(unattributed)` is legal and stays visible; naming a bar
    nobody declared is caught by `check`. Same vocabulary as the
    backlog's `Objective:` — not a second "what this serves".
@@ -328,8 +336,8 @@ bounds the work:
   normally come off that list. Orders closing green while the objective
   goes unserved is invisible to `co-order.sh list` by construction —
   a list of what happened cannot show a gap. `postmortem` is the
-  after-view (transitions with cause artifacts, scope drift, per-order
-  did-the-bar-move). Why it exists: sixteen orders ran under
+  after-view (the full measurement history per bar plus the campaign
+  file's status-edit ledger from git). Why it exists: sixteen orders ran under
   NATIVE_GROUNDING.md, all closed, all gates green, and the headline
   objective (>=5x latency) was carried by none of them.
 
@@ -340,21 +348,22 @@ bounds the work:
    with citations. A skipped `--field` is named in the draft, never
    silent. Operator approves / edits / overrides (`--override` is
    training data — log it). `./scripts/co-order.sh close <id>`.
-8b. **If the order named bars, write the transition** — a `[[initiative.bar.transition]]`
-   row in `quality/initiative-bars.toml` with `to` = met / met-floor /
-   failed / could-not-judge and `by` = the artifact that says so. A
-   `met-floor` row needs `review_by` + `debt_key` and a bar with a
-   declared `floor` — the loader errors on any of those missing, and
-   the debt item is filed in the same breath (see the near-miss
-   protocol). Closing an
-   order WITHOUT one is what leaves a bar `never-attempted` while its
-   orders read `landed`; `co-lineage.py` renders exactly that as
-   `LANDED-BUT-UNMOVED`, so the omission surfaces rather than hiding.
-   A bar dropped from scope gets `deferred` (postponed, still OPEN) or
-   `descoped` (closed by decision) — never silence. **A planning
-   document that quietly re-scopes a bar must land its `deferred` row
-   in the same commit**: that is the exact move that hid the native-
-   grounding latency bar for the whole program.
+8b. **If the order named bars, the bars move by MEASUREMENT, never by
+   hand** — hand-written transition rows are gone (they were the
+   model-prose growth vector: on 2026-08-17 one asserted `met` crediting
+   a guard that exists only on an unmerged branch). A bar's verdict is
+   its newest row in `~/.sovereign/comaintainer/bar-measurements.jsonl`,
+   written by `co-lineage.py measure` (nightly via co-sweep, or run it
+   now); a `met-floor` row prints the debt-filing line ready-to-run
+   (see the near-miss protocol). Closing an order with no measurement
+   row since drafting is rendered as `LANDED-BUT-UNMOVED`, so the
+   omission surfaces rather than hiding. A bar dropped from scope gets a
+   one-line `status` edit in `quality/campaigns/<id>.toml` — `deferred`
+   (postponed, still OPEN) or `descoped` (closed by decision), git
+   history is the ledger — never silence. **A planning document that
+   quietly re-scopes a bar must land its status edit in the same
+   commit**: that is the exact move that hid the native-grounding
+   latency bar for the whole program.
 9. Day close: `scripts/co-closeout.py --open`. Never hand-assemble
    the page — log each drip decision as its own pending row
    (`--kind decision`) and the ledger builds itself.

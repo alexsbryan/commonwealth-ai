@@ -115,7 +115,7 @@ future abandoned system, named here as such.
 | **Durable notes** (decision/invariant/todo) | `note`, `svrn notes add` | retire-with-pointer, or supersede | `svrn notes rationalize` — a candidate report, and only on request | the note, indistinguishable from a current one | **Flat**, but manual: `rationalize` derives candidates from the live store at read. Ephemeral kinds have a real closer (`svrn notes gc`, daemon-run daily); durable ones do not. |
 | **Directives** (`directives.jsonl`) | every seat draft/final pair | the seat stating the edit verdict at resolve time | `co-directive-log.sh --unclassified` / `--stats` | listed under `--unclassified`, outside the denominator | **Flat** — both are queries over the whole log, computed at read |
 | **Orders** (`.sovereign/features/<id>/order.md`) | `co-order.sh new` | `co-order.sh close` | `co-order.sh list` | listed as open, with its age | **Flat** — `list` derives from the order files that exist now |
-| **Initiative bars** (`quality/initiative-bars.toml`) | transcribed from a spec's own gate lines when the initiative starts | a `[[…bar.transition]]` row with `to` = met / met-floor / failed / could-not-judge and the artifact that says so (`met-floor` needs `review_by` + `debt_key` and does NOT close it) | `co-lineage.py coverage <initiative>` — headline is **uncovered bars** | `never-attempted`, counted OPEN, with `NO ORDER` or `LANDED-BUT-UNMOVED` beside it | **Flat** — coverage and verdict are both derived from the declaration file and the live order files at read |
+| **Campaign bars** (`quality/campaigns/<id>.toml`; `initiative-bars.toml` is ARCHIVED 2026-08-17, frozen) | transcribed from a spec's own gate lines when the campaign starts; <=9 bars, one screen | a machine-stamped measurement row in `~/.sovereign/comaintainer/bar-measurements.jsonl` (`co-lineage.py measure`, nightly via co-sweep) — hand-written transitions are gone; defer/descope is a one-line `status` edit with git as the ledger; campaign close moves the file to `quality/campaigns/closed/` | `co-lineage.py coverage <campaign>` — headline is **uncovered bars**; stale/unattributed/static rows render loudly | `never-attempted`, counted OPEN, with `NO ORDER`, `LANDED-BUT-UNMOVED`, `NEVER-MEASURED` or `STALE` beside it | **Flat** — coverage and verdict are derived from the campaign files, the measurement store and the live order files at read; age renders from row `ts` |
 | **Scope claims** | `declare_scope` | `release_scope`, or the TTL | `work_in_flight` | nothing: the TTL drops it whether or not anyone looks | **Flat** — live-only by design; the spec forbids history, so there is no backlog of claims to replay |
 | **Session frames** | a session banking at its cutoff | a session marking itself `completed` | `svrn session frames` | `in-flight` forever, with its age beside it (87 live, several `in-flight` for days) | **Flat** — the list is derived from live frames at read |
 | **Bench baselines / posture rows** | a bench run; each quality subsystem's artifact | re-running the named refresh command | `svrn posture` — one row each, each naming its own refresh command | `stale`, with its age and the command that fixes it | **Flat** — age is computed from the artifact on disk at read time |
@@ -145,10 +145,12 @@ orders**, and its headline is the inverse: the bars with no order at all.
 
 | Question | Run |
 |---|---|
-| What has this initiative promised, and what is uncovered? | `scripts/co-lineage.py coverage <initiative>` |
-| What actually happened — transitions, scope drift, did the bars move? | `scripts/co-lineage.py postmortem <initiative>` |
-| What initiatives exist / how many orders are unattributed? | `scripts/co-lineage.py list` |
+| What has this campaign promised, and what is uncovered / unmeasured / stale? | `scripts/co-lineage.py coverage <campaign>` |
+| What actually happened — every measurement row, did the bars move? | `scripts/co-lineage.py postmortem <campaign>` |
+| What campaigns exist / how many are closed? | `scripts/co-lineage.py list` |
+| Measure every instrumented bar right now | `scripts/co-lineage.py measure <campaign>` (or `--all-active`) |
 | Is the renderer itself honest? | `scripts/co-lineage.py --self-test` |
+| Is a commit's story entailed by its diff? (shadow) | `scripts/co-drift.py <sha>`; self-tests: `--self-test`, `--self-test-live` |
 
 ### Floor, target, and yellow (2026-08-16)
 
@@ -161,13 +163,66 @@ invented**. No floor means target-only: red/green, and a near-miss there
 genuinely escalates — the right shape for a structural zero.
 
 `met-floor` is the band: measured, above floor, below target. **The work
-ships; the bar does not close.** It is absent from `closes_a_bar` (the
-loader errors if anyone adds it), so yellow stays OPEN everywhere,
-carrying a required `review_by` and `debt_key` — one backlog item per
-bar id. Past `review_by` it renders `OVERDUE`.
+ships; the bar does not close.** The decider computes it (only a
+measured `met` or a `descoped` status edit closes a bar), so yellow
+stays OPEN everywhere; the tuning debt is filed to the backlog heap
+keyed by bar id (`measure` prints the ready-to-run producer line on
+every `met-floor` row), and the heap's OVERDUE rendering carries the
+review pressure.
 
 **A worker may pass yellow; only you may move a target** (§18.6). That is
 the whole reason it is safe to grant.
+
+### The burden rule (operator, 2026-08-17 — a standing test, not a preference)
+
+> "we need to absolutely prioritize telemetry that offers as much signal
+> with as little burden as possible otherwise it will just be another
+> speedbump we route around."
+
+Every future bar or instrument must pass three questions before it ships:
+
+1. Does anything have to be REMEMBERED to run? If yes, it will not get run.
+2. Does it add a step to a path someone already walks?
+3. Does the measurement cost more than the decision it informs?
+
+Corollary, demonstrated the day this shipped: **the honest instrument
+turned out to be the cheap one** — read-tier F2 (below) is both more
+attributable and ~1000x cheaper than the nightly run it replaced. And a
+coverage target needs a denominator someone CHOSE: 503 is a number a
+filer's agent chose; asked-concepts is a denominator the user chooses by
+asking.
+
+### Why the 2026-08-17 financial-corpora thresholds are shaped this way (directive 0c042797)
+
+Recorded so a later reader does not "fix" these back:
+
+- **F2 is target-only 1.0 with NO floor, deliberately.** The bar is zero
+  unattributable numerals, not a rate; a floor on an honesty bar licenses
+  occasional fabrication. Measured n=3 was 1.0 / 0.889 / 1.0 — the 0.889
+  is intermittency worth seeing, and a floor would have smoothed it into a
+  yellow. Do not add a floor here "to make it reachable".
+- **F2 is READ-TIER on purpose, and its number is allowed to go stale.**
+  It parses the newest COMMITTED frozen-set verdicts (aggregating every
+  artifact of that commit — an n=3 session counts all 27 items) and takes
+  `ref` from that commit, so a value is never stamped with a HEAD that did
+  not produce it. The run-tier alternative (regenerate answers nightly)
+  was rejected at 40-70 min/night: staleness rendered as age is better
+  information than a number kept fresh at an hour a night, and a slow
+  path is the thing most likely to get the whole system abandoned. The
+  read path is measured at 0.06-0.13s and is structurally
+  daemon-independent (proved with sockets disarmed in-process).
+- **F5 is NOT a coverage ratio.** 24 of 503 filer tags are mapped, but of
+  the 479 unmapped, 335 have names over 34 characters (footnote minutiae
+  like `AccumulatedOtherComprehensiveIncomeLoss…EffectNetOfTax`), only 5
+  are variants of already-covered concepts, and the denominator contains
+  dimensional/segment tags companyfacts can never serve — so any
+  percentage target on it is partly unattainable by construction. F5
+  lands as its first clause only: the corpus STATES what it cannot answer
+  (structural, target 1.0). The real number is deferred until demand
+  exists: `fixable misses / total asks`, trending to zero, with
+  `consolidated_only` misses EXCLUDED from the denominator — a source
+  limit to disclose, never a gap to close (miss instrumentation folded
+  into order sec-filings-ship).
 
 ## Campaigns — approve the ladder once, not every rung
 
@@ -248,9 +303,15 @@ zero bars and a `notes` line saying so.
   `--install` / `--uninstall` manage the launchd agent.
 - `scripts/co-backlog-producer.sh` — the contract automated signals
   file through (e.g. a failed HARD bench lane); never run by hand.
-- `scripts/co-lineage.py` — the initiative rollup (see "Initiatives"
-  above). Reads `quality/initiative-bars.toml` plus every order's
-  `serves:` frontmatter; writes nothing and mints no store.
+- `scripts/co-lineage.py` — the campaign rollup (see "Initiatives"
+  above). Reads `quality/campaigns/*.toml`, the measurement store and
+  every order's `serves:` frontmatter; `coverage` writes nothing —
+  only `measure` appends rows (and their logs under
+  `~/.sovereign/comaintainer/measure/`).
+- `scripts/co-drift.py` — shadow drift monitor: per swept commit,
+  claim-vs-diff and touched-files-vs-`serves:` rows into
+  `verdicts.jsonl` (kind `drift`). Always shadow; a model never
+  authors a rendered line.
 - `scripts/co-order.sh new|check|close` — order lifecycle; the seat
   drives these, but the order file is always yours to edit directly.
   `new` now writes a `serves:` line (default `(unattributed)`) and
