@@ -1,0 +1,65 @@
+svrnmesh: bridged 2 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1786999483 — Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-06/dr-1786999483
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-06 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1786999483] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1786999483] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1786999483] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1786999483] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1786999483] Building FTS content index (2/3)...
+[dr-estate-dr-1786999483] FTS content index done
+[dr-estate-dr-1786999483] Building FTS title index (3/3)...
+[dr-estate-dr-1786999483] FTS title index done
+deep-research: estate corpus dr-estate-dr-1786999483 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-06/dr-1786999483/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786999483", charter_hash: "c5fdb88e8ac1244b", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 11 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 9, fetched: 0, search_calls: 1 }, RoundRow { round: 3, gaps_before: 9, gaps_after: 18, fetched: 1, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://estate.example/seed-06", custody: "public-web", ingested_into: Some("dr-estate-dr-1786999483") }], failed: [] }, budget: BudgetTotals { spent: {"web-fetch:pages": 1, "web-search:mock": 12}, remaining: {"web-search:mock": 0, "web-fetch:pages": 11} }, not_covered: ["On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [Source: ev-1].", "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [Source: ev-1].", "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [Source: ev-1].", "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [Source: ev-1].", "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [Source: ev-1].", "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024 [Source: ev-1].", "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [Source: ev-1].", "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [Source: ev-1].", "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [Source: ev-1].", "On July 19, 2024 [ev-1], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [ev-1].", "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [ev-1].", "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [ev-1].", "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [ev-1].", "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [ev-1].", "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024, following the incident [ev-1].", "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [ev-1].", "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [ev-1].", "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev-1]."], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1786999483", acquired_at_unix: 1786999483, released_at_unix: Some(1786999726) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-06/dr-1786999483/report.md
+rounds: 3 | gaps after last round: 18 | searches: 12 | fetched sources: 1
+open questions (could-not-judge):
+  - On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [Source: ev-1].
+  - This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [Source: ev-1].
+  - The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [Source: ev-1].
+  - The consequences of this single point of failure were severe across multiple sectors:
+*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [Source: ev-1].
+  - *   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [Source: ev-1].
+  - *   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024 [Source: ev-1].
+  - *   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [Source: ev-1].
+  - The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [Source: ev-1].
+  - The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [Source: ev-1].
+  - On July 19, 2024 [ev-1], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [ev-1].
+  - This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [ev-1].
+  - The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [ev-1].
+  - The consequences of this single point of failure were severe across multiple sectors:
+*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [ev-1].
+  - *   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [ev-1].
+  - *   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024, following the incident [ev-1].
+  - *   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [ev-1].
+  - The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [ev-1].
+  - The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  verdict-set.json
+  report.md
+  manifest.json

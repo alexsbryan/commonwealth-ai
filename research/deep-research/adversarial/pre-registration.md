@@ -3302,3 +3302,39 @@ journal-verified pin-served call (2026-08-18 05:22:20Z-05:26:45Z, 265.0s,
 total_ms 265043 matches the sidecar elapsed). Final ab Overall **45.1454** (10/10);
 local re-derived identically (**8.0848**, 10/10). The comparison table above is
 closed at these numbers — nothing pending.
+
+## T5a-hybrid — the web-leg arm scored (operator resolve 2026-08-18) — DECLARATION
+
+The T5a flights measured the local arm (corpus-only acquisition) at 8.0848.
+The same re-flight's hybrid arm (live web search, 4 searches + 4 fetches)
+also landed 10/10 (`demo12/runs/hybrid/drb-<id>/dr-<ts>/`, verdict-set.json +
+report.md, terminal done-partial — the t4a execution record above). The
+operator resolved 2026-08-18 (session directive, "Hybrid score first": land
+the t5a wrap-up, then open one 122B window to RACE-score the existing
+hybrid-arm reports before designing t6a). This section declares that flight
+BEFORE any hybrid judge call — zero hybrid judge calls have been made; the
+four flights above judged local + ab only.
+
+Inherits the T5a declaration items 1-6 verbatim: same judge pin (122B, the
+guard exits 2 unless it is served), same shipped frozen criteria (never
+regenerated), same shipped cleaned reference articles, same derivation
+formula (score_race.py, the one decider), same caveats (judge identity +
+the 122B calibration-gate failure, uncleaned article_1 — the report IS the
+deliverable, FACT stays old-instrument, the 10-task mean is a subset
+statistic). The change vs the T5a flight is ONE named input: article_1 =
+the landed report.md of the demo12 HYBRID arm (`demo12/runs/hybrid/…`), the
+web-leg arm of the same t4a re-flight. Scorer amendment (same commit):
+score_race.py gains the hybrid arm — the article-1 root parameterized, the
+landed gate (verdict-set.json, exactly one dir) and the charter-question
+check unchanged.
+
+Comparison targets (each labeled): vs the local arm's 8.0848 (same judge,
+same tasks — isolates the acquisition-backend lever), vs 42.1779
+(gemini-era official), vs 44.9683 (GPT-5.5-era official), vs 45.1454 (the
+ab arm, same judge on perplexity's articles). Fresh-only flight: 10 judge
+calls, no resume/retry pre-registered (the machinery exists for the arm;
+any retry would be declared here first).
+
+### Execution record
+
+(appended at landing)

@@ -1,0 +1,220 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1786999483",
+  "charter_hash": "c5fdb88e8ac1244b",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1786999483",
+    "question": "Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-06/dr-1786999483",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?",
+  "frontier": [
+    "Number of Windows devices affected by the CrowdStrike Falcon sensor update in July 2024",
+    "Percentage of global commercial airline flights delayed or canceled during the first 48 hours after the July 19, 2024 outage",
+    "Estimated total financial cost to businesses globally due to the July 2023 CrowdStrike incident (Note: The prompt asks for July 2024, but this event occurred in July 2023; if strictly adhering to the user's \"July 2024\" constraint despite factual error, no data exists. However, assuming the user meant the actual historical event which is often misdated by one year in queries, I will list metrics for the *actual* event date of July 19-20, **2023**, as there was no such global outage in July 2024 caused by CrowdStrike. If forced to answer for July 202 specifically based on reality: No major CrowdStrike-caused global IT outage occurred in July 20**24**. The significant incident was in July 20**23**.",
+    "Re-evaluating the prompt's constraint \"If the question implies specific numbers...\". The premise contains a factual error (July 2024 vs July 2023). A web search for \"CrowdStrike software update global IT outage July 2024\" will likely return results clarifying that this event happened in **July 2023**. Therefore, the sub-questions must target the data associated with the *actual* event to be answerable by a web search, or clarify the date discrepancy. However, standard practice for these tasks is to decompose based on the intent of finding information about the famous CrowdStrike outage, correcting the implicit year if necessary for retrieval success, OR listing metrics that would confirm/deny the premise.",
+    "Given the instruction \"Decompose... so a search for the data can retrieve it\", searching for stats from July 20**24** regarding a CrowdStrike global outage will yield zero results because it didn't happen then. Searching for **July 2023** yields rich data. I will assume the user made a typo and intends to ask about the well-known incident (which fits all other descriptors: single update, global IT outage). I will frame the sub-questions around the *actual* event date (July 19–20, **2023**) to ensure retrievability, as this is likely the intended target of \"global IT outage\" + \"CrowdStrike\".",
+    "Number of Windows endpoints that crashed due to the defective CrowdStrike Falcon content channel update on July 19, **2023**",
+    "Percentage of US commercial airline flights disrupted in the 48 hours following the July 19, **2023** CrowdStrike failure",
+    "Estimated total economic loss attributed to the July **2023** CrowdStrike incident by major financial institutions or industry reports",
+    "Count of countries where critical infrastructure (healthcare, banking) reported operational disruptions during the peak of the July **2023** CrowdStrike outage",
+    "Average downtime duration for affected enterprise servers before recovery from the July **2023** CrowdStrike bug"
+  ],
+  "frontier_question": "Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?",
+  "figure_specifiers": [
+    "2024"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786999483",
+      "charter_hash": "c5fdb88e8ac1244b",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786999483",
+      "charter_hash": "c5fdb88e8ac1244b",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-06",
+          "source_url": "https://estate.example/seed-06",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "On 2024-07-19, a faulty CrowdStrike Falcon Sensor content update (a \"Rapid Response Content\" channel file) crashed Windows machines worldwide in blue-screen loops — roughly 8.5 million Windows devices affected, per Microsoft's estimate. CrowdStrike's own root-cause analysis (August 2024) named an out-of-bounds memory read in the sensor's C++ code: an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator — the missing input validation and the memory-safety defect. The impact was global: airlines grounded (Delta cancelled roughly 7,000 flights and took about $500M in costs, later suing CrowdStrike and hiring David Boies), banks, hospitals, 911 services, and broadcasters disrupted. CrowdStrike shares fell about 11% on the following Monday (2024-07-22); CEO George Kurtz testified before Congress on 2024-09-24, and the company apologized and promised deployment-process changes. The causal link was monoculture concentration: one security agent deployed at enterprise scale, updated with a fast-cadence push, became a global single point of failure. CrowdStrike moved to staged (phased) rollouts with canary testing and added sensor-level validation, and the episode drove industry-wide discussion of chaos-engineering and blast-radius limits for endpoint agents.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "crowdstrike",
+            "outage"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-06"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786999483",
+      "charter_hash": "c5fdb88e8ac1244b",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-06"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "On July 19, 2024 [ev-1], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [ev-1].",
+    "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [ev-1].",
+    "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [ev-1].",
+    "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [ev-1].",
+    "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [ev-1].",
+    "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024, following the incident [ev-1].",
+    "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [ev-1].",
+    "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [ev-1].",
+    "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "On July 19, 2024 [ev-1], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [ev-1].",
+      "actionable_query": "On July [ev- ], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in th (2024)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [ev-1].",
+      "actionable_query": "This defect was specifically an untrusted pointer dereference triggered by a -byte input that passed a flawed content validator due to missi (2024)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [ev-1].",
+      "actionable_query": "The incident affected approximately million Windows devices worldwide according to Microsoft’s estimate [ev- ].",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [ev-1].",
+      "actionable_query": "The consequences of this single point of failure were severe across multiple sectors: * **Aviation:** Delta Air Lines cancelled roughly flig (2024)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [ev-1].",
+      "actionable_query": "* **Critical Services:** Banks, hospitals, broadcasters, and services experienced disruptions [ev- ]. (2024)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024, following the incident [ev-1].",
+      "actionable_query": "* **Financial Impact:** CrowdStrike shares fell by about on Monday, July following the incident [ev- ]. (2024)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [ev-1].",
+      "actionable_query": "* **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September ; the company apologized and promised deploym (2024)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [ev-1].",
+      "actionable_query": "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push be (2024)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev-1].",
+      "actionable_query": "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev- ]. (2024)",
+      "from_claim_id": "c9",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 11
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 9,
+      "fetched": 0,
+      "search_calls": 1
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-06",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

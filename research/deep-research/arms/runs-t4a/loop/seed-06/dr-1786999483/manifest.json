@@ -1,0 +1,81 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1786999483",
+  "charter_hash": "c5fdb88e8ac1244b",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 11
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 9,
+      "fetched": 0,
+      "search_calls": 1
+    },
+    {
+      "round": 3,
+      "gaps_before": 9,
+      "gaps_after": 18,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-06",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1786999483"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [Source: ev-1].",
+    "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [Source: ev-1].",
+    "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [Source: ev-1].",
+    "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [Source: ev-1].",
+    "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [Source: ev-1].",
+    "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024 [Source: ev-1].",
+    "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [Source: ev-1].",
+    "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [Source: ev-1].",
+    "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [Source: ev-1].",
+    "On July 19, 2024 [ev-1], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [ev-1].",
+    "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [ev-1].",
+    "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [ev-1].",
+    "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [ev-1].",
+    "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [ev-1].",
+    "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024, following the incident [ev-1].",
+    "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [ev-1].",
+    "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [ev-1].",
+    "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1786999483",
+    "acquired_at_unix": 1786999483,
+    "released_at_unix": 1786999726
+  }
+}

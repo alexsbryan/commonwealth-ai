@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786999255",
+  "charter_hash": "8e66721107369ecc",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Date of entry into force for the EU AI Act prohibitions on unacceptable risk practices (2024, 2027)",
+      "Specific prohibited high-risk AI practice categories listed in Article 5 of Regulation (EU) 2024/1689 effective February 2, 2025",
+      "Percentage change in compliance deadline from initial proposal to final adopted text for general-purpose AI model obligations",
+      "Number of months between the publication date of Regulation (EU) 2347 and the start of the phased implementation timeline",
+      "List of specific GPAI systemic risk thresholds defined by computational power measured in floating point operations per second (FLOPs) (2024, 2027)",
+      "Count of distinct regulatory phases identified in the official European Commission communication regarding the EU AI Act rollout schedule",
+      "Date when full application of high-risk system requirements under Annex III begins according to Article 113 of Regulation (EU) 1689"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2027"
+    ]
+  }
+}

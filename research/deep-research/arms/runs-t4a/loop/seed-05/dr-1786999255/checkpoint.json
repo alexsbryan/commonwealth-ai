@@ -1,0 +1,283 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1786999255",
+  "charter_hash": "8e66721107369ecc",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1786999255",
+    "question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-05/dr-1786999255",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+  "frontier": [
+    "Date of entry into force for the EU AI Act prohibitions on unacceptable risk practices (2024, 2027)",
+    "Specific prohibited high-risk AI practice categories listed in Article 5 of Regulation (EU) 2024/1689 effective February 2, 2025",
+    "Percentage change in compliance deadline from initial proposal to final adopted text for general-purpose AI model obligations",
+    "Number of months between the publication date of Regulation (EU) 2347 and the start of the phased implementation timeline",
+    "List of specific GPAI systemic risk thresholds defined by computational power measured in floating point operations per second (FLOPs) (2024, 2027)",
+    "Count of distinct regulatory phases identified in the official European Commission communication regarding the EU AI Act rollout schedule",
+    "Date when full application of high-risk system requirements under Annex III begins according to Article 113 of Regulation (EU) 1689"
+  ],
+  "frontier_question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+  "figure_specifiers": [
+    "2024",
+    "2027"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786999255",
+      "charter_hash": "8e66721107369ecc",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786999255",
+      "charter_hash": "8e66721107369ecc",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-05",
+          "source_url": "https://estate.example/seed-05",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "The EU AI Act — the world's first comprehensive AI law — was published in the EU Official Journal on 2024-07-12 and entered into force on 2024-08-01. Its obligations are phased: prohibited practices (\"unacceptable risk\") apply from 2025-02-02; general-purpose AI (GPAI) model obligations from 2025-08-02; high-risk system obligations from 2026-08-02, with a subset applying from 2027-08-02. The risk tiers are unacceptable (banned outright — social scoring, certain manipulative or exploitation-of-vulnerability uses), high, limited (transparency duties), and minimal, plus the separate GPAI model category with duties scaled by systemic-risk status (the 10^26 FLOPs threshold). Fines reach €35 million or 7% of global annual turnover, whichever is higher, for prohibited-practice violations, and €15 million or 3% for most other breaches. The European AI Office (established 2024, Brussels) leads implementation; a GPAI Code of Practice was drafted through 2024-2025 with broad industry participation (including OpenAI, Google, Microsoft, Anthropic, Meta) as the safe-zone interpretation of the GPAI obligations. The phased entry was deliberate: obligations land as institutional capacity and technology mature, and the schedule doubles as the compliance roadmap the \"Brussels effect\" exports to providers worldwide.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2027",
+            "act",
+            "entry",
+            "force",
+            "phased"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-05"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786999255",
+      "charter_hash": "8e66721107369ecc",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-05"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed so that obligations would land as institutional capacity and technology mature [Source: ev-1].",
+    "This schedule also functions as a compliance roadmap for the \"Brussels effect,\" which exports these standards to providers worldwide [Source: ev-1].",
+    "The different deadlines require the following specific actions based on risk tiers and system categories:\n*   **Prohibited practices:** Practices classified as \"unacceptable risk\" (such as social scoring and certain manipulative uses) are banned outright starting from February 2, 2025 [Source: ev-1].",
+    "Violations of these prohibited practices carry fines reaching €35 million or 7% of global annual turnover, whichever is higher [Source: ev-1].",
+    "The text says GPAI model obligations apply from 2025-08-02 [Source: ev-1].",
+    "These duties are scaled by systemic-risk status, specifically referencing a threshold of $10^{26}$ FLOPs [Source: ev-1].",
+    "A GPAI Code of Practice was drafted between 2024–2025 to serve as the safe-zone interpretation of these obligations [Source: ev-1].",
+    "No, the text says 2027-08-02 for the subset [Source: ev-1].",
+    "Most other breaches carry fines of €15 million or 3% of global annual turnover [Source: ev-1].",
+    "No, it entered into force on 2024-08-01 [Source: ev-1].",
+    "The European AI Office, established in Brussels in 2024, leads implementation [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed so that obligations would land as institutional capacity and technology mature [Source: ev-1].",
+      "actionable_query": "2024 2027 Act entered force phases because phased entry deliberate designed obligations land institutional capacity technology mature",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This schedule also functions as a compliance roadmap for the \"Brussels effect,\" which exports these standards to providers worldwide [Source: ev-1].",
+      "actionable_query": "schedule functions compliance roadmap Brussels effect exports standards providers worldwide",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The different deadlines require the following specific actions based on risk tiers and system categories:\n*   **Prohibited practices:** Practices classified as \"unacceptable risk\" (such as social scoring and certain manipulative uses) are banned outright starting from February 2, 2025 [Source: ev-1].",
+      "actionable_query": "The different deadlines require the following specific actions based on risk tiers and system categories: * **Prohibited practices:** Practi (2024, 2027)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "Violations of these prohibited practices carry fines reaching €35 million or 7% of global annual turnover, whichever is higher [Source: ev-1].",
+      "actionable_query": "Violations of these prohibited practices carry fines reaching € million or of global annual turnover, whichever is higher . (2024, 2027)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "The text says GPAI model obligations apply from 2025-08-02 [Source: ev-1].",
+      "actionable_query": "text says GPAI model obligations apply",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "These duties are scaled by systemic-risk status, specifically referencing a threshold of $10^{26}$ FLOPs [Source: ev-1].",
+      "actionable_query": "duties scaled systemic-risk status specifically referencing threshold FLOPs",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "A GPAI Code of Practice was drafted between 2024–2025 to serve as the safe-zone interpretation of these obligations [Source: ev-1].",
+      "actionable_query": "2024 GPAI Code Practice drafted serve safe-zone interpretation obligations",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "No, the text says 2027-08-02 for the subset [Source: ev-1].",
+      "actionable_query": "2027 text says subset",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g12",
+      "text": "Most other breaches carry fines of €15 million or 3% of global annual turnover [Source: ev-1].",
+      "actionable_query": "Most other breaches carry fines of € million or of global annual turnover . (2024, 2027)",
+      "from_claim_id": "c12",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "No, it entered into force on 2024-08-01 [Source: ev-1].",
+      "actionable_query": "2024 entered force",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "The European AI Office, established in Brussels in 2024, leads implementation [Source: ev-1].",
+      "actionable_query": "2024 European Office established Brussels leads implementation",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 11,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

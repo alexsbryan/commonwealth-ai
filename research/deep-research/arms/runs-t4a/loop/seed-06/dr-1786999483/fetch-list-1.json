@@ -1,0 +1,166 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1786999483",
+  "charter_hash": "c5fdb88e8ac1244b",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Number of Windows devices affected by the CrowdStrike Falcon sensor update in July 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Percentage of global commercial airline flights delayed or canceled during the first 48 hours after the July 19, 2024 outage",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Estimated total financial cost to businesses globally due to the July 2023 CrowdStrike incident (Note: The prompt asks for July 2024, but this event occurred in July 2023; if strictly adhering to the user's \"July 2024\" constraint despite factual error, no data exists. However, assuming the user meant the actual historical event which is often misdated by one year in queries, I will list metrics for the *actual* event date of July 19-20, **2023**, as there was no such global outage in July 2024 caused by CrowdStrike. If forced to answer for July 202 specifically based on reality: No major CrowdStrike-caused global IT outage occurred in July 20**24**. The significant incident was in July 20**23**.",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Re-evaluating the prompt's constraint \"If the question implies specific numbers...\". The premise contains a factual error (July 2024 vs July 2023). A web search for \"CrowdStrike software update global IT outage July 2024\" will likely return results clarifying that this event happened in **July 2023**. Therefore, the sub-questions must target the data associated with the *actual* event to be answerable by a web search, or clarify the date discrepancy. However, standard practice for these tasks is to decompose based on the intent of finding information about the famous CrowdStrike outage, correcting the implicit year if necessary for retrieval success, OR listing metrics that would confirm/deny the premise.",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Given the instruction \"Decompose... so a search for the data can retrieve it\", searching for stats from July 20**24** regarding a CrowdStrike global outage will yield zero results because it didn't happen then. Searching for **July 2023** yields rich data. I will assume the user made a typo and intends to ask about the well-known incident (which fits all other descriptors: single update, global IT outage). I will frame the sub-questions around the *actual* event date (July 19–20, **2023**) to ensure retrievability, as this is likely the intended target of \"global IT outage\" + \"CrowdStrike\".",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Number of Windows endpoints that crashed due to the defective CrowdStrike Falcon content channel update on July 19, **2023**",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Percentage of US commercial airline flights disrupted in the 48 hours following the July 19, **2023** CrowdStrike failure",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "Estimated total economic loss attributed to the July **2023** CrowdStrike incident by major financial institutions or industry reports",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q10",
+      "text": "Count of countries where critical infrastructure (healthcare, banking) reported operational disruptions during the peak of the July **2023** CrowdStrike outage",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q11",
+      "text": "Average downtime duration for affected enterprise servers before recovery from the July **2023** CrowdStrike bug",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q6",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q7",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 14.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

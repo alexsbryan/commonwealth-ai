@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786999115",
+  "charter_hash": "d967244ec8babc32",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1]. The launch signaled a strategic shift in the direction of frontier reasoning models toward architectures with vision built natively into the model itself rather than being bolted on, as well as native tool use (such as web search and code interpreter) trained directly into the system [Source: ev-1].\n\nStrategically, this release was designed to defend OpenAI’s position at the frontier against DeepSeek's R1 cost shock and Anthropic's agentic-coding push while GPT-5 had not yet shipped [Source: ev-1]. This move reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini’s pricing of $1.10 per million input tokens and $4.40 per million output tokens, compared to o3’s higher price point of $10 / $40 [Source: ev-1].\n\nThe launch also introduced new technical standards for reasoning models, including a private chain-of-thought policy where reasoning tokens are not exposed to API callers, alongside a technique called budget forcing that uses task-adaptive compute so harder questions receive longer thinking times [Source: ev-1]. The technical direction was further highlighted when o3 set a record on the ARC-AGI benchmark, achieving about 87.5% on ARC-AGI-1 at high compute, which met or exceeded the ~85% human baseline as the first model to do so [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-04",
+      "custody": "public-web"
+    }
+  ]
+}

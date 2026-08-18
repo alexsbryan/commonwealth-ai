@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786999926",
+  "charter_hash": "5cce4a80c53afdaf",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The specific legal standard and market definition used by the US District Court to determine Google's dominance in general web search, including the estimated market share percentage attributed to Google.",
+      "The list of specific anticompetitive practices cited by Judge Mehta as evidence of monopoly power, such as exclusive distribution agreements with Apple and Samsung.",
+      "The total annual payment amount from Apple to Google for being the default search engine on its devices, expressed in billions of dollars.",
+      "The number of major browser manufacturers or device makers that entered into exclusive default-search deals with Google between 2013 and 2020.",
+      "The specific structural remedies ordered by the court regarding the divestiture of Chrome browser assets if a fix-it-first approach fails.",
+      "The duration of the conduct remedy period imposed on Google's future business practices, measured in years."
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787000389",
+  "charter_hash": "eceaa4effda21476",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, becoming the first company in history to close above this threshold [Source: ev-1]. This milestone was driven by several key factors related to artificial intelligence infrastructure spending:\n\n*   **Demand for Accelerators:** Strong demand for Nvidia's Blackwell accelerator systems, specifically GB200 and GB300 rack systems, contributed significantly to the valuation increase [Source: ev-1].\n*   **Major Infrastructure Projects:** The Stargate project’s approximately $500 billion AI-infrastructure plan played a crucial role in driving interest and investment [Source: ev-1].\n*   **Hyperscaler Capital Expenditure:** Repeatedly raised capital expenditure guidance from major hyperscalers—including Microsoft, Meta, Google, and Amazon—throughout 2025 further propelled Nvidia's market value [Source: ev-1].\n\nThis milestone indicates that the market is pricing AI infrastructure as the largest new capital cycle since the internet era. In this context, Nvidia is viewed as a central \"toll-booth\" for this supercycle [Source: ev-1]. CEO Jensen Huang characterized the shift behind these investments as a transition from training-focused demand to inference-driven demand, describing \"AI factories\" that sell compute as a commodity [Source: ev-1].\n\nThe rapid trajectory of Nvidia’s valuation—from $1 trillion in mid-2023, to $2 trillion in February 2024, and $3 trillion in June 2024—highlights the intensity of current spending on compute resources leading up to the July 2025 milestone [Source: ev-1]. During this period, Nvidia's share price crossed approximately $160 [Source: ev-1]. However, the evidence also notes significant concentration risks, as Nvidia's weight in the S&P 500 reached record levels amidst these gains [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-11",
+      "custody": "public-web"
+    }
+  ]
+}

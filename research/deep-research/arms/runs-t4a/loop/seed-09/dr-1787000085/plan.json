@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787000085",
+  "charter_hash": "a6ed1a4bfa611c7a",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Anthropic Claude 4 model names and release date in May 2025",
+      "Claude Opus 4 vs Claude Sonnet 4 pricing per million tokens (input/output)",
+      "Benchmark scores for Claude Opus 4 on SWE-bench Verified",
+      "Market share of AI coding assistants by vendor in Q1 2025",
+      "Number of enterprise customers adopting agentic coding tools from Anthropic in early 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

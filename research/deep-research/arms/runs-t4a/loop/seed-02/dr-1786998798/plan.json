@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786998798",
+  "charter_hash": "7ba4f435fb3947be",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's single-day market capitalization loss in dollars and percentage on January 27, 2025",
+      "The count of Nvidia GPUs required to train DeepSeek R1 as reported by DeepSeek or independent analysts",
+      "DeepSeek R1 training cost estimates in US dollars compared to typical frontier model training costs (e.g., GPT-4)",
+      "The share of global AI data center revenue attributed to Nvidia before the DeepSeek release announcement",
+      "Percentage change in Nvidia stock price from pre-market open to close on January 28, 2025 versus historical record losses",
+      "Estimated inference cost per token for DeepSeek R1 using H800 GPUs versus comparable models like Llama 3.1 70B",
+      "Number of NVIDIA H800 chips used in the cluster that trained DeepSeek V3/R1 according to public technical reports"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1"
+    ]
+  }
+}

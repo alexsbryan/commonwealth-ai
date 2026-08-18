@@ -1,0 +1,60 @@
+svrnmesh: bridged 2 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1786999726 — Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-07/dr-1786999726
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-07 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1786999726] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1786999726] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1786999726] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1786999726] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1786999726] Building FTS content index (2/3)...
+[dr-estate-dr-1786999726] FTS content index done
+[dr-estate-dr-1786999726] Building FTS title index (3/3)...
+[dr-estate-dr-1786999726] FTS title index done
+deep-research: estate corpus dr-estate-dr-1786999726 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-07/dr-1786999726/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1786999726", charter_hash: "f82c3b7e7ef7ae90", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 7 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 6, fetched: 0, search_calls: 5 }, RoundRow { round: 3, gaps_before: 6, gaps_after: 15, fetched: 1, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://estate.example/seed-07", custody: "public-web", ingested_into: Some("dr-estate-dr-1786999726") }], failed: [] }, budget: BudgetTotals { spent: {"web-fetch:pages": 1, "web-search:mock": 12}, remaining: {"web-fetch:pages": 11, "web-search:mock": 0} }, not_covered: ["The United States moved to force the sale or ban of TikTok between 2024 and 2025 primarily due to national-security concerns regarding potential Chinese government access to US user data and the platform's algorithm, as identified during CFIUS review [Source: ev-1].", "To address these risks, President Biden signed the Protecting Americans from Foreign Adversary Controlled Applications Act on April 24, 2024 [Source: ev-1].", "This legislation required ByteDance to divest TikTok’s US operations within roughly 270 days (extendable by an additional 90 days) or face a ban in the United States [Source: ev-1].", "The dispute was resolved through an Oracle-led deal announced on June 10, 2025, rather than an outright sale of the company [Source: ev-1].", "Under this agreement, which structured the app as a joint venture under \"Project Texas,\" Oracle received approximately a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1].", "The arrangement ensured that US user data would be hosted in Oracle’s cloud under US control to mitigate security risks [Source: ev-1].", "This resolution followed a period where the Supreme Court upheld the law by a unanimous 9-0 vote on January 17, 2025 (per curiam), just before its effective date of January 19, 2025 [Source: ev-1].", "Consequently, TikTok went dark in the US for roughly 14 hours on January 18/19, 202 [Source: ev-1].", "The service was restored on January 19, 2 [Source: ev-1] after President Trump pledged to pause enforcement and issued an executive order on January 20, 20 that delayed enforcement for 75 days while final ownership structures were completed through 2025 [Sourc e: ev-1].", "The United States moved to force TikTok's sale or ban it primarily due national-security concerns regarding potential Chinese government access to US user data and the platform's algorithm, as determined during CFIUS review [Source: ev-1].", "This concern led President Biden to sign the Protecting Americans from Foreign Adversary Controlled Applications Act on 2024-04-24, which mandated that ByteDance divest TikTok's US operations within roughly 270 days (extendable by 90) or face a ban in the US [Source: ev-1].", "The dispute was resolved through an Oracle-led deal announced on 2025-06-10, rather than an outright sale [Source: ev-1].", "Under this agreement, Oracle received approximately a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1].", "The resolution involved structuring the app as a joint venture under \"Project Texas,\" which kept US user data hosted in Oracle's cloud under US control to address security risks [Source: ev-1].", "This process occurred after the Supreme Court upheld the law 9-0 on 2025-17 (per curiam), just before the effective date of 2025-2025; following a brief period where TikTok went dark for roughly 14 hours on 2025/2025, President Trump pledged to pause enforcement and issued an executive order on 20-20 that delayed enforcement for 75 days while final ownership structures were completed through 2025 [Source: ev-1]."], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1786999726", acquired_at_unix: 1786999726, released_at_unix: Some(1786999926) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-07/dr-1786999726/report.md
+rounds: 3 | gaps after last round: 15 | searches: 12 | fetched sources: 1
+open questions (could-not-judge):
+  - The United States moved to force the sale or ban of TikTok between 2024 and 2025 primarily due to national-security concerns regarding potential Chinese government access to US user data and the platform's algorithm, as identified during CFIUS review [Source: ev-1].
+  - To address these risks, President Biden signed the Protecting Americans from Foreign Adversary Controlled Applications Act on April 24, 2024 [Source: ev-1].
+  - This legislation required ByteDance to divest TikTok’s US operations within roughly 270 days (extendable by an additional 90 days) or face a ban in the United States [Source: ev-1].
+  - The dispute was resolved through an Oracle-led deal announced on June 10, 2025, rather than an outright sale of the company [Source: ev-1].
+  - Under this agreement, which structured the app as a joint venture under "Project Texas," Oracle received approximately a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1].
+  - The arrangement ensured that US user data would be hosted in Oracle’s cloud under US control to mitigate security risks [Source: ev-1].
+  - This resolution followed a period where the Supreme Court upheld the law by a unanimous 9-0 vote on January 17, 2025 (per curiam), just before its effective date of January 19, 2025 [Source: ev-1].
+  - Consequently, TikTok went dark in the US for roughly 14 hours on January 18/19, 202 [Source: ev-1].
+  - The service was restored on January 19, 2 [Source: ev-1] after President Trump pledged to pause enforcement and issued an executive order on January 20, 20 that delayed enforcement for 75 days while final ownership structures were completed through 2025 [Sourc e: ev-1].
+  - The United States moved to force TikTok's sale or ban it primarily due national-security concerns regarding potential Chinese government access to US user data and the platform's algorithm, as determined during CFIUS review [Source: ev-1].
+  - This concern led President Biden to sign the Protecting Americans from Foreign Adversary Controlled Applications Act on 2024-04-24, which mandated that ByteDance divest TikTok's US operations within roughly 270 days (extendable by 90) or face a ban in the US [Source: ev-1].
+  - The dispute was resolved through an Oracle-led deal announced on 2025-06-10, rather than an outright sale [Source: ev-1].
+  - Under this agreement, Oracle received approximately a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1].
+  - The resolution involved structuring the app as a joint venture under "Project Texas," which kept US user data hosted in Oracle's cloud under US control to address security risks [Source: ev-1].
+  - This process occurred after the Supreme Court upheld the law 9-0 on 2025-17 (per curiam), just before the effective date of 2025-2025; following a brief period where TikTok went dark for roughly 14 hours on 2025/2025, President Trump pledged to pause enforcement and issued an executive order on 20-20 that delayed enforcement for 75 days while final ownership structures were completed through 2025 [Source: ev-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  verdict-set.json
+  report.md
+  manifest.json

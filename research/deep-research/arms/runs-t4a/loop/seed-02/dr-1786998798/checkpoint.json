@@ -1,0 +1,215 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1786998798",
+  "charter_hash": "7ba4f435fb3947be",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1786998798",
+    "question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t4a/loop/seed-02/dr-1786998798",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+  "frontier": [
+    "Nvidia's single-day market capitalization loss in dollars and percentage on January 27, 2025",
+    "The count of Nvidia GPUs required to train DeepSeek R1 as reported by DeepSeek or independent analysts",
+    "DeepSeek R1 training cost estimates in US dollars compared to typical frontier model training costs (e.g., GPT-4)",
+    "The share of global AI data center revenue attributed to Nvidia before the DeepSeek release announcement",
+    "Percentage change in Nvidia stock price from pre-market open to close on January 28, 2025 versus historical record losses",
+    "Estimated inference cost per token for DeepSeek R1 using H800 GPUs versus comparable models like Llama 3.1 70B",
+    "Number of NVIDIA H800 chips used in the cluster that trained DeepSeek V3/R1 according to public technical reports"
+  ],
+  "frontier_question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+  "figure_specifiers": [
+    "1"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786998798",
+      "charter_hash": "7ba4f435fb3947be",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786998798",
+      "charter_hash": "7ba4f435fb3947be",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-02",
+          "source_url": "https://estate.example/seed-02",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "DeepSeek released DeepSeek-R1, its open-weights reasoning model with accompanying paper, on 2025-01-20. Its predecessor DeepSeek-V3 (released 2024-12-26) reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million, on export-restricted H800 chips. R1's reasoning was produced by reinforcement learning (GRPO), and R1-Zero was trained with no supervised fine-tuning at all. On 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization — at the time the largest single-day loss in stock-market history — with about US$1 trillion erased across the tech complex. Markets repriced the thesis that frontier-AI capex, and therefore Nvidia's demand, is moated by compute scale: an open-weights frontier-class reasoning model had been trained for a fraction of the incumbent cost. US export controls (the H800 restrictions) had forced Chinese labs toward efficiency — scarcity, not preference, drove the economics.\n",
+          "ingested_into": null,
+          "tags": [
+            "2025",
+            "deepseek",
+            "loss",
+            "nvidia"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-02"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1786998798",
+      "charter_hash": "7ba4f435fb3947be",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-02"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the incumbent cost, challenging the market thesis that AI capital expenditure and Nvidia demand were protected by compute scale [Source: ev-1].",
+    "This event revealed that scarcity driven by US export controls (specifically restrictions on H800 chips) forced Chinese labs toward efficiency rather than preference driving their economics [Source: ev-1].",
+    "Specific details from the evidence include:\n*   DeepSeek-R1 was released on 2025-01-20 [Source: ev-1].",
+    "*   Its predecessor, DeepSeek-V3, was released on 2024-12-26 [Source: ev-1].",
+    "*   DeepSeek-V3 reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+    "Let's look at the figures list: `1, 2025, 01, 27`.",
+    "This corresponds to January 27, 2025), Nvidia lost approximately US$589 billion in market capitalization [Source: ev-1].",
+    "*   At that time, about US$1 trillion was erased across the tech complex [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the incumbent cost, challenging the market thesis that AI capital expenditure and Nvidia demand were protected by compute scale [Source: ev-1].",
+      "actionable_query": "release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class, open-weights reasoning mode (1)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This event revealed that scarcity driven by US export controls (specifically restrictions on H800 chips) forced Chinese labs toward efficiency rather than preference driving their economics [Source: ev-1].",
+      "actionable_query": "event revealed scarcity driven export controls specifically restrictions chips forced Chinese labs toward efficiency rather preference driving economics",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Specific details from the evidence include:\n*   DeepSeek-R1 was released on 2025-01-20 [Source: ev-1].",
+      "actionable_query": "was released on - - . (1)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "*   Its predecessor, DeepSeek-V3, was released on 2024-12-26 [Source: ev-1].",
+      "actionable_query": "* Its predecessor, DeepSeek-V was released on - - . (1)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "*   DeepSeek-V3 reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+      "actionable_query": "* DeepSeek-V reported training on roughly million GPU-hours at a claimed cost of about US$ million using export-restricted H chips .",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "Let's look at the figures list: `1, 2025, 01, 27`.",
+      "actionable_query": "`. (1)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "This corresponds to January 27, 2025), Nvidia lost approximately US$589 billion in market capitalization [Source: ev-1].",
+      "actionable_query": "This corresponds to January ), Nvidia lost approximately US$ billion in market capitalization . (1)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "*   At that time, about US$1 trillion was erased across the tech complex [Source: ev-1].",
+      "actionable_query": "trillion was erased across the tech complex . (1)",
+      "from_claim_id": "c9",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 2,
+      "gaps_after": 8,
+      "fetched": 0,
+      "search_calls": 3
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-02",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

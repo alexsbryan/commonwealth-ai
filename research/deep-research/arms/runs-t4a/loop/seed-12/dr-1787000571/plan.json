@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787000571",
+  "charter_hash": "f227cc78a37533fd",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of security researchers who demonstrated that Microsoft Recall screenshots could be accessed by any local user before the 2024 update",
+      "Date when Microsoft disabled the automatic saving feature for Windows Recall in the May 2024 Insider build",
+      "Percentage change in the number of privacy-related complaints or articles mentioning \"Microsoft Recall\" between April and June 2024 compared to January-March 2024",
+      "Count of specific vulnerabilities (CVEs) identified in the initial implementation of Microsoft Recall's data storage mechanism",
+      "Name of the encryption standard initially used versus the updated hardware-based encryption method implemented after public criticism (2024)",
+      "Share of Windows Copilot+ PCs shipped with Recall enabled at launch versus those where it was later turned off by default"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

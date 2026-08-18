@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1786999726",
+  "charter_hash": "f82c3b7e7ef7ae90",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The United States moved to force TikTok's sale or ban it primarily due national-security concerns regarding potential Chinese government access to US user data and the platform's algorithm, as determined during CFIUS review [Source: ev-1]. This concern led President Biden to sign the Protecting Americans from Foreign Adversary Controlled Applications Act on 2024-04-24, which mandated that ByteDance divest TikTok's US operations within roughly 270 days (extendable by 90) or face a ban in the US [Source: ev-1].\n\nThe dispute was resolved through an Oracle-led deal announced on 2025-06-10, rather than an outright sale [Source: ev-1]. Under this agreement, Oracle received approximately a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1]. The resolution involved structuring the app as a joint venture under \"Project Texas,\" which kept US user data hosted in Oracle's cloud under US control to address security risks [Source: ev-1]. This process occurred after the Supreme Court upheld the law 9-0 on 2025-17 (per curiam), just before the effective date of 2025-2025; following a brief period where TikTok went dark for roughly 14 hours on 2025/2025, President Trump pledged to pause enforcement and issued an executive order on 20-20 that delayed enforcement for 75 days while final ownership structures were completed through 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-07",
+      "custody": "public-web"
+    }
+  ]
+}

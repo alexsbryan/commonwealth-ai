@@ -1,0 +1,234 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786999726",
+  "charter_hash": "f82c3b7e7ef7ae90",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The United States moved to force TikTok's sale or ban it primarily due national-security concerns regarding potential Chinese government access to US user data and the platform's algorithm, as determined during CFIUS review [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "TikTok",
+          "CFIUS review",
+          "Chinese government access to US user data"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This concern led President Biden to sign the Protecting Americans from Foreign Adversary Controlled Applications Act on 2024-04-24, which mandated that ByteDance divest TikTok's US operations within roughly 270 days (extendable by 90) or face a ban in the US [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024-04-24",
+          "President Biden",
+          "Protecting Americans from Foreign Adversary Controlled Applications Act",
+          "ByteDance divest TikTok"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The dispute was resolved through an Oracle-led deal announced on 2025-06-10, rather than an outright sale [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025-06-10",
+          "Oracle-led deal"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Under this agreement, Oracle received approximately a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The resolution involved structuring the app as a joint venture under \"Project Texas,\" which kept US user data hosted in Oracle's cloud under US control to address security risks [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "This process occurred after the Supreme Court upheld the law 9-0 on 2025-17 (per curiam), just before the effective date of 2025-2025; following a brief period where TikTok went dark for roughly 14 hours on 2025/2025, President Trump pledged to pause enforcement and issued an executive order on 20-20 that delayed enforcement for 75 days while final ownership structures were completed through 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9, 0, 2025/2025"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "The United States moved to force TikTok's sale or ban it primarily due national-security concerns regarding potential Chinese government access to US user data and the platform's algorithm, as determined during CFIUS review [Source: ev-1].",
+      "actionable_query": "United States moved force TikTok's sale ban primarily due national-security concerns regarding potential Chinese government access user data platform's algorithm determined during CFIUS review",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This concern led President Biden to sign the Protecting Americans from Foreign Adversary Controlled Applications Act on 2024-04-24, which mandated that ByteDance divest TikTok's US operations within roughly 270 days (extendable by 90) or face a ban in the US [Source: ev-1].",
+      "actionable_query": "2024 concern led President Biden sign Protecting Americans Foreign Adversary Controlled Applications Act mandated ByteDance divest TikTok's operations within roughly days extendable face ban",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The dispute was resolved through an Oracle-led deal announced on 2025-06-10, rather than an outright sale [Source: ev-1].",
+      "actionable_query": "2025 dispute resolved through Oracle-led deal announced rather outright sale",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Under this agreement, Oracle received approximately a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1].",
+      "actionable_query": "Under agreement Oracle received approximately stake TikTok's operations participation SoftBank other investors ByteDance retained majority interest",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "The resolution involved structuring the app as a joint venture under \"Project Texas,\" which kept US user data hosted in Oracle's cloud under US control to address security risks [Source: ev-1].",
+      "actionable_query": "resolution involved structuring app joint venture under Project Texas kept user data hosted Oracle's cloud control address security risks",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "This process occurred after the Supreme Court upheld the law 9-0 on 2025-17 (per curiam), just before the effective date of 2025-2025; following a brief period where TikTok went dark for roughly 14 hours on 2025/2025, President Trump pledged to pause enforcement and issued an executive order on 20-20 that delayed enforcement for 75 days while final ownership structures were completed through 2025 [Source: ev-1].",
+      "actionable_query": "This process occurred after the Supreme Court upheld the law - - ; following a brief period where TikTok went dark for roughly hours on Pres (2024, 2025)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

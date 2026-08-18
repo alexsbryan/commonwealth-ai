@@ -1,0 +1,178 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786998714",
+  "charter_hash": "e28fcf8dacf4dc57",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Google acquired the cloud-security firm Wiz to close a security gap with competitors AWS and Azure, betting that cloud-security consolidation would be the next battleground in the \"cloud wars\" driven by AI-driven cloud adoption [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The deal signaled this strategic shift toward securing the market as it consolidated around these new drivers.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "The acquisition was announced on March 18, 2025, for approximately $32 billion in an all-cash transaction, making it the largest acquisition in Google's history [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "March 18, 2025",
+          "$32 billion",
+          "All-cash transaction"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "This final price followed Wiz’s rejection of an earlier offer from Google worth $23 billion in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Although the agreement was reached in March 2025 and involved shareholder and regulatory steps, the deal officially closed later that same year, with completion reported in July 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "March 2025",
+          "July 2025"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Google acquired the cloud-security firm Wiz to close a security gap with competitors AWS and Azure, betting that cloud-security consolidation would be the next battleground in the \"cloud wars\" driven by AI-driven cloud adoption [Source: ev-1].",
+      "actionable_query": "Google acquired cloud-security firm Wiz close security gap competitors AWS Azure betting consolidation next battleground cloud wars driven AI-driven adoption",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "The deal signaled this strategic shift toward securing the market as it consolidated around these new drivers.",
+      "actionable_query": "The deal signaled this strategic shift toward securing the market as it consolidated around these new drivers. (2025)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "The acquisition was announced on March 18, 2025, for approximately $32 billion in an all-cash transaction, making it the largest acquisition in Google's history [Source: ev-1].",
+      "actionable_query": "2025 acquisition announced March approximately billion all-cash transaction making largest Google's history",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "This final price followed Wiz’s rejection of an earlier offer from Google worth $23 billion in July 2024 [Source: ev-1].",
+      "actionable_query": "final price followed Wiz’s rejection earlier offer Google worth billion July",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Although the agreement was reached in March 2025 and involved shareholder and regulatory steps, the deal officially closed later that same year, with completion reported in July 2025 [Source: ev-1].",
+      "actionable_query": "2025 Although agreement reached March involved shareholder regulatory steps deal officially closed later same year completion reported July",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

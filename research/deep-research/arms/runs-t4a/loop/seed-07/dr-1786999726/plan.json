@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1786999726",
+  "charter_hash": "f82c3b7e7ef7ae90",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The number of US federal laws or executive orders signed between January 2024 and December 2025 mandating the divestiture or ban of TikTok",
+      "The percentage share of total US social media users aged 13-24 who used TikTok in Q4 2023 according to Pew Research Center data",
+      "The count of US government officials cited by major news outlets as having expressed national security concerns regarding ByteDance's ownership of TikTok from 2019 to 2024",
+      "The median age of TikTok's user base in the United States compared to Facebook and Instagram as reported in industry reports for 2023",
+      "The number of days granted to ByteDance to complete a sale under the August 2025 executive order or court rulings prior to that date",
+      "The estimated annual revenue loss (in USD) projected for TikTok if it were banned in the US market between 2024 and 2025 according to financial analysts"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2025"
+    ]
+  }
+}

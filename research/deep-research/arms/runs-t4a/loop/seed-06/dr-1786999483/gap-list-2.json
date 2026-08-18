@@ -1,0 +1,226 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1786999483",
+  "charter_hash": "c5fdb88e8ac1244b",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "On July 19, 2024 [ev-1], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024, following the incident [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "On July 19, 2024 [ev-1], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [ev-1].",
+      "actionable_query": "On July [ev- ], a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in th (2024)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This defect was specifically an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety flaw [ev-1].",
+      "actionable_query": "This defect was specifically an untrusted pointer dereference triggered by a -byte input that passed a flawed content validator due to missi (2024)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "The incident affected approximately 8.5 million Windows devices worldwide according to Microsoft’s estimate [ev-1].",
+      "actionable_query": "The incident affected approximately million Windows devices worldwide according to Microsoft’s estimate [ev- ].",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The consequences of this single point of failure were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs, subsequently suing CrowdStrike and hiring David Boies [ev-1].",
+      "actionable_query": "The consequences of this single point of failure were severe across multiple sectors: * **Aviation:** Delta Air Lines cancelled roughly flig (2024)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced disruptions [ev-1].",
+      "actionable_query": "* **Critical Services:** Banks, hospitals, broadcasters, and services experienced disruptions [ev- ]. (2024)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "*   **Financial Impact:** CrowdStrike shares fell by about 11% on Monday, July 22, 2024, following the incident [ev-1].",
+      "actionable_query": "* **Financial Impact:** CrowdStrike shares fell by about on Monday, July following the incident [ev- ]. (2024)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised deployment-process changes, including staged (phased) rollouts with canary testing and added sensor-level validation [ev-1].",
+      "actionable_query": "* **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September ; the company apologized and promised deploym (2024)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push became a global single point of failure [ev-1].",
+      "actionable_query": "The root cause was identified as monoculture concentration, where one security agent deployed at enterprise scale via a fast-cadence push be (2024)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev-1].",
+      "actionable_query": "The episode also drove industry-wide discussion regarding chaos-engineering and blast-radius limits for endpoint agents [ev- ]. (2024)",
+      "from_claim_id": "c9",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}
