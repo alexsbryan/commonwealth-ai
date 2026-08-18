@@ -1,0 +1,2079 @@
+{
+ "arm": "local",
+ "subset": "drb/query.subset.jsonl",
+ "judge_pin": "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003",
+ "n_tasks": 10,
+ "tasks": [
+  {
+   "id": 56,
+   "topic": null,
+   "pairs": 23,
+   "counts": {
+    "supported": 3,
+    "unsupported": 20,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 300,
+   "cost_usd": 0.00075,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 3,
+    "hallucination": 20,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Specifically: The text notes that in \"private value auctions,\" every bidder has their own valuation .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "It describes \"sealed-bid\" auctions where bidders only learn if their bid was the best .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "It mentions \"first-price\" auctions in the context of dummy bids, stating they are designed so as not to become the winning bid .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "It is commonly used in charity events where items are closed at a common finish time without an active auctioneer for individual sales .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Bid sheets often include fixed starting amounts, predetermined increments, and \"guaranteed bid\" or \"buy now\" options .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "In private value auctions within this context, each bidder has their own valuation, whereas in common value auctions, valuations are identical among bidders .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "Conversely, sealed-bid auctions only reveal whether a specific bid was the best .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "Variations like \"best/not best\" auctions provide leadership responses, while rank auctions show the bidder's position relative to others .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "Traffic-light auctions use signals based on the last bid's distribution position .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "This structure encourages high bidders to exceed their limits in final rounds to avoid losing without return .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "The top-up auction, used primarily for charity, requires losing bidders to pay the difference between their bid and the next lowest one, while the winner pays their bid amount .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "**Winner Selection and Pricing:** Most auctions select the best bid as the winner, but unique bid auctions award the item to the bidder with the lowest *unique* bid .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "Chinese auctions use sealed bids where winning probability increases with relative bid size .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "eBay’s proxy bidding is a specific implementation of this rule, adding a predefined increment to the second highest bid when outbid .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "Multi-winner formats include multiunit, combinatorial, generalized first-price, and generalized second-price auctions .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 16,
+     "fact": "**Bidding Strategies and Tactics** **Sniping and Jump Bidding:** Auction sniping involves placing a bid at the last moment; data from eBay indicates experienced bidders are more likely to snipe and that snipers have higher win rates .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 17,
+     "fact": "\"Auction fever\" (calor licitantis) describes irrational bidder behavior during these processes .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 18,
+     "fact": "If cancelled, they may claim damages equal to the difference between their maximum bid and the replacement purchase price, reflecting a market self-protection mechanism even if no sale occurred .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 19,
+     "fact": "**Collusion and Rings** **Illegal Practices:** In the UK, certain auction practices are illegal as they jeopardize competition, demotivate bidders, rob sellers of true value, and reduce commissions for auctioneers .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 20,
+     "fact": "This was highlighted in an episode titled 'For Love or Money' from the 1979 British television series *The House of Caradus*, where Helena Caradus uncovered such activities upon her return from Paris .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 21,
+     "fact": "This tactic was a plot device in *Lovejoy* (series 4, episode 3), specifically involving the inflation of a watercolour’s value so other works could sell for more than their purchase cost .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 22,
+     "fact": "In English auctions, dummy bids are collusive acts designed to deceive genuine bidders into paying more; in first-price auctions, they may serve as unfavorable bids to ensure invitation to future events rather than winning the current one .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 23,
+     "fact": "**Regulatory Precautions:** To prevent tacit coordination or signalling via bid digits, agencies like the FCC have experimented with restrictions on bid visibility, limiting bid counts, using click-box bidding, and enforcing anonymous bidding in spectrum auctions .",
+     "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 58,
+   "topic": null,
+   "pairs": 36,
+   "counts": {
+    "supported": 6,
+    "unsupported": 17,
+    "unknown": 13,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 324,
+   "cost_usd": 0.00081,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 6,
+    "hallucination": 17,
+    "honest_abstention": 0,
+    "unclassified": 13
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Definition and General Prevalence Horizontal gene transfer (HGT) is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "While HGT is a major driver of evolution in bacteria and common in certain unicellular eukaryotes, its prevalence and importance in **multicellular eukaryotes** remain unclear .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "However, it is recognized as a pervasive evolutionary process that can involve both prokaryotic and eukaryotic lineages .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "Molecular biologists have described HGT as \"A New Paradigm for Biology\" due to increasing evidence of its significance .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Mechanism/Context:** As an understory plant, *Amborella* has intimate contact with shade- and moisture-dependent organisms such as algae, lichens, and mosses .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Extent of Transfer:** Sequencing revealed that for every gene of its own origin, *Amborella* contains about six versions from the genomes of associated plants and algae .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "**Significance:** The scale of this transfer caused \"considerable surprise,\" but its evolutionary or physiological significance—including whether it relates to the species' apparent stability—is not yet clear .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Potential Role in Cancer:** It has been suggested that lateral gene transfer from bacteria to humans may play a role in cancer, though this is presented as a suggestion rather than an established fact .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "**Source of New Genes:** In prokaryotes, HGT contributes more to genetic variation than gene duplication .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "The existence of a Last Universal Common Ancestor (LUCA) suggests that early horizontal transfers were relatively limited; otherwise, life would be represented as a complex network with many ancestors rather than sharply delineated lineages .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "**Mediators and Mechanisms:** Viruses can carry DNA between organisms, allowing gene transfer even across biological domains .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": "estate-1",
+     "verdict": "supported"
+    },
+    {
+     "idx": 12,
+     "fact": "In prokaryotes, mechanisms include transformation, transduction, and conjugation , though specific mechanisms for the plant/animal examples above are not detailed in the text beyond general HGT definitions.",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 13,
+     "fact": "**Adaptive Benefits:** While HGT is noted to spread antibiotic resistance, virulence, and adaptive metabolic functions generally  , the evidence does not explicitly confirm that these same benefits apply to the *Amborella* or rotifer cases; indeed, the significance of the *Amborella* transfers remains unclear .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "The text notes that in prokaryotes, HGMT spreads adaptive metabolic functions and virulence .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "However, regarding the specific plant example (*Amborella*), the text explicitly states that the evolutionary and physiological significance is **not as yet clear** .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "Based on the provided evidence, horizontal gene transfer (HGT) is defined as the movement of genetic material between organisms other than through vertical transmission from parent to offspring .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 17,
+     "fact": "While HGT plays a major role in bacterial evolution and is common in certain unicellular eukaryotes, its prevalence and importance in multicellular eukaryotes remain unclear, though some molecular biologists have described it as \"A New Paradigm for Biology\" due to increasing evidence of its evolutionary significance .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 18,
+     "fact": "In prokaryotes, HGT is a primary source of new genes and contributes significantly to genetic variation, often more so than gene duplication .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 19,
+     "fact": "It facilitates the rapid spread of antibiotic resistance among different species of bacteria through mechanisms such as transformation, transduction, and conjugation, posing significant challenges to medical management  .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 20,
+     "fact": "Additionally, HGT serves as a common means of spreading virulence factors and adaptive metabolic functions .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 21,
+     "fact": "These include protist and algal genomes containing bacterial-origin genes , and horizontal transfers from bacteria to eukaryotic organisms such as the yeast *Saccharomyces cerevisiae* and the adzuki bean beetle *Callosobruchus chinensis* .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 22,
+     "fact": "A notable example is the plant *Amborella*, whose mitochondrial genome contains approximately six horizontally transferred versions for every one of its own origin-derived genes, sourced from associated algae, lichens, mosses, and other plants; however, the evolutionary significance of this extensive transfer remains unclear .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 23,
+     "fact": "The existence of a Last Universal Common Ancestor (LUCA) suggests that horizontal transfers were relatively limited in early life history, as continued extensive transfer would have resulted in a complex network rather than sharply delineated lineages .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "Specific Instances in Animals (Eukaryotes) While HGT is described as rare in eukaryotes generally, several specific examples involving animals and other multicellular organisms are identified: **Bdelloid Rotifers:** These appear to have received a range of genes from bacteria, fungi, and plants, representing larger-scale transfers .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 2,
+     "fact": "**Insects/Arthropods:** Horizontal transfer has occurred from bacteria to the adzuki bean beetle (*Callosobruchus chinensis*) .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 3,
+     "fact": "**Yeast/Fungi:** Transfers from bacteria to *Saccharomyces cerevisiae* may also have occurred .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 4,
+     "fact": "While less common in eukaryotes, it remains a mechanism for acquiring new genes .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 5,
+     "fact": "**Phylogenetic Dating:** Despite complicating phylogenies by creating networks rather than simple trees, the detection of HGT events provides valuable information for dating phylogenies .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 6,
+     "fact": "**Mediators and Mechanisms:** Viruses can carry DNA between organisms, allowing gene transfer even across biological domains .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": "estate-2",
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 7,
+     "fact": "**Adaptive Benefits:** While HGT is noted to spread antibiotic resistance, virulence, and adaptive metabolic functions generally  , the evidence does not explicitly confirm that these same benefits apply to the *Amborella* or rotifer cases; indeed, the significance of the *Amborella* transfers remains unclear .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 8,
+     "fact": "It facilitates the rapid spread of antibiotic resistance among different species of bacteria through mechanisms such as transformation, transduction, and conjugation, posing significant challenges to medical management  .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 9,
+     "fact": "These include protist and algal genomes containing bacterial-origin genes , and horizontal transfers from bacteria to eukaryotic organisms such as the yeast *Saccharomyces cerevisiae* and the adzuki bean beetle *Callosobruchus chinensis* .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 10,
+     "fact": "Larger-scale gene transfers are observed in bdelloid rotifers, which appear to have acquired genes from bacteria, fungi, and plants .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 11,
+     "fact": "Viruses can also mediate HGT by carrying DNA between organisms across biological domains .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 12,
+     "fact": "Historically, large-scale gene transfer occurred during the evolution of eukaryotic cells through the acquisition of mitochondria and chloroplasts from prokaryotes .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    },
+    {
+     "idx": 13,
+     "fact": "Furthermore, despite the phylogenetic complications it introduces, the detection of HGT events provides valuable information for dating phylogenies .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Phylogenetic_information_in_HGT",
+     "evidence_id": null,
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    }
+   ]
+  },
+  {
+   "id": 59,
+   "topic": null,
+   "pairs": 22,
+   "counts": {
+    "supported": 0,
+    "unsupported": 21,
+    "unknown": 0,
+    "decline": 1,
+    "errors": 0
+   },
+   "wall_s": 625,
+   "cost_usd": 0.0015625,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 0,
+    "hallucination": 21,
+    "honest_abstention": 1,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Approximately 1,800 of the world's 10,000 bird species undertake long-distance migrations annually .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "The timing of these movements is primarily controlled by changes in day length, which trigger hormonal changes within the birds' bodies .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Navigation Cues:** **Celestial Navigation:** Diurnal migrants use a sun compass to navigate by day; they compensate for the changing position of the sun using an internal clock .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "At night or during nocturnal migration, birds often rely on a stellar compass that depends on the position of constellations surrounding Polaris .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Magnetoreception:** Many species possess the ability to sense the Earth's geomagnetic field through specialized photoreceptors, providing orientation backed up by celestial cues .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "This magnetic sensing is part of a complex navigation system that may include both endogenous programs and learning .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "In studies involving Cory’s shearwaters released 800 km from their home nests, birds rendered anosmic (unable to smell) took longer to return than control or magnetically disturbed birds .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "Similarly, in experiments where birds were made anosmic with zinc sulphate, they failed to home before nightfall compared to controls .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "**Visual Landmarks:** Navigation also involves the use of visual landmarks and mental maps formed by long-distance migrants who disperse as young birds and develop high site-fidelity to specific breeding and wintering locations .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "For instance, rendering Procellariiformes anosmic delays their homing ability .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "Additionally, magnetic disturbance has been tested alongside olfactory impairment; in one study, magnetically disturbed or control birds returned faster than anosmic ones when released 800 km away .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "Historically, experiments have shown that interfering with astronomical cues (such as those used by procellariiforms) causes them to fly \"as if lost\" and return slowly or not at all .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "**Evidence of Precision and Distance:** The precision of bird navigation is demonstrated by the Manx shearwater, which was released in Boston in a 1950 experiment and returned to its colony in Skomer, Wales within 13 days, covering a distance of 5,150 km (3,200 mi) .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "While some birds like albatrosses circle the Earth, others such as Manx shearwaters migrate 14,000 km (8,700 mi) between northern breeding grounds and southern oceans .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "The Arctic tern holds the record for the longest migration journey, traveling at least 19,000 km (12,000 mi) annually from the Arctic to the Antarctic and back .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "Based on the provided evidence, bird migration is a seasonal movement between breeding and wintering grounds that occurs twice a year .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 17,
+     "fact": "Approximately 1,800 of the world's 10,000 bird species undertake long-distance migrations annually in response to seasonal changes .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 18,
+     "fact": "The timing of these movements is primarily controlled by changes in day length, which signal hormonal changes within the birds' bodies .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 19,
+     "fact": "Birds use celestial cues such as the sun and stars; diurnal migrants utilize a sun compass compensated by an internal clock, while nocturnal orientation often involves a stellar compass based on constellations surrounding Polaris .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 20,
+     "fact": "Additionally, many species possess magnetoreception abilities that allow them to sense the Earth's geomagnetic field through specialized photoreceptors .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 21,
+     "fact": "Olfactory cues also play a role in navigation for certain birds like procellariiformes (e.g., shearwaters); studies involving Cory’s shearwaters released 800 km from their home nests showed that anosmic birds took longer to return than control or magnetically disturbed birds .",
+     "url": "https://en.wikipedia.org/wiki/Bird#Migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "The provided evidence does not contain specific figures or details regarding \"Figures present in the evidence\" listed under `[ev-4]` other than confirming that sensation involves signal collection and transduction through sense organs , but it does not provide ecological navigation data beyond what is cited in `estate-1`.",
+     "url": "https://en.wikipedia.org/wiki/Sense#Magnetoception",
+     "evidence_id": null,
+     "verdict": "decline",
+     "mechanism": "decline-shape-intercept"
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "topic": null,
+   "pairs": 29,
+   "counts": {
+    "supported": 5,
+    "unsupported": 24,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 326,
+   "cost_usd": 0.000815,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 5,
+    "hallucination": 24,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "However, the following facts regarding the state of trapped-ion technology, its challenges, and related advancements are supported by the text: **Current Scale and Limitations:** Prototype general-purpose machines using trapped ions have been realized with up to 20 qubits .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Engineering Barriers to Scaling:** A major obstacle to full-scale integration is that trapped-ion devices combine complex vacuum equipment, lasers, microwave, and radio frequency equipment, making them difficult to integrate with standard computing infrastructure .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Additionally, engineering high-quality qubits is challenging due to quantum decoherence if the system is not sufficiently isolated from its environment .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Recent Experimental Advances (2022–2024):** While not explicitly labeled as \"scaling strategies,\" recent research includes: In 2022, researchers at the University of Innsbruck developed a universal qudit quantum processor using trapped ions .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": "estate-1",
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "In 2022 Tsinghua University implemented dual-type qubit schemes in trapped ion computers using the same ion species .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "Scientific Research constructed a pair of qudits with 10 different states each, offering more computational power than 6 qubits .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "**Application Constraints:** Even if scaled, current algorithms face limitations; for instance, machine learning and big data problems are unlikely to achieve quantum advantage in the foreseeable future due to I/O constraints and algorithmic limits .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "Based on the provided evidence, here is a synthesis of the information regarding quantum computing and related scientific fields: **Quantum Computing Hardware and Qubits** A practical quantum computer utilizes physical systems as programmable quantum registers to exploit quantum mechanical phenomena .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "While classical physics cannot explain these devices, scalable quantum computers could perform certain calculations exponentially faster than modern \"classical\" computers, potentially breaking widely used encryption schemes like RSA and Diffie–Hellman protocols  .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "However, current implementations remain largely experimental due to engineering challenges such as quantum decoherence, which introduces noise if qubits are not sufficiently isolated from their environment .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 11,
+     "fact": "Two primary hardware candidates for reliable qubit implementation are superconductors and trapped ions .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "Trapped ion technology has seen significant development; the first quantum logic gates were implemented with this method, leading to prototype general-purpose machines with up to 20 qubits .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "Despite these advances, full-scale integration is difficult because the technology requires complex vacuum equipment, lasers, microwave, and radio frequency systems that do not easily integrate with standard computing infrastructure .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "For instance, Scientific Research constructed a pair of qudits with 10 different states each, providing more computational power than 6 qubits .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "Significant milestones occurred in 2022: researchers at the University of Innsbruck developed a universal qudit quantum processor using trapped ions, while researchers at Tsinghua University implemented dual-type qubit schemes in trapped ion computers using the same ion species .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "Additionally, in 2024, a demonstration showed extensible control of superconducting qudits up to d = 4 based on programmable two-photon interactions .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 17,
+     "fact": "However, recent assessments indicate that many potential applications, such as machine learning and \"big data\" problems involving I/O constraints, are unlikely to achieve quantum advantage with current algorithms in the foreseeable future .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 18,
+     "fact": "Similarly, computational chemistry uses computer simulations to calculate molecular structures because accurate analytical depictions are not feasible due to many-body problem complexity .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "**Historical Feasibility Milestones:** The feasibility of the technology was demonstrated in 1998 by a two-qubit quantum computer .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "Wineland made notable contributions to laser cooling of trapped ions and their use for quantum-computing operations, receiving the Nobel Prize in Physics in 2012 for these methods .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Recent Experimental Advances (2022–2024):** While not explicitly labeled as \"scaling strategies,\" recent research includes: In 2022, researchers at the University of Innsbruck developed a universal qudit quantum processor using trapped ions .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": "estate-2",
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "While classical physics cannot explain these devices, scalable quantum computers could perform certain calculations exponentially faster than modern \"classical\" computers, potentially breaking widely used encryption schemes like RSA and Diffie–Hellman protocols  .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "In 1998, a two-qubit quantum computer demonstrated the feasibility of this technology .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "In 1982, Feynman conjectured that quantum computers could simulate quantum systems without exponential overhead; this was validated in 1996 when Seth Lloyd proved it possible .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "Peter Shor’s algorithm from 1994 for breaking RSA encryption drew significant attention to the field .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "Grover's algorithm, established in 1996, provided a quantum speedup for unstructured search problems .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "Wineland, an American physicist born on February 24, 1944, made notable contributions to laser cooling of trapped ions and their use in quantum-computing operations .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "He received the Nobel Prize in Physics in 2012 jointly with Serge Haroche for ground-breaking experimental methods enabling the measurement and manipulation of individual quantum systems .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "Supercomputers themselves aim for \"capability computing,\" using maximum power to solve single large or complex problems in the shortest time, rather than just capacity for routine tasks .",
+     "url": "https://en.wikipedia.org/wiki/Quantum_computing#History",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 65,
+   "topic": null,
+   "pairs": 18,
+   "counts": {
+    "supported": 2,
+    "unsupported": 16,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 821,
+   "cost_usd": 0.0020525,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 2,
+    "hallucination": 16,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "System Modeling and Analysis To model crop grain phenotypes, we utilize computational methods that allow for the formulation of real-world problems to develop solutions .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "These techniques play an increasing role in biological fields by aiding hypothesis testing and generating new insights through theoretical analysis .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Analysis techniques include both frequency domain and time domain approaches to ensure stability, controllability, and observability of the measurement systems used in grain analysis  .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "Design Implementation: 3D Reconstruction For the physical reconstruction of crop grains, we employ **Computer-Aided Design (CAD)** software, which enables engineers to create **3D** models, **2D** drawings, and schematics .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "This allows for **3D**-graphics and physics-based models to simulate mechanical loads and postures relevant to grain handling and processing environments  .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "These simulations utilize inverse kinematics capabilities within virtual environments to mimic performance in settings such as manufacturing facilities or agricultural machinery operations .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "Control System Application In the context of automated phenotyping equipment, control engineering principles are applied to design systems that operate without human input (automatic control systems) .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "The system utilizes sensors and detectors to measure output performance, providing the necessary data for these corrective feedback loops .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "By combining genetic modification tools like molecular markers with rigorous computational modeling and control-based phenotyping systems, researchers can better interpret research results and implement relevant practices in production and management .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "Specifically, the system can be modeled using differential equations describing the relation between input and output, a standard approach in control theory known as the transfer function or system function  .",
+     "url": "https://en.wikipedia.org/wiki/Control_theory",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "The design process involves distinguishing between open-loop and closed-loop (feedback) systems, with specific attention to classical SISO (Single Input Single Output) and modern MIMO (Multiple Input Multiple Output) system designs for complex phenotypic traits .",
+     "url": "https://en.wikipedia.org/wiki/Control_theory",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Analysis techniques include both frequency domain and time domain approaches to ensure stability, controllability, and observability of the measurement systems used in grain analysis  .",
+     "url": "https://en.wikipedia.org/wiki/Control_theory",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "This allows for **3D**-graphics and physics-based models to simulate mechanical loads and postures relevant to grain handling and processing environments  .",
+     "url": "https://en.wikipedia.org/wiki/Control_theory",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "This ensures a level of control stability and minimizes steady-state errors during high-throughput grain analysis  .",
+     "url": "https://en.wikipedia.org/wiki/Control_theory",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Figures Referenced:** The structural organization of this report aligns with standard technical documentation sections including History (Section **1**), Open-loop/closed-loop control (**2**), Classical/Linear theory (**3**, **4**), Analysis techniques (**5**), System interfacing (**6**, **6.1**, **6.2**), Topics in control theory such as Stability (**7**, **7.1**) and Controllability/Observability (**7.2**), Control specification (**7.3**), Model identification (**7.4**), System classifications like Linear systems (**8**, **8.1**) and Nonlinear systems (**8.2**), Decentralized systems (**8.3**), Deterministic/Stochastic systems (**8.4**), Main control strategies (**9**), People in systems (**10**), See also (**11**), References (**12**), Further reading (**13**), and External links (**14**) .",
+     "url": "https://en.wikipedia.org/wiki/Control_theory",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "This is supported by reverse engineering processes that measure physical objects using technologies such as CMMs, laser scanners, structured light digitizers, or industrial CT scanning .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "The resulting data, often a point cloud, lacks topological information but can be reconstructed into a triangular-faced mesh or boundary-representation CAD model using analytical surfaces like planes, cylinders, and NURBS .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Integration with Agricultural Biotechnology This engineering approach supports agricultural biotechnology goals by enabling precise measurement of traits such as size, growth rate, and disease resistance in transgene crops .",
+     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 69,
+   "topic": null,
+   "pairs": 16,
+   "counts": {
+    "supported": 1,
+    "unsupported": 15,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 238,
+   "cost_usd": 0.000595,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 1,
+    "hallucination": 15,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "The term \"protocol\" in the evidence refers exclusively to legacy and standard Internet protocols such as: Transmission Control Protocol (TCP) QUIC IPv6 IMAP/IMAP2 Tunneling protocols (HTTP, SSH, DNS, MQTT) The references to Google in the text discuss unrelated topics such as search architecture (\"Caffeine\"), encrypted connections since 2012, Google Fiber, Project Fi, and cookie usage for tracking preferences.",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "Based on the available text: **TCP Ossification:** TCP has significantly ossified, making extension difficult; QUIC is noted as the first IETF transport protocol designed with deliberate anti-ossification properties .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**IPv6 Features:** IPv6 simplifies address configuration and places packet fragmentation responsibility at end points rather than routers .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "It fixes the host identifier portion of an address to 64 bits  and defines addressing architecture in RFC 4291 , allowing unicast, anycast, and multicast transmission .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**IMAP History:** The Interactive Mail Access Protocol (IMAP2) was defined in RFC 1064 in 1988 and later updated by RFC 1176 in 1990 .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Google Search & Infrastructure:** Since 2012, Google has globally introduced encrypted connections for most clients .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "**TCP Accelerators:** TCP accelerators terminate connections inside network processors and relay data via a second connection, shortening the feedback loop during packet loss to ensure faster delivery .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Tunneling Protocols:** Tunneling is frequently adopted for malicious communication outside protected networks using protocols such as HTTP, SSH, DNS, and MQTT .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "**End-to-End Principle:** The design of the Internet Protocol suite recognized that intelligence should be located at edge nodes (end nodes), a principle pioneered by Louis Pouzin in CYCLADES; this new protocol was implemented as the Transmission Control Program in 1974 .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "For instance, \"6\" appears near \"IPv6\" and \"RFC 4291\" allows three types of transmission but does not explicitly list a figure of 6 as a count in that specific sentence structure provided; however, the number **64** is explicitly stated for host identifier size , **4291** for RFC , **1064/1176** for IMAP RFCs , **1988/1990** for dates , **2012** for encryption rollout , **1974** for TCP implementation , and **50%** for Caffeine freshness .",
+     "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "In August 2009, Google tested the \"Caffeine\" search architecture, which was completed on June 8, 2010, claiming 50% fresher results due to continuous index updating .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "This move shifted back-end indexing from MapReduce to Bigtable .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**TCP Functionality:** TCP provides host-to-host connectivity at the transport layer, handling handshaking and transmission details so applications do not need to know specific mechanisms like IP fragmentation for maximum transmission unit accommodation .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Google Fiber & Project Fi:** In February 2010, Google announced Google Fiber with plans for an ultra-high-speed broadband network for 50,000 to 500,000 customers .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "In April 2015, Google announced Project Fi, combining Wi-Fi and cellular networks from different providers .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "For instance, \"6\" appears near \"IPv6\" and \"RFC 4291\" allows three types of transmission but does not explicitly list a figure of 6 as a count in that specific sentence structure provided; however, the number **64** is explicitly stated for host identifier size , **4291** for RFC , **1064/1176** for IMAP RFCs , **1988/1990** for dates , **2012** for encryption rollout , **1974** for TCP implementation , and **50%** for Caffeine freshness .",
+     "url": "https://en.wikipedia.org/wiki/Transmission_Control_Protocol#Network_function",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 78,
+   "topic": "Health",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 425,
+   "cost_usd": 0.0010625,
+   "zero_pair": true,
+   "zero_judged": true,
+   "graded_telemetry": {
+    "grounded": 0,
+    "hallucination": 0,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": []
+  },
+  {
+   "id": 83,
+   "topic": null,
+   "pairs": 34,
+   "counts": {
+    "supported": 0,
+    "unsupported": 34,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 379,
+   "cost_usd": 0.0009475,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 0,
+    "hallucination": 34,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "1) Major Manufacturers, Specific Device Models, and Configurations **Major Manufacturers:** Apple holds the largest manufacturer market share, followed by Samsung and Lenovo .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "It only mentions general categories such as \"slate tablets,\" \"hybrids,\" and \"convertibles\" released alongside Windows 8 in 2012 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "It also notes that Microsoft cancelled a prototype two-screen tablet called the Courier in 2008 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Configurations:** Customized business tablets can be configured with professional-grade GPS antennas to improve accuracy over consumer-grade modules, resistive touchscreens for special hardware needs, or ruggedized casings for field use .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Software configurations may include removing functions like internet browsers to reduce cellular data costs and adding custom package management software .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Customized Field Operations:** Transportation companies use customized business tablets embedded with professional-grade antennas for better GPS signals in field operations .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "It notes that SaaS can reduce IT operational costs by outsourcing maintenance  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "4) Market Penetration, Usage Scenarios, Price Ranges, and Installed Base by Region **Global User Statistics (2021):** As of 2021, there were an estimated 1.28 billion tablet users worldwide according to Statista data .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "It only gives a global total of 1.28 billion users  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "**Current User Statistics (2021)** As of 2021, there are an estimated 1.28 billion tablet users worldwide, according to Statista data cited in the evidence .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "In this timeframe, Apple holds the largest manufacturer market share, followed by Samsung and Lenovo .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "**Operating Systems and Hardware Evolution** Android is a Linux-based operating system offered as open source under the Apache license; it was first released on tablets in 2009 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "Vendors such as Motorola and Lenovo delayed their tablet deployments until after 2011, when Android 3.0 (Honeycomb) was released with better support for larger screens .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "Microsoft introduced Windows 8 in 2012, which included significant changes for touch-based devices and an application store optimized for tablets .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "Prior to this, Microsoft had shown a prototype two-screen tablet called the Courier in 2008 but cancelled the project .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "For instance, transportation companies may embed professional-grade antennas into tablets to improve GPS accuracy beyond consumer-grade modules, or remove unnecessary software functions like internet browsers to reduce cellular data costs .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 17,
+     "fact": "These devices may also be ruggedized for field use .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 18,
+     "fact": "Additionally, cloud computing models such as Software as a Service (SaaS) allow applications to be hosted centrally and accessed over the internet, potentially reducing IT operational costs for businesses by outsourcing hardware maintenance  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Windows",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "In early 2016, Android reigned over the market with 65% share, while Apple took second place with 26%, and Windows held third with 9% .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "3) Primary Use Cases and Scenarios **Business/Work Usage:** Tablets are performing well primarily among users employing them for work; newer models are designed more expensively with keyboards and styluses to reflect these changing uses .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Sales Activities:** In 2014, approximately 23% of B2B companies deployed tablets for sales-related activities .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "It notes that SaaS can reduce IT operational costs by outsourcing maintenance  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Regional Presence:** The iPad held majority use in North America, Western Europe, Japan, Australia, and most of the Americas .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "Android tablets were more popular in most of Asia (with China and Russia as exceptions), Africa, and Eastern Europe .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "**Price Ranges:** The evidence states that newer work-oriented models are \"more expensive\" but does not provide specific price ranges or currency values .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "It only gives a global total of 1.28 billion users  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "Based on the provided evidence, here is a synthesis of information regarding tablet computers and related technology: **Market Share and Developer Trends (2014–2016)** In 2014, 93% of mobile app developers were targeting smartphones, while 83% were targeting tablets .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "During this same period in 2014, approximately 23% of B2B companies had deployed tablets for sales-related activities according to Corporate Visions .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "By early 2016, Android dominated the market with a 65% share, followed by Apple at 26%, and Windows holding the remaining 9% .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "Although tablet sales did not increase in 2015, Apple remained the largest seller despite its market share declining below 25% that year .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "Samsung’s vice president noted in early 2016 that tablets were performing well primarily among users employing them for work, leading to newer models being designed more expensively with keyboards and styluses .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "Marketing efforts often target these businesses (B2B) as well as consumers directly (B2C), with products marketed by retailers, manufacturers, or dedicated agencies .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "**Related Technology Context** While not exclusively tablet-focused, the evidence notes that Thunderbolt 3 was introduced in late 2015 and adopted by various laptop manufacturers; Apple first included it on Macs in 2016 .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "Additionally, cloud computing models such as Software as a Service (SaaS) allow applications to be hosted centrally and accessed over the internet, potentially reducing IT operational costs for businesses by outsourcing hardware maintenance  .",
+     "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 90,
+   "topic": null,
+   "pairs": 47,
+   "counts": {
+    "supported": 2,
+    "unsupported": 45,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 551,
+   "cost_usd": 0.0013775,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 2,
+    "hallucination": 45,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "As of 2023, most commercially available vehicles are SAE Level 2 .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "In this classification, an ADAS automates specific features such as lane keeping, cruise control, and emergency braking, but it explicitly requires a human driver to handle tasks that the system does not support .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Vehicles operating below Level 5 autonomy still require significant human engagement or oversight in many scenarios .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "A 2005 FMCSA report analyzing 33 months of data found that 87% of large truck crashes were attributed to driver error .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "In two-vehicle accidents involving cars and trucks, fault was split between drivers (46% for truck drivers, 56% for car drivers), suggesting that both parties share similar top-level error factors .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Fatality Context:** The severity of these errors is underscored by fatality statistics; in 2009, there were 3,380 fatalities involving large trucks, with 2,470 attributed to combination unit trucks .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "**Efficiency in Compensation Models:** The Japanese legal system is noted as being vastly more efficient and reliable in delivering compensation compared to the American tort system .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "Under laws such as the 1994 Law on Product Liability, or earlier acts from 1955 and 1973, legal fees comprised only 2% of total compensation paid to injured persons .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "In contrast, in the United States during the late 1980s (referencing data around 1980), payments to lawyers equaled 47% of personal injury benefits paid by insurers .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "This high cost drives up insurance premiums, leading to higher rates of uninsured drivers who may not be able to compensate victims fully .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "While driving faster than the advisory speed limit (*Richtgeschwindigkeit*) is not illegal, it can increase liability in collisions because courts have ruled that an \"ideal driver\" would not exceed this limit (set at 130 km/h or 81 mph) .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "Given that these systems require a human driver to handle unsupported tasks , laws must mandate continuous monitoring requirements.",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "Failure to monitor (evidenced by multitasking behaviors known to degrade attention ) should be treated as a strict breach of duty, similar to how \"ideal driver\" standards apply to speed limits in Germany .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "2% in Japan) , regulators could implement no-fault insurance pools specifically for verified ADAS malfunctions.",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "If a manufacturer knows that an AI self-learning system has limitations in specific edge cases (e.g., poor weather, missing traffic controls) but fails to disclose these risks adequately, they may be liable for substantially assisting in the breach if users rely on the system beyond its safe operational envelope  .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "**Mandate Data Logging for Accident Reconstruction:** Given that 87% of truck crashes were due to driver error and human attention is limited during multitasking  , mandatory event data recorders should capture both vehicle dynamics and driver engagement metrics.",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 17,
+     "fact": "**Standardize Liability Allocation Hierarchy:** Until specific AV standards are adopted , regulators should establish a hierarchy for liability allocation in shared contexts: (a) Primary liability lies with the operator if they failed to maintain situational awareness required by SAE Level 2 definitions; (b) Secondary/Accessory liability may attach to manufacturers/suppliers if it is proven that the system’s self-learning algorithms or sensor limitations contributed substantially to the breach of duty without adequate warning  .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 18,
+     "fact": "As of 2023, most commercially available vehicles operating below Level 5 autonomy are SAE Level 2, where an ADAS automates specific features like lane keeping but requires a human driver to handle unsupported tasks  .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 19,
+     "fact": "In large truck crashes from a 2005 FMCSA report analyzing 33 months of data, 87% were attributed to driver error .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 20,
+     "fact": "In two-vehicle accidents involving trucks and cars, 46% involved the truck driver’s fault and 56% involved the car driver’s fault, suggesting similar top error factors for both groups despite public perception often placing higher burden on truck drivers (sometimes cited as 70%) .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 21,
+     "fact": "In 2009, there were 3,380 fatalities involving large trucks, with 2,470 attributed to combination unit trucks .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 22,
+     "fact": "For instance, under laws such as the 1994 Law on Product Liability or earlier acts from 1955 and 1973, legal fees comprised only 2% of total compensation for injured persons .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 23,
+     "fact": "In contrast, in the United States during the late 1980s (specifically referencing data around 1980), payments to lawyers equaled 47% of personal injury benefits paid by insurers, driving up insurance costs and leading to higher rates of uninsured drivers .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 24,
+     "fact": "Driving faster than this is not illegal but can increase liability in collisions; courts have ruled that an \"ideal driver\" exempt from absolute liability for inevitable tort would not exceed the advisory speed limit of 130 kilometres per hour (81 mph) .",
+     "url": "https://en.wikipedia.org/wiki/Truck_driver#Safety",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "The primary technical obstacle is that these systems must safely navigate a wide variety of conditions, including day/night driving, bad weather, poor road quality, and complex edge cases like following police instructions at crash sites .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Duty of Care:** In tort law, liability is based on a defendant's failure to fulfill a legally recognized duty of care owed to the plaintiff .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "To prove this, plaintiffs must demonstrate three elements: (1) Defendant B breached a duty causing injury; (2) Defendant A knowingly and substantially assisted in that breach; and (3) Defendant A was aware of its role in promoting the breach at the time assistance was provided .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Contractual Damages:** While tort law governs personal injury, contractual disputes regarding vehicle performance may invoke common law rules such as those established in *Hadley v Baxendale*, though some argue the test of foreseeability is broader for aggrieved parties in these contexts .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Drivers engaged in multitasking (e.g., texting, eating, or talking) exhibit worse performance, make more mistakes, brake harder and later, veer into other lanes, and have reduced situational awareness .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "Current Gaps and Complexity in AV/ADAS Liability Despite the clarity of traditional negligence principles, specific standards for ADAS liability have yet to be adopted .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "Key complexities include: **Unclear Allocation:** It remains uncertain whether liability rests with the vehicle occupant, owner, manufacturer, or the ADAS technology supplier, often depending on the specific circumstances of the crash .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "Because AI systems are inherently self-learning, questions arise regarding accountability for errors that emerge from machine learning processes rather than static programming flaws .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "Failure to monitor (evidenced by multitasking behaviors known to degrade attention ) should be treated as a strict breach of duty, similar to how \"ideal driver\" standards apply to speed limits in Germany .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "This would separate liability clearly between human error (handled via traditional negligence/tort law based on duty of care breaches ) and system defects (handled via product liability/no-fault mechanisms).",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "**Clarify Accessory Liability for Manufacturers and Developers:** Legal frameworks should provide clearer guidelines for \"aiding and abetting\" or accessory liability claims against technology providers .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "If a manufacturer knows that an AI self-learning system has limitations in specific edge cases (e.g., poor weather, missing traffic controls) but fails to disclose these risks adequately, they may be liable for substantially assisting in the breach if users rely on the system beyond its safe operational envelope  .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "**Mandate Data Logging for Accident Reconstruction:** Given that 87% of truck crashes were due to driver error and human attention is limited during multitasking  , mandatory event data recorders should capture both vehicle dynamics and driver engagement metrics.",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "This would allow courts to accurately determine whether a crash resulted from system failure or human distraction/fatigue, resolving the current ambiguity where liability could rest with any party depending on circumstances .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "**Standardize Liability Allocation Hierarchy:** Until specific AV standards are adopted , regulators should establish a hierarchy for liability allocation in shared contexts: (a) Primary liability lies with the operator if they failed to maintain situational awareness required by SAE Level 2 definitions; (b) Secondary/Accessory liability may attach to manufacturers/suppliers if it is proven that the system’s self-learning algorithms or sensor limitations contributed substantially to the breach of duty without adequate warning  .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "Based on the provided evidence, here is a synthesis of the legal and technical aspects regarding liability in driving contexts: **Liability Frameworks and Tort Law** In negligence cases, legal liability arises from a defendant's failure to fulfill a legally recognized duty of care .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 17,
+     "fact": "For \"aiding and abetting\" claims under civil accessory liability, plaintiffs must prove that Defendant B breached a duty causing injury, that Defendant A knowingly assisted in this breach, and that Defendant A was aware of its role at the time assistance was provided .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 18,
+     "fact": "In contract law, damages follow common law rules such as those in *Hadley v Baxendale*, though some argue foreseeability tests are broader for aggrieved parties .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 19,
+     "fact": "Employer liability can extend to employees even during minor detours from work duties, such as stopping briefly for food while delivering packages .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 20,
+     "fact": "**Autonomous Vehicles (AVs) and ADAS Liability** Standards for liability regarding self-driving car crashes have not yet been adopted; responsibility could fall on the occupant, owner, manufacturer, or Advanced Driver Assistance Systems (ADAS) supplier depending on circumstances .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 21,
+     "fact": "The integration of AI adds complexity because systems are self-learning, raising questions about whether accountability rests with owners, manufacturers, or developers .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 22,
+     "fact": "As of 2023, most commercially available vehicles operating below Level 5 autonomy are SAE Level 2, where an ADAS automates specific features like lane keeping but requires a human driver to handle unsupported tasks  .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 23,
+     "fact": "**Human Factors and Accident Statistics** Research indicates that the human attentional system has limits; multitasking while driving (e.g., texting or talking) leads to worse performance, more mistakes, harder/late braking, and increased accidents .",
+     "url": "https://en.wikipedia.org/wiki/Negligence#Duty_of_care",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 95,
+   "topic": null,
+   "pairs": 27,
+   "counts": {
+    "supported": 1,
+    "unsupported": 25,
+    "unknown": 1,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 535,
+   "cost_usd": 0.0013375,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 1,
+    "hallucination": 25,
+    "honest_abstention": 0,
+    "unclassified": 1
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Historical Origins and Chronology The *Diamond Sutra* is a Mahāyāna Buddhist sutra belonging to the genre of *Prajñāpāramit* (\"perfection of wisdom\") sutras .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Relative Dating:** Japanese scholars traditionally consider the *Diamond Sutra* (*Vajracchedik*) to be from a very early date in the development of *Prajñāparāmīt* literature, placing it earlier than other texts based on comparisons of contents and themes rather than translation dates .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Scholarly Debate:** Some western scholars believe that the later *Aasāhasrikā Prajñāpārmita Sūtra* (the 8,000-line sutra) was actually adapted from this earlier *Vajracchedika text* .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "In contrast, Edward Conze estimates that the *Aāsaharikā*, associated with the Mahāsāghikas, originated around **100 BCE** .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Chinese Translations The sutra has been translated into Chinese multiple times by prominent monks over several centuries : **Paramārtha**: 558 CE **Dharmagupta**: Twice (in 590 and between 605–616) **Xuanzang**: Twice (in 648 and between 660–663) **Yijing**: 703 CE Archaeological Evidence **Bamiyan Manuscript:** The Chinese monk Xuanzang visited a Mahāsāghika-Lokottaravada monastery at Bamiyan, Afghanistan, in the 7th century .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "This specific Sanskrit manuscript (cataloged as MS **2385** in the Schøyen Collection) is written in an ornate form of Gupta script and also contains the Medicine Buddha Sūtra (*Bhaiajyaguruvaiūryaprabhārāja Sūtra*) .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "The Earliest Printed Book A copy of the Tang dynasty Chinese version was found among Dunhuang manuscripts in 1900 by Daoist monk Wang Yuanlu and sold to Aurel Stein in 1907 .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "Dated to **May 11, 868**, this artifact is described by the British Library as \"the earliest dated printed book\" .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "It holds historical significance as the first known creative work with an explicit public domain dedication; its colophon states it was created \"for universal free distribution\" .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "Defined in the 8,000-line Prajñāparamit sutra (which shares thematic roots with the Diamond Sutra), a Bodhisattva experiences everything \"without attachment\" (*asakti*) and sees reality or suchness (*Tathātā*) as it is .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "The central quality of this path is the practice of *Prajñaparamit*, described as a deep state of knowledge arising from analysis and meditative insight that is non-conceptual, non-dual (*advaya*), and transcendental .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 12,
+     "fact": "As explained in related texts like the Heart Sutra (which is prominent alongside the Diamond Sutra in Zen tradition), all Buddhas rely on this *Prajnaparamita* to awaken completely .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": "estate-1",
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "Influence on Zen (Chan) Buddhism The *Diamond Sutra* holds a position of particular prominence within the Chan (Zen) tradition, often cited alongside the Heart Sutra .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 14,
+     "fact": "While it notes that \"interpersonal communication\" is a field studying social interaction , this information is general academic context and not derived from an interpretation of the *Diamond Sutra's* teachings.",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 15,
+     "fact": "**Lotus Sūtra:** Affirms equality and implicitly teaches buddha-nature (according to scholars like Hajime Nakamura and Akira Hirakawa), a concept supported by Chinese commentators pointing to chapter **20** (Bodhisattva Never Disparaging) .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "**Sutta Piaka:** Contains 152 medium-length suttas including mindfulness practices, though this is Theravada literature distinct from the Mahayana *Diamond Sutra* context provided here .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#The_earliest_texts",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "The Nature of Reality (Illusion) A central teaching in these sutras, explicitly stated in the *Diamond Sutra*, is that all dharmas (phenomena) are like an illusion (*māy*), a dream (*svapna*), or a mirage .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "This perspective extends to even the highest Buddhist goals, such as Buddhahood and Nirvana, which are also seen through this lens of illusoriness .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Consequently, the highest wisdom (*prajñ*) is defined as spiritual knowledge that sees all things as illusory .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "Influential sutras include the Lankavatara Sutra, the Diamond Sutra, and the Platform Sutra .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Other influential texts in Zen include the Vimalakirti Sutra, Avatamsaka Sutra, Shurangama Sutra, and Mahaparinirvana Sutra .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Hongzhou School Analysis:** Mario Poceski’s analysis of Tang dynasty Hongzhou school works notes that they frequently cite Mahayana sutras including the Lotus, Huayan, Nirvana, Lakāvatāra, Prajñāpāmīta (which includes the Diamond), Mahāratnakūta, Mahāsamnipāta, and Vimalakīrti .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 7,
+     "fact": "It was translated by Kumārajīva (**344–413 CE**) .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Tantric Commentary:** Kūkai’s 9th-century work (referenced as century **9** or similar context) is noted as the first-known Tantric commentary on these texts .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "**Xuanzang's Translation Efforts:** Xuanzang determined to render an unabridged, complete volume faithful to the original of **600 fascicles**, indicating the scale and complexity of the *Prajnaparamita* literature he worked with .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "Related Texts Context To understand the *Diamond Sutra*, it helps to note its relationship with other texts mentioned in the evidence: **Heart Sutra:** Prominent in Zen alongside the Diamond; explains that Prajñapārmita transcends single vehicles .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "As explained in related texts like the Heart Sutra (which is prominent alongside the Diamond Sutra in Zen tradition), all Buddhas rely on this *Prajnaparamita* to awaken completely .",
+     "url": "https://en.wikipedia.org/wiki/Prajnaparamita#China",
+     "evidence_id": "estate-2",
+     "verdict": "unknown",
+     "mechanism": "no-reference"
+    }
+   ]
+  }
+ ],
+ "pooled_fabrication": 0.9156118143459916,
+ "paper_mean_fabrication": 0.9181656018008454,
+ "pooled_citation_accuracy": 0.08438818565400841,
+ "bootstrap": {
+  "n_resamples": 10000,
+  "seed": 4234932947,
+  "dropped_undefined": 0,
+  "ci95_lower": 0.8556149732620321,
+  "ci95_upper": 0.9625
+ },
+ "references": {
+  "primary": {
+   "agent": "perplexity-Research",
+   "fabrication": 0.1737
+  },
+  "secondary": {
+   "agent": "openai-deepresearch",
+   "fabrication": 0.2499
+  }
+ },
+ "verdict_primary": "failed",
+ "mean_cost_usd": 0.001131,
+ "cost_proxy_usd": 1.45,
+ "zero_pair_flights": {
+  "count": 1,
+  "ids": [
+   78
+  ],
+  "contribution": "pairs=0 -> per the declared drop rule each contributes fab=1.0 to the paper mean (pre-registration T2b, 'Local 62/90/95'); the pooled mean is unaffected (they carry no pairs). Reported as their own rows — never silently folded into the pooled mean (order deep-research-t3d)."
+ },
+ "zero_judged_flights": {
+  "count": 1,
+  "ids": [
+   78
+  ],
+  "contribution": "pairs>0 but supported+unsupported == 0 -> N_u=0 -> Acc=0 -> fab=1.0 in the paper mean, the declared N_u=0->1 rule (pre-registration line 2226-2237)."
+ },
+ "graded_telemetry": {
+  "grounded": 20,
+  "hallucination": 217,
+  "honest_abstention": 1,
+  "unclassified_unknown": 14,
+  "caveated_ood": null,
+  "answered_novalue": null,
+  "ladder_notes": "projection of the verdict channel onto the chaos graded ladder (chaos_monkey.rs score_answer). caveated_ood / answered_novalue need score_answer's critic — the pre-registered 122B graded pass — and are null here (unmeasured, never defaulted, §18.3)."
+ },
+ "abstention_dimension": {
+  "honest_abstention": 1,
+  "unclassified_unknown": 14,
+  "abstention_share_of_unknown": 0.06666666666666667,
+  "note": "decline (honest abstention) is its own verdict class (order deep-research-t3d); the remaining unknown mass is unclassified — never abstention-scored by any instrument (T3C_AUDIT_FORENSICS.md pass site 3) — and is reported as-is, never collapsed into fabrication."
+ },
+ "elapsed_s": 420.5
+}

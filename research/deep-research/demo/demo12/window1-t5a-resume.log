@@ -1,0 +1,36 @@
+WARNING:root:ID: 58 - 1 criteria without exact matches: {'insight:Insightful Articulation of Eukaryotic Specificities and Challenges'}
+WARNING:root:ID: 65 - 1 criteria without exact matches: {'instruction_following:Strict Adherence to Research Domain: 3D Reconstruction and Phenotypal Analysis of Crop Grains'}
+WARNING:root:ID: 69 - 1 criteria without exact matches: {'instruction_following:Provision and Detail of Explanation on Connections Between A2A and MCP'}
+WARNING:root:ID: 69 - 1 criteria without exact matches: {'instruction_following:Provision and Detail of Explanation on Connections between A2A and MCP'}
+WARNING:root:ID: 78 - 1 criteria without exact matches: {'instruction_following:Response to Query on Post-DBS Adjustments and Comfort Strategies'}
+WARNING:root:ID: 95 - 1 criteria without exact matches: {'instruction_following:Exclusive Focus on the Diamond Sutra (Vajracchedikā Prajñāpāramita Sūtra)'}
+resume: arm ab — no persisted sidecar, running fresh
+judge guard: Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003 loaded
+output root: flights/race-20260817T213110
+  -> flights/race-20260817T213110/local/race_result.txt
+     Comprehensiveness: 7.3583
+     Insight: 5.7647
+     Instruction Following: 8.8110
+     Readability: 13.2390
+     Overall Score: 8.0848
+  10/10 tasks scored
+  ARM local: derived from judge_output.jsonl — 0 judge calls
+== arm ab (fresh judge calls) ==
+  id 56: ERROR — task 56: judge failed after 10 retries — Failed to generate content: openai chat/completions 503: {"error":"host busy: ~53141 ms predicted wait at queue position 1","reason":"local_queue_full","retry_after_secs":54} (recorded, flight continues)
+  id 58: overall=0.4696 (5.7 min, 4 dims parsed)
+  id 59: overall=0.4477 (4.2 min, 4 dims parsed)
+  id 62: overall=0.4600 (4.8 min, 4 dims parsed)
+  id 65: overall=0.4495 (5.0 min, 4 dims parsed)
+  id 69: overall=0.4573 (4.0 min, 4 dims parsed)
+  id 78: overall=0.4543 (4.0 min, 4 dims parsed)
+  id 83: overall=0.4156 (4.6 min, 4 dims parsed)
+  id 90: overall=0.4725 (4.6 min, 4 dims parsed)
+  id 95: overall=0.4472 (4.3 min, 4 dims parsed)
+  -> flights/race-20260817T213110/ab/race_result.txt
+     Comprehensiveness: 45.0066
+     Insight: 43.8472
+     Instruction Following: 47.0082
+     Readability: 46.2495
+     Overall Score: 45.2640
+  9/10 tasks scored; failed: [56]
+manifest: flights/race-20260817T213110/manifest.json

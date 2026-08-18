@@ -12,6 +12,12 @@ failure does not stop the driver; the exit code is non-zero if any flight
 failed. Subprocess argv (no shell), so the prompts' apostrophes are safe.
 
 Run: python3 run-drb-arms.py [--bin sovereign] [--arm local|hybrid]
+        [--run-root <dir>]
+
+--run-root (order deep-research-t4a, pre-registered): the t4a re-flight
+writes to demo/demo12/runs/{local,hybrid}/ — the frozen drb/runs/ is
+never touched. Default: HERE/runs (the historical root, verbatim
+pre-t4a behavior).
 """
 import argparse
 import json
@@ -35,8 +41,11 @@ def main():
     ap.add_argument("--bin", default="sovereign")
     ap.add_argument("--arm", choices=["local", "hybrid"], default=None,
                     help="fly only one arm (default: both, local first)")
+    ap.add_argument("--run-root", default=str(HERE / "runs"),
+                    help="run root (t4a: demo/demo12/runs — the frozen drb/runs is never touched)")
     args = ap.parse_args()
 
+    run_root = Path(args.run_root)
     rows = [json.loads(l) for l in open(HERE / "query.subset.jsonl", encoding="utf-8")]
     arms = [args.arm] if args.arm else ["local", "hybrid"]
     failures = []
@@ -51,8 +60,8 @@ def main():
         flags = ARM_FLAGS[arm]
         for r in rows:
             tid = r["id"]
-            run_dir = HERE / "runs" / arm / f"drb-{tid}"
-            log_path = HERE / "runs" / arm / f"drb-{tid}.console.log"
+            run_dir = run_root / arm / f"drb-{tid}"
+            log_path = run_root / arm / f"drb-{tid}.console.log"
             run_dir.mkdir(parents=True, exist_ok=True)
             # resume: a completed flight (nested manifest present) is skipped
             mp = manifest_of(run_dir)

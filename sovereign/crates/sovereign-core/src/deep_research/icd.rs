@@ -62,6 +62,14 @@ pub enum GateAction {
     /// refusal — deliberately outside `is_refusal` (the R-3 reds stay
     /// `abstained_*` / `refused_*` only).
     CorroborationFloor,
+    /// REF-REQUIRED (order deep-research-t4a, pre-registered): the
+    /// claim carries no `[Source: …]` citation handle — the draft must
+    /// select the chunks it asserts against.
+    RefusedNoCitationHandle,
+    /// REF-REQUIRED (order deep-research-t4a, pre-registered): a
+    /// citation handle naming no window chunk — the gate cannot verify
+    /// an assertion against evidence outside the window.
+    RefusedUnresolvableHandle,
 }
 
 impl GateAction {
@@ -72,6 +80,8 @@ impl GateAction {
             GateAction::RewriteAnnotated => "rewrite_annotated",
             GateAction::RefusedUnknownProvenance => "refused_unknown_provenance",
             GateAction::CorroborationFloor => "corroboration_floor",
+            GateAction::RefusedNoCitationHandle => "refused_no_citation_handle",
+            GateAction::RefusedUnresolvableHandle => "refused_unresolvable_handle",
         }
     }
 
@@ -80,7 +90,10 @@ impl GateAction {
     pub fn is_refusal(self) -> bool {
         matches!(
             self,
-            GateAction::AbstainedDecline | GateAction::RefusedUnknownProvenance
+            GateAction::AbstainedDecline
+                | GateAction::RefusedUnknownProvenance
+                | GateAction::RefusedNoCitationHandle
+                | GateAction::RefusedUnresolvableHandle
         )
     }
 }

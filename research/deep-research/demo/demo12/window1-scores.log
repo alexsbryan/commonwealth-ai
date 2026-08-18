@@ -1,0 +1,31 @@
+WARNING:root:ID: 58 - 1 criteria without exact matches: {'insight:Insightful Articulation of Eukaryotic Specificities and Challenges'}
+WARNING:root:ID: 65 - 1 criteria without exact matches: {'instruction_following:Strict Adherence to Research Domain: 3D Reconstruction and Phenotypal Analysis of Crop Grains'}
+WARNING:root:ID: 69 - 1 criteria without exact matches: {'instruction_following:Provision and Detail of Explanation on Connections Between A2A and MCP'}
+judge guard: Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003 loaded
+output root: flights/race-20260817T204115
+== arm local ==
+  id 56: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 58: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 59: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 62: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 65: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 69: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 78: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 83: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 90: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+  id 95: ERROR — name 'elapsed' is not defined (recorded, flight continues)
+Traceback (most recent call last):
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/overall-derivation/score_race.py", line 394, in <module>
+    main()
+    ~~~~^^
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/overall-derivation/score_race.py", line 366, in main
+    all_records["local"] = run_arm("local", local_articles, prompts,
+                           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                   criteria, references, client,
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                                   args.dry_run, out_dir)
+                                   ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/overall-derivation/score_race.py", line 289, in run_arm
+    means = {m: sum(r[m] for r in ok) / len(ok) for m in DIMS}
+                ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+ZeroDivisionError: division by zero

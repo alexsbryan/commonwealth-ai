@@ -7,21 +7,28 @@
 //! 2. single-string judge (`claim_violation_joint`) — `None` (judge
 //!    failed to run) → **could-not-judge**, recorded, never defaulted;
 //! 3. `p >= tau` → **failed** (action `abstained_decline`);
-//! 4. `p < tau` → judge-supported → **containment witness** on the
-//!    claim's extracted specifics; all witnessable specifics absent →
-//!    downgrade to **could-not-judge** (the shared-bias residual);
-//! 5. custody veto (R-3): a claim whose supporting chunks carry unknown
+//! 4. `p < tau` → judge-supported → **ref-required** (order
+//!    deep-research-t4a): the draft must cite the chunks it asserts
+//!    against — no citation handle → **could-not-judge**
+//!    (`refused_no_citation_handle`); a handle naming no window chunk
+//!    → **could-not-judge** (`refused_unresolvable_handle`);
+//! 5. judge-supported + referenced → **containment witness** on the
+//!    claim's extracted specifics against the REFERENCED chunk set;
+//!    all witnessable specifics absent → downgrade to
+//!    **could-not-judge** (the shared-bias residual);
+//! 6. custody veto (R-3): a claim whose supporting chunks carry unknown
 //!    provenance refuses (`refused_unknown_provenance`).
-//! 6. corroboration floor (GAP-2/F22): a claim passes only if its
+//! 7. corroboration floor (GAP-2/F22): a claim passes only if its
 //!    support set spans ≥2 distinct provenance origins (distinct
 //!    source_urls, C-class); a one-origin set caps at could-not-judge
 //!    (`corroboration_floor`), the record verdict-visible.
 //!
-//! The witness only downgrades, and the floor only downgrades. The same
-//! claim splitter feeds the R3 round audits and the R9 final verdict set
-//! — one splitter, two consumers.
+//! The witness only downgrades, and the floor only downgrades; the
+//! ref-required stage adds refusal paths, never converts a verdict. The
+//! same claim splitter feeds the R3 round audits and the R9 final
+//! verdict set — one splitter, two consumers.
 
-use super::containment::{containment_witness, ContainmentConfig};
+use super::containment::{citation_handles, containment_witness, ContainmentConfig};
 use super::icd::{
     ClaimVerdict, CorroborationRecord, EmptyWindow, Gap, GapList, GateAction, Verdict,
     WitnessRecord,
@@ -193,10 +200,62 @@ pub async fn assess_claim(
         };
     }
 
-    // 4. Judge-supported → containment witness (downgrade-only).
-    let witness = containment_witness(provider, claim, &texts, containment, posture).await;
+    // 4. Ref-required (order deep-research-t4a, pre-registered): the
+    // draft must cite the chunks it asserts against — the model's
+    // honesty discretion goes to zero (it selects which chunks to
+    // cite; the gate verifies the selection). A claim without a
+    // citation handle refuses; a handle naming no window chunk refuses
+    // (the gate cannot verify an assertion against evidence outside
+    // the window). The witness then runs against the REFERENCED chunk
+    // set only — a claim can only pass when its figures verify against
+    // the chunks it cites. Downgrade-only: refusal paths, never a
+    // verdict conversion.
+    let handles = citation_handles(claim);
+    if handles.is_empty() {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::RefusedNoCitationHandle,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("ref-required: no citation handle".to_string()),
+            corroboration: None,
+        };
+    }
+    let mut referenced_ids: Vec<String> = Vec::new();
+    let mut unresolved: Vec<String> = Vec::new();
+    for h in &handles {
+        if let Some(c) = chunks.iter().find(|c| &c.id == h || &c.source_url == h) {
+            if !referenced_ids.contains(&c.id) {
+                referenced_ids.push(c.id.clone());
+            }
+        } else {
+            unresolved.push(h.clone());
+        }
+    }
+    if !unresolved.is_empty() {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::RefusedUnresolvableHandle,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(format!(
+                "ref-required: citation handle(s) {unresolved:?} do not name a window chunk"
+            )),
+            corroboration: None,
+        };
+    }
+    let ref_texts: Vec<String> = chunks
+        .iter()
+        .filter(|c| referenced_ids.contains(&c.id))
+        .map(|c| c.content.clone())
+        .collect();
+    let witness = containment_witness(provider, claim, &ref_texts, containment, posture).await;
 
-    // 5. Custody veto (R-3): the claim's supporting chunks must not rest
+    // 6. Custody veto (R-3): the claim's supporting chunks must not rest
     // on unknown provenance. Locate supporting chunks by specific
     // presence (C-class) when the witness ran; if every located chunk is
     // unknown, refuse.
@@ -268,7 +327,7 @@ pub async fn assess_claim(
         };
     }
 
-    // 6. Corroboration floor (GAP-2/F22, the two-source rule): a claim
+    // 7. Corroboration floor (GAP-2/F22, the two-source rule): a claim
     // passes only if its support set spans ≥2 distinct provenance
     // origins. C-class: origins are the distinct source_urls among the
     // supporting chunks — coverage counts origins, never chunks (five
@@ -605,7 +664,11 @@ mod tests {
 
     #[tokio::test]
     async fn contradicted_negative_records_its_reason_in_the_audit() {
-        let claim = "None of the provided sources list the crew members of the Apollo 11 mission.";
+        // Ref-required amendment (order deep-research-t4a,
+        // pre-registered): the fixture claim gains its citation handle
+        // (the apollo_window chunk id).
+        let claim =
+            "None of the provided sources list the crew members of the Apollo 11 mission. [Source: c1]";
         let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
             extract: "Apollo 11",
         });
@@ -632,7 +695,11 @@ mod tests {
 
     #[tokio::test]
     async fn vacuous_negative_is_could_not_judge_not_passed() {
-        let claim = "None of the provided sources list the crew members of the Apollo 11 mission.";
+        // Ref-required amendment (order deep-research-t4a,
+        // pre-registered): the fixture claim gains its citation handle
+        // (the apollo_window chunk id).
+        let claim =
+            "None of the provided sources list the crew members of the Apollo 11 mission. [Source: c1]";
         let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "NONE" });
         let audit = assess_claim(
             &provider,
@@ -698,10 +765,14 @@ mod tests {
     /// short-circuit is deterministic and extraction-independent.
     #[tokio::test]
     async fn untraced_claim_figure_is_downgraded_not_passed() {
+        // Ref-required amendment (order deep-research-t4a,
+        // pre-registered): the fixture's tail becomes a resolvable
+        // chunk handle (era_window c2 — which lacks "2024", the
+        // untraced figure).
         let claim = concat!(
             "American cities underwent dramatic economic and demographic transformations ",
             "across four decades (1980–2024), with gentrification accelerating significantly after 2000 ",
-            "[Source: University of Georgia]."
+            "[Source: c2]."
         );
         let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
             extract: "1980\nUniversity of Georgia",
@@ -741,9 +812,12 @@ mod tests {
     /// adds downgrades, never removes true positives.
     #[tokio::test]
     async fn fully_traced_claim_figures_do_not_block_the_witness() {
+        // Ref-required amendment (order deep-research-t4a,
+        // pre-registered): the fixture claim gains its citation handle
+        // (era_window c1 — the figures it asserts are present there).
         let claim = concat!(
             "American cities have been transformed by gentrification since 2000, ",
-            "with governing coalitions reshaping urban policy across the nation."
+            "with governing coalitions reshaping urban policy across the nation. [Source: c1]"
         );
         let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted {
             extract: "2000\nGoverning",
@@ -772,8 +846,10 @@ mod tests {
     /// negation but cannot verify it); downgraded, never passed.
     #[tokio::test]
     async fn negative_claim_with_untraced_figures_is_downgraded_not_passed() {
-        let claim =
-            "No source lists the 2024 census figures for the transformation of American cities.";
+        // Ref-required amendment (order deep-research-t4a,
+        // pre-registered): the fixture claim gains its citation handle
+        // (era_window c2 — which lacks "2024").
+        let claim = "No source lists the 2024 census figures for the transformation of American cities. [Source: c2]";
         let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "NONE" });
         let audit = assess_claim(
             &provider,
@@ -841,7 +917,10 @@ mod tests {
         });
         let audit = assess_claim(
             &provider,
-            "The Apollo 11 mission launched on July 16, 1969.",
+            // Ref-required amendment (order deep-research-t4a,
+            // pre-registered): the fixture claim gains its citation
+            // handle (two_origin_window c1).
+            "The Apollo 11 mission launched on July 16, 1969. [Source: c1]",
             &chunks,
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
@@ -886,7 +965,10 @@ mod tests {
         });
         let audit = assess_claim(
             &provider,
-            "The Apollo 11 mission launched on July 16, 1969.",
+            // Ref-required amendment (order deep-research-t4a,
+            // pre-registered): the fixture claim gains its citation
+            // handle (two_origin_window c1).
+            "The Apollo 11 mission launched on July 16, 1969. [Source: c1]",
             &chunks,
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
@@ -904,6 +986,153 @@ mod tests {
             audit.supporting_chunk_ids.len(),
             2,
             "both chunks carry citations"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // REF-REQUIRED (order deep-research-t4a, pre-registered): the
+    // model's honesty discretion goes to zero — it selects which chunks
+    // to cite; the gate verifies the selection. The containment witness
+    // runs against the REFERENCED chunk set. RED-FIRST at HEAD: the
+    // gate verifies against a paraphrase (the window), so these shapes
+    // pass or cap for other reasons.
+    // ------------------------------------------------------------------
+
+    /// A two-chunk window for the ref-required reds — ev-1 carries NO
+    /// figure, ev-2 carries "68"; the claim cites ev-1.
+    fn ref_window() -> Vec<AuditChunk> {
+        vec![
+            AuditChunk {
+                id: "ev-1".to_string(),
+                content: "The auction house expanded its operations across the region.".to_string(),
+                custody_known: true,
+                source_url: "https://example.com/one".to_string(),
+            },
+            AuditChunk {
+                id: "ev-2".to_string(),
+                content: "The auction house served 68 languages worldwide across its halls."
+                    .to_string(),
+                custody_known: true,
+                source_url: "https://example.com/one".to_string(),
+            },
+        ]
+    }
+
+    /// RED (order deep-research-t4a): a claim with no citation handle
+    /// refuses — the draft must select the chunks it asserts against.
+    #[tokio::test]
+    async fn ref_required_no_handle_refuses() {
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "68" });
+        let audit = assess_claim(
+            &provider,
+            "The auction house served 68 languages worldwide.",
+            &ref_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "a handle-less claim must refuse, got {:?}",
+            audit.verdict
+        );
+        assert_eq!(
+            audit.action,
+            GateAction::RefusedNoCitationHandle,
+            "the refusal must carry its own action, got {:?}",
+            audit.action
+        );
+        assert!(
+            audit
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("ref-required")),
+            "the reason must name the ref-required class, got {:?}",
+            audit.reason
+        );
+    }
+
+    /// RED (order deep-research-t4a): a handle naming no window chunk
+    /// refuses — the gate cannot verify an assertion against evidence
+    /// outside the window.
+    #[tokio::test]
+    async fn ref_required_unresolvable_handle_refuses() {
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "68" });
+        let audit = assess_claim(
+            &provider,
+            "The auction house served 68 languages worldwide [Source: ev-99].",
+            &ref_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "an unresolvable handle must refuse, got {:?}",
+            audit.verdict
+        );
+        assert_eq!(
+            audit.action,
+            GateAction::RefusedUnresolvableHandle,
+            "the refusal must carry its own action, got {:?}",
+            audit.action
+        );
+        assert!(
+            audit
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("ev-99")),
+            "the reason must name the unresolvable handle, got {:?}",
+            audit.reason
+        );
+    }
+
+    /// RED (order deep-research-t4a — the pinned shape): a claim whose
+    /// HANDLE'S chunk lacks the figure refuses (the witness fires
+    /// against the referenced chunk). The figure IS in the window
+    /// (ev-2) — at HEAD the window-wide witness sees it and the claim
+    /// caps at the floor instead; after the fix the witness is
+    /// ref-scoped and the claim's own selection fails it.
+    #[tokio::test]
+    async fn ref_required_claim_whose_chunk_lacks_the_figure_refuses() {
+        let provider: Arc<dyn InferenceProvider> = Arc::new(ShapeScripted { extract: "68" });
+        let audit = assess_claim(
+            &provider,
+            "The auction house served 68 languages worldwide [Source: ev-1].",
+            &ref_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "a claim whose referenced chunk lacks its figure must refuse, got {:?}",
+            audit.verdict
+        );
+        assert!(
+            audit.witness.ran && audit.witness.all_absent,
+            "the witness fires against the referenced chunk and reports the absence"
+        );
+        assert!(
+            audit
+                .witness
+                .reason
+                .as_deref()
+                .is_some_and(|r| r.contains("68")),
+            "the reason must name the untraced figure, got {:?}",
+            audit.witness.reason
+        );
+        assert_eq!(
+            audit.action,
+            GateAction::AbstainedDecline,
+            "the ref-scoped witness downgrade keeps the abstained action, got {:?}",
+            audit.action
         );
     }
 }

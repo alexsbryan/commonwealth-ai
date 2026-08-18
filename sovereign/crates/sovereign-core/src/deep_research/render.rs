@@ -11,9 +11,10 @@
 //! its flag, never deleted.
 
 use super::audit::ClaimAudit;
+use super::containment::strip_citation_spans;
 use super::icd::{
-    AlignmentRecord, BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, LockRecord, Manifest,
-    ReframeRecord, ResidueRow, RoundRow, SourceLedger, Verdict, VerdictSet,
+    AlignmentRecord, BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, GateAction,
+    LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow, SourceLedger, Verdict, VerdictSet,
 };
 
 /// Map the final audits to verdict-set rows, with C-class citations
@@ -41,6 +42,20 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
             let status = a.verdict.as_str().to_string();
             let flag = match a.verdict {
                 Verdict::Failed => Some("refuted by the evidence".to_string()),
+                // REF-REQUIRED (order deep-research-t4a): the refusal
+                // classes name the cause — the reader sees the draft's
+                // selection failed the gate, not a generic
+                // could-not-judge.
+                Verdict::CouldNotJudge if a.action == GateAction::RefusedNoCitationHandle => {
+                    Some("open question: no citation handle (ref-required — the draft must cite \
+                          the chunks it asserts against)"
+                        .to_string())
+                }
+                Verdict::CouldNotJudge if a.action == GateAction::RefusedUnresolvableHandle => {
+                    Some("open question: the citation handle does not name a window chunk \
+                          (ref-required)"
+                        .to_string())
+                }
                 // GAP-2: a floor-capped claim names the cause — the
                 // reader sees WHY the claim is open (single origin),
                 // not a generic could-not-judge.
@@ -87,6 +102,20 @@ pub fn render_report(
     alignment: Option<&AlignmentRecord>,
     residue: &[ResidueRow],
 ) -> String {
+    // Model-written `[Source: …]` tails are demoted at the page (order
+    // deep-research-t4a, pre-registered — pass site 1: 83% of claims
+    // rendered verbatim with their tails): the typed citation channel
+    // is the only citation that ships. The verdict-set side is
+    // untouched — final_claims keeps the raw text, and the DRB
+    // scorer's Amendment-3 pair formation resolves tails through the
+    // draft registry (named, deliberate).
+    let claims: Vec<FinalClaim> = claims
+        .iter()
+        .map(|c| FinalClaim {
+            text: strip_citation_spans(&c.text),
+            ..c.clone()
+        })
+        .collect();
     let mut out = String::new();
     out.push_str(&format!("# {question}\n\n"));
     out.push_str(&format!(
@@ -328,6 +357,45 @@ mod tests {
         assert!(!report.contains("[never-ran]"));
         assert_eq!(claims[0].citations.len(), 1);
         assert_eq!(claims[0].citations[0].evidence_id, "ev-1");
+    }
+
+    /// RED (order deep-research-t4a, pre-registered — pass site 1: 83%
+    /// of claims rendered verbatim with model-written tails): the
+    /// report never ships a model-written `[Source: …]` tail; the
+    /// typed citation channel is the only citation on the page. The
+    /// verdict-set side keeps the raw text — the DRB scorer's
+    /// Amendment-3 pair formation resolves tails through the draft
+    /// registry (named, deliberate).
+    #[test]
+    fn report_strips_model_tails_keeps_typed_citations() {
+        let audits = vec![ClaimAudit {
+            claim: "The bridge was completed in 1873 [Source: https://example.com/draft]. "
+                .to_string(),
+            verdict: Verdict::Passed,
+            action: super::super::icd::GateAction::CitationGrounded,
+            witness: Default::default(),
+            supporting_chunk_ids: vec!["ev-1".to_string()],
+            empty_evidence_window: false,
+            reason: None,
+            corroboration: None,
+        }];
+        let claims = final_claims(&audits, &window());
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[]);
+        assert!(
+            !report.contains("[Source:"),
+            "model-written tails never ship on the page"
+        );
+        assert!(
+            report.contains("https://example.com/a"),
+            "the typed citation still renders"
+        );
+        assert!(report.contains("[passed]"));
+        // The verdict-set side keeps the raw text — the scorer's pair
+        // formation depends on it.
+        assert_eq!(
+            claims[0].text,
+            "The bridge was completed in 1873 [Source: https://example.com/draft]. "
+        );
     }
 
     #[test]

@@ -142,6 +142,32 @@ pub fn strip_citation_spans(text: &str) -> String {
     out
 }
 
+/// Extract the `[Source: X]` citation handles from text — the OTHER
+/// projection of the span grammar (order deep-research-t4a,
+/// pre-registered): `strip_citation_spans` removes the spans; this
+/// names what they carried. One grammar, two projections. Only
+/// terminated spans yield a handle (an unterminated span is stripped
+/// by the strip — it can cite nothing); an unterminated span is
+/// skipped to end-of-line, the strip's bounded-bracket contract.
+/// Order preserved, duplicates removed.
+pub fn citation_handles(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = text;
+    while let Some(start) = rest.find("[Source:") {
+        let after = &rest[start..];
+        if let Some(end) = after.find(']') {
+            let handle = after["[Source:".len()..end].trim();
+            if !handle.is_empty() && !out.contains(&handle.to_string()) {
+                out.push(handle.to_string());
+            }
+            rest = &after[end + 1..];
+        } else {
+            rest = after.find('\n').map(|e| &after[e..]).unwrap_or("");
+        }
+    }
+    out
+}
+
 /// A line is heading-shaped when it is short, title-like, and carries no
 /// sentence-final punctuation — the shape that proves nothing about the
 /// evidence body (the hand-run's "budget forcing" lesson: the technique
@@ -167,7 +193,18 @@ fn appears_in_body(specific: &str, evidence: &str) -> bool {
     let specific = specific.to_lowercase();
     evidence.lines().any(|line| {
         if is_heading_shaped(line) {
-            false
+            // Provenance-aware heading inclusion (order
+            // deep-research-t4a, pre-registered — the drb-56
+            // "untraced: 68" shape): a heading-shaped line COUNTS for
+            // presence when the specific is figure-bearing. The line
+            // came from a chunk body (the ICD's WindowChunk carries no
+            // heading field — every evidence line IS body), and a
+            // figure token is the claim's own asserted digit, not a
+            // heading-shaped paraphrase of it. Non-figure specifics
+            // stay excluded (`heading_occurrences_do_not_count` pins
+            // that side: a technique name in a heading proves nothing
+            // about the body).
+            !figure_tokens(&specific).is_empty() && line.to_lowercase().contains(&specific)
         } else {
             line.to_lowercase().contains(&specific)
         }
@@ -506,6 +543,35 @@ mod tests {
         ));
     }
 
+    /// RED (order deep-research-t4a — the pinned shape, pre-registered;
+    /// drb-56 local c5, "untraced: 68"): a figure-bearing heading-shaped
+    /// line counts for presence when it came from a chunk body. The
+    /// ICD's WindowChunk carries no heading field — every evidence line
+    /// IS body — so the heading exclusion is provenance-blind; the
+    /// figure-aware exception restores the provenance. Non-figure
+    /// heading-shaped lines stay excluded
+    /// (`heading_occurrences_do_not_count` pins the other side).
+    #[test]
+    fn heading_shaped_figure_line_counts_for_presence() {
+        let evidence = vec![
+            "68 languages العربية\n\nThe auction house operated across the region.".to_string(),
+        ];
+        // Both consumers share the one matcher.
+        assert!(
+            missing_claim_figures(
+                "The auction house served 68 languages worldwide.",
+                &evidence
+            )
+            .is_empty(),
+            "the claim's own figure token '68' must trace to the figure-bearing \
+             heading-shaped line"
+        );
+        assert!(
+            witness_presence(&["68".to_string()], &evidence),
+            "the numeric specific '68' counts for presence on the figure-bearing line"
+        );
+    }
+
     /// RED (order deep-research-t1h — the honesty rule, pre-registered;
     /// the t1g break is the named red): thematic presence can no
     /// longer mask numeric absence. The v1 flight's [passed] c1
@@ -629,6 +695,30 @@ mod tests {
             "the 'ev-1' citation tail is citation machinery, not claim content — \
              the claim's figures (32, 2025, 03, 18) are all present"
         );
+    }
+
+    /// The span grammar's other projection (order deep-research-t4a,
+    /// pre-registered): `citation_handles` names what the strip
+    /// removes. One grammar, two projections — the ref-required stage
+    /// and the strip must never disagree.
+    #[test]
+    fn citation_handles_extract_what_the_strip_removes() {
+        let text = "Claim one [Source: ev-1]. Claim two [Source: ev-2] and again [Source: ev-1].";
+        assert_eq!(
+            citation_handles(text),
+            vec!["ev-1".to_string(), "ev-2".to_string()],
+            "order preserved, duplicates removed"
+        );
+        // URL-shaped handles (the pre-t4a draft style) parse the same.
+        assert_eq!(
+            citation_handles("Said [Source: https://example.com/a]."),
+            vec!["https://example.com/a".to_string()]
+        );
+        // No spans → no handles; an unterminated span cites nothing.
+        assert!(citation_handles("No citation here.").is_empty());
+        assert!(citation_handles("Broke [Source: ev-1").is_empty());
+        // The strip removes exactly the spans the handles name.
+        assert!(citation_handles(&strip_citation_spans(text)).is_empty());
     }
 
     #[test]

@@ -74,8 +74,10 @@ pub async fn draft_round(
     open_gaps: &[String],
 ) -> Result<Draft, String> {
     let system = "You are a local research synthesist. Answer the question from the evidence provided. \
-                  Cite every factual claim with [Source: URL] where the URL is one of the allowed sources. \
-                  If the evidence cannot answer a part, say so explicitly rather than guessing."
+                  Cite EVERY factual claim with [Source: ev-<id>] where <id> is the evidence chunk id \
+                  the claim rests on (each chunk is labelled [id] in the evidence block, and its \
+                  figures are listed in the inventory). Use only chunk ids present in the evidence \
+                  block. If the evidence cannot answer a part, say so explicitly rather than guessing."
         .to_string();
     let mut prompt = String::new();
     if round == 1 {

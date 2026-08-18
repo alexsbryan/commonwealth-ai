@@ -1,0 +1,2839 @@
+{
+  "pooled": {
+    "label": "Frozen DRB local (t2b flights) \u2014 merged-view retrace",
+    "root": "research/deep-research/drb/runs/local",
+    "flights": 10,
+    "untraced_claims_checked": 199,
+    "untraced_claims_with_present": 185,
+    "untraced_tokens_total": 367,
+    "untraced_tokens_present_substring": 347,
+    "untraced_tokens_present_token": 288,
+    "ref_scoped_records": 53,
+    "ref_real_leak": 4,
+    "ref_matcher_significance": 176,
+    "ref_genuine_absent": 3,
+    "ref_heading_class": 21,
+    "tails_total": 238,
+    "flights_with_tails": 7,
+    "flights_without_report": 0,
+    "passed_claims": 4,
+    "passed_with_untraced_figures": 0,
+    "passed_with_recorded_untraced": 0,
+    "passed_missing_structured_citations": 0,
+    "residual": [
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-56/dr-1786943328",
+        "pair": "drb-56",
+        "items": [
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "4",
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c5",
+            "tokens_present": [
+              "68"
+            ]
+          },
+          {
+            "claim_id": "c6",
+            "tokens_present": [
+              "1",
+              "2",
+              "2.1",
+              "2.2",
+              "2.3",
+              "3",
+              "4",
+              "4.1",
+              "4.2",
+              "4.2.1",
+              "4.2.2",
+              "4.2.3",
+              "4.3",
+              "4.4",
+              "4.5",
+              "4.6",
+              "4.7",
+              "4.8",
+              "4.9",
+              "5",
+              "5.1",
+              "5.2",
+              "5.3",
+              "5.4",
+              "5.5",
+              "5.6",
+              "5.7",
+              "6",
+              "6.1",
+              "6.1.1",
+              "6.2",
+              "6.2.1",
+              "6.2.2",
+              "6.2.3"
+            ]
+          },
+          {
+            "claim_id": "c7",
+            "tokens_present": [
+              "7"
+            ]
+          },
+          {
+            "claim_id": "c9",
+            "tokens_present": [
+              "6.2.3",
+              "7",
+              "8"
+            ]
+          },
+          {
+            "claim_id": "c11",
+            "tokens_present": [
+              "7",
+              "8",
+              "9"
+            ]
+          },
+          {
+            "claim_id": "c13",
+            "tokens_present": [
+              "9"
+            ]
+          },
+          {
+            "claim_id": "c19",
+            "tokens_present": [
+              "4",
+              "3",
+              "68",
+              "1",
+              "2",
+              "4.1",
+              "4.2",
+              "4.2.1",
+              "4.2.2",
+              "4.2.3",
+              "4.3",
+              "4.4",
+              "4.5",
+              "4.6",
+              "4.7",
+              "4.8",
+              "4.9",
+              "5",
+              "5.1",
+              "5.2",
+              "5.3",
+              "5.4",
+              "5.5",
+              "5.6",
+              "5.7",
+              "6",
+              "6.1",
+              "6.1.1",
+              "6.2",
+              "6.2.1",
+              "6.2.2",
+              "6.2.3",
+              "7",
+              "8",
+              "9"
+            ]
+          },
+          {
+            "claim_id": "c21",
+            "tokens_present": [
+              "4",
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c5",
+            "tokens_present": [
+              "68"
+            ]
+          },
+          {
+            "claim_id": "c6",
+            "tokens_present": [
+              "1",
+              "2",
+              "2.1",
+              "2.2",
+              "2.3",
+              "3",
+              "4",
+              "4.1",
+              "4.2",
+              "4.2.1",
+              "4.2.2",
+              "4.2.3",
+              "4.3",
+              "4.4",
+              "4.5",
+              "4.6",
+              "4.7",
+              "4.8",
+              "4.9",
+              "5",
+              "5.1",
+              "5.2",
+              "5.3",
+              "5.4",
+              "5.5",
+              "5.6",
+              "5.7",
+              "6",
+              "6.1",
+              "6.1.1",
+              "6.2",
+              "6.2.1",
+              "6.2.2",
+              "6.2.3"
+            ]
+          },
+          {
+            "claim_id": "c7",
+            "tokens_present": [
+              "7"
+            ]
+          },
+          {
+            "claim_id": "c8",
+            "tokens_present": [
+              "6.2.3",
+              "7",
+              "8"
+            ]
+          },
+          {
+            "claim_id": "c9",
+            "tokens_present": [
+              "7",
+              "8",
+              "9"
+            ]
+          },
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "9"
+            ]
+          },
+          {
+            "claim_id": "c12",
+            "tokens_present": [
+              "4",
+              "3",
+              "68",
+              "1",
+              "2",
+              "4.1",
+              "4.2",
+              "4.2.1",
+              "4.2.2",
+              "4.2.3",
+              "4.3",
+              "4.4",
+              "4.5",
+              "4.6",
+              "4.7",
+              "4.8",
+              "4.9",
+              "5",
+              "5.1",
+              "5.2",
+              "5.3",
+              "5.4",
+              "5.5",
+              "5.6",
+              "5.7",
+              "6",
+              "6.1",
+              "6.1.1",
+              "6.2",
+              "6.2.1",
+              "6.2.2",
+              "6.2.3",
+              "7",
+              "8",
+              "9"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "4",
+              "3"
+            ]
+          }
+        ]
+      },
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-62/dr-1786946459",
+        "pair": "drb-62",
+        "items": [
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c3",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c4",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c5",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c8",
+            "tokens_present": [
+              "6",
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c9",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c11",
+            "tokens_present": [
+              "4",
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c13",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c16",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c17",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c19",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c20",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c21",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c22",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c3",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c4",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c7",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c8",
+            "tokens_present": [
+              "6",
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "1",
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c13",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c15",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c16",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c18",
+            "tokens_present": [
+              "6",
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c19",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c20",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c21",
+            "tokens_present": [
+              "4",
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c23",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c24",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c26",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c27",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c28",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c29",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c30",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c31",
+            "tokens_present": [
+              "2"
+            ]
+          }
+        ]
+      },
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-65/dr-1786946583",
+        "pair": "drb-65",
+        "items": [
+          {
+            "claim_id": "c12",
+            "tokens_present": [
+              "3",
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c17",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c26",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c27",
+            "tokens_present": [
+              "3",
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c45",
+            "tokens_present": [
+              "3",
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c46",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c49",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c56",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c57",
+            "tokens_present": [
+              "3",
+              "2"
+            ]
+          }
+        ]
+      },
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-69/dr-1786944221",
+        "pair": "drb-69",
+        "items": [
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c11",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c5",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c13",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "2"
+            ]
+          }
+        ]
+      },
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-78/dr-1786944328",
+        "pair": "drb-78",
+        "items": [
+          {
+            "claim_id": "c28",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c24",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c50",
+            "tokens_present": [
+              "2"
+            ]
+          }
+        ]
+      },
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-83/dr-1786944522",
+        "pair": "drb-83",
+        "items": [
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c7",
+            "tokens_present": [
+              "9%"
+            ]
+          },
+          {
+            "claim_id": "c17",
+            "tokens_present": [
+              "3.0"
+            ]
+          },
+          {
+            "claim_id": "c20",
+            "tokens_present": [
+              "8"
+            ]
+          },
+          {
+            "claim_id": "c22",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c23",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c24",
+            "tokens_present": [
+              "3",
+              "4"
+            ]
+          },
+          {
+            "claim_id": "c25",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "6"
+            ]
+          },
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c17",
+            "tokens_present": [
+              "6"
+            ]
+          },
+          {
+            "claim_id": "c20",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c33",
+            "tokens_present": [
+              "9%"
+            ]
+          },
+          {
+            "claim_id": "c39",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c43",
+            "tokens_present": [
+              "9%"
+            ]
+          },
+          {
+            "claim_id": "c47",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c52",
+            "tokens_present": [
+              "9%"
+            ]
+          },
+          {
+            "claim_id": "c58",
+            "tokens_present": [
+              "3.0"
+            ]
+          },
+          {
+            "claim_id": "c60",
+            "tokens_present": [
+              "8"
+            ]
+          },
+          {
+            "claim_id": "c62",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c63",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c64",
+            "tokens_present": [
+              "3",
+              "4"
+            ]
+          },
+          {
+            "claim_id": "c65",
+            "tokens_present": [
+              "2"
+            ]
+          }
+        ]
+      },
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-90/dr-1786944936",
+        "pair": "drb-90",
+        "items": [
+          {
+            "claim_id": "c1",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c3",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c5",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c6",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c11",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c13",
+            "tokens_present": [
+              "2%"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c16",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c17",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c20",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c21",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c4",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c5",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c6",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c9",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c12",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c15",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c16",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c18",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c21",
+            "tokens_present": [
+              "2%",
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c23",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c28",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c29",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c30",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c32",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c33",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c39",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c50",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c51",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c52",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c53",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c54",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c56",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c57",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c59",
+            "tokens_present": [
+              "2%"
+            ]
+          },
+          {
+            "claim_id": "c60",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c62",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c63",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c66",
+            "tokens_present": [
+              "2"
+            ]
+          }
+        ]
+      },
+      {
+        "flight": "research/deep-research/drb/runs/local/drb-95/dr-1786946762",
+        "pair": "drb-95",
+        "items": [
+          {
+            "claim_id": "c1",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c4",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c5",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c6",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c12",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c15",
+            "tokens_present": [
+              "9",
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c16",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c19",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c20",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c2",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c3",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c4",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c6",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c7",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c9",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c10",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c12",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c13",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c14",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c15",
+            "tokens_present": [
+              "3"
+            ]
+          },
+          {
+            "claim_id": "c16",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c20",
+            "tokens_present": [
+              "1",
+              "4"
+            ]
+          },
+          {
+            "claim_id": "c21",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c22",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c23",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c24",
+            "tokens_present": [
+              "4"
+            ]
+          },
+          {
+            "claim_id": "c25",
+            "tokens_present": [
+              "2",
+              "4"
+            ]
+          },
+          {
+            "claim_id": "c26",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c28",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c29",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c30",
+            "tokens_present": [
+              "5"
+            ]
+          },
+          {
+            "claim_id": "c33",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c34",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c36",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c37",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c38",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c42",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c44",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c45",
+            "tokens_present": [
+              "9",
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c46",
+            "tokens_present": [
+              "2"
+            ]
+          },
+          {
+            "claim_id": "c49",
+            "tokens_present": [
+              "1"
+            ]
+          },
+          {
+            "claim_id": "c50",
+            "tokens_present": [
+              "1"
+            ]
+          }
+        ]
+      }
+    ],
+    "constitution_violations": []
+  },
+  "per_flight": [
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-56/dr-1786943328",
+      "pair": "drb-56",
+      "untraced_claims_checked": 17,
+      "untraced_claims_with_present": 17,
+      "untraced_tokens_total": 162,
+      "untraced_tokens_present_substring": 162,
+      "untraced_tokens_present_token": 162,
+      "ref_real_leak": 4,
+      "ref_matcher_significance": 146,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 10,
+      "ref_scoped_records": 15,
+      "residual": [
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "4",
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c5",
+          "tokens_present": [
+            "68"
+          ]
+        },
+        {
+          "claim_id": "c6",
+          "tokens_present": [
+            "1",
+            "2",
+            "2.1",
+            "2.2",
+            "2.3",
+            "3",
+            "4",
+            "4.1",
+            "4.2",
+            "4.2.1",
+            "4.2.2",
+            "4.2.3",
+            "4.3",
+            "4.4",
+            "4.5",
+            "4.6",
+            "4.7",
+            "4.8",
+            "4.9",
+            "5",
+            "5.1",
+            "5.2",
+            "5.3",
+            "5.4",
+            "5.5",
+            "5.6",
+            "5.7",
+            "6",
+            "6.1",
+            "6.1.1",
+            "6.2",
+            "6.2.1",
+            "6.2.2",
+            "6.2.3"
+          ]
+        },
+        {
+          "claim_id": "c7",
+          "tokens_present": [
+            "7"
+          ]
+        },
+        {
+          "claim_id": "c9",
+          "tokens_present": [
+            "6.2.3",
+            "7",
+            "8"
+          ]
+        },
+        {
+          "claim_id": "c11",
+          "tokens_present": [
+            "7",
+            "8",
+            "9"
+          ]
+        },
+        {
+          "claim_id": "c13",
+          "tokens_present": [
+            "9"
+          ]
+        },
+        {
+          "claim_id": "c19",
+          "tokens_present": [
+            "4",
+            "3",
+            "68",
+            "1",
+            "2",
+            "4.1",
+            "4.2",
+            "4.2.1",
+            "4.2.2",
+            "4.2.3",
+            "4.3",
+            "4.4",
+            "4.5",
+            "4.6",
+            "4.7",
+            "4.8",
+            "4.9",
+            "5",
+            "5.1",
+            "5.2",
+            "5.3",
+            "5.4",
+            "5.5",
+            "5.6",
+            "5.7",
+            "6",
+            "6.1",
+            "6.1.1",
+            "6.2",
+            "6.2.1",
+            "6.2.2",
+            "6.2.3",
+            "7",
+            "8",
+            "9"
+          ]
+        },
+        {
+          "claim_id": "c21",
+          "tokens_present": [
+            "4",
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c5",
+          "tokens_present": [
+            "68"
+          ]
+        },
+        {
+          "claim_id": "c6",
+          "tokens_present": [
+            "1",
+            "2",
+            "2.1",
+            "2.2",
+            "2.3",
+            "3",
+            "4",
+            "4.1",
+            "4.2",
+            "4.2.1",
+            "4.2.2",
+            "4.2.3",
+            "4.3",
+            "4.4",
+            "4.5",
+            "4.6",
+            "4.7",
+            "4.8",
+            "4.9",
+            "5",
+            "5.1",
+            "5.2",
+            "5.3",
+            "5.4",
+            "5.5",
+            "5.6",
+            "5.7",
+            "6",
+            "6.1",
+            "6.1.1",
+            "6.2",
+            "6.2.1",
+            "6.2.2",
+            "6.2.3"
+          ]
+        },
+        {
+          "claim_id": "c7",
+          "tokens_present": [
+            "7"
+          ]
+        },
+        {
+          "claim_id": "c8",
+          "tokens_present": [
+            "6.2.3",
+            "7",
+            "8"
+          ]
+        },
+        {
+          "claim_id": "c9",
+          "tokens_present": [
+            "7",
+            "8",
+            "9"
+          ]
+        },
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "9"
+          ]
+        },
+        {
+          "claim_id": "c12",
+          "tokens_present": [
+            "4",
+            "3",
+            "68",
+            "1",
+            "2",
+            "4.1",
+            "4.2",
+            "4.2.1",
+            "4.2.2",
+            "4.2.3",
+            "4.3",
+            "4.4",
+            "4.5",
+            "4.6",
+            "4.7",
+            "4.8",
+            "4.9",
+            "5",
+            "5.1",
+            "5.2",
+            "5.3",
+            "5.4",
+            "5.5",
+            "5.6",
+            "5.7",
+            "6",
+            "6.1",
+            "6.1.1",
+            "6.2",
+            "6.2.1",
+            "6.2.2",
+            "6.2.3",
+            "7",
+            "8",
+            "9"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "4",
+            "3"
+          ]
+        }
+      ],
+      "tails_in_report": 24,
+      "passed_claims": 0,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-58/dr-1786943716",
+      "pair": "drb-58",
+      "untraced_claims_checked": 4,
+      "untraced_claims_with_present": 0,
+      "untraced_tokens_total": 4,
+      "untraced_tokens_present_substring": 0,
+      "untraced_tokens_present_token": 0,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 0,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 0,
+      "residual": [],
+      "tails_in_report": 28,
+      "passed_claims": 0,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-59/dr-1786943937",
+      "pair": "drb-59",
+      "untraced_claims_checked": 0,
+      "untraced_claims_with_present": 0,
+      "untraced_tokens_total": 0,
+      "untraced_tokens_present_substring": 0,
+      "untraced_tokens_present_token": 0,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 0,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 0,
+      "residual": [],
+      "tails_in_report": 29,
+      "passed_claims": 1,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-62/dr-1786946459",
+      "pair": "drb-62",
+      "untraced_claims_checked": 37,
+      "untraced_claims_with_present": 37,
+      "untraced_tokens_total": 43,
+      "untraced_tokens_present_substring": 43,
+      "untraced_tokens_present_token": 5,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 0,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 0,
+      "residual": [
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c3",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c4",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c5",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c8",
+          "tokens_present": [
+            "6",
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c9",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c11",
+          "tokens_present": [
+            "4",
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c13",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c16",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c17",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c19",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c20",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c21",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c22",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c3",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c4",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c7",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c8",
+          "tokens_present": [
+            "6",
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "1",
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c13",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c15",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c16",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c18",
+          "tokens_present": [
+            "6",
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c19",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c20",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c21",
+          "tokens_present": [
+            "4",
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c23",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c24",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c26",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c27",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c28",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c29",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c30",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c31",
+          "tokens_present": [
+            "2"
+          ]
+        }
+      ],
+      "tails_in_report": 0,
+      "passed_claims": 0,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-65/dr-1786946583",
+      "pair": "drb-65",
+      "untraced_claims_checked": 14,
+      "untraced_claims_with_present": 11,
+      "untraced_tokens_total": 18,
+      "untraced_tokens_present_substring": 15,
+      "untraced_tokens_present_token": 15,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 15,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 11,
+      "residual": [
+        {
+          "claim_id": "c12",
+          "tokens_present": [
+            "3",
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c17",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c26",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c27",
+          "tokens_present": [
+            "3",
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c45",
+          "tokens_present": [
+            "3",
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c46",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c49",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c56",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c57",
+          "tokens_present": [
+            "3",
+            "2"
+          ]
+        }
+      ],
+      "tails_in_report": 42,
+      "passed_claims": 0,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-69/dr-1786944221",
+      "pair": "drb-69",
+      "untraced_claims_checked": 6,
+      "untraced_claims_with_present": 6,
+      "untraced_tokens_total": 6,
+      "untraced_tokens_present_substring": 6,
+      "untraced_tokens_present_token": 6,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 1,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 1,
+      "residual": [
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c11",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c5",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c13",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "2"
+          ]
+        }
+      ],
+      "tails_in_report": 15,
+      "passed_claims": 1,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-78/dr-1786944328",
+      "pair": "drb-78",
+      "untraced_claims_checked": 3,
+      "untraced_claims_with_present": 3,
+      "untraced_tokens_total": 3,
+      "untraced_tokens_present_substring": 3,
+      "untraced_tokens_present_token": 0,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 3,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 3,
+      "residual": [
+        {
+          "claim_id": "c28",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c24",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c50",
+          "tokens_present": [
+            "2"
+          ]
+        }
+      ],
+      "tails_in_report": 44,
+      "passed_claims": 0,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-83/dr-1786944522",
+      "pair": "drb-83",
+      "untraced_claims_checked": 26,
+      "untraced_claims_with_present": 23,
+      "untraced_tokens_total": 28,
+      "untraced_tokens_present_substring": 25,
+      "untraced_tokens_present_token": 25,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 11,
+      "ref_genuine_absent": 3,
+      "ref_heading_class": 11,
+      "ref_scoped_records": 23,
+      "residual": [
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c7",
+          "tokens_present": [
+            "9%"
+          ]
+        },
+        {
+          "claim_id": "c17",
+          "tokens_present": [
+            "3.0"
+          ]
+        },
+        {
+          "claim_id": "c20",
+          "tokens_present": [
+            "8"
+          ]
+        },
+        {
+          "claim_id": "c22",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c23",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c24",
+          "tokens_present": [
+            "3",
+            "4"
+          ]
+        },
+        {
+          "claim_id": "c25",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "6"
+          ]
+        },
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c17",
+          "tokens_present": [
+            "6"
+          ]
+        },
+        {
+          "claim_id": "c20",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c33",
+          "tokens_present": [
+            "9%"
+          ]
+        },
+        {
+          "claim_id": "c39",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c43",
+          "tokens_present": [
+            "9%"
+          ]
+        },
+        {
+          "claim_id": "c47",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c52",
+          "tokens_present": [
+            "9%"
+          ]
+        },
+        {
+          "claim_id": "c58",
+          "tokens_present": [
+            "3.0"
+          ]
+        },
+        {
+          "claim_id": "c60",
+          "tokens_present": [
+            "8"
+          ]
+        },
+        {
+          "claim_id": "c62",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c63",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c64",
+          "tokens_present": [
+            "3",
+            "4"
+          ]
+        },
+        {
+          "claim_id": "c65",
+          "tokens_present": [
+            "2"
+          ]
+        }
+      ],
+      "tails_in_report": 56,
+      "passed_claims": 2,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-90/dr-1786944936",
+      "pair": "drb-90",
+      "untraced_claims_checked": 48,
+      "untraced_claims_with_present": 44,
+      "untraced_tokens_total": 55,
+      "untraced_tokens_present_substring": 45,
+      "untraced_tokens_present_token": 27,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 0,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 0,
+      "residual": [
+        {
+          "claim_id": "c1",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c3",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c5",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c6",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c11",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c13",
+          "tokens_present": [
+            "2%"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c16",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c17",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c20",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c21",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c4",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c5",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c6",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c9",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c12",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c15",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c16",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c18",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c21",
+          "tokens_present": [
+            "2%",
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c23",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c28",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c29",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c30",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c32",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c33",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c39",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c50",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c51",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c52",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c53",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c54",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c56",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c57",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c59",
+          "tokens_present": [
+            "2%"
+          ]
+        },
+        {
+          "claim_id": "c60",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c62",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c63",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c66",
+          "tokens_present": [
+            "2"
+          ]
+        }
+      ],
+      "tails_in_report": 0,
+      "passed_claims": 0,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    },
+    {
+      "flight": "research/deep-research/drb/runs/local/drb-95/dr-1786946762",
+      "pair": "drb-95",
+      "untraced_claims_checked": 44,
+      "untraced_claims_with_present": 44,
+      "untraced_tokens_total": 48,
+      "untraced_tokens_present_substring": 48,
+      "untraced_tokens_present_token": 48,
+      "ref_real_leak": 0,
+      "ref_matcher_significance": 0,
+      "ref_genuine_absent": 0,
+      "ref_heading_class": 0,
+      "ref_scoped_records": 0,
+      "residual": [
+        {
+          "claim_id": "c1",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c4",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c5",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c6",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c12",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c15",
+          "tokens_present": [
+            "9",
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c16",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c19",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c20",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c2",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c3",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c4",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c6",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c7",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c9",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c10",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c12",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c13",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c14",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c15",
+          "tokens_present": [
+            "3"
+          ]
+        },
+        {
+          "claim_id": "c16",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c20",
+          "tokens_present": [
+            "1",
+            "4"
+          ]
+        },
+        {
+          "claim_id": "c21",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c22",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c23",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c24",
+          "tokens_present": [
+            "4"
+          ]
+        },
+        {
+          "claim_id": "c25",
+          "tokens_present": [
+            "2",
+            "4"
+          ]
+        },
+        {
+          "claim_id": "c26",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c28",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c29",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c30",
+          "tokens_present": [
+            "5"
+          ]
+        },
+        {
+          "claim_id": "c33",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c34",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c36",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c37",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c38",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c42",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c44",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c45",
+          "tokens_present": [
+            "9",
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c46",
+          "tokens_present": [
+            "2"
+          ]
+        },
+        {
+          "claim_id": "c49",
+          "tokens_present": [
+            "1"
+          ]
+        },
+        {
+          "claim_id": "c50",
+          "tokens_present": [
+            "1"
+          ]
+        }
+      ],
+      "tails_in_report": 0,
+      "passed_claims": 0,
+      "passed_with_untraced_figures": 0,
+      "passed_with_recorded_untraced": 0,
+      "passed_missing_structured_citations": 0,
+      "constitution_violations": []
+    }
+  ]
+}

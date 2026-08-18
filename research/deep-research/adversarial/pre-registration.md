@@ -2951,3 +2951,354 @@ No `.rs` files were moved by this order — the lint --full / test gate is repor
 - `python3 drb-score.py --selftest` — PASS (12/12, incl. the decline intercept, zero-pair task 203, zero-judged task 204, fact_rows persistence; the selftest caught and fixed a per-url fact_rows leak).
 - `--replay` over the frozen artifacts — frozen numbers reproduced exactly (above); outputs `demo/demo9/score-{local,hybrid,hybrid-delta}-t3d.json`, labeled, frozen files untouched (sha256sum -c SHA256SUMS all OK; the delta guard refuses to overwrite the frozen score-hybrid-delta.json, exit 2).
 - `verify-demo9.sh` — strips 1-4, 7, 8 PASS. Strips 5-6 FAIL PRE-EXISTING at HEAD (verified against `git show HEAD:quality/initiative-bars.toml`): the t3a landing's dr-verdict `met` transition writes `by = "…"` double-quoted without naming P4/P2/P1, while the strip demands the triple-quoted block — the dr-verdict bar file is out of this order's lane (bar-text edits forbidden; another session's uncommitted edits live there). Named, not swept.
+
+## T4a — the arm-pass order: close the three deterministic leak sites, then re-flight DRB on the same 27B draft (order deep-research-t4a, appended 2026-08-17)
+
+The operator's direction 2026-08-17: the verification arm (dr-verdict: ship iff P4 AND P2 AND P1) must pass, and **model capability is not the difference maker**. The component attribution (T3C_AUDIT_FORENSICS.md + T3C_GAP_ANALYSIS.md, artifact-derived): fabrications are born in the one Class-G component (the draft) and survive through THREE deterministic defects — the witness view's heading-shape exclusion (79% of recorded-untraced figures are in the flight's own union of windows), the render's model-written `[Source:]` tails (83% of claims; structured citations on 5/616), and the draft's handle-less assertions (the gate verifies against a paraphrase, not the referenced chunk). Fix the three deterministically — no model swap, no new model — then re-flight the frozen DRB subset on the SAME 27B draft.
+
+This entry is the §18.6 pre-registration: every instrument change below was written BEFORE any battery or flight; red-first evidence is on the record; no recorded number is silently changed — old-instrument numbers are cited as old-instrument. The bank, the DRB subset, the bar text, and the floor/witness are frozen (run, never edit; never weakened).
+
+### Item 1 — the witness view: provenance-aware heading inclusion on the flight's own union of windows (heap 21370152)
+
+- **Reuse check (§19).** Examined first: the main gate's claim-search ladder (`SOVEREIGN_GATE_CLAIM_SEARCH` — "widens the audit's evidence beyond the prompt chunks", measured 7/7 rescues) is the existing union-view mechanism. **Named reason it cannot serve**: the ClaimSearcher is `pub(crate)` and requires a corpus-engine handle, which the loop's audit has no access to (the seat's ruling, verbatim: "the loop has no corpus-engine handle"). Adopted instead: the loop's OWN union surface, already at HEAD — `merge_windows()` (deep_research/mod.rs:1132, first-wins dedup by source_url) feeds BOTH draft_round and audit_pass (mod.rs:1395, :1418), identical at t2b (01eb51d4). Adopt, don't rebuild.
+- **The pinned mechanism (the seat correction, verbatim).** The "untraced: 68" shape — drb-56, local arm, claim c5. The figure's only occurrence in the flight's own artifacts is the line "68 languages العربية" in evidence-window-1.json (round 1's Auction chunk). The line is heading-shaped by `is_heading_shaped` (containment.rs:149 — ≤80 chars, no sentence-final punctuation, no continuation) → excluded by `appears_in_body` (containment.rs:166) → `missing_claim_figures` reports "untraced: 68" although the line came from a chunk body. The union view alone turning the pinned case green is falsified by the code; the heading-shape fix is the mechanism.
+- **The change (one decider, one name).** `appears_in_body` gains the provenance-aware exception: a heading-shaped line COUNTS for presence when the specific is figure-bearing (`figure_tokens(specific)` non-empty — the ONE figure decider, mod.rs:473, already imported by containment.rs:33). Non-figure heading-shaped lines stay excluded — the `heading_occurrences_do_not_count` pin (containment.rs:489, "Budget Forcing") survives because that specific has no figure tokens. The provenance condition ("came from a chunk body") is structurally satisfied: the ICD's WindowChunk carries no heading field — every evidence line IS chunk body. Both consumers (`witness_presence` and `missing_claim_figures`' shared `present` closure) inherit the fix from the one site.
+- **Red-first shape (deterministic, no live model).** A claim carrying the figure "68" against evidence whose only "68" occurrence is the heading-shaped line "68 languages العربية": `missing_claim_figures` returns `["68"]` at HEAD, `[]` after. Same shape for `witness_presence` with the numeric specific.
+- **Old-instrument baseline (verbatim from T3C_AUDIT_FORENSICS.md pass site 2, never edited):** 161 claims carried a recorded "untraced: …" list; **127/161 (79%)** had ≥1 untraced figure present in the flight's own union of windows — 228/287 figure tokens; strong-figure variant **6/28 (21%)**, 66/107 tokens. These numbers are old-instrument and stand as measured. The target after the fix: untraced-but-present → **0** on the new battery, the residual named, never smoothed.
+- **The battery measurement.** The t1h/t2c protocol re-runs with `SOVEREIGN_GATE_AUDIT_FORENSICS` set (pass-site-5 closure — per-claim judged windows recorded; env read at runtime/grounding/config.rs:310/326/675, records appended by `audit_forensics`). A new deterministic re-trace script, `research/deep-research/arms/t4a-retrace.py` — the forensics' method verbatim (plain token presence of each recorded "untraced: …" figure against the flight's OWN union of evidence-window-*.json) over the NEW flights — counts untraced-but-present. **Constitution:** zero untraced figures in [passed] position in ANY arm (never traded for coverage). If the change degrades the constitution → revert and report (the order clause; the witness view is load-bearing).
+
+### Item 2 — the structured render: model-written tails demoted, the typed channel ships (heap 9f6ee143)
+
+- **Reuse check (§19).** The typed channel exists and is honest: `ClaimCitation {evidence_id, url, chunk_id}` built from `supporting_chunk_ids` (render.rs), `citations[]`/`evidence_ids` on the passed claims only (5/616 in the forensics). A new render-side citation format would be a §10.6 second implementation — **the named reason**: the typed channel IS the format. The render consumes it.
+- **The change.** `render_report` strips model-written `[Source: …]` tails from every rendered claim text via `containment::strip_citation_spans` (the existing pub strip at containment.rs:127 — reuse; a render-local copy would be the §10.6 second implementation). Passed claims keep their typed citation block (" — `ev-1` [url](url)"). A flag branch renders the new ref-required classes (item 3) with their own wording. `verdict-set.json` claim texts KEEP tails — the DRB scorer's Amendment-3 pair formation resolves `[Source: …]` tails through the draft registry (named, deliberate; the scorer is unchanged). Report structure is preserved: `report_is_verdict_stamped_with_citations` (render.rs:299) stays green.
+- **Red-first shape (deterministic).** A claim whose text carries a `[Source: …]` tail renders WITHOUT the tail while its typed citation block still renders.
+- **Measurement.** Tails → 0 on the battery report artifacts (count of "[Source:" in rendered reports over the new battery; the frozen artifacts' tails are old-instrument, untouched).
+
+### Item 3 — ref-required claims: the gate verifies the model's citation selection (the draft's chunk handles, the witness against the referenced chunk)
+
+- **Reuse check (§19).** `SOVEREIGN_CITATION_GROUNDING` (default on, the main answer path — "the model must copy a verbatim supporting sentence before answering… no findable quote → honest abstention") was examined first. **Named reason it cannot serve the loop's window shape**: `citation_grounded_answer` is a per-question, single-quote, single-answer mechanism (ONE verbatim quote + ONE answer per call), while the loop's gate verifies per-claim multi-figure presence across a whole round's report — the loop's draft routes through the loop's OWN gate, which is the citation-grounding surface (now scoped to the referenced chunk). The sampling-layer surface was examined too: `EvidenceIdAllowlistConstraint` (sovereign-inference/src/evidence_id_constraint.rs, wired via `CompletionRequest.evidence_id_allowlist`, populated CLI-side from knowledge_lookup tool results) — **named reason it cannot serve the loop's draft seam**: its engagement marker is hardcoded to the knowledge_lookup canonical form (`EV_START = "[ev-T"` → `ev-Tn-NNNN`), the loop's window handles are `ev-N` (verified in the frozen evidence-window-1.json: ids `ev-1`, `ev-2`), and the loop's `ResearchPort::draft` surface carries no `evidence_id_allowlist` parameter. The gate, not the constraint, is the loop's verification point — the ref-required stage is deterministic and red-first pinned; no loop-local constraint is built. The `EvidenceId` pattern is in-tree (knowledge_lookup/mod.rs:8-17).
+- **The change.**
+  - (a) synthesize.rs — the draft's system prompt demands chunk-handle citations: claims carry `[Source: ev-<id>]` handles naming window chunks (the in-tree EvidenceId pattern); the `figure_inventory` already enumerates per-chunk figures so the model can select precisely; the `allowed_urls` constraint is unchanged (URLs are structurally constrained; handles are not — the gate, not the constraint, verifies them).
+  - (b) audit.rs — a deterministic ref-required stage in `assess_claim`, AFTER the judge and BEFORE the witness: parse `[Source: X]` handles from the claim (the same span grammar as `strip_citation_spans`); **no handle → could-not-judge, reason "ref-required: no citation handle"**; **a handle naming no window chunk (chunk-id exact match, else source_url match) → could-not-judge, reason "ref-required: citation handle X does not name a window chunk"**; the containment witness then runs against the REFERENCED chunk set only (both `missing_claim_figures`' short-circuit and `witness_presence` are ref-scoped — a claim can only PASS when its figures verify against the referenced chunks). Custody veto and corroboration floor keep their window-wide scans (minimal-scope decision, pre-registered: the floor counts distinct source_urls — a window property, not a claim property).
+  - The model's honesty discretion goes to zero: it selects which chunks to cite; the gate verifies the selection. This ADDS refusal paths (could-not-judge) — the floor/witness are never weakened, no pass is converted to a fail, no failed claim is rescued.
+- **Red-first shapes (deterministic, ShapeScripted provider, no live model):** (i) a claim "… 68 … [Source: ev-1]" where ev-1's content lacks "68" → refuses (could-not-judge, the ref-required reason); (ii) a handle-less claim → refuses; (iii) a claim citing ev-99 (no window chunk) → refuses.
+- **Test amendments (pre-registered — the rule's new shape, not a weakening), full enumeration:** six handle-less fixtures gain handles on their claim text — `contradicted_negative_records_its_reason_in_the_audit` (+ " [Source: c1]"), `vacuous_negative_is_could_not_judge_not_passed` (+ " [Source: c1]"), `fully_traced_claim_figures_do_not_block_the_witness` (audit.rs:743, + " [Source: c1]"), `single_origin_support_caps_at_could_not_judge` (:837, + " [Source: c1]"), `two_distinct_origins_pass_unchanged` (:882, + " [Source: c1]"), `negative_claim_with_untraced_figures_is_downgraded_not_passed` (+ " [Source: c2]") — plus ONE tail-swap fixture: `untraced_claim_figure_is_downgraded_not_passed`, whose model-shaped tail "[Source: University of Georgia]" swaps to the window handle "[Source: c2]" so the fixture keeps pinning the untraced-figure downgrade under the ref-required rule. No fixture's verdict expectation changes; only the handle-carrying shape of the claim under test.
+
+### Item 4 — the DRB re-flight (both arms, same 27B draft, the seat-routed 122B judge window)
+
+- **The run.** Frozen subset [56,58,59,62,65,69,78,83,90,95], seed 556953489, bank frozen (SHA256SUMS re-verified before and after; run, never edit). `run-drb-arms.py` gains `--run-root` → `demo/demo12/runs/{local,hybrid}/` (the new artifact dir; the frozen `drb/runs/` never touched).
+- **The draft.** Qwen3.8-27B-UD-Q6_K_XL — the daily driver, MTP active; the SD-on gate losslessness is already verified (T3c (a4): byte-for-byte identical, no measurable pacing delta on the gate's surface).
+- **The scoring.** The t3d-fixed `drb-score.py` (fact_rows persisted, DECLINE_SHAPE one-implementation union, graded vocabulary as additive telemetry, seed 4234932947, REFERENCE_PRIMARY 0.1737 / REFERENCE_SECONDARY 0.2499) with `FACT_MODEL = Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003` — the over-accuser → the bracket's UPPER BOUND (the ceiling is the objective). The judge swap routes through the seat (claim protocol + the proven swap sequence): ESCALATION via SendMessage to `main`, then wait — the worker never loads the 122B itself.
+- **The bracket report (three labeled rows, never mixed — the T3c summary shapes stated):** 35B old-instrument (t2b frozen verbatim — local 0.8706 [0.7241, 1.0000], hybrid 0.3571 [0.2564, 0.4554], delta −0.5134 [−0.6232, −0.3941]; calibration 100/75, FAIL spec); 122B evidence-with-caveat (T3c re-judge — local 0.9329 [0.8846, 1.0000], hybrid 0.3190 [0.2231, 0.4211], delta −0.6140 [−0.7195, −0.5130]; calibration 80/63, FAIL both floors); 27B gate-failed (calibration 50/88, FAIL sens — no re-judge on the 27B instrument, ever). The NEW row: 27B draft re-flight scored by the 122B judge. **Deliverable: does the upper bound fall toward the reference 0.1737?** NO verdict update: the judge-precondition heap item 764896dc stands, the bar text stays frozen, P2's old-instrument verdict stands as published.
+
+### The battery protocol (items 1-3 measured in one pass)
+
+The t1h/t2c protocol (arms/run-arms.sh + arms/score-arms.py — the existing battery harness, reused unchanged): 13 v0 seeds + v1, mock deck, C-class claims only, four-verdict gate, bars_block legs (P4-v0 ≥58/72, P4-v1 ≥12/16, P3 ≥10/13, R-12 ≥10/12, T1.7, two-arm lift ≥0.10/0.15, honesty not worse), run with the fixed binaries and `SOVEREIGN_GATE_AUDIT_FORENSICS` set per flight. The battery is the re-measure vehicle for done-when (a) untraced-but-present → 0 (or the residual named), (b) tails → 0, (c) the ref-required red fixtures, and every passed claim's figure verifies against its referenced chunk (the ref-scoped witness record is the evidence), (d) the constitution — zero untraced figures in [passed] position in ANY arm.
+
+- **The run root.** The battery writes to a FRESH root — `ARMS_RUN_ROOT="$ARMS/runs-t4a"` (the new run-arms.sh override; default = the historical root, verbatim pre-t4a behavior) — so the frozen `arms/runs/` (t1c/t2c/t1h flights) is never touched. `SOVEREIGN_GATE_AUDIT_FORENSICS="$ARMS/runs-t4a/forensics.jsonl"` (a FILE: one JSONL record per audit pass + one per claim decision — config.rs:310/326; the pass-site-5 closure).
+- **The re-trace instrument (`arms/t4a-retrace.py`, deterministic, pre-registered).** Per flight, against the flight's OWN artifacts (the same view the forensics used): (1) **untraced-but-present** — the forensics' method verbatim: for every gap-list witness record whose `reason` contains "untraced: ", parse the figure list; count each figure's presence in the flight's union of `evidence-window-*.json` (PRIMARY: case-insensitive substring — the forensics' method that produced 127/161; SECONDARY: whole-token, the same tokenizer applied to the union). (2) **tails** — count of "[Source:" in the flight's rendered `report.md` (target 0; `report_strips_model_tails_keeps_typed_citations` pins the render never ships the string). (3) **structured citations** — every [passed] claim in `verdict-set.json` carries non-empty `evidence_ids` AND `citations[]` (the typed channel). (4) **constitution** — the [passed] claims' figure tokens (measurement port of `figure_tokens`, mod.rs:473: maximal runs of digits and `$ % . : / ,`, trailing `. ,` popped — the ONE decider) all present in the flight union (substring presence — the permissive side; any absent-by-substring figure is a true violation), plus no untraced witness record on a [passed] claim id. Reported per flight, per arm, and pooled; any residual is named (flight, claim, tokens), never smoothed.
+- **Named instrument amendment (landed after the battery, §18.6 — the ref-required stage changed the gate's view from the flight union to the REFERENCED chunk set, so the union-presence check alone no longer measures the gate's view):** the re-trace gains the **ref-scoped presence pass**. For each recorded-untraced claim, the claim's `[Source: …]` handles resolve to the referenced chunks' contents; each recorded figure is then classed by the gate's own discipline — (i) present by the matcher's discipline (`value_present_in_chunks` significance floor + `appears_in_body`) in the referenced chunks → **REAL LEAK** (target 0); (ii) present as substring but not by the discipline → **MATCHER-SIGNIFICANCE residual** (the shared floor — "9.5" splits into 1-char halves, "1" from "R1" — a deliberate, reused rule, containment.rs:19; named, never smoothed); (iii) absent → **GENUINE UNTRACED** (honest refusal); (iv) present in the referenced chunks only on heading-shaped lines → **HEADING CLASS** (the item-1 target — must be 0). The recorded-side constitution check becomes **TEXT-MATCHED**: an untraced witness record counts against a [passed] claim only when the record's claim text equals the passed claim's text — the round-scoped gap-list ids are per-round indices, not identities (the v1 c20 case: round-2's refused draft variant "9.6, 4.7" and round-3's passed "177% / 92%" share the label c20 but are different claims; the refused variant never passed). The computed-side constitution check (passed claims' figures present in the flight union) is unchanged.
+- **Named instrument amendment 2 (landed 2026-08-17, BEFORE the re-flight measurement — §18.6, the §18.4 validation catch).** The re-trace's flight DISCOVERY does not match the DRB driver's real layout. `run-drb-arms.py` (t2b through t4a; the frozen `drb/runs/` included) writes `<root>/<arm>/drb-<tid>/dr-<ts>/` — the third nesting level, `drb-<tid>`, is invisible to `flight_dirs`' `dr-*` glob. The flat branch was NEVER exercised by any recorded measurement — the battery numbers (union 101/103, ref-scoped 0/165/5/0) all came from the `loop/` branch, which is untouched. Red-first shape: `t4a-retrace.py --root <demo12 arm root>` yields zero flights today; after the fix it yields the ten. The fix is discovery-only: `flight_dirs` gains the `<root>/drb-*/dr-*` branch (pair label = the drb-<tid> dir name); the `loop/` and flat branches stay; `retrace_flight` and every measurement line are byte-unchanged. No recorded number changes; the frozen flights are read-only to the instrument (validation run on `drb/runs/local` writes only to a caller-named `--out` scratch, never into the flight dirs).
+- **Named instrument amendment 2a (landed 2026-08-17, before the re-flight measurement — the landed-flight gate).** A failed or interrupted flight leaves a `dr-*` dir with gap-lists but NO `verdict-set.json` (the manifest and verdict set are written only at flight end). The re-flight driver re-runs failed tasks into NEW `dr-<ts>` dirs, so a `drb-<tid>` can accumulate aborted dirs. Without a gate, the retrace would count an aborted dir's round records as a flight and pollute the pooled untraced/ref-scoped tallies (its verdicts are absent, so the constitution legs are unaffected). The gate: `flight_dirs` yields a `dr-*` dir only when it contains `verdict-set.json` — a landed flight always has one. Red-first shape: an aborted dir (no verdict-set) is excluded today and after the fix; no landed flight is affected (validated on the frozen `drb/runs/local`: 13 `dr-*` dirs, 10 carry verdict-set.json — the 10 landed flights, one per subset task, all manifest done-partial — and the 3 without (drb-62/dr-1786944073, drb-65/dr-1786944147, drb-95/dr-1786945101, 6-8 files, no manifest) are the aborted t2b dirs the gate excludes; an earlier count of 13/13 in this amendment's draft mis-stated the validation and is corrected here, §11). Discovery-only, same as amendment 2; measurement lines unchanged.
+- **Named instrument amendment 2b (landed 2026-08-17, before the re-flight measurement is finalized — §18.6, the §18.4 validation catch): the retrace's view excludes the estate window.** The audit's evidence surface is the MERGED window (mod.rs:1395). Round 1 pushes the estate window (mod.rs:1385 — estate-N chunk ids, corpus-hit content; `estate_window` at mod.rs:1091-1114) BEFORE the round's fetch window (mod.rs:1697), and `merge_windows` (mod.rs:1132) dedups by source_url FIRST-WINS — so for URLs the corpus hits covered, the audit sees the ESTATE chunk (id `estate-{i+1}`, hit content), while the persisted `evidence-window-*.json` (ev-N ids, fetched content) is a view the audit does NOT use for those URLs. The retrace's union/ref_map read only the persisted windows → the measured view ≠ the gate's view. Red-first shape: drb-62 c9 PASSED with figures "2022","2022" — the gate verified them against its referenced chunk estate-1 (survey-1 hit 3, Qubit#Qudits_and_qutrits: "In 2022, researchers at the University of Innsbruck…") — while the retrace flags them union-absent (a constitution violation) because the estate chunk is invisible to its persisted-only view. The fix is view-only: the retrace reconstructs the estate window from `survey-*.json` with the SAME construction the code uses (query index i → id `estate-{i+1}`; source_url = hit url else `estate:{corpus_id}:{chunk_id}`; content = hit content else snippet) and joins it into `union_text` and `ref_map` BEFORE the persisted windows, applying the same first-wins URL dedup — the merged view equals the audit's view. No measurement line changes; the merged view replaces the persisted-only view. The recorded battery numbers (union 101/103, 165/170; ref-scoped 0/165/5/0) were measured with the persisted-only view — they stand as recorded (old-view); the corrected-view re-measurement is reported alongside, never mixed. Both the battery flights and the DRB flights run the estate survey at round 1 (mod.rs:1366), so every flight's merged surface carries the estate window.
+- **Named instrument amendment 2c (landed 2026-08-17, before the re-flight measurement is finalized — §18.6): the constitution leg's figure extraction must strip citation spans, like the gate does.** `missing_claim_figures` tokenizes `strip_citation_spans(claim)` (containment.rs:262-268) — the gate never sees handle digits as claim figures — while the retrace's constitution leg tokenized the raw claim text, so a handle like `[Source: estate-2]` produced a spurious figure token "2" tested against the union. Red-first shape: drb-58 c21 PASSED with the gate's check (its figures after the strip: none — "**Mediators and Mechanisms:** Viruses can carry DNA between organisms…" carries no figures), while the retrace flagged figure "2" (from the handle) absent from the merged union — a false constitution violation; after the fix the flag disappears and the figure list matches the gate's. Port: `strip_citation_spans` (containment.rs:127-143, terminated at ']' else end-of-line).
+
+### Old-instrument numbers (verbatim, never edited)
+
+| number | value | instrument |
+|---|---|---|
+| t2b local pooled / paper | 0.8706 [0.7241, 1.0000] / 0.9244 | 35B old-instrument, frozen verbatim |
+| t2b hybrid pooled / paper | 0.3571 [0.2564, 0.4554] / 0.4864 | 35B old-instrument, frozen verbatim |
+| t2b delta | −0.5134 [−0.6232, −0.3941] | 35B old-instrument |
+| T3c 122B re-judge local / hybrid / delta | 0.9329 [0.8846, 1.0000] / 0.3190 [0.2231, 0.4211] / −0.6140 [−0.7195, −0.5130] | 122B evidence-with-caveat |
+| calibration | 35B 100/75 (FAIL spec); 122B 80/63 (FAIL both); 27B 50/88 (FAIL sens), SD-on byte-identical | three instruments, never mixed |
+| reference (perplexity-Research) | 0.1737 / 0.2499 | primary / secondary |
+| untraced-but-present (forensics) | 127/161 = 79% (228/287 tokens); strong 6/28 = 21% | old-instrument baseline for item 1 |
+
+### Execution record
+
+(Landed after the battery and the re-flight — §18.6; this section is pre-registered as the slot.)
+
+**Battery (loop arm, frozen seeds 01-12 + v1, 13 flights — recorded 2026-08-17):** P4-v0 70/72 PASS (was 65/72 at HEAD); P4-v1 12/16 PASS (was 2/16 — the first v1 pass); P3 12/13 PASS; R-12 0/12 FAIL (the documented structural red — single-origin v0 decks + the corroboration floor never weakened → gap sets only grow; journaled since t1c, pre-registration §R-12); T1.7 PASS; pooled lift 0.992 FAIL by letter (the bar's premise inverted by the instrument change: loop density 1.0, 35/35, vs one-shot 0.979 — loop 0.021 ABOVE the one-shot); v1 lift FAIL (pre-existing); honesty-not-worse FAIL by letter (letter leg; loop ungrounded 0.021 → 0.008). Battery retrace (recorded): union 101/103 claims, 165/170 tokens (substring), ref-scoped real_leak 0 | matcher-significance 165 | genuine_absent 5 | heading_class 0 over 103 records, tails 0, constitution passed 1 / with_untraced_figures 0 / recorded_untraced 0 / missing_citations 0. **Re-measured under the corrected (merged + strip) view: byte-identical numbers** — the estate join and the citation-span strip changed nothing on the battery; the recorded numbers stand, now confirmed on the instrument that matches the gate's view.
+
+**Re-flight (local arm, 10/10 tasks, the SAME 27B draft — Qwen3.8-27B-UD-Q6_K_XL, MTP active):** all ten landed, one landed run per task under `demo/demo12/runs/local/drb-*/dr-*/` (drb-95 = dr-1787015608, third attempt — the first two were killed by the documented harness reaper on tracked background tasks >~25 min, strikes at 33/40 min, note 694a66d9/512fd04e; all long runs then routed through the seat's durable tier, systemd-run --user units). Structural pass over all 10 verdict-sets: claims 34-79 per flight, 3 passed total (drb-58 c21, drb-62 c9, drb-95 c25), every passed claim carries citations[], evidence_ids resolve in the merged view. Local-arm retrace (the corrected instrument): untraced-but-present **48/56 claims, 82/99 tokens** (whole-token 71) — residual named per flight/claim/token, never smoothed; ref-scoped **real_leak 0 | matcher-significance 69 | genuine_absent 21 | heading_class 9** over 56 records; tails **0 on 10/10** flights; constitution: passed 3, **with_untraced_figures 0, recorded_untraced 0, missing_citations 0**. The heading_class 9 are named: drb-65 c27 figure "4" plus eight drb-83 figures — present in referenced chunks only on heading-shaped lines, below the shared significance floor. The genuine_absent 21 are named: "2022:" ×2 (drb-62 — trailing-colon recording form; "2022" itself is present in the estate chunk), "1064/1176" and "1988/1990" ×2 (drb-69 — slash year-ranges), "4" ×1 (drb-83), and the drb-90 percentages "87%"/"46%"/"56%"/"70%" — absent from the referenced chunks as substrings (honest refusals, the gate's genuine-untraced class).
+
+**Adjudications (the three earlier flags, all instrument-view artifacts — amendments 2b/2c):** drb-62 c9 — the gate's ref-required pass was CORRECT: "2022" verifies against the referenced estate-1 chunk (survey-1 hit 3, Qubit#Qudits_and_qutrits: "In 2022, researchers at the University of Innsbruck…"); the retrace's persisted-only view could not see the estate window (amendment 2b). drb-58 c21 — the flagged figure "2" came from the claim's own "[Source: estate-2]" handle; the gate strips citation spans before figure extraction (missing_claim_figures, containment.rs:262) and the measurement now does too (amendment 2c). drb-65 c27 — heading-class residual as named above.
+
+**The pre-fix comparison on the same view (frozen t2b flights, `drb/runs/local`, read-only):** the corrected instrument on the frozen flights measures the OLD gate's records — untraced-but-present 185/199 claims, 347/367 tokens; ref-scoped **real_leak 4 | matcher-significance 176 | genuine_absent 3 | heading_class 21** over 53 records; tails **238 on 7 flights**; constitution passed 4 / 0/0/0. Versus the re-flight (local arm): **real_leak 4 → 0**, heading_class 21 → 9, tails 238 → 0 — the three deterministic surfaces the order fixes, measured on the same view before and after (different claim populations, never pooled). The 79% forensics baseline (127/161, 228/287) is the runtime/grounding ledger surface — old-instrument, stands as published; the loop gap-list surface is the retrace's (per the battery protocol).
+
+**The ledger-absence fact:** the forensics ledger writer (`audit_forensics`, runtime/grounding/mod.rs:2689) is called ONLY from runtime/grounding/mod.rs (2868-69, 2953, 2996, 3292-93, 3429, 3471), gated on `config::audit_forensics_path()` (runtime/grounding/config.rs:325) — the deep-research loop's audit (`assess_claim`, deep_research/audit.rs) has NO ledger writer; the loop's untraced records surface via the gap-list witness reasons, which the retrace reads. The 79% forensics baseline came from the runtime/grounding surface; the loop-arm re-measurement (101/103) is the loop's own surface, pre-registered as the item-1 method.
+
+**Amendments (all §18.6-named, all landed BEFORE the measurements they bear on):** 1 (ref-scoped pass + text-matched recorded side), 2 (flight discovery gains the drb-<tid> branch), 2a (landed-flight gate), 2b (the estate-window join — merged view), 2c (citation-span strip in the constitution leg).
+
+**Gates:** `sovereign-lint.sh --human --full` exit 0 (0 errors, 470 warnings); `sovereign-test.sh --human` 9937/9940 with 3 named PRE-EXISTING HEAD failures (embedded::gates::tests; gates.rs byte-identical to HEAD, not in the t4a diff). No .rs changed since the gate runs; re-confirmed before landing.
+
+**The hybrid arm (landed 2026-08-17, the seat's durable tier — the harness-reaper directive) and the judge window (pending at write time):** the hybrid arm (web leg, same 27B draft) flew as the seat's systemd-run unit (t4a-drb-hybrid-arm.service) — 10/10 tasks landed, one landed run per task under `demo/demo12/runs/hybrid/drb-*/dr-*/` (16 files each, verdict-set.json + manifest done-partial present, driver "ALL FLIGHTS OK"). Hybrid retrace (same instrument, `demo/demo12/retrace-hybrid-merged.json`): untraced-but-present 22/23 claims, 26/28 tokens (named residual); ref-scoped **real_leak 0** | matcher-significance 8 | genuine_absent 2 | heading_class 18 over 23 records; tails **0 on 10/10**; constitution passed 0 (the web leg passed no claims), 0/0/0. The 122B FACT-judge scoring pass (FACT_MODEL=Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003, claim protocol + proven swap sequence, the seat-executed window covering this order's FACT scoring + t5a's RACE/A/B) ran on both arms plus the delta row — 252 fact rows / 16 judge calls on the local arm (measured). **The judge window LANDED (2026-08-17, the seat's detached unit window1-scores.service, log demo/demo12/window1-scores.log):** the three score files are on disk — `demo/demo12/score-local-122b.json` pooled_fabrication 0.9156 [0.8556, 0.9625] (paper-mean 0.9182, verdict failed, zero-pair/zero-judged [78], elapsed 420.5s), `demo/demo12/score-hybrid-122b.json` 0.2470 [0.1552, 0.3659] (paper-mean 0.3584, verdict could-not-judge, zero-pair/zero-judged [56], elapsed 364.1s), `demo/demo12/score-delta-122b.json` pooled_delta −0.6686 [−0.7593, −0.5611] (descriptive_verdict met); the delta-out guard refused nothing (the frozen score-hybrid-delta.json was never targeted). The NEW bracket row above is filled from these files, and the deliverable answer is recorded there: the upper bound does NOT fall toward the reference 0.1737 — local 0.9156, CI upper 0.9625, ~5.3× the reference; no verdict update (heap 764896dc stands, bar text frozen).
+
+### Bracket report — the four labeled rows + the NEW 27B-draft row (deliverable of item 4; every row's judge named, never mixed)
+
+| row | instrument (judge, calibration shape) | local pooled | hybrid pooled | delta (hybrid − local) |
+|---|---|---|---|---|
+| 1 — 35B old-instrument (t2b frozen verbatim, order deep-research-t2b) | Qwen3.6-35B-A3B-MTP-UD-Q6_K; calibration sens 100% / spec 75% (FAIL spec) | 0.8706 [0.7241, 1.0000] | 0.3571 [0.2564, 0.4554] | −0.5134 [−0.6232, −0.3941] |
+| 2 — 122B evidence-with-caveat (T3c re-judge, 2026-08-17) | Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003; calibration sens 80% / spec 63% (FAIL both floors) | 0.9329 [0.8846, 1.0000] | 0.3190 [0.2231, 0.4211] | −0.6140 [−0.7195, −0.5130] |
+| 3 — 27B gate-failed (no re-judge, ever) | Qwen3.8-27B-UD-Q6_K_XL; calibration sens 50% / spec 88% (FAIL sens) — SD-on re-run byte-identical | — (no re-judge; swap path stopped) | — | — |
+| 4 — reference (perplexity-Research) | race evaluator, gemini-2.5-pro judge; primary / secondary | 0.1737 / 0.2499 | — | — |
+| **NEW — the 27B draft re-flight scored by the 122B judge (window-2, seat-executed 2026-08-17, window1-scores.service)** | Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003 on the t4a flights (27B draft, MTP active); calibration shape = the row-2 instrument's (FAIL both floors — the caveat attaches, never silent) | 0.9156 [0.8556, 0.9625] (paper-mean 0.9182; verdict_primary failed; zero-pair/zero-judged [78]; elapsed 420.5s) | 0.2470 [0.1552, 0.3659] (paper-mean 0.3584; verdict_primary could-not-judge; zero-pair/zero-judged [56]; elapsed 364s) | −0.6686 [−0.7593, −0.5611] (descriptive_verdict met) |
+
+Files: `demo/demo12/score-local-122b.json`, `score-hybrid-122b.json`, `score-delta-122b.json` (seed 4234932947, 10000 resamples, judge_pin recorded in-file; the delta-out guard refused nothing — the frozen score-hybrid-delta.json was never targeted).
+
+**Deliverable answer: does the upper bound fall toward the reference 0.1737? NO — the ceiling is unchanged.** The local arm's 122B-judged pooled fabrication is 0.9156 [0.8556, 0.9625] — statistically identical to the same judge's read of the pre-fix t2b flights (0.9329 [0.8846, 1.0000]; CIs overlap, difference −0.017): the three deterministic fixes moved the INSTRUMENT surfaces (untraced-but-present real_leak 4 → 0, tails 238 → 0, ref-required) and did NOT move the judge-level fabrication rate — the upper bound stays ~5.3× the primary reference (0.9156 vs 0.1737). The hybrid arm fell: 0.2470 [0.1552, 0.3659] vs the t2b-flights 0.3190 — its CI now straddles the primary reference (lower bound 0.1552 < 0.1737) and its point sits at the secondary (0.2499): the arm mix (estate-only vs estate+web) remains the between-arm lever, consistent with the t3d disposition; the delta widened −0.6140 → −0.6686. NO verdict update regardless of the shape: the judge-precondition heap item 764896dc stands (no judge passes the calibration gate — the row-2 instrument's own 80/63 attaches to this row too), the bar text stays frozen, P2's old-instrument verdict (35B, failed) stands as published.
+
+## T5a — the RACE scorer flight: our re-flight reports and the A/B arm scored by the benchmark's own evaluator (order deep-research-t5a) — DECLARATION
+
+Order `deep-research-t5a`: wire the DRB benchmark's own RACE evaluator to our
+re-flight outputs and produce a comparable comprehensive overall_score, to
+beat the perplexity-Research reference. This section is the declaration; the
+execution record is appended below it after the flights (append-only, nothing
+backdated). The seat verifies this ordering at landing (§18.6). Appended
+2026-08-17, BEFORE any judge call of this order. The draft §18.6 entries were
+approved as drafted by operator resolve 2026-08-17 (seat relay, M0), with the
+comparison-targets item amended (item 5: the recommended additional flight is
+now a DECIDED flight). This section is separate from t4a's concurrent entries.
+
+### 1. Judge pin
+
+Local daemon :9741 serving **Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003**
+(the seat's proven 122B load sequence; claim protocol + the swap sequence,
+seat-executed). The flight's judge guard GETs {base}/models before ANY judge
+call and refuses loudly (exit 2) unless the pinned model is served — the
+flight never runs against a substitute (§18.3). **The judge-identity caveat
+rides every number**: ours is a different model from the official judges
+(gemini-2.5-pro / GPT-5.5 for RACE; gemini-2.5-flash / GPT-5.4-mini for
+FACT), and the 122B failed its own calibration gate (T3c record: sens 80% /
+spec 63% vs floors 0.85/0.8) — these numbers are new-instrument evidence,
+never a verdict update.
+
+### 2. Criteria source
+
+The shipped frozen `data/criteria_data/criteria.jsonl` rows for ids
+[56, 58, 59, 62, 65, 69, 78, 83, 90, 95] (upstream clone @ 469cce54). Never
+regenerated. Shipped — verified: `dimension_weight` AND per-dim criterion
+weights sum to 1.0 in every row (asserted structurally by the verifier and
+the scorer dry-run).
+
+### 3. Reference articles
+
+The shipped cleaned reference articles for the same 10 prompts (upstream
+`data/test_data/cleaned_data/reference.jsonl`). Same references the official
+judge compared against.
+
+### 4. Derivation formula
+
+The official recipe, executed by our own scorer (`drb/overall-derivation/
+score_race.py` — no upstream driver run): `format_criteria_list`
+(deepresearch_bench_race.py:33-56) → en merged score prompt
+(prompt/score_prompt_en.py) → judge call via the vendored OpenAI-compat
+client (`vendor/utils/api.py`, LLM_BACKEND=openai, OPENAI_BASE_URL=
+http://127.0.0.1:9741/v1, OPENAI_API_KEY=local) → `extract_json_from_markdown`
++ expected-dims check (driver:121-133) → `calculate_weighted_scores`
+(vendored `vendor/utils/score_calculator.py`, byte-identical to the clone —
+asserted) → per-task `overall = target_total/(target_total+reference_total)`
+and per-dim ratios (driver:155-175) → task means ×100 (driver:490-514). The
+scorer imports the recipe functions from the pinned clone (one source, never
+reimplemented) and the vendored client/calculator/extractor (frozen).
+
+### 5. Comparison targets (reported together, each labeled — operator resolve 2026-08-17)
+
+- our 10-task mean vs **42.1779** (perplexity, gemini-2.5-pro era, same 10
+  tasks) — like-for-like task set (primary);
+- **DECIDED flight** — re-judge perplexity's 10 official subset articles
+  with our 122B → same-judge same-task A/B; the judge-offset measurement
+  (work item 2b). Inputs pinned: `drb/overall-derivation/inputs/
+  perplexity-subset-articles.jsonl` (sha256 `b1ce5783…`, 10 rows, prompts
+  matched to the frozen `query.subset.jsonl`, NONE mismatched). ~10 extra
+  judge calls;
+- vs **44.9683** (perplexity, GPT-5.5 era, same 10 tasks);
+- vs **40.46** (the order's literal reference, 100-task) — with the
+  task-set + judge-era caveats attached.
+
+### 6. Caveats (named, never silent)
+
+- Judge identity (item 1 above).
+- **Cleaning identity**: article_1 is scored UNCLEANED in both arms — the
+  local-arm report.md IS the deliverable; the official cleaned targets are
+  NOT shipped (the space carries only raw_data/raw_results/fact_results —
+  verified 2026-08-17), so the A/B judges the raw official articles. The
+  official 42.1779 was produced on LLM-cleaned targets; the cleaning offset
+  is named alongside the judge offset, never collapsed. (Pre-registered at
+  D-F-4 of the worked derivation.)
+- FACT numbers remain old-instrument (never re-judged here); the vendored
+  validate.py 'decline' amendment is not exercised by this order (FACT not
+  re-run).
+- The 10-task mean is a subset statistic — the subset reference resolves the
+  task-set confound; the judge confound is named, never collapsed.
+- The 122B calibration-gate failure (T3c) attaches to every number as
+  new-instrument evidence with caveat; no verdict update on any frozen bar.
+
+### 7. Flight protocol (the seat executes; the worker never loads the 122B itself)
+
+```
+cd /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/overall-derivation
+LLM_BACKEND=openai OPENAI_BASE_URL=http://127.0.0.1:9741/v1 OPENAI_API_KEY=local \
+RACE_MODEL=Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003 \
+python3 score_race.py --arm both --out flights
+```
+
+20 judge calls serial (10 local + 10 ab), each prompt 72k-127k chars;
+expected duration 2-5h on the 122B (per-call 6-15 min, prefill-dominated;
+t3c-recorded FACT calls ran 8.9-55.6s at small input size) → durable tier
+(systemd-run --user), the seat's proven route for >~25 min runs. Outputs:
+`drb/overall-derivation/flights/race-<ts>/{local,ab}/raw_results.jsonl`
+(official record shape), `race_result.txt` (official 5-line summary shape),
+`judge_output.jsonl` (per-task judge output + timing sidecar), `manifest.json`
+(judge pin, timestamps, landed-flight dirs). Dry-run (zero judge calls)
+validates all linkages — ran clean before this declaration.
+
+### Execution record (appended 2026-08-17, after the resumed flight landed; CLOSED 2026-08-17 after the task-56 retry landed — 10/10 both arms, nothing pending, nothing backdated)
+
+**Flight chain (times UTC = 2026-08-17 20:41-22:14 PDT local; the crashed
+flight's sidecar is the local-arm evidence):**
+
+- `flights/race-20260817T204115` — first flight, CRASHED after its local arm:
+  10/10 judge calls completed 2026-08-18 03:41:15Z-04:22:32Z and persisted
+  (`judge_output.jsonl`, full responses + timing), then the script crashed on a
+  stale print reference (`elapsed` NameError — the timestamp amendment; the
+  dry-run never exercised the judge-call path) → 10 ERROR rows → ZeroDivisionError
+  at the means; the ab arm never ran. Root cause fixed (print uses `t1 - t0`),
+  zero-ok guard added (0 scored = named failure, no race_result.txt, exit 4 —
+  never a divide-by-zero), resume path added (`--resume`).
+- `flights/race-20260817T212951` — worker-side resume validation (0 judge calls):
+  local re-derived 10/10 from the persisted sidecar; fresh-vs-resume equivalence
+  verified byte-identical (same compute_record, one decider).
+- `flights/race-20260817T213110` — seat relaunch (`--resume`): local derived from
+  disk (0 calls), ab fresh (2026-08-18 04:33:03Z-05:14:07Z) — 9/10 scored;
+  task 56 failed: transient
+  `503 local_queue_full` ("host busy ~53s predicted wait, queue position 1"),
+  10 retries exhausted — the daemon's 122B slot was contended at flight start
+  (journal shows the 503 rejection on every one of 56's attempts and on 58's
+  first 11; named in `ab/errors.jsonl`). ab Overall **45.2640** (9/10).
+- `flights/race-20260817T222220` — the task-56 retry, seat-executed: ONE fresh
+  judge call for 56 (2026-08-18 05:22:20Z-05:26:45Z, 265.0s), merged with the
+  persisted 9-row sidecar, the full ab arm re-derived through compute_record (the
+  one decider) — 10/10; local re-derived from the 213110 sidecar (0 calls).
+  manifest: `retry: {arm: ab, id: 56}`, `resumed_from: race-20260817T213110`.
+  The ab arm is now COMPLETE: Overall **45.1454** (10/10).
+
+**Served-model verification (three independent surfaces):**
+
+1. Judge guard: GET `/v1/models` before any judge call — the pin
+   `Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003` loaded=true at both real flights'
+   starts (the exit-2 refusal never fired; no judge call was ever made against a
+   substitute).
+2. Every sidecar row carries `judge_model` = the pin (10 local + 9 ab).
+3. Decision-journal cross-check (T3c-(c0) method, `~/.svrnmesh/decisions-EXP.jsonl`):
+   for all 19 calls, the outcome event at the call's end_unix is
+   `served_by` = the pin, error=None; `total_ms` matches `elapsed_s` (ab id 58's
+   window shows 11 queue-full rejections before its pin-served success — the
+   342.5s elapsed includes retry overhead; the generation itself is
+   journal-verified). No other model's outcome ends any call. Concurrent
+   `served_by=primary` traffic on the daemon's other slot is what produced the
+   503s at flight start.
+
+**Per-call rows** (UTC; judge = the pin on every row):
+
+local (10/10, 2026-08-18 03:41:15Z-04:22:32Z, elapsed 209.0-279.1s, mean 247.7s):
+
+```
+56  03:41:15->03:45:31  255.7s    65  03:58:06->04:02:20  254.2s    83  04:09:40->04:14:03  262.9s
+58  03:45:31->03:49:46  255.1s    69  04:02:20->04:05:49  209.0s    90  04:14:03->04:18:21  257.8s
+59  03:49:46->03:53:27  221.0s    78  04:05:49->04:09:40  230.9s    95  04:18:21->04:22:32  251.6s
+62  03:53:27->03:58:06  279.1s
+```
+
+ab (10/10 after the retry; original 9 calls 2026-08-18 04:33:03Z-05:14:07Z,
+elapsed 237.1-342.5s, mean 273.8s; the retry call id 56 ran 05:22:20Z-05:26:45Z,
+265.0s; full-arm mean 272.9s):
+
+```
+56  05:22:20->05:26:45  265.0s
+58  04:33:03->04:38:45  342.5s    69  04:52:42->04:56:40  237.8s    90  05:05:13->05:09:47  273.8s
+59  04:38:45->04:42:56  250.3s    78  04:56:40->05:00:37  237.1s    95  05:09:47->05:14:07  260.2s
+62  04:42:56->04:47:43  287.7s    83  05:00:37->05:05:13  276.2s
+65  04:47:43->04:52:42  298.6s
+```
+
+**Raw per-task scores** (percent, ×100; overall + the 4 dims, official record
+shape in `raw_results.jsonl`):
+
+local (10/10): `56: 6.18 (2.54/2.80/11.64/14.95) | 58: 24.07 (20.70/25.60/25.75/24.07) |
+59: 3.90 (1.79/0.00/8.61/9.93) | 62: 8.17 (11.68/1.54/5.52/18.54) | 65: 0.00 (all 0) |
+69: 3.16 (0.00/0.00/0.00/17.88) | 78: 18.04 (18.73/18.68/20.02/13.59) |
+83: 9.74 (10.36/5.97/8.04/16.34) | 90: 3.38 (3.62/0.00/4.38/10.32) |
+95: 4.20 (4.17/3.06/4.15/6.76)`
+
+ab (10/10): `56: 44.08 (43.93/42.61/47.10/44.36) | 58: 46.96 (47.21/46.17/47.66/47.85) |
+59: 44.77 (43.81/42.90/48.21/46.38) | 62: 46.00 (45.95/45.22/46.86/47.12) |
+65: 44.95 (44.81/42.70/46.94/46.74) | 69: 45.73 (45.81/44.02/47.20/47.40) |
+78: 45.43 (44.53/44.68/47.22/45.62) | 83: 41.56 (41.45/39.72/42.86/41.99) |
+90: 47.25 (47.54/45.85/49.38/47.36) | 95: 44.72 (43.95/43.37/46.73/45.78)`
+
+**Derived numbers** (`race_result.txt`, the official 5-line summary shape, means ×100):
+
+- local (10/10): Comprehensiveness **7.3583** | Insight **5.7647** |
+  Instruction Following **8.8110** | Readability **13.2390** | **Overall 8.0848**
+- ab (10/10 after the task-56 retry): Comprehensiveness **44.8992** | Insight
+  **43.7235** | Instruction Following **47.0174** | Readability **46.0606** |
+  **Overall 45.1454**
+
+**Comparison table (each labeled):**
+
+| measure | value | task set | article_1 | judge | cleaning |
+|---|---|---|---|---|---|
+| our local arm | 8.0848 | 10 (subset) | our re-flight reports | our 122B | uncleaned (the report IS the deliverable) |
+| our ab arm | 45.1454 (10/10) | 10 (subset) | perplexity's raw official articles | our 122B | uncleaned |
+| official, gemini era (primary like-for-like reference) | 42.1779 | 10 (subset) | perplexity's targets | gemini-2.5-pro | LLM-cleaned |
+| official, GPT-5.5 era | 44.9683 | 10 (subset) | perplexity's targets | GPT-5.5 | LLM-cleaned |
+| order reference (leaderboard row 39) | 40.46 | 100 (full) | perplexity's targets | official judges | LLM-cleaned |
+
+Task-set and judge-era caveats attach to the 100-task 40.46 as declared; the
+subset references resolve the task-set confound for the 10-task rows.
+
+**The read.** The judge-offset question is answered by the ab arm: our 122B reads
+perplexity's own articles at 45.15 (10/10) — +2.97 above the gemini-era 42.18,
++0.18 above the GPT-5.5-era 44.97, the same regime — so the local arm's 8.08 is a
+REAL gap in our re-flight reports under the benchmark's own evaluator, not a judge
+artifact. **The ratio headline: 8.0848 / 45.1454 ≈ 0.179 under one judge** — our
+re-flight reports score ~18% of the official articles' judged quality on the
+benchmark's own evaluator. The 122B's persisted per-task rationales are consistent
+with this: local
+id 65 derived 0.0000 across all dims with the judge's own words on disk ("Article_1
+is a broken artifact containing only 'refuted claims' and 'open questions'... a
+failed generation log rather than a report"); our strongest dim is Readability
+(13.24) — the content dims are where the reference scores far ahead. Caveats ride
+every number exactly as declared: judge identity + the 122B's calibration-gate
+failure (T3c: sens 80% / spec 63% vs floors 0.85/0.8 — new-instrument evidence,
+no verdict update); cleaning identity (official targets were LLM-cleaned; the
+A/B judges the raw official articles — the cleaning offset is named alongside the
+judge offset, never collapsed); the 10-task mean is a subset statistic.
+
+**Task-56 adjudication — one-call re-run: YES.** The failure is transient (503
+queue-full — daemon slot contention at flight start, evidenced by the journal
+rejection pattern), not a judge or scoring failure; the official references are
+10-task means and the local arm is 10/10 — a 9/10 ab mean is not like-for-like.
+Cost: one call (~4-5 min). The seat keeps the window open for it. Invocation
+(seat-executed, durable tier):
+
+```
+cd /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb/overall-derivation
+LLM_BACKEND=openai OPENAI_BASE_URL=http://127.0.0.1:9741/v1 OPENAI_API_KEY=local \
+RACE_MODEL=Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003 \
+python3 score_race.py --resume flights/race-20260817T213110 --arm both --retry 56 --out flights
+```
+
+ab: ONE judge call for 56, merged with the persisted 9-row sidecar, the full arm
+re-derived through compute_record (the one decider); local: derived from the 213110
+sidecar (0 calls). Output `flights/race-<ts>/` with both arms complete; manifest
+carries `retry: {arm: ab, id: 56}` and `resumed_from: race-20260817T213110`.
+
+**CLOSED 2026-08-17 — the retry landed:** `flights/race-20260817T222220`, task 56
+scored **44.08** overall (comp 43.93 / ins 42.61 / if 47.10 / read 44.36), one
+journal-verified pin-served call (2026-08-18 05:22:20Z-05:26:45Z, 265.0s,
+total_ms 265043 matches the sidecar elapsed). Final ab Overall **45.1454** (10/10);
+local re-derived identically (**8.0848**, 10/10). The comparison table above is
+closed at these numbers — nothing pending.

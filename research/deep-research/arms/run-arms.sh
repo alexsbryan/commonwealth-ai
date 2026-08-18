@@ -29,7 +29,12 @@ set -u
 
 DR_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 ARMS="$DR_ROOT/arms"
-RUNS="$ARMS/runs"
+# Run-root override (order deep-research-t4a, pre-registered): the t4a
+# battery re-flights the frozen bank under the amended gate and MUST
+# write to a fresh root (ARMS_RUN_ROOT="$ARMS/runs-t4a") so the frozen
+# arms/runs/ from t1c/t2c/t1h is never touched. Default = the
+# historical root (verbatim pre-t4a behavior).
+RUNS="${ARMS_RUN_ROOT:-$ARMS/runs}"
 LOOP="$RUNS/loop"
 ONESHOT="$RUNS/oneshot"
 BIN="${SOVEREIGN_BIN:-sovereign}"

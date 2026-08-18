@@ -1,0 +1,1492 @@
+{
+ "arm": "hybrid",
+ "subset": "drb/query.subset.jsonl",
+ "judge_pin": "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003",
+ "n_tasks": 10,
+ "tasks": [
+  {
+   "id": 56,
+   "topic": "Finance & Business",
+   "pairs": 0,
+   "counts": {
+    "supported": 0,
+    "unsupported": 0,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 21,
+   "cost_usd": 5.25e-05,
+   "zero_pair": true,
+   "zero_judged": true,
+   "graded_telemetry": {
+    "grounded": 0,
+    "hallucination": 0,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": []
+  },
+  {
+   "id": 58,
+   "topic": null,
+   "pairs": 9,
+   "counts": {
+    "supported": 9,
+    "unsupported": 0,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 142,
+   "cost_usd": 0.000355,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 9,
+    "hallucination": 0,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Based on the provided evidence, horizontal gene transfer (HGT) in eukaryotes is a documented phenomenon that includes transfers between plants and animals, as well as within these groups .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "The Wikipedia entry lists specific subsections for HGT involving \"Bacteria to fungi,\" \"Bacteria to plants,\" \"Plant to plant,\" \"Plants to animals,\" and \"Animals to animals\" .",
+     "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "Regarding evolutionary significance and mechanisms in non-microbial systems: **Organelle Transfer:** A classic example of HGT relevant to animal evolution is the transfer of DNA from mitochondria and chloroplasts to the nucleus after eukaryotic acquisition of these organelles .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "This process supports the serial endosymbiotic theory .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Animal-Specific Transfers:** Many described instances of bacteria-to-animal transfers occur within intimate relationships, such as those between endosymbionts and their invertebrate hosts (particularly insects and nematodes) .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "Additionally, numerous transfers are found in asexual animals, which aligns with Muller’s ratchet .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Frequency and Detection:** While HGT is frequently observed among prokaryotes—with phylogenetic analysis of 144 prokaryotic genomes showing frequent horizontal transfer—HGT events among eukaryotes are identified but noted to be less common than in Eubacteria .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "The evidence notes that it is difficult to ascertain the full extent or specific promoting factors for these lifestyles due to non-random sampling in animal genome sequencing projects and the lack of systematic analysis for such transfers in animal genomes .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "It confirms that HGT allows for the acquisition of novel traits unique from those inherited .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 59,
+   "topic": null,
+   "pairs": 9,
+   "counts": {
+    "supported": 8,
+    "unsupported": 1,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 171,
+   "cost_usd": 0.0004275,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 8,
+    "hallucination": 1,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "**Navigation Cues** **Celestial and Magnetic:** Migrating birds navigate using celestial cues from the Sun and stars, as well as the Earth's magnetic field .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "They also utilize \"mental maps\" to guide their movement between breeding and wintering grounds .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Other Factors** **Timing:** The timing of migration is primarily controlled by changes in day length .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Risks:** Migration carries inherent risks including predation and other hazards en route, which may influence navigation strategies and stopover behaviors .",
+     "url": "https://en.wikipedia.org/wiki/Bird_migration",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "**Olfactory (Smell):** Olfactory sense plays a significant role in navigation, particularly for long-distance migrants like the Lesser Black-backed Gull (*Larus fuscus fuscus*) which migrates from northern Europe to Lake Victoria in Africa .",
+     "url": "https://pages.vassar.edu/sensoryecology/air-borne-directions-how-olfactory-cues-help-gulls-navigate-long-distance-migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Air-borne olfactory information is necessary for compensating for longitudinal displacements when navigating through unfamiliar areas .",
+     "url": "https://pages.vassar.edu/sensoryecology/air-borne-directions-how-olfactory-cues-help-gulls-navigate-long-distance-migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "When researchers sectioned the olfactory nerves of gulls, these birds could no longer compensate for translocations to unfamiliar locations; they retained a general directional preference for migrating south but failed to correct their longitude to return to their population-specific migration corridor .",
+     "url": "https://pages.vassar.edu/sensoryecology/air-borne-directions-how-olfactory-cues-help-gulls-navigate-long-distance-migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Magnetic Field Cues:** In contrast, birds with the ophthalmic branch of the trigeminal nerve sectioned (implicating magnetic field intensity cues) were still able to orient toward their migratory corridor, suggesting that while magnetic fields may be used, olfactory cues play a larger or more vital role in correcting longitudinal errors during displacement navigation in unfamiliar territory .",
+     "url": "https://pages.vassar.edu/sensoryecology/air-borne-directions-how-olfactory-cues-help-gulls-navigate-long-distance-migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "Unfamiliarity:** The necessity of olfactory cues appears context-dependent; gulls displaced within familiar territories (such as southeast Russia) could correct for displacement even without functional olfactory nerves, implying they rely on other cues like visual landmarks or memory in known areas .",
+     "url": "https://pages.vassar.edu/sensoryecology/air-borne-directions-how-olfactory-cues-help-gulls-navigate-long-distance-migration",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 62,
+   "topic": null,
+   "pairs": 18,
+   "counts": {
+    "supported": 14,
+    "unsupported": 4,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 220,
+   "cost_usd": 0.00055,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 14,
+    "hallucination": 4,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Laser Delivery: From Free-Space to Integrated Optics** A major challenge in scaling is that fully controllable N-qubit trapped ion systems typically require ~N individually controllable laser beams .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Delivering these via free-space optics becomes increasingly difficult (\"quite a faff\") at large scales due to cross-talk and the need to avoid the physical ion trap chip .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "While neutral atom platforms can use free-space tweezers for hundreds of qubits because atoms are spaced only microns apart and held in free space, trapped ions are separated by hundreds of microns on a chip, making free-space delivery less scalable .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "The most mature proposed solution is replacing free-space propagation with **guided light propagation** using optical fibres coupled to on-chip waveguides and grating couplers .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "This approach has been demonstrated as feasible through recent experiments: In 2016, researchers at MIT Lincoln Labs demonstrated single-qubit gates in Sr+ using integrated optics .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "In 2020, a team at ETH Zurich (led by Karan Mehta) achieved two-qubit gates in Ca+ with ~99.3% fidelity using this method .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "Instead of holding all qubits in one potential well (which leads to uncontrolled interactions), this method uses multiple individual wells holding only a few qubits at a time .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "While current commercial ion trap QCs typically operate with 10–30 accessible qubits on the cloud compared to superconducting systems reaching hundreds or thousands (e.g., IBM Eagle has 500), academic experiments have already demonstrated quantum information processing with 100+ trapped ions using 1D and 2D crystals, indicating that large-scale physics is feasible even if full control over every qubit remains challenging .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "**Conclusion on Feasibility and Success Likelihood** The evidence suggests that trapped ions are not inherently harder to scale than other platforms; rather, specific engineering challenges must be overcome .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "These approaches have been validated by recent experimental milestones (e.g., 99.3% fidelity gates in 2020 , 200-ion traps ), suggesting high feasibility compared to purely free-space optical scaling methods which face fundamental limits at large scales .",
+     "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "Trap Architecture and Power Dissipation** Scaling the physical number of ions is limited by power dissipation on the trap chip when high voltages are applied to RF electrodes .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "To address this, QSA researchers developed the **\"enchilada\" architecture**, a trap chip capable of storing up to 200 ions .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "Key features include raising RF electrodes and removing insulating dielectric material below them, which reduces capacitance and lowers power losses when applying necessary voltages ranging from 150 V to 300 V .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "This design allows for larger traps that sidestep the size limitations imposed by heat generation .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Traditional trapped-ion gate operations are performed sequentially because all gates use the same set of motional modes, causing interference when attempted in parallel .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "By simultaneously controlling qubits along different spatial directions (and thus different vibrational patterns), they enabled concurrent operation without significant interference or overhead .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "This innovation is critical for achieving higher information throughput necessary for solving real-world problems on large-scale systems .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "These approaches have been validated by recent experimental milestones (e.g., 99.3% fidelity gates in 2020 , 200-ion traps ), suggesting high feasibility compared to purely free-space optical scaling methods which face fundamental limits at large scales .",
+     "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 65,
+   "topic": null,
+   "pairs": 6,
+   "counts": {
+    "supported": 6,
+    "unsupported": 0,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 143,
+   "cost_usd": 0.0003575,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 6,
+    "hallucination": 0,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "72, Issue 2, 2026), specifically focusing on drying kinetics of nut mixtures using mathematical models like the Balbay and Şahin model .",
+     "url": "https://rae.agriculturejournals.cz/lastarticles.php",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "It also mentions thin-layer drying of octopus using solar dryers .",
+     "url": "https://rae.agriculturejournals.cz/lastarticles.php",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "26, Issue 6, March 11, 2025/2026) .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "This review assesses geometry-based, sensor-based, and learning-based methodologies for transforming 2D images into 3D models .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "It specifically notes that LiDAR is highly accurate but expensive, while geometry-based methods are inexpensive but struggle with complex biological structures .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "The text highlights Learning-based methods, particularly **3D Gaussian Splatting (3DGS)**, as revolutionary in this field .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13030611",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 69,
+   "topic": null,
+   "pairs": 39,
+   "counts": {
+    "supported": 29,
+    "unsupported": 9,
+    "unknown": 0,
+    "decline": 1,
+    "errors": 0
+   },
+   "wall_s": 240,
+   "cost_usd": 0.0006,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 29,
+    "hallucination": 9,
+    "honest_abstention": 1,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Differences Between A2A and MCP The two protocols address distinct but complementary needs in agentic AI development  .",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp#key-differences-summary",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Their primary distinctions are as follows: **Primary Function:** **MCP** defines how AI agents interact with individual tools and resources, such as databases or APIs   .",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp#key-differences-summary",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "Connections Between A2A and MCP The protocols are explicitly designed to be complementary rather than competing standards    .",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp#key-differences-summary",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**System Integration:** Both protocols work together in systems where one protocol handles the interface between the agent and its environment/tools (MCP) and the other manages coordination among multiple autonomous entities (A2A)  .",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp#key-differences-summary",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "Additionally, while version numbers like \"v1.0\" and \"2025.1\" appear in navigation menus of the source documents  , the text does not provide a changelog detailing what changed between these versions to support a detailed comparison of protocol evolution.",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp#key-differences-summary",
+     "evidence_id": null,
+     "verdict": "decline"
+    },
+    {
+     "idx": 1,
+     "fact": "Differences Between A2A and MCP The two protocols address distinct but complementary needs in agentic AI development  .",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp?raw=1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Connections Between A2A and MCP The protocols are explicitly designed to be complementary rather than competing standards    .",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp?raw=1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**System Integration:** Both protocols work together in systems where one protocol handles the interface between the agent and its environment/tools (MCP) and the other manages coordination among multiple autonomous entities (A2A)  .",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp?raw=1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "Additionally, while version numbers like \"v1.0\" and \"2025.1\" appear in navigation menus of the source documents  , the text does not provide a changelog detailing what changed between these versions to support a detailed comparison of protocol evolution.",
+     "url": "https://agent2agent.info/docs/topics/a2a-and-mcp?raw=1",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "Their primary distinctions are as follows: **Primary Function:** **MCP** defines how AI agents interact with individual tools and resources, such as databases or APIs   .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "It standardizes how models connect to external capabilities and provides structured inputs/outputs for these interactions  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "**A2A** facilitates dynamic, multimodal communication between different agents acting as peers  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "It enables agent-to-agent collaboration, delegation of sub-tasks, and management of shared tasks rather than direct tool access  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Scope of Interaction:** MCP is described as the way agents \"access their capabilities\" by connecting to tools  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "A2A serves as a common language for agents built on diverse frameworks (e.g., LangGraph, CrewAI, Semantic Kernel) to break down silos and foster interoperability between remote or local agents and humans  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "Connections Between A2A and MCP The protocols are explicitly designed to be complementary rather than competing standards    .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Complementary Roles:** In robust agentic applications, an agent can use MCP to equip itself with tools and APIs, while using A2A to communicate with other agents  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "The documentation summarizes this relationship as \"Build with ADK (or any framework), equip with MCP (or any tool), and communicate with A2A\"  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "Innovative Aspects of the A2A Protocol The evidence highlights several innovative features that distinguish A2A from previous communication methods or single-agent architectures: **Interoperability Across Vendors and Frameworks:** A2A provides a common language for agents regardless of their underlying framework or vendor, enabling composite AI systems to be built from heterogeneous components  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "This ensures security and preserves intellectual property by keeping agent internals opaque during collaboration  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 12,
+     "fact": "**Open Standard Status:** The protocol was announced in April 2025 (based on the \"Apr\" announcement date relative to the copyright year) and subsequently donated to the Linux Foundation by Google Cloud in June, marking its transition into a neutral open standard  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "**Silos between Platforms:** It addresses the lack of interoperability among agents built using different platforms such as LangGraph, CrewAI, or Semantic Kernel  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 14,
+     "fact": "**Complex Workflows Beyond Single Agents:** It enables agents to delegate sub-tasks and coordinate actions to solve complex problems that exceed the capabilities of a single agent  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 15,
+     "fact": "**Security and IP Protection:** By allowing interaction without exposing internal state or proprietary tools, it solves the security risks associated with sharing sensitive agent internals during collaboration  .",
+     "url": "https://a2a-protocol.org/v0.2.4",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "Their primary distinctions are as follows: **Primary Function:** **MCP** defines how AI agents interact with individual tools and resources, such as databases or APIs   .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "It standardizes how models connect to external capabilities and provides structured inputs/outputs for these interactions  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**A2A** facilitates dynamic, multimodal communication between different agents acting as peers  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "It enables agent-to-agent collaboration, delegation of sub-tasks, and management of shared tasks rather than direct tool access  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Scope of Interaction:** MCP is described as the way agents \"access their capabilities\" by connecting to tools  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "A2A serves as a common language for agents built on diverse frameworks (e.g., LangGraph, CrewAI, Semantic Kernel) to break down silos and foster interoperability between remote or local agents and humans  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "Connections Between A2A and MCP The protocols are explicitly designed to be complementary rather than competing standards    .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Complementary Roles:** In robust agentic applications, an agent can use MCP to equip itself with tools and APIs, while using A2A to communicate with other agents  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "The documentation summarizes this relationship as \"Build with ADK (or any framework), equip with MCP (or any tool), and communicate with A2A\"  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "Innovative Aspects of the A2A Protocol The evidence highlights several innovative features that distinguish A2A from previous communication methods or single-agent architectures: **Interoperability Across Vendors and Frameworks:** A2A provides a common language for agents regardless of their underlying framework or vendor, enabling composite AI systems to be built from heterogeneous components  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 11,
+     "fact": "This ensures security and preserves intellectual property by keeping agent internals opaque during collaboration  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 12,
+     "fact": "**Open Standard Status:** The protocol was announced in April 2025 (based on the \"Apr\" announcement date relative to the copyright year) and subsequently donated to the Linux Foundation by Google Cloud in June, marking its transition into a neutral open standard  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "**Silos between Platforms:** It addresses the lack of interoperability among agents built using different platforms such as LangGraph, CrewAI, or Semantic Kernel  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 14,
+     "fact": "**Complex Workflows Beyond Single Agents:** It enables agents to delegate sub-tasks and coordinate actions to solve complex problems that exceed the capabilities of a single agent  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 15,
+     "fact": "**Security and IP Protection:** By allowing interaction without exposing internal state or proprietary tools, it solves the security risks associated with sharing sensitive agent internals during collaboration  .",
+     "url": "https://a2a-protocol.org/v0.2.6",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 78,
+   "topic": null,
+   "pairs": 23,
+   "counts": {
+    "supported": 15,
+    "unsupported": 7,
+    "unknown": 1,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 253,
+   "cost_usd": 0.0006325,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 15,
+    "hallucination": 7,
+    "honest_abstention": 0,
+    "unclassified": 1
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Post-Operative Health Signs and When to Intervene For family members monitoring a patient after DBS surgery, several specific physical changes are normal parts of the healing process, while others require medical attention: **Normal Recovery Signs (No Immediate Intervention Needed):** **Swelling and Bruising:** Swelling around the eyes is common and typically improves within one week  or two weeks .",
+     "url": "https://www.dbsandme.com/en/support-and-resources/articles/what-to-expect-after-dbs-surgery.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Pain and Tenderness:** Post-surgical pain is usually mild and manageable with oral medication .",
+     "url": "https://www.dbsandme.com/en/support-and-resources/articles/what-to-expect-after-dbs-surgery.html",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Tenderness or numbness near incisions and behind the ear may last for up to a month , while general tenderness near incisions can persist for a week or two .",
+     "url": "https://www.dbsandme.com/en/support-and-resources/articles/what-to-expect-after-dbs-surgery.html",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "Daily Life Adjustments and Support Strategies for Post-DBS Patients To improve comfort and well-being after DBS, the following adjustments are recommended by clinical sources: **Rest and Activity Pacing:** Upon returning home, patients should rest as much as possible and slowly return to regular activities rather than resuming full activity immediately [ev-2].",
+     "url": "https://www.dbsandme.com/en/support-and-resources/articles/what-to-expect-after-dbs-surgery.html",
+     "evidence_id": null,
+     "verdict": "unknown"
+    },
+    {
+     "idx": 5,
+     "fact": "Most patients can resume daily activities gradually .",
+     "url": "https://www.dbsandme.com/en/support-and-resources/articles/what-to-expect-after-dbs-surgery.html",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "Post-Operative Health Signs and When to Intervene For family members monitoring a patient after DBS surgery, several specific physical changes are normal parts of the healing process, while others require medical attention: **Normal Recovery Signs (No Immediate Intervention Needed):** **Swelling and Bruising:** Swelling around the eyes is common and typically improves within one week  or two weeks .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Some bruise near the surgery areas is also normal and will fade over time .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Tenderness or numbness near incisions and behind the ear may last for up to a month , while general tenderness near incisions can persist for a week or two .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "This can last days or weeks .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 5,
+     "fact": "It is normal for symptoms to return to pre-DBS levels once this effect wears off; family members should not be alarmed by this regression, as it will improve again with system programming .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "**Signs Requiring Caution/Intervention:** **Falls Risk:** There is an especially high risk of falling in the weeks following DBS surgery because patients often feel overconfident about their mobility .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "Family members must ensure that if a walker or cane was used before surgery, it continues to be used until the patient is stronger and steadier .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Medication Management:** Do not change medication doses based on temporary symptom improvements during the \"honeymoon\" phase; any changes should only occur under the recommendation of a neurologist .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "**Therapy Integration:** Some individuals may require physical or speech therapy post-surgery to achieve optimal results from their DBS system .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "**Device Monitoring and Programming Support:** The implanted pulse generator (IPG) is typically programmed about one month after surgery placement .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 11,
+     "fact": "Patients often need several adjustment sessions, usually spaced a month apart, to find the best symptom control .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 12,
+     "fact": "After initial optimization, adjustments are generally needed every six months .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 13,
+     "fact": "Family members should be aware that battery replacement for non-rechargeable generators occurs every three to five years in a minor outpatient procedure, while newer rechargeable units last approximately 15 years .",
+     "url": "https://www.ohsu.edu/brain-institute/what-expect-after-dbs-surgery",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "**Home Programming:** Both clinician and patient programming systems exist, allowing patients to make certain adjustments at home if instructed by their care team .",
+     "url": "https://consultqd.clevelandclinic.org/a-deep-dive-into-deep-brain-stimulation",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Context on DBS Timing and Efficacy (Relevant to Long-Term Support) Understanding the long-term nature of the treatment helps families set realistic expectations: **Long-Term Benefit:** A 2019 study indicated that 75% of participants followed for over 10 years felt DBS helped manage their Parkinson’s symptoms .",
+     "url": "https://consultqd.clevelandclinic.org/a-deep-dive-into-deep-brain-stimulation",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "This combination often allows patients to use lower medication doses, which can reduce side effects .",
+     "url": "https://consultqd.clevelandclinic.org/a-deep-dive-into-deep-brain-stimulation",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "However, some experts argue for earlier intervention if criteria are met, as younger patients or those earlier in the disease course may have better outcomes [ev-4].",
+     "url": "https://consultqd.clevelandclinic.org/a-deep-dive-into-deep-brain-stimulation",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "**Timing Considerations:** Current evidence suggests DBS is typically performed in late-stage PD, averaging 14 to 15 years after diagnosis .",
+     "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4065356",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  },
+  {
+   "id": 83,
+   "topic": null,
+   "pairs": 4,
+   "counts": {
+    "supported": 0,
+    "unsupported": 2,
+    "unknown": 0,
+    "decline": 2,
+    "errors": 0
+   },
+   "wall_s": 110,
+   "cost_usd": 0.000275,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 0,
+    "hallucination": 2,
+    "honest_abstention": 2,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "The evidence does not contain information regarding tablet-style devices for payments or SaaS applications, their manufacturers (other than a general mention of SUNMI), specific models, configurations, images, use cases beyond \"retailers, restaurants, and service providers,\" market penetration, price ranges, or installed base figures for any region  .",
+     "url": "https://www.amazon.jobs/en/jobs/10433598/senior-product-manager-tech-devices-services-new-initiatives",
+     "evidence_id": null,
+     "verdict": "decline",
+     "mechanism": "decline-shape-intercept"
+    },
+    {
+     "idx": 2,
+     "fact": "It mentions requirements such as 5+ years of experience but does not list payment tablet hardware details relevant to the question's scope regarding SaaS/payment terminals in general markets like Japan/Korea or Southeast Asia .",
+     "url": "https://www.amazon.jobs/en/jobs/10433598/senior-product-manager-tech-devices-services-new-initiatives",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "The evidence does not contain information regarding tablet-style devices for payments or SaaS applications, their manufacturers (other than a general mention of SUNMI), specific models, configurations, images, use cases beyond \"retailers, restaurants, and service providers,\" market penetration, price ranges, or installed base figures for any region  .",
+     "url": "https://www.sunmi.com/en/news/486",
+     "evidence_id": null,
+     "verdict": "decline",
+     "mechanism": "decline-shape-intercept"
+    },
+    {
+     "idx": 2,
+     "fact": "It only lists contact information (400-6666-509) and dates (2025-10-21, 2026) .",
+     "url": "https://www.sunmi.com/en/news/486",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 90,
+   "topic": null,
+   "pairs": 22,
+   "counts": {
+    "supported": 10,
+    "unsupported": 12,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 258,
+   "cost_usd": 0.000645,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 10,
+    "hallucination": 12,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Technical Principles and Shared Responsibility Liability issues arise primarily because current ADAS technologies operate within a \"shared human-machine driving context\" where responsibility remains with the driver .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "Although vehicles are increasingly incorporating automation features such as adaptive cruise control and lane centering, truly driverless cars are not yet available for sale to consumers .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "Consequently, drivers continue to share driving responsibilities for the foreseeable future .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "ADAS systems utilize sensors, cameras, and radar to detect conditions and assist in preventing accidents through functionalities like automatic emergency braking, lane departure warning, and blind spot monitoring  .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "These systems can issue warnings or automatically brake/steer if the driver does not act .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "In 2024, the National Highway Traffic Safety Administration (NHTSA) finalized a requirement mandating front crash prevention systems on nearly all new vehicles with a gross vehicle weight rating of 10,000 pounds or less by September 2029 .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "This rule requires that these systems be operable in both daylight and dark conditions and provide warnings and automatic braking responses to vehicles ahead at speeds up to 90 mph .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 8,
+     "fact": "light vehicle sales—to make front crash prevention standard by September 2022 .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "Research indicates that while some driver assistance technologies have shown real-world crash reductions for front collision prevention, lane departure prevention, blind spot detection, and rear crash prevention, there remains substantial uncertainty regarding how quickly these safety benefits accrue over time  .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 10,
+     "fact": "This variability in performance and adoption means that liability cannot be statically assigned; it must account for whether the ADAS was active, if it functioned within its designed capabilities (e.g., detecting pedestrians or cyclists as noted in newer systems), and if the driver maintained appropriate oversight .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "**Clarify Driver Oversight Obligations:** Regulations should explicitly define the level of attention required from drivers when using partial automation features like adaptive cruise control, reinforcing that these technologies do not absolve the driver of primary responsibility for monitoring the environment  .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 12,
+     "fact": "**Standardize Performance Metrics for Liability Determination:** Legal frameworks should reference specific technical benchmarks established by NHTSA (such as the 90 mph braking capability and day/night operability requirements) to determine if a system was functioning within its intended design scope at the time of an accident .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "**Implement Data Logging Standards:** To resolve disputes regarding whether ADAS was engaged or malfunctioning, mandatory standardized data recording from sensor systems (radar, cameras, lidar) is recommended to provide objective evidence for fault determination in shared driving scenarios  .",
+     "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "ADAS systems utilize sensors, cameras, and radar to detect conditions and assist in preventing accidents through functionalities like automatic emergency braking, lane departure warning, and blind spot monitoring  .",
+     "url": "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "The legal landscape must discern whether negligence lies with the driver’s reliance on technology or the system's reliability .",
+     "url": "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "Liability Boundaries and Negligence The core legal challenge in shared driving contexts is determining accountability when a crash occurs despite active ADAS features .",
+     "url": "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 4,
+     "fact": "As drivers rely more heavily on technology, traditional liability models are complicated because it becomes essential to determine if the fault lies with the human operator or the vehicle's technology itself .",
+     "url": "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Implement Data Logging Standards:** To resolve disputes regarding whether ADAS was engaged or malfunctioning, mandatory standardized data recording from sensor systems (radar, cameras, lidar) is recommended to provide objective evidence for fault determination in shared driving scenarios  .",
+     "url": "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 1,
+     "fact": "However, because these technologies do not fully automate the driving task under all conditions, they create a dynamic where fault determination becomes complex .",
+     "url": "https://aaafoundation.org/research/examining-the-safety-benefits-of-partial-vehicle-automation-technologies-in-an-uncertain-future",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 2,
+     "fact": "Research indicates that while some driver assistance technologies have shown real-world crash reductions for front collision prevention, lane departure prevention, blind spot detection, and rear crash prevention, there remains substantial uncertainty regarding how quickly these safety benefits accrue over time  .",
+     "url": "https://aaafoundation.org/research/examining-the-safety-benefits-of-partial-vehicle-automation-technologies-in-an-uncertain-future",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "A study by AAA Foundation researchers estimated future safety benefits through 2050 but highlighted that outcomes depend on complex factors including consumer usage rates and technology maturity .",
+     "url": "https://aaafoundation.org/research/examining-the-safety-benefits-of-partial-vehicle-automation-technologies-in-an-uncertain-future",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Clarify Driver Oversight Obligations:** Regulations should explicitly define the level of attention required from drivers when using partial automation features like adaptive cruise control, reinforcing that these technologies do not absolve the driver of primary responsibility for monitoring the environment  .",
+     "url": "https://aaafoundation.org/research/examining-the-safety-benefits-of-partial-vehicle-automation-technologies-in-an-uncertain-future",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    }
+   ]
+  },
+  {
+   "id": 95,
+   "topic": null,
+   "pairs": 40,
+   "counts": {
+    "supported": 34,
+    "unsupported": 6,
+    "unknown": 0,
+    "decline": 0,
+    "errors": 0
+   },
+   "wall_s": 384,
+   "cost_usd": 0.00096,
+   "zero_pair": false,
+   "zero_judged": false,
+   "graded_telemetry": {
+    "grounded": 34,
+    "hallucination": 6,
+    "honest_abstention": 0,
+    "unclassified": 0
+   },
+   "fact_rows": [
+    {
+     "idx": 1,
+     "fact": "Historical Context & Origins **Classification:** The Diamond Sutra is a Mahayana sutra belonging to the *Prajñāpāramit* (Perfection of Wisdom) genre .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "Title Interpretation & Symbolism The title *Vajracchedika Prajnaparamita Sutra* carries deep symbolic weight regarding its function and nature: **Vajra:** Translated as \"diamond,\" it signifies something dazzling, brilliant, bright, powerful, sudden, and dramatic that cuts through everything while itself being uncuttable .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 3,
+     "fact": "In Tantric Buddhism, *vajra* also means \"thunderbolt\" or a lightning flash, symbolizing the ability to cut through darkness and illuminate the whole sky suddenly .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Cchedika:** Meaning \"cutter,\" this suggests an image of a diamond sword (often associated with Manjushri Bodhisattva) that slices through confusion and delusion .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "**Prajnaparamita:** Translates to \"Perfection of Wisdom.\" *Prajna* is wisdom, and *paramita* implies perfection or \"going beyond,\" suggesting an unsurpassable state where something perfect goes beyond the thing itself .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "The setting is detailed in Chapter 1: **Location:** The Buddha was staying in Anathapindika's park (Jeta Grove) near Sravasti  or Shravasti at Anathapindada Garden in Jeta Forest .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "**Assembly:** He was accompanied by a community of 1,250 bhiksus (fully ordained monks) and many bodhisattvas .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Action:** After performing his daily alms round, eating lunch, washing his feet, and sitting down, the dialogue begins when Subhuti stands up to ask questions about mastering thinking for those who wish to attain awakened mind .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 9,
+     "fact": "**Focus on Early Chapters:** Thich Nhat Hanh advises that reading and re-reading the first five chapters contains all essentials; understanding these allows the meaning to enter like beautiful music without straining .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "**Mental Cultivation:** The practice involves \"mastering thinking\" (or letting minds dwell) according to the teachings of non-reliance and emptiness .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 11,
+     "fact": "**Modern Interpretations:** Zoketsu Norman Fischer delivered a series on the sutra in 2008, referencing Red Pine’s translation, which is noted for bringing fresh understanding and making the text feel alive .",
+     "url": "https://everydayzen.org/teachings/diamond-sutra-1",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "It is considered one of the most revered Mahayana sutras and represents a culmination of the Prajnaparamita collection .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Composition Date:** The sutra was written between the 2nd and 5th centuries CE in Sanskrit  or specifically between the 2nd and 4th centuries CE according to other sources, with translation into Chinese occurring in the early 5th century .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "Narrative Structure & Setting The sutra presents a dialogue between the Buddha and Subhuti, an arhat known for mastering loving-kindness .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "Core Teachings & Philosophical Analysis The sutra explores the nature of reality, specifically exposing *sunyata* (emptiness) and tearing down usual perceptions of the world .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "Emptiness of Self and Liberation (Section 3)** **Core Statement:** \"There are no sentient beings to be liberated and no self to attain perfect wisdom\" .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "The Raft Metaphor (Section 6)** This section offers a metaphor where even sacred dharma is merely a means to an end, intended to be left behind after crossing to the \"other shore\" .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "It underscores that one should not cling to teachings as ultimate truth but use them for liberation and then release attachment .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "Freedom from Dependence (Section 10)** **Key Advice:** \"A bodhisattva should develop a mind that functions freely, without depending on anything or any place\" .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "This advice on nonattachment is noted as remarkably relevant in modern contexts of constant distraction .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "Nondiscriminatory Compassion (Section 14)** Genuine compassion taught in the sutra is selfless, nondiscriminatory, and not based on personal whims or superficial differences .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 11,
+     "fact": "It sees beyond surface-level distinctions to treat all beings equally .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 12,
+     "fact": "Impermanence and Reality (Section 32)** **Poetic Pinnacle:** The experience of the world is compared to dreams, bubbles, flashes of lightning, and illusions .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 13,
+     "fact": "This emphasizes the fleeting and insubstantial nature of what is perceived as real .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 14,
+     "fact": "Enlightenment arises from insight into this eternal truth of emptiness slicing through reality's illusions .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 15,
+     "fact": "Practical Application & Study Methodology While specific modern life applications are not detailed in the evidence, the following practical aspects are highlighted: **Accessibility:** The entire sutra can be read in one sitting and is often chanted daily or weekly by practitioners .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 16,
+     "fact": "Key Figures & Translations **Key Interlocutors:** Buddha and Subhuti .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 17,
+     "fact": "Ranallo-Higgins provided an analysis highlighting its timeless wisdom in 2024 .",
+     "url": "https://tricycle.org/article/the-diamond-sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "**Composition Date:** The sutra was written between the 2nd and 5th centuries CE in Sanskrit  or specifically between the 2nd and 4th centuries CE according to other sources, with translation into Chinese occurring in the early 5th century .",
+     "url": "https://en.wikipedia.org/wiki/Diamond_Sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Historical Significance:** A specific copy printed in the 9th year of the Xiantong era of the Tang dynasty (CE 868) is recognized as the oldest known dated printed book in the world, currently held by the British Library .",
+     "url": "https://en.wikipedia.org/wiki/Diamond_Sutra",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 1,
+     "fact": "The setting is detailed in Chapter 1: **Location:** The Buddha was staying in Anathapindika's park (Jeta Grove) near Sravasti  or Shravasti at Anathapindada Garden in Jeta Forest .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 2,
+     "fact": "**Assembly:** He was accompanied by a community of 1,250 bhiksus (fully ordained monks) and many bodhisattvas .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "unsupported"
+    },
+    {
+     "idx": 3,
+     "fact": "**Action:** After performing his daily alms round, eating lunch, washing his feet, and sitting down, the dialogue begins when Subhuti stands up to ask questions about mastering thinking for those who wish to attain awakened mind .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 4,
+     "fact": "**Interpretation:** A bodhisattva must lead all living beings (whether egg-born, womb-born, moisture-born, or spontaneously born; with form or without form/perception) to ultimate nirvana .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 5,
+     "fact": "However, if a practitioner holds onto the idea that a self, person, being, or lifespan exists, they are not an authentic bodhisattva .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 6,
+     "fact": "The teaching emphasizes that even after liberating innumerable beings, one does not think a single being has been liberated .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 7,
+     "fact": "Non-Attachment and Generosity (Section 4)** **Practice:** A bodhisattva practicing generosity should not rely on any object (form, sound, smell, taste, tactile object, or dharma) .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 8,
+     "fact": "**Result:** Practicing without relying on signs results in happiness that is immeasurable, compared to the vastness of space which cannot be measured by direction (East, West, South, North, above, below) .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 9,
+     "fact": "**Mental Cultivation:** The practice involves \"mastering thinking\" (or letting minds dwell) according to the teachings of non-reliance and emptiness .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    },
+    {
+     "idx": 10,
+     "fact": "Key Figures & Translations **Key Interlocutors:** Buddha and Subhuti .",
+     "url": "https://www.abuddhistlibrary.com/Buddhism/C%20-%20Zen/Sutras/The%20Diamond%20Sutra/The%20Vajracchedika%20Prajnaparamita%20Sutra.htm",
+     "evidence_id": null,
+     "verdict": "supported"
+    }
+   ]
+  }
+ ],
+ "pooled_fabrication": 0.2469879518072289,
+ "paper_mean_fabrication": 0.35838118022328547,
+ "pooled_citation_accuracy": 0.7530120481927711,
+ "bootstrap": {
+  "n_resamples": 10000,
+  "seed": 4234932947,
+  "dropped_undefined": 0,
+  "ci95_lower": 0.15517241379310345,
+  "ci95_upper": 0.36585365853658536
+ },
+ "references": {
+  "primary": {
+   "agent": "perplexity-Research",
+   "fabrication": 0.1737
+  },
+  "secondary": {
+   "agent": "openai-deepresearch",
+   "fabrication": 0.2499
+  }
+ },
+ "verdict_primary": "could-not-judge",
+ "mean_cost_usd": 0.0004855,
+ "cost_proxy_usd": 1.45,
+ "zero_pair_flights": {
+  "count": 1,
+  "ids": [
+   56
+  ],
+  "contribution": "pairs=0 -> per the declared drop rule each contributes fab=1.0 to the paper mean (pre-registration T2b, 'Local 62/90/95'); the pooled mean is unaffected (they carry no pairs). Reported as their own rows — never silently folded into the pooled mean (order deep-research-t3d)."
+ },
+ "zero_judged_flights": {
+  "count": 1,
+  "ids": [
+   56
+  ],
+  "contribution": "pairs>0 but supported+unsupported == 0 -> N_u=0 -> Acc=0 -> fab=1.0 in the paper mean, the declared N_u=0->1 rule (pre-registration line 2226-2237)."
+ },
+ "graded_telemetry": {
+  "grounded": 125,
+  "hallucination": 41,
+  "honest_abstention": 3,
+  "unclassified_unknown": 1,
+  "caveated_ood": null,
+  "answered_novalue": null,
+  "ladder_notes": "projection of the verdict channel onto the chaos graded ladder (chaos_monkey.rs score_answer). caveated_ood / answered_novalue need score_answer's critic — the pre-registered 122B graded pass — and are null here (unmeasured, never defaulted, §18.3)."
+ },
+ "abstention_dimension": {
+  "honest_abstention": 3,
+  "unclassified_unknown": 1,
+  "abstention_share_of_unknown": 0.75,
+  "note": "decline (honest abstention) is its own verdict class (order deep-research-t3d); the remaining unknown mass is unclassified — never abstention-scored by any instrument (T3C_AUDIT_FORENSICS.md pass site 3) — and is reported as-is, never collapsed into fabrication."
+ },
+ "elapsed_s": 364.1
+}
