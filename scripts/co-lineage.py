@@ -397,18 +397,65 @@ def campaign_orders(camp: Campaign, orders: list[Order]) -> list[Order]:
     return [o for o in orders if o.serves_initiative == camp.id]
 
 
+def substrate_epoch(rows: list[dict]) -> str:
+    """Date of the FIRST measurement row ever written, or '' if there are none.
+
+    Before it, no order COULD have been measured — the substrate did not exist.
+    One decider for "was this order judgeable at all" (§10.6); both the per-bar
+    flag and the campaign-level line read it.
+    """
+    return min((r.get("ts", "")[:10] for r in rows if r.get("ts")), default="")
+
+
 def landed_but_unmoved(bar: Bar, camp: Campaign, orders: list[Order],
                        rows: list[dict]) -> list[Order]:
     """Covering orders that LANDED while the bar has no measurement rows at
-    all, or none since the order's drafted date."""
+    all, or none since the order's drafted date.
+
+    Two exclusions, because in both an order is being blamed for a gap that is
+    not its doing, and in both the fact is already reported elsewhere:
+
+    - A bar with NO INSTRUMENT cannot be moved by any order. Flagging its
+      covering orders restates the UNMEASURED line once per order — and a flag
+      no action clears becomes wallpaper, which is how the next real one gets
+      missed. UNMEASURED is the report.
+    - An order drafted before `substrate_epoch` closed before measurement rows
+      existed at all. Reported once at campaign level (`pre_substrate_orders`).
+    """
+    if not bar.instrument:
+        return []
+    epoch = substrate_epoch(rows)
     mine = rows_for_bar(rows, camp.id, bar.id)
     out = []
     for o in covering_orders(bar, camp, orders):
         if o.status != "landed":
             continue
+        if epoch and o.drafted and o.drafted < epoch:
+            continue
         since = [r for r in mine if not o.drafted or r["ts"][:10] >= o.drafted]
         if not since:
             out.append(o)
+    return out
+
+
+def pre_substrate_orders(camp: Campaign, orders: list[Order],
+                         rows: list[dict]) -> list[Order]:
+    """Landed orders that closed before the first measurement row existed.
+
+    Not a finding about the order — a finding about WHEN the substrate arrived.
+    Reported once, with the epoch, so the count is visible without five
+    unactionable per-bar flags standing in for it.
+    """
+    epoch = substrate_epoch(rows)
+    if not epoch:
+        return []
+    seen, out = set(), []
+    for b in camp.bars:
+        for o in covering_orders(b, camp, orders):
+            if (o.status == "landed" and o.drafted and o.drafted < epoch
+                    and o.id not in seen):
+                seen.add(o.id)
+                out.append(o)
     return out
 
 
@@ -789,6 +836,13 @@ def render_coverage(camp: Campaign, orders: list[Order], rows: list[dict],
     if never_measured:
         p(f"NEVER-MEASURED = {len(never_measured)}   "
           f"({', '.join(b.id for b in never_measured)})   — instrument declared, no rows")
+    pre = pre_substrate_orders(camp, orders, rows)
+    if pre:
+        p(f"PRE-SUBSTRATE = {len(pre)} landed order(s) closed before the first "
+          f"measurement row ({substrate_epoch(rows)})   "
+          f"({', '.join(o.id for o in pre)})")
+        p("   — not judgeable, and no action clears them; excluded from the "
+          "per-bar LANDED-BUT-UNMOVED flag")
     p()
 
     for b in camp.bars:
@@ -1162,6 +1216,39 @@ def self_test() -> int:  # noqa: C901 — a flat checklist reads better than a f
               == ["o-landed"])
         check("a measurement row after drafting clears LANDED-BUT-UNMOVED",
               landed_but_unmoved(bar, camp_r, orders, flat) == [])
+
+        # ---- an uninstrumented bar blames no order (UNMEASURED reports it) -
+        import dataclasses as _dc
+        bar_noinst = _dc.replace(bar, instrument="")
+        check("a bar with NO instrument flags nobody — UNMEASURED is the report",
+              landed_but_unmoved(bar_noinst, camp_r, orders, []) == []
+              and [o.id for o in landed_but_unmoved(bar, camp_r, orders, [])]
+              == ["o-landed"])
+
+        # ---- the pre-substrate floor: reported once, never per bar --------
+        check("substrate_epoch is the first row's date",
+              substrate_epoch(flat) == "2026-01-01")
+        check("no rows at all -> no epoch, so nothing is excluded",
+              substrate_epoch([]) == ""
+              and [o.id for o in landed_but_unmoved(bar, camp_r, orders, [])]
+              == ["o-landed"])
+        old = [fake_order("o-ancient", "landed", "t B", drafted="2025-12-31")]
+        check("an order drafted BEFORE the first row is not flagged per bar",
+              landed_but_unmoved(bar, camp_r, old, flat) == [])
+        check("...and is reported once at campaign level instead",
+              [o.id for o in pre_substrate_orders(camp_r, old, flat)]
+              == ["o-ancient"])
+        check("an order drafted AFTER the epoch is still flagged",
+              [o.id for o in landed_but_unmoved(
+                  bar, camp_r, [fake_order("o-recent", "landed", "t B",
+                                           drafted="2026-06-01")], flat)]
+              == ["o-recent"])
+        buf8 = io.StringIO()
+        render_coverage(camp_r, old, flat, 0, [], now=now, out=buf8)
+        check("the render names the epoch and the excluded order",
+              "PRE-SUBSTRATE" in buf8.getvalue()
+              and "2026-01-01" in buf8.getvalue()
+              and "o-ancient" in buf8.getvalue())
         buf7 = io.StringIO()
         render_coverage(camp_r, orders, [], 0, [], now=now, out=buf7)
         check("an undeclared bar id in serves: is reported, not dropped",
