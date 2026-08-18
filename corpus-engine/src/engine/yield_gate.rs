@@ -212,12 +212,16 @@ mod tests {
         let (buf, _guard) = capture();
         let (hook, flag) = switch(true);
 
+        // The cap is 1.1s rather than something instant so `deferred_secs`
+        // carries a REAL elapsed value in the rendered event. A cap of 120ms
+        // fires just as well but logs `deferred_secs=0`, and a field that only
+        // ever renders zero has not been shown to work.
         let exit = defer_to_foreground(
             &hook,
             "folder-corpus-2918e9ebc0b5",
             "enrichment",
-            DeferralBudget::with_cap_at_most(Duration::from_millis(120)),
-            Duration::from_millis(10),
+            DeferralBudget::with_cap_at_most(Duration::from_millis(1100)),
+            Duration::from_millis(50),
             || false,
             || {},
         )
@@ -234,8 +238,9 @@ mod tests {
             "the override must be announced; got:\n{out}"
         );
         assert!(
-            out.contains("deferred_secs="),
-            "the override must carry the elapsed deferral; got:\n{out}"
+            out.contains("deferred_secs=1"),
+            "the override must carry the REAL elapsed deferral, not a zero; \
+             got:\n{out}"
         );
         assert!(
             out.contains("cap_secs="),

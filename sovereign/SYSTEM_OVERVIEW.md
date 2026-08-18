@@ -58,7 +58,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
-| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both | — |
+| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below | — |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`   |
@@ -3621,6 +3621,52 @@ absent and the guards fail closed for *every* caller.
   (`peer_preferences.rs` + `store.rs`).
 - See [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md)
   for peer-admission, contribution ceiling, and foreground-yield.
+
+### Foreground yield is bounded (2026-08-18)
+
+`YieldHook::should_yield()` answers "should I stand aside *right now*".
+It is a **level** predicate — `now - foreground_last_active_ts < window`
+— with no memory of how long the asker has already been parked, so any
+request cadence shorter than `window` holds it true indefinitely. Every
+consumer that parks on it therefore pairs it with
+`corpus_engine_yield::DeferralBudget`, and that pairing is the
+invariant, not a convention:
+
+- `MAX_FOREGROUND_DEFERRAL = 300 s` (five whole default 60 s windows,
+  and half the desktop's 600 s `enrich-once` client timeout). It is
+  deliberately **not** an env flag or a config field: a liveness bound
+  someone must remember to switch on is not a liveness bound.
+  `DeferralBudget::with_cap_at_most` clamps to it, so a caller can only
+  tighten the bound, never weaken it.
+- `corpus-engine`'s two checkpoints (before each embed batch, before the
+  enrichment phase) both go through `engine::yield_gate`, which owns the
+  wait loop, the 5 s poll interval, and the three events — `yield:
+  deferring`, `yield: resuming`, and `yield: deferral cap reached`
+  (WARN, carrying `deferred_secs` and `cap_secs`). The override event is
+  emitted inside the helper so no checkpoint can adopt the bound and
+  forget to announce it. `YieldExit` is an enum rather than a bool so
+  "resuming — foreground idle" cannot be printed after an exit that was
+  a cap override.
+- `AppStateInner::foreground_yield_remaining_secs` is the single
+  implementation of the predicate itself. It previously existed three
+  times (the hook, `should_yield_to_foreground`,
+  `seconds_until_foreground_idle`) and the copies had already diverged
+  on the backwards-clock case, so the `/internal/daemon/foreground_state`
+  route could report the opposite of what ingest was doing.
+
+**Why this exists.** On 2026-08-18 a `sovereign-server` mobile host
+(`[[inference.backends]] type = "remote"` → `127.0.0.1:9741`) ran
+`HybridProvider::start_health_loop(30)`, which POSTed a 16-token
+`"ping"` completion to the local daemon's `/v1/chat/completions` every
+30.0 s. That handler bumps foreground unconditionally, so a 30 s probe
+against the 60 s window meant the window never lapsed; three consecutive
+real-e2e runs died with `resuming enrichment` appearing zero times and a
+misleading "bridge listen_any regression" message. The probe side is
+fixed too — `HybridProvider::health_sweep` now probes only backends the
+tracker has marked unavailable, since real traffic already maintains a
+healthy backend's health — but the bound is what makes the invariant
+hold for the case nobody predicted, including an ordinary user who sends
+a chat every 30 seconds.
 
 ### Test harness
 

@@ -51,27 +51,20 @@ impl AppStateYieldHook {
 }
 
 impl YieldHook for AppStateYieldHook {
+    /// Delegates to `AppStateInner::foreground_yield_remaining_secs` — the one
+    /// implementation of this predicate (ARCH §10.6). It used to be a third
+    /// copy of the same arithmetic; if the hook and the
+    /// `/internal/daemon/foreground_state` route ever disagreed again, ingest
+    /// would be pausing for a reason the introspection surface denied.
+    ///
+    /// This answers "should I stand aside right now", NOT "may I stand aside
+    /// indefinitely". It is a level predicate with no notion of how long the
+    /// caller has already been parked, so it can be held true forever by any
+    /// request cadence shorter than the window. Every consumer pairs it with
+    /// `corpus_engine_yield::DeferralBudget`; that is where the liveness bound
+    /// lives, and it is not optional.
     fn should_yield(&self) -> bool {
-        let window = self
-            .inner
-            .yield_window_secs
-            .load(std::sync::atomic::Ordering::Relaxed);
-        if window == 0 {
-            return false;
-        }
-        let last = self
-            .inner
-            .foreground_last_active_ts
-            .load(std::sync::atomic::Ordering::Relaxed);
-        if last == 0 {
-            return false;
-        }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let elapsed = now.saturating_sub(last);
-        elapsed >= 0 && (elapsed as u64) < window
+        self.inner.foreground_yield_remaining_secs().is_some()
     }
 
     fn throttle_factor(&self) -> f32 {
@@ -151,6 +144,58 @@ mod tests {
         // window = 0 disables: helper returns None even after a
         // bump.
         assert!(app.seconds_until_foreground_idle().is_none());
+    }
+
+    // ─── One decider (ARCH §10.6) ─────────────────────────────────
+
+    fn rewind_foreground_to(app: &crate::state::AppState, secs_ago: i64) {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        app.inner
+            .foreground_last_active_ts
+            .store(now - secs_ago, std::sync::atomic::Ordering::Relaxed);
+    }
+
+    /// The hook, `AppState::should_yield_to_foreground` (what the
+    /// `/internal/daemon/foreground_state` route reports) and
+    /// `seconds_until_foreground_idle` must never be able to disagree — that
+    /// is the whole reason they share one implementation now. Includes the
+    /// backwards-clock case, which is exactly where the old copies HAD
+    /// diverged.
+    #[test]
+    fn hook_route_and_countdown_never_disagree() {
+        for secs_ago in [-5_i64, 0, 1, 30, 59, 60, 120] {
+            let app = test_app_state();
+            app.set_yield_window_secs(60);
+            rewind_foreground_to(&app, secs_ago);
+            let hook = AppStateYieldHook::new(app.inner.clone());
+
+            assert_eq!(
+                hook.should_yield(),
+                app.should_yield_to_foreground(),
+                "hook and route disagreed at secs_ago={secs_ago}"
+            );
+            assert_eq!(
+                hook.should_yield(),
+                app.seconds_until_foreground_idle().is_some(),
+                "hook and countdown disagreed at secs_ago={secs_ago}"
+            );
+        }
+    }
+
+    /// A timestamp in the FUTURE (clock jumped backwards) is read as "a
+    /// foreground request landed very recently", not as "idle". Yielding is
+    /// the conservative reading and the deferral bound caps its cost.
+    #[test]
+    fn a_backwards_clock_yields_rather_than_barging_in() {
+        let app = test_app_state();
+        app.set_yield_window_secs(60);
+        rewind_foreground_to(&app, -30);
+        let hook = AppStateYieldHook::new(app.inner.clone());
+        assert!(hook.should_yield());
+        assert_eq!(app.seconds_until_foreground_idle(), Some(60));
     }
 
     // ─── Quiesce flag ─────────────────────────────────────────────
