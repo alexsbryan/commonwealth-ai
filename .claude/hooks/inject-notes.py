@@ -72,9 +72,12 @@ def is_seat_session(env, sid):
         return True
     # A fresh restart types `/comaintainer` BEFORE any marker can exist in
     # the transcript — the skill has not been invoked yet at UserPromptSubmit
-    # time. This is the boot case the whole order is about.
+    # time. This is the boot case the whole order is about. Harnesses spell
+    # the same invocation differently (Claude Code `/comaintainer`, pi
+    # `/skill:comaintainer` per the Agent Skills standard), so match both —
+    # a seat that boots under pi must trip the same signal.
     prompt = (env.get("prompt") or "").lstrip()
-    if prompt.startswith("/comaintainer"):
+    if prompt.startswith("/comaintainer") or prompt.startswith("/skill:comaintainer"):
         return True
     # Already-running seat: the skill fired on an earlier turn. Bounded
     # to the transcript TAIL — this runs on every prompt of every

@@ -459,7 +459,14 @@ else:
 if not os.environ.get("SOVEREIGN_NO_ORDERS"):
     try:
         import glob as _glob
-        _repo = os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd()
+        # Harness-neutral first, Claude Code's spelling second, cwd last.
+        # pi's adapter (.pi/extensions/sovereign-hooks) sets the neutral one;
+        # nothing here should depend on which harness is driving.
+        _repo = (
+            os.environ.get("SOVEREIGN_PROJECT_DIR")
+            or os.environ.get("CLAUDE_PROJECT_DIR")
+            or os.getcwd()
+        )
         _orders = []
         for _p in sorted(_glob.glob(os.path.join(
                 _repo, ".sovereign", "features", "*", "order.md"))):

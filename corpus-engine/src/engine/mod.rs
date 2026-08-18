@@ -9,6 +9,7 @@ mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
 mod ingest_prebuilt;
+mod yield_gate;
 
 pub mod reindex;
 

@@ -20,7 +20,9 @@ use crate::types::{CorpusSpec, IngestResult};
 use super::ingest_helpers::{
     apply_jsonl_shard_override, chunk_doc, mark_complete_files, mark_complete_shards,
 };
+use super::yield_gate;
 use super::{blake3_hex, CorpusEngine, EMBED_BATCH_SIZE, INDEX_FLUSH_SIZE};
+use corpus_engine_yield::DeferralBudget;
 
 /// Would install-time enrichment have been ATTEMPTED for a recipe declaring
 /// this `[enrichment] type`?
@@ -1373,10 +1375,36 @@ impl CorpusEngine {
                     // we exit the same way the per-doc cancel check
                     // does, so /internal/corpus/pause stays
                     // responsive.
+                    //
+                    // Bounded (`DeferralBudget`): a foreground cadence
+                    // shorter than the yield window would otherwise park
+                    // this loop forever and the ingest would never finish
+                    // — see `engine::yield_gate`.
                     if let Some(hook) = self.yield_hook() {
-                        let mut announced = false;
-                        while hook.should_yield() {
-                            if cancel_flag.is_cancelled() {
+                        let chunks_so_far = total_chunks + index_buffer.len() as u64;
+                        let docs_so_far = resume_iter_pos + docs_processed;
+                        let exit = yield_gate::defer_to_foreground(
+                            hook.as_ref(),
+                            &recipe.corpus.id,
+                            "embed",
+                            DeferralBudget::new(),
+                            yield_gate::YIELD_POLL_INTERVAL,
+                            || cancel_flag.is_cancelled(),
+                            || {
+                                if let Some(ref cb) = progress {
+                                    cb(IngestProgress::Embedding {
+                                        chunks_embedded: chunks_so_far,
+                                        total: 0,
+                                        docs_processed: docs_so_far,
+                                        chunks_per_sec: 0.0,
+                                        expected_docs: expected_filter_docs,
+                                    });
+                                }
+                            },
+                        )
+                        .await;
+                        match exit {
+                            yield_gate::YieldExit::Cancelled => {
                                 tracing::info!(
                                     corpus = %recipe.corpus.id,
                                     iter_pos,
@@ -1385,30 +1413,14 @@ impl CorpusEngine {
                                 );
                                 return Err(Error::Cancelled(recipe.corpus.id.clone()));
                             }
-                            if !announced {
-                                announced = true;
-                                tracing::info!(
-                                    corpus = %recipe.corpus.id,
-                                    "yield: pausing embed batches for foreground inference"
-                                );
-                                if let Some(ref cb) = progress {
-                                    cb(IngestProgress::Embedding {
-                                        chunks_embedded: total_chunks + index_buffer.len() as u64,
-                                        total: 0,
-                                        docs_processed: resume_iter_pos + docs_processed,
-                                        chunks_per_sec: 0.0,
-                                        expected_docs: expected_filter_docs,
-                                    });
-                                }
+                            // Both exits that actually parked: the wall
+                            // clock spent standing aside is not embed time,
+                            // so don't let it poison the throughput figure.
+                            yield_gate::YieldExit::ForegroundIdle
+                            | yield_gate::YieldExit::CapReached => {
+                                embed_timer = Instant::now();
                             }
-                            tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                        }
-                        if announced {
-                            tracing::info!(
-                                corpus = %recipe.corpus.id,
-                                "yield: resumed embed batches — foreground idle"
-                            );
-                            embed_timer = Instant::now();
+                            yield_gate::YieldExit::NotDeferred => {}
                         }
                     }
 
@@ -1719,36 +1731,39 @@ impl CorpusEngine {
                         // long-running calls into the chat slot
                         // (atlas extraction, cluster labelling) — the
                         // exact contention foreground chat is trying
-                        // to avoid. Block here until the user is
+                        // to avoid. Stand aside until the user is
                         // idle, then proceed. Once the phase starts,
                         // mid-phase preemption is intentionally not
                         // attempted: cluster state is built up
                         // incrementally and a partial run would
                         // corrupt the checkpoint.
+                        //
+                        // BOUNDED. Standing aside is courtesy; standing
+                        // aside forever is a denial. Until 2026-08-18
+                        // this was an unbounded `while should_yield()`
+                        // and a 30-second liveness probe against the
+                        // 60-second window starved enrichment across
+                        // three complete runs without one line of log
+                        // saying why. `DeferralBudget` caps the total
+                        // deferral and `yield_gate` announces the
+                        // override when it fires.
                         if let Some(hook) = self.yield_hook() {
-                            let mut announced = false;
-                            while hook.should_yield() {
-                                if cancel_flag.is_cancelled() {
-                                    tracing::info!(
-                                        corpus = %recipe.corpus.id,
-                                        "ingest cancelled while yielding before enrichment"
-                                    );
-                                    return Err(Error::Cancelled(recipe.corpus.id.clone()));
-                                }
-                                if !announced {
-                                    announced = true;
-                                    tracing::info!(
-                                        corpus = %recipe.corpus.id,
-                                        "yield: deferring enrichment for foreground inference"
-                                    );
-                                }
-                                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                            }
-                            if announced {
+                            let exit = yield_gate::defer_to_foreground(
+                                hook.as_ref(),
+                                &recipe.corpus.id,
+                                "enrichment",
+                                DeferralBudget::new(),
+                                yield_gate::YIELD_POLL_INTERVAL,
+                                || cancel_flag.is_cancelled(),
+                                || {},
+                            )
+                            .await;
+                            if exit == yield_gate::YieldExit::Cancelled {
                                 tracing::info!(
                                     corpus = %recipe.corpus.id,
-                                    "yield: resuming enrichment — foreground idle"
+                                    "ingest cancelled while yielding before enrichment"
                                 );
+                                return Err(Error::Cancelled(recipe.corpus.id.clone()));
                             }
                         }
 

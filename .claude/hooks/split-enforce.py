@@ -70,9 +70,21 @@ def main() -> int:
         return 0
     session_id = envelope.get("session_id") or ""
     transcript_path = envelope.get("transcript_path") or ""
-    if not session_id or not transcript_path:
+    # `context_tokens` lets a harness that already knows its context size hand
+    # it over instead of us re-deriving it. Claude Code does not, so it stays
+    # on the transcript reader below; pi supplies it from ctx.getContextUsage()
+    # via .pi/extensions/sovereign-hooks. The POLICY (thresholds, frame
+    # freshness, directives) has one implementation either way — only the
+    # measurement is per-harness, because only the measurement differs.
+    supplied = envelope.get("context_tokens")
+    if not session_id:
         return 0
-    ctx = last_context_size(Path(transcript_path))
+    if isinstance(supplied, (int, float)) and supplied > 0:
+        ctx = int(supplied)
+    elif transcript_path:
+        ctx = last_context_size(Path(transcript_path))
+    else:
+        return 0
     if ctx < YELLOW:
         return 0
 
