@@ -22,8 +22,16 @@ pub fn run(args: &[String]) -> i32 {
     let baseline_path = common::baselines_dir(&root).join("oversized.txt");
     let flags = common::baseline_flags(args);
 
+    let scope = match common::SourceTree::discover(&root) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("arch-gate: cannot resolve this repo's source tree: {e}");
+            return 1;
+        }
+    };
+
     let mut oversized: Vec<(String, usize)> = Vec::new();
-    collect_oversized(&root, &root, &mut oversized);
+    collect_oversized(&root, &root, &scope, &mut oversized);
     oversized.sort();
     let current: BTreeMap<String, usize> = oversized.iter().cloned().collect();
 
@@ -109,8 +117,10 @@ pub fn run(args: &[String]) -> i32 {
     let doc_fails = doc_contract_failures(&root);
 
     eprintln!(
-        "arch-gate: {} oversized files tracked vs baseline; §1 doc-contract checked",
-        oversized.len()
+        "arch-gate: {} oversized files tracked vs baseline; §1 doc-contract checked \
+         (source scope: {} non-source trees excluded)",
+        oversized.len(),
+        scope.ignored_dir_count()
     );
     for f in &failures {
         eprintln!("  ✗ size: {f}");
@@ -133,38 +143,84 @@ pub fn run(args: &[String]) -> i32 {
     }
 }
 
-/// Collect (repo-relative path, line count) for every `.rs` over the limit,
-/// skipping build/vendor/vcs trees.
-fn collect_oversized(dir: &Path, root: &Path, out: &mut Vec<(String, usize)>) {
+/// Collect (repo-relative path, line count) for every `.rs` over the limit
+/// **within this repo's own source** — `scope` is the single decider for what
+/// that means (`common::SourceTree`), so vendored dependency trees, build
+/// outputs and agent worktree copies of this repo are never counted.
+fn collect_oversized(
+    dir: &Path,
+    root: &Path,
+    scope: &common::SourceTree,
+    out: &mut Vec<(String, usize)>,
+) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
         if path.is_dir() {
-            if matches!(
-                name.as_ref(),
-                "target" | "vendor" | ".git" | "node_modules" | ".sovereign"
-            ) {
+            if scope.excludes_dir(&common::rel_path(&path, root)) {
                 continue;
             }
-            collect_oversized(&path, root, out);
+            collect_oversized(&path, root, scope, out);
         } else if path.extension().and_then(|e| e.to_str()) == Some("rs") {
             if let Ok(text) = std::fs::read_to_string(&path) {
                 let lines = text.lines().count();
                 if lines > LINE_LIMIT {
-                    let rel = path
-                        .strip_prefix(root)
-                        .unwrap_or(&path)
-                        .to_string_lossy()
-                        .replace('\\', "/");
-                    out.push((rel, lines));
+                    out.push((common::rel_path(&path, root), lines));
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::BTreeSet;
+
+    /// An identical oversized file planted in this repo's source and in a
+    /// vendored tree must produce EXACTLY ONE failure. Watching only the
+    /// quiet arm cannot tell an exclusion from a broken walk (ARCH §18.1).
+    #[test]
+    fn walk_counts_source_and_ignores_vendored_copies_of_the_same_file() {
+        let tmp = std::env::temp_dir().join(format!("archgate-walk-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        let oversized = "// line\n".repeat(LINE_LIMIT + 1);
+
+        for dir in [
+            "corpus-engine/src",                 // source
+            ".cargo-container/registry/foo-1.0", // vendored dependency
+            ".claude/worktrees/agent-abc/src",   // agent copy of this repo
+            "vendor/llama-cpp-4/src",            // tracked, not authored here
+        ] {
+            std::fs::create_dir_all(tmp.join(dir)).expect("mkdir");
+            std::fs::write(tmp.join(dir).join("big.rs"), &oversized).expect("write");
+        }
+
+        let scope = common::SourceTree::from_parts(
+            [".cargo-container", ".claude/worktrees"]
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<BTreeSet<_>>(),
+            ["vendor", ".git"]
+                .iter()
+                .map(|s| (*s).to_string())
+                .collect::<BTreeSet<_>>(),
+        );
+
+        let mut out = Vec::new();
+        collect_oversized(&tmp, &tmp, &scope, &mut out);
+        let _ = std::fs::remove_dir_all(&tmp);
+
+        let found: Vec<&str> = out.iter().map(|(p, _)| p.as_str()).collect();
+        assert_eq!(
+            found,
+            vec!["corpus-engine/src/big.rs"],
+            "the walk must count this repo's source and nothing else"
+        );
+        assert_eq!(out[0].1, LINE_LIMIT + 1);
     }
 }
 

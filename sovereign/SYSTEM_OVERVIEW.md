@@ -4482,6 +4482,7 @@ of them shadow `SetupConfig` fields — declared debt via the registry's
 | `quality/ARCH_LAYERS.toml` | crate layer map + exceptions | humans | `cargo xtask layer-gate`, `arch_report` |
 | `quality/env-flags.toml` | the env-knob registry (cluster/default/status/`alias_of`/`shadows`) | humans | `cargo xtask env-gate` + pin-tests in the two in-code flags tables |
 | `quality/baselines/` | shrink-only ratchet baselines | **machine only** (`--update-baseline` / `--tighten`) | every count-based xtask gate |
+| `quality/source-tree.toml` | the residual "not our source" dirs a gate walk must skip — only what git's ignore rules cannot express (`vendor/` is tracked but not authored here) | humans | `common::SourceTree::discover` → arch-gate, docs-gate, env-gate |
 | `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans | `cli_contract_journeys`, `svrn contract` |
 | `models.toml` | model selection per hardware | humans | daemon model selection |
 | `../sovereign-recipes/registry.toml` | recipe registry | humans | `corpus-engine/src/registry.rs` |
