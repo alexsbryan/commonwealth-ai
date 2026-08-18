@@ -14,11 +14,39 @@
     "chars": 105807
   },
   {
+    "id": 58,
+    "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8401529/",
+    "body": "task-58-f1.md",
+    "sha256": "e8e8b65bd5619450091b6df15eb5670cd1b9b1151b1c434b7b0c072535a2ebf8",
+    "chars": 59748
+  },
+  {
+    "id": 58,
+    "url": "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2017.02015/full",
+    "body": "task-58-f2.md",
+    "sha256": "29d6f87ca58f8c826da76d45e26d7153b8461741503a37f5a896211303572213",
+    "chars": 40657
+  },
+  {
     "id": 59,
     "url": "https://en.wikipedia.org/wiki/Bird_migration",
     "body": "task-59-w.md",
     "sha256": "fcb8af1892e5f83d8f8b1d7e473e7107ce487bc56c5f8a795f2aad4d9a420c52",
     "chars": 90362
+  },
+  {
+    "id": 59,
+    "url": "https://www.scientificamerican.com/article/solar-storms-can-hinder-bird-migration/",
+    "body": "task-59-f3.md",
+    "sha256": "776c033d98fff8dafb7997fd22af5e9497d3d08c8ad192a842a16d6d0c79a32f",
+    "chars": 8288
+  },
+  {
+    "id": 59,
+    "url": "https://phys.org/news/2016-01-magnetic-compass-birds-affected-polarised.html",
+    "body": "task-59-f5.md",
+    "sha256": "e10a1046f0cf6c373a24a4f9932e065db2b7630b24e5ae5389838259f36cd74b",
+    "chars": 8789
   },
   {
     "id": 62,
@@ -28,11 +56,32 @@
     "chars": 117298
   },
   {
+    "id": 62,
+    "url": "https://arxiv.org/html/2407.14195v1",
+    "body": "task-62-f5.md",
+    "sha256": "fe90feaa79f57d019752fcc42c80009e542c0b9da2954800cdcb6be62d71179c",
+    "chars": 33953
+  },
+  {
     "id": 65,
     "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
     "body": "task-65-w.md",
     "sha256": "0000f539114fa600dae1698f6faaf33678be7ef2bc205d701f9031079cbf9aeb",
     "chars": 31426
+  },
+  {
+    "id": 65,
+    "url": "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2022.974339/full",
+    "body": "task-65-f1.md",
+    "sha256": "935c962ebe08b18c24abe067954312be4e3cf347f6de5a4ead06e6efe50753b0",
+    "chars": 66325
+  },
+  {
+    "id": 65,
+    "url": "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2022.840908/full",
+    "body": "task-65-f2.md",
+    "sha256": "3984a4f12b3c68eab7146b793efa41b06cc01b2a11575375016ac62545b90c1e",
+    "chars": 55494
   },
   {
     "id": 69,
@@ -42,11 +91,39 @@
     "chars": 69347
   },
   {
+    "id": 69,
+    "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/",
+    "body": "task-69-f1.md",
+    "sha256": "a3cc519c570f1ad5aabb7d92d58bc451cf21f3fb35def9f466fbd2fc329d2231",
+    "chars": 23683
+  },
+  {
+    "id": 69,
+    "url": "https://www.infoq.com/news/2025/04/google-agentic-a2a/",
+    "body": "task-69-f2.md",
+    "sha256": "75ccf78f33ccaa208021bd9722262463e26837337bba63c3600f03ace5595b51",
+    "chars": 14258
+  },
+  {
     "id": 78,
     "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
     "body": "task-78-w.md",
     "sha256": "6e1164c06492b2f7b8d32a032cfbdfdcd0fd1eeb9528e613928719a2c6cd081d",
     "chars": 126647
+  },
+  {
+    "id": 78,
+    "url": "https://www.parkinson.org/understanding-parkinsons/10-early-signs",
+    "body": "task-78-f1.md",
+    "sha256": "dd91a686d026e6a41498ef97e99b83a41756eb632514fea292d35f702f34acde",
+    "chars": 17669
+  },
+  {
+    "id": 78,
+    "url": "https://www.parkinson.org/blog/care/care-mid-stride",
+    "body": "task-78-f3.md",
+    "sha256": "8c073dd9753a7e8ca60cfc7993a147f31b30fbb24f70f1807e81c97b96be5ecc",
+    "chars": 14145
   },
   {
     "id": 83,
@@ -56,6 +133,20 @@
     "chars": 105042
   },
   {
+    "id": 83,
+    "url": "https://www.jasswaypos.com/list-of-top-10-android-pos-hardware-manufacturers/",
+    "body": "task-83-f1.md",
+    "sha256": "02d13c1afea2612d4b2a3d11e9f189629fac70ec1884ae3c9680d6db4d12948c",
+    "chars": 23855
+  },
+  {
+    "id": 83,
+    "url": "https://www.pax.us/products/mobile/a920/",
+    "body": "task-83-f2.md",
+    "sha256": "50934748302c972ac4078003391ac8daa3ffd4098c4c0df60c823d2ecb676c28",
+    "chars": 12886
+  },
+  {
     "id": 90,
     "url": "https://en.wikipedia.org/wiki/Self-driving_car#Commercialization",
     "body": "task-90-w.md",
@@ -63,10 +154,38 @@
     "chars": 132670
   },
   {
+    "id": 90,
+    "url": "https://newsmartsafe.com/industry-news/adas-systems",
+    "body": "task-90-f1.md",
+    "sha256": "2c150280b8a8cb22e1e1cff9ad1189b20b69ba4dc0ba7f039d083601d578f3c6",
+    "chars": 19496
+  },
+  {
+    "id": 90,
+    "url": "https://www.autosinnovate.org/initiatives/innovation/autonomous-vehicles/levels-of-automation",
+    "body": "task-90-f2.md",
+    "sha256": "16304786914f27d7fbfb2c574f97a55fe7e61d6a503e26eab1edad6599ebe3c9",
+    "chars": 9496
+  },
+  {
     "id": 95,
     "url": "https://en.wikipedia.org/wiki/Diamond_Sutra#History",
     "body": "task-95-w.md",
     "sha256": "b2f9559a74410663715f59df2725fe8d11bc5aa879877107f18827f0328ea84d",
     "chars": 40126
+  },
+  {
+    "id": 95,
+    "url": "https://en.wikipedia.org/wiki/Diamond_Sutra",
+    "body": "task-95-f1.md",
+    "sha256": "b2f9559a74410663715f59df2725fe8d11bc5aa879877107f18827f0328ea84d",
+    "chars": 40126
+  },
+  {
+    "id": 95,
+    "url": "https://foguangpedia.org/diamond-sutra/",
+    "body": "task-95-f3.md",
+    "sha256": "1332efabd9ed34678a1a3b65fcf15d743d4226c1ca28f69abb6ba3595e5e2d6e",
+    "chars": 11116
   }
 ]

@@ -1,0 +1,82 @@
+[
+  {
+    "id": 56,
+    "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 56,
+    "url": "https://blebrun.info.yorku.ca/files/2016/05/FPANB-DP97.pdf?x20523",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 56,
+    "url": "https://www.isid.ac.in/~epu/acegd2022/papers/G_V_A_Dharanan.pdf",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 56,
+    "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 56,
+    "url": "https://math.stackexchange.com/questions/1385728/system-of-differential-equations-asymmetric-first-price-auction",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 56,
+    "url": "http://www.math.tau.ac.il/~fibich/Manuscripts/Numerical-simulations-of-asymmetric-first-price-auctions.pdf",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 59,
+    "url": "https://abcbirds.org/blog/how-birds-navigate/",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 59,
+    "url": "https://consensus.app/questions/birds-know-find-home/",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 59,
+    "url": "https://journals.biologists.com/jeb/article/224/3/jeb237875/223405/Ontogeny-of-the-star-compass-in-birds-pied",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 62,
+    "url": "https://courses.physics.illinois.edu/phys513/sp2016/reading/week14_trapped_ion_talk/1164.full.pdf",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 62,
+    "url": "https://postquantum.com/quantum-computing-architectures/trapped-ion-qubits-101/",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 62,
+    "url": "https://www.ecio-conference.org/wp-content/uploads/2023/05/Grimpe_TowardsPhotonicIntegratedIonTraps.pdf",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 62,
+    "url": "https://link.aps.org/doi/10.1103/PhysRevLett.120.220501",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 62,
+    "url": "https://www.jst.go.jp/moonshot/en/program/goal6/files/63_takahashi_ap.pdf",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 78,
+    "url": "https://www.mayoclinichealthsystem.org/hometown-health/speaking-of-health/early-symptoms-of-parkinsons-disease",
+    "error": "fetch failed or body too small"
+  },
+  {
+    "id": 95,
+    "url": "https://www.abuddhistlibrary.com/Buddhism/C",
+    "error": "fetch failed or body too small"
+  }
+]

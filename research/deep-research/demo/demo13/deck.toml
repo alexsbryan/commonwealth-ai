@@ -1,4 +1,4 @@
-# T6a phase 1b + t6b pilot ceiling deck (v2) — built by build-ceiling-deck.py
+# T6a phase 1b + t6b pilot ceiling deck (v3) — built by build-ceiling-deck.py
 version = 1
 
 [[hit]]
@@ -34,6 +34,22 @@ body = "task-58-w.md"
 custody = "public-web"
 
 [[hit]]
+url = "https://pmc.ncbi.nlm.nih.gov/articles/PMC8401529/"
+title = "footnote: drb-58/1"
+snippet = "cited by the task 58 article"
+match = []
+body = "task-58-f1.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2017.02015/full"
+title = "footnote: drb-58/2"
+snippet = "cited by the task 58 article"
+match = []
+body = "task-58-f2.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-59"
 title = "drb-59 reference content"
 snippet = "In ecology, how do birds achieve precise location and direction navigation during migration? What cues and disturbances "
@@ -47,6 +63,22 @@ title = "wikipedia: drb-59"
 snippet = "second origin for task 59"
 match = []
 body = "task-59-w.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.scientificamerican.com/article/solar-storms-can-hinder-bird-migration/"
+title = "footnote: drb-59/3"
+snippet = "cited by the task 59 article"
+match = []
+body = "task-59-f3.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://phys.org/news/2016-01-magnetic-compass-birds-affected-polarised.html"
+title = "footnote: drb-59/5"
+snippet = "cited by the task 59 article"
+match = []
+body = "task-59-f5.md"
 custody = "public-web"
 
 [[hit]]
@@ -66,6 +98,14 @@ body = "task-62-w.md"
 custody = "public-web"
 
 [[hit]]
+url = "https://arxiv.org/html/2407.14195v1"
+title = "footnote: drb-62/5"
+snippet = "cited by the task 62 article"
+match = []
+body = "task-62-f5.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-65"
 title = "drb-65 reference content"
 snippet = "As an agricultural engineering researcher focusing on 3D reconstruction and phenotypic analysis of crop grains, please d"
@@ -79,6 +119,22 @@ title = "wikipedia: drb-65"
 snippet = "second origin for task 65"
 match = []
 body = "task-65-w.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2022.974339/full"
+title = "footnote: drb-65/1"
+snippet = "cited by the task 65 article"
+match = []
+body = "task-65-f1.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2022.840908/full"
+title = "footnote: drb-65/2"
+snippet = "cited by the task 65 article"
+match = []
+body = "task-65-f2.md"
 custody = "public-web"
 
 [[hit]]
@@ -98,6 +154,22 @@ body = "task-69-w.md"
 custody = "public-web"
 
 [[hit]]
+url = "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/"
+title = "footnote: drb-69/1"
+snippet = "cited by the task 69 article"
+match = []
+body = "task-69-f1.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.infoq.com/news/2025/04/google-agentic-a2a/"
+title = "footnote: drb-69/2"
+snippet = "cited by the task 69 article"
+match = []
+body = "task-69-f2.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-78"
 title = "drb-78 reference content"
 snippet = "Parkinson's disease has a profound impact on patients. What are the potential health warning signs associated with diffe"
@@ -111,6 +183,22 @@ title = "wikipedia: drb-78"
 snippet = "second origin for task 78"
 match = []
 body = "task-78-w.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.parkinson.org/understanding-parkinsons/10-early-signs"
+title = "footnote: drb-78/1"
+snippet = "cited by the task 78 article"
+match = []
+body = "task-78-f1.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.parkinson.org/blog/care/care-mid-stride"
+title = "footnote: drb-78/3"
+snippet = "cited by the task 78 article"
+match = []
+body = "task-78-f3.md"
 custody = "public-web"
 
 [[hit]]
@@ -130,6 +218,22 @@ body = "task-83-w.md"
 custody = "public-web"
 
 [[hit]]
+url = "https://www.jasswaypos.com/list-of-top-10-android-pos-hardware-manufacturers/"
+title = "footnote: drb-83/1"
+snippet = "cited by the task 83 article"
+match = []
+body = "task-83-f1.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.pax.us/products/mobile/a920/"
+title = "footnote: drb-83/2"
+snippet = "cited by the task 83 article"
+match = []
+body = "task-83-f2.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-90"
 title = "drb-90 reference content"
 snippet = "Analyze the complex issue of liability allocation in accidents involving vehicles with advanced driver-assistance system"
@@ -146,6 +250,22 @@ body = "task-90-w.md"
 custody = "public-web"
 
 [[hit]]
+url = "https://newsmartsafe.com/industry-news/adas-systems"
+title = "footnote: drb-90/1"
+snippet = "cited by the task 90 article"
+match = []
+body = "task-90-f1.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://www.autosinnovate.org/initiatives/innovation/autonomous-vehicles/levels-of-automation"
+title = "footnote: drb-90/2"
+snippet = "cited by the task 90 article"
+match = []
+body = "task-90-f2.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-95"
 title = "drb-95 reference content"
 snippet = "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedik\u0101 Praj\u00f1\u0101p\u0101ramit\u0101 S\u016btra). These notes shoul"
@@ -159,4 +279,20 @@ title = "wikipedia: drb-95"
 snippet = "second origin for task 95"
 match = []
 body = "task-95-w.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://en.wikipedia.org/wiki/Diamond_Sutra"
+title = "footnote: drb-95/1"
+snippet = "cited by the task 95 article"
+match = []
+body = "task-95-f1.md"
+custody = "public-web"
+
+[[hit]]
+url = "https://foguangpedia.org/diamond-sutra/"
+title = "footnote: drb-95/3"
+snippet = "cited by the task 95 article"
+match = []
+body = "task-95-f3.md"
 custody = "public-web"

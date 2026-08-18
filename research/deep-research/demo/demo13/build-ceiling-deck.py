@@ -64,24 +64,74 @@ def sha256_prefix(path: Path) -> str:
     return h[:8]
 
 
-def fetch_text(url: str) -> str:
-    """Fetch a page once and reduce it to text (tag-strip + unescape). A
-    failed fetch refuses loudly — the deck must never silently carry a
-    missing second origin."""
-    req = urllib.request.Request(url, headers={
-        "User-Agent": "commonwealth-ai-deep-research-ceiling-deck/1.0 "
-                      "(local benchmark fixture build; one fetch per build)"})
-    with urllib.request.urlopen(req, timeout=60) as r:            # noqa: S310
-        raw = r.read().decode("utf-8", errors="replace")
+def fetch_text(url: str, strict: bool = True) -> str | None:
+    """Fetch a page once and reduce it to text (tag-strip + unescape).
+    strict (the wiki second origin): a failed fetch or a too-small body
+    refuses loudly — the deck must never silently carry a missing origin.
+    non-strict (best-effort footnotes): None on failure or smallness, the
+    caller records the skip by name."""
+    try:
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "commonwealth-ai-deep-research-ceiling-deck/1.0 "
+                          "(local benchmark fixture build; one fetch per "
+                          "build)"})
+        with urllib.request.urlopen(req, timeout=60) as r:        # noqa: S310
+            raw = r.read()
+    except Exception as e:                                         # noqa: BLE001
+        if strict:
+            raise
+        return None
+    # A PDF body routes through the house extractor (§19 — the same
+    # surface `sovereign extract` serves), never through the HTML strip.
+    if url.lower().endswith(".pdf") or ".pdf?" in url.lower() or raw[:4] == b"%PDF":
+        import os
+        import subprocess
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tf:
+            tf.write(raw)
+            tmp = tf.name
+        try:
+            out = subprocess.run(
+                ["sovereign", "extract", tmp], capture_output=True,
+                text=True, timeout=180)
+            text = out.stdout
+        finally:
+            os.unlink(tmp)
+        if len(text.strip()) < 2000:
+            if strict:
+                raise SystemExit(
+                    f"exit 3: extracted {url} yields {len(text)} chars — "
+                    "too small to be a real second origin, refusing")
+            return None
+        return text.strip()
+    raw = raw.decode("utf-8", errors="replace")
     raw = re.sub(r"<(script|style)[^>]*>.*?</\1>", " ", raw, flags=re.S | re.I)
     raw = re.sub(r"<[^>]+>", " ", raw)
     text = html.unescape(raw)
     text = re.sub(r"[ \t]+", " ", text)
     text = re.sub(r"\n\s*\n+", "\n", text)
     if len(text.strip()) < 2000:
-        raise SystemExit(f"exit 3: fetched {url} yields {len(text)} chars — "
-                         "too small to be a real second origin, refusing")
+        if strict:
+            raise SystemExit(
+                f"exit 3: fetched {url} yields {len(text)} chars — "
+                "too small to be a real second origin, refusing")
+        return None
     return text.strip()
+
+
+def footnote_urls(article: str) -> list[str]:
+    """The article's own cited sources — the origins its claims came from
+    (the corroboration floor's honest second origins). Non-PDF only (the
+    builder's text extractor serves HTML; a PDF footnote is skipped and
+    NAMED in the build output)."""
+    urls = re.findall(r'https?://[^\s\)\]\"\']+', article)
+    out = []
+    for u in dict.fromkeys(urls):
+        u = u.rstrip(".,;:")
+        if "r2cdn" in u or "perplexity.ai" in u:
+            continue
+        out.append(u)
+    return out
 
 
 def main():
@@ -93,7 +143,8 @@ def main():
     assert [r["id"] for r in rows] == [56, 58, 59, 62, 65, 69, 78, 83, 90, 95]
 
     sources = []
-    deck_lines = ["# T6a phase 1b + t6b pilot ceiling deck (v2) — built by "
+    skipped = []
+    deck_lines = ["# T6a phase 1b + t6b pilot ceiling deck (v3) — built by "
                   "build-ceiling-deck.py", "version = 1", ""]
     for r in rows:
         tid = r["id"]
@@ -128,12 +179,42 @@ def main():
         deck_lines.append(f"body = \"{wiki_body_file}\"")
         deck_lines.append('custody = "public-web"')
         deck_lines.append("")
+        # hits C — the article's own footnote sources (deck v3): the
+        # corroboration floor's REAL second origins. Up to 2 per task;
+        # fetch failures are named, never silent.
+        fn_success = 0
+        for n, fu in enumerate(footnote_urls(r["article"]), start=1):
+            if fn_success >= 2 or n > 6:
+                break
+            f_body = f"task-{tid}-f{n}.md"
+            f_text = fetch_text(fu, strict=False)
+            if f_text is None:
+                skipped.append({"id": tid, "url": fu,
+                                "error": "fetch failed or body too small"})
+                print(f"  footnote {tid}/{n} skipped: {fu[:80]}")
+                continue
+            fn_success += 1
+            (HERE / f_body).write_text(f_text, encoding="utf-8")
+            f_sha = hashlib.sha256(f_text.encode("utf-8")).hexdigest()
+            sources.append({"id": tid, "url": fu, "body": f_body,
+                            "sha256": f_sha, "chars": len(f_text)})
+            deck_lines.append("[[hit]]")
+            deck_lines.append(f"url = \"{fu}\"")
+            deck_lines.append(f"title = \"footnote: drb-{tid}/{n}\"")
+            deck_lines.append(f"snippet = \"cited by the task {tid} article\"")
+            deck_lines.append("match = []")
+            deck_lines.append(f"body = \"{f_body}\"")
+            deck_lines.append('custody = "public-web"')
+            deck_lines.append("")
     (HERE / "deck.toml").write_text("\n".join(deck_lines), encoding="utf-8")
     (HERE / "deck-sources.json").write_text(
         json.dumps(sources, indent=2) + "\n", encoding="utf-8")
-    print(f"deck v2 built: {HERE}/deck.toml ({len(rows) * 2} hits, "
-          f"{len(rows)} pinned articles + {len(rows)} wikipedia second "
-          "origins); shas in deck-sources.json")
+    (HERE / "deck-skipped.json").write_text(
+        json.dumps(skipped, indent=2) + "\n", encoding="utf-8")
+    print(f"deck v3 built: {HERE}/deck.toml ({sum(1 for _ in
+          deck_lines if _.startswith('[[hit]]'))} hits); {len(skipped)} "
+          "footnote fetches skipped (deck-skipped.json); shas in "
+          "deck-sources.json")
 
 
 if __name__ == "__main__":
