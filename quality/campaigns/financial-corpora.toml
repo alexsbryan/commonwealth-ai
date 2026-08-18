@@ -71,7 +71,13 @@ status       = "open"
 id           = "F4-enrichment"
 one_line     = "Why a figure moved returns the filing's own explanation, attributed — never a manufactured one"
 derives_from = "FINANCIAL_CORPORA.md §4 F4, §3.2"
-status       = "open"
+# DEFERRED 2026-08-18 (seat, at the operator's budget close). Postponed, NOT
+# descoped — §4 F4 still declares it and it stays OPEN. No instrument was ever
+# declared and no live order covers it: the only order that named it
+# (sec-filings-harden) landed before the measurement substrate existed. It is
+# deferred rather than left silently open so the campaign renders what is
+# actually in flight. Re-declare it with an instrument before pulling it.
+status       = "deferred"
 
 [[bar]]
 id           = "F5-coverage-visible"
@@ -109,4 +115,9 @@ PY'''
 id           = "F6-freshness"
 one_line     = "A corpus knows its as-of filing and refuses periods it cannot cover"
 derives_from = "FINANCIAL_CORPORA.md §4 F6"
-status       = "open"
+# DEFERRED 2026-08-18 (seat, at the operator's budget close). Postponed, NOT
+# descoped. Same reason as F4 — no instrument, no live order. NOTE for whoever
+# picks it up: the refusal half may be nearly free once the authority guard's
+# period-refusal path is exercised, which is what assertion 4 of the
+# sec-filings journey drives. Check that evidence before building anything.
+status       = "deferred"
