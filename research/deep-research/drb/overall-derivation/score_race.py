@@ -31,7 +31,8 @@ Two arms (--arm local | ab | both):
           (demo12/runs/hybrid/drb-<id>/dr-<ts>/, same landed gate, same
           charter check). The web-leg arm of the same re-flight; uncleaned,
           the same caveats. (T5a-hybrid declaration, operator resolve
-          2026-08-18.)
+          2026-08-18.) --landed-root + --arm-label re-brand it for the t6a
+          deep arm (T6a declaration, operator resolve 2026-08-18.)
 
 Both arms share article_2 (the shipped cleaned reference articles) and the
 shipped per-task criteria (clone data/…, frozen at the pin).
@@ -466,6 +467,12 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--arm", choices=["local", "ab", "hybrid", "both"],
                     default="both")
+    ap.add_argument("--landed-root", type=Path, default=None,
+                    help="override the article-1 landing root for the "
+                         "hybrid arm (e.g. demo13/runs/deep — order t6a)")
+    ap.add_argument("--arm-label", default=None,
+                    help="output dir + manifest arm name for the hybrid "
+                         "arm (e.g. deep) — the pre-registered t6a flight")
     ap.add_argument("--out", type=Path, default=HERE / "flights")
     ap.add_argument("--dry-run", action="store_true",
                     help="validate inputs + build every prompt, NO judge call")
@@ -481,6 +488,14 @@ def main() -> None:
                          "the task is already scored or the sidecar misses "
                          "any other task. No other judge calls.")
     args = ap.parse_args()
+
+    # the t6a extension: a named label re-brands the hybrid arm's
+    # article-1 source (pre-registered; the recipe is unchanged)
+    flown_hybrid = args.arm_label or "hybrid"
+    if args.arm_label and args.arm != "hybrid":
+        sys.exit("exit 3: --arm-label requires --arm hybrid")
+    if args.landed_root and args.arm != "hybrid":
+        sys.exit("exit 3: --landed-root requires --arm hybrid")
 
     check_clone()
     prompts = frozen_prompts()
@@ -510,7 +525,8 @@ def main() -> None:
         local_articles = load_landed_articles(DEMO12_LOCAL)
     hybrid_articles = None
     if args.arm == "hybrid":
-        hybrid_articles = load_landed_articles(DEMO12_HYBRID)
+        hybrid_articles = load_landed_articles(
+            args.landed_root or DEMO12_HYBRID)
 
     arts = subset_articles()
     for i in SUBSET_IDS:
@@ -539,7 +555,7 @@ def main() -> None:
         # the retry targets the arm whose persisted sidecar lacks the id —
         # self-describing, no --arm ambiguity
         lacking = []
-        for a in ("local", "ab", "hybrid"):
+        for a in ("local", "ab", flown_hybrid):
             sp = args.resume / a / "judge_output.jsonl"
             if sp.exists():
                 ids = {r["id"] for r in load_jsonl(sp)}
@@ -549,7 +565,7 @@ def main() -> None:
             sys.exit(f"exit 3: --retry {args.retry}: arm(s) lacking the id: "
                      f"{lacking}, expected exactly one")
         retry_arm = lacking[0]
-    for a in ("local", "ab", "hybrid"):
+    for a in ("local", "ab", flown_hybrid):
         if a == retry_arm:
             modes[a] = "retry"
             continue
@@ -564,7 +580,14 @@ def main() -> None:
         modes[a] = "fresh"
 
     # the judge guard applies only to arms actually selected by --arm
-    in_scope = ("local", "ab") if args.arm == "both" else (args.arm,)
+    # (a re-labeled hybrid arm flies under its label — the guard must
+    # key on the flown name, never silently skip)
+    if args.arm == "both":
+        in_scope = ("local", "ab")
+    elif args.arm == "hybrid":
+        in_scope = (flown_hybrid,)
+    else:
+        in_scope = (args.arm,)
     client = None
     if not args.dry_run and any(modes[a] in ("fresh", "retry")
                                 for a in in_scope):
@@ -599,8 +622,8 @@ def main() -> None:
             "ab", ab_articles, prompts, criteria, references,
             client, args.dry_run, out_dir, modes, args)
     if args.arm == "hybrid":
-        scored_counts["hybrid"] = run_one_arm(
-            "hybrid", hybrid_articles, prompts, criteria, references,
+        scored_counts[flown_hybrid] = run_one_arm(
+            flown_hybrid, hybrid_articles, prompts, criteria, references,
             client, args.dry_run, out_dir, modes, args)
 
     if not args.dry_run:
@@ -619,9 +642,10 @@ def main() -> None:
                         "targets are not shipped)",
             "inputs": {"clone_pin": PIN,
                        "subset_articles_sha": SUBSET_ARTICLES_SHA},
-            "landed_arm": "hybrid" if args.arm == "hybrid" else "local",
+            "landed_arm": flown_hybrid if args.arm == "hybrid" else "local",
             "landed_dirs": {str(i): str(landed_report(
-                i, DEMO12_HYBRID if args.arm == "hybrid" else DEMO12_LOCAL
+                i, (args.landed_root or DEMO12_HYBRID)
+                if args.arm == "hybrid" else DEMO12_LOCAL
             ).parent) for i in SUBSET_IDS},
         }
         (out_dir / "manifest.json").write_text(

@@ -6,6 +6,11 @@ subset, per the pre-registered arm protocols:
           --search 12 --fetch 12 --max-rounds 3
   hybrid: --backend auto --search-source web --consent personal
           --search 4 --fetch 4 --max-rounds 3
+  deep:   --backend auto --search-source web --consent personal
+          --search 10 --fetch 12 --max-rounds 6
+          (order deep-research-t6a phase 1, pre-registered:
+          research-grade depth on the same frozen subset; tavily keyed —
+          the 10-task arm consumes the 100-call daily allowance exactly)
 
 Arms run strictly sequentially (local first, then hybrid). One flight's
 failure does not stop the driver; the exit code is non-zero if any flight
@@ -30,16 +35,18 @@ HERE = Path(__file__).parent
 
 ARM_FLAGS = {
     "local": ["--search-source", "corpus", "--corpora", "wikipedia",
-              "--search", "12", "--fetch", "12"],
+              "--search", "12", "--fetch", "12", "--max-rounds", "3"],
     "hybrid": ["--search-source", "web", "--consent", "personal",
-               "--search", "4", "--fetch", "4"],
+               "--search", "4", "--fetch", "4", "--max-rounds", "3"],
+    "deep": ["--search-source", "web", "--consent", "personal",
+             "--search", "10", "--fetch", "12", "--max-rounds", "6"],
 }
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default="sovereign")
-    ap.add_argument("--arm", choices=["local", "hybrid"], default=None,
+    ap.add_argument("--arm", choices=["local", "hybrid", "deep"], default=None,
                     help="fly only one arm (default: both, local first)")
     ap.add_argument("--run-root", default=str(HERE / "runs"),
                     help="run root (t4a: demo/demo12/runs — the frozen drb/runs is never touched)")
@@ -76,7 +83,7 @@ def main():
                 except Exception:
                     pass
             cmd = [args.bin, "deep-research", r["prompt"],
-                   "--backend", "auto", *flags, "--max-rounds", "3",
+                   "--backend", "auto", *flags,
                    "--run-dir", str(run_dir)]
             t0 = time.time()
             print(f"[{arm}] task {tid} start  (cmd: {cmd[:4]} ...)", flush=True)

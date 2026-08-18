@@ -3375,3 +3375,41 @@ leg found protocol content the corpus lacked) while id 56 0.0618 → 0.0000
 arms. The 5.6× gap is NOT the search backend — it is budget depth, round
 count, draft yield against the verifier, and report shape. That is the t6a
 evidence base.
+
+## T6a — the yield order, phase 1: the research-grade acquisition arm (operator resolve 2026-08-18) — DECLARATION
+
+The T5a-hybrid flight measured the backend lever at +0.569 — the web leg as
+configured (4 searches/4 fetches/3 rounds) does not move the gap; the
+per-task evidence (id 69 ×6 on web, id 58 passed-findings at 3 fetches) says
+depth is the dominant term. Order deep-research-t6a phase 1 flies a
+research-grade arm with NO loop-code change — the driver's own flags — and
+scores it through the proven instrument. Declared BEFORE any flight: zero
+deep-arm flights have been made (demo13 does not exist yet).
+
+1. **Arm "deep"** (run-drb-arms.py, the t2b/t4a driver, new ARM_FLAGS
+   entry): `--search-source web --consent personal --search 10 --fetch 12
+   --max-rounds 6`. Backend: tavily (keyed — the house prefer list; the
+   CLI logs the choice per run; the orchestrator's daily cap bounds the
+   10-task arm to 100 searches — exactly the allowance; any refusal is
+   journaled in the budget ledger, never silent). Runs land in
+   `demo/demo13/runs/deep/` — the frozen `drb/runs/` is never touched.
+   Serial, 10 tasks, the frozen `query.subset.jsonl` prompts, the 27B
+   draft (the daily driver, MTP active).
+2. **Scorer amendment (named):** score_race.py gains `--landed-root`
+   (overrides the article-1 landing root) and `--arm-label` (the output
+   dir + manifest arm name). Same landed gate (verdict-set.json, exactly
+   one dir), same charter-question check, same recipe. The t6a flight:
+   `score_race.py --arm hybrid --landed-root demo13/runs/deep
+   --arm-label deep` → `flights/race-<ts>/deep/`.
+3. **Judge:** the T5a pin (122B), the guard (exit 2 unless served), the
+   proven window protocol. Judge-identity + calibration-gate caveats
+   inherited verbatim (T5a items 1, 6). article_1 uncleaned — the report
+   IS the deliverable. FACT stays old-instrument.
+4. **Comparison targets (each labeled):** vs 8.6538 (the hybrid arm —
+   the nearest same-judge predecessor), vs 8.0848 (local), vs 45.1454
+   (same-judge reference), vs 42.1779/44.9683 (official, 10 tasks).
+5. Expected 10 judge calls, fresh-only.
+
+### Execution record
+
+(appended at landing)
