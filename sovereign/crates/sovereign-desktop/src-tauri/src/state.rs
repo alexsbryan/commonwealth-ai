@@ -1274,6 +1274,18 @@ pub async fn bootstrap_with_progress(
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // Typed SEC-filing figures with basis + accession, or first-class refusals.
+    //
+    // UNCONDITIONAL, never gated on `config.enabled_tools`: this tool is what
+    // DECLARES authority over an installed SEC corpus (`authority_domains()`
+    // -> `claim_stores()`), and the guard arms only when a registered tool
+    // claims a corpus the answer drew on. An install-capable surface without
+    // it is a FABRICATION surface, not a reduced one.
+    // Pinned by `tests/authority_surface_census.rs`, which carries the
+    // measured evidence.
+    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     // Code Intelligence tools. Build the merged SCIP handle first so
     // SymbolLookupTool can share it — exact-name lookup now reads
     // SCIP directly (Lance kept only embeddings/content/mtime).

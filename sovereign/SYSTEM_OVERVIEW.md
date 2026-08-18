@@ -546,7 +546,21 @@ pipeline (`scope_is_armed` gates both branch sites). On violation the
 prose is withheld §6.2(4)-style, naming every numeral, quoting the
 verified spans, and naming the authoritative tool. Corpora declaring
 nothing are structurally untouched (empty intersection, no metadata,
-byte-identical delivery). Coverage is code: `guard_story` in
+byte-identical delivery). The same emptiness arises per-SURFACE, and
+there it is a DEFECT rather than a no-op: arming reads the registry of
+the process that serves the turn, so "every dispatch surface" above is
+true of the SEAM and not of the ARMING. A binary that can install a
+corpus but never registers the tool declaring authority over it has an
+empty `authority_domains()`, never arms, and answers ungrounded —
+while every gate stays green, because the gates run in binaries that
+DO register it. `sovereign-desktop` was exactly this until 2026-08-18:
+it registered the `sec_edgar` acquirer and not `SecFactsTool`, and
+answered a capex question with a figure absent from the store and a
+manufactured source quotation. Registration on an install-capable
+surface is therefore UNCONDITIONAL, never gated on `enabled_tools`
+config, and is pinned by a source census
+(`sovereign-desktop/src-tauri/tests/authority_surface_census.rs`).
+Coverage is code: `guard_story` in
 `authority_guard.rs` is an exhaustive per-`Intent` table (Covered /
 No-op-by-construction / Excluded-by-decision), pinned by test, with
 the non-intent-keyed streaming exits dispositioned in its doc table;
