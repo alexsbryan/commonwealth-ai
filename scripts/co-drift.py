@@ -49,6 +49,12 @@ REPO = Path(__file__).resolve().parent.parent
 VERDICTS_LOG = Path.home() / ".sovereign" / "comaintainer" / "verdicts.jsonl"
 JOURNEY_LATEST = Path.home() / ".sovereign" / "journey-nightly" / "latest.json"
 
+RECENT_H = 48              # hours; steady state judges only what someone can
+                           # still act on (seat ruling 2026-08-17, note
+                           # 5bcae522). A CONSTANT, never an env flag or config
+                           # key: a flag is a thing someone must remember, which
+                           # fails question 1 of the burden test this monitor
+                           # exists to apply. Skips are ROWS, never silence.
 DIFF_CAP = 24_000          # chars; truncation is NAMED in the bundle
 MAX_CLAIMS = 8             # overflow counted, never silently dropped
 MAX_TOKENS = 900           # the measured 420-token truncation lesson: keep 900
@@ -323,6 +329,28 @@ def append_rows(rows: list[dict], log: Path = VERDICTS_LOG) -> None:
             fh.write(json.dumps(r) + "\n")
 
 
+def recency_skip_reason(age_h: float | None) -> str | None:
+    """None = judge this commit. A string = the reason, verbatim into the row.
+
+    An UNKNOWN age is never a skip: absence of a timestamp is not evidence the
+    commit is old (§18.3), and the run path already has a could-not-judge row
+    for a sha git cannot show.
+    """
+    if age_h is None or age_h <= RECENT_H:
+        return None
+    return (f"commit is {age_h:.0f}h old; steady state judges the last "
+            f"{RECENT_H}h — drift's signal is highest where someone can still act")
+
+
+def _commit_age_h(sha: str, now: float | None = None) -> float | None:
+    raw = _git(["show", "--no-patch", "--format=%ct", sha]).strip().splitlines()
+    if not raw or not raw[0].isdigit():
+        return None
+    then = int(raw[0])
+    now = now if now is not None else _dt.datetime.now(_dt.timezone.utc).timestamp()
+    return (now - then) / 3600.0
+
+
 def _parse_engine_reply(text: str, verdicts: tuple) -> dict | None:
     try:
         d = json.loads(text)
@@ -339,6 +367,12 @@ def _parse_engine_reply(text: str, verdicts: tuple) -> dict | None:
 
 
 def run(sha: str) -> int:
+    skip = recency_skip_reason(_commit_age_h(sha))
+    if skip is not None:
+        append_rows([drift_row(
+            sha, "recency", _git(["show", "--no-patch", "--format=%s", sha]).strip(),
+            "skipped-not-recent", skip, "", "", "", "recency", "")])
+        return 0
     call_daemon, why_engine = _import_call_daemon()
     lineage, why_lineage = _import_lineage()
     bundle, subject, body = build_bundle(sha)
@@ -537,6 +571,16 @@ def self_test() -> int:
     check("a plainly-cited unsupported PASSES the gate", v == "unsupported")
     v, _ = gate_unsupported("supported", "", "", hay)
     check("the gate touches only unsupported", v == "supported")
+
+    # ---- recency: the steady-state cap, watched to fire AND to hold back ---
+    check("a fresh commit is judged", recency_skip_reason(0.0) is None)
+    check(f"exactly {RECENT_H}h is still recent",
+          recency_skip_reason(float(RECENT_H)) is None)
+    r_skip = recency_skip_reason(float(RECENT_H) + 1)
+    check("older than the cap SKIPS, naming its age and the cap",
+          r_skip is not None and f"{RECENT_H + 1}h old" in r_skip
+          and f"last {RECENT_H}h" in r_skip, str(r_skip))
+    check("an UNKNOWN age is never a skip", recency_skip_reason(None) is None)
 
     # ---- row shape --------------------------------------------------------
     r = drift_row("a" * 40, "claim-evidence", "c", "unsupported", "x", "r",
