@@ -1370,6 +1370,18 @@ impl Runtime {
         // attribution — computed here (chunks are moved into the gate
         // evidence inside the spawn) and moved into the spawn.
         let pool_corpora_for_ledger = crate::runtime::epistemic::pool_corpora(&chunks);
+        // Authority guard arming (order authority-guard-at-exit): armed
+        // off the corpora this answer's evidence actually draws on — the
+        // same pool the epistemic ledger attributes. Computed pre-spawn
+        // (the spawn holds no `&self`); an armed turn forces hold-mode
+        // below, and its held answer is audited at the exit seam before
+        // release. None on every turn whose pool declares no authority —
+        // those turns are byte-identical to pre-guard behaviour.
+        let authority_armed = crate::runtime::authority_guard::armed_for_evidence(
+            &self.tools,
+            &pool_corpora_for_ledger,
+            "kq_stream",
+        );
         // Ledger inputs that ride into the spawn: the plan's retained
         // demand set + query embedding (gap-turn coverage probe) and
         // an engine handle for the probe itself.
@@ -1427,6 +1439,19 @@ impl Runtime {
         // gate. Both run the identical cite-or-abstain ladder.
         let gate_surface = self.kq_gate_surface(context.conversation.enabled_corpora.as_deref());
         let gate_on = gate_surface.enabled() && documents_found > 0;
+        // Token-delivery mode. `gate_on` alone decides whether the
+        // grounding ladder runs; `hold` decides whether tokens are
+        // buffered until the verdicts. An ARMED turn must hold even
+        // when the grounding gate is env-disabled — a numeric guard
+        // cannot unsay tokens already streamed, so protection that
+        // rides an unrelated flag would be the same defect this guard
+        // closes (seat ruling 2026-08-17). Ratified by the operator
+        // 2026-08-17: "We've accepted that we can't stream and verify
+        // in the desktop a long time ago, there's precedence for the
+        // decision here" — the grounding gate's buffer-until-verdict
+        // (this same `gate_on` hold) is that precedent. Unarmed turns:
+        // hold == gate_on, byte-identical delivery.
+        let hold = gate_on || authority_armed.is_some();
         // The turn's sealed evidence universe — built here because
         // the spawned task holds no `&self`. Claim search is
         // sealed to the conversation's corpora.
@@ -1659,8 +1684,9 @@ impl Runtime {
             // set their prefix on retry_req and emit it manually.
             if let Some(pfx) = request.assistant_prefix.clone() {
                 full_text.push_str(&pfx);
-                // In gate mode nothing is sent until the verdict.
-                if !gate_on && tx.send(Ok(pfx)).await.is_err() {
+                // In hold mode (gate or armed guard) nothing is sent
+                // until the verdicts.
+                if !hold && tx.send(Ok(pfx)).await.is_err() {
                     return;
                 }
             }
@@ -1669,10 +1695,10 @@ impl Runtime {
             // silent stretch with a live token-count heartbeat. A throttled
             // channel carries the running count out of `run_synthesis_stream`;
             // this reader turns each into a `SynthesisProgress` chip the
-            // desktop shows ticking up. Gate mode only — an ungated turn
+            // desktop shows ticking up. Hold mode only — an unheld turn
             // already streams tokens the user can watch. The reader ends when
             // the channel closes (`hb_tx` dropped after synthesis).
-            let hb_tx = if gate_on {
+            let hb_tx = if hold {
                 let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<SynthBeat>(32);
                 let hb_events = collab_routing_events.clone();
                 let hb_sid = collab_session_id.clone();
@@ -1733,7 +1759,7 @@ impl Runtime {
                 &cancel_for_stream,
                 &mut full_text,
                 had_retrieved_chunks,
-                gate_on,
+                hold,
                 hb_tx.as_ref(),
                 "kq-stream",
                 Some(&gate_evidence), // Phase A pipeline (flag-gated)
@@ -1979,7 +2005,7 @@ impl Runtime {
             // The refinement path (collaboration.rs) re-verifies
             // any gap-check rewrite. Empty doc_context (parametric
             // path) is a no-op.
-            let full_text = {
+            let (full_text, verified_spans) = {
                 let v = crate::quote_verification::verify_answer_against_turn_evidence(
                     &full_text,
                     &doc_context,
@@ -1992,7 +2018,10 @@ impl Runtime {
                         "kq-stream: post-synthesis guardrail demoted unverified quotations"
                     );
                 }
-                v.rewritten
+                // The passed spans feed the authority guard's quote
+                // exemption below — the filing's own verified sentence
+                // stays legal (§6.2(5)).
+                (v.rewritten, v.verified_spans)
             };
 
             // ── §9.6: name what we could not reach. CODE, not the model. ──
@@ -2034,9 +2063,44 @@ impl Runtime {
                 });
             }
 
-            // Gate mode held every token — release the final
-            // (gated, quote-verified) text as one frame now.
-            if gate_on
+            // Authority guard — the exit seam (order authority-guard-at-
+            // exit). Runs on the FINAL held text, after the gate, the
+            // quote guardrail, and the lesson transform, before release
+            // and the durable save. On a block the prose is withheld and
+            // replaced; hold-mode above guarantees no token has been
+            // released yet. Absent arming this is a no-op and the
+            // binding is untouched.
+            let mut authority_guard_meta: Option<serde_json::Value> = None;
+            let full_text = if let Some(armed) = &authority_armed {
+                let basis = crate::runtime::authority_guard::GuardBasis {
+                    question: &gate_question,
+                    verified_spans: &verified_spans,
+                    cited: &[],
+                    raw_values: &[],
+                    allowed_tokens: &[],
+                };
+                let verdict = crate::runtime::authority_guard::guard_answer(
+                    armed,
+                    &full_text,
+                    &basis,
+                    "kq_stream",
+                );
+                authority_guard_meta = Some(verdict.metadata(armed, "kq_stream"));
+                match verdict {
+                    crate::runtime::authority_guard::GuardVerdict::Released => full_text,
+                    crate::runtime::authority_guard::GuardVerdict::Blocked {
+                        replacement,
+                        ..
+                    } => replacement,
+                }
+            } else {
+                full_text
+            };
+
+            // Hold mode (gate or armed guard) held every token — release
+            // the final (gated, quote-verified, guard-audited) text as
+            // one frame now.
+            if hold
                 && !cancel_for_stream.is_cancelled()
                 && tx.send(Ok(full_text.clone())).await.is_err()
             {
@@ -2246,6 +2310,13 @@ impl Runtime {
                 // offer against; the UI hides the row.
                 "next_steps": offers_json,
             });
+            // Glassbox: armed turns record the guard verdict (corpus,
+            // tool, action, withheld numerals). Inserted only when
+            // armed — unarmed metadata stays byte-identical.
+            let mut metadata_json = metadata_json;
+            if let Some(g) = authority_guard_meta {
+                metadata_json["authority_guard"] = g;
+            }
             let assistant_msg = Message {
                 id: message_id_owned.clone(),
                 conversation_id: conversation_id_owned.clone(),
@@ -2455,6 +2526,20 @@ impl Runtime {
                     engine: engine_for_ledger.clone(),
                     coverage: probe_verdict_for_routes,
                 });
+                // Authority-armed turns skip the refinement rewrite: it
+                // can replace the persisted answer AFTER the exit guard
+                // audited it, and an unaudited rewrite over an
+                // authoritative corpus is the hole this guard closes
+                // (order authority-guard-at-exit). The synchronous
+                // dossier baseline above already landed; only the
+                // rewrite is suppressed.
+                if authority_armed.is_some() {
+                    tracing::info!(
+                        target: "authority_guard",
+                        "authority_guard: post-stream refinement suppressed on an armed turn (kq_stream)"
+                    );
+                }
+                if authority_armed.is_none() {
                 tokio::spawn(async move {
                     tracing::info!(
                         conversation_id = %collab_cid,
@@ -2504,6 +2589,7 @@ impl Runtime {
                         .await;
                     }
                 });
+                }
             }
 
             // Auto-title after first exchange — same post-stream
@@ -2903,9 +2989,28 @@ impl Runtime {
         // today, and the long-form ladder doesn't consume it.
         let deep_gate_surface = crate::runtime::grounding::GateSurface::DeepQuery;
         let deep_gate_on = deep_gate_surface.enabled() && !kc.chunks.is_empty();
+        // Authority guard arming (order authority-guard-at-exit) — this
+        // is prose-explanation-mac's route: DeepQuery over the filing's
+        // prose, no tool, no audit before this change. Armed off the
+        // evidence pool (below); an armed turn forces hold-mode so the
+        // exit audit runs before any token reaches the user. `deep_hold`
+        // vs `deep_gate_on`: the gate flag alone still decides whether
+        // the grounding ladder runs; hold decides token delivery.
+        // Forced hold on armed turns ratified by the operator
+        // 2026-08-17 ("We've accepted that we can't stream and verify
+        // in the desktop a long time ago" — the grounding gate's
+        // buffer-until-verdict is the precedent; full citation at the
+        // KQ seam's `hold`). Unarmed turns: deep_hold == deep_gate_on,
+        // byte-identical.
         // Distinct corpus ids for the epistemic ledger (moved into the
         // spawn; kc.chunks is consumed by the evidence build below).
         let deep_pool_corpora = crate::runtime::epistemic::pool_corpora(&kc.chunks);
+        let authority_armed = crate::runtime::authority_guard::armed_for_evidence(
+            &self.tools,
+            &deep_pool_corpora,
+            "deep_stream",
+        );
+        let deep_hold = deep_gate_on || authority_armed.is_some();
         // The turn's sealed evidence universe (deep answers are
         // usually long-form). Built pre-spawn; claim search sealed to
         // the conversation's corpora. entity_anchored=false — the
@@ -3078,15 +3183,16 @@ impl Runtime {
             // with the KQ spawn.
             if let Some(pfx) = request.assistant_prefix.clone() {
                 full_text.push_str(&pfx);
-                if !deep_gate_on && tx.send(Ok(pfx)).await.is_err() {
+                if !deep_hold && tx.send(Ok(pfx)).await.is_err() {
                     return;
                 }
             }
 
             // Refusal-retry + token forwarding live in the shared
-            // Token-count heartbeat during the gated hold (mirrors the
-            // KnowledgeQuery spawn). Reader ends when `hb_tx` drops.
-            let hb_tx = if deep_gate_on {
+            // Token-count heartbeat during the held stretch (gate or
+            // armed guard; mirrors the KQ spawn). Reader ends when
+            // `hb_tx` drops.
+            let hb_tx = if deep_hold {
                 let (tx_hb, mut rx_hb) = tokio::sync::mpsc::channel::<SynthBeat>(32);
                 let hb_events = routing_events_for_spawn.clone();
                 let hb_sid = session_id_for_spawn.clone();
@@ -3146,7 +3252,7 @@ impl Runtime {
                 &cancel_for_stream,
                 &mut full_text,
                 had_retrieved_chunks,
-                deep_gate_on,
+                deep_hold,
                 hb_tx.as_ref(),
                 "deep-stream",
                 Some(&deep_gate_evidence), // Phase A pipeline (flag-gated)
@@ -3277,7 +3383,7 @@ impl Runtime {
             // it's persisted. Empty evidence (pure-reasoning, no
             // retrieval) is a no-op. The refinement path
             // (collaboration.rs) re-verifies any gap-check rewrite.
-            let full_text = {
+            let (full_text, verified_spans) = {
                 let v = crate::quote_verification::verify_answer_against_turn_evidence(
                     &full_text,
                     &evidence,
@@ -3290,7 +3396,10 @@ impl Runtime {
                         "deep-stream: post-synthesis guardrail demoted unverified quotations"
                     );
                 }
-                v.rewritten
+                // The passed spans feed the authority guard's quote
+                // exemption below (§6.2(5) — the filing's own verified
+                // sentence stays legal).
+                (v.rewritten, v.verified_spans)
             };
             // §9.6: name what retrieval could not reach. CODE, not the model.
             // Same position as the KnowledgeQuery stream's marker, for the
@@ -3329,6 +3438,38 @@ impl Runtime {
                 )
                 .await
             };
+            // Authority guard — the exit seam (order authority-guard-at-
+            // exit). Runs on the FINAL held text, after the gate, the
+            // quote guardrail, and the lesson transform, before release
+            // and the durable save. Hold-mode above guarantees no token
+            // has been released yet on an armed turn. Unarmed turns:
+            // no-op, binding untouched.
+            let mut authority_guard_meta: Option<serde_json::Value> = None;
+            let full_text = if let Some(armed) = &authority_armed {
+                let basis = crate::runtime::authority_guard::GuardBasis {
+                    question: &deep_gate_question,
+                    verified_spans: &verified_spans,
+                    cited: &[],
+                    raw_values: &[],
+                    allowed_tokens: &[],
+                };
+                let verdict = crate::runtime::authority_guard::guard_answer(
+                    armed,
+                    &full_text,
+                    &basis,
+                    "deep_stream",
+                );
+                authority_guard_meta = Some(verdict.metadata(armed, "deep_stream"));
+                match verdict {
+                    crate::runtime::authority_guard::GuardVerdict::Released => full_text,
+                    crate::runtime::authority_guard::GuardVerdict::Blocked {
+                        replacement,
+                        ..
+                    } => replacement,
+                }
+            } else {
+                full_text
+            };
             let mut metadata_json = metadata_json;
             if let Some(obj) = metadata_json.as_object_mut() {
                 obj.insert(
@@ -3339,9 +3480,16 @@ impl Runtime {
                     "kept_lesson".to_string(),
                     kept_lesson.unwrap_or(serde_json::Value::Null),
                 );
+                // Glassbox: armed turns record the guard verdict.
+                // Inserted only when armed — unarmed metadata stays
+                // byte-identical.
+                if let Some(g) = authority_guard_meta.take() {
+                    obj.insert("authority_guard".to_string(), g);
+                }
             }
-            // Gate mode held every token — release the final text now.
-            if deep_gate_on
+            // Hold mode (gate or armed guard) held every token — release
+            // the final (guard-audited) text now.
+            if deep_hold
                 && !cancel_for_stream.is_cancelled()
                 && tx.send(Ok(full_text.clone())).await.is_err()
             {
@@ -3415,27 +3563,41 @@ impl Runtime {
                     engine: engine_for_routes.clone(),
                     coverage: None,
                 });
-                tokio::spawn(async move {
-                    run_post_stream_refinement(
-                        collab_inference.as_ref(),
-                        collab_approval.as_ref(),
-                        collab_store.as_ref(),
-                        &collab_config,
-                        &collab_cid,
-                        &collab_mid,
-                        &collab_question,
-                        &collab_original,
-                        &collab_evidence,
-                        Some(collab_metadata),
-                        collab_events,
-                        collab_sid,
-                        collab_lesson_prompt,
-                        collab_preempt,
-                        collab_guard,
-                        collab_route_ctx,
-                    )
-                    .await;
-                });
+                // Authority-armed turns skip the refinement rewrite: it
+                // can replace the persisted answer AFTER the exit guard
+                // audited it, and an unaudited rewrite over an
+                // authoritative corpus is the hole this guard closes
+                // (order authority-guard-at-exit; same suppression as
+                // the KQ spawn). Auto-title below is text-free and
+                // unaffected.
+                if authority_armed.is_none() {
+                    tokio::spawn(async move {
+                        run_post_stream_refinement(
+                            collab_inference.as_ref(),
+                            collab_approval.as_ref(),
+                            collab_store.as_ref(),
+                            &collab_config,
+                            &collab_cid,
+                            &collab_mid,
+                            &collab_question,
+                            &collab_original,
+                            &collab_evidence,
+                            Some(collab_metadata),
+                            collab_events,
+                            collab_sid,
+                            collab_lesson_prompt,
+                            collab_preempt,
+                            collab_guard,
+                            collab_route_ctx,
+                        )
+                        .await;
+                    });
+                } else {
+                    tracing::info!(
+                        target: "authority_guard",
+                        "authority_guard: post-stream refinement suppressed on an armed turn (deep_stream)"
+                    );
+                }
 
                 // Auto-title after first exchange. Non-blocking; the stream has
                 // already delivered the response to the user.
@@ -4053,7 +4215,15 @@ impl Runtime {
         // Tool-calls and OICP/mesh peer routing reach `Runtime`
         // through different entry points and never hit this
         // branch (per plan §4.3).
-        if crate::pipeline::is_team_pipeline_enabled()
+        // Armed-scope diversion: an armed turn must not take the team
+        // pipeline — its Presenter stream is returned to the caller
+        // directly (no buffer point exists), so no exit guard could hold
+        // it. Route armed turns onto the covered legacy dispatch below
+        // instead (order authority-guard-at-exit, seat ruling
+        // 2026-08-17: structural, not a warn — and the diversion TRACES,
+        // because a silent diversion is the same invisibility that hid
+        // the defect). Unarmed: byte-identical.
+        let team_pipeline_route = crate::pipeline::is_team_pipeline_enabled()
             && matches!(
                 intent,
                 Intent::SimpleQuery
@@ -4061,8 +4231,20 @@ impl Runtime {
                     | Intent::KnowledgeQuery
                     | Intent::ComparisonQuery
                     | Intent::ExpressiveQuery
-            )
-        {
+            );
+        let armed_scope_divert = team_pipeline_route
+            && crate::runtime::authority_guard::scope_is_armed(
+                &self.tools,
+                &context.installed_corpora,
+            );
+        if armed_scope_divert {
+            tracing::info!(
+                target: "authority_guard",
+                intent = ?intent,
+                "authority_guard: team pipeline DIVERTED to guarded legacy path — corpus scope declares authority (stream)"
+            );
+        }
+        if team_pipeline_route && !armed_scope_divert {
             tracing::info!(
                 intent = ?intent,
                 "team-pipeline: kill-switch enabled — routing turn through orchestrator"

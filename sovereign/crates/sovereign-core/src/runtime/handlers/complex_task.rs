@@ -370,6 +370,15 @@ impl Runtime {
         // Bare scope runs whenever a tool declared the opt-in — including
         // on refusal turns where `cited_figures` is empty: precisely there
         // a model reciting a figure from pretraining must be flagged.
+        //
+        // DELEGATION (order authority-guard-at-exit): this in-handler
+        // audit IS this route's exit guard — it holds the tool
+        // transcript basis (cited/raw/allowed_tokens + the §6.2(4)
+        // tool-verbatim substitution) that the generic exit seams do
+        // not. The exit-guard coverage table records ComplexTask as
+        // delegated here (`runtime/authority_guard.rs::guard_story`);
+        // the seams add nothing on this route, so behaviour is
+        // byte-identical to pre-guard.
         let violations: Vec<String> = if audit_bare {
             crate::runtime::numeric_audit::uncited_numerics_including_bare(
                 &gated_text,

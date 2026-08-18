@@ -547,6 +547,45 @@ impl Runtime {
                 "metalingual: quote guardrail demoted unverified quotations"
             );
         }
+        // Authority guard — exit seam, Metalingual (order
+        // authority-guard-at-exit). This handler's evidence never
+        // leaves it (no retrieved_chunks metadata), so the guard runs
+        // here, at the one point where the final text, the chunk pool,
+        // and the verification result coexist. Serves BOTH dispatch
+        // surfaces (turn.rs tail and the streaming single-chunk
+        // fallback both call this handler). No-op when unarmed.
+        let mut authority_guard_meta: Option<serde_json::Value> = None;
+        let guarded_content = if let Some(armed) =
+            crate::runtime::authority_guard::armed_for_evidence(
+                &self.tools,
+                &crate::runtime::epistemic::pool_corpora(&chunks),
+                "metalingual",
+            ) {
+            let basis = crate::runtime::authority_guard::GuardBasis {
+                question: message,
+                verified_spans: &verified.verified_spans,
+                cited: &[],
+                raw_values: &[],
+                allowed_tokens: &[],
+            };
+            let verdict = crate::runtime::authority_guard::guard_answer(
+                &armed,
+                &verified.rewritten,
+                &basis,
+                "metalingual",
+            );
+            authority_guard_meta = Some(verdict.metadata(&armed, "metalingual"));
+            match verdict {
+                crate::runtime::authority_guard::GuardVerdict::Released => {
+                    verified.rewritten.clone()
+                }
+                crate::runtime::authority_guard::GuardVerdict::Blocked { replacement, .. } => {
+                    replacement
+                }
+            }
+        } else {
+            verified.rewritten.clone()
+        };
         let sources: Vec<String> = chunks
             .iter()
             .filter_map(|c| c.title.clone())
@@ -557,20 +596,29 @@ impl Runtime {
             id: uuid::Uuid::new_v4().to_string(),
             conversation_id: conversation_id.to_string(),
             role: Role::Assistant,
-            content: verified.rewritten,
+            content: guarded_content,
             created_at: now(),
-            metadata: Some(serde_json::json!({
-                "intent": "MetalingualQuery",
-                "locator": format!("{:?}", locator),
-                "sources": sources,
-                "chunks_used": chunks.len(),
-                // Whether the running conversation frame was part of
-                // the evidence — the difference between "answered from
-                // turns still in view" and "answered from what I
-                // folded away", which is otherwise unrecoverable after
-                // the turn.
-                "conversation_frame_used": conversation_frame.is_some(),
-            })),
+            metadata: Some({
+                let mut m = serde_json::json!({
+                    "intent": "MetalingualQuery",
+                    "locator": format!("{:?}", locator),
+                    "sources": sources,
+                    "chunks_used": chunks.len(),
+                    // Whether the running conversation frame was part of
+                    // the evidence — the difference between "answered from
+                    // turns still in view" and "answered from what I
+                    // folded away", which is otherwise unrecoverable after
+                    // the turn.
+                    "conversation_frame_used": conversation_frame.is_some(),
+                });
+                // Glassbox: armed turns record the guard verdict.
+                // Inserted only when armed — unarmed metadata stays
+                // byte-identical.
+                if let Some(g) = authority_guard_meta {
+                    m["authority_guard"] = g;
+                }
+                m
+            }),
             version: 0,
         };
         Ok(Response {

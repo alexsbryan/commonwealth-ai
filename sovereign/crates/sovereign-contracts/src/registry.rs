@@ -92,6 +92,25 @@ impl ToolRegistry {
         claims
     }
 
+    /// Every corpus any registered tool declares authority over,
+    /// question-independent (order authority-guard-at-exit). The
+    /// answer-exit numeric guard's arming surface: same declaration
+    /// index as [`Self::authority_claims`], read at corpus granularity,
+    /// same `(tool_id, corpus_id)` tie-rule sort. Empty on every install
+    /// with no authoritative store — the guard's structural no-op case.
+    pub fn authority_domains(&self) -> Vec<crate::types::AuthorityClaim> {
+        let mut domains: Vec<_> = self
+            .tools
+            .iter()
+            .flat_map(|t| t.authority_domains())
+            .collect();
+        domains.sort_by(|a, b| {
+            (a.tool_id.as_str(), a.corpus_id.as_str())
+                .cmp(&(b.tool_id.as_str(), b.corpus_id.as_str()))
+        });
+        domains
+    }
+
     /// Number of registered tools.
     pub fn count(&self) -> usize {
         self.tools.len()
@@ -228,6 +247,13 @@ mod tests {
                 Vec::new()
             }
         }
+        fn authority_domains(&self) -> Vec<AuthorityClaim> {
+            vec![AuthorityClaim {
+                tool_id: "fake_store".into(),
+                corpus_id: self.corpus.into(),
+                matched: "declared authoritative".into(),
+            }]
+        }
     }
 
     #[test]
@@ -251,5 +277,31 @@ mod tests {
         // regardless of registration order.
         assert_eq!(claims[0].corpus_id, "corpus-a");
         assert_eq!(claims[1].corpus_id, "corpus-b");
+    }
+
+    /// The corpus-granularity read of the same declaration index
+    /// (order authority-guard-at-exit): question-independent, so a
+    /// question `claims` deliberately declines ("why did …") still sees
+    /// the declaration; same tie-rule sort; and an empty registry — the
+    /// no-authoritative-store install — declares nothing, which is the
+    /// exit guard's structural no-op.
+    #[test]
+    fn authority_domains_are_question_independent_and_sorted() {
+        assert!(ToolRegistry::new().authority_domains().is_empty());
+
+        let mut reg = ToolRegistry::new();
+        reg.register(Box::new(FakeStoreTool { corpus: "corpus-b" }));
+        reg.register(Box::new(FakeStoreTool { corpus: "corpus-a" }));
+
+        // The failing input for question-level arming, by name: this
+        // question claims NOTHING at question granularity …
+        assert!(reg
+            .authority_claims("Why did Acme's sales increase?")
+            .is_empty());
+        // … yet the corpus-level declaration is visible regardless.
+        let domains = reg.authority_domains();
+        assert_eq!(domains.len(), 2);
+        assert_eq!(domains[0].corpus_id, "corpus-a");
+        assert_eq!(domains[1].corpus_id, "corpus-b");
     }
 }

@@ -896,6 +896,25 @@ pub trait Tool: Send + Sync {
         let _ = question;
         Vec::new()
     }
+
+    /// The corpora this tool declares authority OVER, question-independent
+    /// (order authority-guard-at-exit, 2026-08-17). Same declaration index
+    /// as [`Self::claims`] read at CORPUS granularity: `claims` asks "does
+    /// this tool serve this question?" (a routing decision, deliberately
+    /// narrowed — e.g. explanation-shaped questions are declined so they
+    /// reach the prose path); this asks "does this tool vouch for figures
+    /// over this corpus at all?" (a provenance decision, which must NOT
+    /// inherit the routing narrowing — the answer-exit numeric guard arms
+    /// off it precisely for the questions `claims` declines).
+    ///
+    /// One `AuthorityClaim` per declared corpus; `matched` describes the
+    /// declaration, not a question match. Same purity contract as
+    /// `claims`. Default: none — tools that are not authoritative stores
+    /// keep the default, which is what makes corpora with no declaration
+    /// structurally invisible to the exit guard.
+    fn authority_domains(&self) -> Vec<crate::types::AuthorityClaim> {
+        Vec::new()
+    }
 }
 
 // ─── 5. Storage (sub-traits) ──────────────────────────────────

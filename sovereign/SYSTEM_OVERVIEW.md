@@ -527,6 +527,32 @@ the concept map), and the router's authority pre-check
 question to ComplexTask before any similarity classification — see
 FINANCIAL_CORPORA.md §7.3.
 
+The audit no longer depends on that routing (order
+authority-guard-at-exit, 2026-08-17): `runtime/authority_guard.rs`
+binds it to the ANSWER EXIT on every dispatch surface. Arming is
+corpus-granular off the same declaration index (`Tool::authority_domains`
+→ `ToolRegistry::authority_domains`, the question-independent read of
+`claims()`'s cache — necessary because `store_claims` deliberately
+declines explanation-shaped questions to keep them on the prose path):
+a turn whose retrieved-evidence pool (`epistemic::pool_corpora`)
+intersects a declared authority domain is audited at bare scope at its
+exit seam, with an allowed basis of tool-emitted figures ∪ numerals in
+quote-verification-VERIFIED verbatim spans
+(`VerificationResult::verified_spans`) ∪ the user's own question
+numerals. Armed streaming turns force hold-mode (`hold` /
+`deep_hold`) so no token is released before the audit, and skip the
+post-stream refinement rewrite; armed turns cannot take the team
+pipeline (`scope_is_armed` gates both branch sites). On violation the
+prose is withheld §6.2(4)-style, naming every numeral, quoting the
+verified spans, and naming the authoritative tool. Corpora declaring
+nothing are structurally untouched (empty intersection, no metadata,
+byte-identical delivery). Coverage is code: `guard_story` in
+`authority_guard.rs` is an exhaustive per-`Intent` table (Covered /
+No-op-by-construction / Excluded-by-decision), pinned by test, with
+the non-intent-keyed streaming exits dispositioned in its doc table;
+ComplexTask DELEGATES to the richer in-handler §6.2(4) audit above,
+unchanged. Glassbox target: `authority_guard`.
+
 Which corpora the tool is authoritative FOR has exactly one
 implementation: `discover_authoritative_stores` /
 `authoritative_store` in `enrichment/atlas/analysis/sec_facts.rs`, keyed
