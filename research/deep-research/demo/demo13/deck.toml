@@ -1,0 +1,83 @@
+# T6a phase 1b ceiling deck — built by build-ceiling-deck.py
+version = 1
+
+[[hit]]
+url = "https://ceiling.drb/task-56"
+title = "drb-56 reference content"
+snippet = "Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private val"
+match = ["general", "method", "solving", "first-price", "sealed-bid", "auction", "bidders", "have", "independent", "private", "values", "drawn", "different", "distributions", "ex-ante", "asymmetric"]
+body = "task-56.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-58"
+title = "drb-58 reference content"
+snippet = "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)
+You could examine instances of"
+match = ["Exploring", "Horizontal", "Gene", "Transfer", "Plants", "animals", "Non-Microbial", "Systems", "could", "examine", "instances", "horizontal", "gene", "transfer", "eukaryotes", "particularly", "plants", "evaluate", "evolutionary", "significance"]
+body = "task-58.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-59"
+title = "drb-59 reference content"
+snippet = "In ecology, how do birds achieve precise location and direction navigation during migration? What cues and disturbances "
+match = ["ecology", "birds", "achieve", "precise", "location", "direction", "navigation", "migration", "cues", "disturbances", "influence", "process"]
+body = "task-59.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-62"
+title = "drb-62 reference content"
+snippet = "What are the most effective approaches to scaling ion trap quantum computing from small-scale demonstration projects to "
+match = ["effective", "approaches", "scaling", "trap", "quantum", "computing", "small-scale", "demonstration", "projects", "large-scale", "systems", "capable", "solving", "real-world", "problems", "research", "should", "investigate", "various", "proposed"]
+body = "task-62.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-65"
+title = "drb-65 reference content"
+snippet = "As an agricultural engineering researcher focusing on 3D reconstruction and phenotypic analysis of crop grains, please d"
+match = ["agricultural", "engineering", "researcher", "focusing", "reconstruction", "phenotypic", "analysis", "crop", "grains", "please", "develop", "design", "report", "utilizing", "modern", "control", "theory", "alongside", "relevant", "theoretical"]
+body = "task-65.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-69"
+title = "drb-69 reference content"
+snippet = "Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol"
+match = ["Please", "provide", "detailed", "explanation", "differences", "connections", "Google", "recently", "released", "protocol", "Furthermore", "elaborate", "innovative", "aspects", "specific", "problems", "designed", "address"]
+body = "task-69.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-78"
+title = "drb-78 reference content"
+snippet = "Parkinson's disease has a profound impact on patients. What are the potential health warning signs associated with diffe"
+match = ["Parkinson", "disease", "profound", "impact", "patients", "potential", "health", "warning", "signs", "associated", "different", "stages", "family", "members", "specific", "should", "alert", "intervene", "seek", "medical"]
+body = "task-78.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-83"
+title = "drb-83 reference content"
+snippet = "Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS"
+match = ["Acting", "senior", "hardware", "product", "manager", "conduct", "in-depth", "research", "tablet-style", "devices", "used", "payments", "SaaS", "applications", "Your", "report", "should", "List", "major", "manufacturers"]
+body = "task-83.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-90"
+title = "drb-90 reference content"
+snippet = "Analyze the complex issue of liability allocation in accidents involving vehicles with advanced driver-assistance system"
+match = ["Analyze", "complex", "issue", "liability", "allocation", "accidents", "involving", "vehicles", "advanced", "driver-assistance", "systems", "ADAS", "operating", "shared", "human-machine", "driving", "context", "Your", "analysis", "should"]
+body = "task-90.md"
+custody = "personal"
+
+[[hit]]
+url = "https://ceiling.drb/task-95"
+title = "drb-95 reference content"
+snippet = "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedikā Prajñāpāramitā Sūtra). These notes shoul"
+match = ["Create", "comprehensive", "in-depth", "study", "notes", "Diamond", "Sutra", "Vajracchedik", "Praj", "ramit", "should", "offer", "deep", "analysis", "interpretation", "various", "perspectives", "exploring", "teachings", "relevance"]
+body = "task-95.md"
+custody = "personal"

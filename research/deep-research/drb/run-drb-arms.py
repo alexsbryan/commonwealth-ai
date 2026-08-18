@@ -11,6 +11,14 @@ subset, per the pre-registered arm protocols:
           (order deep-research-t6a phase 1, pre-registered:
           research-grade depth on the same frozen subset; tavily keyed —
           the 10-task arm consumes the 100-call daily allowance exactly)
+  ceiling: --backend mock --mock-deck ../demo/demo13 (the deck built by
+          demo13/build-ceiling-deck.py — each hit's body IS perplexity's
+          official article; the perfect-acquisition probe, phase 1b)
+  corpus-scale: --backend auto --search-source corpus --corpora wikipedia
+          --search 40 --fetch 60 --max-rounds 6
+          (order deep-research-t6a phase 1c, pre-registered: the
+          estate-as-brain probe — corpus breadth at zero API cost;
+          thresholds untouched, named)
 
 Arms run strictly sequentially (local first, then hybrid). One flight's
 failure does not stop the driver; the exit code is non-zero if any flight
@@ -34,19 +42,32 @@ from pathlib import Path
 HERE = Path(__file__).parent
 
 ARM_FLAGS = {
-    "local": ["--search-source", "corpus", "--corpora", "wikipedia",
-              "--search", "12", "--fetch", "12", "--max-rounds", "3"],
-    "hybrid": ["--search-source", "web", "--consent", "personal",
-               "--search", "4", "--fetch", "4", "--max-rounds", "3"],
-    "deep": ["--search-source", "web", "--consent", "personal",
-             "--search", "10", "--fetch", "12", "--max-rounds", "6"],
+    "local": ["--backend", "auto", "--search-source", "corpus",
+              "--corpora", "wikipedia", "--search", "12", "--fetch", "12",
+              "--max-rounds", "3"],
+    "hybrid": ["--backend", "auto", "--search-source", "web",
+               "--consent", "personal", "--search", "4", "--fetch", "4",
+               "--max-rounds", "3"],
+    "deep": ["--backend", "auto", "--search-source", "web",
+             "--consent", "personal", "--search", "10", "--fetch", "12",
+             "--max-rounds", "6"],
+    "ceiling": ["--backend", "mock",
+                "--mock-deck", str((HERE / ".." / "demo" / "demo13").resolve()),
+                "--search-source", "web", "--consent", "personal",
+                "--search", "10", "--fetch", "12", "--max-rounds", "6"],
+    "corpus-scale": ["--backend", "auto", "--search-source", "corpus",
+                     "--corpora", "wikipedia", "--search", "40",
+                     "--fetch", "60", "--max-rounds", "6"],
 }
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--bin", default="sovereign")
-    ap.add_argument("--arm", choices=["local", "hybrid", "deep"], default=None,
+    ap.add_argument("--arm",
+                    choices=["local", "hybrid", "deep", "ceiling",
+                             "corpus-scale"],
+                    default=None,
                     help="fly only one arm (default: both, local first)")
     ap.add_argument("--run-root", default=str(HERE / "runs"),
                     help="run root (t4a: demo/demo12/runs — the frozen drb/runs is never touched)")
@@ -82,8 +103,7 @@ def main():
                         continue
                 except Exception:
                     pass
-            cmd = [args.bin, "deep-research", r["prompt"],
-                   "--backend", "auto", *flags,
+            cmd = [args.bin, "deep-research", r["prompt"], *flags,
                    "--run-dir", str(run_dir)]
             t0 = time.time()
             print(f"[{arm}] task {tid} start  (cmd: {cmd[:4]} ...)", flush=True)

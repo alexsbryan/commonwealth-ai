@@ -3413,3 +3413,57 @@ deep-arm flights have been made (demo13 does not exist yet).
 ### Execution record
 
 (appended at landing)
+
+## T6a phase 1b — the ceiling arm (the perfect-acquisition probe) — DECLARATION
+
+Operator question 2026-08-18: "can the rest of the system take a perfect
+article acquisition and turn it into an equivalent or better score?" This
+arm answers it with zero loop code, via the existing mock backend.
+
+1. **Deck**: `demo13/deck.toml` (built by `demo13/build-ceiling-deck.py`
+   from the pinned A/B input `perplexity-subset-articles.jsonl`, sha256
+   b1ce5783… — re-verified at build, refusal on drift). 10 hits, one per
+   subset task; each hit's body IS perplexity's official article for that
+   task, custody personal, served by the mock's term-index search (the
+   body is the match surface). **Named caveat**: the deck feeds the ANSWER,
+   not the sources — an upper-bound acquisition, not a realistic one.
+2. **Flight**: `--backend mock`, drafts delegated to the real 27B; same
+   budgets as the deep arm (10 searches/12 fetches/6 rounds) — the ONLY
+   variable vs the deep arm is the acquisition source. Runs land in
+   `demo/demo13/runs/ceiling/`.
+3. Everything else inherited verbatim: judge pin + guard, shipped
+   criteria, shipped references, the derivation formula, the caveats
+   (T5a items 1-6).
+4. **The read** (pre-registered): ceiling ≈45 → the downstream stack
+   (draft/verifier/render) is capable and acquisition owns the gap;
+   ceiling ≈10 → the downstream stack is the ceiling and t6a phase 2
+   becomes the whole game. Either way the answer is the evidence.
+
+### Execution record
+
+(appended at landing)
+
+## T6a phase 1c — the corpus-scale arm (the estate-as-brain probe) — DECLARATION
+
+Operator direction 2026-08-18: "leverage the corpus mechanism as the brain…
+pull in MORE sources than a cloud single-shot model relying only on
+context." This arm probes the acquisition-VOLUME lever where it is free
+for us and expensive for context-bound cloud models.
+
+1. **Flags**: `--search-source corpus --corpora wikipedia --search 40
+   --fetch 60 --max-rounds 6`. Corpus searches are local and free (no
+   API budget); every fetched page lands in the flight's estate
+   (`dr-estate-dr-*`) at zero marginal token cost — the estate, not the
+   context window, holds the evidence (the operator's pattern).
+2. **Thresholds UNTOUCHED, named**: code-set K=3, eps-quota 0.1, and the
+   evidence window 20 chunks are hardcoded defaults. Retuning any of
+   them is an instrument change and moves to phase 2 (red-first +
+   battery per §18.6). Phase 1c therefore measures the volume lever
+   UNDER the current thresholds — the residual above it is the phase-2
+   estate-assembly item, measured, never assumed.
+3. Runs land in `demo/demo13/runs/corpus-scale/`. Everything else
+   inherited verbatim (judge, recipe, caveats).
+
+### Execution record
+
+(appended at landing)
