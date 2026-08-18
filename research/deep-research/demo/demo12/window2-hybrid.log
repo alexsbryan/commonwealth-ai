@@ -1,0 +1,26 @@
+Running as unit: t5a-hybrid-race.service; invocation ID: edbd0053f49e4d3d9ebc6cd42b940f16
+Aug 17 23:02:18 fedora systemd[4377]: Started t5a-hybrid-race.service - [systemd-run] /usr/bin/python3 score_race.py --arm hybrid --out flights.
+Aug 17 23:09:55 fedora python3[86989]: WARNING:root:ID: 58 - 1 criteria without exact matches: {'insight:Insightful Articulation of Eukaryotic Specificities and Challenges'}
+Aug 17 23:22:28 fedora python3[86989]: WARNING:root:ID: 65 - 1 criteria without exact matches: {'instruction_following:Strict Adherence to Research Domain: 3D Reconstruction and PhenotypicAnalysis of Crop Grains'}
+Aug 17 23:26:14 fedora python3[86989]: WARNING:root:ID: 69 - 1 criteria without exact matches: {'instruction_following:Provision and Detail of Explanation on Connections Between A2A and MCP'}
+Aug 17 23:42:03 fedora python3[86989]: judge guard: Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003 loaded
+Aug 17 23:42:03 fedora python3[86989]: output root: flights/race-20260817T230218
+Aug 17 23:42:03 fedora python3[86989]: == arm hybrid (fresh judge calls) ==
+Aug 17 23:42:03 fedora python3[86989]:   id 56: overall=0.0000 (3.6 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 58: overall=0.1000 (4.0 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 59: overall=0.0418 (3.9 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 62: overall=0.1724 (4.6 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 65: overall=0.0088 (4.1 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 69: overall=0.1901 (3.8 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 78: overall=0.1904 (3.5 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 83: overall=0.0154 (4.2 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 90: overall=0.0306 (4.1 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   id 95: overall=0.1159 (4.0 min, 4 dims parsed)
+Aug 17 23:42:03 fedora python3[86989]:   -> flights/race-20260817T230218/hybrid/race_result.txt
+Aug 17 23:42:03 fedora python3[86989]:      Comprehensiveness: 9.6793
+Aug 17 23:42:03 fedora python3[86989]:      Insight: 6.2156
+Aug 17 23:42:03 fedora python3[86989]:      Instruction Following: 10.5256
+Aug 17 23:42:03 fedora python3[86989]:      Readability: 10.0968
+Aug 17 23:42:03 fedora python3[86989]:      Overall Score: 8.6538
+Aug 17 23:42:03 fedora python3[86989]:   10/10 tasks scored
+Aug 17 23:42:03 fedora python3[86989]: manifest: flights/race-20260817T230218/manifest.json

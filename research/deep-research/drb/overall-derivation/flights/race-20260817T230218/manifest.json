@@ -1,0 +1,35 @@
+{
+  "order": "deep-research-t5a",
+  "created_at": "20260817T230218",
+  "resumed_from": null,
+  "retry": null,
+  "judge": {
+    "pin": "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003",
+    "caveat": "different model from the official judges (gemini-2.5-pro / GPT-5.5 era)"
+  },
+  "arms": {
+    "hybrid": {
+      "tasks": 10,
+      "scored": 10,
+      "source": "fresh"
+    }
+  },
+  "cleaning": "article_1 uncleaned in both arms (named caveat \u2014 the report IS the deliverable; the official cleaned targets are not shipped)",
+  "inputs": {
+    "clone_pin": "469cce54ea7f6a63c163d3d9fec879cf289ec484",
+    "subset_articles_sha": "b1ce57831916bd0e487b8816d3ef6b3fe3c3cb1ce73e26cdce4d6e9da4f3b0e7"
+  },
+  "landed_arm": "hybrid",
+  "landed_dirs": {
+    "56": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-56/dr-1787017121",
+    "58": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-58/dr-1787017142",
+    "59": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-59/dr-1787017284",
+    "62": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-62/dr-1787017455",
+    "65": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-65/dr-1787017676",
+    "69": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-69/dr-1787017819",
+    "78": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-78/dr-1787018060",
+    "83": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-83/dr-1787018313",
+    "90": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-90/dr-1787018423",
+    "95": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/demo/demo12/runs/hybrid/drb-95/dr-1787018682"
+  }
+}

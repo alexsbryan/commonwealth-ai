@@ -3337,4 +3337,41 @@ any retry would be declared here first).
 
 ### Execution record
 
-(appended at landing)
+**Flight `flights/race-20260817T230218` — 10/10 scored, zero errors.** Seat-executed
+window (claim dfa767f6, config swap + daemon restart, the proven sequence;
+backup `config.toml.bak-pre-window2-20260818`; primary restored to the 27B
+after). Judge guard passed at flight start: the pin
+`Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003` loaded=true; every sidecar row
+carries `judge_model` = the pin. Calls ran 2026-08-18 06:02-06:42Z
+(23:02-23:42 PDT), elapsed 213.0-273.8s per call, mean 244.3s; launched as
+the detached `systemd-run --user` transient unit `t5a-hybrid-race.service`
+(the harness-reaper directive; log `demo12/window2-hybrid.log`).
+`verify_derivation.py` exit 0 (28/28) re-run 2026-08-18 05:47Z before this
+flight.
+
+Per-task (percent ×100): `56: 0.00 | 58: 10.00 | 59: 4.18 | 62: 17.24 |
+65: 0.88 | 69: 19.01 | 78: 19.04 | 83: 1.54 | 90: 3.06 | 95: 11.59`
+
+Derived (means ×100): Comprehensiveness **9.6793** | Insight **6.2156** |
+Instruction Following **10.5256** | Readability **10.0968** |
+**Overall 8.6538**.
+
+Comparison (each labeled):
+
+| measure | overall | judge |
+|---|---|---|
+| local arm (corpus-only 12+12) | 8.0848 | our 122B |
+| **hybrid arm (web 4+4)** | **8.6538** | our 122B |
+| ab arm (perplexity's articles) | 45.1454 | our 122B |
+| official gemini-era (10 tasks) | 42.1779 | gemini-2.5-pro |
+| official GPT-5.5-era (10 tasks) | 44.9683 | GPT-5.5 |
+
+**The read.** The acquisition-backend lever AS CONFIGURED buys +0.569
+(8.0848 → 8.6538, +7.0%) — the web leg at a 4-search/4-fetch budget does not
+move the needle; both arms sit at ~1/5 of the same-judge reference. Per-task
+evidence confirms the mechanism: id 69 (A2A/MCP) 0.0316 → 0.1901 (the web
+leg found protocol content the corpus lacked) while id 56 0.0618 → 0.0000
+(the hybrid report for 56 is a 434-byte refusal) and id 65 stays ~0 in both
+arms. The 5.6× gap is NOT the search backend — it is budget depth, round
+count, draft yield against the verifier, and report shape. That is the t6a
+evidence base.
