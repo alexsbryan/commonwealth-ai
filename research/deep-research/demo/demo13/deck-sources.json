@@ -1,0 +1,72 @@
+[
+  {
+    "id": 56,
+    "url": "https://en.wikipedia.org/wiki/Auction#Other_features",
+    "body": "task-56-w.md",
+    "sha256": "1f61110ce9da2f0fc7c428c3c200b3c7dcee69b69351b5e0a32d2731c3a43f81",
+    "chars": 101406
+  },
+  {
+    "id": 58,
+    "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Abstract",
+    "body": "task-58-w.md",
+    "sha256": "9cc6786ef53523507192e72cb3208c397b5962fa6db283c31459e70b018b6698",
+    "chars": 105807
+  },
+  {
+    "id": 59,
+    "url": "https://en.wikipedia.org/wiki/Bird_migration",
+    "body": "task-59-w.md",
+    "sha256": "fcb8af1892e5f83d8f8b1d7e473e7107ce487bc56c5f8a795f2aad4d9a420c52",
+    "chars": 90362
+  },
+  {
+    "id": 62,
+    "url": "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations",
+    "body": "task-62-w.md",
+    "sha256": "cf7f81c2c1cbabe5e41913ef1e82dc28026d6087f3094ac867b47b145f11b8cc",
+    "chars": 117298
+  },
+  {
+    "id": 65,
+    "url": "https://en.wikipedia.org/wiki/Control_engineering#Control_theory",
+    "body": "task-65-w.md",
+    "sha256": "0000f539114fa600dae1698f6faaf33678be7ef2bc205d701f9031079cbf9aeb",
+    "chars": 31426
+  },
+  {
+    "id": 69,
+    "url": "https://en.wikipedia.org/wiki/Communication_protocol#Ossification",
+    "body": "task-69-w.md",
+    "sha256": "c60eebe505db90c82f8cbaf04bdda789fc8338f19820e94c449afdbc5197be65",
+    "chars": 69347
+  },
+  {
+    "id": 78,
+    "url": "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms",
+    "body": "task-78-w.md",
+    "sha256": "6e1164c06492b2f7b8d32a032cfbdfdcd0fd1eeb9528e613928719a2c6cd081d",
+    "chars": 126647
+  },
+  {
+    "id": 83,
+    "url": "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets",
+    "body": "task-83-w.md",
+    "sha256": "d557e1d24f273b4e6f7794751d08c6aefa6c995718c54cdb17089ae444c3705e",
+    "chars": 105042
+  },
+  {
+    "id": 90,
+    "url": "https://en.wikipedia.org/wiki/Self-driving_car#Commercialization",
+    "body": "task-90-w.md",
+    "sha256": "bb42222d21b5f76843faa469fad9bfb842f0a418fd309267d8228714e1b60bfd",
+    "chars": 132670
+  },
+  {
+    "id": 95,
+    "url": "https://en.wikipedia.org/wiki/Diamond_Sutra#History",
+    "body": "task-95-w.md",
+    "sha256": "b2f9559a74410663715f59df2725fe8d11bc5aa879877107f18827f0328ea84d",
+    "chars": 40126
+  }
+]

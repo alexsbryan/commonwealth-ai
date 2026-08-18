@@ -3467,3 +3467,50 @@ for us and expensive for context-bound cloud models.
 ### Execution record
 
 (appended at landing)
+
+## T6a-t6b pilot — the smallest learning loop (operator steer 2026-08-18) — DECLARATION
+
+The ceiling arm's 5 landed reports (56/58/59/62/65 — truncated, named) with
+PERFECT acquisition in hand show the universal profile: ZERO [passed]
+findings; task 56's 23 claims split as 12 single-origin (corroboration
+floor), 6 no-citation-handle (the splitter drops paragraph-terminal tags
+from the paragraph's earlier sentences), 5 extracted-specifics-absent
+(honest refusals — as designed). The operator's steer: smallest necessary
+learning loops. This pilot attacks the two mechanisms directly and
+re-measures on TWO tasks (56 + 65), not ten.
+
+1. **Splitter span propagation (instrument change, code)** —
+   `split_claims` (audit.rs:77): a sentence pushed without its own span
+   inherits the paragraph's last-seen `[Source: X]` span; reset at blank
+   lines (paragraph boundaries), update on each new span. Honesty
+   argument: the model attests the paragraph rests on the chunk; the
+   witness STILL verifies each claim's figures against the referenced
+   chunk (containment per claim — an inherited span routes the claim
+   INTO verification, never around it); unsupported figures → extracted
+   specifics absent, unchanged. No floor weakening, no verdict
+   conversion. Red-first: the frozen ceiling task-56 draft shape (a
+   paragraph whose terminal span left earlier sentences untagged — the
+   6 ref-required refusals). The existing
+   `sentence_splitter_attaches_spans` test's third assertion encodes the
+   old (defective) behavior and updates to the propagated span — the
+   change is named, the test follows the semantics. Battery on the
+   frozen banks required after the change (instrument discipline,
+   §18.6) — the constitution (zero untraced figures in [passed]
+   position) is never the thing that gives.
+2. **Two-source ceiling deck (deck variant, NO instrument change)** —
+   each task gains hit B: one Wikipedia page per task (URLs taken from
+   the landed demo12/demo13 run manifests' fetched sources; the builder
+   fetches once at build time, bodies pinned into the repo, url+sha
+   recorded). Hit A (the pinned perplexity article, sha b1ce5783)
+   unchanged. The corroboration floor then has two origins to find
+   support in — the 12 single-origin refusals can clear WITHOUT touching
+   the floor (the floor itself is untouched — it stays calibrated).
+3. **Re-measure gate**: re-run ceiling tasks 56 + 65 with the fixed
+   binary + deck v2. Gate: [passed] findings > 0 in BOTH, and the flag
+   distribution moves (no-handle → 0; single-origin → passed where the
+   second origin supports). 2 tasks, not 10 — the smallest measurement
+   that discriminates. The judge window stays deferred.
+
+### Execution record
+
+(appended at landing)

@@ -74,9 +74,48 @@ impl ClaimAudit {
 /// Deterministic claim splitter: sentence boundaries, with trailing
 /// `[Source: …]` spans attached to their sentence. Used by R3 (round
 /// drafts) and R9 (final draft) — one splitter.
+/// The span the model placed at the END of a sentence, before its final
+/// period ("…strategies [Source: ev-1].") — the model's real shape. The
+/// attach branch handles spans AFTER the punctuation; this captures the
+/// before-the-period shape and names it the paragraph's span. Mid-sentence
+/// spans (followed by more prose) are claim-local, never paragraph spans.
+fn trailing_span(text: &str) -> Option<String> {
+    let start = text.rfind("[Source:")?;
+    let after = &text[start..];
+    let close = after.find(']')?;
+    let tail = after[close + 1..].trim();
+    if tail.is_empty() || tail.chars().all(|c| matches!(c, '.' | '!' | '?')) {
+        Some(after[..=close].to_string())
+    } else {
+        None
+    }
+}
+
+/// t6b (red-first, pre-registered): flush a paragraph's buffered claims —
+/// each untagged claim inherits the paragraph's span. The model writes ONE
+/// span per paragraph (typically at its end); the witness still verifies
+/// each claim's figures against the referenced chunk, so an inherited span
+/// routes the claim INTO verification, never around it.
+fn flush_paragraph(paragraph: &mut Vec<String>, span: &Option<String>, claims: &mut Vec<String>) {
+    for mut c in paragraph.drain(..) {
+        if !c.contains("[Source:") {
+            if let Some(sp) = span {
+                c.push_str(&format!(" {sp}"));
+            }
+        }
+        claims.push(c);
+    }
+}
+
 pub fn split_claims(draft: &str) -> Vec<String> {
     let mut claims = Vec::new();
     let mut current = String::new();
+    // The model's span sits at the paragraph's END — the paragraph's
+    // claims are buffered and flushed at the paragraph boundary, so the
+    // earlier sentences inherit it (a live last-seen span cannot reach
+    // back to sentences already pushed).
+    let mut paragraph: Vec<String> = Vec::new();
+    let mut paragraph_span: Option<String> = None;
     // Iterate char-wise, splitting on sentence-final punctuation
     // (., !, ?) followed by whitespace or end.
     let chars: Vec<char> = draft.chars().collect();
@@ -84,6 +123,12 @@ pub fn split_claims(draft: &str) -> Vec<String> {
     while i < chars.len() {
         let c = chars[i];
         current.push(c);
+        // Blank line = paragraph boundary: flush with the paragraph's
+        // span, then reset it.
+        if c == '\n' && chars.get(i + 1) == Some(&'\n') {
+            flush_paragraph(&mut paragraph, &paragraph_span, &mut claims);
+            paragraph_span = None;
+        }
         let is_sentence_end = matches!(c, '.' | '!' | '?');
         if is_sentence_end {
             // Sentence-final punctuation is followed by whitespace or
@@ -112,6 +157,8 @@ pub fn split_claims(draft: &str) -> Vec<String> {
                 // and the sentence ends at the punctuation.
                 if let Some(close) = chars[k..].iter().position(|&c| c == ']') {
                     let end = k + close;
+                    let span: String = chars[k..=end].iter().collect();
+                    paragraph_span = Some(span.clone());
                     current.extend(chars[k..=end].iter());
                     i = end + 1;
                     attached = true;
@@ -128,19 +175,26 @@ pub fn split_claims(draft: &str) -> Vec<String> {
             if !attached {
                 i = j.max(i + 1);
             }
-            let trimmed = current.trim();
+            let trimmed = current.trim().to_string();
             if !trimmed.is_empty() {
-                claims.push(trimmed.to_string());
+                if let Some(sp) = trailing_span(&trimmed) {
+                    paragraph_span = Some(sp);
+                }
+                paragraph.push(trimmed);
             }
             current.clear();
         } else {
             i += 1;
         }
     }
-    let tail = current.trim();
+    let tail = current.trim().to_string();
     if !tail.is_empty() {
-        claims.push(tail.to_string());
+        if let Some(sp) = trailing_span(&tail) {
+            paragraph_span = Some(sp);
+        }
+        paragraph.push(tail);
     }
+    flush_paragraph(&mut paragraph, &paragraph_span, &mut claims);
     claims
 }
 
@@ -496,7 +550,53 @@ mod tests {
         assert!(claims[0].contains("[Source: https://example.com/a]"));
         assert!(!claims[1].contains("1873"));
         assert!(claims[1].contains("[Source: https://example.com/b]"));
-        assert_eq!(claims[2], "A final sentence with no citation.");
+        // The final sentence inherits the paragraph's last-seen span
+        // (the t6b propagation — the old exact-equality here encoded the
+        // dropped-tag defect the ceiling fixture measured).
+        assert!(claims[2].contains("[Source: https://example.com/b]"));
+    }
+
+    /// RED-first (order deep-research-t6b, pre-registered): the frozen
+    /// ceiling task-56 draft shape — the model writes ONE terminal span
+    /// per paragraph, and the splitter's attach-to-preceding-sentence
+    /// rule leaves the paragraph's earlier sentences untagged, which the
+    /// ref-required stage refuses ("no citation handle" — 6/23 claims on
+    /// the perfect-acquisition fixture). The propagation: an untagged
+    /// sentence inherits the paragraph's last-seen span — the witness
+    /// still verifies each claim against the referenced chunk, so the
+    /// inherited span routes the claim INTO verification, never around
+    /// it.
+    #[test]
+    fn paragraph_span_propagates_to_untagged_sibling_sentences() {
+        let draft = "Yes, there is a general method for solving first-price sealed-bid auctions with two ex-ante asymmetric bidders, but it generally requires numerical approaches rather than closed-form analytical solutions. Consequently, sophisticated numerical methods are necessary to determine the equilibrium strategies [Source: ev-1].";
+        let claims = split_claims(draft);
+        assert_eq!(claims.len(), 2, "two sentences: {:?}", claims);
+        assert!(
+            claims[0].contains("[Source: ev-1]"),
+            "the untagged first sentence must inherit the paragraph's span: {:?}",
+            claims[0]
+        );
+        assert!(claims[1].contains("[Source: ev-1]"));
+    }
+
+    /// The span is paragraph-scoped: a blank line resets it, so a later
+    /// paragraph never inherits the previous paragraph's chunk.
+    #[test]
+    fn span_does_not_cross_paragraph_boundaries() {
+        let draft = "A claim resting on chunk one [Source: ev-1].\n\nA new paragraph with its own evidence [Source: ev-2]. A sibling sentence.";
+        let claims = split_claims(draft);
+        assert_eq!(claims.len(), 3, "{:?}", claims);
+        assert!(claims[0].contains("[Source: ev-1]"));
+        assert!(claims[1].contains("[Source: ev-2]"));
+        assert!(
+            claims[2].contains("[Source: ev-2]"),
+            "the sibling inherits its OWN paragraph's span: {:?}",
+            claims[2]
+        );
+        assert!(
+            !claims[2].contains("ev-1"),
+            "never the previous paragraph's span"
+        );
     }
 
     #[test]
@@ -1082,10 +1182,7 @@ mod tests {
             audit.action
         );
         assert!(
-            audit
-                .reason
-                .as_deref()
-                .is_some_and(|r| r.contains("ev-99")),
+            audit.reason.as_deref().is_some_and(|r| r.contains("ev-99")),
             "the reason must name the unresolvable handle, got {:?}",
             audit.reason
         );

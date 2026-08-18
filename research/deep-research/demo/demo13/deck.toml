@@ -1,4 +1,4 @@
-# T6a phase 1b ceiling deck — built by build-ceiling-deck.py
+# T6a phase 1b + t6b pilot ceiling deck (v2) — built by build-ceiling-deck.py
 version = 1
 
 [[hit]]
@@ -10,12 +10,28 @@ body = "task-56.md"
 custody = "personal"
 
 [[hit]]
+url = "https://en.wikipedia.org/wiki/Auction#Other_features"
+title = "wikipedia: drb-56"
+snippet = "second origin for task 56"
+match = []
+body = "task-56-w.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-58"
 title = "drb-58 reference content"
 snippet = "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)\nYou could examine instances of"
 match = ["Exploring", "Horizontal", "Gene", "Transfer", "Plants", "animals", "Non-Microbial", "Systems", "could", "examine", "instances", "horizontal", "gene", "transfer", "eukaryotes", "particularly", "plants", "evaluate", "evolutionary", "significance"]
 body = "task-58.md"
 custody = "personal"
+
+[[hit]]
+url = "https://en.wikipedia.org/wiki/Horizontal_gene_transfer#Abstract"
+title = "wikipedia: drb-58"
+snippet = "second origin for task 58"
+match = []
+body = "task-58-w.md"
+custody = "public-web"
 
 [[hit]]
 url = "https://ceiling.drb/task-59"
@@ -26,12 +42,28 @@ body = "task-59.md"
 custody = "personal"
 
 [[hit]]
+url = "https://en.wikipedia.org/wiki/Bird_migration"
+title = "wikipedia: drb-59"
+snippet = "second origin for task 59"
+match = []
+body = "task-59-w.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-62"
 title = "drb-62 reference content"
 snippet = "What are the most effective approaches to scaling ion trap quantum computing from small-scale demonstration projects to "
 match = ["effective", "approaches", "scaling", "trap", "quantum", "computing", "small-scale", "demonstration", "projects", "large-scale", "systems", "capable", "solving", "real-world", "problems", "research", "should", "investigate", "various", "proposed"]
 body = "task-62.md"
 custody = "personal"
+
+[[hit]]
+url = "https://en.wikipedia.org/wiki/Quantum_computing#Physical_realizations"
+title = "wikipedia: drb-62"
+snippet = "second origin for task 62"
+match = []
+body = "task-62-w.md"
+custody = "public-web"
 
 [[hit]]
 url = "https://ceiling.drb/task-65"
@@ -42,12 +74,28 @@ body = "task-65.md"
 custody = "personal"
 
 [[hit]]
+url = "https://en.wikipedia.org/wiki/Control_engineering#Control_theory"
+title = "wikipedia: drb-65"
+snippet = "second origin for task 65"
+match = []
+body = "task-65-w.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-69"
 title = "drb-69 reference content"
 snippet = "Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol"
 match = ["Please", "provide", "detailed", "explanation", "differences", "connections", "Google", "recently", "released", "protocol", "Furthermore", "elaborate", "innovative", "aspects", "specific", "problems", "designed", "address"]
 body = "task-69.md"
 custody = "personal"
+
+[[hit]]
+url = "https://en.wikipedia.org/wiki/Communication_protocol#Ossification"
+title = "wikipedia: drb-69"
+snippet = "second origin for task 69"
+match = []
+body = "task-69-w.md"
+custody = "public-web"
 
 [[hit]]
 url = "https://ceiling.drb/task-78"
@@ -58,12 +106,28 @@ body = "task-78.md"
 custody = "personal"
 
 [[hit]]
+url = "https://en.wikipedia.org/wiki/Parkinson%27s_disease#Signs_and_symptoms"
+title = "wikipedia: drb-78"
+snippet = "second origin for task 78"
+match = []
+body = "task-78-w.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-83"
 title = "drb-83 reference content"
 snippet = "Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS"
 match = ["Acting", "senior", "hardware", "product", "manager", "conduct", "in-depth", "research", "tablet-style", "devices", "used", "payments", "SaaS", "applications", "Your", "report", "should", "List", "major", "manufacturers"]
 body = "task-83.md"
 custody = "personal"
+
+[[hit]]
+url = "https://en.wikipedia.org/wiki/Tablet_computer#Modern_tablets"
+title = "wikipedia: drb-83"
+snippet = "second origin for task 83"
+match = []
+body = "task-83-w.md"
+custody = "public-web"
 
 [[hit]]
 url = "https://ceiling.drb/task-90"
@@ -74,9 +138,25 @@ body = "task-90.md"
 custody = "personal"
 
 [[hit]]
+url = "https://en.wikipedia.org/wiki/Self-driving_car#Commercialization"
+title = "wikipedia: drb-90"
+snippet = "second origin for task 90"
+match = []
+body = "task-90-w.md"
+custody = "public-web"
+
+[[hit]]
 url = "https://ceiling.drb/task-95"
 title = "drb-95 reference content"
 snippet = "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedik\u0101 Praj\u00f1\u0101p\u0101ramit\u0101 S\u016btra). These notes shoul"
 match = ["Create", "comprehensive", "in-depth", "study", "notes", "Diamond", "Sutra", "Vajracchedik", "Praj", "ramit", "should", "offer", "deep", "analysis", "interpretation", "various", "perspectives", "exploring", "teachings", "relevance"]
 body = "task-95.md"
 custody = "personal"
+
+[[hit]]
+url = "https://en.wikipedia.org/wiki/Diamond_Sutra#History"
+title = "wikipedia: drb-95"
+snippet = "second origin for task 95"
+match = []
+body = "task-95-w.md"
+custody = "public-web"
