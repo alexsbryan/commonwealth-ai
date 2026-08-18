@@ -340,7 +340,64 @@ impl SecRefusal {
 ///    declared `ask_terms` (the concept-map author's own synonyms —
 ///    an alias, not a near neighbour). One hit resolves (logged);
 ///    several hits refuse naming the candidates.
+///
+/// EVERY call emits exactly one `f5_demand` event — see [`F5_DEMAND_ANCHOR`].
 pub fn resolve_concept(store: &SecFactStore, requested: &str) -> Result<String, SecRefusal> {
+    let outcome = resolve_concept_inner(store, requested);
+    // ── F5 demand-side telemetry, the whole of it ────────────────────
+    // F5's second clause asks how many of the concepts people ACTUALLY
+    // ASK FOR miss for a reason we could fix. This is the one place that
+    // knows a concept was asked for at all, so the event is emitted HERE
+    // and nowhere else: one per ask, covering both the numerator (the
+    // misses) and the denominator (the asks). Emitting it in the arms
+    // instead would make "how many asks were there" unanswerable, and
+    // would put the telemetry one forgotten `return` away from a hole.
+    //
+    // There is deliberately NO STORE, no counter and no cadence.
+    // Operator constraint, standing: telemetry must offer "as much
+    // signal with as little burden as possible otherwise it will just
+    // be another speedbump we route around". A debug event on a path
+    // that already runs costs nothing to keep current and nothing to
+    // remember to run; `scripts/sec-miss-demand.py` reads it back out of
+    // logs a run already produced.
+    let (label, resolved) = match &outcome {
+        Ok(id) => ("resolved", Some(id.as_str())),
+        Err(SecRefusal::UnmappedConcept { .. }) => ("unmapped", None),
+        Err(SecRefusal::AmbiguousConcept { .. }) => ("ambiguous", None),
+        // resolve_concept_inner returns only the three above; a fourth
+        // arm would be a new outcome the reader must learn about, so it
+        // is named rather than folded into one of the three.
+        Err(_) => ("other", None),
+    };
+    tracing::debug!(
+        target: "sec_facts",
+        f5_demand = true,
+        requested = ?requested,
+        outcome = label,
+        resolved = ?resolved,
+        // The STORE's structural source limit, not a verdict on this ask:
+        // companyfacts has no dimension axis. It cannot tell you that THIS
+        // ask was a segment ask, and the reader must not treat it as if it
+        // could — a consolidated-only miss is a source limit to disclose,
+        // never a gap to close.
+        consolidated_only = store.coverage.consolidated_only,
+        store_concepts = store.concepts.len(),
+        "sec_facts: concept ask"
+    );
+    outcome
+}
+
+/// The anchor field on the F5 demand event, exported so the contract is
+/// citable from both sides of the language boundary.
+///
+/// `scripts/sec-miss-demand.py` greps THIS declaration in `--self-test`
+/// and the unit test below asserts the event really emits a field of this
+/// name, so renaming it fails two checks instead of silently zeroing the
+/// instrument (the reader would simply match nothing and report a clean
+/// score, which is the §18.3 silent-substitution failure).
+pub const F5_DEMAND_ANCHOR: &str = "f5_demand";
+
+fn resolve_concept_inner(store: &SecFactStore, requested: &str) -> Result<String, SecRefusal> {
     let id_form = normalize(requested).replace(' ', "_");
     if store.concepts.contains_key(&id_form) {
         return Ok(id_form);
@@ -1049,6 +1106,186 @@ mod tests {
         assert!(
             store_claims(&s, "How much were Apple's net sales in fiscal 2025?").is_some(),
             "figure-shaped questions still claim"
+        );
+    }
+
+    /// The F5 demand instrument's cross-language contract, pinned from the
+    /// Rust side. `scripts/sec-miss-demand.py` greps this module for the
+    /// `F5_DEMAND_ANCHOR` declaration; this asserts the event the module
+    /// actually emits carries a field of that name, and that it sits on
+    /// the single covering path rather than in the arms.
+    ///
+    /// Why source inspection rather than capturing the log line: capturing
+    /// needs a `tracing-subscriber` dev-dependency this crate does not
+    /// have, and adding one to pin a field name is a dep for a string
+    /// (ARCH §8.2). The failing input is named in each message.
+    #[test]
+    fn f5_demand_event_is_emitted_once_per_ask_under_the_declared_anchor() {
+        let src = include_str!("mod.rs");
+        assert_eq!(
+            F5_DEMAND_ANCHOR, "f5_demand",
+            "the reader (scripts/sec-miss-demand.py, ANCHOR) greps for this \
+             exact spelling"
+        );
+        assert!(
+            src.contains(&format!("{F5_DEMAND_ANCHOR} = true")),
+            "resolve_concept no longer emits a `{F5_DEMAND_ANCHOR} = true` \
+             field. The const and the event have drifted apart, and \
+             sec-miss-demand.py would match nothing and report a clean \
+             coverage score for a store nobody instrumented — absence \
+             reported as success is exactly the §18.3 failure."
+        );
+        // ONE emission site. A second would double-count every ask and
+        // silently halve the reported miss rate.
+        assert_eq!(
+            src.matches(&format!("{F5_DEMAND_ANCHOR} = true")).count(),
+            1,
+            "the {F5_DEMAND_ANCHOR} event must be emitted from exactly one \
+             place (§10.6). More than one site makes the denominator — the \
+             number of asks — depend on which path ran."
+        );
+        // ...and it must cover every arm, i.e. sit in `resolve_concept`
+        // itself rather than inside the match on the outcome.
+        let body = src
+            .split_once("pub fn resolve_concept(")
+            .expect("resolve_concept is the covering entry point")
+            .1
+            .split_once("fn resolve_concept_inner(")
+            .expect("the inner resolver is separate so the event covers all arms")
+            .0;
+        assert!(
+            body.contains(&format!("{F5_DEMAND_ANCHOR} = true")),
+            "the {F5_DEMAND_ANCHOR} event moved out of the covering \
+             `resolve_concept` wrapper. Emitted from an arm, it stops \
+             counting the asks that did NOT take that arm."
+        );
+    }
+
+    /// Every outcome the reader classifies is one this resolver can
+    /// actually produce, and they are distinguishable. The reader keys the
+    /// numerator on `outcome=unmapped` exactly; if a miss started
+    /// reporting as `other`, the measured miss rate would silently fall.
+    #[test]
+    fn f5_demand_outcomes_cover_the_arms_the_reader_distinguishes() {
+        let s = store();
+        assert!(resolve_concept(&s, "gross profit").is_ok(), "resolved arm");
+        assert!(
+            matches!(
+                resolve_concept(&s, "deferred revenue"),
+                Err(SecRefusal::UnmappedConcept { .. })
+            ),
+            "unmapped arm — the one the reader counts as a miss"
+        );
+        let mut amb = store();
+        if let Some(cf) = amb.concepts.get_mut("gross_profit") {
+            cf.ask_terms.push("sales".to_string());
+        }
+        assert!(
+            matches!(
+                resolve_concept(&amb, "sales"),
+                Err(SecRefusal::AmbiguousConcept { .. })
+            ),
+            "ambiguous arm — a map bug, NOT a coverage gap, so the reader \
+             must be able to tell it apart from `unmapped`"
+        );
+    }
+
+    /// Capture what a `tracing` event really renders to, so the log-line
+    /// grammar the Python reader parses is pinned by a rendered event and
+    /// not by a string this test composed.
+    #[derive(Clone, Default)]
+    struct CaptureWriter(std::sync::Arc<std::sync::Mutex<Vec<u8>>>);
+    impl std::io::Write for CaptureWriter {
+        fn write(&mut self, b: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(b);
+            Ok(b.len())
+        }
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    impl<'a> tracing_subscriber::fmt::MakeWriter<'a> for CaptureWriter {
+        type Writer = CaptureWriter;
+        fn make_writer(&'a self) -> Self::Writer {
+            self.clone()
+        }
+    }
+
+    /// VALIDATE THE INSTRUMENT BEFORE THE RESULT (ARCH §18.4). The F5
+    /// demand number is only as good as the agreement between this
+    /// module (writer) and `scripts/sec-miss-demand.py` (reader), and
+    /// that agreement is a LOG LINE — the least type-checked interface
+    /// in the system. So render real events and assert every field the
+    /// reader's grammar depends on:
+    ///
+    ///   - the `f5_demand` anchor it greps for;
+    ///   - `requested="..."` QUOTED, so a concept spelled with a space
+    ///     survives. This is why the field is emitted with `?` (Debug):
+    ///     rendered with Display, `gross profit` would arrive unquoted
+    ///     and the reader would silently truncate it at the space;
+    ///   - `outcome=` naming the arm, so a miss is distinguishable from
+    ///     an ambiguity and from a resolution;
+    ///   - `consolidated_only=` as a bare `true`/`false`.
+    ///
+    /// The failing input is named in every message.
+    #[test]
+    fn f5_demand_event_renders_the_grammar_the_reader_parses() {
+        let buf = CaptureWriter::default();
+        let sub = tracing_subscriber::fmt()
+            .with_writer(buf.clone())
+            .with_ansi(false)
+            .with_max_level(tracing::Level::DEBUG)
+            .finish();
+        let s = store();
+        tracing::subscriber::with_default(sub, || {
+            // A concept spelled with a SPACE, and a miss.
+            let _ = resolve_concept(&s, "gross profit");
+            let _ = resolve_concept(&s, "deferred revenue");
+        });
+        let out = String::from_utf8(buf.0.lock().unwrap().clone()).unwrap();
+        let lines: Vec<&str> = out
+            .lines()
+            .filter(|l| l.contains(F5_DEMAND_ANCHOR))
+            .collect();
+
+        assert_eq!(
+            lines.len(),
+            2,
+            "expected exactly one {F5_DEMAND_ANCHOR} event per ask (2 asks). \
+             Got {}:\n{out}",
+            lines.len()
+        );
+        assert!(
+            lines[0].contains(r#"requested="gross profit""#),
+            "a concept spelled with a SPACE must render QUOTED — the reader's \
+             field grammar is `requested=\"...\"` and an unquoted value would \
+             be truncated at the space, silently mis-attributing the ask. \
+             Got:\n{}",
+            lines[0]
+        );
+        // QUOTED. `outcome` is a &str field, and the fmt layer writes
+        // &str values through `record_str`, which quotes. The reader's
+        // first draft grepped `outcome=(\w+)` and matched nothing — it
+        // would have reported a clean zero for every store forever.
+        // That is why this test renders rather than composes.
+        assert!(
+            lines[0].contains(r#"outcome="resolved""#),
+            "the resolved arm must name itself, QUOTED — the reader's \
+             grammar is `outcome=\"...\"`:\n{}",
+            lines[0]
+        );
+        assert!(
+            lines[1].contains(r#"outcome="unmapped""#),
+            "the MISS arm must render `outcome=unmapped` — this is the exact \
+             token the reader counts as the F5 numerator, so any other \
+             spelling reports a miss rate of zero for a store that missed:\n{}",
+            lines[1]
+        );
+        assert!(
+            lines[1].contains("consolidated_only=true")
+                || lines[1].contains("consolidated_only=false"),
+            "the store's source-limit flag must render as a bare boolean:\n{}",
+            lines[1]
         );
     }
 }

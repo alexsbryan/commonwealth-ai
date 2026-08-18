@@ -85,9 +85,123 @@ function storeAccessions(): Set<string> {
   return out;
 }
 
-/** Overridable so a rerun can pick a different filer without editing
- *  the spec; the assertions are derived from whatever installs. */
-const TICKER = process.env.SOVEREIGN_SEC_TICKER ?? "AAPL";
+/** Whitespace-normalized text, for comparing a quoted span against the
+ *  filing it claims to come from. The extractor collapses the 10-K's
+ *  layout into running text and the model re-wraps what it quotes, so a
+ *  byte-for-byte compare would fail on formatting alone and prove
+ *  nothing about fidelity. Case is PRESERVED — "verbatim" that tolerates
+ *  case is not verbatim. */
+function flat(s: string): string {
+  return s.replace(/\s+/g, " ").trim();
+}
+
+/** The ingested 10-K prose, as one normalized string, plus the accessions
+ *  its page files are named for.
+ *
+ *  FOUND, NOT ASSUMED. The install writes prose under a downloads dir
+ *  whose name comes from the recipe, and hard-coding that path is exactly
+ *  the class of guess that has cost this initiative a run at a time. So
+ *  this walks the hermetic profile for a `prose` directory whose page
+ *  files are named for an accession the STORE actually holds, and takes
+ *  that one. If the layout moves, this keeps working; if no such
+ *  directory exists, it THROWS — the risk assertion is then
+ *  could-not-judge, which is not the same as the answer being wrong
+ *  (ARCH §18.2, §18.3).
+ *
+ *  Page files are named `<accession-digits>-<page>.txt`, e.g.
+ *  `000032019325000079-005.txt` for accession `0000320193-25-000079`. */
+function ingestedProse(held: Set<string>): { text: string; accessions: Set<string> } {
+  const profile = process.env.SOVEREIGN_REAL_PROFILE_DIR ?? "real-profile";
+  const root = path.join(CRATE_ROOT, "test-artifacts", profile, "home");
+  const digitsOf = (accession: string) => accession.replace(/-/g, "");
+  const heldDigits = new Map([...held].map((a) => [digitsOf(a), a]));
+
+  const candidates: string[] = [];
+  const walk = (dir: string, depth: number) => {
+    if (depth > 8) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      const full = path.join(dir, e.name);
+      if (e.name === "prose") candidates.push(full);
+      else walk(full, depth + 1);
+    }
+  };
+  walk(root, 0);
+
+  for (const dir of candidates) {
+    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".txt"));
+    const accessions = new Set<string>();
+    for (const f of files) {
+      const m = /^(\d{18})-\d+\.txt$/.exec(f);
+      const hit = m && heldDigits.get(m[1]);
+      if (hit) accessions.add(hit);
+    }
+    if (accessions.size === 0) continue;
+    const text = flat(
+      files.map((f) => fs.readFileSync(path.join(dir, f), "utf8")).join("\n"),
+    );
+    return { text, accessions };
+  }
+
+  throw new Error(
+    `no ingested 10-K prose found under ${root} whose page files are named ` +
+      `for one of the ${held.size} accessions this store holds ` +
+      `(${[...held].sort().join(", ")}). Searched ${candidates.length} ` +
+      `directory(ies) named "prose". Without the filing's own text there is ` +
+      `no independent oracle for "verbatim", so the risk assertion cannot be ` +
+      `judged — which is NOT the same as the answer being wrong.`,
+  );
+}
+
+/** The filers this run proves, in order. TWO by default, because one is
+ *  not the feature: every figure measured before this spec was Apple's,
+ *  and "it works" for a single hard-coded company is not an installable
+ *  product. The assertions are all derived from whatever installs, so the
+ *  list is data and the journey is the same code for every entry.
+ *
+ *  WHY THESE TWO. The order asks for one company that SELF-files and one
+ *  that files THROUGH AN AGENT, because the "accession prefix is the
+ *  subject's CIK" assumption cost this initiative five attempts (see the
+ *  `ACCESSION` note). Checked against EDGAR's own submissions index
+ *  before this list was written, rather than assumed:
+ *    - AAPL (CIK 0000320193) — latest 10-K `0000320193-25-000079`,
+ *      prefix == CIK, SELF-FILED.
+ *    - KO   (CIK 0000021344) — latest 10-K `0001628280-26-010047`,
+ *      prefix != CIK, AGENT-FILED.
+ *  So the pair exercises both shapes on the filing the acquirer actually
+ *  selects, not merely somewhere in a back catalogue. `filerShapes` below
+ *  records what was OBSERVED per install and the final check asserts the
+ *  run covered both — a permanent regression test for the prefix bug at
+ *  the cost of one extra install.
+ *
+ *  Overridable: `SOVEREIGN_SEC_TICKERS` (comma-separated) for the list,
+ *  `SOVEREIGN_SEC_TICKER` for the legacy single-filer form. */
+const TICKERS = (
+  process.env.SOVEREIGN_SEC_TICKERS ??
+  process.env.SOVEREIGN_SEC_TICKER ??
+  "AAPL,KO"
+)
+  .split(",")
+  .map((s) => s.trim().toUpperCase())
+  .filter(Boolean);
+
+/** What each install turned out to be, filled in as the run goes. Read by
+ *  the final check. `self` and `agent` are counted per ACCESSION, not per
+ *  company: one filer's store routinely carries both (Apple's does), and
+ *  the property that matters is that an accession whose prefix is NOT the
+ *  subject's CIK was accepted rather than rejected. */
+const filerShapes: Array<{
+  ticker: string;
+  cik: string;
+  self: number;
+  agent: number;
+}> = [];
 
 /** The shape of an SEC accession number, e.g. `0000320193-25-000073`.
  *
@@ -139,12 +253,19 @@ interface CorpusRow {
   status: string;
 }
 
+// SERIAL IS LOAD-BEARING, not tidiness. Install is SINGLE-INSTANCE under
+// the recipe's id: a second company REPLACES the first (and the acquirer
+// says so). Minting per-filer corpus ids was priced and deliberately
+// dropped as a real seam, so the two-filer proof SEQUENCES — each test
+// removes whatever is installed before installing its own filer, at step
+// 0 below. Run these in parallel and they fight over one corpus id.
 test.describe.configure({ mode: "serial" });
 
-test("a ticker typed into the catalog installs a corpus that answers a figure with its basis and refuses what it cannot know", async ({
-  sovereignPage: page,
-  bridge,
-}) => {
+for (const TICKER of TICKERS) {
+  test(`${TICKER}: a ticker typed into the catalog installs a corpus that answers a figure with its basis, reports the filing's own risk language, and refuses what it cannot know`, async ({
+    sovereignPage: page,
+    bridge,
+  }) => {
   // Live SEC fetch + full ingest + two model turns. The default 180s
   // budget is for a turn, not for an install.
   test.setTimeout(25 * 60_000);
@@ -319,10 +440,16 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
       : store.answers[0];
   const askYear = Math.max(...answerable.fiscal_years);
 
+  // Title carries the TICKER: the profile is reused across the filers in
+  // TICKERS, and the sidebar lookup below matches on title text and takes
+  // `.first()`. A shared title would silently seal the PREVIOUS filer's
+  // conversation — enabled on a corpus that has since been replaced —
+  // and the figure question would be asked against nothing.
+  const convTitle = `sec-figures-${TICKER}`;
   const conv = await bridge.invoke<{ id: string }>("create_conversation");
   await bridge.invoke("rename_conversation", {
     conversationId: conv.id,
-    title: "sec-figures-by-ticker",
+    title: convTitle,
   });
   await bridge.invoke("set_conversation_enabled_corpora", {
     conversationId: conv.id,
@@ -335,10 +462,7 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
   // (native-grounding-p1.real.spec.ts:121-135); the install had to come
   // first here, so the boot moves instead.
   await realBootToChat(page);
-  await page
-    .locator(".convo-title", { hasText: "sec-figures-by-ticker" })
-    .first()
-    .click();
+  await page.locator(".convo-title", { hasText: convTitle }).first().click();
 
   const figureId = await sendAndAwaitTurn(
     page,
@@ -375,6 +499,18 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
     (figureText.match(/\d{4}-\d{2}-\d{2}/g) ?? []).length,
     `the figure carried no fiscal-period basis (no period dates):\n${figureText}`,
   ).toBeGreaterThan(0);
+
+  // WHAT THIS FILER TURNED OUT TO BE — an OBSERVATION, recorded for the
+  // cross-filer check at the end of the file. Never a claim about who
+  // filed: an accession whose prefix differs from the subject's CIK was
+  // transmitted by someone else, and that is all this counts.
+  const bare = store.cik.replace(/^0+/, "");
+  const shape = { ticker: TICKER, cik: store.cik, self: 0, agent: 0 };
+  for (const a of held) {
+    if (a.split("-")[0].replace(/^0+/, "") === bare) shape.self += 1;
+    else shape.agent += 1;
+  }
+  filerShapes.push(shape);
 
   // ── 4. the refusal, which names what IS available ─────────────────
   // A period ending after the corpus's as-of filing CANNOT be known
@@ -431,4 +567,153 @@ test("a ticker typed into the catalog installs a corpus that answers a figure wi
       `corpus's as-of filing (${store.as_of.accession}, latest period end ` +
       `${store.as_of.latest_period_end}):\n${refusalText}`,
   ).toBe(false);
+
+  // ── 5. THE RISK QUESTION — the journey this corpus exists for ──────
+  // Operator, verbatim, on what "quantify" means here: "we just want to
+  // be able to report what the report actually cites -- like a lawsuit
+  // coming up, etc". That is NARROWER and safer than deriving exposure
+  // numbers, and the three checks below are exactly its three parts.
+  //
+  // The question deliberately asks something the source CANNOT fully
+  // answer. A 10-K carries no forward figures, so "in the next year" has
+  // no answer here; the correct behaviour is the filing's own risk
+  // language, figures only where they trace, and a refusal to project
+  // that still NAMES the trend that exists.
+  const riskId = await sendAndAwaitTurn(
+    page,
+    `What are the material risks facing ${store.entity} in the next year ` +
+      `and how would you quantify them?`,
+  );
+  const risk = await assertTurnInvariants(page, bridge, riskId);
+  const riskText = risk.complete.full_text;
+
+  // Preserve the answer whatever the verdict: this is the one turn in the
+  // initiative nobody has read, and a failing assertion that also loses
+  // the evidence costs a live SEC fetch to see again.
+  const artifactDir = path.join(CRATE_ROOT, "test-artifacts", "sec-risk-answers");
+  fs.mkdirSync(artifactDir, { recursive: true });
+  fs.writeFileSync(path.join(artifactDir, `${TICKER}-risk.txt`), riskText);
+
+  // 5a. THE FILING'S OWN WORDS, checked against the filing.
+  // The oracle is the ingested prose on disk, not the product's own
+  // claim that it quoted something — a spec that asked the answerer
+  // whether it was faithful would be the §18.1 echo smell.
+  const prose = ingestedProse(held);
+  const MIN_QUOTE = 60;
+  const quoted = [...riskText.matchAll(/["“]([^"“”]{20,})["”]/g)].map((m) => flat(m[1]));
+  const verbatim = quoted.filter(
+    (q) => q.length >= MIN_QUOTE && prose.text.includes(q),
+  );
+  expect(
+    verbatim.length,
+    `no quoted span of ${MIN_QUOTE}+ characters in the risk answer appears ` +
+      `verbatim in the ${prose.accessions.size} ingested filing(s) ` +
+      `(${[...prose.accessions].join(", ")}). ` +
+      `${quoted.length} span(s) were quoted; the longest was ` +
+      `${Math.max(0, ...quoted.map((q) => q.length))} chars. A risk reported ` +
+      `as the company's own language must BE the company's own language — ` +
+      `a paraphrase in quotation marks is the failure this checks for.` +
+      `\n\nquoted spans:\n${quoted.map((q) => `  - ${q.slice(0, 180)}`).join("\n")}` +
+      `\n\nanswer:\n${riskText}`,
+  ).toBeGreaterThan(0);
+
+  // ...cited to a filing THIS CORPUS HOLDS. Same membership rule as
+  // assertion 3, and for the same reason: a prefix check is false for
+  // half of Apple's own filings and passes a citation to a real filing
+  // this corpus never ingested.
+  const riskCited = [...riskText.matchAll(/\b\d{10}-\d{2}-\d{6}\b/g)].map((m) => m[0]);
+  expect(
+    riskCited.length,
+    `the risk answer cited no accession. Risk language reported without ` +
+      `its filing is unsourced prose:\n${riskText}`,
+  ).toBeGreaterThan(0);
+  const foreign = riskCited.filter((a) => !held.has(a));
+  expect(
+    foreign,
+    `the risk answer cited accession(s) this corpus does not hold. ` +
+      `Held (${held.size}): ${[...held].sort().join(", ")}:\n${riskText}`,
+  ).toEqual([]);
+
+  // 5b. QUANTIFY ONLY WHAT TRACES — no figure may be attached to a period
+  // the store cannot cover. This is the fabrication class observed on the
+  // shipped tree before the guard merged: an answer that projected
+  // "through FY2026" off a store whose as-of is FY2025.
+  //
+  // Checked as PROXIMITY in both directions, because "$X in FY2027" and
+  // "in FY2027, $X" are the same failure and a one-directional regex
+  // catches only one of them.
+  const FIGURE = /\$\s?[\d,]+(?:\.\d+)?|\b\d[\d,]*\.?\d*\s?(?:billion|million|thousand)\b/gi;
+  const figureAt = [...riskText.matchAll(FIGURE)].map((m) => m.index ?? 0);
+  const beyond: string[] = [];
+  for (let y = asOfYear + 1; y <= asOfYear + 5; y += 1) {
+    for (const m of riskText.matchAll(new RegExp(`\\bFY?\\s?${y}\\b`, "g"))) {
+      const at = m.index ?? 0;
+      const near = figureAt.find((f) => Math.abs(f - at) <= 120);
+      if (near !== undefined) {
+        beyond.push(`${y} @${at} with a figure @${near}: ` +
+          `"${riskText.slice(Math.min(at, near) - 40, Math.max(at, near) + 60)}"`);
+      }
+    }
+  }
+  expect(
+    beyond,
+    `the risk answer attached a figure to a period beyond this corpus's ` +
+      `as-of (${store.as_of.latest_period_end}, accession ` +
+      `${store.as_of.accession}). A 10-K carries no forward figures, so any ` +
+      `number for FY${asOfYear + 1}+ was invented:\n${beyond.join("\n")}` +
+      `\n\nanswer:\n${riskText}`,
+  ).toEqual([]);
+
+  // 5c. THE REFUSAL NAMES WHAT IT DOES HAVE. "We cannot know that yet"
+  // without "here is what we do know" is the bare abstention §7.7
+  // forbids. The store carries multi-year trends; the answer must name
+  // at least one fiscal year it actually holds.
+  const heldYears = [...new Set(store.answers.flatMap((a) => a.fiscal_years))].sort();
+  const namedYears = heldYears.filter((y) => riskText.includes(String(y)));
+  expect(
+    namedYears.length,
+    `the risk answer named none of the ${heldYears.length} fiscal years this ` +
+      `corpus holds (${heldYears.join(", ")}). Declining to project forward ` +
+      `is correct; declining without naming the trend that DOES exist is a ` +
+      `bare abstention:\n${riskText}`,
+  ).toBeGreaterThan(0);
+  });
+}
+
+// ── the cross-filer check ───────────────────────────────────────────────
+// Two companies is the feature, not a nicety: everything measured before
+// this spec was Apple. And the assumption that an accession's leading ten
+// digits are the SUBJECT's CIK cost five attempts, so this pins the fix
+// as a permanent regression test — the run must have accepted at least
+// one accession transmitted by someone OTHER than the subject.
+//
+// This states what was OBSERVED across the installs above. It asserts no
+// cause and names no filing agent.
+test("the run proved more than one filer, and accepted an agent-filed accession", () => {
+  expect(
+    filerShapes.map((f) => f.ticker),
+    `only ${filerShapes.length} of ${TICKERS.length} filer(s) in ` +
+      `[${TICKERS.join(", ")}] completed the journey, so the second-company ` +
+      `claim is unproven. A single-filer pass is not this feature.`,
+  ).toHaveLength(TICKERS.length);
+  expect(
+    new Set(filerShapes.map((f) => f.cik)).size,
+    `the installs resolved to ${new Set(filerShapes.map((f) => f.cik)).size} ` +
+      `distinct CIK(s): ${filerShapes.map((f) => `${f.ticker}=${f.cik}`).join(", ")}. ` +
+      `Two tickers that resolve to one company prove one company.`,
+  ).toBe(TICKERS.length);
+  const agent = filerShapes.reduce((n, f) => n + f.agent, 0);
+  const self = filerShapes.reduce((n, f) => n + f.self, 0);
+  expect(
+    self,
+    `no SELF-filed accession (prefix == subject CIK) was seen across ` +
+      `${JSON.stringify(filerShapes)}`,
+  ).toBeGreaterThan(0);
+  expect(
+    agent,
+    `no AGENT-filed accession (prefix != subject CIK) was seen across ` +
+      `${JSON.stringify(filerShapes)}. The prefix-is-the-filer bug is then ` +
+      `untested by this run: every accession it accepted would also have ` +
+      `passed the broken prefix check.`,
+  ).toBeGreaterThan(0);
 });

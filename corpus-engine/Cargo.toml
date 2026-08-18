@@ -219,6 +219,14 @@ treesitter = [
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 tempfile = { workspace = true }
+# Dev-only, and only to capture what a tracing event ACTUALLY formats to.
+# The F5 demand instrument is a Rust writer read back by a Python reader
+# (scripts/sec-miss-demand.py); the two agree on a log-line grammar and
+# nothing else, so the test that pins that grammar has to render a real
+# event through a real subscriber rather than assert on a string the test
+# itself composed. Workspace-pinned, so this adds no second version of a
+# crate nine others already use (ARCH §8.2), and no production weight.
+tracing-subscriber = { workspace = true }
 # SP5 spike probe (examples/concept_graph_probe.rs): Leiden community
 # detection over a concept co-occurrence graph. Survey pick 2026-07-31
 # (research/enrichment-spikes/findings/SP5_concept_graph.md): core has no

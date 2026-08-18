@@ -577,6 +577,33 @@ neither can be demoted to fine print without visibly demoting the other.
 Nothing in the derivation or the component names a company, so a second
 installed filer renders truthfully with no new copy written.
 
+F5's demand-side half — of the concepts people actually ASK for, how many
+miss for a reason we could fix — is a LOG READER, not a store (order
+sec-filings-ship). `resolve_concept` in
+`enrichment/atlas/analysis/sec_facts/mod.rs` is the single covering entry
+point for every concept ask, so it emits exactly one `f5_demand` debug
+event per ask (target `sec_facts`), carrying the requested spelling, the
+outcome arm (`resolved` / `unmapped` / `ambiguous`), and the store's
+`consolidated_only` flag. Emitting from the wrapper rather than from the
+match arms is what makes the DENOMINATOR — the number of asks —
+answerable at all. `scripts/sec-miss-demand.py` reads that back out of
+logs a run already produced: no new store, no cadence, nothing to
+remember to run. A miss counts as FIXABLE only on a declared membership
+test against the corpus's own `_unmapped_concepts.json` (token-equality,
+or a ≥2-token boundary prefix such as `deferred revenue` naming
+`DeferredRevenueCurrent`); everything else reports `unclassified` and
+never enters the numerator, because `consolidated_only` is a STORE-level
+source limit and cannot classify an individual ask — a segment miss is a
+limit to DISCLOSE, never a gap to close. Zero asks exits 3 with a named
+reason rather than scoring 0.0 (ARCH §18.3). The cross-language contract
+is pinned on both sides: `F5_DEMAND_ANCHOR` is grepped by the reader's
+`--self-test`, and
+`f5_demand_event_renders_the_grammar_the_reader_parses` renders a real
+event through a real subscriber to pin the field grammar the reader
+parses — it caught `outcome="resolved"` arriving quoted, which the
+reader's first draft would have matched zero times while reporting a
+clean score.
+
 The `email` + `described_asset` extractors and the `column_aware`
 reconciliation extractor (configured via
 `[enrichment.reconciliation.column_aware]`, not an `[extractor] type`;
