@@ -12,8 +12,7 @@ custody = "personal"
 [[hit]]
 url = "https://ceiling.drb/task-58"
 title = "drb-58 reference content"
-snippet = "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)
-You could examine instances of"
+snippet = "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)\nYou could examine instances of"
 match = ["Exploring", "Horizontal", "Gene", "Transfer", "Plants", "animals", "Non-Microbial", "Systems", "could", "examine", "instances", "horizontal", "gene", "transfer", "eukaryotes", "particularly", "plants", "evaluate", "evolutionary", "significance"]
 body = "task-58.md"
 custody = "personal"
@@ -77,7 +76,7 @@ custody = "personal"
 [[hit]]
 url = "https://ceiling.drb/task-95"
 title = "drb-95 reference content"
-snippet = "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedikā Prajñāpāramitā Sūtra). These notes shoul"
+snippet = "Create comprehensive, in-depth study notes for the Diamond Sutra (Vajracchedik\u0101 Praj\u00f1\u0101p\u0101ramit\u0101 S\u016btra). These notes shoul"
 match = ["Create", "comprehensive", "in-depth", "study", "notes", "Diamond", "Sutra", "Vajracchedik", "Praj", "ramit", "should", "offer", "deep", "analysis", "interpretation", "various", "perspectives", "exploring", "teachings", "relevance"]
 body = "task-95.md"
 custody = "personal"

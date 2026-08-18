@@ -61,7 +61,7 @@ def main():
         deck_lines.append("[[hit]]")
         deck_lines.append(f"url = \"https://ceiling.drb/task-{tid}\"")
         deck_lines.append(f"title = \"drb-{tid} reference content\"")
-        deck_lines.append(f"snippet = \"{r['prompt'][:120]}\"")
+        deck_lines.append(f"snippet = {json.dumps(r['prompt'][:120])}")
         deck_lines.append(f"match = {json.dumps(uniq)}")
         deck_lines.append(f"body = \"{body_file}\"")
         deck_lines.append('custody = "personal"')
