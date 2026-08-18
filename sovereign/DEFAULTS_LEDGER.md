@@ -86,6 +86,38 @@ store (ids cited per row).
   reached its assertions. Recording them as failures would put a wrong
   verdict against work that is probably correct; recording them as met
   would be the F2 mistake in another costume. They are unmeasured.
+- **Condition audit, 2026-08-18 — (2) moves `never-ran` → FAILED, for a
+  cause that is not the corpus.** Order `sec-filings-close`, ring 2
+  (`runs/sec-filings-close-e2e/`, `DONE 15:35:15Z`). The e2e reached its
+  assertions for the first time in seven attempts.
+  - **Arming is PROVEN on the desktop.** `sec_facts: discovery complete
+    declared=1` → `coarse=Some("AUTHORITY_CLAIM")`, neither ever logged
+    on this surface before. Registering `SecFactsTool` (`655c6ab5`) is
+    the whole of the change; run 4 logged `not armed — no evidence
+    corpus declares authority handler="kq_stream"` at the same point.
+  - **(2) FAILED — no figure was answered.** The planner called the tool
+    with `concept="capital_expenditures|acquisitions|property_plant_equipment"`,
+    a pipe-alternation hedge. `resolve_concept` is a DECLARED two-step
+    resolver that never similarity-guesses (§18.3), so it normalized that
+    to a single id containing pipes, matched nothing, and refused
+    (`outcome="unmapped"`, `store_concepts=20`). The store DOES hold
+    `capital_expenditures` — the first alternative would have resolved
+    at step 1.
+  - **Two structural defects behind it, neither in scope for that order.**
+    (a) `concept` is a CLOSED set — the store's 20 ids, known at call
+    time — passed to the planner as free text with six examples and no
+    `enum`, while `mode` in the same schema IS an enum (ARCH §2 /
+    principle 9; §7.6 on asking a model to guarantee what a schema can
+    enforce). (b) `executor: step done success=true` for a step whose
+    tool REFUSED — an `Err` collapsed into a success-shaped value (§18.3,
+    smell table). The empty basis is why the provenance audit then
+    flagged all four numerals: with no tool datum in the basis,
+    "untraceable" is correct by construction, so the guard is right about
+    a symptom.
+- **Instrument gap this run exposed:** the answer TEXT is preserved
+  nowhere in `evidence/` — only the audit's violation list — so whether
+  `2023`/`2024` were prose years or claimed data CANNOT be decided from
+  this run's record. That question is left open rather than guessed.
 - **Known gap this does NOT cover:** segment figures. The acquirer
   refuses segment concepts because companyfacts is consolidated-only;
   the F2 honesty violation at `e8b9319b` is the same gap seen from the
