@@ -198,6 +198,70 @@ mod tests {
         assert_eq!(app.seconds_until_foreground_idle(), Some(60));
     }
 
+    // ─── The 2026-08-18 starvation, at the daemon layer ───────────
+
+    /// THE DEFECT, against the REAL predicate rather than a test double.
+    ///
+    /// A caller on a 30-second cadence against the 60-second default window —
+    /// the `sovereign-server` mobile-host health probe that starved enrichment
+    /// across three e2e runs, and equally an ordinary person sending a chat
+    /// every 30 seconds. The window is never observed lapsing at ANY point in
+    /// the cadence, which is what makes the wait unbounded rather than merely
+    /// long.
+    ///
+    /// The generalisation the assertion below stands for: for every window `W`
+    /// there is a cadence `W-1` that pins the predicate true, so no value of
+    /// `yield_to_foreground_secs` fixes this. Moving that threshold treats the
+    /// symptom; the deferral needs a deadline.
+    #[test]
+    fn a_30s_cadence_against_the_60s_window_never_lets_it_lapse() {
+        let app = crate::state::test_app_state();
+        app.set_yield_window_secs(60);
+        let hook = AppStateYieldHook::new(app.inner.clone());
+
+        // The staleness of the timestamp under a 30s cadence sweeps 0..=30 and
+        // never gets further: the next probe resets it. Every one of those
+        // states must still be "yielding".
+        for elapsed in 0..=30 {
+            rewind_foreground_to(&app, elapsed);
+            assert!(
+                hook.should_yield(),
+                "elapsed={elapsed}s is inside the 60s window — the probe cadence \
+                 never lets it lapse, which is precisely the livelock"
+            );
+        }
+    }
+
+    /// ...AND THE BOUND IS WHAT ENDS IT. Same pinned predicate, and the wait
+    /// still terminates — because the budget, not the window, is the authority
+    /// on how long deferring may go on.
+    #[test]
+    fn the_deferral_bound_ends_a_wait_the_window_never_would() {
+        use corpus_engine::{DeferralBudget, DeferralStep};
+
+        let app = crate::state::test_app_state();
+        app.set_yield_window_secs(60);
+        // Mid-cadence: 30s since the last probe, 30s still to run on the
+        // window. Left to the window alone this never resolves.
+        rewind_foreground_to(&app, 30);
+        let hook = AppStateYieldHook::new(app.inner.clone());
+        assert!(hook.should_yield(), "premise: still inside the window");
+
+        // A budget with room defers, exactly as before.
+        let fresh = DeferralBudget::new();
+        assert!(
+            matches!(fresh.step(hook.as_ref()), DeferralStep::Defer { .. }),
+            "an unspent budget must still be polite"
+        );
+
+        // A spent one proceeds anyway. THIS is the liveness guarantee.
+        let spent = DeferralBudget::with_cap_at_most(std::time::Duration::ZERO);
+        assert!(
+            matches!(spent.step(hook.as_ref()), DeferralStep::CapReached { .. }),
+            "a spent budget must proceed even though the foreground is active"
+        );
+    }
+
     // ─── Quiesce flag ─────────────────────────────────────────────
 
     #[test]

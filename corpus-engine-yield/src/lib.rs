@@ -139,6 +139,25 @@ pub enum DeferralStep {
 /// point: a call site cannot forget to measure how long it has been parked,
 /// because the object it must ask for permission is the same object that
 /// knows.
+///
+/// # Per checkpoint, not per job — deliberately
+///
+/// Each arrival at a checkpoint gets a fresh budget, so a long ingest that
+/// keeps reaching the embed checkpoint can spend the bound many times over.
+/// That is the intended reading, not an oversight. A per-JOB budget would be
+/// worse exactly where it matters: once spent it would switch yielding OFF for
+/// the remainder of a multi-hour ingest, and the user would find the GPU
+/// pinned against them all afternoon. Per checkpoint guarantees forward
+/// progress — every batch, every phase, eventually runs — while leaving the
+/// courtesy intact for the next one. The invariant is "the work always
+/// advances", not "the work eventually stops standing aside".
+///
+/// # Granularity
+///
+/// The bound is checked when the caller asks, so the wait can overshoot by up
+/// to one poll interval. At the shipped 5s poll against a 300s cap that is
+/// under 2%; a caller choosing a cap near its poll interval should expect the
+/// overshoot to dominate.
 #[derive(Debug, Clone, Copy)]
 pub struct DeferralBudget {
     started: Instant,
