@@ -679,6 +679,15 @@ struct Controller {
     /// (charter/plan/align — the checkpoint verified them) and the
     /// completed rounds when `Some`.
     resumed_after_round: Option<u32>,
+    /// T6c REV-2 (pre-registered): the degenerate-draft guard's retry
+    /// budget — at most ONE shape-constrained re-draft per flight
+    /// segment. A resume re-flights only the un-written rounds and
+    /// rebuilds without the checkpoint's flag (the checkpoint is
+    /// ICD-frozen — no ICD change): the budget is per segment, and the
+    /// guard's contract (no infinite loop per draft call) holds either
+    /// way. The retry record = the draft-{round}-degenerate.json
+    /// artifact + tracing; RoundRow is unchanged.
+    draft_retried: bool,
 }
 
 impl Controller {
@@ -764,6 +773,7 @@ impl Controller {
             artifacts: Vec::new(),
             aborted_at_round: None,
             resumed_after_round: None,
+            draft_retried: false,
         };
         Ok(ctl)
     }
@@ -893,6 +903,7 @@ impl Controller {
             artifacts: cp.artifacts.clone(),
             aborted_at_round: cp.aborted_at_round,
             resumed_after_round: Some(cp.written_after_round),
+            draft_retried: false,
         };
         tracing::info!(
             target: "deep_research",
@@ -1427,7 +1438,7 @@ impl Controller {
                 return self.land_aborted().await;
             }
             let window = self.merge_windows();
-            let draft = synthesize::draft_round(
+            let mut draft = synthesize::draft_round(
                 self.port.as_ref(),
                 &self.config.run_id,
                 &self.charter_hash,
@@ -1435,8 +1446,38 @@ impl Controller {
                 &self.question,
                 &window,
                 &self.prior_gap_texts,
+                false,
             )
             .await?;
+            // T6c REV-2 (pre-registered): the degenerate-draft guard.
+            // The seed-07 corruption class (inner monologue, date
+            // spirals, 12.8 "**" per 1k chars) flooded the gap ledger
+            // 2 -> 38 in rev 1. ONE shape-constrained re-draft per
+            // flight segment; the degenerate original is preserved as
+            // draft-{round}-degenerate.json (never silently
+            // substituted — §18.3), the retry is glassbox.
+            if synthesize::draft_is_degenerate(&draft.text) && !self.draft_retried {
+                tracing::warn!(
+                    target: "deep_research",
+                    run_id = %self.config.run_id,
+                    round,
+                    chars = draft.text.len(),
+                    "degenerate draft detected; one shape-constrained re-draft"
+                );
+                self.write_artifact(&format!("draft-{round}-degenerate.json"), &draft)?;
+                self.draft_retried = true;
+                draft = synthesize::draft_round(
+                    self.port.as_ref(),
+                    &self.config.run_id,
+                    &self.charter_hash,
+                    round,
+                    &self.question,
+                    &window,
+                    &self.prior_gap_texts,
+                    true,
+                )
+                .await?;
+            }
             if round == 1 {
                 // The survey's estate_answer is the round-1 draft (the
                 // estate alone answered).

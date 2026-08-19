@@ -227,6 +227,7 @@ async fn one_shot(pair: &Pair, out: &Path) -> Result<(), String> {
         &pair.question,
         &window,
         &[],
+        false,
     )
     .await
     .map_err(|e| format!("{}: {e}", pair.id))?;

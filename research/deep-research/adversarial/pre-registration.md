@@ -3739,3 +3739,403 @@ research/deep-research/arms/score-report-t6c.json.)
   battery-wide). The convergence gate is unmet; the rev-2 fix
   (pre-registered, red-first) targets the DRAFT seam — the r3 draft
   re-expressing newly-acquired evidence with untracked figures.
+
+---
+
+## T6c REV-2 — the draft-seam fix + the intent-form leg + the 503 evidence
+
+**PRE-REGISTERED BEFORE any flight, before the scorer edit, and before
+any code** (REV-2 GO, operator verbatim "launch rev-2", 2026-08-18).
+Rev-2 is the order's second revolution; the budget allows three.
+
+### 1. The intent-form leg re-cut (directive 19909d5f, resolved UNEDITED)
+
+The scorer's R-12-nongrow leg is re-cut from the literal all-pairs
+formula to the CONTENT-ROUNDS TRAJECTORY, verbatim the operator's
+form: **r2→r3 non-growing AND final gap count ≤ round-2 count — the
+r1→r2 empty-window abstention pair EXCLUDED** (pre-registered artifact,
+named: round 1 with an empty window emits the abstention gap — "No
+evidence was retrieved this round." — which closes at r2 and never
+joins the r2 content set; measured fatal to the literal formula 0/12,
+every failure the same pair). Implemented as:
+
+```
+content_nongrow = len(sets) >= 3 and all(
+    sets[i] <= sets[i - 1] for i in range(2, len(sets))
+)
+```
+
+i.e. for the 3-round battery: `sets[-1] <= sets[1]` (final ≤ round-2).
+Bar unchanged: **≥10/12 v0 seeds**. Expected value on the rev-1 runs:
+9/12 (seed-06 11→12, seed-07 2→38, seed-09 4→6 fail; the rest pass)
+— the same three failures the rev-2 fix targets at the draft seam
+(seed-07 = the corruption class; seed-06/09 = the honest-growth class,
+journaled below). The seat's bars.toml intent-form amendment
+(FORM REFINEMENT 2026-08-18, directive 19909d5f, "non-growth is
+measured on content rounds") is already in the tree and lands with
+this revolution's commit.
+
+### 2. The 503 evidence (the coordinator's question, answered exactly)
+
+Both re-flights DIED on their FIRST draft call — no retry, no fallback.
+Verbatim last line of `research/deep-research/arms/runs-t6c/loop/seed-01.console.log`
+(18:14:07) and `seed-02.console.log` (18:15:04):
+
+```
+deep-research: run failed: draft failed: draft ask: Inference error: Remote API returned 503 Service Unavailable: {"error":"host busy: ~30000 ms predicted wait at queue position 1","reason":"local_queue_full","retry_after_secs":30}
+```
+
+Failed run dirs `dr-1787101991` (seed-01) / `dr-1787102047` (seed-02)
+hold preflight artifacts only (budget-ledger/charter/plan/
+resume-input/survey-1 — no manifest, no draft). The decision journal's
+no-shed record is CONSISTENT with this: the 503 is a queue-full
+REJECTION (a predicted wait), not a shed event; nothing was shed.
+**Client-handling gap (rev-2-relevant finding, named, not fixed):**
+the loop surfaces `ResearchPort::draft`'s `Err` as a fatal "draft
+failed:" run abort — `retry_after_secs: 30` is never honored. The
+retry belongs to the shared inference client (outside deep_research/
+scope); the finding rides this revolution's landing report for the
+operator's disposition.
+
+### 3. The draft-seam fix: the degenerate-draft guard (red-first)
+
+**Mechanism (measured, rev-1 forensics):** seed-07's r3 draft is
+12,677 chars of corruption — inner monologue ("(Wait" ×2, "Let me
+re-read", "I must ", "Actually,"), evidence self-interrogation ("Note:
+Evidence states", "the exact string", "in the snippet"), a date spiral
+("**2057**-**6**-**1**? no" fragments), 163 "**" markers (12.8/k chars).
+The splitter atomized the broken fragments into 36 claims; the ledger
+went 2 → 38. The v1's 2 figureless r3 fragments are markdown
+section-heading leakage — a separate, smaller splitter-side class
+(rev-3 candidate, not this fix). The genuinely-new-figure growth
+(seed-06 +1, seed-09 +2, v1's 6) is HONEST: r3 is a full re-synthesis
+over the growing window and the deterministic figure inventory drives
+enumeration; new figures from newly-arrived evidence (ev-2) become new
+single-origin-capped ledger entries — the fold cannot merge different
+figures by design, and it must not.
+
+**The guard (this revolution's fix):**
+
+- `draft_is_degenerate(text: &str) -> bool` — a PURE, closed-set shape
+  rule (no model, no thresholds learned from the battery): degenerate
+  iff ≥2 DISTINCT inner-monologue/self-interrogation markers OR ≥3
+  total occurrences (marker class: "(Wait", "Let me re-", "Let me
+  read", "Let me look", "I must ", "Actually,", "Note: Evidence",
+  "the exact string", "in the snippet", "? no") OR bold density ≥8
+  "**" per 1k chars. Rules describe SHAPES, not content — the marker
+  class is the documented corruption signature, and a legit draft with
+  one "Actually," cannot trip the ≥2-distinct/≥3-total bar.
+- ONE re-draft, bounded once per run: `draft_round` gains
+  `strict_shape: bool` (default false) appending a plain-prose shape
+  constraint ("complete sentences, no markdown, no bold, no bullet
+  lists, no parenthetical asides, no self-interrogation; state each
+  fact at most once"). The retry decision lives in the Controller
+  (mod.rs round loop — the artifact surface): if
+  `draft_is_degenerate(&draft.text)` && !`self.draft_retried`, write
+  the original to `draft-{round}-degenerate.json` (glassbox; never
+  silently substituted — the original is preserved, §18.3), re-draft
+  with `strict_shape = true`, mark retried. **No ICD change** — the
+  retry is invisible to RoundRow (icd.rs:789-795, 5 fields unchanged);
+  the retry record = the artifact file + tracing at debug.
+- The guard targets ONLY the corruption class; the honest-growth class
+  is not touched (its gaps stay, capped single-origin — correct).
+
+**Red-first test list (write → watch red → implement → watch green):**
+(a) the seed-07-class excerpt (real, from the flight record) is
+detected degenerate; (b) the clean-synthesis class (v1's draft-2/
+draft-3, 6.1k chars) is NOT flagged; (c) markdown structure alone
+(headings, bold section titles — seed-02's draft-2 class) does NOT
+trip the bold-density bar; (d) the strict_shape=true prompt carries
+the shape constraint while the default prompt is byte-identical to
+today's; (e) a single "Actually," in a long clean draft does NOT trip
+the marker bar (the ≥2-distinct/≥3-total guard). Fixtures via the
+gym's scripted draft surface (MockDraftSurface::Scripted), audit
+module's scripted-provider pattern; the retry wiring itself is
+exercised by the battery (seed-07 re-measured), not unit-tested.
+
+**The resolve-only alternative (pre-registered as the REV-3 candidate,
+NOT this revolution's fix):** constrain the r3 draft to resolve the
+open ledger without new-figure re-synthesis. It would cross the
+intent-form bar (potentially 12/12) but trades P4-v1 coverage — the
+final answer would omit untracked in-window facts. The tension is
+named for the operator; this revolution ships the corruption-class
+fix and keeps the honest-growth class.
+
+### 4. The gate (unchanged from rev-1, re-stated)
+
+1. **v1 trajectory journaled** (the order's gate): final ≤ round-2,
+   set stops growing. Rev-1: 1 → 27 → 35, NOT converged; the rev-2
+   expectation is 1 → 27 → 27..35 (the guard must not move a clean
+   r3 — seed-07 is the seed whose r3 is corrupt).
+2. **No-regression legs** vs score-report-t6b.json, bars unchanged
+   (P3, T1.7, P4-v1, honesty, two-arm lift) — rev-2's battery is the
+   second sample of the rev-1 crossings (§18.5).
+3. **R-12-nongrow intent-form row measured** — bar ≥10/12; the rev-1
+   runs re-score to 9/12 as the expected value (the rev-2 fix is
+   expected to restore seed-07: 2→38 → 2→~2, landing 10/12+).
+
+### 5. The rev-2 battery (systemd-run, reaper case law)
+
+Fresh root `ARMS_RUN_ROOT="$ARMS/runs-t6c-r2"` — the driver
+regenerates pairs.json from the frozen bank (never hardcoded, never
+drifts); 13 flights (12 v0 + v1) + the one-shot comparator arm,
+budget 12/12, model pin unchanged. **The driver runs under
+systemd-run, NOT a harness background task** — the harness reaper
+killed two tasks this session (the rev-1 one-shot arm and the
+coordinator's watcher); systemd-run units survived. Daemon idle check
+(127.0.0.1:9741) before launch; no daemon restarts mid-battery
+(D2's fixes land between revolutions via main). The terminal monitor
+reaches the coordinator on completion; the landing report follows.
+Keep/revert journal for the guard lands with the execution record;
+ONE git invocation — this order's files + the seat's
+quality/initiative-bars.toml (already in the tree).
+
+### Execution record (REV-2 — appended 2026-08-19 after the battery terminal, the seat-verified dead unit, the seed-06 one-shot rerun, and the intent-form scoring)
+
+Battery #2: 13/13 loop flights + 13/13 one-shot pairs. The one-shot
+arm's first pass lost seed-06 to a daemon-side 503 ("MTP inference
+deadline exceeded after 300s (3990 tokens)") — the client-handling
+gap journaled below; the rerun (single-pair input, unit
+dr-t6c-r2-s06, systemd-run with --working-directory) passed in
+31.15s. All scores below are from score-arms.py (C-class
+deterministic), report score-report-t6c-r2.json, bars unchanged from
+rev-1 (the seat's bars.toml amendment — the intent-form FORM clause —
+was already in the tree).
+
+Revolution-2 result (measured):
+
+- **v1 trajectory: r1:1 → r2:28 → r3:30 — NOT CONVERGED.** The gate
+  (final <= round-2) fails: 30 > 28. Growth shrank vs rev-1 (27→35,
+  +7 → +2) — the fold's compression holds — but the gate is binary.
+- **R-12-nongrow (intent-form): 6/12 v0 seeds — FAIL** (bar >=10/12;
+  rev-1 re-scored 9/12 — the leg REGRESSED, characterized below).
+  Verdicts: passed seed-03, 06, 07, 08, 10, 12; failed seed-01, 02,
+  05, 09, 11; could-not-judge seed-04 (2 rounds only — the honest
+  done-partial terminal, search allowance spent at r1).
+- P4-v0 69/72 pass (rev-1 68/72; t6b 70/72) — no regression.
+- P4-v1 (loop) 13/16 pass (rev-1 11/16 FAIL — improved; t6b 13/16) — no regression.
+- P3 12/13 pass (the one fail: seed-03, loop 5/7 vs one-shot 7/7 —
+  the loop arm's P3 miss, same seed-class as prior revolutions).
+- T1.7 plan presence 12/12 pass.
+- two-arm lift: pooled 0.991 vs 0.938, lift +0.053 — FAIL (bar
+  +0.10), but the DIRECTION flipped from rev-1's negative lift
+  (−0.010); v1 0.974 vs 0.952 FAIL. Bar-verdict unchanged — not a
+  regression.
+- honesty not worse: ungrounded loop 0.009 vs one-shot 0.062 — PASS
+  (rev-1 0.203 FAIL; t6b 0.000 PASS). The 20x honesty improvement is
+  the fold + the guard's re-draft discipline working.
+
+The five intent-form fails, each characterized (the rev-2 question):
+
+1. **seed-01 [1,2,4,5]** — TWO causes. (a) The degenerate guard's
+   FALSE-POSITIVE firing on the r2 draft (density rule alone: 4 bolded
+   figures in a clean 716-char draft, 11.2/k stars, zero markers;
+   draft-2-degenerate.json in the run dir) — the re-draft's r2 audit
+   produced a DIFFERENT r2 ledger (4 entries vs rev-1's 3; the
+   re-draft added the $23B-rejection detail). (b) The r3 draft then
+   enumerated one new figureless identity ("...critical competitive
+   priority for hyperscalers", corroboration origins 0 — the
+   extraction-empty seam). The FP class is journaled (density rule
+   needs a length floor or marker-context requirement) — a DEFERRED
+   refinement, not a rev-3 budget item.
+2. **seed-02 [1,3,4]** — r3 enumerated ONE new figure-set identity
+   ("US$589 billion single-day loss... $1 trillion erased" — figures
+   589/1 never in the r2 ledger) — the fold correctly refuses (new
+   figures), the single-origin floor caps it at 1 origin. Rev-1's r3
+   draft did not enumerate it — enumeration variance.
+3. **seed-05 [1,6,9]** — r3 enumerated THREE new identities, all
+   date-bearing (2024-07-12 entry-into-force, 2025/08/02 GPAI
+   obligations, 2024 Brussels AI-Office) — new figure-sets, fold
+   refuses, floor caps; one also shows the extraction-empty seam
+   (origins 0).
+4. **seed-09 [1,5,6]** — r3 enumerated ONE new identity ("update
+   '4.1'... June 18, 2026 (noted as 2025-06-18 in evidence)" — the
+   model itself flagged the evidence-date discrepancy). FAILED BOTH
+   revolutions (rev-1 4→6) — the persistent r3-enumeration class.
+5. **seed-11 [1,4,5]** — r3 enumerated ONE new figureless identity
+   ("AI factories... compute as a commodity", origins 0 — the
+   extraction-empty seam). Rev-1 stable [2,8,8].
+
+The v0 four-regression mechanism, stated once: the r3 draft
+enumerates NEW fact identities (figure-rich re-expressions or
+figureless paraphrases) that (a) the fold cannot merge — new
+figure-sets, or the mixed-pair refusal (figureless vs figure-bearing
+is "different facts" by the fold rule, confirmed correct) — and (b)
+the floor cannot pass — the v0 single-origin estate is structurally
+capped at 1 origin < floor 2 (the R-12 v0 fixture artifact, in the
+disposition), or the extraction-empty seam. Rev-1 vs rev-2 deltas are
+r3-draft enumeration variance, not a code change: the fold and the
+draft path are byte-identical between revolutions except the guard's
+one firing.
+
+The 503 evidence (journaled): the one-shot arm hit
+"503 Service Unavailable: local inference failed: Inference error:
+MTP inference deadline exceeded after 300s (3990 tokens)" — a
+daemon-side deadline under transient overload; the test wrote 12/13
+pairs and FAILED loudly (exit 101 — the harness refused to report a
+partial run as a pass). The loop surface has the same class of error
+as a fatal abort ("draft failed:") with retry_after_secs never
+honored — the client-handling gap is named, its fix belongs in the
+shared inference client (out of this order's scope); the 12/13-then-
+rerun path is the evidence that the one-shot arm itself is sound.
+
+### Keep/revert journal (rev-2, lands with this record)
+
+- **The fold: KEEP.** Compression holds across revolutions: v1 growth
+  35→30 (r2 sets 27→28, r3 35→30), seed-07's corruption class gone
+  (rev-1 r3:38 → rev-2 r3:10), honesty 0.203 → 0.009 ungrounded.
+  The gate remains unmet, but every movement is in the direction the
+  order's pre-registration predicted for the fold.
+- **The degenerate-draft guard: KEEP, with the FP class journaled.**
+  Measured effect across battery #2: one false-positive firing
+  (seed-01, density rule alone) and zero corruption recurrences. The
+  guard is a tripwire for the 2026-07-31 corruption class (36 new r3
+  texts) — two batteries clean since. The FP defect is in the RULE
+  (the density branch has no length floor / marker context), not the
+  mechanism — the re-draft itself was clean and arguably better. The
+  rule refinement is DEFERRED (named above), NOT a rev-3 budget item.
+- **The R-12 intent-form leg: still failing (6/12 vs rev-1's 9/12),
+  and the v1 gate unmet — the convergence lever is the re-expression
+  seam, pre-registered below as REV-3.** The rev-2 numbers make the
+  seam's shape exact: every r3 growth in this battery is the r3 draft
+  enumerating identities absent from the r2 ledger, in two shapes
+  (new figure-sets; figureless paraphrases). Rev-3 fixes both shapes
+  and closes the empty-extraction class.
+
+## T6c REV-3 — the re-expression seam fix (the order's LAST budgeted revolution; operator steer 2026-08-19: "keep the war plan going", no round-trip)
+
+### 0. Pre-registered before ANY rev-3 code — this section lands with the rev-2 execution record, before the red-first tests
+
+### 1. The forensics answer (the coordinator's question: why does double-sourced material still fail the floor's corroboration?)
+
+The v1 r2→r3 +2 (28→30), mechanism complete:
+
+- **Both r3-new claims are NEW fact identities** — the fold correctly
+  refuses them. (a) The figure-bearing fragment ("Washington, D.C.
+  followed at 51.9%, Minneapolis at 50.6%, and Seattle at 50%...") —
+  its figure-set {51.9, 50.6, 50} intersects ZERO r2 ledger entries:
+  the r2 draft never asserted the DC/Seattle figures (an r2-draft
+  omission; the r3 fragment is the splitter's cut of the fact the r3
+  draft redeemed). (b) The figureless claim ("Residents from
+  historically Black gentrifying neighborhoods...") shares 3/2/2
+  common subjects with figure-BEARING r2 seeds ("While gentrification
+  remains rare nationally...", "Other cities such as Atlanta
+  (46.2%)...", "Since 1980, nearly 80%...") — the fold's mixed-pair
+  rule (figured vs figureless = different facts) refuses, BY DESIGN
+  (the identities really differ). The fold seam is NOT the growth
+  cause — it worked as specified.
+- **The floor fails double-sourced material because the witness's
+  specifics were model-extracted, and the extraction returned EMPTY.**
+  Both r3-new claims carry corroboration {origins: 0, support_chunks:
+  0} — the containment witness (containment.rs:373-488) ran the
+  extraction (temperature 0.0), got nothing usable (the NONE sentinel
+  / not-witnessable path, containment.rs:457-459), and the empty
+  witnessable set → 0 supporting chunks → could-not-judge. The
+  figure-bearing claim's digits ("51.9%", "50.6%", "50%") are
+  VERBATIM in BOTH origins (ev-1 prose, ev-2 table) — the floor's own
+  deterministic criterion (>=2 distinct source_url origins) is met by
+  the evidence the model never entered into the witness. The t1h
+  strengthen (missing_claim_figures — figures absent from evidence →
+  all_absent) does NOT fire: all claim figures ARE present. So the
+  seam is exactly this: **the witness's specifics are a model output
+  with no deterministic backstop; the claim's own figures are
+  anchored by construction and were never merged in.**
+- **Quantified fixable class:** 22/42 v1 CN claims (52%) carry claim
+  figure tokens present in >=2 origins (the cited evidence) — the
+  merge below passes them; 15 are single-origin (honest caps — the
+  evidence genuinely has one origin); 0 carry figures absent from the
+  evidence (no fabrication — the t1h path is clean); 5 are figureless
+  (paraphrase re-expressions — honest CN by the containment design).
+
+### 2. Fix A — the deterministic figure merge (the re-expression seam)
+
+`containment_witness` merges the claim's OWN figure tokens into the
+witnessable specifics: extraction output ∪ {t in
+`figure_tokens(claim)` : t appears in >=1 referenced chunk's content}.
+Deterministic; anchored by construction (figure tokens are claim
+substrings — the anchor_filter is satisfied by construction, no new
+gate). §7.6: never ask a model to guarantee what code can enforce —
+the extraction stays, the merge is the backstop. Order preserved:
+missing_claim_figures (t1h strengthen) runs FIRST and unchanged — a
+claim whose figures are absent from ALL evidence still downgrades;
+the merge adds only PRESENT figures. The floor (>=2 origins) is
+untouched. Downgrade-only: no pass becomes a fail; a CN figure-bearing
+re-expression becomes a pass only when its digits are in the cited
+evidence. No new threshold, no new decider (§10.6 — the merge
+reuses `figure_tokens`, the ONE implementation).
+
+### 3. Fix B — the resolve-only r3 draft (the enumeration seam)
+
+The r3 (and later) draft is constrained to RESOLVE the open ledger:
+the deterministic figure inventory is suppressed at round >= 3 and
+the draft prompt instructs resolution-only — re-assert the open gaps
+with the evidence, enumerate no new facts. The growth shapes are both
+killed at the source: new figure-set identities and figureless
+paraphrases cannot enter at r3. The closing path is NOT the draft:
+audit_pass re-enters the prior gap texts verbatim every round (the
+fold's seeds are re-audited by the loop itself, fold mechanics in
+audit.rs build_gap_list) — so under A, the r2 ledger's figure-bearing
+entries PASS on the r3 re-audit and leave the ledger. The v0 seeds
+(no fix can pass their single-origin claims) converge by
+non-enumeration: r3 == r2.
+
+### 4. Expected readings (pre-registered, battery #3)
+
+- **v1: r2:28 → r3 ~6-9 — CONVERGED AND SHRUNK** (the first full
+  pass in the order's three revolutions): the ledger's figure-bearing
+  entries pass under A (the closing path), the figureless/single-
+  origin residue stays honest CN, and B bounds the r3 additions to
+  ~0. If the fold's closing path does not recognize the re-audits
+  (measurement, not assumption): r3 == 28 — STILL CONVERGED (final <=
+  round-2 holds; the intent-form is `<=`).
+- **R-12-nongrow: >=10/12 expected** (12/12 if B holds: every v0
+  seed's r3 == r2; seed-04 stays could-not-judge).
+- **P4-v1 (loop): >=12/16 expected** — the r2 ledger's figure-bearing
+  coverage passes at r3. The measured trade: r3-ONLY identities (the
+  +2 fragment's DC/Seattle figures; v0's date identities) drop from
+  the final report unless already in the r2 ledger — P4-v1's delta
+  vs rev-2's 13/16 is the trade's size.
+- **honesty not worse: ungrounded loop <= 0.009** (A is
+  downgrade-only; the merge cannot create grounding the evidence
+  lacks — the absent-figure path is unchanged).
+- **two-arm lift / P3 / P4-v0 / T1.7: bar-verdicts unchanged.**
+
+### 5. Red-first test list (pure, no daemon — the merge is deterministic)
+
+1. A failing test at HEAD (red): `merge_claim_figures` does not
+   exist — the wiring test asserts the merged specifics of a real
+   rev-2 fixture claim (the "51.9%..." fragment) include "51.9" and
+   "50.6" (present in both origins' contents) — red at HEAD, green
+   after A.
+2. The no-fabrication test: a claim whose figure tokens are absent
+   from the referenced chunks merges NOTHING (the t1h strengthen
+   still fires first in the full chain — asserted in the same test).
+3. The anchor test: merged figures are claim substrings by
+   construction (no anchor_filter change needed — asserted).
+4. The flight-level red is battery #3's v1 reading (the daemon-
+   backed full chain: extraction ∪ merge → origins 2 → passes_floor
+   true on the real re-expression).
+
+### 6. The gate (unchanged form, re-stated for the LAST revolution)
+
+v1 final <= round-2 AND R-12-nongrow >= 10/12 AND no-regression on
+P4-v1 / P3 / honesty / two-arm-lift (bar verdicts vs rev-2).
+
+**Not-worth-continuing (the order's pre-registered exit, now live):
+if battery #3 — with the enumeration suppressed (B) and the
+deterministic merge landed (A) — still shows v1 final > round-2, the
+growth is outside the draft/audit/gap seams the order was scoped to
+fix, the pre-registered boundary is met, and the landing report says
+so plainly. The R-12 v0 leg remains the operator's disposition call
+(single-origin estate + floor = structural; documented, never
+touched).**
+
+### 7. Battery #3 (systemd-run, the reaper case law applies)
+
+Fresh root `ARMS_RUN_ROOT="$ARMS/runs-t6c-r3"` — 13 flights (12 v0 +
+v1) + the one-shot comparator arm, budget 12/12, model pin unchanged,
+daemon idle check (127.0.0.1:9741) before launch, ONE unit
+(dr-t6c-r3.service), no daemon restarts mid-battery. The pre-
+registration is in the tree before the battery launches. The landing
+report carries the trajectory numbers, the keep/revert verdict, and
+the converged/exit statement either way.

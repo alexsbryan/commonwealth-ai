@@ -53,20 +53,28 @@
 # fetched == 0 cannot be compared -> could-not-judge.
 #
 # R-12-nongrow: gap-set NON-GROWTH on the v0 seeds — the dr-compass bar
-# re-cut by operator disposition 2026-08-18 ("the round-N gap set never
-# grows on >=10 of 12 bank questions", directive 9bf1d984 — option 2 of
-# adversarial/t6c-r12-v0-disposition.md): comparing the gap-list-N.json
-# gap TEXT sets across consecutive rounds, all(sets[i] <= sets[i-1]).
-# The OLD leg was strict-shrink (all(sets[i] < sets[i-1])) — retired by
-# the same disposition; its citations stay labeled ("R-12
-# strict-shrink, retired 2026-08-18"): the t6b 0/12 numbers remain
-# citable under the old leg name. The mock estate is empty, so round-1's
-# set is the empty-window abstention gap; the round-2 audit of the
-# first content draft carries the claims the corroboration floor keeps
-# open (single-origin) — the measured shape is journaled per seed. A
-# 1-round run (never observed here: the abstention draft always yields
-# a gap) or a run whose sets cannot be compared -> could-not-judge
-# (four-verdict: a gate not watched fail is not a gate).
+# re-cut by operator disposition 2026-08-18 (directive 9bf1d984 —
+# option 2 of adversarial/t6c-r12-v0-disposition.md) and re-cut AGAIN
+# to the INTENT-FORM by directive 19909d5f (2026-08-18, resolved
+# UNEDITED, pre-registered in the t6c REV-2 execution record): the
+# CONTENT-ROUNDS TRAJECTORY — r2->r3 (and later content pairs)
+# non-growing AND final <= round-2 — with the r1->r2 empty-window
+# abstention pair EXCLUDED (pre-registered artifact, named: round 1
+# with an empty window emits the abstention gap "No evidence was
+# retrieved this round.", which closes at r2 and never joins the r2
+# content set; measured fatal to the literal all-pairs formula 0/12).
+# Implemented as r12_nongrow_intent_form(sets) below — ONE
+# implementation shared by the row computation and the fixtures. The
+# OLD strict-shrink leg (all(sets[i] < sets[i-1])) is retired and its
+# citations stay labeled ("R-12 strict-shrink, retired 2026-08-18"):
+# the t6b 0/12 numbers remain citable under the old leg name. The mock
+# estate is empty, so round-1's set is the abstention gap; the round-2
+# audit of the first content draft carries the claims the
+# corroboration floor keeps open (single-origin) — the measured shape
+# is journaled per seed. Fewer than three persisted gap lists (a
+# 2-round or crashed run) -> could-not-judge (the content-rounds
+# verdict needs the r3 set; four-verdict: a gate not watched fail is
+# not a gate).
 #
 # Four-verdict reporting (§18.2): every leg row is passed / failed /
 # could-not-judge / never-ran. Nothing defaults to passed.
@@ -74,9 +82,22 @@
 import argparse
 import json
 import math
+from datetime import date
 import pathlib
 import re
 import sys
+
+
+def r12_nongrow_intent_form(sets):
+    """R-12-nongrow INTENT-FORM (directive 19909d5f, resolved UNEDITED,
+    pre-registered in the t6c REV-2 execution record): the
+    content-rounds trajectory — r2->r3 (and later content pairs)
+    non-growing, final <= round-2 — with the r1->r2 empty-window
+    abstention pair EXCLUDED (pre-registered artifact, named). ONE
+    implementation shared by the row computation and the fixtures.
+    Fewer than three sets cannot carry the content-rounds verdict
+    (the caller reports could-not-judge, never failed)."""
+    return len(sets) >= 3 and all(sets[i] <= sets[i - 1] for i in range(2, len(sets)))
 
 # ------------------------------------------------------------------
 # 1. Figures: extraction (from key texts) + canonicalization
@@ -745,24 +766,28 @@ def main():
                     else:
                         row["p3"] = "could-not-judge"
                         row["p3_reason"] = "no draft-2 (round-1-evidence answer missing)"
-                # R-12-nongrow: gap-set NON-GROWTH (gap TEXT sets,
-                # consecutive) — re-cut by operator disposition
-                # 2026-08-18 (directive 9bf1d984, pre-registered in the
-                # t6c execution record); the old strict-shrink premise
-                # is retired and stays labeled in citations.
+                # R-12-nongrow INTENT-FORM (gap TEXT sets; directive
+                # 19909d5f, resolved UNEDITED, pre-registered in the
+                # t6c rev-2 execution record): the content-rounds
+                # trajectory with the r1->r2 empty-window abstention
+                # pair EXCLUDED. The literal all-pairs formula (rev-1)
+                # and the old strict-shrink premise are retired and
+                # stay labeled in citations.
                 gs = run["gap_sets"]
-                if len(gs) >= 2:
+                if len(gs) >= 3:
                     rounds_ord = sorted(gs)
                     sets = [set(gs[r]) for r in rounds_ord]
-                    nongrow = all(sets[i] <= sets[i - 1] for i in range(1, len(sets)))
+                    nongrow = r12_nongrow_intent_form(sets)
                     row["r12"] = "passed" if nongrow else "failed"
                     row["r12_gap_sizes"] = [len(s) for s in sets]
-                    row["r12_reason"] = ("gap set never grows across rounds" if nongrow else
-                                         "a round's gap set GREW vs the previous (old "
-                                         "strict-shrink premise retired 2026-08-18)")
+                    row["r12_reason"] = (
+                        "content rounds non-growing; final <= round-2 (r1->r2 "
+                        "abstention pair excluded, directive 19909d5f)" if nongrow else
+                        "a CONTENT round's gap set GREW vs the previous (r2->r3 "
+                        "pair, intent-form; r1->r2 abstention excluded)")
                 else:
                     row["r12"] = "could-not-judge"
-                    row["r12_reason"] = "fewer than two gap lists persisted"
+                    row["r12_reason"] = "fewer than three gap lists persisted (content-rounds verdict needs the r3 set)"
                 # density + honesty over the final report
                 dens, tr, tot, drows = density(run["report"], run["window_text"])
                 row["loop_density"] = dens
@@ -789,7 +814,7 @@ def main():
 
     summary = summarize(rows)
     report = {
-        "scored_at": "2026-08-14",
+        "scored_at": str(date.today()),
         "scorer": "score-arms.py (C-class deterministic; rules journaled in the file header)",
         "pairs": rows,
         "summary": summary,
@@ -861,8 +886,10 @@ def bars_block(rows, summary):
             "the v0 seeds all re-fetch the same exemplar (no fetch dedup); the v1 flight passed (round-2 fetched 0, coverage not worse)"),
         leg("R-12-nongrow", f"{r12_passed}/12 v0 seeds", ">=10/12",
             r12_passed >= 10,
-            "non-growth premise per disposition 2026-08-18 (option 2, directive 9bf1d984); "
-            "old strict-shrink leg retired and stays labeled in citations; "
+            "INTENT-FORM content-rounds trajectory per directive 19909d5f (r2->r3 "
+            "non-growing, final <= round-2; the r1->r2 empty-window abstention pair "
+            "excluded — pre-registered artifact, named); literal all-pairs and "
+            "strict-shrink legs retired, citations stay labeled; "
             "v1 trajectory is the t6c order's gate, journaled not gated"),
         leg("T1.7 plan presence", f"{len(t17_pass)}/{len(t17_scoped)} scoped flights",
             "all scoped flights carry", t17_verdict == "passed", t17_note),
@@ -1094,18 +1121,26 @@ cited?"
                    "48 50 1.1% Houston", None)
     check("k9 uncorrected all-of can clear", r[0]["covered"] is True, r[0]["reason"])
 
-    # R-12-nongrow semantics (gap TEXT sets, consecutive rounds; the
-    # strict-shrink premise retired 2026-08-18 by operator disposition,
-    # directive 9bf1d984 — old-instrument citations stay labeled)
-    shrink = {1: ["g1", "g2"], 2: ["g1"], 3: []}
-    grow = {1: ["no evidence"], 2: ["claim a", "claim b"]}
-    conv = {1: ["no evidence"], 2: []}
-    stable = {1: ["g1"], 2: ["g1"], 3: ["g1"]}
-    check("r12-nongrow shrink passes",
-          set(shrink[2]) <= set(shrink[1]) and set(shrink[3]) <= set(shrink[2]))
-    check("r12-nongrow grown fails", not (set(grow[2]) <= set(grow[1])))
-    check("r12-nongrow converged passes", set(conv[2]) <= set(conv[1]))
-    check("r12-nongrow stable passes", set(stable[2]) <= set(stable[1]))
+    # R-12-nongrow INTENT-FORM semantics (gap TEXT sets; directive
+    # 19909d5f, pre-registered in the t6c rev-2 execution record): the
+    # content-rounds trajectory with the r1->r2 empty-window abstention
+    # pair EXCLUDED. The fixtures call the SAME implementation as the
+    # row computation — one threshold, one name.
+    abst_ok = {1: ["no evidence"], 2: ["claim a", "claim b"], 3: ["claim a"]}
+    grow = {1: ["no evidence"], 2: ["claim a"], 3: ["claim a", "claim c"]}
+    conv = {1: ["no evidence"], 2: ["g1"], 3: []}
+    stable = {1: ["no evidence"], 2: ["g1", "g2"], 3: ["g1", "g2"]}
+    two_round = {1: ["no evidence"], 2: ["g1"]}
+    check("r12 intent-form: abstention pair excluded (the pre-registered artifact)",
+          r12_nongrow_intent_form([set(abst_ok[r]) for r in sorted(abst_ok)]))
+    check("r12 intent-form: content growth fails",
+          not r12_nongrow_intent_form([set(grow[r]) for r in sorted(grow)]))
+    check("r12 intent-form: converged passes",
+          r12_nongrow_intent_form([set(conv[r]) for r in sorted(conv)]))
+    check("r12 intent-form: stable content rounds pass",
+          r12_nongrow_intent_form([set(stable[r]) for r in sorted(stable)]))
+    check("r12 intent-form: two rounds cannot carry the verdict",
+          not r12_nongrow_intent_form([set(two_round[r]) for r in sorted(two_round)]))
 
     # P3 arithmetic: 0 < 0.2*f1 passes; f2 >= 0.2*f1 fails
     check("p3 zero round-2 passes", 0 < 0.2 * 1)

@@ -1937,7 +1937,7 @@ second editor on that file."""
 id = "dr-compass"
 one_line = "The gap loop converges on the bank — round-N gap sets never grow on >=10 of 12 questions; the two-origin v1 flight strictly shrinks"
 derives_from = "DEEP_RESEARCH.md R3, R11, FR-4; PLAN.md §3 R-12 green, §4 T1"
-bar = "the round-N gap set NEVER GROWS on >=10 of 12 bank questions (re-cut from strict-shrink by operator disposition 2026-08-18, option 2 of the t6c evidence package: the single-origin v0 estate + met corroboration floor make strict shrink structurally unreachable — measured 0/12, eight batteries, t1c..t6b); the two-origin v1 flight's gap trajectory converges (final <= round-2, the set stops growing). Gaps stay phrased as things a search query can act on. Red: the non-growth green on the v0 estate — never observed (gap sets grew every battery)"
+bar = "the round-N gap set NEVER GROWS on >=10 of 12 bank questions (re-cut from strict-shrink by operator disposition 2026-08-18, option 2 of the t6c evidence package: the single-origin v0 estate + met corroboration floor make strict shrink structurally unreachable — measured 0/12, eight batteries, t1c..t6b); FORM ('intent-form', operator 2026-08-18): non-growth is measured on content rounds — r2->r3 non-growing AND final <= round-2 — the r1->r2 empty-window abstention pair excluded (pre-registered artifact, named); the two-origin v1 flight's gap trajectory converges (final <= round-2, the set stops growing). Gaps stay phrased as things a search query can act on. Red: the non-growth green on the v0 estate — never observed (gap sets grew every battery)"
 declared = "2026-08-13"
 notes = """RE-CUT at T0 landing (directive 65af7264, approved unedited): the
 declared T0 hand-run clause passed — strict convergence 6->0, 6->0, 7->1->0 on
@@ -1955,7 +1955,15 @@ bar text is FROZEN") held the text pending exactly this call — the freeze was
 the operator's own discipline and the operator is its authority; this re-cut is
 the dispositioned path, not a silent flip. The scorer's R-12 leg is re-cut to
 the same premise (t6c steer, pre-registered before re-scoring); old-instrument
-strict-shrink citations stay labeled."""
+strict-shrink citations stay labeled.
+
+FORM REFINEMENT 2026-08-18 (operator, 'intent-form', directive 19909d5f): the
+leg measures content rounds (r2->r3 non-growth + final <= round-2); the
+r1->r2 empty-window abstention pair is excluded — named, never silent. The
+literal all-pairs formula measured 0/12 on that artifact; content-rounds
+measured 9/12 with all three failures characterized as the r3-draft seam
+(rev-2's target). One trajectory measure everywhere — the order's v1 gate
+shape, not a second formula."""
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
