@@ -340,20 +340,40 @@ sha256 = ""
 # two paths' namespaces cannot collide. (`sha256 = ""` -> the bundled in-repo
 # recipe wins, as for brothers-karamazov-book-1 below.)
 #
-# catalog_status stays `preview` — the install button is deliberately off
-# until the whole journey is proven end to end by
-# tests/e2e/real/sec-filings-by-ticker.real.spec.ts, which drives the
-# catalog surface and asserts both an answered figure and a refusal that
-# names what IS available.
+# catalog_status = "featured" — FLIPPED 2026-08-18 BY OPERATOR DECISION,
+# with three of four flip conditions met and the fourth NOT met. This
+# comment records the gaps rather than implying a clean bar, because the
+# next reader must not infer from `featured` that the journey is fully
+# proven. Full audit trail: sovereign/DEFAULTS_LEDGER.md.
 #
-# The integration the earlier `preview` note was waiting on IS now in
-# place: sec_edgar step 6 calls sec_facts_render::render pre-ingest and
-# install_fact_sidecar moves the typed store into the index dir
-# synchronously. What is still missing is the RUN — the spec above has
-# never completed on this host (the real-suite harness fails in its own
-# fixture-corpus ingest during global-setup, before the spec is reached).
-# So the journey is unproven rather than disproven, and an unproven
-# button stays off. See sovereign/DEFAULTS_LEDGER.md.
+# WHAT IS PROVEN. The figure path works on BOTH surfaces. Ring 0
+# (`svrn chat ask`, n=3, 3/3 identical) and ring 2 (the desktop app,
+# installed BY TICKER through this catalog) both return
+# `capital_expenditures = $12,715,000,000.00` with fiscal-period basis
+# (2024-09-29..2025-09-27) and accession 0000320193-25-000079. Conditions
+# (1) render pre-ingest, (2) a figure answered from a ticker-installed
+# corpus, and (3) the install form are MET.
+#
+# KNOWN GAP 1 — condition (4) is UNMET. The F3 hand-read has never run at
+# its registered bar, and run 6 of the e2e above is RED: it aborted in
+# `assertTurnInvariants` (invariants.ts:111) on a transport invariant —
+# concat(message-chunk) differs from message-complete.full_text by one
+# trailing newline — BEFORE reaching its figure assertion. The describe
+# block is serial, so the KO filer and the two-filer assertion were
+# SKIPPED, not passed. The newline is UNATTRIBUTED; leading hypothesis is
+# revealed-not-caused (that assertion had never executed on an answered
+# figure in eight prior attempts). Not proven either way.
+#
+# KNOWN GAP 2 — segment questions with no structural word. The tool
+# refuses below-entity asks via SecRefusal::ScopeNotInSource, but it keys
+# on STRUCTURAL vocabulary ("segment", "division", "by region", …), never
+# on a filer's product names. So "What was Mac revenue in FY2025?" is NOT
+# caught and answers CONSOLIDATED revenue. Closing it needs the filer's
+# own segment names, which companyfacts does not carry.
+#
+# KNOWN GAP 3 — F2 segment honesty is not settled by this flip, and never
+# was: companyfacts is consolidated-only, so the prose-served segment
+# figures at `e8b9319b` remain the open F2 item.
 [[recipes]]
 id = "sec-filings-company"
 name = "SEC Filings — Single Company (10-K + typed facts)"
@@ -365,7 +385,7 @@ enrichment_enabled = false
 mesh_sharing = true
 toml_url = "https://raw.githubusercontent.com/alexsbryan/sovereign-recipes/main/sec-filings-company/recipe.toml"
 sha256 = ""
-catalog_status = "preview"
+catalog_status = "featured"
 
 [[recipes]]
 id = "uap-blue-book"

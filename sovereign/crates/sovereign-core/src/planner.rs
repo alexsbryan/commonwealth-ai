@@ -237,10 +237,27 @@ fn describe_step_kind(kind: &StepKind) -> String {
     }
 }
 
+/// Declared `enum` members of a JSON-Schema property, in the form the
+/// planner is expected to copy. `None` when absent or empty, so an
+/// `"enum": []` renders as an unconstrained type rather than as a
+/// vocabulary with no legal value.
+fn enum_values(spec: &serde_json::Value) -> Option<Vec<String>> {
+    let arr = spec.get("enum")?.as_array()?;
+    if arr.is_empty() {
+        return None;
+    }
+    Some(
+        arr.iter()
+            .map(|v| v.as_str().map_or_else(|| v.to_string(), str::to_string))
+            .collect(),
+    )
+}
+
 /// Compact hint of a tool's INPUT parameters for the planner prompt:
-/// property names with their JSON-Schema types, required ones marked `*`.
-/// Pairs with the output-keys line so the planner knows both what a tool
-/// accepts and what it returns. `None` when the schema has no properties.
+/// property names with their JSON-Schema types, required ones marked `*`,
+/// and — for a closed set — the values it will accept. Pairs with the
+/// output-keys line so the planner knows both what a tool accepts and what
+/// it returns. `None` when the schema has no properties.
 fn format_param_hint(t: &ToolDescriptor) -> Option<String> {
     let props = t.parameters.get("properties")?.as_object()?;
     if props.is_empty() {
@@ -261,7 +278,17 @@ fn format_param_hint(t: &ToolDescriptor) -> Option<String> {
             } else {
                 ""
             };
-            format!("{name}{star} ({ty})")
+            // A declared `enum` is a CLOSED set the tool REJECTS outside
+            // of, so the planner has to see every member — it cannot copy
+            // an id it was never shown, and the resulting refusal is
+            // indistinguishable from "this corpus does not hold it".
+            // Rendered in full and never truncated: a partial vocabulary
+            // biases the planner toward the head of the list and
+            // guarantees refusals for values that would have resolved.
+            match enum_values(spec) {
+                Some(vals) => format!("{name}{star} ({ty}: {})", vals.join("|")),
+                None => format!("{name}{star} ({ty})"),
+            }
         })
         .collect();
     let note = if required.is_empty() {
@@ -845,5 +872,89 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    fn descriptor_with_params(parameters: serde_json::Value) -> ToolDescriptor {
+        ToolDescriptor {
+            id: "probe".to_string(),
+            name: "probe".to_string(),
+            description: "probe".to_string(),
+            parameters,
+            examples: vec![],
+            effect: Effect::Read,
+            idempotency: Idempotency::Idempotent,
+            latency: Latency::Fast,
+            scope: Scope::Session,
+            output_schema: None,
+        }
+    }
+
+    /// The regression this whole change exists for: a tool that declares a
+    /// closed vocabulary had it DISCARDED on the way to the planner prompt,
+    /// which was rendered `concept (string)`. The planner then invented a
+    /// value the tool was guaranteed to reject.
+    #[test]
+    fn param_hint_renders_declared_enum() {
+        let t = descriptor_with_params(serde_json::json!({
+            "properties": {
+                "mode": { "type": "string", "enum": ["figure", "coverage"] }
+            },
+            "required": ["mode"]
+        }));
+        assert_eq!(
+            format_param_hint(&t).unwrap(),
+            "mode* (string: figure|coverage) (*=required)"
+        );
+    }
+
+    /// Every member, always. A truncated vocabulary is worse than none: it
+    /// biases the planner to the head of the list while the tool still
+    /// rejects everything below the cut.
+    #[test]
+    fn param_hint_renders_every_enum_member() {
+        let ids: Vec<String> = (0..40).map(|i| format!("concept_{i:02}")).collect();
+        let t = descriptor_with_params(serde_json::json!({
+            "properties": { "concept": { "type": "string", "enum": ids } }
+        }));
+        let hint = format_param_hint(&t).unwrap();
+        for id in &ids {
+            assert!(hint.contains(id.as_str()), "{id} missing from hint: {hint}");
+        }
+    }
+
+    #[test]
+    fn param_hint_without_enum_is_unchanged() {
+        let t = descriptor_with_params(serde_json::json!({
+            "properties": { "period": { "type": "string" } },
+            "required": ["period"]
+        }));
+        assert_eq!(
+            format_param_hint(&t).unwrap(),
+            "period* (string) (*=required)"
+        );
+    }
+
+    /// An empty `enum` declares no legal value. Rendering `(string: )` would
+    /// tell the planner the parameter is uncallable; fall back to the type.
+    #[test]
+    fn param_hint_ignores_empty_enum() {
+        let t = descriptor_with_params(serde_json::json!({
+            "properties": { "mode": { "type": "string", "enum": [] } }
+        }));
+        assert_eq!(
+            format_param_hint(&t).unwrap(),
+            "mode (string) — all optional"
+        );
+    }
+
+    #[test]
+    fn param_hint_renders_non_string_enum_members() {
+        let t = descriptor_with_params(serde_json::json!({
+            "properties": { "depth": { "type": "integer", "enum": [1, 2, 3] } }
+        }));
+        assert_eq!(
+            format_param_hint(&t).unwrap(),
+            "depth (integer: 1|2|3) — all optional"
+        );
     }
 }

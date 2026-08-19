@@ -31,6 +31,70 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### `sec-filings-company` install-by-ticker — `catalog_status = "featured"` since 2026-08-18 (was **preview**)
+
+**FLIPPED 2026-08-18 BY OPERATOR DECISION, over an unmet condition.** The
+seat recommended holding and was overruled; that is the operator's call
+and it is recorded as a decision, not as a bar that was met. Three of the
+four flip conditions below are MET — (1) render pre-ingest, (2) a figure
+answered from a ticker-installed corpus with basis and accession, now
+proven on BOTH the CLI (ring 0, n=3) and the DESKTOP (ring 2, run 6), and
+(3) the install form. **(4), the F3 hand-read at its registered bar, is
+NOT met**, and the ring 2 run that would speak to it is RED on a
+transport invariant (one trailing newline, `invariants.ts:111`), with the
+KO filer and two-filer assertion SKIPPED rather than passed.
+
+**The three known gaps a user can hit, stated so nobody has to rediscover
+them** (also carried in `sovereign-recipes/registry.toml` above the entry,
+and in notes `9be87107` / `45b04cf5`):
+
+1. **Segment questions with no structural word answer CONSOLIDATED, and
+   this is a MEASURED REGRESSION against a pre-registered item, not an
+   estimate.** `SecRefusal::ScopeNotInSource` catches "Mac **segment**
+   revenue" but not "**Mac** revenue" / "**Services** revenue" — it keys
+   on structural vocabulary, never on a filer's product names, which
+   companyfacts does not carry.
+   - Frozen-set item `segment-services`
+     (`sovereign-recipes/sec-filings-company/prereg/aapl-fabrication-set.toml:62`,
+     `question = "What was Apple's Services revenue in fiscal 2025?"`,
+     `expect = "refusal"`) **passed on 2026-08-16** (`aapl-fabrication-
+     n3run1_20260816.jsonl`, 9/9) and **does not now**: the planner sends
+     `concept="revenue"` and the turn serves consolidated
+     `$416,161 million` for a Services question. True Services revenue is
+     `109,158` — listed in that item's own `forbidden_values`.
+   - **Cause is the enum, by mechanism.** Pre-enum an out-of-vocabulary
+     ask drifted to something unmapped and refused honestly; post-enum the
+     planner is reliably pushed into the closed set, picks the nearest
+     LEGAL member, and the tool answers it. The enum is a real improvement
+     on in-vocabulary asks and a real regression on out-of-vocabulary ones.
+   - **SCORED, whole set, 2026-08-18: `8/9 passed` — HONESTY 1, bar
+     ZERO.** `segment-services` FAILED with "unattributable numeral(s):
+     $416,161 million". Every other item passed, including
+     `prose-explanation-mac`, `period-calendar-trap`, `period-beyond-asof`
+     and `arithmetic-yoy-revenue` (11 figures, all attributable).
+     Artefacts committed alongside the prior runs:
+     `sovereign/bench/sec-filings/results/aapl-fabrication-postenum-scope_20260818.jsonl`
+     (+ `-records_`). Compare `aapl-fabrication-n3run1_20260816.jsonl` = 9/9.
+   - BOTH instruments validated before the result: `run_frozen_set.py
+     --self-test` (6/6 controls, watched reading fired and not-fired) and
+     `scripts/check-sec-answer-path.py --self-test` (watched FAILING on 5
+     tampered controls — 4 honesty, 1 competence — and passing on 4 clean).
+   - This is the highest-severity live gap: a real, cited,
+     wrong-granularity figure rather than a refusal, and it crosses a
+     registered bar whose threshold is zero.
+2. **The e2e has never gone green end to end** — nine attempts. Run 6 got
+   the figure on the desktop and then failed a byte-equality invariant.
+   Unattributed; the newline is not chased.
+3. **F2 segment honesty is unsettled and this flip does not settle it**
+   (`e8b9319b`) — companyfacts is consolidated-only by construction.
+
+**Review-by 2026-08-30 stands.** If gap 1 is still open then, this row is
+the place to argue for reverting to `preview`.
+
+---
+
+_Historical record below — the reasoning while this row was `preview`._
+
 ### `sec-filings-company` install-by-ticker — `catalog_status = "preview"` (not **featured**)
 - **Shipped dark:** 2026-08-16, order `financial-corpora` slice 2
   (worker `sec-recipe-install`). The recipe installs one company's 10-K
@@ -114,6 +178,89 @@ store (ids cited per row).
     flagged all four numerals: with no tool datum in the basis,
     "untraceable" is correct by construction, so the guard is right about
     a symptom.
+- **Condition audit, 2026-08-18 (later) — (2) moves FAILED → MET.** Order
+  `sec-facts-concept-enum` + the planner change it was blocked on
+  (`format_param_hint` now renders a declared `enum` into the plan
+  prompt). Ring 0, `svrn chat ask` against `sec-cik0000320193`, n=3:
+  - The planner sent `concept="capital_expenditures"` — a bare canonical
+    id — **3/3**. No hedge, no label, no pipe alternation. The prior
+    failing inputs were a label (`"Payments to acquire property, plant
+    and equipment"`, deterministic 3/3) and the pipe hedge; both are gone.
+  - **A figure was answered, with basis and citation, 3/3 identical:**
+    `capital_expenditures = $12,715,000,000.00`, us-gaap
+    `PaymentsToAcquirePropertyPlantAndEquipment`, period
+    `2024-09-29..2025-09-27`, Form 10-K accession `0000320193-25-000079`,
+    plus a reproduce path to the companyfacts URL. Zero `refusal emitted`.
+  - **Still `preview`, because (4) is unmeasured.** (1) (2) (3) are now
+    MET; the F3 hand-read has never run. Any one unmet keeps it `preview`,
+    so this does not flip the row — it removes the blocker that made the
+    initiative close NOT-SHIPPABLE.
+  - Ring 2 (desktop e2e) NOT re-run: ring 0 proves the planner→tool→basis
+    path, and the desktop's own arming was already proven at `655c6ab5`.
+  - **NEW BLOCKER, same session — the REFUSAL half now fails, 2/2.** This
+    registry entry's flip condition wants an answered figure AND a refusal
+    naming what IS available; only the first is met. Asked for Apple's
+    **Mac** and then **iPhone** segment revenue, the planner sent
+    `concept="revenue"` both times and got consolidated $416,161M, which
+    the model narrated as "Apple Inc.'s Mac segment revenue in FY2025 was
+    $416,161 million". The enum closed the in-vocabulary hole and
+    SHARPENED this one: the schema tells the planner to "send the closest
+    single id and let the tool refuse", but that premise is false when the
+    closest id is in the store — so no refusal ever fires (§18.3, moved
+    from the resolver to the planner). The provenance guard withheld both
+    answers only INCIDENTALLY — on a rounding restatement (`$416.2
+    billion`) and on an accession fragment (`0000320`) — neither catch
+    about granularity. Detail + fix shape (compare the ask against the
+    resolved concept at the `ToolContext` seam, as M1b already does for
+    period): note `45b04cf5`. **Do not flip until this refuses.**
+  - **CLOSED, same session.** `SecRefusal::ScopeNotInSource` +
+    `scope_qualifier_in_question`, wired at the same seam as
+    `PeriodNotAsAsked` and gated on `store.coverage.consolidated_only`.
+    Re-run of the exact failing probe: the planner still sends
+    `concept="revenue"` (the enum correctly pushes it into the closed
+    set), and the tool now REFUSES — "this question asks for a
+    'segment'-level figure … the consolidated 'revenue' figure is NOT
+    that number and is not offered as a substitute", followed by all 20
+    typed concepts. Consolidated control unchanged: capex still answers
+    `$12,715,000,000.00`, zero refusals. So both halves of this entry's
+    flip condition — an answered figure AND a refusal naming what IS
+    available — now hold at ring 0.
+  - **RESIDUE, disclosed not hidden (§18.3).** The guard keys on
+    STRUCTURAL segment vocabulary (`segment`, `division`, `business unit`,
+    `product line`, `by region`, `geographic`, …), deliberately not on one
+    filer's product names, which would not transfer to the next company.
+    So "What was **Mac** revenue in FY2025?" — a product name with no
+    structural word — is NOT caught and would still answer consolidated.
+    Closing that needs the filer's own segment names, which companyfacts
+    does not carry. Scoped to the clear case exactly as the calendar check
+    was, by the same operator direction.
+- **Ring 2, run 6 (`runs/sec-filings-scope-e2e/`) — the figure LANDED on
+  the desktop, and the run is still RED.** Both are true and neither
+  cancels the other.
+  - **The substantive win, first time in nine attempts.** Installed BY
+    TICKER through the catalog, in `sovereign-desktop`, the turn returned
+    `capital_expenditures = $12,715,000,000.00 — us-gaap
+    PaymentsToAcquirePropertyPlantAndEquipment, period
+    2024-09-29..2025-09-27, Form 10-K accession 0000320193-25-000079`.
+    That is condition (2) on the surface that ships — the inference M2.5
+    existed to stop us making, now measured instead of inferred.
+  - **Why it is still red, and it is NOT the figure.** The spec aborted in
+    `assertTurnInvariants` (`invariants.ts:111`) on a TRANSPORT invariant:
+    `concat(message-chunk)` differs from `message-complete.full_text` by
+    exactly one trailing newline. It failed BEFORE reaching the figure
+    assertion at `:475`; the figure is visible only in the failure diff.
+    The describe block is serial, so **KO and the two-filer assertion
+    never ran** (skipped, not passed).
+  - **UNATTRIBUTED.** Neither order touches the answer-rendering or
+    streaming path — the enum changes a prompt, the scope guard is inert
+    here (the spec has no segment vocabulary, grepped). Leading hypothesis
+    is REVEALED-not-caused: this assertion had never executed on an
+    answered figure in eight prior attempts, so a pre-existing off-by-one
+    newline would surface exactly now. **That is a hypothesis, not a
+    finding** — proving it needs a control run on a stashed tree, which
+    was not spent.
+  - **Condition (4) therefore does NOT pass, and the row stays
+    `preview`.** A red e2e is not an F3 hand-read at its registered bar.
 - **Instrument gap this run exposed:** the answer TEXT is preserved
   nowhere in `evidence/` — only the audit's violation list — so whether
   `2023`/`2024` were prose years or claimed data CANNOT be decided from

@@ -63,6 +63,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine::engine::{CorpusEngine, CustomAcquirerFn};
+use corpus_engine::enrichment::atlas::analysis::sec_facts::normalize_concept_phrase;
 use corpus_engine::error::{Error, Result};
 use serde::{Deserialize, Serialize};
 
@@ -109,6 +110,80 @@ const CONCEPT_MAP_TOML: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../sovereign-recipes/sec-filings-company/concept-map.toml"
 ));
+
+/// The concept vocabulary, derived ONCE from [`CONCEPT_MAP_TOML`].
+///
+/// WHY THIS EXISTS (order `sec-facts-concept-enum`). `concept` reaches
+/// the `sec_facts` tool as free text from a PLANNER, and the set of
+/// names that can ever resolve is fixed at compile time — the map is
+/// `include_str!`'d above, so every build knows its whole vocabulary.
+/// A closed set passed as open text is exactly what ARCH §9 forbids, and
+/// it cost three separate refusals of answerable questions: a human
+/// label, a pipe-alternation hedge, and a CLI-path case.
+///
+/// Two consumers, one source (§10.6):
+///   - the tool's parameter schema publishes [`ids`](Self::ids) as a JSON
+///     Schema `enum`, so the planner is SHOWN the closed set;
+///   - the tool's `validate`/`execute` call [`accepts`](Self::accepts),
+///     so a name outside the vocabulary fails loudly naming what was
+///     expected — because a schema shown to a model is a request, and a
+///     request is not a guarantee (§7.6).
+pub(crate) struct ConceptVocabulary {
+    /// Canonical concept ids, sorted (the map is a `BTreeMap`). This is
+    /// the published `enum`.
+    pub(crate) ids: Vec<String>,
+    /// Canonical ids as a set, for `accepts`.
+    id_set: std::collections::BTreeSet<String>,
+    /// Every declared `ask_terms` phrase across every concept, NORMALIZED.
+    ask_terms: std::collections::BTreeSet<String>,
+}
+
+impl ConceptVocabulary {
+    /// Would `resolve_concept` accept this spelling for SOME corpus?
+    ///
+    /// This mirrors `resolve_concept_inner`'s two steps exactly — id
+    /// form, then declared-alias form — but asks them of the MAP rather
+    /// than of one filer's store. The two questions are different and
+    /// both are needed:
+    ///
+    ///   this fn   "is this a name the system knows at all?"   -> map
+    ///   resolver  "does THIS corpus hold it?"                 -> store
+    ///
+    /// Keeping them apart is the whole point. Before this existed, a
+    /// planner-invented label and a genuine coverage limit produced the
+    /// SAME refusal, so "the model wrote nonsense" was indistinguishable
+    /// from "this company does not report that" — and the first one was
+    /// being read as the second for three occurrences running.
+    ///
+    /// It is emphatically NOT a similarity match: both arms are exact
+    /// equality after the resolver's own normalization. `resolve_concept`'s
+    /// never-guess contract (§18.3) is unchanged and unweakened.
+    pub(crate) fn accepts(&self, requested: &str) -> bool {
+        let n = normalize_concept_phrase(requested);
+        self.id_set.contains(&n.replace(' ', "_")) || self.ask_terms.contains(&n)
+    }
+}
+
+/// Process-wide vocabulary. Parsed once; the bytes are compiled in, so a
+/// parse failure here is a build-time-committed malformed map and there
+/// is no correct runtime behaviour but to say so.
+pub(crate) fn concept_vocabulary() -> &'static ConceptVocabulary {
+    static VOCAB: std::sync::OnceLock<ConceptVocabulary> = std::sync::OnceLock::new();
+    VOCAB.get_or_init(|| {
+        let map = crate::sec_facts_render::ConceptMap::from_toml(CONCEPT_MAP_TOML)
+            .expect("compiled-in concept-map.toml must parse");
+        ConceptVocabulary {
+            ids: map.concepts.keys().cloned().collect(),
+            id_set: map.concepts.keys().cloned().collect(),
+            ask_terms: map
+                .concepts
+                .values()
+                .flat_map(|c| c.ask_terms.iter())
+                .map(|t| normalize_concept_phrase(t))
+                .collect(),
+        }
+    })
+}
 
 /// Prose part sizing. Each part must become ONE chunk: the engine
 /// prepends the doc title to every chunk AFTER the chunker bounds

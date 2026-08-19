@@ -41,7 +41,8 @@ use sovereign_core::types::{
 use corpus_engine::enrichment::atlas::analysis::sec_facts::{
     available_period_ends, calendar_period_in_question, change, coverage_summary,
     discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
-    store_claims, SecFact, SecFactStore, SecRefusal, SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
+    scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
+    SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
 };
 use corpus_engine::CorpusEngine;
 use sovereign_core::types::AuthorityClaim;
@@ -154,7 +155,12 @@ impl Tool for SecFactsTool {
                 "properties": {
                     "concept": {
                         "type": "string",
-                        "description": "Canonical concept id, e.g. revenue, gross_profit, net_income, eps_diluted, total_assets, operating_cash_flow. Unknown concepts are refused by name (mode=coverage lists them)."
+                        // THE CLOSED SET, PUBLISHED (ARCH §9). Derived from
+                        // the compiled concept map — never hand-listed, so a
+                        // new row in concept-map.toml cannot leave the schema
+                        // advertising a stale vocabulary (§10.6).
+                        "enum": &crate::sec_edgar::concept_vocabulary().ids,
+                        "description": "Canonical concept id — MUST be one of the listed values, copied EXACTLY. Not a label, not a description, and never several ids joined by '|' or '/': send ONE id. If the user's wording matches no id, send the closest single id and let the tool refuse — a refusal names what IS available; an invented id is rejected outright."
                     },
                     "period": {
                         "type": "string",
@@ -166,7 +172,11 @@ impl Tool for SecFactsTool {
                     },
                     "ratio_to": {
                         "type": "string",
-                        "description": "Optional denominator concept: returns concept ÷ ratio_to for the same period (e.g. gross margin percent = gross_profit ratio_to revenue)."
+                        // Same vocabulary, same reason — a denominator is a
+                        // concept id too, and was open text for the same
+                        // three occurrences.
+                        "enum": &crate::sec_edgar::concept_vocabulary().ids,
+                        "description": "Optional denominator concept id, from the same list as `concept`: returns concept ÷ ratio_to for the same period (e.g. gross margin percent = gross_profit ratio_to revenue)."
                     },
                     "compare_period": {
                         "type": "string",
@@ -230,6 +240,14 @@ impl Tool for SecFactsTool {
     fn required_permissions(&self) -> Vec<Permission> {
         vec![]
     }
+
+    // NO `validate` override, deliberately. The obvious place for a
+    // parameter check is this hook, and it is the wrong one here: its
+    // signature is `Result<()>`, so rejecting through it turns a bad
+    // concept into a FAILED STEP, and a failed step gives the answer
+    // path nothing to be honest with. Measured, n=3 — see
+    // `concept_vocabulary_refusal`. The check runs in `execute` and
+    // returns a refusal instead.
 
     /// §7.3: deterministic authority claim. Claims a question iff it
     /// names an entity AND a concept ask-term of a store whose recipe
@@ -309,10 +327,36 @@ impl Tool for SecFactsTool {
             ));
         };
 
+        // Vocabulary check. It lives in `execute` and NOT in `validate`
+        // because `validate` is called by the plan executor
+        // (executor.rs:799) and by nothing else — `execute_delegate` and
+        // the tool loop invoke `execute` directly, so a guard placed
+        // there would cover one of three entry points and have to be
+        // REMEMBERED for the other two (§7: structural, not remembered).
+        // It also cannot live in `validate` for a second reason: that
+        // hook returns `Result`, and the measured cost of failing this
+        // as an error rather than a refusal is on
+        // `concept_vocabulary_refusal`.
+        for (field, value) in [
+            ("concept", Some(requested_concept)),
+            ("ratio_to", params.get("ratio_to").and_then(|v| v.as_str())),
+        ] {
+            if let Some(v) = value {
+                if let Some(reason) = concept_vocabulary_refusal(field, v) {
+                    return Ok(refusal_output(&corpus_id, &store, v, period, &reason));
+                }
+            }
+        }
+
         // Planner-spelled concept names resolve through the declared
         // alias registry (separator normalization + ask_terms); the
         // canonical id is NAMED in the output, never a silent
         // substitution (ARCH §18.3).
+        //
+        // Everything reaching HERE is in the vocabulary, so a refusal
+        // below means "this corpus does not hold that concept" — a
+        // coverage fact about the filer, not a malformed ask. The two
+        // used to arrive as one indistinguishable `UnmappedConcept`.
         let concept = match resolve_concept(&store, requested_concept) {
             Ok(c) => c,
             Err(r) => {
@@ -368,6 +412,43 @@ impl Tool for SecFactsTool {
                     &store,
                     concept,
                     &asked,
+                    &refusal.reason(),
+                ));
+            }
+        }
+
+        // SCOPE, checked the same way and for the same reason as the
+        // period above. The planner substitutes the nearest LEGAL concept
+        // when the question asks below the consolidated entity — asked for
+        // Apple's "Mac segment revenue" it sends `concept="revenue"`,
+        // which resolves, so no other refusal can fire and a company-wide
+        // figure gets narrated as a segment one (reproduced 2/2,
+        // 2026-08-18). The provenance guard does not catch this: it binds
+        // numerals to the tool datum and the datum IS the tool's, so both
+        // catches that run were incidental.
+        //
+        // Enforced in code because the schema already ASKS the planner not
+        // to do this and asking is not a guarantee (§7.6) — the same
+        // reasoning that put `PeriodNotAsAsked` here.
+        if store.coverage.consolidated_only {
+            if let Some(qualifier) = ctx
+                .question
+                .as_deref()
+                .and_then(scope_qualifier_in_question)
+            {
+                let refusal = SecRefusal::ScopeNotInSource {
+                    concept: concept.to_string(),
+                    qualifier: qualifier.clone(),
+                    mapped: store.concepts.keys().cloned().collect(),
+                };
+                tracing::debug!(target: "sec_facts", corpus_id = %corpus_id, concept,
+                    qualifier = %qualifier,
+                    "sec_facts: REFUSE scope not in source (model substituted a consolidated concept)");
+                return Ok(refusal_output(
+                    &corpus_id,
+                    &store,
+                    concept,
+                    period,
                     &refusal.reason(),
                 ));
             }
@@ -552,6 +633,73 @@ fn derivation_line(concept: &str, f: &SecFact) -> String {
     )
 }
 
+/// THE vocabulary decider for `concept`-shaped parameters (§10.6).
+///
+/// An `Err` here is deliberately NOT a [`refusal_output`]. The two say
+/// different things and the distinction is the point of this check:
+///
+///   refusal  — "this corpus cannot answer that", a fact about the filer,
+///              first-class, synthesized into an honest answer;
+///   Err      — "that is not a concept id", a fact about the CALL, which
+///              no corpus could have satisfied and no answer should be
+///              built on.
+///
+/// Collapsing the second into the first is what produced three refused
+/// answerable questions: the planner sent a human label
+/// ("Payments to acquire property, plant and equipment"), then a
+/// pipe-alternation hedge ("capital_expenditures|acquisitions|…"), each
+/// came back looking exactly like "Apple does not report that", and the
+/// turn was synthesized with an EMPTY BASIS — every numeral in it
+/// untraceable by construction.
+///
+/// The message NAMES the whole expected set, because a rejection that
+/// does not say what would have worked just moves the guessing.
+/// `None` when the spelling is acceptable; `Some(reason)` — a REFUSAL
+/// reason, not an error string — when it is not.
+///
+/// WHY A REFUSAL AND NOT AN `Err`, measured rather than assumed. This
+/// check was built returning `Err` first. Ring 0, n=3, the exact
+/// planner input below: the step hard-failed, the executor replanned,
+/// the replan dropped `period` and failed again, and the synthesizer —
+/// now holding NO tool output at all, not even a reason — answered from
+/// pretraining in all three runs ("approximately $9.9 billion",
+/// "approximately $11 billion"). Turning a bad parameter into a dead
+/// step deleted the honesty machinery: no `numeric_audit` opt-in, no
+/// available-concept list, nothing for the answer to be built from.
+///
+/// The `Ok`-valued refusal is what keeps `with_audit_optin` armed and
+/// puts "here is what IS available" in front of the synthesizer. The
+/// same n=3 on the unfixed code shows that working: two of three runs
+/// refused honestly AND named `capital_expenditures` as available.
+///
+/// So the refusal stays a refusal. What this adds is that it is now a
+/// DISTINGUISHABLE one — its own trace event and its own reason text,
+/// naming the vocabulary rather than the store — where before, a
+/// planner-invented label and a genuine coverage limit arrived as the
+/// same `UnmappedConcept` and the first was read as the second three
+/// occurrences running.
+fn concept_vocabulary_refusal(field: &str, requested: &str) -> Option<String> {
+    let vocab = crate::sec_edgar::concept_vocabulary();
+    if vocab.accepts(requested) {
+        return None;
+    }
+    tracing::debug!(
+        target: "sec_facts",
+        field,
+        requested,
+        vocabulary_size = vocab.ids.len(),
+        "sec_facts: concept outside published vocabulary — not a corpus coverage limit"
+    );
+    Some(format!(
+        "`{field}` must be ONE canonical concept id, copied exactly; got {requested:?}, \
+         which is not one of them — this is a malformed request, NOT a statement that \
+         this company does not report it. Send a single id, never a label, a \
+         description, or several ids joined by '|' or '/'. The complete set of ids is: \
+         {}.",
+        vocab.ids.join(", ")
+    ))
+}
+
 /// A refusal is a first-class answer: reason names what IS available,
 /// and the bare-numeral audit is STILL armed — with the refusal's own
 /// numerals allowed — so a model layering a recalled figure on top of
@@ -615,6 +763,109 @@ mod tests {
             "accession": "0000320193-25-000079", "form": "10-K", "filed": "2025-10-31"
         }))
         .unwrap()
+    }
+
+    // ── the concept vocabulary (order `sec-facts-concept-enum`) ──────
+    //
+    // A gate you have not watched fail is not a gate, and a gate watched
+    // ONLY failing is half a gate: three runs on this initiative died
+    // behind guards whose passing arm had never been exercised. Both
+    // arms are asserted here, and the passing arm uses the exact
+    // spellings the product path actually sends.
+
+    /// WATCHED FAIL, and this is the string the planner really sent —
+    /// captured from `Executing tool step tool_id="sec_facts"` on
+    /// 2026-08-18, three runs of three. It is the concept's own `label`
+    /// from concept-map.toml minus the parenthetical, which is what the
+    /// desktop journey puts in front of the model.
+    #[test]
+    fn a_human_label_is_rejected_and_the_message_names_the_vocabulary() {
+        let msg = concept_vocabulary_refusal(
+            "concept",
+            "Payments to acquire property, plant and equipment",
+        )
+        .expect("a human label is not a concept id");
+        // Names the offending value...
+        assert!(
+            msg.contains("Payments to acquire property, plant and equipment"),
+            "rejection must quote what it got: {msg}"
+        );
+        // ...and names what WOULD have worked. A rejection that does not
+        // say this just relocates the guessing.
+        assert!(
+            msg.contains("capital_expenditures") && msg.contains("revenue"),
+            "rejection must name the expected set: {msg}"
+        );
+    }
+
+    /// WATCHED FAIL: the pipe-alternation hedge from run
+    /// `sec-filings-close-e2e`. The FIRST alternative would have
+    /// resolved, which is exactly why this must not be split and
+    /// retried — picking an alternative for the model is guessing on its
+    /// behalf (§18.3).
+    #[test]
+    fn a_pipe_alternation_hedge_is_rejected() {
+        assert!(concept_vocabulary_refusal(
+            "concept",
+            "capital_expenditures|acquisitions|property_plant_equipment"
+        )
+        .is_some());
+    }
+
+    /// WATCHED PASS, arm 1: every canonical id the schema advertises is
+    /// accepted. This is the arm that makes the `enum` honest — publish
+    /// a value the checker then rejects and the tool is unusable exactly
+    /// as instructed.
+    #[test]
+    fn every_published_enum_value_is_accepted() {
+        let ids = &crate::sec_edgar::concept_vocabulary().ids;
+        assert!(ids.len() >= 20, "vocabulary looks empty: {ids:?}");
+        for id in ids {
+            if let Some(r) = concept_vocabulary_refusal("concept", id) {
+                panic!("schema publishes {id:?} but the check rejects it: {r}");
+            }
+        }
+    }
+
+    /// WATCHED PASS, arm 2: the DECLARED aliases still work. `capex` is
+    /// an `ask_terms` row, and `resolve_concept` has always resolved it —
+    /// a vocabulary check that rejected it would be a regression dressed
+    /// as a fix.
+    #[test]
+    fn declared_ask_terms_and_separator_variants_still_pass() {
+        for spelling in [
+            "capex",                 // declared ask_term
+            "capital expenditures",  // declared ask_term
+            "capital_expenditures",  // canonical id
+            "Capital Expenditures",  // id modulo the resolver's normalization
+            "gross margin",          // another concept's ask_term
+        ] {
+            if let Some(r) = concept_vocabulary_refusal("concept", spelling) {
+                panic!("{spelling:?} must stay acceptable: {r}");
+            }
+        }
+    }
+
+    /// The published `enum` and the checker read the SAME compiled map,
+    /// so they cannot disagree — asserted rather than trusted, because
+    /// the failure mode (schema advertises a value `validate` refuses)
+    /// is invisible until a planner picks that one value.
+    #[test]
+    fn schema_enum_matches_the_compiled_concept_map() {
+        let map = crate::sec_facts_render::ConceptMap::from_toml(
+            &std::fs::read_to_string(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("../../../sovereign-recipes/sec-filings-company/concept-map.toml"),
+            )
+            .expect("concept map is committed"),
+        )
+        .expect("concept map parses");
+        let published = &crate::sec_edgar::concept_vocabulary().ids;
+        let canonical: Vec<String> = map.concepts.keys().cloned().collect();
+        assert_eq!(
+            published, &canonical,
+            "the tool schema's concept enum has drifted from concept-map.toml"
+        );
     }
 
     #[test]

@@ -227,6 +227,23 @@ pub enum SecRefusal {
         requested: String,
         candidates: Vec<String>,
     },
+    /// The QUESTION scopes the figure BELOW the consolidated entity — a
+    /// segment, division, product line, or geography — and the source
+    /// cannot carry that. Code enforces this because the failure is
+    /// invisible to every other guard: the planner substitutes the nearest
+    /// LEGAL concept (`revenue` for "Mac segment revenue"), the store
+    /// resolves it correctly, and a consolidated figure is narrated as a
+    /// segment one. Reproduced 2/2 on 2026-08-18; the provenance guard
+    /// caught both only incidentally (a rounding restatement, then an
+    /// accession fragment), never the granularity itself.
+    ///
+    /// This is the §18.3 twin of `PeriodNotAsAsked`: a correct label on
+    /// the wrong SCOPE is still the wrong answer.
+    ScopeNotInSource {
+        concept: String,
+        qualifier: String,
+        mapped: Vec<String>,
+    },
 }
 
 impl SecRefusal {
@@ -252,6 +269,19 @@ impl SecRefusal {
                     mapped.join(", ")
                 )
             }
+            SecRefusal::ScopeNotInSource {
+                concept,
+                qualifier,
+                mapped,
+            } => format!(
+                "this question asks for a '{qualifier}'-level figure, and the source \
+                 (SEC companyfacts) is consolidated-only: it carries no segment, \
+                 division, product-line or geographic breakdown, even when the number \
+                 appears in the filing's prose. The consolidated '{concept}' figure is \
+                 NOT that number and is not offered as a substitute. Typed \
+                 company-wide concepts available: {}.",
+                mapped.join(", ")
+            ),
             SecRefusal::NoFactForPeriod {
                 concept,
                 period,
@@ -398,15 +428,15 @@ pub fn resolve_concept(store: &SecFactStore, requested: &str) -> Result<String, 
 pub const F5_DEMAND_ANCHOR: &str = "f5_demand";
 
 fn resolve_concept_inner(store: &SecFactStore, requested: &str) -> Result<String, SecRefusal> {
-    let id_form = normalize(requested).replace(' ', "_");
+    let id_form = normalize_concept_phrase(requested).replace(' ', "_");
     if store.concepts.contains_key(&id_form) {
         return Ok(id_form);
     }
-    let phrase = normalize(requested);
+    let phrase = normalize_concept_phrase(requested);
     let hits: Vec<&String> = store
         .concepts
         .iter()
-        .filter(|(_, cf)| cf.ask_terms.iter().any(|t| normalize(t) == phrase))
+        .filter(|(_, cf)| cf.ask_terms.iter().any(|t| normalize_concept_phrase(t) == phrase))
         .map(|(id, _)| id)
         .collect();
     match hits.as_slice() {
@@ -452,7 +482,7 @@ pub fn available_period_ends(cf: &ConceptFacts) -> Vec<String> {
 /// question, so ONE function decides what period a question states, at
 /// both ends (§10.6).
 pub fn calendar_period_in_question(question: &str) -> Option<(String, String)> {
-    let q = normalize(question);
+    let q = normalize_concept_phrase(question);
     let stated_calendar = contains_phrase(&q, "calendar")
         || (contains_phrase(&q, "january") && contains_phrase(&q, "december"))
         || (contains_phrase(&q, "jan") && contains_phrase(&q, "dec"));
@@ -468,6 +498,49 @@ pub fn calendar_period_in_question(question: &str) -> Option<(String, String)> {
         .filter_map(|w| w.parse::<i32>().ok())
         .find(|y| (1994..=2031).contains(y))?;
     Some((format!("{year}-01-01"), format!("{year}-12-31")))
+}
+
+/// Structural markers that scope a figure BELOW the consolidated entity.
+///
+/// Deliberately NOT a list of one filer's product names ("Mac", "iPhone"):
+/// those are home-context and would not transfer to the next filer. These
+/// are the words the SEC's own segment-reporting vocabulary uses, so they
+/// hold for any company this recipe installs.
+const SCOPE_QUALIFIERS: &[&str] = &[
+    "segment",
+    "segments",
+    "reportable segment",
+    "operating segment",
+    "division",
+    "divisions",
+    "business unit",
+    "product line",
+    "product category",
+    "by region",
+    "by geography",
+    "geographic",
+    "geographical",
+    "regional",
+];
+
+/// The scope qualifier a question states, if any — the SCOPE twin of
+/// [`calendar_period_in_question`].
+///
+/// Scoped to the CLEAR case on purpose, exactly as the calendar check is
+/// (operator direction 2026-08-16): a question that names no qualifier
+/// leaves this inert, so ordinary company-wide questions are untouched.
+///
+/// KNOWN RESIDUE, disclosed rather than hidden: a question naming a
+/// product WITHOUT a structural word ("What was Mac revenue in FY2025?")
+/// is not caught here, because catching it needs the filer's own segment
+/// names and companyfacts does not carry them (§18.3 — the gap is
+/// reported, not papered over with similarity guessing).
+pub fn scope_qualifier_in_question(question: &str) -> Option<String> {
+    let q = normalize_concept_phrase(question);
+    SCOPE_QUALIFIERS
+        .iter()
+        .find(|marker| contains_phrase(&q, marker))
+        .map(|marker| (*marker).to_string())
 }
 
 /// THE lookup. One fact or a refusal that names what is available.
@@ -696,7 +769,7 @@ fn group(v: f64, places: usize) -> String {
 /// so the vocabulary may be generous; but an entity match is REQUIRED —
 /// generic finance wording ("what is gross margin?") never claims.
 pub fn store_claims(store: &SecFactStore, question: &str) -> Option<String> {
-    let q = normalize(question);
+    let q = normalize_concept_phrase(question);
     // Explanation-shaped questions are OUT of the store's domain: the
     // store is authoritative for FIGURES; "why" answers live in the
     // filing's prose and are best served by the retrieval path with
@@ -713,7 +786,7 @@ pub fn store_claims(store: &SecFactStore, question: &str) -> Option<String> {
         if let Some(term) = cf
             .ask_terms
             .iter()
-            .find(|t| contains_phrase(&q, &normalize(t)))
+            .find(|t| contains_phrase(&q, &normalize_concept_phrase(t)))
         {
             return Some(format!(
                 "entity '{entity_hit}' + concept '{concept_id}' term '{term}'"
@@ -730,7 +803,7 @@ fn entity_terms(store: &SecFactStore) -> Vec<String> {
     if !store.ticker.is_empty() {
         terms.push(store.ticker.to_lowercase());
     }
-    for w in normalize(&store.entity).split_whitespace() {
+    for w in normalize_concept_phrase(&store.entity).split_whitespace() {
         if !matches!(
             w,
             "inc" | "corp" | "corporation" | "co" | "ltd" | "plc" | "the"
@@ -743,7 +816,15 @@ fn entity_terms(store: &SecFactStore) -> Vec<String> {
 
 /// Lowercase, non-alphanumerics to spaces, collapsed. "Apple's" →
 /// "apple s", so possessives match the bare entity term.
-fn normalize(s: &str) -> String {
+///
+/// PUBLIC because it is the ONE spelling-normalization the concept
+/// resolver applies (§10.6: one decider, one name). `sec_facts`'s
+/// parameter-vocabulary check must ask "would the resolver accept this
+/// spelling?" and it can only answer that by normalizing the SAME way —
+/// a second copy in the tools crate would drift the moment either side
+/// learned a new rule, and the drift would show up as a concept the
+/// schema advertises and the resolver rejects.
+pub fn normalize_concept_phrase(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut last_space = true;
     for c in s.chars() {
@@ -795,6 +876,65 @@ pub(crate) mod fixtures;
 mod tests {
     use super::*;
     use crate::enrichment::atlas::analysis::sec_facts::fixtures::store;
+
+    /// The failing input by name, reproduced 2/2 on 2026-08-18: asked for
+    /// Apple's "Mac segment revenue", the planner sent `concept="revenue"`
+    /// — legal, resolvable, and the wrong SCOPE.
+    #[test]
+    fn scope_qualifier_catches_the_segment_ask() {
+        for q in [
+            "What was Apple Inc.'s Mac segment revenue in FY2025?",
+            "What was Apple Inc.'s iPhone segment revenue in FY2025?",
+            "Revenue by region for FY2025?",
+            "What did the Services division earn in FY2025?",
+            "Break out revenue by geography.",
+            "What was the product line revenue?",
+        ] {
+            assert!(
+                scope_qualifier_in_question(q).is_some(),
+                "should have caught a below-entity ask: {q}"
+            );
+        }
+    }
+
+    /// Inert on ordinary company-wide questions — the same scoping the
+    /// calendar check uses. A guard that fires on everything is a guard
+    /// nobody can ship.
+    #[test]
+    fn scope_qualifier_is_inert_on_consolidated_asks() {
+        for q in [
+            "What was Apple Inc.'s revenue in FY2025?",
+            "What was Apple Inc.'s Payments to acquire property, plant and equipment (capex) in FY2025?",
+            "What was net income in FY2024?",
+            "How much cash did Apple hold at the end of FY2025?",
+        ] {
+            assert_eq!(
+                scope_qualifier_in_question(q),
+                None,
+                "must not fire on a consolidated ask: {q}"
+            );
+        }
+    }
+
+    /// The refusal must name the source limit AND what IS available —
+    /// "we cannot" without "here is what we can" is the abstention §7.7
+    /// forbids. It must also refuse to offer the consolidated figure.
+    #[test]
+    fn scope_refusal_names_the_limit_and_the_alternatives() {
+        let r = SecRefusal::ScopeNotInSource {
+            concept: "revenue".to_string(),
+            qualifier: "segment".to_string(),
+            mapped: vec!["revenue".to_string(), "net_income".to_string()],
+        };
+        let reason = r.reason();
+        assert!(reason.contains("consolidated-only"), "{reason}");
+        assert!(reason.contains("segment"), "{reason}");
+        assert!(reason.contains("net_income"), "names alternatives: {reason}");
+        assert!(
+            reason.contains("not offered as a substitute"),
+            "must refuse the substitution outright: {reason}"
+        );
+    }
 
     #[test]
     fn fiscal_year_lookup_returns_the_typed_fact() {

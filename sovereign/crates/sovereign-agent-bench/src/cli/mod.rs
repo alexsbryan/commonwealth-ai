@@ -5,6 +5,7 @@ pub mod aggregate;
 pub mod args;
 pub mod replay;
 pub mod run;
+pub mod swebench;
 
 /// Public entrypoint. Dispatched from `sovereign-cli/src/main.rs` and
 /// from the standalone `sovereign-agent-bench` binary.
@@ -16,6 +17,13 @@ pub async fn run_agent_bench(args: &[String]) -> u8 {
             Ok(()) => 0,
             Err(e) => {
                 eprintln!("agent-bench run failed: {e}");
+                1
+            }
+        },
+        "swebench" => match swebench::run_command(&args[1..]).await {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("agent-bench swebench failed: {e}");
                 1
             }
         },

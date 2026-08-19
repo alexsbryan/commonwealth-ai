@@ -53,7 +53,9 @@ sys.path.insert(0, str(HERE))
 sys.path.insert(0, str(HERE.parent.parent / "gym" / "next-edit" / "golden"))
 
 import markers as M  # noqa: E402
-from score_golden import wilson  # noqa: E402  (one formula, one home)
+from score_golden import (  # noqa: E402  (one formula, one home)
+    cohens_kappa, kappa_band, kappa_ci, wilson,
+)
 from validate_episodes import arch_sections, ledger_slugs  # noqa: E402
 
 DAEMON = "http://localhost:9741/v1/chat/completions"
@@ -349,6 +351,25 @@ def score_rows(rows: list[dict], bank_by_id: dict[str, dict]) -> None:
         clo, chi = wilson(coarse, n)
         print(f"  coarse-3 {coarse}/{n} = {100*coarse/n:.1f}%  "
               f"(95% CI {100*clo:.1f}–{100*chi:.1f}%)")
+        # Chance-corrected agreement. exact-6 above is raw percent agreement,
+        # which an unbalanced 6-class bank inflates — the constant-verdict
+        # floor exists because of exactly that. kappa is the statistic this
+        # problem class is measured with, and it is reported BESIDE exact-6
+        # rather than replacing it so historical runs stay comparable.
+        # Malformed replies have no category and are excluded, named.
+        kp = [(r["parsed_verdict"], bank_by_id[r["id"]]["expect"]["verdict"])
+              for r in subset if r.get("parsed_verdict")]
+        if kp:
+            _, pe, kap = cohens_kappa(kp)
+            klo, khi = kappa_ci(kp)
+            skipped = n - len(kp)
+            print(f"  kappa    {kap:.3f}  (95% CI {klo:.3f}–{khi:.3f}; "
+                  f"chance {100*pe:.1f}%)  -> {kappa_band(kap)}"
+                  + (f"  [{skipped} malformed excluded]" if skipped else ""))
+            if kap == kap and kap < 0.667:
+                print("           NOTE: below 0.667 the raters do not agree "
+                      "enough for this task to be reliably specified; an "
+                      "exact-6 delta inside that band is not a finding.")
         if nm:
             print(f"  malformed {nm}/{n} = {100*nm/n:.1f}%  {dict(malformed)}"
                   f"  — NOT folded into disagreement; rates above are "

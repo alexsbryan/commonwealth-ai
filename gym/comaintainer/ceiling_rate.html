@@ -1,0 +1,246 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comaintainer ceiling study — blind verdict rating</title>
+<style>
+  :root{ --bg:#fbfaf8; --fg:#1a1a19; --dim:#6b6a66; --line:#e2e0da; --card:#fff;
+         --accent:#2f5d50; --warn:#8a5a2b; --hi:#eef3f1; }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#141513; --fg:#e8e6e1; --dim:#95938c; --line:#2c2e2a; --card:#1c1e1b;
+           --accent:#7fb3a1; --warn:#c99b62; --hi:#222622; } }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--fg);
+       font:16px/1.55 ui-sans-serif,-apple-system,"Segoe UI",system-ui,sans-serif}
+  .wrap{max-width:820px;margin:0 auto;padding:18px 20px 84px}
+  header{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;
+         border-bottom:1px solid var(--line);padding-bottom:9px}
+  h1{font-size:14px;margin:0;font-weight:650}
+  .meta{color:var(--dim);font-size:13px}
+  .bar{height:3px;background:var(--line);border-radius:2px;margin:9px 0 22px;overflow:hidden}
+  .bar > i{display:block;height:100%;background:var(--accent);width:0;transition:width .2s}
+
+  .claim{font-size:19px;line-height:1.5;margin:4px 0 18px;
+         border-left:3px solid var(--accent);padding:2px 0 2px 16px;white-space:pre-wrap}
+  .ev{font-size:16px;line-height:1.5;margin:4px 0 16px;
+      border-left:3px solid var(--line);padding:2px 0 2px 16px;white-space:pre-wrap;
+      max-height:16em;overflow:auto}
+  .ev.nothing{border-left-color:var(--warn);color:var(--warn);font-weight:600;font-style:normal}
+  .srcline{color:var(--dim);font-size:12.5px;align-self:center}
+
+  .full{display:none;margin:6px 0 18px}
+  .full.open{display:block}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:8px;
+        padding:14px 16px;margin-bottom:10px}
+  .lbl{font-size:11px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);
+       margin-bottom:6px;font-weight:600}
+  pre{margin:0;white-space:pre-wrap;word-wrap:break-word;
+      font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-x:auto}
+  .none{color:var(--dim);font-style:italic}
+
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:9px}
+  button{font:inherit;cursor:pointer;background:var(--card);color:var(--fg);
+         border:1px solid var(--line);border-radius:7px;padding:9px 13px}
+  button:hover{background:var(--hi);border-color:var(--accent)}
+  button.on{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}
+  button.warn.on{background:var(--warn);border-color:var(--warn)}
+  .small{font-size:13px;padding:6px 11px}
+  kbd{display:inline-block;min-width:14px;text-align:center;font:11px/1.4 ui-monospace,monospace;
+      border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
+      padding:1px 4px;margin-right:7px;color:var(--dim)}
+  button.on kbd{color:var(--bg);border-color:currentColor}
+  .step{opacity:.32;pointer-events:none;transition:opacity .15s}
+  .step.live{opacity:1;pointer-events:auto}
+  .foot{position:fixed;left:0;right:0;bottom:0;background:var(--card);
+        border-top:1px solid var(--line);padding:8px 20px;display:flex;gap:10px;
+        align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:13px}
+  .done,.brk{text-align:center;padding:44px 20px}
+  .big{font-size:30px;font-weight:650;margin:8px 0}
+  table{border-collapse:collapse;margin:16px auto;font-size:14px}
+  td,th{border:1px solid var(--line);padding:5px 12px;text-align:left}
+  .hint{color:var(--dim);font-size:12.5px;margin-top:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Comaintainer ceiling study</h1>
+    <span class="meta" id="pos"></span>
+    <span class="meta" id="clock"></span>
+  </header>
+  <div class="bar"><i id="prog"></i></div>
+
+  <div id="stage">
+    <div class="lbl">The proposal &mdash; verbatim</div>
+    <p class="claim" id="pro"></p>
+
+    <div class="lbl">Offered as evidence &mdash; verbatim</div>
+    <p class="ev" id="ev"></p>
+
+    <div class="row">
+      <button class="small" id="verifybtn"><kbd>V</kbd>Background &amp; context</button>
+      <span class="srcline" id="srcline"></span>
+    </div>
+    <div class="full" id="full">
+      <div class="card"><div class="lbl">Situation</div><pre id="sit"></pre></div>
+    </div>
+
+    <div class="lbl" style="margin-top:14px">Your verdict</div>
+    <div class="row" id="verdicts"></div>
+    <div class="step" id="confstep">
+      <div class="lbl">Confidence</div>
+      <div class="row" id="confs"></div>
+    </div>
+    <div class="row">
+      <button class="small warn" id="flagbtn"><kbd>F</kbd>Item under-specified</button>
+      <button class="small" id="backbtn"><kbd>&larr;</kbd>Back</button>
+    </div>
+    <p class="hint"><b>1-6</b> verdict &middot; <b>7/8/9</b> confidence &middot; <b>V</b> background &middot;
+       <b>F</b> under-specified &middot; <b>&larr;</b> back</p>
+  </div>
+  <div id="done" style="display:none"></div>
+</div>
+
+<div class="foot">
+  <span id="status" style="color:var(--dim)">&nbsp;</span>
+  <span>
+    <button class="small" id="export">Download results (.jsonl)</button>
+    <button class="small" id="copy">Copy</button>
+    <button class="small" id="reset">Reset</button>
+  </span>
+</div>
+
+<script>
+const ITEMS = __ITEMS_JSON__;
+const SEED  = __SEED__;
+const VERDICTS=["approve","revise","measure-first","split","escalate","could-not-judge"];
+const CONF=["low","medium","high"];
+const KEY="comaintainer-ceiling-v3";
+const $=id=>document.getElementById(id);
+
+let state=JSON.parse(localStorage.getItem(KEY)||"null")||
+  {started:new Date().toISOString(),seed:SEED,answers:{},idx:0};
+let pending=null,flagged=false,expanded=false,shownAt=Date.now(),expandAt=null;
+
+function save(){localStorage.setItem(KEY,JSON.stringify(state));}
+
+function buildButtons(){
+  $("verdicts").innerHTML="";
+  VERDICTS.forEach((v,i)=>{const b=document.createElement("button");
+    b.innerHTML=`<kbd>${i+1}</kbd>${v}`;b.dataset.v=v;b.onclick=()=>pickVerdict(v);
+    $("verdicts").appendChild(b);});
+  $("confs").innerHTML="";
+  CONF.forEach((c,i)=>{const b=document.createElement("button");
+    b.innerHTML=`<kbd>${i+7}</kbd>${c}`;b.onclick=()=>pickConf(c);
+    $("confs").appendChild(b);});
+}
+
+function render(){
+  if(state.idx>=ITEMS.length) return finish();
+  if(state.idx && state.idx%12===0 && state.brk!==state.idx){
+    state.brk=state.idx;save();
+    $("stage").style.display="none";$("done").style.display="block";$("done").className="brk";
+    $("done").innerHTML=`<div class="big">${state.idx} of ${ITEMS.length}</div>
+      <p class="meta">Break point. Progress is saved &mdash; close the tab if you want.</p>
+      <button id="go">Continue &rarr;</button>`;
+    $("go").onclick=()=>{$("done").style.display="none";$("stage").style.display="block";render();};
+    return;
+  }
+  const it=ITEMS[state.idx];
+  $("pro").textContent=it.proposal;
+  const noneish=!it.evidence||/^\[none provided\]$/i.test(it.evidence.trim());
+  $("ev").textContent=noneish?"nothing offered":it.evidence;
+  $("ev").className=noneish?"ev nothing":"ev";
+  $("sit").textContent=it.situation;
+  $("srcline").textContent=`${it.situation.split(/\s+/).length} words of background`;
+  expanded=false;
+  $("pos").textContent=`item ${state.idx+1} of ${ITEMS.length}`;
+  $("prog").style.width=(100*state.idx/ITEMS.length).toFixed(1)+"%";
+  const prior=state.answers[it.id];
+  pending=prior?prior.verdict:null;
+  flagged=prior?!!prior.unjudgeable:false;
+  if(prior) expanded=!!prior.expanded;
+  shownAt=Date.now(); expandAt=null;
+  paint(); window.scrollTo(0,0);
+  $("status").textContent=`${Object.keys(state.answers).length} rated · saved locally · nothing leaves this machine`;
+}
+
+function paint(){
+  [...$("verdicts").children].forEach(b=>b.classList.toggle("on",b.dataset.v===pending));
+  $("confstep").classList.toggle("live",!!pending);
+  $("flagbtn").classList.toggle("on",flagged);
+  $("full").classList.toggle("open",expanded);
+  $("verifybtn").innerHTML=expanded?'<kbd>V</kbd>Hide background':'<kbd>V</kbd>Background &amp; context';
+}
+
+function doExpand(force){
+  expanded=force===undefined?!expanded:force;
+  if(expanded&&expandAt===null) expandAt=Date.now()-shownAt;
+  paint();
+}
+function pickVerdict(v){pending=v;paint();}
+function pickConf(c){
+  if(!pending)return;
+  const it=ITEMS[state.idx];
+  state.answers[it.id]={id:it.id,order:state.idx+1,verdict:pending,confidence:c,
+    unjudgeable:flagged, summary_inadequate:false, expanded:expanded,
+    ms_to_expand:expandAt, had_summary:false,
+    ms:Date.now()-shownAt, at:new Date().toISOString()};
+  save(); state.idx++; save(); render();
+}
+
+$("verifybtn").onclick=()=>doExpand();
+$("flagbtn").onclick=()=>{flagged=!flagged;paint();};
+$("backbtn").onclick=()=>{if(state.idx>0){state.idx--;save();render();}};
+
+document.addEventListener("keydown",e=>{
+  if(state.idx>=ITEMS.length)return;
+  const k=e.key;
+  if(k>="1"&&k<="6"){pickVerdict(VERDICTS[+k-1]);e.preventDefault();}
+  else if(k>="7"&&k<="9"){pickConf(CONF[+k-7]);e.preventDefault();}
+  else if(k==="v"||k==="V"){doExpand();e.preventDefault();}
+  else if(k==="f"||k==="F"){flagged=!flagged;paint();e.preventDefault();}
+  else if(k==="ArrowLeft"){$("backbtn").click();e.preventDefault();}
+});
+
+function jsonl(){
+  const rows=ITEMS.map(it=>state.answers[it.id]).filter(Boolean);
+  const head={record:"meta",study:"comaintainer-ceiling",seed:state.seed,
+    started:state.started,finished:new Date().toISOString(),
+    n_items:ITEMS.length,n_rated:rows.length,summary_mode:true};
+  return [head,...rows.map(r=>({record:"rating",...r}))].map(o=>JSON.stringify(o)).join("\n")+"\n";
+}
+$("export").onclick=()=>{const b=new Blob([jsonl()],{type:"application/jsonl"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(b);
+  a.download="ceiling-ratings.jsonl";a.click();};
+$("copy").onclick=async()=>{try{await navigator.clipboard.writeText(jsonl());
+  $("status").textContent="copied";}catch(_){$("status").textContent="clipboard blocked — use Download";}};
+$("reset").onclick=()=>{if(confirm("Clear all saved ratings?")){localStorage.removeItem(KEY);
+  state={started:new Date().toISOString(),seed:SEED,answers:{},idx:0};save();render();}};
+
+function finish(){
+  $("stage").style.display="none";$("prog").style.width="100%";
+  $("pos").textContent=`${ITEMS.length} of ${ITEMS.length}`;
+  const rows=Object.values(state.answers);
+  const dist={};VERDICTS.forEach(v=>dist[v]=0);
+  let bad=0,flag=0,exp=0,tot=0;
+  rows.forEach(r=>{dist[r.verdict]++;if(r.summary_inadequate)bad++;if(r.unjudgeable)flag++;
+    if(r.expanded)exp++;tot+=r.ms;});
+  const med=rows.map(r=>r.ms).sort((a,b)=>a-b)[Math.floor(rows.length/2)]||0;
+  $("done").style.display="block";$("done").className="done";
+  $("done").innerHTML=`<div class="big">Done — ${rows.length} rated</div>
+    <p class="meta">Median ${(med/1000).toFixed(1)}s per item · ${(tot/60000).toFixed(1)} min total<br>
+      ${exp} items needed background · ${flag} under-specified</p>
+    <table><tr><th>verdict</th><th>n</th></tr>
+      ${VERDICTS.map(v=>`<tr><td>${v}</td><td>${dist[v]}</td></tr>`).join("")}</table>
+    <p class="meta">No score shown — this page never loaded the answer key.<br>
+       Hit <b>Download results</b>, then run the analysis.</p>`;
+  $("status").textContent="complete — download your results";
+}
+setInterval(()=>{if(state.idx<ITEMS.length)
+  $("clock").textContent=`${((Date.now()-shownAt)/1000).toFixed(0)}s`;},1000);
+buildButtons();render();
+</script>
+</body>
+</html>

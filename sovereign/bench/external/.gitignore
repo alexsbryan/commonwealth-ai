@@ -1,0 +1,11 @@
+# Everything here is reproducible from prepare.py (fixed seed) or is a
+# run artifact. Committing a 44MB bare clone or a stale sample would make
+# the bank's provenance ambiguous — regenerate instead.
+swebench/repos/
+swebench/work/
+swebench/preds/
+swebench/predictions/
+swebench/gold/
+swebench/instances.jsonl
+swebench/.mini-swe-out/
+rewardbench2/runs/

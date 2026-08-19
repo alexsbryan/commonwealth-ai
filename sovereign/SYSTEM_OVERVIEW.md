@@ -508,7 +508,44 @@ The SEC filings corpora reuse that same guarantee contract
 (`sovereign-tools/src/sec_facts_render.rs`) with `cited_figures` + `derivation` +
 `reproduce`, computes ratios and year-over-year changes in Rust, and
 refuses first-class naming what IS available (coverage, freshness, and
-the consolidated-only source limit). Because financial answers carry
+the consolidated-only source limit). The `concept` vocabulary is FIXED
+at compile time, not per corpus: `sovereign-recipes/sec-filings-company/
+concept-map.toml` holds the 20 canonical ids and is `include_str!`'d into
+the binary (`sec_edgar.rs` `CONCEPT_MAP_TOML`), so `concept_vocabulary()`
+derives BOTH the schema's `enum` and the tool's own acceptance check from
+one source (§10.6); a filer's store is a SUBSET of that fixed set. The
+two refusals this produces are deliberately distinct — "not a concept id"
+(malformed request, names all 20) versus `resolve_concept`'s "this corpus
+does not hold it" (a coverage fact, names what the store has). They
+arrived as one indistinguishable `UnmappedConcept` until order
+`sec-facts-concept-enum`, and a planner-invented label was read as a
+coverage limit three occurrences running. Both stay `Ok`-valued
+refusals rather than `Err`: measured n=3, failing a bad parameter as an
+error made the executor replan, drop `period`, fail again, and answer
+from pretraining with no tool output at all — a dead tool step does not
+degrade the honesty machinery, it deletes it. The planner SEES this
+vocabulary: `planner.rs` `format_param_hint` renders a declared `enum`
+into the plan prompt's `Params:` line as `concept* (string: revenue|…)`,
+in FULL and never truncated — a partial list biases the planner to the
+head of it while the tool still rejects everything below the cut. Until
+that change the hint rendered only `name (type)`, so no tool's declared
+enum reached the prompt and `mode`'s enum had never bound either; the
+schema asymmetry the order was raised against was real and inert.
+`description` is still discarded — the enum is the closed set, the prose
+is not. The enum closed the in-vocabulary hole and SHARPENED an
+out-of-vocabulary one, so a second guard sits beside it: asked for a
+figure scoped BELOW the consolidated entity, the planner substitutes the
+nearest LEGAL concept (`revenue` for "Mac segment revenue"), the store
+resolves it, and no other refusal can fire — a company-wide figure
+narrated as a segment one, reproduced 2/2. `scope_qualifier_in_question`
++ `SecRefusal::ScopeNotInSource` refuse it at the same `ToolContext` seam
+`PeriodNotAsAsked` uses and for the same reason: the schema already asks
+the planner not to, and asking is not a guarantee (§7.6). The guard keys
+on STRUCTURAL segment vocabulary, never on one filer's product names —
+so a bare product name with no structural word is KNOWN RESIDUE, scoped
+to the clear case as the calendar check was. The provenance guard does
+not cover this class: it binds numerals to the tool datum, and the datum
+IS the tool's, so its catches here were incidental. Because financial answers carry
 BARE figures (`416,161` millions, EPS `7.46`) outside the default $/%
 audit scope, the tool declares the OPT-IN bare-numeral audit on its step
 output (`numeric_audit.audit_bare_numerals` + `allowed_tokens`, lexed by
