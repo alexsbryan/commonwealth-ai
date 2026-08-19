@@ -240,6 +240,117 @@ pub fn render_report(
     out
 }
 
+/// The flag's leading class word repeats the stamp ("open question: …",
+/// "not evaluated: …") — the page names the class once, in the stamp;
+/// the explanation that follows is preserved verbatim.
+fn flag_without_class_prefix<'a>(flag: &'a str, class: &str) -> &'a str {
+    let prefix = format!("{class}: ");
+    match flag.strip_prefix(&prefix) {
+        Some(rest) => rest,
+        None => flag,
+    }
+}
+
+/// The clean article page — the RACE scorer's input surface (order
+/// deep-research-t6b, pre-window slice, pre-registered 2026-08-19).
+/// Passed findings organized by section, every claim carrying its
+/// TYPED citations from the structured channel (evidence id + source
+/// URL); zero bare model-written tails in [passed] position;
+/// downgraded claims visibly stamped, never removed. report.md (the
+/// verdict transcript) is UNCHANGED — this is a post-flight rendering
+/// pass over the same verdict set, not a judgment change.
+pub fn render_race(question: &str, claims: &[FinalClaim], run_id: &str) -> String {
+    // Model-written `[Source: …]` tails are demoted at the page (the
+    // same pass the transcript runs): the typed citation channel is
+    // the only citation that ships. The verdict-set side is untouched.
+    let claims: Vec<FinalClaim> = claims
+        .iter()
+        .map(|c| FinalClaim {
+            text: strip_citation_spans(&c.text),
+            ..c.clone()
+        })
+        .collect();
+    let established = claims
+        .iter()
+        .filter(|c| c.verdict == Verdict::Passed)
+        .count();
+    let open = claims.len() - established;
+    let mut out = String::new();
+    out.push_str(&format!("# {question}\n\n"));
+    out.push_str(&format!(
+        "_run: `{run_id}` — {established} finding{} established; {open} claim{} open. \
+         Citations are chunk-level (evidence id + source URL)._\n\n",
+        if established == 1 { "" } else { "s" },
+        if open == 1 { "" } else { "s" },
+    ));
+    let mut passed = Vec::new();
+    let mut failed = Vec::new();
+    let mut open_q = Vec::new();
+    let mut not_evaluated = Vec::new();
+    for c in claims {
+        match c.verdict {
+            Verdict::Passed => passed.push(c),
+            Verdict::Failed => failed.push(c),
+            Verdict::CouldNotJudge => open_q.push(c),
+            Verdict::NeverRan => not_evaluated.push(c),
+        }
+    }
+    out.push_str("## Findings\n\n");
+    for c in passed {
+        out.push_str(&format!("- **[passed]** {}", c.text));
+        if !c.citations.is_empty() {
+            out.push_str(" — ");
+            let sources: Vec<String> = c
+                .citations
+                .iter()
+                .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
+                .collect();
+            out.push_str(&sources.join(", "));
+        } else {
+            out.push_str(" — *(judge-supported; no witnessable specifics — see verdict set)*");
+        }
+        out.push('\n');
+    }
+    out.push('\n');
+    if !failed.is_empty() {
+        out.push_str("## Refuted claims\n\n");
+        for c in failed {
+            out.push_str(&format!(
+                "- **[refuted]** {} — *{}*\n",
+                c.text,
+                flag_without_class_prefix(c.flag.as_deref().unwrap_or("refuted"), "refuted")
+            ));
+        }
+        out.push('\n');
+    }
+    if !open_q.is_empty() {
+        out.push_str("## Open questions\n\n");
+        for c in open_q {
+            out.push_str(&format!(
+                "- **[open question]** {} — *{}*\n",
+                c.text,
+                flag_without_class_prefix(c.flag.as_deref().unwrap_or("open"), "open question")
+            ));
+        }
+        out.push('\n');
+    }
+    if !not_evaluated.is_empty() {
+        out.push_str("## Not evaluated\n\n");
+        for c in not_evaluated {
+            out.push_str(&format!(
+                "- **[not evaluated]** {} — *{}*\n",
+                c.text,
+                flag_without_class_prefix(
+                    c.flag.as_deref().unwrap_or("not evaluated"),
+                    "not evaluated"
+                )
+            ));
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// Everything the manifest needs at run close.
 #[derive(Debug, Clone)]
 pub struct ManifestInput {
@@ -552,5 +663,97 @@ mod tests {
             !report.contains("Searched but absent"),
             "an empty residue must render no section: {report}"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // T6b pre-window slice — the clean RACE render (RED-FIRST: the
+    // render_race stub returned the empty string when this test was
+    // written; the assertions watched the red before the body landed —
+    // order deep-research-t6b, pre-registered).
+    // ------------------------------------------------------------------
+
+    /// The race page leads with passed findings carrying their TYPED
+    /// citations (evidence id + URL) and never a bare model-written
+    /// tail in [passed] position; downgraded claims are visibly
+    /// stamped, never removed; the verdict transcript is untouched.
+    #[test]
+    fn race_render_leads_with_typed_citations_and_stamps_downgrades() {
+        let audits = vec![
+            ClaimAudit {
+                claim: "The bridge was completed in 1873 [Source: https://example.com/draft]. "
+                    .to_string(),
+                verdict: Verdict::Passed,
+                action: super::super::icd::GateAction::CitationGrounded,
+                witness: Default::default(),
+                supporting_chunk_ids: vec!["ev-1".to_string()],
+                empty_evidence_window: false,
+                reason: None,
+                corroboration: None,
+            },
+            ClaimAudit {
+                claim: "The engineer was Helena Voss.".to_string(),
+                verdict: Verdict::Failed,
+                action: super::super::icd::GateAction::AbstainedDecline,
+                witness: Default::default(),
+                supporting_chunk_ids: Vec::new(),
+                empty_evidence_window: false,
+                reason: None,
+                corroboration: None,
+            },
+            ClaimAudit {
+                claim: "Funding is unclear.".to_string(),
+                verdict: Verdict::CouldNotJudge,
+                action: super::super::icd::GateAction::RefusedNoCitationHandle,
+                witness: Default::default(),
+                supporting_chunk_ids: Vec::new(),
+                empty_evidence_window: false,
+                reason: None,
+                corroboration: None,
+            },
+        ];
+        let claims = final_claims(&audits, &window());
+        let page = render_race("Meridian Bridge history", &claims, "run-1");
+        // The article leads with the question, then the findings.
+        assert!(page.starts_with("# Meridian Bridge history"), "{page}");
+        assert!(page.contains("## Findings"), "{page}");
+        let findings = page
+            .split("## Findings")
+            .nth(1)
+            .expect("findings section present");
+        assert!(
+            findings.contains("[passed]"),
+            "passed renders in [passed] position"
+        );
+        assert!(
+            findings.contains("ev-1"),
+            "typed evidence id renders: {findings}"
+        );
+        assert!(
+            findings.contains("https://example.com/a"),
+            "typed source URL renders: {findings}"
+        );
+        assert!(
+            !findings.contains("[Source:"),
+            "no model-written tail in [passed] position: {findings}"
+        );
+        // The raw text stays on the verdict-set side (scorer pair
+        // formation resolves tails through the draft registry).
+        assert_eq!(
+            claims[0].text,
+            "The bridge was completed in 1873 [Source: https://example.com/draft]. "
+        );
+        // Downgraded claims are visibly stamped, never removed.
+        assert!(page.contains("[refuted]"), "{page}");
+        assert!(page.contains("Helena Voss"), "{page}");
+        assert!(page.contains("[open question]"), "{page}");
+        assert!(page.contains("Funding is unclear"), "{page}");
+        assert!(
+            !page.contains("[could-not-judge]"),
+            "the page uses its own stamps, not the transcript's: {page}"
+        );
+        // The transcript function is untouched — it still renders its
+        // own stamps.
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[]);
+        assert!(report.contains("[could-not-judge]"), "{report}");
     }
 }

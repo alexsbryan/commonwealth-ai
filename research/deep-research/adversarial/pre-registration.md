@@ -3466,7 +3466,95 @@ for us and expensive for context-bound cloud models.
 
 ### Execution record
 
-(appended at landing)
+**2026-08-19 — execution begins (order deep-research-t6a phase 1c; seat un-park
+directive e8bdf4e8; autonomy grant, no per-order review; local-only commits).
+Written BEFORE any flight of this arm (§18.6 — declaration precedes execution).**
+
+**Operator steer (verbatim, relayed by the seat while the arm was being
+prepared):** "Estate is sort of impotent until it is acquired — right now we
+just have wikipedia and the few searches we've done. The estate ends up being
+a cache of those heavy web search runs." Consequence, pre-registered here: the
+wikipedia-only leg below measures the estate at its FLOOR — the write-up must
+state that reading explicitly, never imply it is the volume ceiling. A
+warm-estate bracket is added below to bracket thin-estate vs warm-estate.
+
+**1. Probe protocol (smallest learning loop first):** fly seeds 01-03
+(thin leg) with the pre-registered flags verbatim
+(`--backend auto --search-source corpus --corpora wikipedia --search 40
+--fetch 60 --max-rounds 6`), measure per-flight wall time. Decision rule:
+full bank (seed-01..seed-12 + v1) if per-flight wall < ~45 min; otherwise a
+named subset, reasoning journaled. Questions are extracted from the frozen
+bank (`bank/seeds.md` + `bank/v1/seeds.md`, the run-arms.sh regex — the driver
+`demo/demo13/fly-corpus-scale.py` never hardcodes a question). Thresholds
+untouched, named: code-set K=3, eps-quota 0.1, evidence window 20 chunks —
+all CLI defaults; retuning is a phase-2 instrument change, not this arm's.
+Model: the daemon's 27B draft (`Qwen3.8-27B-UD-Q6_K_XL`, loaded, :9741) —
+the first flight is 27B for comparability with the batteries and the deep
+arm; the model-zoo cross-model leg rides with the 122B window later (NOTED,
+NOT FLOWN). All flights under systemd-run (the harness reaper kills bare
+harness background tasks — proven repeatedly on this host).
+
+**2. Warm-estate bracket (AMENDMENT, pre-registered before the warm leg
+flies, per §18.6):** the thin leg's wikipedia-only corpus set is the estate
+at its floor. The bracket: assemble a warm corpus from the demo13 web runs'
+fetched pages (the deep arm's acquired evidence — the estate's production
+feedstock: heavy web-search runs) and re-fly a SUBSET of seeds against
+`--corpora wikipedia,<warm-corpus-id>` — SAME budgets, rounds, thresholds;
+the ONLY variable is the corpus set (wikipedia alone vs wikipedia + the
+acquired cache). Warm corpus assembly: extract the deep flights' evidence
+windows (`demo/demo13/runs/deep/drb-*/dr-*/evidence-window-*.json` — the
+fetched chunks carry source_url + content), write to a folder, ingest via the
+shipped surface `svrn corpus ingest <folder> --corpus <id>`. Enrichment
+surface inventory (measured 2026-08-19, before any flight): the deep flights
+created NO `dr-estate-dr-*` corpora (109 estate corpora on the host, none for
+the demo13 deep ts range) and their fetch-lists carry queries with zero
+result bodies — the web arm's acquisitions persist only in-run as evidence
+windows; that is the flywheel gap the seat banks if the ingest path proves
+unusable. If the assembled corpus cannot be ingested or searched, report that
+as the NAMED flywheel gap and do not fly the warm leg.
+
+**3. Scoring protocol:** the landed scorer `arms/score-arms.py` (invoke only,
+do not modify — the intent-form R-12 legs are current) per leg root:
+`--pairs <run-root>/pairs.json --loop <run-root>/<arm> --oneshot
+<arms>/runs-t6b/oneshot --out <arms>/score-report-corp-scale-<arm>.json`.
+The one-shot root is the t6b comparator — arm-independent by construction
+(the one-shot draft has no acquisition gate; same frozen questions), journaled
+choice. Comparison targets (each labeled in the write-up): the deep arm (web
+flight, demo13/runs/deep), 8.6538 (the t5a hybrid same-judge reference), the
+batteries (score-report-t6b.json, score-report-t6c.json, the rev-3 numbers).
+The question the arm answers: does acquisition VOLUME move the bars (P4,
+R-12 intent-form, P3, honesty, v1 trajectory)?
+
+**4. Delivery:** `research/deep-research/arms/corpus-scale-comparison.md` —
+the numbers per leg with citations; an explicit answer to "does volume move
+the score, and by how much"; the floor reading stated explicitly (thin =
+estate at its floor, NOT the volume ceiling); the flywheel-gap disposition.
+ONE git invocation for the write-up + this execution record; local only;
+never push.
+
+### Flight log
+
+- **2026-08-19 ~09:38-09:41 — probe attempt 1 (thin, seeds 01-03): ALL THREE
+  FAILED at plan-subquestions with the SAME 503** (`host busy: ~30000 ms
+  predicted wait at queue position 1`, `local_queue_full`,
+  `retry_after_secs 30`; wall = 30s each; console logs per seed in
+  `runs/corpus-scale/thin/`). Cause: the live t6c rev-4 battery
+  (`dr-t6c-r4.service`, ~3 min/flight, 4/13 done at the event) saturated the
+  daemon's 27B inference queue; the fail-fast 503 client behavior is the
+  KNOWN, NAMED client-handling gap (t6c rev-2 landing) — the fetch/client
+  layers are the other workers' surface, NOT touched here. Disposition
+  (journaled): WAIT for the battery unit to go inactive, then relaunch the
+  probe on a clean queue (the driver's manifest-resume semantics re-fly only
+  failed seeds). Probe wall times measured under co-tenancy would be
+  inflated upper bounds — the relaunch keeps the measurement honest.
+  Enrichment surface meanwhile VERIFIED flyable: the demo13 web runs' 38
+  fetched chunks (evidence windows, no estate corpora existed for them) were
+  extracted to `demo/demo13/warm-sources/` and ingested via the shipped
+  `svrn corpus ingest` → `dr-estate-demo13-warm` (searchable, retrieval
+  verified) — the deep flights' missing estates are the observed persistence
+  gap, NOT a blocking flywheel gap.
+
+(appended as flights land)
 
 ## T6a-t6b pilot — the smallest learning loop (operator steer 2026-08-18) — DECLARATION
 
@@ -4527,3 +4615,162 @@ item 2 is amended accordingly: the swallow-ALONE fixture is NOT
 degenerate (the pinned clean shape); the swallow+echo package (the
 corrupt draft-3's exact opening) IS. The frag and echo shapes fire
 individually, unchanged.
+
+## T6b pre-window slice — PRE-REGISTRATION (the acquisition-yield
+pre-window work; order deep-research-t6b, operator-activated
+2026-08-19, directive c5f70843: "get this estimate as close to our
+objective as possible before running another assessment")
+
+**PRE-REGISTERED BEFORE any code** (§18.6). The slice is bounded: the
+three items below, each red-first, each landed in its own commit, the
+battery re-measured on frozen banks after landing (scorer legs must
+not drift — the render change is input-side only). The floor and the
+witness are NEVER weakened; this is rendering and client plumbing, not
+judgment. Scope seam: the t6c worker holds the engine files
+(mod.rs/audit.rs/synthesize.rs/containment.rs/gap code); nothing here
+touches them.
+
+### 1. ITEM 5 (top priority) — the clean RACE render (render-race.md)
+
+The loop's report render produces the verdict transcript (report.md)
+whose readability leg measured 10.1 vs the 46.1 reference at t5a. The
+RACE scorer reads that transcript; the target is a clean article page
+for the scorer's comprehension/readability legs — passed findings
+organized by section, every claim carrying its TYPED citations from
+the structured channel, zero untraced figures in [passed] position,
+downgraded claims visibly stamped.
+
+Design (all confirmed against the code):
+
+1. `render_race(question, claims, run_id) -> String` — a NEW pure
+   function in `sovereign/crates/sovereign-core/src/deep_research/render.rs`
+   (my scope per the order). Sections: Findings (passed claims,
+   citation tails stripped via the existing `strip_citation_spans`,
+   typed citations inline — evidence_id + URL resolved from
+   FinalClaim.citations/evidence_ids against the window chunks),
+   Refuted claims, Open questions, Not evaluated — the three
+   downgraded classes visibly stamped **[refuted]** / **[open
+   question]** / **[not evaluated]** with their flags. Never removes
+   a claim. report.md (the verdict transcript) is UNCHANGED.
+2. Write site: the CLI driver (`deep_research_cmd.rs`, run path after
+   `run()` and resume path after `resume_run_inner()`), reading
+   verdict-set.json (VerdictSet is Serialize+Deserialize, confirmed)
+   + the run's question (charter.json carries `"question"` at top
+   level) → writes `render-race.md` beside report.md. Skipped when
+   verdict-set.json is absent (aborted run). The engine's report-write
+   site (mod.rs:1812) is untouched — the write is post-flight.
+3. `research/deep-research/drb/overall-derivation/score_race.py`:
+   `landed_report()` prefers `render-race.md` when present, falls
+   back to report.md (old runs unscored-by-race keep the transcript —
+   named, no silent substitution).
+
+Red-first test (render.rs): a passed claim carries its typed citation
+(evidence_id + URL) on the race page AND a model-written tail
+(`[Source: ...]`) is ABSENT from [passed]; a downgraded claim carries
+its stamp; the transcript function's output is byte-identical
+regardless of the race page's presence.
+
+Falsifiable: a landed run's dir contains render-race.md; [passed]
+claims carry typed citations and no bare model-written tails; the
+readability leg re-measured on the frozen bank is not worse; scorer
+legs (comprehension/insight/instruction_following) do not drift.
+
+### 2. ITEM 2 — refused-URL re-admission dedup (the task-56 shape)
+
+Evidence: task-56's ledger
+(`research/deep-research/demo/demo13/runs/deep/drb-56/dr-1787063160/`)
+— 12/12 fetch allowance spent on 4 UNIQUE URLs across 3 rounds; the
+same 4 PDF URLs are re-admitted by every fetch-list, fail every round
+(fetch errors), and are re-spent every round. t1d's dedup (fetch.rs)
+refuses already-FETCHED URLs with no decider call; failed URLs are
+never in `fetched_sources`, so they are re-admitted forever.
+
+Design (zero forbidden-file touches):
+
+1. `BudgetLedger` gains `#[serde(default)] refused_urls: Vec<String>`
+   (icd.rs — serde-default keeps old ledgers loadable).
+2. `SpendDecider` gains the run-scoped dead set (budget.rs):
+   `record_fetch_dead(url)` (dedup push + persist),
+   `is_fetch_dead(url)`; `snapshot()` carries it, `restore()`
+   replays it — the decider is already threaded to fetch_round, so
+   the engine call site (mod.rs:1729) needs NO change.
+3. `fetch_round` (fetch.rs, mine): a dead gate BEFORE decider.allow —
+   a dead URL is refused with no decider call and no port call,
+   recorded on the EXISTING window `dedup_refused` field (no
+   EvidenceWindow field addition — construction sites in forbidden
+   files); on `port.web_fetch` Err → `record_fetch_dead(url)`.
+
+Red-first test (fetch.rs): the task-56 shape — 12 allowance, 4 unique
+failing URLs, 3 rounds. Round 1 spends 4; rounds 2 and 3 refuse with
+ZERO additional decider calls (spend count stays 4) and the refusal
+rows land on `dedup_refused`; the dead set survives snapshot→restore
+(resume refuses without re-spend).
+
+### 3. ITEM 7 — the loop client honors 503 + Retry-After
+
+Evidence: both seed-01/02 re-flights died on their FIRST draft call —
+`research/deep-research/arms/runs-t6b/loop/seed-05.console.log` shows
+`draft ask: Inference error: Remote API returned 503 Service
+Unavailable: ...` with `retry_after_secs: 30` in the body; the client
+never retried. Wire path (verified end-to-end): the daemon sheds a
+stuck generation → 503 + Retry-After header +
+`AdmissionRejection { "reason": "local_queue_full", "retry_after_secs": N }`
+(commonwealth-api/src/admission.rs `shed_response`; sovereign-server/
+busy.rs uses the `retry_after` key variant); oicp-client's
+RemoteApiProvider flattens it to
+`Error::Inference("Remote API returned 503 Service Unavailable: {500-char excerpt}")`
+— the Retry-After HEADER is dropped, only the body keys survive.
+
+Design (deep_research_cmd.rs, mine — `CliResearchPort`):
+
+1. `complete_with_shed_retry(provider, request, what)` — bounded
+   retry wrapper around `provider.complete` for `draft()` and
+   `plan_subquestions()`: MAX_SHED_RETRIES=3, default backoff 5s
+   (mirroring the mesh's `YIELD_REFUSAL_DEFAULT_BACKOFF_SECS`,
+   sovereign-mesh/src/decision_log.rs:1140-1200 — the precedent for
+   `looks_shed` and `parse_retry_after_secs`, cited).
+2. Classification on the flattened error text: 503 /
+   service-unavailable / 429 / retry-after → shed. Hint parse:
+   `retry_after_secs` key first, then `retry_after`; clamped 1..=300.
+3. `tracing::warn` per retry (attempt, max, backoff, what) + info on
+   recovery — glassbox, named; after retries exhaust, the LAST honest
+   error is surfaced (never a synthesized substitute).
+
+Red-first test: a stub provider that 503s twice then succeeds — 3
+attempts, success, warn events recorded; a provider that always 503s —
+attempts bounded at MAX+1, last error surfaced.
+
+### 4. ITEM 3 — per-round search allocation: SKIPPED, named
+
+The order allows skipping ("Skip it if the design doesn't fall out
+quickly"). It does not fall out quickly: the search spend's allow()
+call sites are mod.rs:1661 (round search loop) and the search-
+remaining guard mod.rs:1568-1571 — both in the t6c-held engine file;
+the SpendDecider has no round concept, and giving it one requires the
+forbidden call-site change. No mod.rs-free seam exists. Recorded here
+so the skip is explicit, not silent (§18.3).
+
+### Execution record
+
+**Landing 1 (ITEM 5 — the clean RACE render, 2026-08-19):** red→green
+as declared — `render_race` was first a stub returning the empty
+string; `race_render_leads_with_typed_citations_and_stamps_downgrades`
+watched the red (panicked on the `starts_with` assertion against the
+empty stub), then the body landed green (8/8 render-module tests, the
+transcript goldens included — the transcript function is untouched).
+The CLI write path (`write_race_render`, deep_research_cmd.rs) landed
+with two unit tests over a fabricated run dir matching the REAL
+verdict-set.json wire shape (verified against drb-56/dr-1787063160 and
+drb-58/dr-1787063201 — verdict values serialize as kebab-case strings);
+the test asserts the transcript file is byte-untouched, and the
+no-verdict-set case (aborted run) skips with a named note, never an
+error. score_race.py's `landed_report` prefers render-race.md when
+present and falls back to report.md (old flights — named, no silent
+substitution). Gates: lint --full exit 0 (0 errors); sovereign-test
+full 9967 pass / 3 fail — the same pre-existing sovereign-inference
+embedded::gates trio (clean HEAD, D2 domain, untouched). Battery
+re-measurement follows the slice's final landing (item 5 is post-flight
+rendering; the scorer's input preference is the only change).
+
+_(further landings append here: red→green evidence, gate exits, battery
+re-measurement, commit ids.)_

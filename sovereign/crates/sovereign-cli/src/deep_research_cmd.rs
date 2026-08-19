@@ -49,7 +49,8 @@ use sovereign_core::deep_research::gym::{
     CorpusSurface, Deck, MockBackendImpl, MockDraftSurface, ProviderEmbed,
 };
 use sovereign_core::deep_research::icd::ICD_VERSION;
-use sovereign_core::deep_research::icd::{CorpusEntry, EvidenceWindow, Plan, Survey};
+use sovereign_core::deep_research::icd::{CorpusEntry, EvidenceWindow, Plan, Survey, VerdictSet};
+use sovereign_core::deep_research::render::render_race;
 use sovereign_core::deep_research::{
     read_checkpoint, resume, run, RunConfig, RunOutcome, SearchSource,
 };
@@ -1026,6 +1027,13 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         return 1;
     }
     print_summary(&outcome);
+    // T6b pre-window slice (pre-registered): the clean RACE article
+    // page, written post-flight beside report.md. A write failure
+    // fails the verb loudly — the deliverable is missing.
+    if let Err(e) = write_race_render(&outcome.report_path) {
+        eprintln!("deep-research: {e}");
+        return 1;
+    }
     0
 }
 
@@ -1277,6 +1285,7 @@ async fn resume_run_inner(
         return Err(format!("estate ingest failed: {e}"));
     }
     print_summary(&outcome);
+    write_race_render(&outcome.report_path)?;
     Ok(())
 }
 
@@ -1468,6 +1477,62 @@ fn print_summary(outcome: &RunOutcome) {
     }
 }
 
+/// T6b pre-window slice (pre-registered 2026-08-19): the post-flight
+/// RACE article page. Reads the run's verdict-set.json (the structured
+/// channel — typed citations and verdicts) and writes `render-race.md`
+/// beside report.md: passed findings with typed citations, downgraded
+/// claims stamped, zero model-written tails. The page's question is
+/// report.md's own H1 — the question the transcript actually answers
+/// (a reframed/redirected run's title comes from the record, never a
+/// silent substitute). Skipped with a named note when the verdict set
+/// is absent (an aborted run); a write failure fails the verb loudly —
+/// the deliverable is missing.
+fn write_race_render(report_path: &std::path::Path) -> Result<(), String> {
+    let dir = report_path
+        .parent()
+        .ok_or_else(|| "the run's report path has no parent (no run dir)".to_string())?;
+    let question = match std::fs::read_to_string(report_path) {
+        Ok(text) => text
+            .lines()
+            .find_map(|l| l.strip_prefix("# ").map(str::to_string))
+            .ok_or_else(|| {
+                format!(
+                    "render-race.md skipped — report.md carries no `# ` heading: {}",
+                    report_path.display()
+                )
+            })?,
+        Err(_) => {
+            eprintln!(
+                "deep-research: render-race.md skipped — report.md unreadable at {}",
+                report_path.display()
+            );
+            return Ok(());
+        }
+    };
+    let verdict_path = dir.join("verdict-set.json");
+    let verdict_set: VerdictSet = match std::fs::read(&verdict_path)
+        .ok()
+        .and_then(|raw| serde_json::from_slice(&raw).ok())
+    {
+        Some(vs) => vs,
+        None => {
+            eprintln!(
+                "deep-research: render-race.md skipped — {} absent or unreadable (aborted run?)",
+                verdict_path.display()
+            );
+            return Ok(());
+        }
+    };
+    let page = render_race(&question, &verdict_set.claims, &verdict_set.run_id);
+    let race_path = dir.join("render-race.md");
+    std::fs::write(&race_path, page).map_err(|e| {
+        format!(
+            "render-race.md write failed at {}: {e}",
+            race_path.display()
+        )
+    })
+}
+
 fn now_unix() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -1477,6 +1542,7 @@ fn now_unix() -> i64 {
 
 #[cfg(test)]
 mod tests {
+    use super::write_race_render;
     use sovereign_core::deep_research::estate::estate_snippet;
 
     /// Measured fixture (demo re-ask dr-1786727099): the Smithsonian
@@ -1514,5 +1580,84 @@ mod tests {
         let content = "short chunk with no matching terms here";
         let snippet = estate_snippet(content, "zzzqqq wwww", 50);
         assert_eq!(snippet, content);
+    }
+
+    // ------------------------------------------------------------------
+    // T6b pre-window slice — the post-flight RACE page (RED-FIRST: the
+    // write path did not exist at HEAD; the render test in sovereign-core
+    // watched the red first — order deep-research-t6b, pre-registered).
+    // ------------------------------------------------------------------
+
+    /// write_race_render reads a run dir's verdict-set.json (the
+    /// structured channel, real wire shape) + report.md's H1 (the
+    /// question the transcript actually answers) and writes the clean
+    /// article page beside the transcript — typed citations in [passed]
+    /// position, no model-written tails, downgraded claims stamped.
+    #[test]
+    fn write_race_render_produces_the_clean_page_from_a_run_dir() {
+        let tmp = std::env::temp_dir().join(format!("dr-race-render-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let report = "# Meridian Bridge history\n\n- run: `dr-test`\n\n\
+            ## Findings\n\n- **[passed]** The bridge was completed in 1873. — `ev-1` \
+            [https://example.com/a](https://example.com/a)\n";
+        std::fs::write(tmp.join("report.md"), report).unwrap();
+        let verdict_set = serde_json::json!({
+            "icd": "verdict_set",
+            "version": 1,
+            "run_id": "dr-test",
+            "charter_hash": "h",
+            "claims": [
+                {"id": "c1",
+                 "text": "The bridge was completed in 1873 [Source: https://example.com/draft]. ",
+                 "verdict": "passed", "status": "passed",
+                 "evidence_ids": ["ev-1"],
+                 "citations": [{"evidence_id": "ev-1", "url": "https://example.com/a",
+                                "chunk_id": "ev-1"}],
+                 "flag": null},
+                {"id": "c2",
+                 "text": "The engineer was Helena Voss.",
+                 "verdict": "failed", "status": "failed",
+                 "evidence_ids": [], "citations": [],
+                 "flag": "refuted by the evidence"}
+            ]
+        });
+        std::fs::write(
+            tmp.join("verdict-set.json"),
+            serde_json::to_vec_pretty(&verdict_set).unwrap(),
+        )
+        .unwrap();
+        write_race_render(&tmp.join("report.md")).unwrap();
+        let page = std::fs::read_to_string(tmp.join("render-race.md")).unwrap();
+        assert!(page.starts_with("# Meridian Bridge history"), "{page}");
+        assert!(page.contains("## Findings"), "{page}");
+        let findings = page.split("## Findings").nth(1).expect("findings present");
+        assert!(findings.contains("ev-1"), "{findings}");
+        assert!(findings.contains("https://example.com/a"), "{findings}");
+        assert!(!findings.contains("[Source:"), "{findings}");
+        assert!(page.contains("[refuted]"), "{page}");
+        assert!(page.contains("Helena Voss"), "{page}");
+        // The transcript file is untouched, byte-for-byte.
+        assert_eq!(
+            std::fs::read_to_string(tmp.join("report.md")).unwrap(),
+            report
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    /// No verdict set (an aborted run) skips with a note — never an
+    /// error and never a page pretending to be complete.
+    #[test]
+    fn write_race_render_skips_without_a_verdict_set() {
+        let tmp = std::env::temp_dir().join(format!("dr-race-render-skip-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::fs::write(tmp.join("report.md"), "# Q\n\n## Findings\n\n").unwrap();
+        write_race_render(&tmp.join("report.md")).unwrap();
+        assert!(
+            !tmp.join("render-race.md").exists(),
+            "no verdict set — no race page"
+        );
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

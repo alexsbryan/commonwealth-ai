@@ -158,9 +158,13 @@ def reference_by_id() -> dict:
 
 
 def landed_report(task_id: int, root: Path) -> Path:
-    """The ONE landed report.md for a task in a demo12 arm root (amendment-2a
+    """The ONE landed report for a task in a demo12 arm root (amendment-2a
     gate: verdict-set.json present). Refuses if zero or multiple landed dirs —
-    never guesses. The root names the arm: demo12/runs/{local,hybrid}/."""
+    never guesses. The root names the arm: demo12/runs/{local,hybrid}/.
+    Since 2026-08-19 the loop writes render-race.md (the clean article
+    page: typed citations, stamped downgrades) beside report.md; the
+    scorer prefers it when present and falls back to the transcript
+    (old flights) — named, no silent substitution."""
     task_root = root / f"drb-{task_id}"
     landed = [
         d for d in task_root.glob("dr-*")
@@ -171,7 +175,9 @@ def landed_report(task_id: int, root: Path) -> Path:
             f"exit 3: task {task_id}: expected exactly 1 landed flight in "
             f"{task_root}, found {len(landed)}: {[d.name for d in landed]}"
         )
-    return landed[0] / "report.md"
+    run_dir = landed[0]
+    race = run_dir / "render-race.md"
+    return race if race.exists() else run_dir / "report.md"
 
 
 def subset_articles() -> dict:
