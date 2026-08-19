@@ -370,6 +370,34 @@ fn anchor_filter(specifics: Vec<String>, claim: &str) -> Vec<String> {
 
 /// Run the witness over one claim: extract specifics (I-class) then
 /// check presence (C-class). `chunks` is the evidence window.
+/// The re-expression seam's ONE merge (order deep-research-t6c, REV-3,
+/// pre-registered in adversarial/pre-registration.md): extraction
+/// specifics ∪ the claim's own figure tokens. The extraction is model
+/// output and can return empty on figure-bearing re-expressions whose
+/// digits are verbatim in the evidence (measured: the v1 r3-new
+/// fragment "51.9%"/"50.6%"/"50%" verbatim in BOTH origins, yet
+/// corroboration origins 0 — the floor never saw the digits because
+/// the witness never entered them). The t1h strengthen
+/// (`missing_claim_figures`) runs BEFORE the extraction and already
+/// proved every claim figure is present in the evidence — the merge
+/// just routes that deterministic fact into the specifics (§7.6:
+/// never ask a model to guarantee what code can enforce). Anchored by
+/// construction — figure tokens are claim substrings; citation spans
+/// stripped first, the fold's own anti-leak precedent ("[Source:
+/// ev-2]" must never contribute its bare "2"). Downgrade-only: the
+/// strengthen still fires first on absent figures; this adds only
+/// PRESENT digits, and the witness's own presence test still runs the
+/// merged set through the strict matcher afterwards.
+fn merge_claim_figures(specifics: Vec<String>, claim: &str) -> Vec<String> {
+    let mut merged = specifics;
+    for t in figure_tokens(&strip_citation_spans(claim)) {
+        if !merged.contains(&t) {
+            merged.push(t);
+        }
+    }
+    merged
+}
+
 pub async fn containment_witness(
     inference: &Arc<dyn InferenceProvider>,
     claim: &str,
@@ -431,11 +459,30 @@ pub async fn containment_witness(
     if specifics.iter().any(|s| s.eq_ignore_ascii_case("none")) {
         specifics.clear();
     }
+    // The re-expression seam (order deep-research-t6c, REV-3,
+    // pre-registered): merge the claim's own figure tokens into the
+    // specifics — even through the NONE sentinel, whose empty set is
+    // exactly the measured failure (the v1 r3-new fragment's digits
+    // verbatim in both origins, corroboration origins 0). The t1h
+    // strengthen above already proved every claim figure present in
+    // the evidence; the merge is deterministic and anchored by
+    // construction. Figureless claims merge nothing (the paraphrase
+    // residue stays honest could-not-judge). NEGATIVE claims are
+    // EXEMPT: the negation inverts presence, so a merged claim digit
+    // present in the evidence (e.g. "11" from "Apollo 11") would
+    // manufacture a contradiction the negation never asserted — the
+    // extraction's specifics ARE the negation's target, and the merge
+    // must not widen it (case law: negative_claims_hold_when_their_
+    // specifics_are_absent; caught by the full gate at the rev-3
+    // landing, journaled).
+    let negative = is_negative_claim(claim);
+    if !negative {
+        specifics = merge_claim_figures(specifics, claim);
+    }
     // The witness-fix (directive 6c25d88e): a negative claim about the
     // evidence inverts the presence test; the anchor filter drops a
     // specific the claim does not assert (the phantom class) before it
     // can flip the witness.
-    let negative = is_negative_claim(claim);
     let witnessable: Vec<String> = anchor_filter(specifics, claim)
         .into_iter()
         .filter(|s| is_witnessable(s))
@@ -796,7 +843,11 @@ mod tests {
     // Defect 1: the phantom specific — "Date: 1973 (inauguration)",
     // present in neither claim nor evidence, alone flipped the witness
     // to all-absent. The anchor filter drops a specific the claim does
-    // not assert.
+    // not assert. REV-3 (order deep-research-t6c): the claim's OWN
+    // figure "1973" is now merged into the specifics and is witnessable
+    // (anchored in the claim, present in the window) — the phantom
+    // shape is still dropped, and the witness runs on the claim's own
+    // figure, not the phantom.
     #[tokio::test]
     async fn phantom_specifics_do_not_flip_the_witness() {
         let claim = "The Larkhall viaduct across the Clyde valley was inaugurated in 1973.";
@@ -806,10 +857,9 @@ mod tests {
         )];
         let outcome = witness_with("Date: 1973 (inauguration)", claim, &window).await;
         assert!(
-            !outcome.all_absent,
-            "a specific anchored in neither claim nor evidence must not flip the witness"
+            outcome.ran && !outcome.all_absent,
+            "the phantom shape is dropped; the claim's own figure '1973' witnesses presence (rev-3 merge)"
         );
-        assert!(!outcome.ran, "nothing witnessable after the anchor filter");
     }
 
     // Defect 1b: the anchored reshape survives label stripping and is
@@ -904,5 +954,49 @@ mod tests {
             outcome.ran && outcome.all_absent,
             "an unverifiable negative claim is could-not-judge, never a vacuous pass"
         );
+    }
+
+    // ---- Rev-3 re-expression seam (order deep-research-t6c,
+    // pre-registered in adversarial/pre-registration.md): the witness
+    // specifics get the claim's OWN figure tokens, deterministically.
+    // The flight-level red is battery #3 (the daemon-backed full chain);
+    // these are the pure merge semantics — no model. Fixtures carry the
+    // REAL v1 flight's digits (runs-t6c-r2/loop/v1/dr-*/gap-list-3.json
+    // and evidence-window-1.json). RED AT HEAD: `merge_claim_figures`
+    // does not exist yet.
+    #[test]
+    fn merge_claims_the_figures_the_extraction_dropped() {
+        // The v1 r3-new fragment: the extraction returned nothing
+        // usable (corroboration origins 0) although the digits are
+        // verbatim in BOTH origins (ev-1 prose, ev-2 table).
+        let claim = "Washington, D.C. followed at 51.9%, Minneapolis at 50.6%, and Seattle at 50% [Source: ev-1] [Source: ev-2].";
+        let merged = merge_claim_figures(Vec::new(), claim);
+        assert!(merged.contains(&"51.9%".to_string()), "51.9% merged");
+        assert!(merged.contains(&"50.6%".to_string()), "50.6% merged");
+        assert!(merged.contains(&"50%".to_string()), "50% merged");
+        // The citation handles must not leak their digits (the fold's
+        // anti-leak precedent): "ev-2" contributes no bare "2".
+        assert!(
+            !merged.contains(&"2".to_string()),
+            "no bare citation digit leaks into the specifics"
+        );
+    }
+
+    #[test]
+    fn merge_keeps_extraction_specifics_and_dedups() {
+        let claim = "Portland led with 58.1% of eligible tracts gentrifying [Source: ev-1].";
+        let merged = merge_claim_figures(vec!["Portland".to_string(), "58.1%".to_string()], claim);
+        assert!(merged.contains(&"Portland".to_string()));
+        // The extraction already carried the figure — no duplicate.
+        assert_eq!(merged.iter().filter(|s| *s == "58.1%").count(), 1);
+    }
+
+    #[test]
+    fn merge_adds_nothing_for_figureless_claims() {
+        // The figureless r3-new residue class: no figures, nothing
+        // merged — the paraphrase stays honest could-not-judge (the
+        // sentinel path is untouched).
+        let claim = "Residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas [Source: ev-1].";
+        assert!(merge_claim_figures(Vec::new(), claim).is_empty());
     }
 }

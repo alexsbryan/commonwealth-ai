@@ -4139,3 +4139,171 @@ daemon idle check (127.0.0.1:9741) before launch, ONE unit
 registration is in the tree before the battery launches. The landing
 report carries the trajectory numbers, the keep/revert verdict, and
 the converged/exit statement either way.
+
+## T6c REV-3 — EXECUTION RECORD (battery #3 terminal, seat-verified)
+
+### 1. Trajectory numbers (the gate)
+
+- **v1: r1:1 → r2:18 → r3:21 — NOT CONVERGED.** Final (21) > round-2
+  (18): the intent-form content-rounds pair GREW, and none of the three
+  pre-registered v1 outcomes materialized (neither ~6-9 converged-and-
+  shrunk nor 28 converged-flat; the battery's own round-2 base was 18,
+  not the rev-2-era 28 — the pre-registered base was a factual slip,
+  corrected here: battery-3's r2 ledger had 18 entries).
+- **R-12-nongrow (v0, intent-form): 11/12 — PASS** (bar >=10/12), the
+  first pass in the order's three revolutions. 11 v0 seeds show
+  r3 == r2 exactly; seed-01 alone grew (r2:5 → r3:6, +1).
+- **P4-v0: 64/72 (bar >=58/72) — passed, but down from rev-2's 69/72.**
+- **P4-v1 (loop): 10/16 (bar >=12/16) — FAILED; REGRESSION vs rev-2's
+  13/16.** The measured trade size of B (see §3): the resolve-only r3
+  report covers fewer keys than rev-2's enumeration-mode report.
+- **P3: 9/13 (bar >=10/13) — FAILED; REGRESSION vs rev-2's 12/13.**
+  Failures: seed-02, seed-03, seed-04, v1 — the "final coverage not
+  worse than the round-1-evidence draft" leg fails where the resolve-
+  only draft-3 restates fewer keys than draft-2 covered.
+- **T1.7: 12/12 scoped — held.**
+- **two-arm lift: pooled 0.991 vs 0.965 (+0.026, bar +0.10) FAILED;
+  v1 1.0 vs 0.973 (+0.027, bar +0.15) FAILED — both held-failed** (same
+  verdicts as rev-2; the numbers moved, the verdicts did not).
+- **honesty not worse: loop 0.009 vs one-shot 0.035 — PASSED (held).**
+
+### 2. The gate verdict
+
+**v1 final > round-2 — the order's pre-registered NOT-WORTH-CONTINUING
+boundary is LIVE by its letter, and this record states it plainly:
+battery #3 did NOT converge.** The exit clause's premise — "the growth
+is outside the draft/audit/gap seams the order was scoped to fix" — is
+however NOT met: the measured mechanism (below) is inside the draft
+seam (r3 draft shape corruption, guard-missed) and inside the audit
+seam (the fold's closing path is citation-bound). The decision to
+continue or stop is the operator's; this record's job is the evidence
+and the named next seams.
+
+### 3. Mechanism, evidence-complete (why the gate reads what it reads)
+
+**(a) Fix A (merge_claim_figures) WORKS.** The v1 r3 verdict set
+carries 12 claims passing the floor with >=2 distinct source origins —
+including the exact rev-2 "+2" fragment class:
+"(51.9%), Minneapolis (50.6%), and Seattle (50%) [Source: ev-1]
+[Source: ev-2]." The re-expression class that grew the ledger at rev-2
+is now grounded where the evidence supports it.
+
+**(b) Fix B (resolve_only, round >= 3) WORKS for v0** — 11/12 intent-
+form (r3 == r2 on every passing seed). The r3 growth is NOT the
+enumeration seam: the r3 draft's fact content is restatement.
+
+**(c) The +3 v1 growth (18 → 21) is DRAFT CORRUPTION, not facts.** The
+three r3-new ledger entries, verbatim:
+1. "Based on the evidence provided, here is how American cities
+   changed across four decades (1980–2024) regarding gentrification,
+   inequality, affordability, and displacement. [Source: ev-1]" — the
+   prompt's framing echoed as a claim.
+2. "### Economic Inequality Inequality widened significantly during
+   this period, with metropolitan areas showing steeper increases than
+   national averages [Source: ev-1]." — a markdown header swallowed its
+   first sentence; the splitter kept the "### " prefix in the claim.
+3. "showing the sharpest increase among advanced economies since the
+   1980s [Source: ev-1]." — a dependent clause split off as a claim.
+All three are single-origin and structurally unpassable (fragments
+cannot carry multi-origin support). seed-01's +1 is the same class:
+"*   Although announced in March 2025, the deal completed its
+regulatory and shareholder steps later, with completion reported in
+July 2025 [Source: ev-1]." — a markdown bullet fragment.
+
+**(d) The rev-2 guard does NOT see this class.** Draft-2 and draft-3
+of the v1 flight both measure 0 DEGENERATE_MARKERS and bold density
+2.4-2.5 per 1k (bar 8.0) — the prompt-echo / markdown-header /
+fragment shapes are not in the marker list and the density rule misses
+them. The B-prompt's phrasing ("restate each still-open specific
+above...") plausibly induced the structured shape: the constraint's
+enumeration phrasing invited a header/bullet-form synthesis, which the
+splitter fragments. The guard's marker-coverage gap is the FIRST
+named next seam.
+
+**(e) ZERO of the 18 r2 prior texts closed at r3.** All 21 r3 ledger
+entries fail the floor; the 18 seeds' own re-audits fail at the
+WITNESS stage: 9 corr-NULL (t1h strengthen fired — a claim figure
+absent from the referenced chunk), 7 single-origin caps, 5 origins-0
+(the classification of the 21 records; the seed re-audits are the
+overlap). The fold's closing path requires the PRIOR TEXT'S OWN
+verbatim re-audit to pass — and the r2 texts' citations name chunks
+that do not fully carry their figures (the strengthen runs against the
+REFERENCED chunks only). The closing path is CITATION-BOUND: it can
+only close a seed whose own draft cites well enough. Corrected
+derivation (vs my pre-registered "~6-9"): the floor scans the full
+window (15/28 ledger entries are figure-passable there), but the
+witness's strengthen sees only the referenced chunks — the passable
+set and the witness-visible set are different sets. The SECOND named
+next seam: the fold could close a seed on the FOLDING claim's pass
+(the draft's better-cited restatement) rather than the seed's own
+verbatim re-audit — the ledger's identity is the fact, not the
+sentence, which is the fold's own documented philosophy.
+
+### 4. Keep/revert journal
+
+- **Fix A: KEEP.** Proven: 12 grounded r3 claims including the +2
+  fragment class; deterministic, anchored, downgrade-only.
+- **Fix B: KEEP for v0** (11/12 intent-form, first pass in three
+  revolutions), with the r3 draft-shape corruption class journaled as
+  the guard-coverage seam (d) — B's prompt phrasing needs a shape
+  guard, not a revert.
+- **Rev-2 degenerate guard: KEEP**, with the FP class (seed-01 rev-2)
+  and the NEW missed class (r3 markdown/echo/fragment, 0 markers,
+  ~2.5/k bold) both journaled — the density rule needs shape context.
+- **The fold (rev-1): KEEP**; the closing path's citation-boundness is
+  now measured and named as the second seam (e), not a defect of the
+  fold.
+- **Battery-hygiene defects (journaled, fixed where they are mine):**
+  (i) the battery's flights ran under the DEFAULT runs/ root — the
+  driver was wrapped in `toolbox run ... exec run-arms.sh`, which drops
+  ARMS_RUN_ROOT at the flatpak-spawn env boundary; historical dr-*
+  dirs preserved but console logs + pairs.json overwritten. (ii) The
+  one-shot arm failed inside the battery ("flatpak-spawn(1) not
+  found"); rerun as unit dr-t6c-r3-oneshot from the HOST (env on the
+  toolbox command line), all 13 pairs written. (iii) The scorer
+  silently pooled a PARTIAL oneshot dir (the first r3 score reported
+  pooled_oneshot_density 1.0 from one pair's file) and would have
+  crashed on an EMPTY oneshot dir (honesty leg, None comparison) —
+  FIXED: the scorer now guards oneshot completeness and emits
+  could-not-judge on the pooled-lift and honesty legs when pairs are
+  missing (score-arms.py, fixtures green).
+
+### 5. Landing commit
+
+Fix A + Fix B + the 3 merge tests + the resolve-only test + render.rs
+(fmt-only) + score-arms.py (the dated scored_at fix and the oneshot
+completeness guard) + this execution record. bars.toml: NO amendment
+(R-12-nongrow passed 11/12 under the standing >=10/12 bar; the seat
+convention — amendments land in their own commit — is unchanged).
+Battery evidence (runs dirs, reports, logs) stays untracked.
+
+### 6. Post-battery hardening (the full gate's catch, journaled)
+
+The rev-3 landing gate caught TWO pre-existing containment case-law
+tests that Fix A's union semantics broke — caught by the full test run,
+not by the red-first list (the pre-registered reds were the merge's
+positive-class semantics; the negative-class interaction was not
+pre-registered):
+
+1. **Negative claims are EXEMPT from the merge.** The merge added the
+   claim's own digits to a NEGATIVE claim's specifics ("11" from
+   "Apollo 11"); the digit is present in the evidence, so the negation
+   received a manufactured contradiction (a true negative downgraded
+   for a figure it never asserted). The extraction's specifics ARE the
+   negation's target; the merge must not widen them. Landed as
+   `if !negative { specifics = merge_claim_figures(specifics, claim); }`
+   with the case-law comment. The three negative-class tests
+   (contradicted / true-negative-holds / NONE-vacuous) are green again,
+   and test 3c now passes for its genuine reason (no checkable
+   specifics) rather than the merged-digit coincidence.
+2. **The phantom test pinned pre-A behavior.** "Date: 1973
+   (inauguration)" (anchored in neither claim nor evidence) is still
+   anchor-dropped; but the claim's OWN "1973" is now merged and
+   witnessable — exactly the rev-3 intent (and test 1b's already-pinned
+   semantics). The test's `!ran` assertion was updated to the rev-3
+   semantics (`ran && !all_absent`) with the phantom-shape invariant
+   preserved in the comment.
+
+No battery leg changes: all 12 grounded v1 claims and the +3 new
+ledger entries are POSITIVE claims (verified), so the carve-out is
+post-hoc hardening, not a re-measurement.

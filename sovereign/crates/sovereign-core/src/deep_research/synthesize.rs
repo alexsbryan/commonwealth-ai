@@ -145,10 +145,31 @@ pub async fn draft_round(
     }
     // The deterministic figure inventory (t1h — H2): the evidence's
     // figures are enumerated for the model, never left to the draft's
-    // discretion. Both round shapes carry it.
-    let inventory = figure_inventory(evidence);
+    // discretion. Both round shapes carry it — EXCEPT the resolve-only
+    // rounds (REV-3, order deep-research-t6c, pre-registered): the
+    // inventory is round-2's enumeration job; at round >= 3 the draft
+    // resolves the still-open ledger and enumerates NO new facts (the
+    // measured +2/+1 r3 growths are the draft's re-expressions of
+    // evidence into NEW fact identities the fold correctly refuses and
+    // the floor caps — the growth is killed at the source, and the
+    // closing path is the loop's own verbatim re-audit of prior texts,
+    // which needs no enumeration).
+    let resolve_only = round >= 3;
+    let inventory = if resolve_only {
+        String::new()
+    } else {
+        figure_inventory(evidence)
+    };
     if !inventory.is_empty() {
         prompt.push_str(&format!("\n\n{inventory}"));
+    }
+    if resolve_only {
+        prompt.push_str(
+            "\n\nResolution constraint: restate each still-open specific \
+             above exactly as the evidence supports it and nothing beyond \
+             — no new facts, no new figures, no claims not already listed \
+             above.",
+        );
     }
     if evidence.chunks.is_empty() {
         prompt.push_str("\n\n(No evidence was retrieved this round. Say so plainly.)");
@@ -321,6 +342,65 @@ mod tests {
         );
     }
 
+    // --- REV-3 (order deep-research-t6c, pre-registered): the
+    // resolve-only rounds. The r3 draft resolves the still-open ledger
+    // and enumerates NO new facts — the measured +2/+1 r3 growths are
+    // the draft's re-expressions of evidence into NEW fact identities
+    // the fold correctly refuses and the floor caps; suppression at
+    // the source. The inventory is round-2's enumeration job.
+
+    #[tokio::test]
+    async fn resolve_only_rounds_suppress_the_inventory_and_carry_the_constraint() {
+        let mut w = window();
+        w.chunks[0].content =
+            "Gini coefficients in the largest metro areas exceeded 0.5469 in 2019.".to_string();
+        let port = RecordingPort::new();
+        let gaps = vec!["Still-open: the 2019 baseline.".to_string()];
+        draft_round(
+            &port,
+            "r",
+            "h",
+            2,
+            "How did cities change?",
+            &w,
+            &gaps,
+            false,
+        )
+        .await
+        .unwrap();
+        let round2 = port.last_prompt();
+        assert!(
+            round2.contains("Figures present in the evidence"),
+            "round 2 keeps the inventory (its enumeration job): {round2}"
+        );
+        assert!(
+            !round2.contains("Resolution constraint"),
+            "round 2 is not resolve-only: {round2}"
+        );
+
+        draft_round(
+            &port,
+            "r",
+            "h",
+            3,
+            "How did cities change?",
+            &w,
+            &gaps,
+            false,
+        )
+        .await
+        .unwrap();
+        let round3 = port.last_prompt();
+        assert!(
+            round3.contains("Resolution constraint"),
+            "round 3 must carry the resolution constraint: {round3}"
+        );
+        assert!(
+            !round3.contains("Figures present in the evidence"),
+            "round 3 suppresses the inventory: {round3}"
+        );
+    }
+
     // --- REV-2 (order deep-research-t6c, pre-registered): the
     // degenerate-draft guard. RED: these reference
     // `draft_is_degenerate` and the `strict_shape` param, which do not
@@ -392,7 +472,11 @@ Gentrified neighborhoods typically saw increases in non-Hispanic white populatio
         let mut text = String::new();
         for i in 0..20 {
             // One bold pair in 8 of the 20 sections: 16 "**" occurrences.
-            let emphasis = if i % 5 == 0 { "The **headline figure** was 42.7%. " } else { "" };
+            let emphasis = if i % 5 == 0 {
+                "The **headline figure** was 42.7%. "
+            } else {
+                ""
+            };
             text.push_str(&format!(
                 "### Section {i}\n{emphasis}The district reported a 42.7% change in the \
                  eligible population, the highest in the region, against the 2019 baseline.\n"

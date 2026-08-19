@@ -812,7 +812,18 @@ def main():
             row["oneshot_text"] = answer
         rows.append(row)
 
-    summary = summarize(rows)
+    # one-shot arm completeness (§18.2): a partial oneshot dir must not
+    # feed the pooled legs — the pooled density over a subset would be a
+    # silently-substituted measurement (journaled at the t6c rev-3
+    # landing: the first r3 score reported pooled_oneshot_density 1.0
+    # from a single pair's file). Missing pairs force the oneshot-pooled
+    # and honesty legs to could-not-judge.
+    oneshot_missing = [
+        p["id"] for p in pairs
+        if not (oneshot_root / f"oneshot-{p['id']}.md").exists()
+        or not (oneshot_root / f"oneshot-{p['id']}-window.json").exists()
+    ]
+    summary = summarize(rows, oneshot_missing=oneshot_missing)
     report = {
         "scored_at": str(date.today()),
         "scorer": "score-arms.py (C-class deterministic; rules journaled in the file header)",
@@ -841,15 +852,17 @@ def bars_block(rows, summary):
     r12_passed = sum(1 for r in v0_rows if r.get("r12") == "passed")
     r12_cn = sum(1 for r in v0_rows if r.get("r12") == "could-not-judge")
     lift = summary.get("pooled_lift")
+    oneshot_missing = summary.get("oneshot_missing")
     v1_lift = None
     if v1_row.get("loop_density") is not None and v1_row.get("oneshot_density") is not None:
         v1_lift = round(v1_row["loop_density"] - v1_row["oneshot_density"], 3)
     hon_loop = 1.0 - summary.get("pooled_loop_density", 1.0) if summary.get("pooled_loop_density") is not None else None
     hon_one = 1.0 - summary.get("pooled_oneshot_density", 1.0) if summary.get("pooled_oneshot_density") is not None else None
 
-    def leg(name, measured, bar, passed, note=""):
+    def leg(name, measured, bar, passed, note="", verdict=None):
         return {"leg": name, "measured": measured, "bar": bar,
-                "verdict": "passed" if passed else "failed", "note": note}
+                "verdict": verdict if verdict is not None else ("passed" if passed else "failed"),
+                "note": note}
 
     # T1.7 (order deep-research-t1e) — the cap's measurement: frontier
     # figure-specifier presence in the launch plan. A flight whose
@@ -883,7 +896,7 @@ def bars_block(rows, summary):
             "evidence-arbiter corrected forms applied per the frozen journal"),
         leg("P3", f"{p3_passed}/13 passed (+{p3_cn} could-not-judge)", ">=10/13",
             p3_passed >= 10,
-            "the v0 seeds all re-fetch the same exemplar (no fetch dedup); the v1 flight passed (round-2 fetched 0, coverage not worse)"),
+            "round-2 fetched <20% of round-1 AND final coverage not worse than the round-1-evidence draft; v0 seeds re-fetch the same exemplar (no fetch dedup)"),
         leg("R-12-nongrow", f"{r12_passed}/12 v0 seeds", ">=10/12",
             r12_passed >= 10,
             "INTENT-FORM content-rounds trajectory per directive 19909d5f (r2->r3 "
@@ -895,19 +908,22 @@ def bars_block(rows, summary):
             "all scoped flights carry", t17_verdict == "passed", t17_note),
         leg("two-arm lift (pooled)", f"{summary.get('pooled_loop_density')} vs {summary.get('pooled_oneshot_density')}",
             "loop >= one-shot + 0.10", (lift or -1) >= 0.10,
-            "one-shot traces every numeric claim; the loop's flagged open-question claims stay untraced (see the honesty journal)"),
+            "one-shot traces every numeric claim; the loop's flagged open-question claims stay untraced (see the honesty journal)",
+            verdict=("could-not-judge" if oneshot_missing else None)),
         leg("two-arm lift (v1)", f"{v1_row.get('loop_density')} vs {v1_row.get('oneshot_density')}",
             "loop >= one-shot + 0.15", (v1_lift or -1) >= 0.15,
-            "single-question comparison"),
+            "single-question comparison",
+            verdict=("could-not-judge" if v1_row.get("oneshot_density") is None else None)),
         leg("honesty not worse", f"ungrounded loop {hon_loop} vs one-shot {hon_one}",
-            "loop ungrounded <= one-shot", hon_loop is not None and hon_loop <= hon_one,
-            "letter leg: the loop's verdict-flagged claims (failed/could-not-judge) count as ungrounded; zero untraced numbers sit in [passed] position in ANY arm (both epochs, journaled) — t1e loop 0.117 < t1d 0.497 under the same instrument"),
+            "loop ungrounded <= one-shot", hon_loop is not None and hon_one is not None and hon_loop <= hon_one,
+            "letter leg: the loop's verdict-flagged claims (failed/could-not-judge) count as ungrounded; zero untraced numbers sit in [passed] position in ANY arm (both epochs, journaled) — t1e loop 0.117 < t1d 0.497 under the same instrument",
+            verdict=("could-not-judge" if hon_one is None else None)),
     ]
     return {"verdicts": verdicts,
             "note": "P5 (poisoned-drill battery, 6/6, no noise band) is verified by demo/p5/verify.sh and recorded in the DEMO-2 README — a separate gate, not scored here."}
 
 
-def summarize(rows):
+def summarize(rows, oneshot_missing=None):
     s = {"per_question": {}}
     pooled = {"loop": [0, 0, 0.0], "oneshot": [0, 0, 0.0]}  # tracing, total
     for r in rows:
@@ -932,6 +948,10 @@ def summarize(rows):
     ot, otot = pooled["oneshot"][0], pooled["oneshot"][1]
     s["pooled_loop_density"] = round(lt / ltot, 3) if ltot else None
     s["pooled_oneshot_density"] = round(ot / otot, 3) if otot else None
+    if oneshot_missing:
+        s["oneshot_missing"] = sorted(oneshot_missing)
+        s["pooled_oneshot_density"] = None  # subset pool is a substitution
+        s["pooled_lift"] = None
     s["pooled_lift"] = (s["pooled_loop_density"] - s["pooled_oneshot_density"]) \
         if s["pooled_loop_density"] is not None and s["pooled_oneshot_density"] is not None else None
     # leg verdict counts (four-verdict)

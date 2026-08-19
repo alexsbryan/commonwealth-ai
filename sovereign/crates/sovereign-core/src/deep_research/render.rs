@@ -46,15 +46,17 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
                 // classes name the cause — the reader sees the draft's
                 // selection failed the gate, not a generic
                 // could-not-judge.
-                Verdict::CouldNotJudge if a.action == GateAction::RefusedNoCitationHandle => {
-                    Some("open question: no citation handle (ref-required — the draft must cite \
+                Verdict::CouldNotJudge if a.action == GateAction::RefusedNoCitationHandle => Some(
+                    "open question: no citation handle (ref-required — the draft must cite \
                           the chunks it asserts against)"
-                        .to_string())
-                }
+                        .to_string(),
+                ),
                 Verdict::CouldNotJudge if a.action == GateAction::RefusedUnresolvableHandle => {
-                    Some("open question: the citation handle does not name a window chunk \
+                    Some(
+                        "open question: the citation handle does not name a window chunk \
                           (ref-required)"
-                        .to_string())
+                            .to_string(),
+                    )
                 }
                 // GAP-2: a floor-capped claim names the cause — the
                 // reader sees WHY the claim is open (single origin),
