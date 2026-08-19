@@ -2021,6 +2021,22 @@ shape, not a second formula."""
   set stops growing). First measured at the t6c revolution-1 battery
   landing — the disposition doc carries the row."""
 
+  [[initiative.bar.transition]]
+  on = "2026-08-19"
+  to = "failed"
+  by = "order deep-research-t6c close (rev-4 landing 8457cf6e, four revolutions): v1 trajectory 1->27->35, 1->28->30, 1->18->21, 1->21->26 — final > round-2 every battery; the exit condition (battery #4 not-converged) is the pre-registered outcome"
+  note = """The v1 convergence leg FAILED across the order's full budget. Each
+  revolution identified and removed one growth mechanism (handle seam ->
+  fold compression -> merge-claim-figures -> guard shapes) and named the
+  next; battery #4's growth is the word-number class (the strict-shape
+  re-draft spelled figures as words, invisible to the digit-token
+  machinery: 40/40 could-not-judge, P4-v1 10/16 -> 5/16). The v0
+  intent-form leg measured 11/12 (battery #3, passed) then 8/12 (battery
+  #4, draft variance). Successor seams named: the word-number fix
+  (operator-directed, fix-first), verifier decorrelation (per-claim
+  targeted corpus retrieval — notes 414cda2f, f78da95e), the
+  stopping-rule bar (do not pay for a round that adds nothing)."""
+
 [[initiative.bar]]
 id = "dr-compass-handrun"
 one_line = "T0 hand-run: each round's gap set is a strict subset of the previous round's and the gaps are search-actionable, on 3 questions"
