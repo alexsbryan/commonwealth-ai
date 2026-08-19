@@ -86,6 +86,11 @@ is measured by.
 `--self-test` runs the lane: token and cross-site refusals, the decision
 mapping, and the job lifecycle. No socket left open, no store touched.
 
+**What the console does not reach.** It closes the loop between you and
+the record; it cannot deliver an approved steer back to a parked worker,
+and it does not show what the pool banked. Both seams are named with
+their fixes in `docs/COMAINTAINER_CHANNELS.md`.
+
 ## Driving a role yourself
 
 The six seat roles run on the local open-weight model, one card each in
