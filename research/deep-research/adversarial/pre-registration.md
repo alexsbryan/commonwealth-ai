@@ -4772,5 +4772,23 @@ embedded::gates trio (clean HEAD, D2 domain, untouched). Battery
 re-measurement follows the slice's final landing (item 5 is post-flight
 rendering; the scorer's input preference is the only change).
 
+**Landing 2 (ITEM 2 — refused-URL re-admission dedup, 2026-08-19):**
+red→green as declared — `failed_fetch_url_is_dead_for_the_run`
+watched the red as a compile error (E0425 missing BudgetLedger import,
+E0599 missing `is_fetch_dead` on SpendDecider — the methods did not
+exist at HEAD), then the implementation landed green. The task-56
+shape is pinned exactly: 12 fetch allowance, 4 unique URLs, every
+fetch an error, the same 4 re-admitted by all 3 rounds — round 1
+spends 4 and records each URL dead; rounds 2-3 refuse with NO decider
+call and NO port call (spend stays at 4; `dedup_refused` carries the
+rows); the ledger's `refused_urls` persists the dead set and a
+`restore` replays it — a resumed run refuses without re-spending.
+One forced mechanical consequence outside my files: the desktop
+Tauri mirror's BudgetLedger fixture construction site
+(sovereign-desktop/src-tauri/deep_research_commands.rs:1127) gained
+the ICD field (compile-time contract of the field addition — nothing
+else). Gates: lint --full exit 0; sovereign-test full 9968 pass / 3
+fail — the same pre-existing sovereign-inference embedded::gates trio.
+
 _(further landings append here: red→green evidence, gate exits, battery
 re-measurement, commit ids.)_

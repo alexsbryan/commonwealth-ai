@@ -552,6 +552,15 @@ pub struct BudgetLedger {
     pub entries: Vec<BudgetEntry>,
     pub spent: HashMap<String, u32>,
     pub remaining: HashMap<String, u32>,
+    /// T6b pre-window slice: the run's dead-fetch set — URLs whose
+    /// fetch FAILED, recorded dead so a later round's fetch list
+    /// re-admitting them is refused with no decider call and no
+    /// re-spend (the task-56 shape: 12/12 allowance spent on 4 unique
+    /// URLs, all errors). A fact record, not a spend decision — the
+    /// entries replay is untouched. `#[serde(default)]` keeps older
+    /// ledgers loadable.
+    #[serde(default)]
+    pub refused_urls: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

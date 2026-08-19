@@ -110,6 +110,20 @@ pub async fn fetch_round(
             }
             continue;
         }
+        // Dead-URL gate (order deep-research-t6b, pre-window slice): a
+        // URL whose fetch FAILED earlier in this run is refused — no
+        // decider call (refusals spend no budget), no port call, the
+        // URL recorded on the window's dedup_refused with the
+        // fetched-dedup refusals. t1d's dedup refused only
+        // already-FETCHED URLs; the task-56 shape re-admitted the same
+        // 4 failing PDF URLs every round and re-spent the allowance
+        // (12/12 spent on 4 unique URLs, every fetch an error).
+        if decider.is_fetch_dead(&hit.url) {
+            if !refused.contains(&hit.url) {
+                refused.push(hit.url.clone());
+            }
+            continue;
+        }
         // The ONE decider gate — no Allow, no fetch.
         let verdict = decider
             .allow(FAMILY_WEB_FETCH, KEY_FETCH_PAGES, 1, at_unix)
@@ -125,6 +139,19 @@ pub async fn fetch_round(
         let body = match port.web_fetch(&hit.url).await {
             Ok(b) => b,
             Err(e) => {
+                // The URL is dead for the rest of the run: a later
+                // round's fetch list re-admitting it is refused with
+                // no decider call and no re-spend (the task-56 shape).
+                // A dead-record persistence failure does not abort the
+                // round — the failure row still records the fetch
+                // error; the in-memory gate holds for the live run.
+                if let Err(j) = decider.record_fetch_dead(&hit.url) {
+                    tracing::warn!(
+                        url = %hit.url,
+                        error = %j,
+                        "deep-research: fetch-dead record failed — the URL is dead in memory only"
+                    );
+                }
                 failures.push(FetchFailure {
                     url: hit.url.clone(),
                     error: e,
@@ -186,7 +213,7 @@ pub fn derive_custody(chunks: &[WindowChunk]) -> String {
 mod tests {
     use super::*;
     use crate::deep_research::estate::{AlignmentDecision, EstateListing, PortHit};
-    use crate::deep_research::icd::{Plan, TriageOutcome, ICD_VERSION};
+    use crate::deep_research::icd::{BudgetLedger, Plan, TriageOutcome, ICD_VERSION};
     use std::collections::HashMap;
     use std::path::Path;
     use std::sync::{Arc, Mutex};
@@ -217,6 +244,52 @@ mod tests {
         async fn web_fetch(&self, url: &str) -> Result<String, String> {
             self.calls.lock().unwrap().push(url.to_string());
             Ok(self.bodies.get(url).cloned().unwrap_or_default())
+        }
+        async fn terminal_poll(&self) -> Result<(), String> {
+            Ok(())
+        }
+        async fn draft(&self, _p: &str, _s: Option<&str>, _u: &[String]) -> Result<String, String> {
+            unimplemented!("unreachable")
+        }
+        async fn alignment_decision(
+            &self,
+            _p: &Plan,
+            _r: &Path,
+        ) -> Result<AlignmentDecision, String> {
+            Ok(AlignmentDecision::Proceed)
+        }
+    }
+
+    /// A port whose web_fetch FAILS for the named URLs (the task-56
+    /// shape: every admitted URL errors, every round). Records calls.
+    struct FailingPort {
+        calls: Arc<Mutex<Vec<String>>>,
+        fail: Vec<String>,
+    }
+
+    #[async_trait::async_trait]
+    impl ResearchPort for FailingPort {
+        async fn estate_listing(&self, _c: &[String]) -> Result<EstateListing, String> {
+            unimplemented!("unreachable")
+        }
+        async fn estate_search(
+            &self,
+            _c: &[String],
+            _q: &str,
+            _l: usize,
+        ) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_search(&self, _b: &str, _q: &str, _l: usize) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_fetch(&self, url: &str) -> Result<String, String> {
+            self.calls.lock().unwrap().push(url.to_string());
+            if self.fail.iter().any(|u| u == url) {
+                Err("fetch-failed (mock pdf)".to_string())
+            } else {
+                Ok("body".to_string())
+            }
         }
         async fn terminal_poll(&self) -> Result<(), String> {
             Ok(())
@@ -377,6 +450,131 @@ mod tests {
             assert_eq!(round2.dedup_refused, vec![url.clone()]);
             let calls = port.calls.lock().unwrap().len();
             assert_eq!(calls, 1, "round 2 never reached the port");
+        });
+    }
+
+    /// RED (order deep-research-t6b, pre-window slice, pre-registered):
+    /// the task-56 shape — 12 fetch allowance, 4 unique URLs, every
+    /// fetch an error, the SAME 4 URLs re-admitted by every round's
+    /// fetch list. At HEAD the allowance was re-spent every round:
+    /// demo13/runs/deep/drb-56/dr-1787063160's budget-ledger.json shows
+    /// 12/12 spent on 4 unique URLs (all fetch errors) because t1d's
+    /// dedup only refused already-FETCHED URLs — failed URLs were never
+    /// in `fetched_sources` and were re-admitted forever.
+    ///
+    /// Now green: round 1 spends 4 and records each failing URL dead;
+    /// rounds 2-3 refuse the dead URLs with NO decider call and NO
+    /// port call (the spend stays at 4; the ledger's refused_urls
+    /// carries the dead set); a restore replays the dead set — a
+    /// resumed run refuses without re-spending.
+    #[test]
+    fn failed_fetch_url_is_dead_for_the_run() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let urls: Vec<String> = (0..4)
+                .map(|i| format!("https://example.com/pdf-{i}"))
+                .collect();
+            let ids: Vec<String> = (0..4).map(|i| format!("h{}", i + 1)).collect();
+            let ids_ref: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+            let fetch_list = fetch_list_admitting(&ids_ref);
+            let hits: Vec<SearchHit> = ids.iter().zip(&urls).map(|(id, u)| hit(id, u)).collect();
+            let port = FailingPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                fail: urls.clone(),
+            };
+            let tmp = tempfile::tempdir().unwrap();
+            let journal = tmp.path().join("budget-ledger.json");
+            let allowance =
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 12u32)]);
+            let mut decider =
+                SpendDecider::new("r-dead", "h", allowance.clone(), &journal).unwrap();
+
+            let round1 = fetch_round(
+                &port,
+                &mut decider,
+                "r-dead",
+                "h",
+                1,
+                &fetch_list,
+                &hits,
+                &[],
+                1000,
+            )
+            .await
+            .unwrap();
+            assert_eq!(port.calls.lock().unwrap().len(), 4, "round 1 fetches all 4");
+            assert_eq!(round1.fetch_failures.len(), 4);
+            assert!(round1.dedup_refused.is_empty(), "round 1 refusals are none");
+            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
+
+            for round in 2..=3 {
+                let w = fetch_round(
+                    &port,
+                    &mut decider,
+                    "r-dead",
+                    "h",
+                    round,
+                    &fetch_list,
+                    &hits,
+                    &[],
+                    1000 + i64::from(round),
+                )
+                .await
+                .unwrap();
+                assert!(w.chunks.is_empty(), "round {round} fetches nothing");
+                assert!(
+                    w.fetch_failures.is_empty(),
+                    "round {round}: a dead refusal is not a fetch failure"
+                );
+                assert_eq!(
+                    w.dedup_refused, urls,
+                    "round {round} refuses every dead URL, recorded on the window"
+                );
+            }
+            // No re-spend: the allowance paid for exactly 4 fetches.
+            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
+            assert_eq!(
+                port.calls.lock().unwrap().len(),
+                4,
+                "the port is called exactly 4 times across 3 rounds"
+            );
+            assert!(
+                urls.iter().all(|u| decider.is_fetch_dead(u)),
+                "every failed URL is dead for the run"
+            );
+            // The dead set is persisted on the ledger.
+            let ledger: BudgetLedger =
+                serde_json::from_str(&std::fs::read_to_string(&journal).unwrap()).unwrap();
+            assert_eq!(ledger.refused_urls, urls);
+
+            // A resume replays the dead set: the same 4 URLs are refused
+            // without any spend.
+            let mut restored = SpendDecider::restore("r-dead", "h", &allowance, &journal).unwrap();
+            assert!(
+                urls.iter().all(|u| restored.is_fetch_dead(u)),
+                "restore replays the dead set"
+            );
+            assert_eq!(restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
+            let w = fetch_round(
+                &port,
+                &mut restored,
+                "r-dead",
+                "h",
+                4,
+                &fetch_list,
+                &hits,
+                &[],
+                4000,
+            )
+            .await
+            .unwrap();
+            assert!(w.chunks.is_empty() && w.fetch_failures.is_empty());
+            assert_eq!(w.dedup_refused, urls);
+            assert_eq!(
+                restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES),
+                8,
+                "the resumed run spends nothing on dead URLs"
+            );
         });
     }
 

@@ -68,6 +68,10 @@ pub struct SpendDecider {
     spent: HashMap<String, u32>,
     entries: Vec<BudgetEntry>,
     journal_path: PathBuf,
+    /// T6b pre-window slice: the run-scoped dead-fetch set — URLs
+    /// whose fetch failed are refused for the rest of the run with no
+    /// decider call and no re-spend (the task-56 shape).
+    refused_urls: Vec<String>,
 }
 
 impl SpendDecider {
@@ -89,6 +93,7 @@ impl SpendDecider {
             spent: HashMap::new(),
             entries: Vec::new(),
             journal_path: journal_path.to_path_buf(),
+            refused_urls: Vec::new(),
         };
         // Refuse-at-construction if the journal is not writable: an
         // unjournalable run is a run that cannot spend (fail-closed).
@@ -199,6 +204,24 @@ impl SpendDecider {
             .map_err(|e| format!("budget ledger write {}: {e}", self.journal_path.display()))
     }
 
+    /// T6b pre-window slice: record a failed fetch's URL dead for the
+    /// rest of the run. The in-memory set is updated FIRST (the gate
+    /// holds for the live run even when the disk persist fails); a
+    /// persist failure is returned for the caller to name — the dead
+    /// record is best-effort across a resume, never silently dropped
+    /// from the ledger.
+    pub fn record_fetch_dead(&mut self, url: &str) -> Result<(), String> {
+        if !self.refused_urls.iter().any(|u| u == url) {
+            self.refused_urls.push(url.to_string());
+        }
+        self.persist()
+    }
+
+    /// Is this URL dead for the run — its fetch already failed?
+    pub fn is_fetch_dead(&self, url: &str) -> bool {
+        self.refused_urls.iter().any(|u| u == url)
+    }
+
     /// The ICD snapshot: original allowance + journal + spent/remaining.
     pub fn snapshot(&self) -> BudgetLedger {
         BudgetLedger {
@@ -210,6 +233,7 @@ impl SpendDecider {
             entries: self.entries.clone(),
             spent: self.spent.clone(),
             remaining: self.remaining.clone(),
+            refused_urls: self.refused_urls.clone(),
         }
     }
 
@@ -327,6 +351,11 @@ impl SpendDecider {
             spent,
             entries: ledger.entries,
             journal_path: journal_path.to_path_buf(),
+            // T6b pre-window slice: the dead set is a FACT record (not
+            // a spend decision) — replay carries it as stored; a
+            // tampered set only ever refuses without spending
+            // (fail-closed direction), so it needs no totals check.
+            refused_urls: ledger.refused_urls,
         })
     }
 }
@@ -458,6 +487,7 @@ mod tests {
                 ("web-search:duckduckgo".to_string(), 4),
                 ("web-fetch:pages".to_string(), 2),
             ]),
+            refused_urls: Vec::new(),
         }
     }
 

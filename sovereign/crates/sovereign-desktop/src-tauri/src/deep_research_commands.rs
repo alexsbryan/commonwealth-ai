@@ -1133,6 +1133,7 @@ mod tests {
                 entries: Vec::new(),
                 spent: HashMap::from([("web".to_string(), 2)]),
                 remaining: HashMap::from([("web".to_string(), 2)]),
+                refused_urls: Vec::new(),
             },
         );
     }
