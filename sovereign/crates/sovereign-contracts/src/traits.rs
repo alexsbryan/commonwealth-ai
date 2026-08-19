@@ -822,11 +822,17 @@ pub trait Planner: Send + Sync {
     ) -> Result<Plan>;
 
     /// Produce a recovery plan after `failure`, given the original plan and the step outputs already banked in `completed`.
+    ///
+    /// `available_tools` is the same list `plan` was given. It is not
+    /// derivable from `original` — a recovery plan routinely needs a
+    /// tool the failed plan never used — and an implementation that
+    /// constrains decoding needs the vocabulary to constrain against.
     async fn replan(
         &self,
         original: &Plan,
         completed: &[(usize, StepOutput)],
         failure: &StepError,
+        available_tools: &[ToolDescriptor],
     ) -> Result<Plan>;
 }
 

@@ -834,13 +834,15 @@ pub fn parse_scip_file(
                 })
                 .map(|occ| {
                     let start = occ.range.first().copied().unwrap_or(0);
-                    let end = if occ.enclosing_range.len() >= 3 {
-                        occ.enclosing_range[2]
-                    } else if occ.range.len() >= 4 {
-                        occ.range[2]
-                    } else {
-                        start
-                    };
+                    // `range_lines` owns the 3-vs-4-element discrimination —
+                    // see its doc comment. `.max(start)` is the invariant, not
+                    // a patch: a span is never inverted, so a consumer can
+                    // slice `line_start..=line_end` without a clamp of its own.
+                    let end = scip_proto::range_lines(&occ.enclosing_range)
+                        .or_else(|| scip_proto::range_lines(&occ.range))
+                        .map(|(_, e)| e)
+                        .unwrap_or(start)
+                        .max(start);
                     (start, end)
                 })
                 .unwrap_or((0, 0));
@@ -877,13 +879,15 @@ pub fn parse_scip_file(
                 && !occ.symbol.starts_with("local ")
             {
                 let start = occ.range.first().copied().unwrap_or(0);
-                let end = if occ.enclosing_range.len() >= 3 {
-                    occ.enclosing_range[2]
-                } else if occ.range.len() >= 3 {
-                    occ.range[2]
-                } else {
-                    start + 50 // reasonable default scope
-                };
+                // Same decoder as the symbol span above. This one is not
+                // cosmetic: the scope end decides which definition a reference
+                // is attributed to, so a column read as a line silently
+                // mis-assigns callers. The `start + 50` guess survives only as
+                // the no-range fallback.
+                let end = scip_proto::range_lines(&occ.enclosing_range)
+                    .map(|(_, e)| e)
+                    .unwrap_or(start + 50)
+                    .max(start);
                 let display = doc
                     .symbols
                     .iter()

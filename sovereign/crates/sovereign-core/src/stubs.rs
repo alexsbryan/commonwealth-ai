@@ -56,6 +56,7 @@ impl Planner for NoOpPlanner {
         _original: &Plan,
         _completed: &[(usize, StepOutput)],
         _failure: &StepError,
+        _available_tools: &[ToolDescriptor],
     ) -> Result<Plan> {
         Err(Error::NotImplemented(
             "Replanning not available yet".to_string(),

@@ -290,7 +290,7 @@ pub(crate) fn build_sampler(
     model: &LlamaModel,
     request: &CompletionRequest,
     quirks: &ModelQuirks,
-) -> ConstrainedSampler {
+) -> Result<ConstrainedSampler> {
     // Two ways to engage llguidance:
     //   1. `request.lark_grammar` — pre-built Lark string (tool envelope
     //      + alternation, set by `sovereign-mesh::inference_adapter`
@@ -301,10 +301,22 @@ pub(crate) fn build_sampler(
     //      strictness (`additionalProperties: false`) is preserved at
     //      the engine boundary.
     //
-    // Compile failure on either path warns and falls back to free-form
-    // sampling so the request still produces output rather than
-    // 503'ing. See `LLGUIDANCE_MIGRATION_AUDIT.md` for the rollout
-    // history.
+    // **Compile failure REFUSES the request** (changed 2026-08-19). It
+    // used to warn and fall back to free-form sampling "so the request
+    // still produces output rather than 503'ing" — but a caller that
+    // sent a grammar asked for a guarantee, and unconstrained prose
+    // under a 200 is the §18.3 failure exactly: the label, the shape
+    // and the finish reason are all correct, so no client can tell.
+    //
+    // This was not hypothetical. `gym/comaintainer/markers.py` records
+    // 2026-08-10: "a oneOf whose branches declare only properties/
+    // required is DROPPED by the daemon silently — the call still
+    // returns 200 and the model generates free prose." llguidance
+    // supports `oneOf` only when it can prove the branches disjoint
+    // (`coerce_one_of`/`lenient` are both off), and it hard-errors on
+    // any unimplemented keyword, so an ordinary schema edit reaches
+    // this path. Refusing turns a silent wrong answer into a fixable
+    // one. See `LLGUIDANCE_MIGRATION_AUDIT.md` for the rollout history.
     let llg_constraint = if let Some(lark) = request.lark_grammar.as_deref() {
         match crate::llguidance_constraint::LlguidanceConstraint::new(lark, model) {
             Ok(c) => {
@@ -315,11 +327,16 @@ pub(crate) fn build_sampler(
                 Some(c)
             }
             Err(e) => {
-                tracing::warn!(
+                tracing::error!(
+                    target: "llguidance.health",
                     error = %e,
-                    "LlguidanceConstraint compile failed (lark) — falling back to free-form sampling"
+                    "lark grammar failed to compile — refusing the request"
                 );
-                None
+                return Err(sovereign_core::Error::InvalidInput(format!(
+                    "lark grammar failed to compile, so the requested constraint \
+                     cannot be honoured: {e}. The request is refused rather than \
+                     answered with unconstrained text (ARCH §18.3)."
+                )));
             }
         }
     } else if let Some(schema) = request.structured_output.as_ref() {
@@ -329,11 +346,16 @@ pub(crate) fn build_sampler(
                 Some(c)
             }
             Err(e) => {
-                tracing::warn!(
+                tracing::error!(
+                    target: "llguidance.health",
                     error = %e,
-                    "LlguidanceConstraint compile failed (schema) — falling back to free-form sampling"
+                    "response_format schema failed to compile — refusing the request"
                 );
-                None
+                return Err(sovereign_core::Error::InvalidInput(format!(
+                    "response_format schema failed to compile, so the requested \
+                     constraint cannot be honoured: {e}. The request is refused \
+                     rather than answered with unconstrained text (ARCH §18.3)."
+                )));
             }
         }
     } else {
@@ -545,14 +567,14 @@ pub(crate) fn build_sampler(
         LlamaSampler::chain_simple(samplers)
     };
 
-    ConstrainedSampler {
+    Ok(ConstrainedSampler {
         inner_explore: build_chain(&explore, explore.temp),
         inner_content: build_chain(&content, content_temp),
         llg_constraint,
         url_constraint,
         evidence_id_constraint,
         non_latin_denylist,
-    }
+    })
 }
 
 /// Read `SOVEREIGN_BLOCK_NON_LATIN` once per `build_sampler` call.

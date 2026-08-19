@@ -84,7 +84,11 @@ impl Runtime {
                 .map(|(&k, v)| (k, v.clone()))
                 .collect();
 
-            match self.planner.replan(&plan, &completed_vec, error).await {
+            match self
+                .planner
+                .replan(&plan, &completed_vec, error, tool_descriptors)
+                .await
+            {
                 Ok(new_plan) => {
                     tracing::info!(
                         steps = new_plan.steps.len(),

@@ -35,6 +35,12 @@
 
 pub mod arch_metrics;
 pub mod capability_map;
+/// Duplicated concept IDENTITY over the graph — the half `dry_report`
+/// (duplicated behaviour) structurally cannot see. See the module docs.
+pub mod converge;
+/// Derive a symbol's kind + dispatch from its SCIP descriptor — the fix for
+/// the unusable `symbols.kind` and never-written `refs.ref_kind` columns.
+pub mod descriptor;
 pub mod error;
 pub mod scip_export;
 pub mod scip_graph;
@@ -53,6 +59,8 @@ pub use capability_map::{
     build as build_capability_map, Capability, CapabilityMap, EntryPointProvider, MapOptions,
     ProviderKind,
 };
+pub use converge::{census, crate_dag, dossier, duplicate_count, type_defs, Census, CensusRow, Dossier, OwnerCandidate, Scope as ConvergeScope, TypeDef};
+pub use descriptor::{descriptor_of, dispatch_hint, symbol_kind, DispatchHint, SymbolKind};
 pub use error::{Error, Result};
 pub use scip_graph::{
     BlastEntry, BlastRadiusResult, LiveExport, OpenError, RebuildLock, ScipGraph, ScipGraphStats,

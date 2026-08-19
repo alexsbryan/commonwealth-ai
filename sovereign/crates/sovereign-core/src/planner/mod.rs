@@ -10,6 +10,10 @@ use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, Planner};
 use crate::types::*;
 
+mod schema;
+pub use schema::plan_schema;
+use schema::parseable_kinds;
+
 /// LLM-based planner that uses the Primary inference slot to generate execution plans.
 ///
 /// Uses a flat JSON schema that small models (7-14B) can reliably produce.
@@ -59,6 +63,12 @@ impl Planner for LlmPlanner {
                 .with_system(PLAN_SYSTEM_PROMPT)
                 .with_output_budget(1024);
             request.temperature = Some(0.0);
+            // The prompt states the plan contract; the schema enforces
+            // it. Without this the retry loop above was the only thing
+            // standing between a malformed plan and a default-filled
+            // one — and `parse_plan_json`'s defaults meant most
+            // malformed plans never reached the retry (ARCH §7.6).
+            request.structured_output = Some(plan_schema(available_tools)?);
 
             let response = self.inference.complete(&request).await?;
             // Glassbox: the raw model output is the ground truth for *why*
@@ -104,6 +114,7 @@ impl Planner for LlmPlanner {
         original: &Plan,
         completed: &[(usize, StepOutput)],
         failure: &StepError,
+        available_tools: &[ToolDescriptor],
     ) -> Result<Plan> {
         let completed_summary: Vec<String> = completed
             .iter()
@@ -143,6 +154,10 @@ impl Planner for LlmPlanner {
             .with_system(PLAN_SYSTEM_PROMPT)
             .with_output_budget(1024);
         request.temperature = Some(0.0);
+        // Same schema as `plan`. Replan has ONE attempt before the
+        // fallback, so it is the path where an unconstrained malformed
+        // plan costs the most.
+        request.structured_output = Some(plan_schema(available_tools)?);
 
         let response = self.inference.complete(&request).await?;
 
@@ -181,7 +196,7 @@ STEP KINDS:
 - "reason": Thinking/analysis. Requires "prompt" and "speed" ("fast" or "slow").
 - "tool": Execute a tool. Requires "tool_id" (must match an available tool name) and "params" (JSON object passed to the tool).
 - "reason_with_tools": Iterative research. The model thinks, searches, examines results, and searches again as needed. Requires "prompt", "speed", "tools" (list of tool IDs like ["search"]), and "max_iterations" (number, typically 6). Use for complex questions needing multiple searches.
-- "await_user_info": Suspend the task and surface a structured information request to the user. The output is whatever content the user pastes back (or empty on skip). Use when the corpus is genuinely insufficient and a specific external source would resolve the question. Optionally include a pre-filled "request" object with fields {current_understanding, gap, relevance, satisfying_source, search_hints}.
+- "await_user_info": Suspend the task and surface a structured information request to the user. The output is whatever content the user pastes back (or empty on skip). Use when the corpus is genuinely insufficient and a specific external source would resolve the question. Requires a "request" object with fields {current_understanding, gap, relevance, satisfying_source} and optional "search_hints".
 - "delegate": Hand a focused, high-volume subtask to a sub-agent that works in its own context and returns ONLY a compact result. Use when a subtask reads a LOT (a web page, a long document, a spreadsheet) but the rest of the plan needs just a few fields from it — the sub-agent's raw observations never enter your context. Requires "goal" (the subtask, self-contained), "tools" (list of tool IDs the sub-agent may use), "return_schema" (a JSON Schema of the fields you need back), and "max_iterations" (typically 6).
 
 RULES:
@@ -446,10 +461,21 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
             .unwrap_or("step")
             .to_string();
 
+        // A step with no `kind` used to become a `reason` step. That is
+        // the §18.3 substitution exactly: a malformed tool step turns
+        // into a plausible no-op answer, the plan still runs, and
+        // nothing downstream can tell the tool was never called.
+        // Refuse — the planner's retry loop feeds this message back to
+        // the model, and `fallback_plan` still covers total failure.
         let kind_str = step_obj
             .get("kind")
             .and_then(|v| v.as_str())
-            .unwrap_or("reason");
+            .ok_or_else(|| {
+                Error::Planning(format!(
+                    "Step {i} has no \"kind\" — every step must name one of {}",
+                    parseable_kinds()
+                ))
+            })?;
 
         let speed_str = step_obj
             .get("speed")
@@ -463,15 +489,36 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
 
         let kind = match kind_str {
             "tool" => {
+                // An empty `tool_id` is a tool step that names no tool:
+                // the executor has nothing to dispatch, and the plan
+                // log reads "step 0: tool → " with the id blank. Refuse
+                // it here rather than build the step and fail later.
                 let tool_id = step_obj
                     .get("tool_id")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("")
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .ok_or_else(|| {
+                        Error::Planning(format!(
+                            "Step {i} is kind \"tool\" but names no \"tool_id\""
+                        ))
+                    })?
                     .to_string();
-                let params = step_obj
-                    .get("params")
-                    .cloned()
-                    .unwrap_or(serde_json::json!({}));
+                // `params` used to default to `{}` — the same
+                // default-into-a-success-shape as `tool_id` above. A
+                // tool invoked with no arguments is not the step the
+                // planner described; it is a call that will refuse or
+                // return nothing, wearing the shape of a real one.
+                let params = step_obj.get("params").cloned().ok_or_else(|| {
+                    Error::Planning(format!(
+                        "Step {i} is kind \"tool\" ({tool_id}) but carries no \"params\""
+                    ))
+                })?;
+                if !params.is_object() {
+                    return Err(Error::Planning(format!(
+                        "Step {i} tool \"{tool_id}\" has non-object \"params\""
+                    )));
+                }
                 StepKind::Tool { tool_id, params }
             }
             "branch" => {
@@ -589,8 +636,7 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                     });
                 StepKind::AwaitUserInfo { request }
             }
-            _ => {
-                // Default to Reason.
+            "reason" => {
                 let prompt = step_obj
                     .get("prompt")
                     .or_else(|| step_obj.get("prompt_template"))
@@ -601,6 +647,16 @@ pub fn parse_plan_json(json_str: &str, goal: &str) -> Result<Plan> {
                     prompt_template: prompt,
                     speed,
                 }
+            }
+            // Previously `_ => StepKind::Reason`, which meant a typo'd
+            // or hallucinated kind ran as a reason step and the plan
+            // looked fine. Same substitution as the missing-`kind`
+            // case above, and the same refusal.
+            other => {
+                return Err(Error::Planning(format!(
+                    "Step {i} has unknown kind {other:?} — must be one of {}",
+                    parseable_kinds()
+                )));
             }
         };
 
@@ -763,6 +819,7 @@ pub fn fallback_plan(goal: &str) -> Plan {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::planner::schema::{tool_id_vocabulary, HAND_WRITTEN_KINDS, PLANNABLE_KINDS};
 
     #[test]
     fn extract_json_fenced() {
@@ -844,6 +901,143 @@ mod tests {
             {"id": 1, "description": "b", "kind": "reason", "prompt": "y"}
         ], "edges": [[0, 1], [1, 0]]}"#;
         assert!(parse_plan_json(json, "test").is_err());
+    }
+
+    #[test]
+    fn tool_id_vocabulary_matches_the_ids_the_prompt_renders() {
+        // The grammar admits exactly the ids the model was shown. If
+        // these ever diverge the model gets masked on an id the prompt
+        // told it to use, which reads as the model being broken.
+        let tools = vec![
+            descriptor_with_params(serde_json::json!({})),
+            descriptor_with_params(serde_json::json!({})),
+        ];
+        let vocab = tool_id_vocabulary(&tools);
+        assert_eq!(vocab, vec!["probe".to_string()], "duplicate ids collapse");
+
+        let prompt = build_plan_prompt("g", "", &tools, "");
+        for id in &vocab {
+            assert!(
+                prompt.contains(&format!("\"{id}\"")),
+                "vocabulary id {id} must appear quoted in the prompt"
+            );
+        }
+    }
+
+    #[test]
+    fn parse_plan_missing_kind_refuses() {
+        // Was: silently a `reason` step. A tool step that lost its
+        // `kind` became a plausible no-op answer and nothing
+        // downstream could tell the tool never fired (ARCH §18.3).
+        let json = r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "tool_id": "search", "params": {}}], "edges": []}"#;
+        let err = parse_plan_json(json, "t").unwrap_err().to_string();
+        assert!(err.contains("no \"kind\""), "unexpected message: {err}");
+
+        // Twin — the same object with `kind` present must still parse,
+        // so the refusal is about the missing field and not the shape.
+        let json = r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "kind": "tool", "tool_id": "search", "params": {}}], "edges": []}"#;
+        let plan = parse_plan_json(json, "t").unwrap();
+        assert!(matches!(plan.steps[0].kind, StepKind::Tool { .. }));
+    }
+
+    #[test]
+    fn parse_plan_tool_without_tool_id_refuses() {
+        // Was: `tool_id: ""` — a tool step naming no tool, which the
+        // planner log printed as "step 0: tool → ".
+        for bad in [
+            r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "kind": "tool", "params": {}}], "edges": []}"#,
+            r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "kind": "tool", "tool_id": "   ", "params": {}}], "edges": []}"#,
+        ] {
+            let err = parse_plan_json(bad, "t").unwrap_err().to_string();
+            assert!(err.contains("tool_id"), "unexpected message: {err}");
+        }
+    }
+
+    #[test]
+    fn parse_plan_tool_without_params_refuses() {
+        // Was: `params` defaulted to `{}`. A tool called with no
+        // arguments is not the step the planner described — it is a
+        // call that refuses or returns nothing, wearing the shape of a
+        // real one.
+        let json = r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "kind": "tool", "tool_id": "search"}], "edges": []}"#;
+        let err = parse_plan_json(json, "t").unwrap_err().to_string();
+        assert!(err.contains("params"), "unexpected message: {err}");
+
+        let json = r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "kind": "tool", "tool_id": "search", "params": "query=x"}], "edges": []}"#;
+        let err = parse_plan_json(json, "t").unwrap_err().to_string();
+        assert!(err.contains("non-object"), "unexpected message: {err}");
+
+        // Twin: an empty object is a LEGAL argument set — some tools
+        // take none — so the refusal must be about absence, not
+        // emptiness.
+        let json = r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "kind": "tool", "tool_id": "search", "params": {}}], "edges": []}"#;
+        assert!(parse_plan_json(json, "t").is_ok());
+    }
+
+    #[test]
+    fn parse_plan_unknown_kind_refuses() {
+        // Was: any unrecognised kind fell through to `reason`.
+        let json = r#"{"goal": "t", "steps": [{"id": 0, "description": "a", "kind": "summarise", "prompt": "x"}], "edges": []}"#;
+        let err = parse_plan_json(json, "t").unwrap_err().to_string();
+        assert!(err.contains("summarise"), "unexpected message: {err}");
+        assert!(
+            err.contains("branch"),
+            "the message must name every kind the parser accepts, not just \
+             the ones a model may emit: {err}"
+        );
+    }
+
+    #[test]
+    fn every_parseable_kind_parses() {
+        // Pins the match arms against the two constants. A kind named
+        // in either list that the parser does not construct would make
+        // the refusal messages above lie.
+        let bodies = [
+            ("reason", r#""prompt": "p", "speed": "slow""#),
+            ("tool", r#""tool_id": "search", "params": {}"#),
+            (
+                "reason_with_tools",
+                r#""prompt": "p", "speed": "slow", "tools": ["search"], "max_iterations": 6"#,
+            ),
+            (
+                "await_user_info",
+                r#""request": {"current_understanding": "u", "gap": "g", "relevance": "r", "satisfying_source": "s"}"#,
+            ),
+            (
+                "delegate",
+                r#""goal": "g", "tools": ["search"], "return_schema": {}, "max_iterations": 6"#,
+            ),
+            ("branch", r#""condition": "c", "if_true": 0, "if_false": 0"#),
+        ];
+        for kind in PLANNABLE_KINDS.iter().chain(HAND_WRITTEN_KINDS.iter()) {
+            let (_, body) = bodies
+                .iter()
+                .find(|(k, _)| k == kind)
+                .unwrap_or_else(|| panic!("no fixture body for kind {kind}"));
+            let json = format!(
+                r#"{{"goal": "t", "steps": [{{"id": 0, "description": "a", "kind": "{kind}", {body}}}], "edges": []}}"#
+            );
+            parse_plan_json(&json, "t")
+                .unwrap_or_else(|e| panic!("kind {kind} must parse, got {e}"));
+        }
+    }
+
+    #[test]
+    fn await_user_info_request_deserialises_without_the_unwrap_or_fallback() {
+        // The schema requires exactly the four fields
+        // `InformationRequest` has no serde default for, so
+        // `from_value` succeeds and the hand-built fallback — which
+        // reconstructs `gap` from the step description — never runs.
+        let json = r#"{"goal": "t", "steps": [{"id": 0, "description": "the description", "kind": "await_user_info",
+            "request": {"current_understanding": "u", "gap": "the real gap", "relevance": "r", "satisfying_source": "s", "search_hints": ["h"]},
+            "inputs": []}], "edges": []}"#;
+        let plan = parse_plan_json(json, "t").unwrap();
+        let StepKind::AwaitUserInfo { request } = &plan.steps[0].kind else {
+            panic!("expected AwaitUserInfo");
+        };
+        assert_eq!(request.gap, "the real gap");
+        assert_eq!(request.current_understanding, "u");
+        assert_eq!(request.search_hints, vec!["h".to_string()]);
     }
 
     #[test]
