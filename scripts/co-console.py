@@ -116,23 +116,37 @@ class Jobs:
         self._lock = threading.Lock()
         self._jobs: dict[str, dict] = {}
 
-    def start(self, label: str, argv: list[str], on_done=None) -> str:
+    def start(self, label: str, argv: list[str], on_done=None,
+              parse_json: bool = False) -> str:
         jid = uuid.uuid4().hex[:8]
         with self._lock:
             self._jobs[jid] = {"id": jid, "label": label, "state": "running",
-                               "output": "", "code": None}
+                               "output": "", "code": None, "payload": None}
 
         def run():
+            payload = None
             try:
                 r = subprocess.run(argv, capture_output=True, text=True,
                                    cwd=REPO, timeout=3600)
                 out = ((r.stdout or "") + (r.stderr or "")).strip()
                 state = "done" if r.returncode == 0 else "failed"
                 code = r.returncode
+                if parse_json and code == 0:
+                    # co-role.py --json prints its audit row LAST. Parse
+                    # it here rather than in the page: a browser scraping
+                    # structure out of a human printout is a second
+                    # decider about what the run produced.
+                    for line in reversed((r.stdout or "").splitlines()):
+                        try:
+                            payload = json.loads(line)
+                            break
+                        except json.JSONDecodeError:
+                            continue
             except Exception as e:                    # noqa: BLE001
                 out, state, code = f"{type(e).__name__}: {e}", "failed", -1
             with self._lock:
-                self._jobs[jid].update(state=state, output=out, code=code)
+                self._jobs[jid].update(state=state, output=out, code=code,
+                                       payload=payload)
             if on_done:
                 on_done(code)
 
@@ -237,14 +251,55 @@ async function decide(card, kind){
           const ta=card.querySelector('textarea'); if(ta) ta.remove(); }
 }
 
-async function actuate(role){
-  const inp = document.getElementById('in-'+role);
-  const out = document.getElementById('out-'+role);
+async function actuate(role, inputEl, outEl){
+  const inp = inputEl || document.getElementById('in-'+role);
+  const out = outEl || document.getElementById('out-'+role);
   setOut(out,'run','starting '+role+'…');
   const {ok, data} = await post('/actuate', {role, input: inp.value});
   if(!ok){ setOut(out,'err', data.detail||'refused'); return; }
   poll(data.job, out, role);
 }
+
+async function route(){
+  const out = document.getElementById('out-route');
+  const steps = document.getElementById('steps');
+  steps.innerHTML = '';
+  const text = document.getElementById('intent').value.trim();
+  if(!text){ setOut(out,'err','say what you want to do'); return; }
+  setOut(out,'run','reading…');
+  const {ok, data} = await post('/route', {input: text});
+  if(!ok){ setOut(out,'err', data.detail||'refused'); return; }
+  pollRoute(data.job, out, steps);
+}
+
+async function pollRoute(job, out, steps){
+  const r = await fetch('/job?id='+encodeURIComponent(job)+'&t='+TOK);
+  const j = await r.json();
+  if(j.state==='running'){ setOut(out,'run','reading intent…');
+    setTimeout(()=>pollRoute(job,out,steps), 2000); return; }
+  // A route that could not be read is a real answer, and it is shown as
+  // one — not as an empty pane the operator has to interpret.
+  if(j.state!=='done'){ setOut(out,'err', j.output || 'could not route'); return; }
+  const p = j.payload && j.payload.payload;
+  const list = (p && p.steps) || [];
+  if(!list.length){ setOut(out,'err', (p&&p.note) || j.output); return; }
+  setOut(out,'ok', (p.note||'')+'  — nothing has run; edit and run each step.');
+  list.forEach((s,i)=>{
+    const d = document.createElement('div');
+    d.className='card';
+    d.innerHTML = '<b>'+s.role+'</b> <span class="sub">step '+(i+1)+' of '
+      + list.length + ' · ' + esc(s.why) + '</span>'
+      + '<div class="row"><input type="text" class="rin"><button>run '
+      + s.role + '</button></div><div class="out"></div>';
+    const inp = d.querySelector('.rin');
+    inp.value = s.input;
+    d.querySelector('button').onclick =
+      ()=>actuate(s.role, inp, d.querySelector('.out'));
+    steps.appendChild(d);
+  });
+}
+
+function esc(t){ const d=document.createElement('div'); d.textContent=t; return d.innerHTML; }
 
 async function poll(job, out, role){
   const r = await fetch('/job?id='+encodeURIComponent(job)+'&t='+TOK);
@@ -257,9 +312,12 @@ async function poll(job, out, role){
 document.addEventListener('keydown', e=>{
   if(/^(INPUT|TEXTAREA)$/.test(e.target.tagName)){
     if(e.key==='Enter' && (e.ctrlKey||e.metaKey)){
+      if(e.target.id==='intent'){ route(); return; }
       const card = e.target.closest('.card'); if(card) decide(card,'edit'); }
     return;
   }
+  if(e.key==='/'){ const el=document.getElementById('intent');
+    if(el){ el.focus(); e.preventDefault(); return; } }
   const cs = cards();
   if(e.key==='j'||e.key==='ArrowDown'){ sel=Math.min(sel+1,cs.length-1); mark(); }
   else if(e.key==='k'||e.key==='ArrowUp'){ sel=Math.max(sel-1,0); mark(); }
@@ -309,6 +367,23 @@ def render_pending(pending: list) -> str:
     return "".join(out)
 
 
+def render_route() -> str:
+    return (
+        "<section><h2>What do you want to do?</h2>"
+        '<p class="sub">Say it plainly. R0 reads the intent and PROPOSES which '
+        "roles do it, in order — it never runs them for you. Starting a "
+        "campaign is two steps: R2 drafts the bars, then R1 drafts the order "
+        "that serves them.</p>"
+        '<div class="card">'
+        '<textarea id="intent" rows="3" placeholder="e.g. start a campaign on '
+        'making the deep-research loop stop re-fetching URLs it already '
+        'refused"></textarea>'
+        '<div class="row"><button onclick="route()">read it</button>'
+        '<span class="sub">Ctrl+Enter</span></div>'
+        '<div class="out" id="out-route"></div>'
+        '<div id="steps"></div></div></section>')
+
+
 def render_actuate() -> str:
     rows = ["<section><h2>Actuate</h2>",
             '<p class="sub">Press <span class="k">1</span>-<span class="k">6</span> '
@@ -342,6 +417,7 @@ def build_page(state: dict, token: str, script_path: Path) -> str:
         f'<code>{E(str(state["log_path"]))}</code> · this page ACTUATES; '
         "every action shells out to the same script you would run by hand</p>",
         f'<div class="chips">{chips}</div></div>',
+        render_route(),
         render_pending(state["pending"]),
         render_actuate(),
         "<section><h2>Standing</h2></section>",
@@ -438,8 +514,24 @@ def make_handler(token: str, log_path: Path, script_path: Path, jobs: Jobs):
                 self._resolve(body)
             elif path == "/actuate":
                 self._actuate(body)
+            elif path == "/route":
+                self._route(body)
             else:
                 self._json(404, {"detail": "no such path"})
+
+        def _route(self, body: dict):
+            """R0 reads intent and PROPOSES steps. It never dispatches:
+            a wrong route that ran would produce a well-formed artifact
+            of the wrong kind, which is worse than a question because it
+            looks like an answer."""
+            text = (body.get("input") or "").strip()
+            if not text:
+                self._json(400, {"detail": "say what you want to do"})
+                return
+            argv = [sys.executable, str(REPO / "scripts" / "co-role.py"),
+                    "R0", "--input", text, "--json"]
+            jid = jobs.start("R0", argv, parse_json=True)
+            self._json(200, {"job": jid})
 
         def _resolve(self, body: dict):
             kind = body.get("decision")
@@ -604,6 +696,33 @@ def self_test() -> int:
         code, _ = req(f"{base}/job?id=nope&t={token}")
         check("an unknown job id is 404, not an empty success", code == 404)
 
+        print("check 5 — the intent box proposes, and never dispatches")
+        code, _ = req(f"{base}/route", json.dumps({"input": "  "}).encode(), hdr3)
+        check("an empty intent is 400, not a job that reads nothing",
+              code == 400, f"got {code}")
+        code, _ = req(f"{base}/route", json.dumps(
+            {"input": "start a campaign"}).encode(), hdr3)
+        check("NEGATIVE: a real intent starts a job", code == 200, f"got {code}")
+        check("/route is token-guarded like every other POST",
+              req(f"{base}/route", json.dumps({"input": "x"}).encode(),
+                  {"content-type": "application/json"})[0] == 403)
+        # R0's card must stay a PROPOSER. If its gate ever became `auto`
+        # or `draft`, reading intent would start landing things, and the
+        # console's promise that nothing runs until you press run would
+        # quietly stop being true.
+        try:
+            import importlib.util as _il
+            _sp = _il.spec_from_file_location("co_role_ct",
+                                              REPO / "scripts" / "co-role.py")
+            _m = _il.module_from_spec(_sp)
+            _sp.loader.exec_module(_m)
+            check("R0's gate is 'propose' — reading intent cannot land anything",
+                  _m.load_card("R0")["gate"] == "propose")
+            check("R0 has no directive kind, so it cannot queue a directive",
+                  "R0" not in _m.DIRECTIVE_KIND)
+        except Exception as e:                        # noqa: BLE001
+            check("R0's card is loadable", False, f"{type(e).__name__}: {e}")
+
         httpd.shutdown()
         httpd.server_close()
 
@@ -611,7 +730,7 @@ def self_test() -> int:
     if failures:
         print(f"self-test FAILED — {len(failures)} check(s): " + "; ".join(failures))
         return 1
-    print("self-test PASSED — 4 checks, both directions each.")
+    print("self-test PASSED — 5 checks, both directions each.")
     return 0
 
 

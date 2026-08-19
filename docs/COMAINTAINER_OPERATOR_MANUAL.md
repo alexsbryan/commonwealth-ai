@@ -35,7 +35,19 @@ scripts/co-console.py --port 8731  # a fixed port instead of an ephemeral one
 scripts/co-console.py --no-open    # print the URL, do not launch a browser
 ```
 
-Three panes. **Waiting on you** is every pending directive with its draft
+Four panes. **What do you want to do?** is an open box — say it plainly
+and R0 reads the intent and proposes which roles do it, in order, with
+each one's input already filled in. Press `/` to jump there, Ctrl+Enter
+to submit. It **proposes and never dispatches**: you get runnable steps
+you can edit, and nothing happens until you press run. If it cannot tell
+what you mean, or you asked for something needing an id it was not given,
+it says so and returns no steps — that is the answer, not a failure.
+
+**Starting a campaign is two steps and R0 knows it**: R2 drafts the bars
+the campaign is judged by, then R1 drafts the order that serves them. An
+order written before the bars will not name what it moves.
+
+**Waiting on you** is every pending directive with its draft
 verbatim — `a` approves it as written, `e` opens it for editing
 (Ctrl+Enter submits), `r` rejects it with a reason. `j`/`k` move between
 cards. **Actuate** runs any of the six roles: press `1`-`6` to jump to a
@@ -81,6 +93,7 @@ The six seat roles run on the local open-weight model, one card each in
 
 | I want | Run |
 |---|---|
+| Say what I want and be told which roles do it | `scripts/co-role.py R0 --input "start a campaign on X"` |
 | Draft an order from typed intent | `scripts/co-role.py R1 --input intent.txt` |
 | Draft campaign bars for an initiative | `scripts/co-role.py R2 --input initiative.txt` |
 | See coverage against a campaign's bars | `scripts/co-role.py R3 --input financial-corpora` |
@@ -93,7 +106,9 @@ The six seat roles run on the local open-weight model, one card each in
 `--input` takes a file path or a literal string. Each run appends one row
 to `~/.sovereign/comaintainer/role-runs.jsonl`.
 
-**What the gate class means for you.** `R1`, `R2` and `R6` are `draft`:
+**What the gate class means for you.** `R0` is `propose` — it reads
+intent and returns steps, queueing nothing, so asking it a question never
+puts a row in the directive log. `R1`, `R2` and `R6` are `draft`:
 they do not land anything, they queue a pending directive that shows up
 in the closeout page for you to approve, edit or reject. `R3` and `R5`
 are `auto` — consumer-validated, and a wrong item costs one heap row.

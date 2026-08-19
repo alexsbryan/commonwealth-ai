@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Drive one seat role on the local stack. One harness, six cards.
+"""Drive one seat role on the local stack. One harness, seven cards.
 
+    scripts/co-role.py R0 --input "start a campaign on X"   # route, don't run
     scripts/co-role.py R5 --input finding.txt
     scripts/co-role.py R3 --input financial-corpora
     scripts/co-role.py R1 --input intent.txt --draft
@@ -24,6 +25,8 @@ GATE CLASSES (plan §313, operator-set — this file does not choose them):
                      operator to approve, edit or reject. Nothing lands.
   auto    R3 R5      consumer-validated; a wrong item costs one heap row.
   charter R4         the charter's existing landing gate, unchanged.
+  propose R0         the router. Returns steps and queues NOTHING — a route
+                     is a reading of intent, not a decision anyone approves.
 
 `--draft` / `--auto` override the card, and the override is recorded in
 the audit row. Overriding `charter` is refused: R4's gate is ratified
@@ -74,7 +77,13 @@ DIRECTIVE_LOG = REPO / "scripts" / "co-directive-log.sh"
 CARD_TOKEN_CAP = 800
 CHARS_PER_TOKEN = 4
 
-GATES = ("draft", "auto", "charter")
+# `propose` is R0's, and it is a fourth class rather than a reuse of
+# `draft` because a draft QUEUES a directive for the operator to approve.
+# A route is not a decision anyone approves — it is a reading of intent
+# that the operator either acts on or ignores. Queueing it would put a
+# row in directives.jsonl for every question asked, and the edit rate
+# would start counting them.
+GATES = ("draft", "auto", "charter", "propose")
 ENGINES = ("model", "script")
 
 # Which directive kind a drafting role queues under. co-directive-log.sh
@@ -144,7 +153,7 @@ def lint_cards() -> int:
     """Every card parses, and none exceeds the token cap. Exit code IS
     the verdict, so this can be a gate."""
     bad = 0
-    for rid in ("R1", "R2", "R3", "R4", "R5", "R6"):
+    for rid in ("R0", "R1", "R2", "R3", "R4", "R5", "R6"):
         try:
             card = load_card(rid)
         except RoleRefusal as e:
@@ -159,7 +168,7 @@ def lint_cards() -> int:
               f"schema={'yes' if card['schema_obj'] else 'none'}"
               + (f"   OVER the {CARD_TOKEN_CAP}-token cap" if over else ""))
     print()
-    print(f"card lint: {6 - bad} ok, {bad} failing "
+    print(f"card lint: {7 - bad} ok, {bad} failing "
           f"(approximate tokens at {CHARS_PER_TOKEN} chars/token)")
     return 1 if bad else 0
 
@@ -299,8 +308,38 @@ def consume_r4(out: dict, _inp: str) -> tuple[bool, str]:
     return True, f"verdict {out['verdict']!r}, {len(gate['basis'])} anchors {checked}"
 
 
-CONSUMERS = {"R1": consume_r1, "R2": consume_r2, "R4": consume_r4,
-             "R5": consume_r5}
+def consume_r0(out: dict, _inp: str) -> tuple[bool, str]:
+    """The six-role set is the consumer: a proposed step must name a role
+    that exists and carry an input that role could actually take.
+
+    The schema masks `role` to the enum, so a non-member is unreachable
+    at decode time rather than caught here — this checks what the grammar
+    cannot: that R6 was not routed unbounded, and that a step's input is
+    not the operator's question echoed back.
+    """
+    steps = out.get("steps") or []
+    if not steps:
+        # Not a failure. "I could not read this" is the answer R0's card
+        # asks for when the intent is vague or needs an id it was not
+        # given, and it is reported as could-not-judge by the caller.
+        raise RoleRefusal(f"no route — {out.get('note', 'no reason given')}")
+    for s in steps:
+        rid, text = s.get("role"), (s.get("input") or "").strip()
+        if rid not in {f"R{i}" for i in range(1, 7)}:
+            return False, f"proposed an unknown role {rid!r}"
+        if not text:
+            return False, f"{rid} proposed with an empty input"
+        if rid == "R6" and not re.search(r"[0-9a-f]{6,}", text):
+            # R6's own refusal would catch this, but catching it here
+            # means the operator never sees a proposed step that cannot
+            # run. `--all` sweeps ~282 items and times out reporting
+            # nothing, which reads as "nothing to retire".
+            return False, "R6 proposed without item ids — it must be bounded"
+    return True, "; ".join(f"{s['role']} <- {s['input'][:48]}" for s in steps)
+
+
+CONSUMERS = {"R0": consume_r0, "R1": consume_r1, "R2": consume_r2,
+             "R4": consume_r4, "R5": consume_r5}
 
 
 # ---- script roles ------------------------------------------------------
@@ -490,6 +529,19 @@ def run_role(rid: str, inp: str, gate_override: str | None,
         audit(row)
         print(f"{rid} REJECTED by {card['consumer']} — {row['detail']}")
         return 1, row
+
+    if gate == "propose":
+        # Nothing queued, nothing landed. The payload rides in the audit
+        # row so a caller (the console) reads structured steps rather
+        # than scraping them back out of this printout.
+        row.update({"outcome": "proposed", "payload": payload})
+        audit(row)
+        for s in payload.get("steps", []):
+            print(f"  {s['role']}  {s['input'][:70]}")
+            print(f"      why: {s['why'][:100]}")
+        if payload.get("note"):
+            print(f"  note: {payload['note'][:200]}")
+        return 0, row
 
     if gate == "draft":
         did = queue_draft(rid, card, payload,
