@@ -4307,3 +4307,202 @@ pre-registered):
 No battery leg changes: all 12 grounded v1 claims and the +3 new
 ledger entries are POSITIVE claims (verified), so the carve-out is
 post-hoc hardening, not a re-measurement.
+
+## T6c REV-4 — PRE-REGISTRATION (FINAL revolution, operator verbatim: "Let's do rev-4")
+
+Hard stop: this is the order's LAST revolution, bounded and
+hard-stopped after ONE battery (battery #4). Whatever battery #4
+reads, the landing report states converged / not-converged plainly
+and the closing review is the seat's. My scope ends at this landing.
+
+### 1. The seams (SEAM 1 + SEAM 2, both red-first)
+
+**SEAM 1 — the degenerate-draft guard's marker shapes, extended to
+battery #3's three corruption classes.** The corrupt v1 flight
+(dr-1787148073) fired 0 DEGENERATE_MARKERS on its draft-3, then the
+splitter turned the draft-3 corruption into THREE new ledger entries
+(g19, g20, g21 — all single-origin, structurally unpassable,
+invisible to the rev-2 markers). The three shapes, as measured on the
+flight records:
+
+1. **The prompt-echo prefix** — draft-3's first line: "Based on the
+   evidence provided, here is how American cities changed across four
+   decades (1980–2024)…" (the split line became g19). Detector: the
+   first non-empty line starts with the echo phrase.
+2. **The markdown-header swallow** — "### Economic Inequality"
+   followed by "Inequality widened significantly during this
+   period…" (the header's last word swallowed into the next line; the
+   splitter kept the header, g20). Detector: a `#`-header line whose
+   next non-empty line starts with the header's last word
+   (parenthetical last words and bold/bullet continuations excluded —
+   "### Gentrification Trends (1980–2024)" followed by
+   "* **Acceleration:**…" is NOT a swallow).
+3. **The dependent-clause fragment bullet** — "* Although announced
+   in March 2025, the deal completed its regulatory and shareholder
+   steps later…" (seed-01's draft-3 bullet; the splitter's fragment
+   became g6, seed-01's +1). Detector: a bullet line (leading `*`,
+   `-`, or numbered) whose first word opens with a subordinator
+   (although/because/while/despite/whereas/since/after/before/when/
+   though/unless/given/showing/including). This fires on the
+   sentence class that produces unpassable fragments downstream; a
+   complete sentence opened by a subordinator is the SAME class
+   (seed-01's bullet had a main clause — the splitter still made a
+   fragment of it).
+
+Firing rule: any ONE of the three new shapes fires the guard — a
+single occurrence, unlike the rev-2 bar (>= 2 distinct / >= 3 total).
+Rationale: each shape is a single-origin, structurally unpassable gap
+source of its own (the +3/+1 r3 growths were exactly single-shape
+drafts: v1 d3 carried echo+swallow; seed-01 d3 carried the frag
+bullet alone). The rev-2 bar was calibrated against a DENSITY
+corruption (seed-07's 10 distinct markers); these classes are
+sparse-signal and would never reach it.
+
+**Corpus calibration (all 276 battery-era drafts, exact final shape
+definitions):** 12/276 drafts fire under the any-one-shape bar.
+
+- swallow: fires on EXACTLY ONE draft in the corpus — the corrupt v1
+  draft-3. Zero false positives.
+- frag: fires on 4 drafts — seed-01 d3 (+1, the target), seed-12 d3
+  (flat flight — a false positive), v1-mock d2/d3 (clean "Despite…/
+  Since…" bullets — false positives).
+- echo: fires on ~10 drafts across 6 flights (all v1 battery-era
+  flights whose drafts opened with the echo phrase + 2 v1-mock
+  flights).
+
+False-positive economics (accepted, bounded, benign): the guard fires
+ONCE per flight and the re-draft is the intended remedy shape
+(strict_shape plain prose). A false positive costs one extra model
+call and a plain-prose re-draft of a clean draft — the re-draft is
+LESS likely to produce fragment gaps, never more. The seed-12
+false positive is structurally the same class as seed-01 (identical
+bullet shape; its flatness was downstream luck, not shape) — the
+shape cannot discriminate the two drafts, and the cost of catching
+seed-01's +1 class is accepting seed-12's re-draft.
+
+**SEAM 2 — the fold-identity closure.** The ledger's identity is the
+FACT, not the sentence (rev-1 fold, landed). But the closing path is
+narrower than the identity: a seed closes only when its OWN prior
+text's verbatim re-audit passes the floor. The fold loop does
+`if !a.is_gap() { continue; }` — a PASSING claim (the draft's
+better-cited restatement of the same fact identity) never evaluates
+its fold relation, so it can never close the seed. Measured at
+battery #3's r3: the seed's own re-audit fails the floor while a
+restatement of the same fact identity passes — the fact IS grounded
+(the passing claim cleared the floor with >= 2 origins), yet the seed
+stays open and its query runs forever.
+
+The fix: the fold relation is evaluated for ALL audits, gap and
+passing. A passing audit that folds into a tracked entry closes it
+(the fact identity is grounded); a gap audit that folds into a
+tracked entry opens/keeps it. Final state per entry: emitted = (any
+gap audit folded) AND NOT (any passing audit folded) — order-
+independent (two passes), the fold rule and gap_identity unchanged
+(ONE decider, §10.6). Empty-identity entries never fold and are
+unaffected. Honest growth is preserved: a genuinely new fact whose
+claims all fail stays open.
+
+**Seam-2 effect, re-measured on the exact battery-3 v1 audit set
+(gap-list-2/3.json, identity replicated from mod.rs's decider —
+figures minus question specifiers, content-word subjects):** 12/54
+r3 claims passed the floor (all with >= 2 origins); 7 of them fold
+into 3 of the 18 r2 seeds (#0 "Specifically, nearly 20% of
+lower-income neighborhoods…", #5 "Gini coefficient reached 0.40…",
+#6 "From 2007 to 2014, the national 95/20 ratio…") → ledger 21 → 18
+(an earlier hand derivation counted a 4th seed, #11, → 17; the
+re-verified count is 3 seeds; both are converged-or-shrunk, and the
+difference does not change the falsifiable design). The +3 corrupt
+entries (g19/g20/g21) fold into NO seed — they are genuine new texts
+the guard must prevent at the draft, and the fold cannot close them.
+
+### 2. Expected coverage effect (the coordinator's question)
+
+P4-v1 10/16 and P3 9/13 are Fix B's measured coverage trade. Is the
+closure fix expected to restore coverage?
+
+**No — not from SEAM 2.** The closure changes the LEDGER (the r3 gap
+set), not the report: P4-v1/P3 measure the final report's coverage of
+the deck's specifics, and the report is drafted from the evidence
+windows. Closing a seed removes a QUERY (no re-acquisition), never a
+fact — the closing fold claim is itself grounded in the r3 window
+(>= 2 origins), so the fact remains stateable. Expected P4-v1/P3
+effect from SEAM 2 alone: zero (the Fix B trade is untouched).
+
+SEAM 1 CAN move the r3 report: the guard fires on a corrupt draft-3
+and replaces it with a strict-shape re-draft — a different r3 report,
+with the echo/swallow/fragment gap sources removed at the draft.
+Whether that moves P4-v1/P3 is the battery-4 measurement — with the
+stochastic caveat stated plainly: if battery-4's v1 draft-3 is clean
+(the corruption does not reproduce), the guard is NEVER-RAN for this
+battery (§18.2 four verdicts — not a pass), and the report-level
+legs measure the Fix B trade plus draft variance, not the seam.
+
+### 3. Falsifiable outcomes (battery #4, v1 trajectory — the gate)
+
+v1 battery-4: r2 is expected ≈ 18 (nothing r2-affecting changed);
+the gate reads r3 vs r2 of the SAME flight.
+
+- **shrunk (full pass): r3 < r2.** The seams net-negative — the
+  guard removes the corrupt +3 and the closure removes >= 1 seed
+  (measured: 3-4 of the r2 seeds close IF the r3 audit set
+  reproduces the passing-restatement structure).
+- **converged: r3 == r2.** The guard alone removes the +3 with the
+  closure netting zero (or vice versa).
+- **not-converged: r3 > r2.** Neither seam did its job on this
+  battery — the growth is outside the draft/audit/gap seams, the
+  order's pre-registered exit condition is met, and the landing
+  report says so plainly.
+
+Per-seam verdicts, reported separately (never pooled): SEAM 2's
+closure is measured by the flight's own gap-list-3 (closed-seed
+count); SEAM 1's guard verdict is fired (a degenerate draft was
+detected and re-drafted), never-ran (no corrupt draft reproduced), or
+failed (a degenerate draft was NOT detected — checked by re-running
+the shape detectors over the battery-4 draft files).
+
+### 4. Red-first test lists (pure, deterministic — no daemon)
+
+SEAM 1 (synthesize.rs, draft_is_degenerate — all red at HEAD):
+
+1. The prompt-echo fixture (v1 corrupt draft-3's first line) is
+   degenerate; the clean draft-2 first line ("Based on the evidence
+   provided, American cities have undergone…" — no "here is how") is
+   not.
+2. The swallowed-header fixture ("### Economic Inequality\nInequality
+   widened significantly during this period…") is degenerate; the
+   clean header shape ("### Gentrification Trends (1980–2024)"
+   followed by a bold bullet) is not.
+3. The fragment-bullet fixture (seed-01's "* Although announced in
+   March 2025…") is degenerate; a complete-sentence bullet
+   ("* Gentrification remained rare nationally as a whole…") is not.
+4. The corrupt draft-3's FULL text (5943 chars, flight record
+   dr-1787148073) is degenerate — the flight-level red the battery
+   measures.
+
+SEAM 2 (audit.rs, build_gap_list — red at HEAD):
+
+5. A seed whose own verbatim re-audit is a gap, PLUS a passing
+   restatement of the SAME fact identity (figures ∩ AND subjects ∩):
+   the seed closes (gaps empty). Red at HEAD: the passing claim's
+   fold is never evaluated, the seed's own gap fold keeps it open →
+   gaps == 1.
+6. The closing pass never closes a seed on a passing claim with a
+   DIFFERENT figure (Gini 0.5469 does not close Gini 0.40) — the
+   fold rule is unchanged.
+7. Empty-identity entries are unaffected (no fold, no close) —
+   degenerate fragments stay honest entries.
+
+### 5. Battery #4 plan (systemd-run, the reaper case law applies)
+
+Fresh root `ARMS_RUN_ROOT=/home/alexbryan/dev/commonwealth-ai/
+research/deep-research/arms/runs-t6c-r4` (absolute — the rev-1
+lesson; ARMS_RUN_ROOT does not cross the toolbox boundary, so the
+unit runs ON THE HOST with the env on the toolbox command line, the
+dr-t6c-r3-oneshot proven pattern). 13 flights (12 v0 + v1) + the
+one-shot comparator arm, budget unchanged, model pin unchanged,
+daemon idle check (127.0.0.1:9741) before launch, ONE unit, no
+daemon restarts mid-battery. Scoring: score-arms.py, legs and bars
+UNTouched (the seat amends bars in its own commit). This section is
+in the tree before any rev-4 code. Landing: ONE commit (pre-reg +
+reds + seams + execution record + journal), battery evidence
+untracked.
