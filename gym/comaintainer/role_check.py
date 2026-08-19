@@ -32,16 +32,14 @@ import sys
 import tempfile
 import time
 import urllib.error
-import urllib.request
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 sys.path.insert(0, str(HERE))
 import markers as M                      # noqa: E402
-from score import extract_verdict        # noqa: E402
+from score import EngineDrift, call_daemon, extract_verdict   # noqa: E402
 
-DAEMON = "http://localhost:9741/v1/chat/completions"
 RESULTS: list[tuple[str, str, str, str]] = []   # (id, role, verdict, detail)
 
 
@@ -56,24 +54,44 @@ def load_py(path: Path, name: str):
     return m
 
 
-def ask(prompt: str, schema: dict | None = None, model="commonwealth/primary",
+def ask(prompt: str, schema: dict | None = None,
+        pin: str = M.SEAT_ENGINE_OF_RECORD,
         max_tokens=700, tries=8) -> tuple[str | None, str]:
-    body: dict = {"model": model, "temperature": 0, "max_tokens": max_tokens,
-                  "messages": [{"role": "user", "content": prompt}]}
-    if schema:
-        body["response_format"] = {"type": "json_schema",
-                                   "json_schema": {"name": "out", "schema": schema,
-                                                   "strict": True}}
-    data = json.dumps(body).encode()
+    """-> (completion | None, served_model_id | reason).
+
+    A retry wrapper over `score.call_daemon`, not a second HTTP client.
+    It used to build its own request and send `model="commonwealth/primary"`
+    — the ALIAS, which follows config.toml — and never looked at what
+    answered, so this gate could score six roles against a model nobody
+    chose. The pin and the drift check now come from `call_daemon`
+    (§10.6: one implementation); what stays here is the retry policy,
+    which belongs to the gate that needs it and not to every seat caller.
+
+    `EngineDrift` is deliberately NOT retried and not swallowed: it is a
+    permanent condition, and a gate that reports PASS against the wrong
+    engine is worse than one that fails.
+    """
     for _ in range(tries):
         try:
-            req = urllib.request.Request(DAEMON, data, {"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=240) as r:
-                d = json.load(r)
-            return d["choices"][0]["message"]["content"], d.get("model", "?")
+            return call_daemon(prompt, 240.0, max_tokens, schema=schema,
+                               schema_name="out", pin=pin)
+        except EngineDrift:
+            raise
         except urllib.error.HTTPError as e:
+            # 503 is overloaded on this daemon: a full slot queue (wait)
+            # and an unloadable model (never succeeds). Measured
+            # 2026-08-19 — pinning a model no node advertises returns 503,
+            # so a blind retry here burns tries*15s before reporting a
+            # condition that was permanent on the first call.
             if e.code == 503:
-                time.sleep(15); continue
+                try:
+                    detail = e.read().decode("utf-8", "replace")
+                except Exception:  # noqa: BLE001 — body is best-effort
+                    detail = ""
+                if "advertises model" in detail:
+                    return None, f"unservable pin {pin!r}: {detail[:160]}"
+                time.sleep(15)
+                continue
             return None, f"http{e.code}"
         except Exception:
             time.sleep(8)
@@ -293,12 +311,37 @@ def check_r5():
 
 
 # ------------------------------------------------------------------- R6 cull
-def check_r6():
+R6_SLICE = 2
+
+
+def _default_r6_ids() -> list[str]:
+    """The first R6_SLICE live backlog ids, read through co-backlog's own
+    store reader so there is one query, not two (§10.6)."""
+    try:
+        bl = load_py(REPO / "scripts" / "co-backlog.py", "co_backlog_rc")
+        read = bl.read_store(bl.notes_db_path())
+        if read.error:
+            return []
+        return [r[0][:8] for r in read.rows[:R6_SLICE]]
+    except Exception:                            # noqa: BLE001
+        return []
+
+
+def check_r6(ids: list[str] | None = None):
     lp = REPO / "scripts" / "co_liveness.py"
     if not lp.exists():
         return record("R6", "cull the backlog", None, "co_liveness.py absent")
+    # BOUNDED, not `--all`. `--all` walks ~282 items and timed out at 900s;
+    # a check that times out emits no verdicts, and "no verdicts" reads as
+    # "nothing dead" — the gate passing because it never ran (§18.2,
+    # never-ran is not passed). The default slice is small enough to be a
+    # gate you actually run after a card edit.
+    ids = ids or _default_r6_ids()
+    if not ids:
+        return record("R6", "cull the backlog", None,
+                      "no backlog items available to bound the check to")
     # --dry-run: judge, record nothing. A check must not mutate the heap.
-    r = subprocess.run([sys.executable, str(lp), "verify", "--all", "--dry-run"],
+    r = subprocess.run([sys.executable, str(lp), "verify", "--dry-run", *ids],
                        capture_output=True, text=True, cwd=REPO, timeout=900)
     out = (r.stdout or "") + (r.returncode and r.stderr or "")
     verdicts = sum(out.lower().count(w) for w in ("alive", "dead", "could-not-judge"))
@@ -315,12 +358,24 @@ CHECKS = {"R1": check_r1, "R2": check_r2, "R3": check_r3,
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", default=None, help="e.g. R4")
+    ap.add_argument("--r6-ids", nargs="*", default=None,
+                    help="bound R6 to these item ids (default: the first "
+                         f"{R6_SLICE} live items; --all timed out at 900s)")
     a = ap.parse_args()
     todo = [a.only] if a.only else list(CHECKS)
+    if a.r6_ids is not None:
+        CHECKS["R6"] = lambda: check_r6(a.r6_ids)
     print(f"ROLE CHECK — {len(todo)} role(s), local stack\n")
     for rid in todo:
         try:
             CHECKS[rid]()
+        # Drift is not a could-not-judge. Every check already run was run
+        # against an engine nobody asked for, so the gate is void rather
+        # than inconclusive — and the handler below would otherwise turn
+        # it into a COULD-NOT-JUDGE row and still exit 0 (§18.2: a gate
+        # that cannot fail is not a gate).
+        except EngineDrift as e:
+            sys.exit(f"\nROLE CHECK VOID — {e}")
         except Exception as e:
             record(rid, "?", None, f"check itself errored: {type(e).__name__}: {e}")
     print("\n" + "-" * 72)

@@ -528,8 +528,29 @@ def render_verdicts(verdicts, path: Path, now, limit: int = 10) -> str:
         basis = v.get("basis") or []
         if isinstance(basis, str):
             basis = [basis]
-        basis_html = ", ".join(f"<code>{E(str(b))}</code>" for b in basis) or \
+        # Three states, not two (§18.2). Before G1 this page rendered every
+        # anchor identically, which meant a citation nobody had resolved
+        # looked exactly like one that had — the page was the last place
+        # an invented anchor could have been caught and it presented them
+        # as checked. Rows written before G1 carry no `basis_checked` key
+        # at all; those are UNKNOWN and must not be back-dated into
+        # "verified" by a truthy default.
+        checked = v.get("basis_checked")
+        unresolved = set(v.get("basis_unresolved") or [])
+        parts = []
+        for b in basis:
+            b = str(b)
+            if b in unresolved:
+                parts.append(f'<code class="bad">{E(b)}</code> '
+                             '<span class="bad">(does not resolve)</span>')
+            elif checked is True:
+                parts.append(f'<code class="res">{E(b)}</code>')
+            else:
+                parts.append(f"<code>{E(b)}</code>")
+        basis_html = ", ".join(parts) or \
             '<span class="bad">(no basis recorded)</span>'
+        if basis and checked is not True:
+            basis_html += ' <span class="sub">(not verified)</span>'
         verdict = str(v.get("verdict") or "(no verdict)")
         klass = "res" if verdict == "approve" else "bad"
         rows.append(
@@ -770,11 +791,84 @@ def self_test(script_path: Path) -> int:
               "no malformed records" in page and
               "malformed line(s) could not be parsed" not in page)
 
+        # --- check 4: G1 — a cited anchor that does not resolve ----------
+        # Both halves of G1 in one place, because splitting them is how
+        # the hole existed in the first place: the gate can demote, and
+        # the page can still render the anchor as if it were checked.
+        #
+        # The GATE half runs against an injected resolver, not the real
+        # one. `BasisResolver` reads the repo, the ledger and
+        # ~/.sovereign/notes.db; on a host without them every anchor is
+        # unresolvable and this check would pass for the wrong reason.
+        # What is under test here is the gate's decision, and the
+        # resolver itself is already exercised by the gym scorer.
+        print("check 4 — G1: an unresolvable citation demotes, and says so")
+        sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                               / "gym" / "comaintainer"))
+        try:
+            from score import basis_gate
+        except Exception as e:  # noqa: BLE001
+            check("score.basis_gate is importable", False, f"{type(e).__name__}: {e}")
+            basis_gate = None
+
+        if basis_gate is not None:
+            class _Stub:
+                REAL = {"ARCH §18.3", "commit abc1234"}
+
+                def exists(self, anchor):
+                    return anchor in self.REAL
+
+            fabricated = basis_gate(
+                {"verdict": "approve", "basis": ["ARCH §18.3", "ARCH §99.9",
+                                                 "note deadbeef"]}, _Stub())
+            # `.get`, not `[...]`: when the gate stops demoting, the key
+            # is absent, and this lane must report FAIL rather than die
+            # with a KeyError that reads like a broken test.
+            check("a fabricated anchor demotes the verdict",
+                  fabricated.get("verdict") == "could-not-judge",
+                  f"got {fabricated.get('verdict')!r}")
+            check("the engine's own verdict is preserved, not erased",
+                  fabricated.get("proposed_verdict") == "approve")
+            check("the demotion names WHICH anchors failed",
+                  fabricated["basis_unresolved"] == ["ARCH §99.9", "note deadbeef"],
+                  str(fabricated["basis_unresolved"]))
+            check("the resolvable anchor is not blamed",
+                  "ARCH §18.3" not in fabricated["basis_unresolved"])
+
+            clean = basis_gate(
+                {"verdict": "approve", "basis": ["ARCH §18.3", "commit abc1234"]},
+                _Stub())
+            check("NEGATIVE: every anchor resolving does NOT demote",
+                  "verdict" not in clean and clean["basis_checked"] is True)
+
+            empty = basis_gate({"verdict": "approve", "basis": []}, _Stub())
+            check("NEGATIVE: an empty basis demotes nothing",
+                  "verdict" not in empty and empty["basis_unresolved"] == [])
+
+            # The RENDER half: three states must look like three states.
+            now4 = dt.datetime.now(dt.timezone.utc)
+            vpath = tmp / "verdicts.jsonl"
+            vpage = render_verdicts([
+                {"ts": now4.isoformat(), "ref": "1111111", **fabricated},
+                {"ts": now4.isoformat(), "ref": "2222222", "verdict": "approve",
+                 **clean},
+                # A row written BEFORE G1: no basis_checked key at all.
+                {"ts": now4.isoformat(), "ref": "3333333", "verdict": "approve",
+                 "basis": ["ARCH §18.3"]},
+            ], vpath, now4)
+            check("the page marks the anchor that does not resolve",
+                  "does not resolve" in vpage)
+            check("a pre-G1 row is shown as NOT verified, not as checked",
+                  "(not verified)" in vpage)
+            check("NEGATIVE: a fully-resolved row carries neither warning",
+                  vpage.count("does not resolve") == 2  # one per bad anchor
+                  and vpage.count("(not verified)") == 1)
+
     print()
     if failures:
         print(f"self-test FAILED — {len(failures)} check(s): " + "; ".join(failures))
         return 1
-    print("self-test PASSED — 3 checks, both directions each.")
+    print("self-test PASSED — 4 checks, both directions each.")
     return 0
 
 

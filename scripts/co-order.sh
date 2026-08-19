@@ -29,7 +29,11 @@
 set -uo pipefail
 
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
-FEATURES="$REPO/.sovereign/features"
+# CO_FEATURES is the test/harness override, same idiom as CO_DIRECTIVE_LOG
+# and CO_BACKLOG_RULER. `scripts/co-role.py` gates R1's drafted order on
+# `check` (G2) and must not have to write a throwaway order into the real
+# orders directory, where `list` would show it to the operator.
+FEATURES="${CO_FEATURES:-$REPO/.sovereign/features}"
 PY="$(command -v python3 || echo python3)"
 CO_DIR="$(cd "$(dirname "$0")" && pwd)"
 
@@ -289,7 +293,11 @@ if lineage is not None:
                     nudges.append(f"serves: names {order.serves_initiative} but no bar — the rollup "
                                   "will show this order under the initiative with no bar moved")
 if problems:
-    print("NOT READY (advisory — nothing gates on this):")
+    # It exits 1 and, since G2 (2026-08-19), scripts/co-role.py gates R1's
+    # drafted order on that exit code. So it is no longer true that nothing
+    # gates on this, and a banner saying otherwise teaches the reader to
+    # ignore it. A hand-run `check` is still advisory to the human reading it.
+    print("NOT READY (exit 1; co-role.py R1 blocks a draft on this):")
     for p in problems: print(f"  - {p}")
 for n in nudges: print(f"  nudge: {n}")
 if not problems:

@@ -24,6 +24,70 @@ Rendered copies persist at `~/.sovereign/comaintainer/{closeout,backlog}.html`
 and `~/.sovereign/arch/<corpus>/fieldglass.html` — re-openable without
 re-rendering.
 
+**The pages are read-only.** They show you what is waiting; approving a
+draft is still `scripts/co-directive-log.sh --resolve`. The actuating
+console that closes that gap is not built yet — what exists today is the
+apply half (`scripts/co-apply.py`, below), which is what a console would
+drive.
+
+## Driving a role yourself
+
+The six seat roles run on the local open-weight model, one card each in
+`gym/comaintainer/roles/` (data — a card change needs no code change).
+
+| I want | Run |
+|---|---|
+| Draft an order from typed intent | `scripts/co-role.py R1 --input intent.txt` |
+| Draft campaign bars for an initiative | `scripts/co-role.py R2 --input initiative.txt` |
+| See coverage against a campaign's bars | `scripts/co-role.py R3 --input financial-corpora` |
+| Verify a landing | `scripts/co-role.py R4 --input bundle.txt` |
+| File an out-of-scope finding as a backlog item | `scripts/co-role.py R5 --input finding.txt` |
+| Propose retirements, bounded to named items | `scripts/co-role.py R6 --input "6f4928b8 45455f0e"` |
+| Check every card parses and fits the budget | `scripts/co-role.py --lint` |
+| Confirm R4's planted-defect canary can still fire | `scripts/co-role.py R4 --canary-only` |
+
+`--input` takes a file path or a literal string. Each run appends one row
+to `~/.sovereign/comaintainer/role-runs.jsonl`.
+
+**What the gate class means for you.** `R1`, `R2` and `R6` are `draft`:
+they do not land anything, they queue a pending directive that shows up
+in the closeout page for you to approve, edit or reject. `R3` and `R5`
+are `auto` — consumer-validated, and a wrong item costs one heap row.
+`R4` uses the charter's existing landing gate, unchanged; `--draft` and
+`--auto` are refused on it, because that gate is ratified and is not a
+command-line flag.
+
+**Exit codes**, so a script can gate on it: `0` accepted or queued · `1`
+the consumer rejected the output · `2` could-not-judge (engine
+unreachable, malformed reply, an unbounded R6) · `3` engine drift — the
+reply came from a model nobody pinned · `4` the canary halted the run.
+
+**R6 must be bounded.** `--all` timed out at 900s over ~282 items, and a
+sweep that times out reports nothing, which reads as "no dead items".
+
+## Applying decisions in a batch
+
+`scripts/co-apply.py <file.jsonl>` replays a list of decisions by driving
+the real scripts — `co-directive-log.sh --resolve` with the explicit
+`--edited`/`--unedited`/`--no-decision` flag you chose, `co-role.py` for
+an actuation, `co-order.sh close` for a closure. Nothing writes to a
+store directly, so a directive resolved this way is indistinguishable in
+`directives.jsonl` from one you resolved by hand.
+
+```
+{"action":"resolve","id":"001b40b6","final":"Approved as drafted.","verdict":"unedited","edit_class":"none"}
+{"action":"actuate","role":"R3","input":"financial-corpora"}
+{"action":"close","order":"sec-filings-close","state":"landed"}
+```
+
+`--dry-run` prints what would run and touches nothing. A bad line is
+reported with its line number and does not stop the others, but the exit
+code is non-zero if any line failed. `--self-test` runs the lane.
+
+An omitted or unrecognized `verdict` is REFUSED, never guessed — the edit
+verdict is the statistic the M0 loop is measured by, and a fabricated one
+would look exactly like a real one.
+
 ## The backlog
 
 | I want to | Run |
