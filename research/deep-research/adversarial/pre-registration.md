@@ -3554,6 +3554,38 @@ never push.
   verified) — the deep flights' missing estates are the observed persistence
   gap, NOT a blocking flywheel gap.
 
+- **2026-08-19 ~10:33-11:47 — probe attempt 2 (thin, seeds 01-03): ALL THREE
+  LANDED, done-partial.** seed-01 wall 1087s (18 min, run dr-1787160713),
+  seed-02 wall 1985s (33 min, dr-1787161801), seed-03 wall 960s (16 min,
+  dr-1787163785). The r4 battery ended 10:31:22 but the battery worker
+  relaunched within seconds (`t6b-battery-re.service`, runs-t6b-re) — the
+  probe flew under steady co-tenancy; the wall times are therefore upper
+  bounds, journaled. Per the pre-registered decision rule (per-flight
+  wall < 45 min), the FULL BANK (seed-01..12 + v1) is authorized and now
+  in flight (unit `t6a-corpus-scale-bank.service`, seed-04..12 + v1;
+  resume-skip covers the landed probe seeds). NOTE: the fleet client gained
+  a 503 retry envelope between attempts 1 and 2 (`WARN inference shed (503)
+  — honoring Retry-After, will retry … max=3` observed in seed-03's
+  console) — the attempt-1 hard failures are superseded state, journaled so.
+- **Estate flywheel VERIFIED end-to-end (seed-01, dr-1787160713):** manifest
+  `ingested_into: Some("dr-estate-dr-1787160713")` on every round-1 fetched
+  source; `svrn corpus status` ready; `svrn corpus search
+  dr-estate-dr-1787160713 …` returns hits. Corpus-mode flights compound
+  their own estates; later flights can search them via `--corpora`.
+- **seed-01 flight shape (manifest):** 5 rounds, gap trace 0→8→8→8→44→17
+  (r3→r4 re-expression explosion, r5 shrink on new evidence — the t6c
+  growth-engine shape), budget 40/40 corpus searches, 4+8 of 60 fetched,
+  done-partial with truncation declared; `draft-1-degenerate.json` present
+  (the degenerate-draft guard fired on the empty round-1 window, same shape
+  as the batteries).
+- **Warm-leg subset (pre-registered at launch):** seed-01, seed-02, seed-03 —
+  the matched probe seeds; thin-vs-warm on identical questions with the
+  corpus set as the ONLY variable (`wikipedia` vs
+  `wikipedia,dr-estate-demo13-warm`). The probe estates are NOT added to the
+  warm set (wikipedia-content — circular enrichment); the assembled deep-arm
+  cache is the information-bearing addition. Warm leg flies after the thin
+  bank completes.
+
 (appended as flights land)
 
 ## T6a-t6b pilot — the smallest learning loop (operator steer 2026-08-18) — DECLARATION
@@ -4615,6 +4647,121 @@ item 2 is amended accordingly: the swallow-ALONE fixture is NOT
 degenerate (the pinned clean shape); the swallow+echo package (the
 corrupt draft-3's exact opening) IS. The frag and echo shapes fire
 individually, unchanged.
+
+### 7. Battery #4 — EXECUTION RECORD AND JOURNAL (the order's last
+revolution; the landing commit carries this section)
+
+**Execution.** Battery #4 ran to terminal under systemd-run unit
+dr-t6c-r4 (reaper case law; env crossed via the host launcher, the
+rev-1 lesson) into runs-t6c-r4/: 13 loop flights complete (seed-01..
+12 + v1; the seat verified the terminal state directly — v1 console
+last write 10:30) plus pairs.json. The one-shot comparator arm FAILED
+at battery time: all 13 drafts got `503 host busy` (local_queue_full
+— the daemon was still serving the battery's own requests). Rerun
+launched as its own unit dr-t6c-r4-oneshot (the dr-t6c-r3-oneshot
+proven pattern) once the daemon answered a probe (200 in 14 s);
+outcome recorded in the closing entry below.
+
+**The gate — v1 trajectory 1 → 21 → 26: NOT CONVERGED.** r3 (26) >
+r2 (21) of the same flight — the pre-registered not-converged outcome
+materialized and the order's pre-registered exit condition is met.
+(Round-2 itself measured 21 vs battery-3's 18 — draft variance;
+nothing r2-affecting changed, as pre-registered.)
+
+**SEAM 1 — FIRED, via the new echo shape, on the pre-registered
+corruption class.** The corrupt class reproduced: v1 draft-3 opened
+"Based on the evidence provided, here is how American cities changed
+across four decades (1980–2024)…" — the pre-registered echo prefix.
+The rev-2 markers were silent on it (0 markers; bold 3.1/k < 8): the
+old guard would have missed this draft; the echo shape caught it.
+draft-3-degenerate.json preserved (§18.3); the strict-shape re-draft
+replaced it (clean first line, no headers, no bullets). Also fired on
+the v0 flights: seed-05 draft-2 (density 9.7/k) and seed-07 draft-2
+(7 markers, 13.4/k) — the rev-2 bar doing its pre-existing job.
+
+**The growth mechanism — a NEW corruption class, outside the
+pre-registered shapes: the strict-shape re-draft spelled every
+content figure as words.** Measured on the flight records:
+"twenty percent" (16×), "fifty-eight point one percent", "two point
+eight percent", "seventeen point five times", "ninety-five over
+twenty", "eight point five", "eighteen to one" — where the
+degenerate original and the evidence carry the digit forms ("20%",
+"58.1", "2.8%"). The chain, every link in the battery-4 records:
+
+1. The audit judge's citation extraction found nothing for the
+   word-form claims — flag "open question: not judgeable from the
+   evidence", citations=[] on ALL 40 r3 claims → 40/40
+   could-not-judge (battery-3's r3: 12/54 passed) and the witness
+   never ran (40/40 ran=false; every other battery-4 flight's r3 had
+   witnesses running — the v1 r3 audit set is the lone outlier).
+2. The seam-2 closure's fuel is PASSING claims; with zero passing
+   claims it closed 0 seeds (CLOSED from r2: 0 — all 21 r2 ids
+   survive in the r3 ledger). The closure ran and was INERT for lack
+   of passing restatements — the pre-registered IF-condition ("the
+   r3 audit set reproduces the passing-restatement structure") did
+   not hold on this battery.
+3. 5 of the 40 CN claims folded into no tracked seed → +5 (g22-g26):
+   their identities carry no digit figures (or only years — g25's
+   {2007, 2014} miss the seed's {95, 20, 8, 5, 9, 3}) → the fold's
+   figure-intersection cannot see word-forms. The 21 seeds that
+   survive are the honest-growth baseline of a CN-dominated r3.
+4. The re-draft IS the final r3 report → the report-level coverage
+   dropped with it: P4-v1 10/16 → 5/16 (word-forms match no
+   digit-form deck key; the report carries 20 "percent" word-forms).
+
+**SEAM 2 — ran, closed 0, fuel absent.** Not falsified (its
+mechanism requires passing restatements; none existed), not
+demonstrated (the audit set was structurally empty of passing
+claims — an artifact of the word-number class, not of the fold
+identity).
+
+**Legs, bars untouched (battery-3 → battery-4):** P4-v0 64/72 →
+62/72, passed. P4-v1 (loop) 10/16 → 5/16, failed. P3 9/13 → 9/13,
+failed (flat). R-12-nongrow (intent form) 11/12 → 8/12, FAILED —
+4 v0 seeds grew at r3 (seed-02/03/05/09, +1/+2/+1/+1, all ordinary
+honest new texts: dates, fragments, a $2.6B figure) vs 1 in
+battery-3; v0 draft variance, no rev-4 seam fires on those flights
+(seed-05/07's guard fires are rev-2 density/marker behavior). T1.7
+12/12, passed. two-arm lift (pooled/v1) and honesty: could-not-judge
+(one-shot failed at battery time; the rerun's outcome stands in the
+closing entry — never silently substituted).
+
+**Keep/revert: KEEP both seams, one commit.** SEAM 1 fired on the
+exact pre-registered corruption class that the rev-2 markers were
+provably blind to — demonstrated value, even though the remedy's own
+re-draft introduced the word-number class (a remedy-design finding,
+not a detector failure; the strict-shape constraint's "plain prose"
+instruction is the likely prompt-side cause). SEAM 2's semantics are
+unchanged from its red-first proof and cannot grow the ledger (the
+closure only sets emitted=false); the +5 is the CN claims' fold
+misses, which opened entries before AND after the closure. The
+intent-form leg's 8/12 is v0 draft variance, not a seam regression.
+
+**The finding for the closing review.** The order's hard stop is
+met: not-converged, the pre-registered exit condition is triggered,
+and the growth is now MECHANISTICALLY IDENTIFIED, not residual: the
+strict-shape re-draft's word-form figures are invisible to the
+audit judge's citation extraction (digit-form evidence), which
+abstains on everything → 0 passing claims → the closure inert → +5
+unfolded entries, and the same word-forms cut the final report's
+coverage 10/16 → 5/16. Any successor work on R-12's growth must
+address the word-form figure class (the draft seam) — the
+pre-registered shapes were not the last word.
+
+**Closing entry (the one-shot rerun, unit dr-t6c-r4-oneshot):** the
+rerun completed 5/13 drafts — seed-01..08 failed with `503
+local_queue_full` throughout its run (the daemon was saturated by the
+t6b order's inference; a live probe mid-run showed queue position 1,
+~30-47 s predicted waits), seed-09..12 + v1 wrote. The two-arm pooled
+and honesty legs stay could-not-judge (the completeness guard needs
+all 13 traces — never silently substituted; the partial set is not
+pooled). The v1 one-shot DID land, so two-arm lift (v1) computed:
+loop 0.9167 vs one-shot 0.9706 — FAILED (the loop's word-form final
+report carries lower figure density than the one-shot draft;
+battery-3's same leg also failed, 1.0 vs 0.973 — verdict unchanged
+across the seam). The daemon contention is external to this order
+(the t6b pre-window slice holds the inference rail); no third
+attempt, per the pre-registered one-battery plan.
 
 ## T6b pre-window slice — PRE-REGISTRATION (the acquisition-yield
 pre-window work; order deep-research-t6b, operator-activated

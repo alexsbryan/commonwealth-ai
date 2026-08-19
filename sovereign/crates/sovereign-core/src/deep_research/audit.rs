@@ -533,26 +533,33 @@ pub fn build_gap_list(
             }
         })
         .collect();
+    // The fold rule, ONE decider (§10.6): figures intersect AND
+    // subjects intersect, or both figureless with >= 2 shared
+    // subjects; an EMPTY identity never folds. Shared by the gap pass
+    // and the closure pass below.
+    let folds_into =
+        |tracked: &[Tracked], figures: &[String], subjects: &[String]| -> Option<usize> {
+            tracked.iter().position(|t| {
+                if !t.figures.is_empty() && !figures.is_empty() {
+                    figures.iter().any(|f| t.figures.contains(f))
+                        && subjects.iter().any(|s| t.subjects.contains(s))
+                } else if t.figures.is_empty() && figures.is_empty() {
+                    subjects.iter().filter(|s| t.subjects.contains(s)).count() >= 2
+                } else {
+                    false // one figured, one not — different facts
+                }
+            })
+        };
+    // Pass 1 (the fold, unchanged): a GAP audit that folds re-opens
+    // the tracked entry — the canonical text stays the entry; THIS
+    // audit's record rides the query. A gap audit that folds into
+    // nothing pushes a new tracked entry (honest growth).
     for (i, a) in audits.iter().enumerate() {
         if !a.is_gap() {
             continue;
         }
         let (figures, subjects) = super::gap_identity(&a.claim, question_specifiers);
-        let folds_into = tracked.iter().position(|t| {
-            if !t.figures.is_empty() && !figures.is_empty() {
-                figures.iter().any(|f| t.figures.contains(f))
-                    && subjects.iter().any(|s| t.subjects.contains(s))
-            } else if t.figures.is_empty() && figures.is_empty() {
-                subjects.iter().filter(|s| t.subjects.contains(s)).count() >= 2
-            } else {
-                false // one figured, one not — different facts
-            }
-        });
-        if let Some(j) = folds_into {
-            // Fold: the fact is already tracked — the canonical text
-            // stays the entry; THIS audit's record rides the query
-            // (the closing path's query is unchanged: the prior text's
-            // re-audit emits exactly what it emitted pre-fold).
+        if let Some(j) = folds_into(&tracked, &figures, &subjects) {
             tracked[j].emitted = true;
             tracked[j].from_claim_id = Some(i);
             tracked[j].empty_evidence_window = a.empty_evidence_window;
@@ -568,6 +575,25 @@ pub fn build_gap_list(
             empty_evidence_window: a.empty_evidence_window,
             corroboration: a.corroboration.clone(),
         });
+    }
+    // Pass 2 (T6c REV-4, pre-registered — the fold-identity closure):
+    // a PASSING audit that folds into a tracked entry CLOSES it. The
+    // passing claim cleared the floor with >= 2 origins, so the fact
+    // identity is grounded — the ledger's identity is the fact, not
+    // the sentence — and the seed's own unpassable text no longer
+    // keeps the fact open. Order-independent: the passing fold wins
+    // over a same-round gap fold (the grounded fact is grounded).
+    // Closing the entry removes the gap AND its query — the final
+    // report's coverage is untouched (the closing claim itself is
+    // stateable in the round's evidence).
+    for a in audits.iter() {
+        if a.is_gap() {
+            continue;
+        }
+        let (figures, subjects) = super::gap_identity(&a.claim, question_specifiers);
+        if let Some(j) = folds_into(&tracked, &figures, &subjects) {
+            tracked[j].emitted = false;
+        }
     }
     let gaps: Vec<Gap> = tracked
         .iter()
@@ -819,6 +845,30 @@ mod tests {
         }
     }
 
+    /// A passing audit: the floor cleared (>= 2 origins) — the
+    /// REV-4 closure's subject shape (the real passed claims read
+    /// `Verdict::Passed` / `GateAction::CitationGrounded`).
+    fn mk_pass(text: &str) -> ClaimAudit {
+        ClaimAudit {
+            claim: text.to_string(),
+            verdict: Verdict::Passed,
+            action: GateAction::CitationGrounded,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: None,
+            corroboration: Some(CorroborationRecord {
+                origins: vec![
+                    "https://ev-1.example".to_string(),
+                    "https://ev-2.example".to_string(),
+                ],
+                support_chunks: 2,
+                floor: 2,
+                passes_floor: true,
+            }),
+        }
+    }
+
     /// RED (order deep-research-t6c): the measured v1 churn — the same
     /// fact re-stated with new wording and figure accretion
     /// ("Gentrification accelerated significantly after 2000…" gains
@@ -934,6 +984,88 @@ mod tests {
         );
         assert_eq!(g.gaps.len(), 2, "disjoint figures are disjoint facts");
         assert_eq!(g.gaps[1].text, other, "the new fact is its own gap");
+    }
+
+    // --- REV-4 (order deep-research-t6c, pre-registered): the
+    // fold-identity closure. RED: the fold loop `continue`s on
+    // !is_gap() at HEAD — a passing claim's fold relation is never
+    // evaluated, so the tests below fail at HEAD and pass after the
+    // two-pass fold (watched red, then green).
+
+    /// A passing (non-gap) audit with the same fact identity closes
+    /// the seed — the passing claim cleared the floor with >= 2
+    /// origins, so the fact is grounded even though the seed's own
+    /// text is unpassable. RED at HEAD: the seed's own gap re-audit
+    /// folds and keeps it emitted; the passing fold is skipped.
+    #[test]
+    fn passing_fold_closes_the_seed() {
+        let prior = vec![
+            "Gini coefficient reached 0.40 by 2013, marking a steady widening of income \
+             inequality [Source: ev-1]."
+                .to_string(),
+        ];
+        let passing =
+            "Gini coefficient reached 0.40 by 2013 [Source: ev-1] [Source: ev-2].".to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&prior[0]), mk_pass(&passing)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert!(
+            g.gaps.is_empty(),
+            "a passing fold proves the fact grounded — the seed must close: {:?}",
+            g.gaps.iter().map(|x| &x.text).collect::<Vec<_>>()
+        );
+    }
+
+    /// The closing pass never closes a seed on a passing claim with a
+    /// DIFFERENT figure — Gini 0.5469 does not ground Gini 0.40 (the
+    /// fold rule is unchanged; the same discipline as the scorer's
+    /// figure identity).
+    #[test]
+    fn passing_different_figure_does_not_close_the_seed() {
+        let prior = vec!["Gini coefficient reached 0.40 by 2013 [Source: ev-1].".to_string()];
+        let passing =
+            "Gini coefficient reached 0.5469 in New York City [Source: ev-1] [Source: ev-2]."
+                .to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&prior[0]), mk_pass(&passing)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert_eq!(g.gaps.len(), 1, "disjoint figures are disjoint facts");
+    }
+
+    /// Empty-identity entries (the degenerate list-fragment class)
+    /// never fold and never close — a passing claim about a different,
+    /// figured fact leaves the abstention tracked.
+    #[test]
+    fn empty_identity_seed_is_unaffected_by_passing_folds() {
+        let prior = vec!["No evidence was retrieved this round.".to_string()];
+        let passing = "Portland (58.1% of eligible tracts) led gentrification [Source: ev-1] \
+             [Source: ev-2]."
+            .to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&prior[0]), mk_pass(&passing)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert_eq!(g.gaps.len(), 1, "the abstention stays tracked");
     }
 
     /// The round-1 empty-window abstention gap never absorbs content

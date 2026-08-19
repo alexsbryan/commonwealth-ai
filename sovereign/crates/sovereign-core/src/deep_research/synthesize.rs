@@ -81,16 +81,135 @@ pub(crate) const DEGENERATE_MARKERS: [&str; 10] = [
     "? no",
 ];
 
+/// T6c REV-4 (pre-registered): the prompt-echo prefix — the corrupt
+/// v1 draft-3 (flight dr-1787148073) opened with the prompt's own
+/// framing line, and the splitter turned it into gap g19 (one of the
+/// measured +3). Fires INDIVIDUALLY: the echo line is a single-
+/// origin, structurally unpassable gap source of its own (the
+/// battery-2-era echo flights each grew +1 per echoed draft).
+fn draft_opens_with_prompt_echo(text: &str) -> bool {
+    text.lines().next().is_some_and(|l| {
+        l.trim_start()
+            .starts_with("Based on the evidence provided, here is how")
+    })
+}
+
+/// T6c REV-4 (pre-registered): the markdown-header swallow — a
+/// `#`-header line whose next non-empty line starts with the header's
+/// last word ("### Economic Inequality" + "Inequality widened
+/// significantly…" — gap g20). Counts as ONE marker toward the
+/// >= 2-distinct / >= 3-total bar, NEVER alone: the pinned clean
+/// synthesis class (dr-1787104761 draft-3) carries the identical
+/// pair ("### Gentrification" + "Gentrification has become…" —
+/// amendment, §18.6). Parenthetical header words ("(1980–2024)")
+/// and bullet continuations ("* **Acceleration:**…") are excluded.
+fn count_header_swallows(text: &str) -> usize {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut n = 0usize;
+    for (i, line) in lines.iter().enumerate() {
+        let hdr = line.trim_start();
+        if !hdr.starts_with('#') {
+            continue;
+        }
+        let Some(rest) = hdr.strip_prefix('#') else {
+            continue;
+        };
+        let Some(last) = rest.trim().split_whitespace().next_back() else {
+            continue;
+        };
+        let last = last.trim_matches(['*', ':', '.', ';', ',', '(', ')']);
+        if last.is_empty() || last.contains('(') {
+            continue;
+        }
+        let Some(next) = lines[i + 1..]
+            .iter()
+            .map(|l| l.trim_start())
+            .find(|l| !l.is_empty())
+        else {
+            continue;
+        };
+        if next.starts_with(last) {
+            n += 1;
+        }
+    }
+    n
+}
+
+/// T6c REV-4 (pre-registered): the dependent-clause fragment bullet —
+/// a bullet line (leading `*`, `-`, or a numbered marker) whose first
+/// word opens with a subordinator ("* Although announced in March
+/// 2025…" — seed-01's draft-3 bullet, flight dr-1787146175; the
+/// splitter's fragment became gap g6, seed-01's +1). Fires
+/// INDIVIDUALLY: the accepted false-positive class (seed-12's flat
+/// flight, v1-mock's clean "Despite…/Since…" bullets — one extra
+/// re-draft each, benign and bounded) is the price of catching the
+/// seed-01 class; bold lead-ins ("* **Acceleration:**…") are never
+/// fragments.
+fn count_fragment_bullets(text: &str) -> usize {
+    const FRAGMENT_OPENERS: [&str; 14] = [
+        "although",
+        "because",
+        "while",
+        "despite",
+        "whereas",
+        "since",
+        "after",
+        "before",
+        "when",
+        "though",
+        "unless",
+        "given",
+        "showing",
+        "including",
+    ];
+    let mut n = 0usize;
+    for line in text.lines() {
+        let l = line.trim_start();
+        let after_marker = match l.chars().next() {
+            Some('*') | Some('-') => &l[1..],
+            Some(c) if c.is_ascii_digit() => {
+                let word = l.split_whitespace().next().unwrap_or("");
+                let rest = word.trim_end_matches(['.', ')', ':']);
+                if rest.is_empty() || !rest.chars().all(|c| c.is_ascii_digit()) {
+                    continue; // not a numbered-list line
+                }
+                &l[word.len()..]
+            }
+            _ => continue,
+        };
+        let w = after_marker.trim_start();
+        if w.starts_with('*') || w.is_empty() {
+            continue; // bold lead-ins and empty bullets are not fragments
+        }
+        let first = w.split_whitespace().next().unwrap_or("");
+        if FRAGMENT_OPENERS
+            .iter()
+            .any(|o| first.to_lowercase().starts_with(o))
+        {
+            n += 1;
+        }
+    }
+    n
+}
+
 /// The degenerate-draft detector (pure, deterministic — no model, no
-/// battery-learned thresholds). Degenerate iff >= 2 DISTINCT markers
-/// OR >= 3 total occurrences OR >= 8 "**" per 1k chars. Measured on
-/// the flight records: the seed-07 corruption draft = 10 distinct /
+/// battery-learned thresholds). Degenerate iff the prompt-echo prefix
+/// OR any dependent-clause fragment bullet is present (REV-4: each is
+/// a single-origin, structurally unpassable gap source that fires
+/// alone — the +3/+1 r3 growths), OR >= 2 DISTINCT markers OR >= 3
+/// total occurrences OR >= 8 "**" per 1k chars. The header swallow
+/// counts as ONE marker toward the bar (it never fires alone — the
+/// pinned clean class carries the identical pair). Measured on the
+/// flight records: the seed-07 corruption draft = 10 distinct /
 /// 27 total / 12.8 per 1k; the clean synthesis class (v1 draft-2/3,
 /// seed-02 draft-2) = 0 distinct / 0 total / <= 3.2 per 1k — a >= 2.5x
 /// margin on the density bar.
 pub(crate) fn draft_is_degenerate(text: &str) -> bool {
     if text.is_empty() {
         return false;
+    }
+    if draft_opens_with_prompt_echo(text) || count_fragment_bullets(text) > 0 {
+        return true;
     }
     let mut distinct = 0usize;
     let mut total = 0usize;
@@ -100,6 +219,11 @@ pub(crate) fn draft_is_degenerate(text: &str) -> bool {
             distinct += 1;
             total += n;
         }
+    }
+    let swallows = count_header_swallows(text);
+    if swallows > 0 {
+        distinct += 1;
+        total += swallows;
     }
     let bold_per_1k = text.matches("**").count() as f64 * 1000.0 / text.len() as f64;
     distinct >= 2 || total >= 3 || bold_per_1k >= 8.0
@@ -509,6 +633,104 @@ Gentrified neighborhoods typically saw increases in non-Hispanic white populatio
         assert!(
             !draft_is_degenerate(&text),
             "one marker occurrence must not trip the >=2-distinct / >=3-total bar"
+        );
+    }
+
+    // --- REV-4 (order deep-research-t6c, pre-registered): the three
+    // battery-3 corruption classes. RED: `draft_opens_with_prompt_echo`
+    // and `count_fragment_bullets` do not exist at HEAD — these tests
+    // fail to COMPILE before the fix (watched red, then green). The
+    // swallow shape is a bar-marker (amendment §18.6): the swallow-
+    // alone fixture below is the pinned clean class and must NOT fire.
+
+    /// RED (f): the prompt-echo prefix — the corrupt v1 draft-3's
+    /// first line (flight record dr-1787148073; the split line became
+    /// gap g19, one of the measured +3). Fires alone.
+    #[test]
+    fn prompt_echo_prefix_is_degenerate() {
+        let text = r#"Based on the evidence provided, here is how American cities changed across four decades (1980–2024) regarding gentrification, inequality, affordability, and displacement.
+
+### Gentrification
+*   **Acceleration:** The rate of gentrification doubled after 2000 compared to the 1990s [Source: ev-1]."#;
+        assert!(
+            draft_is_degenerate(text),
+            "the prompt-echo prefix must fire the guard"
+        );
+    }
+
+    /// RED (g): the clean evidence framing is NOT the echo — the
+    /// corrupt flight's OWN clean draft-2 opens "Based on the
+    /// evidence provided, American cities have undergone…" (no
+    /// "here is how").
+    #[test]
+    fn clean_evidence_framing_is_not_the_echo() {
+        let text = r#"Based on the evidence provided, American cities have undergone a fundamental transformation across four decades (1980–2024), with accelerated gentrification and widening inequality.
+
+### Gentrification Trends (1980–2024)
+*   **Acceleration:** The rate of gentrification doubled after 2000 compared to the 1990s [Source: ev-1]."#;
+        assert!(
+            !draft_is_degenerate(text),
+            "the clean framing must not be mistaken for the echo"
+        );
+    }
+
+    /// RED (h): the swallow package — the corrupt draft-3's exact
+    /// opening (echo line + swallowed header pair). The echo fires
+    /// alone; the swallow adds a marker toward the bar.
+    #[test]
+    fn swallowed_header_package_is_degenerate() {
+        let text = r#"Based on the evidence provided, here is how American cities changed across four decades (1980–2024).
+
+### Economic Inequality
+Inequality widened significantly during this period, with metropolitan areas showing steeper increases than national averages [Source: ev-1]."#;
+        assert!(
+            draft_is_degenerate(text),
+            "the echo + swallowed-header package must fire the guard"
+        );
+    }
+
+    /// RED (i): a swallow pair ALONE is the pinned clean shape — the
+    /// clean synthesis fixture (dr-1787104761 draft-3) has exactly
+    /// this pair ("### Gentrification" + "Gentrification has
+    /// become…"). The swallow counts toward the >=2-distinct bar, it
+    /// never fires alone (amendment §18.6).
+    #[test]
+    fn single_swallow_pair_does_not_fire_the_guard() {
+        let text = r#"American cities have undergone a fundamental transformation over the last four decades (1980–2024).
+
+### Gentrification
+Gentrification has become significantly more prevalent since 2000, although it remains geographically concentrated in specific regions [Source: ev-2]."#;
+        assert!(
+            !draft_is_degenerate(text),
+            "the clean header + topic sentence must not trip the guard"
+        );
+    }
+
+    /// RED (j): the dependent-clause fragment bullet — seed-01's
+    /// draft-3 bullet (flight record dr-1787146175; the splitter's
+    /// fragment became gap g6, seed-01's +1). Fires alone.
+    #[test]
+    fn dependent_clause_bullet_is_degenerate() {
+        let text = r#"*   Although announced in March 2025, the deal completed its regulatory and shareholder steps later, with completion reported in June [Source: ev-1].
+
+Regulatory approval followed the announcement [Source: ev-1]."#;
+        assert!(
+            draft_is_degenerate(text),
+            "the subordinator-opened bullet must fire the guard"
+        );
+    }
+
+    /// RED (k): a complete-sentence bullet (capitalized, no
+    /// subordinator) is NOT a fragment — the clean bullet class stays
+    /// clean. (No bold in the fixture: the density bar is not this
+    /// test's subject.)
+    #[test]
+    fn complete_sentence_bullet_is_not_a_fragment() {
+        let text = r#"*   The rate of gentrification doubled after 2000 compared to the 1990s [Source: ev-1].
+*   Gentrification remained rare nationally as a whole, affecting only 8 percent of all reviewed neighborhoods [Source: ev-1]."#;
+        assert!(
+            !draft_is_degenerate(text),
+            "a complete-sentence bullet is not a fragment"
         );
     }
 
