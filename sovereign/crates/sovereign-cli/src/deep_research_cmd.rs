@@ -41,6 +41,7 @@ use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
 use sovereign_contracts::types::CompletionRequest;
+use sovereign_contracts::types::CompletionResponse;
 use sovereign_contracts::types::Speed;
 use sovereign_core::deep_research::estate::{
     estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
@@ -451,9 +452,9 @@ impl ResearchPort for CliResearchPort {
         system_message: Option<&str>,
         allowed_urls: &[String],
     ) -> Result<String, String> {
-        let resp = self
-            .provider
-            .complete(&CompletionRequest {
+        let resp = complete_with_shed_retry(
+            &*self.provider,
+            &CompletionRequest {
                 prompt: prompt.to_string(),
                 system_message: system_message.map(|s| s.to_string()),
                 preferred_speed: Speed::Slow,
@@ -463,9 +464,11 @@ impl ResearchPort for CliResearchPort {
                 think_budget: None,
                 url_allowlist: Some(allowed_urls.to_vec()),
                 ..Default::default()
-            })
-            .await
-            .map_err(|e| format!("draft ask: {e}"))?;
+            },
+            "draft",
+        )
+        .await
+        .map_err(|e| format!("draft ask: {e}"))?;
         Ok(resp.text)
     }
 
@@ -496,9 +499,9 @@ impl ResearchPort for CliResearchPort {
              question implies specific numbers, name them. One sub-question per line, no citations, \
              no numbering, no commentary.\n\nQuestion: {question}"
         );
-        let resp = self
-            .provider
-            .complete(&CompletionRequest {
+        let resp = complete_with_shed_retry(
+            &*self.provider,
+            &CompletionRequest {
                 prompt,
                 system_message: None,
                 preferred_speed: Speed::Slow,
@@ -508,9 +511,11 @@ impl ResearchPort for CliResearchPort {
                 think_budget: None,
                 url_allowlist: None,
                 ..Default::default()
-            })
-            .await
-            .map_err(|e| format!("plan-subquestions ask: {e}"))?;
+            },
+            "plan-subquestions",
+        )
+        .await
+        .map_err(|e| format!("plan-subquestions ask: {e}"))?;
         let mut out: Vec<String> = Vec::new();
         for line in resp.text.lines() {
             let line = line.trim().trim_start_matches(['-', '*', ' ']).trim();
@@ -541,6 +546,111 @@ impl ResearchPort for CliResearchPort {
         // plan + acceptance shapes at the gate; the operator's call is
         // on the record (alignment-1.json, manifest, report header).
         read_staged_alignment(run_dir).map(|staged| staged.unwrap_or(AlignmentDecision::Proceed))
+    }
+}
+
+// ----------------------------------------------------------------------
+// T6b pre-window slice — shed retry around the inference leg (order
+// deep-research-t6b, pre-registered). The daemon surfaces stuck
+// generations as a named shed: 503 + Retry-After. The loop client
+// previously DIED on the first 503 — evidenced by the seed-05 re-flight,
+// which died on its FIRST draft call (arms/runs-t6b/loop/seed-05.console
+// .log) with no retry despite the daemon's shed shape. Bounded retry,
+// honoring the Retry-After hint when the wire carries one.
+// ----------------------------------------------------------------------
+
+/// Shed retries granted before the error is surfaced — the loop never
+/// sits in a 503 loop past MAX_SHED_RETRIES + 1 total attempts.
+const MAX_SHED_RETRIES: usize = 3;
+
+/// Default backoff when the shed body carries no retry hint — mirrors
+/// the mesh's yield-refusal default (sovereign-mesh decision_log.rs
+/// YIELD_REFUSAL_DEFAULT_BACKOFF_SECS).
+const SHED_DEFAULT_BACKOFF_SECS: u64 = 5;
+
+/// Is this inference error the daemon's shed shape (503 busy /
+/// overloaded / shutting down)? Mirrors the mesh's `looks_shed`
+/// classification token-for-token — same lowercase contains.
+fn looks_shed(text: &str) -> bool {
+    let t = text.to_lowercase();
+    [
+        "503",
+        "service unavailable",
+        "too many requests",
+        "429",
+        "retry-after",
+    ]
+    .iter()
+    .any(|tok| t.contains(tok))
+}
+
+/// The Retry-After hint from a shed body, in seconds. Tries the
+/// admission shape's `retry_after_secs` key first (a bare `retry_after`
+/// search would match inside `retry_after_secs`), then the busy
+/// shape's `retry_after` key. Mesh-style digit parse, clamped to
+/// [1, 300] so a shed can never command a multi-minute stall.
+fn shed_retry_hint_secs(text: &str) -> Option<u64> {
+    for key in ["retry_after_secs", "retry_after"] {
+        if let Some(idx) = text.find(key) {
+            let tail = &text[idx + key.len()..];
+            let digits: String = tail
+                .chars()
+                .skip_while(|c| !c.is_ascii_digit())
+                .take_while(|c| c.is_ascii_digit())
+                .collect();
+            if !digits.is_empty() {
+                if let Ok(secs) = digits.parse::<u64>() {
+                    return Some(secs.clamp(1, 300));
+                }
+            }
+        }
+    }
+    None
+}
+
+/// Bounded retry around `provider.complete` for the loop's inference
+/// legs (draft, plan-subquestions): a shed (503) is retried up to
+/// MAX_SHED_RETRIES times with the Retry-After hint (or the default
+/// backoff); anything else — and the last shed — surfaces IMMEDIATELY
+/// as the raw error text, so callers keep their own `draft ask: {e}`
+/// / `plan-subquestions ask: {e}` framing and the evidenced seed-05
+/// error shape survives exhausted retries unchanged.
+async fn complete_with_shed_retry(
+    provider: &dyn InferenceProvider,
+    request: &CompletionRequest,
+    what: &str,
+) -> Result<CompletionResponse, String> {
+    let mut attempt: usize = 0;
+    loop {
+        match provider.complete(request).await {
+            Ok(resp) => {
+                if attempt > 0 {
+                    tracing::info!(
+                        what,
+                        attempt,
+                        "deep-research: inference recovered after a shed"
+                    );
+                }
+                return Ok(resp);
+            }
+            Err(e) => {
+                let text = e.to_string();
+                if attempt >= MAX_SHED_RETRIES || !looks_shed(&text) {
+                    // Honest error, surfaced raw — never a substitution.
+                    return Err(text);
+                }
+                attempt += 1;
+                let backoff = shed_retry_hint_secs(&text).unwrap_or(SHED_DEFAULT_BACKOFF_SECS);
+                tracing::warn!(
+                    what,
+                    attempt,
+                    max = MAX_SHED_RETRIES,
+                    backoff_secs = backoff,
+                    "deep-research: inference shed (503) — honoring Retry-After, will retry"
+                );
+                tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
+            }
+        }
     }
 }
 
@@ -1542,8 +1652,17 @@ fn now_unix() -> i64 {
 
 #[cfg(test)]
 mod tests {
-    use super::write_race_render;
+    use super::{
+        complete_with_shed_retry, looks_shed, shed_retry_hint_secs, write_race_render,
+        MAX_SHED_RETRIES,
+    };
+    use futures::Stream;
+    use sovereign_contracts::error::Error as ContractError;
+    use sovereign_contracts::types::{CompletionRequest, CompletionResponse, Speed};
     use sovereign_core::deep_research::estate::estate_snippet;
+    use sovereign_core::traits::InferenceProvider;
+    use std::pin::Pin;
+    use std::sync::{Arc, Mutex};
 
     /// Measured fixture (demo re-ask dr-1786727099): the Smithsonian
     /// timeline chunk's 240-char prefix is nav + donate blurb; the
@@ -1659,5 +1778,206 @@ mod tests {
             "no verdict set — no race page"
         );
         let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    // ------------------------------------------------------------------
+    // T6b pre-window slice — the shed (503 + Retry-After) retry
+    // (RED-FIRST: complete_with_shed_retry did not exist at HEAD; the
+    // seed-05 re-flight died on its FIRST draft call with no retry —
+    // arms/runs-t6b/loop/seed-05.console.log — order deep-research-t6b,
+    // pre-registered).
+    // ------------------------------------------------------------------
+
+    /// A provider that sheds (503) the first `fails` completes, then
+    /// answers. Attempts are counted so tests can assert the exact
+    /// retry bound.
+    struct ShedStub {
+        fails: usize,
+        error_text: String,
+        attempts: Arc<Mutex<usize>>,
+    }
+
+    #[async_trait::async_trait]
+    impl InferenceProvider for ShedStub {
+        async fn complete(
+            &self,
+            _request: &CompletionRequest,
+        ) -> std::result::Result<CompletionResponse, ContractError> {
+            let mut attempts = self.attempts.lock().unwrap();
+            *attempts += 1;
+            if *attempts <= self.fails {
+                Err(ContractError::Inference(self.error_text.clone()))
+            } else {
+                Ok(CompletionResponse {
+                    text: "the answer".to_string(),
+                    tokens_used: 0,
+                    prompt_tokens: 0,
+                    model_id: "shed-stub".to_string(),
+                    latency_ms: 0,
+                    oicp_meta: None,
+                    finish_reason: None,
+                    completion_tokens: None,
+                })
+            }
+        }
+
+        async fn complete_stream(
+            &self,
+            _request: &CompletionRequest,
+        ) -> std::result::Result<
+            Pin<Box<dyn Stream<Item = std::result::Result<String, ContractError>> + Send>>,
+            ContractError,
+        > {
+            Err(ContractError::NotImplemented("ShedStub".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> std::result::Result<Vec<f32>, ContractError> {
+            Ok(vec![])
+        }
+
+        fn capabilities(&self) -> sovereign_contracts::types::ProviderCapabilities {
+            sovereign_contracts::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: true,
+                relative_speed: Speed::Fast,
+                relative_reasoning: sovereign_contracts::types::Depth::Moderate,
+            }
+        }
+    }
+
+    /// The classifier and hint parser read the REAL wire shapes — the
+    /// admission shape (retry_after_secs key), the busy shape (bare
+    /// retry_after key), the evidenced seed-05 death (no retry key at
+    /// all — default backoff), and a transport failure (never a shed).
+    #[test]
+    fn shed_classifier_and_hint_parse_the_real_wire_shapes() {
+        let seed_05 = "Inference error: Remote API returned 503 Service Unavailable: \
+            {\"error\":{\"message\":\"local inference failed: Inference error: MTP inference \
+            deadline exceeded after 300s (3560 tokens)\",\"type\":\"backend_error\",\"code\":null}}";
+        assert!(looks_shed(seed_05), "the evidenced death is a shed");
+        assert_eq!(
+            shed_retry_hint_secs(seed_05),
+            None,
+            "no retry key — default backoff"
+        );
+        let admission = "Remote API returned 503 Service Unavailable: \
+            {\"error\":\"local queue full\",\"reason\":\"local_queue_full\",\"retry_after_secs\":30}";
+        assert!(looks_shed(admission));
+        assert_eq!(shed_retry_hint_secs(admission), Some(30));
+        let busy = "Remote API returned 503 Service Unavailable: \
+            {\"error\":\"host busy\",\"retry_after\":14,\"queue_position\":3}";
+        assert!(looks_shed(busy));
+        assert_eq!(shed_retry_hint_secs(busy), Some(14));
+        assert_eq!(
+            shed_retry_hint_secs("retry_after_secs\":3600"),
+            Some(300),
+            "clamped"
+        );
+        assert!(!looks_shed("connection refused"));
+        assert_eq!(shed_retry_hint_secs("connection refused"), None);
+    }
+
+    /// The evidenced seed-05 death — through the helper, with the
+    /// DEFAULT backoff (the body carries no retry key) — recovers on
+    /// the retry and answers. This is the exact text that killed the
+    /// seed-05 flight.
+    #[tokio::test]
+    async fn the_evidenced_seed_05_death_is_a_shed_the_client_now_survives() {
+        let seed_05 = "Inference error: Remote API returned 503 Service Unavailable: \
+            {\"error\":{\"message\":\"local inference failed: Inference error: MTP inference \
+            deadline exceeded after 300s (3560 tokens)\",\"type\":\"backend_error\",\"code\":null}}";
+        let stub = Arc::new(ShedStub {
+            fails: 1,
+            error_text: seed_05.to_string(),
+            attempts: Arc::new(Mutex::new(0)),
+        });
+        let request = CompletionRequest {
+            prompt: "q".to_string(),
+            ..Default::default()
+        };
+        let resp = complete_with_shed_retry(&*stub, &request, "draft")
+            .await
+            .unwrap();
+        assert_eq!(resp.text, "the answer");
+        assert_eq!(
+            *stub.attempts.lock().unwrap(),
+            2,
+            "one shed + the answering call"
+        );
+    }
+
+    /// Sheds twice with a 1s hint, then succeeds: three attempts, the
+    /// Retry-After hint honored, the success surfaced.
+    #[tokio::test]
+    async fn shed_twice_then_succeed_retries_with_the_hint_backoff() {
+        let stub = Arc::new(ShedStub {
+            fails: 2,
+            error_text: "Remote API returned 503 Service Unavailable: \
+                {\"error\":\"host busy\",\"retry_after\":1}"
+                .to_string(),
+            attempts: Arc::new(Mutex::new(0)),
+        });
+        let request = CompletionRequest {
+            prompt: "q".to_string(),
+            ..Default::default()
+        };
+        let resp = complete_with_shed_retry(&*stub, &request, "draft")
+            .await
+            .unwrap();
+        assert_eq!(resp.text, "the answer");
+        assert_eq!(
+            *stub.attempts.lock().unwrap(),
+            3,
+            "two sheds + the answering call"
+        );
+    }
+
+    /// Always-shed: attempts bounded at MAX_SHED_RETRIES + 1, the last
+    /// honest error surfaced — never a silent substitution, never an
+    /// unbounded stall.
+    #[tokio::test]
+    async fn always_shed_is_bounded_and_surfaces_the_last_error() {
+        let stub = Arc::new(ShedStub {
+            fails: usize::MAX,
+            error_text: "Remote API returned 503 Service Unavailable: \
+                {\"error\":\"host busy\",\"retry_after\":1}"
+                .to_string(),
+            attempts: Arc::new(Mutex::new(0)),
+        });
+        let request = CompletionRequest {
+            prompt: "q".to_string(),
+            ..Default::default()
+        };
+        let err = complete_with_shed_retry(&*stub, &request, "plan-subquestions")
+            .await
+            .unwrap_err();
+        assert_eq!(*stub.attempts.lock().unwrap(), MAX_SHED_RETRIES + 1);
+        assert!(
+            err.contains("503"),
+            "the honest error, not a substitution: {err}"
+        );
+    }
+
+    /// A non-shed failure (connection refused) surfaces immediately —
+    /// no retry, no stall; the seed-05 sibling errors keep their shape.
+    #[tokio::test]
+    async fn non_shed_error_surfaces_immediately_without_retry() {
+        let stub = Arc::new(ShedStub {
+            fails: usize::MAX,
+            error_text: "connection refused".to_string(),
+            attempts: Arc::new(Mutex::new(0)),
+        });
+        let request = CompletionRequest {
+            prompt: "q".to_string(),
+            ..Default::default()
+        };
+        let err = complete_with_shed_retry(&*stub, &request, "draft")
+            .await
+            .unwrap_err();
+        assert_eq!(*stub.attempts.lock().unwrap(), 1, "no retry on a non-shed");
+        // The honest wire shape, prefix included — exactly what the
+        // evidence shows the loop client sees (seed-05: "Inference
+        // error: Remote API returned 503 ...").
+        assert_eq!(err, "Inference error: connection refused");
     }
 }

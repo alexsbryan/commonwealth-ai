@@ -4790,5 +4790,39 @@ the ICD field (compile-time contract of the field addition — nothing
 else). Gates: lint --full exit 0; sovereign-test full 9968 pass / 3
 fail — the same pre-existing sovereign-inference embedded::gates trio.
 
+**Landing 3 (ITEM 7 — the loop client's 503 + Retry-After shed retry,
+2026-08-19):** red→green as declared — the five tests
+(`shed_classifier_and_hint_parse_the_real_wire_shapes`,
+`the_evidenced_seed_05_death_is_a_shed_the_client_now_survives`,
+`shed_twice_then_succeed_retries_with_the_hint_backoff`,
+`always_shed_is_bounded_and_surfaces_the_last_error`,
+`non_shed_error_surfaces_immediately_without_retry`) watched the red as
+compile errors (E0425 unresolved `complete_with_shed_retry` at both
+wired call sites; E0046 missing `capabilities` on the ShedStub — the
+trait requires it; E0277 `&Arc<T>` vs `&dyn InferenceProvider` — the
+coercion is through the deref, so the call sites deref explicitly),
+then the implementation landed green. The evidenced seed-05 death —
+`Inference error: Remote API returned 503 Service Unavailable:
+{"error":{"message":"local inference failed: Inference error: MTP
+inference deadline exceeded after 300s (3560 tokens)", ...}}` — is
+classified a shed by the exact text (a body with NO retry key ⇒ the 5s
+default backoff) and now recovers through the helper: one shed, one
+retry, answered. `looks_shed` mirrors the mesh's decision_log
+classifier token-for-token; `shed_retry_hint_secs` parses the
+admission shape's `retry_after_secs` key before the busy shape's
+`retry_after` (the substring trap), mesh-style digit parse, clamped
+[1, 300]; MAX_SHED_RETRIES = 3, SHED_DEFAULT_BACKOFF_SECS = 5 (the
+mesh's yield-refusal default). On exhaustion the LAST honest error is
+surfaced raw — callers keep their `draft ask: {e}` /
+`plan-subquestions ask: {e}` framing, so the seed-05 error shape
+survives exhausted retries byte-for-byte; non-shed errors never retry
+(no stall on a dead transport). `draft()` and `plan_subquestions()`
+are the ONLY two call sites (one implementation, one decider). Gates:
+lint --full exit 0; sovereign-test full 9973 pass / 3 fail — the same
+pre-existing sovereign-inference embedded::gates trio (clean HEAD, D2
+domain, untouched). Battery re-measurement follows the slice's final
+landing (item 7 is client-side resilience; the scorer's input
+preference is unchanged).
+
 _(further landings append here: red→green evidence, gate exits, battery
 re-measurement, commit ids.)_
