@@ -4506,3 +4506,24 @@ UNTouched (the seat amends bars in its own commit). This section is
 in the tree before any rev-4 code. Landing: ONE commit (pre-reg +
 reds + seams + execution record + journal), battery evidence
 untracked.
+
+### 6. Amendment to SEAM 1 (made before any rev-4 code — §18.6)
+
+The swallow shape does NOT fire individually. Extending the shape
+sweep to the battery-1 root (runs-t6c/loop) found that the PINNED
+clean synthesis fixture (dr-1787104761 draft-3 — the test
+`clean_synthesis_draft_is_not_flagged`) carries the same structural
+pair: "### Gentrification" followed by "Gentrification has become
+significantly more prevalent since 2000… [Source: ev-2]" — a complete
+cited sentence starting with the header's last word. The corrupt pair
+("### Economic Inequality" / "Inequality widened significantly during
+this period… [Source: ev-1]") is textually indistinguishable at the
+draft level — the splitter retains the header in BOTH classes'
+claims. The swallow therefore counts as ONE marker toward the
+existing >= 2-distinct / >= 3-total bar (it never fires alone); the
+corrupt draft-3 fires via the echo (individual) and via the
+echo+swallow package (2 distinct) — double-covered. Red-first list
+item 2 is amended accordingly: the swallow-ALONE fixture is NOT
+degenerate (the pinned clean shape); the swallow+echo package (the
+corrupt draft-3's exact opening) IS. The frag and echo shapes fire
+individually, unchanged.
