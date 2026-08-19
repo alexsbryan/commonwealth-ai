@@ -4020,6 +4020,45 @@ mod tests {
         }
     }
 
+    /// A local provider whose serving step REFUSES with the queue shed —
+    /// what the embedded engine returns once the bounded park fires
+    /// (`model_slot`'s `acquire_with_queue_gauge`). Pins the dispatch
+    /// side of order daemon-empty-candidates-error: a shed must reach
+    /// the caller as the NAMED error and close the decision→outcome
+    /// join, never sit silent.
+    struct ShedsLocally;
+
+    #[async_trait]
+    impl InferenceProvider for ShedsLocally {
+        async fn complete(&self, _req: &CompletionRequest) -> Result<CompletionResponse> {
+            Err(Error::queue_shed(1, 30_000))
+        }
+
+        async fn complete_stream(
+            &self,
+            _req: &CompletionRequest,
+        ) -> Result<Pin<Box<dyn Stream<Item = Result<String>> + Send>>> {
+            Err(Error::NotImplemented("stub".into()))
+        }
+
+        async fn embed(&self, _text: &str) -> Result<Vec<f32>> {
+            Err(Error::NotImplemented("stub".into()))
+        }
+
+        fn capabilities(&self) -> ProviderCapabilities {
+            ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: Speed::Slow,
+                relative_reasoning: Depth::Moderate,
+            }
+        }
+
+        fn model_id_for(&self, _speed: Speed) -> String {
+            "shed-model".into()
+        }
+    }
+
     struct OnePeer(PeerInferenceEndpoint);
 
     #[async_trait]
@@ -4181,6 +4220,56 @@ mod tests {
             "SILENT SUBSTITUTION: the local provider served a request for a model \
              it does not advertise"
         );
+    }
+
+    /// The client-visible half of the wedge (order
+    /// daemon-empty-candidates-error, 2026-08-18): when the local
+    /// serving step REFUSES with the queue shed — which is what the
+    /// embedded engine returns once its bounded park fires — the caller
+    /// must receive the NAMED `QueueShed` error, and the
+    /// decision→outcome join must CLOSE with a failed outcome. A
+    /// decision with no terminal outcome is indistinguishable from a
+    /// lost record: the audit's loop waited 62 minutes on exactly that
+    /// gap (wl-judge-468f4b5f, zero outcome events).
+    #[tokio::test]
+    async fn a_local_queue_shed_reaches_the_caller_named_and_closes_the_join() {
+        let local = Arc::new(ShedsLocally);
+        let sink = Arc::new(decision_log::CaptureDecisionSink::new());
+        let mip = MeshInferenceProvider::with_peer_source(local, Arc::new(NoPeers));
+        let mip = mip.with_decision_sink(sink.clone());
+
+        let err = mip.complete(&named("shed-model")).await.expect_err(
+            "a local queue shed must reach the caller as an error — never as \
+             silence (§18.3)",
+        );
+        match err {
+            Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => {
+                assert_eq!(position, 1, "the shed caller was next in line");
+                assert_eq!(predicted_wait_ms, 30_000);
+                assert_eq!(retry_after_secs, 30, "Retry-After hints the real wait");
+            }
+            other => panic!("expected the named QueueShed, got: {other:?}"),
+        }
+
+        let decisions = sink.decisions();
+        assert_eq!(decisions.len(), 1, "one decision point, one record");
+        let outcomes = sink.outcomes();
+        assert_eq!(
+            outcomes.len(),
+            1,
+            "a refusal is a verdict, not a gap in the record"
+        );
+        let o = &outcomes[0];
+        assert!(
+            o.error.as_deref().is_some_and(|e| e.contains("host busy")),
+            "the outcome must carry the named error; got {:?}",
+            o.error
+        );
+        assert!(!o.shed, "a local queue shed is not a mesh shed marker");
     }
 
     /// The streaming half of the same fix. It is expressed as an extra

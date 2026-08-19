@@ -1098,7 +1098,52 @@ pub(super) async fn acquire_with_queue_gauge(
     );
 
     let started = std::time::Instant::now();
-    let acquired = Arc::clone(&queue.inflight).acquire_owned().await;
+    // BOUND THE PARK, not just the prediction (order
+    // daemon-empty-candidates-error, 2026-08-18). The pre-park shed
+    // above is an OPTIMISATION: it refuses a caller whose predicted
+    // wait is clearly over the bound without making them pay the
+    // latency. But the prediction is an EWMA over COMPLETED turns
+    // (`SlotPermit::drop`), so a turn that never completes never
+    // folds in — the estimate stays under the bound while the ACTUAL
+    // wait grows without limit. That is the wedge the audit hit
+    // twice: a wl-judge call parked behind a primary-slot generation
+    // for 62 minutes with no outcome event and no error ever reaching
+    // the client. This timeout is the GUARANTEE: the park can never
+    // outlast the queue's own bound, and the refusal is the SAME
+    // named `Error::QueueShed` the pre-park gate returns — one
+    // decider, one threshold, one retry hint (§10.6).
+    // `max_wait_ms == 0` keeps the documented escape hatch to the
+    // pre-M5 unbounded behaviour.
+    let acquired = if queue.max_wait_ms > 0 {
+        let bound = std::time::Duration::from_millis(queue.max_wait_ms);
+        match tokio::time::timeout(bound, Arc::clone(&queue.inflight).acquire_owned()).await {
+            Ok(res) => res,
+            Err(_elapsed) => {
+                let waited_ms = started.elapsed().as_millis() as u64;
+                // The bound actually hit, so the honest numbers are the
+                // position we parked at and the bound we waited out —
+                // `queue_shed` derives Retry-After from the wait, so the
+                // hint never asks the caller to retry sooner than this
+                // queue could have served them. `warn` (vs the pre-park
+                // shed's `info`) because a prediction that stayed under
+                // the bound while a turn did not complete is the stuck-
+                // slot anomaly, not routine backpressure.
+                tracing::warn!(
+                    slot = %queue.label,
+                    phase,
+                    position,
+                    waited_ms,
+                    bound_ms = queue.max_wait_ms,
+                    "inference.queue: SHED after parking — the permit did \
+                     not free within the wait bound (a stuck slot sheds \
+                     instead of hanging the caller)"
+                );
+                return Err(Error::queue_shed(position, queue.max_wait_ms));
+            }
+        }
+    } else {
+        Arc::clone(&queue.inflight).acquire_owned().await
+    };
     let waited_ms = started.elapsed().as_millis() as u64;
 
     match acquired {
@@ -5256,6 +5301,70 @@ mod queue_gauge_tests {
             waiter.await.expect("task").is_ok(),
             "must be served, not shed"
         );
+    }
+
+    /// THE daemon-empty-candidates wedge, as a unit shape (order
+    /// daemon-empty-candidates-error, 2026-08-18). The audit's wl-judge
+    /// call parked behind a primary-slot generation that did not complete
+    /// for ~25 minutes: the EWMA only folds COMPLETED turns, so the
+    /// predicted wait stayed under the 30 s bound, the pre-park shed
+    /// never fired, and the ACTUAL wait ran to the hour — no outcome
+    /// event, no error, the client hung forever.
+    ///
+    /// Here the holder NEVER releases, which is exactly the wedge shape.
+    /// The seed (100 ms) sits under the bound (200 ms), so the pre-park
+    /// check lets the caller park — and the PARK itself must still shed
+    /// with the same named `Error::QueueShed`, within the queue's own
+    /// bound, not the test's outer timeout.
+    #[tokio::test]
+    async fn a_stuck_slot_sheds_with_a_named_error_instead_of_parking_forever() {
+        let q = queue(100, 200); // seed under the bound -> parks; bound = 200 ms
+        let _held = acquire_with_queue_gauge(&q, "holder")
+            .await
+            .expect("first caller takes the permit");
+
+        let started = std::time::Instant::now();
+        // Bounded by the QUEUE's bound, not the test's: if the
+        // park-timeout regresses, the caller parks forever and this
+        // 3 s outer timeout fails the test instead of hanging the suite
+        // (a gate that hangs on the failure it exists to catch is worse
+        // than none — the same rule `expect_shed` lives by).
+        let err = match tokio::time::timeout(
+            std::time::Duration::from_secs(3),
+            acquire_with_queue_gauge(&q, "complete/lazy"),
+        )
+        .await
+        {
+            Ok(Ok(_permit)) => panic!("expected a shed, got a permit"),
+            Ok(Err(e)) => e,
+            Err(_) => panic!(
+                "the caller parked for 3 s behind a stuck holder — the park \
+                 itself is unbounded; the queue's wait bound must shed it"
+            ),
+        };
+        let waited_ms = started.elapsed().as_millis() as u64;
+
+        match err {
+            Error::QueueShed {
+                position,
+                predicted_wait_ms,
+                retry_after_secs,
+            } => {
+                assert_eq!(position, 1, "the shed caller was next in line");
+                assert_eq!(
+                    predicted_wait_ms, 200,
+                    "the reported wait is the bound actually hit"
+                );
+                assert_eq!(retry_after_secs, 1, "Retry-After never drops below 1");
+            }
+            other => panic!("expected a structured QueueShed, got: {other:?}"),
+        }
+        assert!(
+            waited_ms < 1_500,
+            "the wait must be bounded by the queue's own 200 ms bound, not the \
+             test's outer timeout (waited {waited_ms} ms)"
+        );
+        assert_eq!(q.depth(), 0, "a shed caller must not stay parked");
     }
 
     #[tokio::test]

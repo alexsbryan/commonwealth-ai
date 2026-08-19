@@ -1287,6 +1287,16 @@ CLOSED 2026-08-07 — see "How a shed reaches the client" below.**
 > structured so the HTTP boundary and a peer load balancer can branch rather
 > than parse prose (§18.3).
 >
+> **The park itself is also bounded** (added 2026-08-18, order
+> daemon-empty-candidates-error). The pre-park shed above is an optimisation
+> over the EWMA of COMPLETED turns (`SlotPermit::drop`); a turn that never
+> completes never folds in, so the prediction can stay under the bound while
+> the actual wait grows without limit — the wedge that hung two wl-judge
+> calls 62 min with a `candidates=[]` decision and no outcome. `acquire_owned`
+> now runs under `tokio::time::timeout(max_wait_ms)` and returns the SAME
+> named `Error::QueueShed` (one decider, one threshold, one retry hint) when
+> the bound hits — the queue's own `=0` escape hatch is preserved verbatim.
+>
 > **How a shed reaches the client** (closed 2026-08-07). Being structured
 > *inside* the process was not enough: the trait between the engine and the
 > HTTP layer returned `Result<_, String>`, so `routes_inference` flattened
