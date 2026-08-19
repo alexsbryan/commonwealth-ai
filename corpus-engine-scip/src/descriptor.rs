@@ -49,9 +49,20 @@
 use serde::Serialize;
 
 /// What a SCIP descriptor names. Derived, never stored.
+///
+/// NOT `SymbolKind` — `corpus_engine::extractors::code::SymbolKind` already
+/// owns that name for the tree-sitter extractor's SOURCE-language
+/// classification (Struct / Enum / Class / Interface / Impl). This one
+/// classifies a SCIP *descriptor*, which draws different lines: SCIP
+/// deliberately does not separate struct from enum from trait (they are all
+/// `Foo#`), and tree-sitter never emits a trait-method declaration, a
+/// parameter binding, or a meta descriptor. Two concepts, one obvious name;
+/// disposition `distinct`, recorded here because
+/// `svrn code converge status` caught the collision the hour it was
+/// introduced.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "kebab-case")]
-pub enum SymbolKind {
+pub enum DescriptorKind {
     /// `Foo#` — struct, enum, trait, type alias. SCIP does not distinguish
     /// them in the descriptor, and neither do we: claiming more than the data
     /// carries is how `kind` got into this state.
@@ -75,6 +86,14 @@ pub enum SymbolKind {
     Macro,
     /// `path/`
     Module,
+    /// `impl#[Type]` / `impl#[Type][Trait]` — the impl block itself, not a
+    /// member of it.
+    ImplBlock,
+    /// `fn().(param)` — a parameter binding. Emitted heavily by
+    /// `scip-python`; 21,809 rows on this graph.
+    Parameter,
+    /// `path/name:` — a SCIP meta descriptor (`__init__:` and friends).
+    Meta,
     /// `local N` — rust-analyzer's block-scoped locals.
     Local,
     /// The descriptor is present but matches no known shape. Distinct from
@@ -82,7 +101,7 @@ pub enum SymbolKind {
     Unrecognized,
 }
 
-impl SymbolKind {
+impl DescriptorKind {
     /// Types, variants and fields — the things a concept census counts.
     pub fn is_type_like(self) -> bool {
         matches!(self, Self::Type | Self::EnumVariant | Self::Field)
@@ -138,25 +157,34 @@ pub fn leaf_name(qualified_name: &str) -> &str {
 }
 
 /// Classify a symbol from its qualified name or bare descriptor.
-pub fn symbol_kind(qualified_name: &str) -> SymbolKind {
+pub fn descriptor_kind(qualified_name: &str) -> DescriptorKind {
     let desc = descriptor_of(qualified_name);
     if desc.is_empty() {
-        return SymbolKind::Unrecognized;
+        return DescriptorKind::Unrecognized;
     }
     if desc.starts_with("local ") {
-        return SymbolKind::Local;
+        return DescriptorKind::Local;
     }
     if desc.ends_with('!') {
-        return SymbolKind::Macro;
+        return DescriptorKind::Macro;
+    }
+    if desc.ends_with(')') {
+        return DescriptorKind::Parameter;
+    }
+    if desc.ends_with(':') {
+        return DescriptorKind::Meta;
+    }
+    if desc.ends_with(']') {
+        return DescriptorKind::ImplBlock;
     }
     if desc.ends_with('/') {
-        return SymbolKind::Module;
+        return DescriptorKind::Module;
     }
     if desc.ends_with('#') {
         // One `#` is the type itself; two is a variant nested under its enum.
         return match desc.bytes().filter(|b| *b == b'#').count() {
-            1 => SymbolKind::Type,
-            _ => SymbolKind::EnumVariant,
+            1 => DescriptorKind::Type,
+            _ => DescriptorKind::EnumVariant,
         };
     }
     if desc.ends_with('.') {
@@ -164,35 +192,35 @@ pub fn symbol_kind(qualified_name: &str) -> SymbolKind {
         if !leaf.contains("()") {
             // `Type#field.` vs `path/CONST.`
             return if leaf.contains('#') {
-                SymbolKind::Field
+                DescriptorKind::Field
             } else {
-                SymbolKind::Term
+                DescriptorKind::Term
             };
         }
         // A method. `impl#[Self]` alone is inherent; a second bracket group
         // names the trait being implemented.
         if leaf.starts_with("impl#[") {
             return if leaf.matches("][").count() >= 1 {
-                SymbolKind::TraitImplMethod
+                DescriptorKind::TraitImplMethod
             } else {
-                SymbolKind::Method
+                DescriptorKind::Method
             };
         }
         // `Owner#method().` — the owner is a type, so this is the declaration
         // on that type. For a trait, that is exactly the dispatch site.
         return if leaf.contains('#') {
-            SymbolKind::TraitMethod
+            DescriptorKind::TraitMethod
         } else {
-            SymbolKind::Function
+            DescriptorKind::Function
         };
     }
-    SymbolKind::Unrecognized
+    DescriptorKind::Unrecognized
 }
 
 /// How a reference to this callee was dispatched. See [`DispatchHint`].
 pub fn dispatch_hint(callee_qualified: &str) -> DispatchHint {
-    match symbol_kind(callee_qualified) {
-        SymbolKind::TraitMethod => DispatchHint::ThroughTrait,
+    match descriptor_kind(callee_qualified) {
+        DescriptorKind::TraitMethod => DispatchHint::ThroughTrait,
         _ => DispatchHint::Direct,
     }
 }
@@ -203,33 +231,33 @@ mod tests {
 
     const PFX: &str = "rust-analyzer cargo some-crate 0.5.0 ";
 
-    fn kind(desc: &str) -> SymbolKind {
-        symbol_kind(&format!("{PFX}{desc}"))
+    fn kind(desc: &str) -> DescriptorKind {
+        descriptor_kind(&format!("{PFX}{desc}"))
     }
 
     #[test]
     fn every_shape_this_graph_actually_exhibits_is_classified() {
-        assert_eq!(kind("types/ScoredChunk#"), SymbolKind::Type);
-        assert_eq!(kind("Verdict#"), SymbolKind::Type);
-        assert_eq!(kind("StartupOutcome#Failed#"), SymbolKind::EnumVariant);
-        assert_eq!(kind("DepEdge#from."), SymbolKind::Field);
-        assert_eq!(kind("workflow_cmd/HELP."), SymbolKind::Term);
+        assert_eq!(kind("types/ScoredChunk#"), DescriptorKind::Type);
+        assert_eq!(kind("Verdict#"), DescriptorKind::Type);
+        assert_eq!(kind("StartupOutcome#Failed#"), DescriptorKind::EnumVariant);
+        assert_eq!(kind("DepEdge#from."), DescriptorKind::Field);
+        assert_eq!(kind("workflow_cmd/HELP."), DescriptorKind::Term);
         assert_eq!(
             kind("runtime/streaming/run_synthesis_stream()."),
-            SymbolKind::Function
+            DescriptorKind::Function
         );
-        assert_eq!(kind("impl#[Runtime]handle_message()."), SymbolKind::Method);
+        assert_eq!(kind("impl#[Runtime]handle_message()."), DescriptorKind::Method);
         assert_eq!(
             kind("peer_inference/impl#[MeshInferenceProvider][InferenceProvider]complete_stream_with_id()."),
-            SymbolKind::TraitImplMethod
+            DescriptorKind::TraitImplMethod
         );
         assert_eq!(
             kind("traits/InferenceProvider#complete()."),
-            SymbolKind::TraitMethod
+            DescriptorKind::TraitMethod
         );
-        assert_eq!(kind("ids/define_id!"), SymbolKind::Macro);
-        assert_eq!(kind("crate/"), SymbolKind::Module);
-        assert_eq!(symbol_kind("local 0"), SymbolKind::Local);
+        assert_eq!(kind("ids/define_id!"), DescriptorKind::Macro);
+        assert_eq!(kind("crate/"), DescriptorKind::Module);
+        assert_eq!(descriptor_kind("local 0"), DescriptorKind::Local);
     }
 
     #[test]
@@ -238,9 +266,9 @@ mod tests {
         // graph's `kind` column calls it `constructor` (measured 2026-08-19).
         // The descriptor was right the whole time.
         let intent = "rust-analyzer cargo sovereign-contracts 0.5.0 types/routing/Intent#";
-        assert_eq!(symbol_kind(intent), SymbolKind::Type);
-        assert!(symbol_kind(intent).is_type_like());
-        assert!(!symbol_kind(intent).is_callable());
+        assert_eq!(descriptor_kind(intent), DescriptorKind::Type);
+        assert!(descriptor_kind(intent).is_type_like());
+        assert!(!descriptor_kind(intent).is_callable());
     }
 
     #[test]
@@ -260,6 +288,24 @@ mod tests {
     }
 
     #[test]
+    fn the_shapes_a_live_graph_audit_found_missing() {
+        // Validating the instrument before the result (ARCH §18.4): a first
+        // pass left 25,374 of 313,741 rows (8.1%) unrecognized. Three real
+        // shapes, all confirmed against the graph 2026-08-19.
+        assert_eq!(kind("registry/impl#[Registry][Default]"), DescriptorKind::ImplBlock);
+        assert_eq!(kind("adapter/pi/impl#[Adapter]"), DescriptorKind::ImplBlock);
+        // scip-python emits these; the 5-token prefix parses the same way.
+        assert_eq!(
+            descriptor_kind("scip-python python . abc123 `gym.m`/boot_ci().(a)"),
+            DescriptorKind::Parameter
+        );
+        assert_eq!(
+            descriptor_kind("scip-python python . abc123 `gym.m`/__init__:"),
+            DescriptorKind::Meta
+        );
+    }
+
+    #[test]
     fn leaf_name_strips_the_terminator() {
         assert_eq!(leaf_name(&format!("{PFX}types/ScoredChunk#")), "ScoredChunk");
         assert_eq!(leaf_name(&format!("{PFX}Verdict#")), "Verdict");
@@ -269,13 +315,13 @@ mod tests {
 
     #[test]
     fn an_unknown_shape_is_unrecognized_rather_than_guessed() {
-        assert_eq!(kind("no_terminator"), SymbolKind::Unrecognized);
-        assert_eq!(kind(""), SymbolKind::Unrecognized);
+        assert_eq!(kind("no_terminator"), DescriptorKind::Unrecognized);
+        assert_eq!(kind(""), DescriptorKind::Unrecognized);
     }
 
     #[test]
     fn a_bare_descriptor_with_no_package_prefix_still_classifies() {
-        assert_eq!(symbol_kind("types/ScoredChunk#"), SymbolKind::Type);
+        assert_eq!(descriptor_kind("types/ScoredChunk#"), DescriptorKind::Type);
         assert_eq!(descriptor_of("types/ScoredChunk#"), "types/ScoredChunk#");
         assert_eq!(
             descriptor_of("rust-analyzer cargo c 0.1.0 types/Foo#"),

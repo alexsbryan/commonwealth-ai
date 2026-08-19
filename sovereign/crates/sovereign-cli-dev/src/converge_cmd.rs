@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use corpus_engine_scip::converge::{
-    census, crate_dag, dossier, duplicate_count, render_census, render_dossier, type_defs, Scope,
+    census, crate_dag, dossier, duplicate_count, render_census, render_dossier, type_defs, SourceScope,
 };
 use corpus_engine_scip::ScipGraph;
 
@@ -154,9 +154,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         }
     };
 
-    let scope = Scope {
+    let scope = SourceScope {
         include_prefixes: includes,
-        ..Scope::default()
+        ..SourceScope::default()
     };
     let defs = type_defs(&symbols, &scope);
     if defs.is_empty() {

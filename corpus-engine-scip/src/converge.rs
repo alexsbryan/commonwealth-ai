@@ -62,23 +62,27 @@ use serde::Serialize;
 use crate::capability_map::pkg_and_desc;
 use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 
-// ── Scope ─────────────────────────────────────────────────────────────────────
+// ── SourceScope ─────────────────────────────────────────────────────────────────────
 
 /// Which files count as first-party production code.
+///
+/// NOT `Scope` — `sovereign_contracts::types::routing::Scope` and
+/// `sovereign_workflow::model::Scope` already carry that name for unrelated
+/// concepts. Disposition `distinct`: this one scopes SOURCE FILES.
 ///
 /// Every number this module produces depends on these clauses, which is why
 /// [`Census::scope`] and [`Dossier::scope`] carry them into the output: a
 /// count that travels without its method is the brittleness the convergence
 /// program exists to end (`ARCH_PRINCIPLES` §18.4).
 #[derive(Debug, Clone, Serialize)]
-pub struct Scope {
+pub struct SourceScope {
     /// Path prefixes that count. Empty = everything not excluded.
     pub include_prefixes: Vec<String>,
     /// Substrings that disqualify a path.
     pub exclude_contains: Vec<String>,
 }
 
-impl Default for Scope {
+impl Default for SourceScope {
     fn default() -> Self {
         Self {
             include_prefixes: Vec::new(),
@@ -107,7 +111,7 @@ impl Default for Scope {
     }
 }
 
-impl Scope {
+impl SourceScope {
     pub fn admits(&self, path: &str) -> bool {
         if self.exclude_contains.iter().any(|e| path.contains(e.as_str())) {
             return false;
@@ -125,7 +129,7 @@ impl Scope {
 // Classification is NOT duplicated here. `crate::descriptor` is the one
 // decider for what a SCIP descriptor names (§10.6); a census that carried its
 // own private copy would be a specimen of the disease it measures.
-use crate::descriptor::{leaf_name, symbol_kind, SymbolKind};
+use crate::descriptor::{descriptor_kind, leaf_name, DescriptorKind};
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 
@@ -150,7 +154,7 @@ pub struct CensusRow {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Census {
-    pub scope: Scope,
+    pub scope: SourceScope,
     /// Every first-party production top-level type definition considered.
     pub total_type_defs: usize,
     /// Names defined as a type in more than one crate, ranked.
@@ -169,7 +173,7 @@ pub struct OwnerCandidate {
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Dossier {
-    pub scope: Scope,
+    pub scope: SourceScope,
     pub name: String,
     pub defs: Vec<TypeDef>,
     pub kin: Vec<String>,
@@ -188,7 +192,7 @@ pub struct Dossier {
 /// Deduplicated on `(qualified_name, file)` — the SCIP exporter double-lists
 /// some files under two path prefixes, which would otherwise inflate every
 /// count in this module.
-pub fn type_defs(symbols: &[ScipSymbolRecord], scope: &Scope) -> Vec<TypeDef> {
+pub fn type_defs(symbols: &[ScipSymbolRecord], scope: &SourceScope) -> Vec<TypeDef> {
     let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
     let mut out = Vec::new();
     for s in symbols {
@@ -201,7 +205,7 @@ pub fn type_defs(symbols: &[ScipSymbolRecord], scope: &Scope) -> Vec<TypeDef> {
         // `mod tests` items sit under a `/tests/` descriptor segment even when
         // the FILE is production — the colocated-test case the scope's
         // path clause cannot reach.
-        if symbol_kind(&s.qualified_name) != SymbolKind::Type || desc.contains("/tests/") {
+        if descriptor_kind(&s.qualified_name) != DescriptorKind::Type || desc.contains("/tests/") {
             continue;
         }
         if !seen.insert((s.qualified_name.clone(), s.file_path.clone())) {
@@ -223,7 +227,7 @@ pub fn type_defs(symbols: &[ScipSymbolRecord], scope: &Scope) -> Vec<TypeDef> {
 /// Not `Cargo.toml`: this is what the code actually reaches, including
 /// through re-exports Cargo cannot see. Same rationale as
 /// [`crate::arch_metrics`]'s observed graph.
-pub fn crate_dag(refs: &[ScipRefRecord], scope: &Scope) -> BTreeMap<String, BTreeSet<String>> {
+pub fn crate_dag(refs: &[ScipRefRecord], scope: &SourceScope) -> BTreeMap<String, BTreeSet<String>> {
     let mut dag: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for r in refs {
         if !scope.admits(&r.file_path) {
@@ -257,7 +261,7 @@ fn kin_of(name: &str, all: &BTreeSet<&str>) -> Vec<String> {
 
 /// Names defined as a type in more than one crate, ranked by crates spanned,
 /// then kin, then definition count.
-pub fn census(defs: &[TypeDef], scope: &Scope, with_kin: bool) -> Census {
+pub fn census(defs: &[TypeDef], scope: &SourceScope, with_kin: bool) -> Census {
     let all_names: BTreeSet<&str> = defs.iter().map(|d| d.name.as_str()).collect();
     let mut by_name: BTreeMap<&str, Vec<&TypeDef>> = BTreeMap::new();
     for d in defs {
@@ -321,7 +325,7 @@ pub fn dossier(
     defs: &[TypeDef],
     refs: &[ScipRefRecord],
     dag: &BTreeMap<String, BTreeSet<String>>,
-    scope: &Scope,
+    scope: &SourceScope,
 ) -> Dossier {
     let all_names: BTreeSet<&str> = defs.iter().map(|d| d.name.as_str()).collect();
     let mine: Vec<TypeDef> = defs.iter().filter(|d| d.name == name).cloned().collect();
@@ -410,7 +414,7 @@ pub fn dossier(
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
-fn render_scope(scope: &Scope, out: &mut String) {
+fn render_scope(scope: &SourceScope, out: &mut String) {
     out.push_str("scope: ");
     if scope.include_prefixes.is_empty() {
         out.push_str("all paths");
@@ -581,14 +585,14 @@ mod tests {
             sym("a", "workflow_cmd/HELP.", "sovereign/crates/a/src/t.rs", 4),
             sym("a", "crate/", "sovereign/crates/a/src/t.rs", 5),
         ];
-        let defs = type_defs(&syms, &Scope::default());
+        let defs = type_defs(&syms, &SourceScope::default());
         assert_eq!(defs.len(), 1);
         assert_eq!(defs[0].name, "ScoredChunk");
     }
 
     #[test]
     fn scope_excludes_agent_worktree_shadows_and_test_paths() {
-        let s = Scope::default();
+        let s = SourceScope::default();
         assert!(s.admits("sovereign/crates/sovereign-core/src/lib.rs"));
         // The worktree clause: without it, every first-party name is
         // double-counted from the agent worktree copies.
@@ -603,7 +607,7 @@ mod tests {
         // The FILE is production; the descriptor says `mod tests`. A test
         // helper named `Evidence` must not enter the census.
         let syms = vec![sym("crate_a", "thing/tests/Evidence#", "a/src/thing.rs", 400)];
-        assert!(type_defs(&syms, &Scope::default()).is_empty());
+        assert!(type_defs(&syms, &SourceScope::default()).is_empty());
     }
 
     #[test]
@@ -614,7 +618,7 @@ mod tests {
             sym("crate_a", "m/Verdict#", "sovereign/crates/a/src/m.rs", 10),
             sym("crate_a", "m/Verdict#", "sovereign/crates/a/src/m.rs", 10),
         ];
-        assert_eq!(type_defs(&syms, &Scope::default()).len(), 1);
+        assert_eq!(type_defs(&syms, &SourceScope::default()).len(), 1);
     }
 
     #[test]
@@ -628,8 +632,8 @@ mod tests {
             sym("crate_a", "p/Twice#", "a/src/p.rs", 40),
             sym("crate_a", "q/Twice#", "a/src/q.rs", 50),
         ];
-        let defs = type_defs(&syms, &Scope::default());
-        let c = census(&defs, &Scope::default(), false);
+        let defs = type_defs(&syms, &SourceScope::default());
+        let c = census(&defs, &SourceScope::default(), false);
         assert_eq!(c.total_type_defs, 5);
         assert_eq!(c.rows.len(), 1);
         assert_eq!(c.rows[0].name, "Verdict");
@@ -645,8 +649,8 @@ mod tests {
             sym("crate_d", "p/VerdictRow#", "d/src/p.rs", 40),
             sym("crate_e", "q/Unrelated#", "e/src/q.rs", 50),
         ];
-        let defs = type_defs(&syms, &Scope::default());
-        let c = census(&defs, &Scope::default(), true);
+        let defs = type_defs(&syms, &SourceScope::default());
+        let c = census(&defs, &SourceScope::default(), true);
         assert_eq!(c.rows[0].kin, vec!["GateVerdict", "VerdictRow"]);
     }
 
@@ -658,7 +662,7 @@ mod tests {
             sym("contracts", "c/Anchor#", "sovereign/crates/contracts/src/c.rs", 1),
             sym("store", "s/Anchor#", "sovereign/crates/store/src/s.rs", 1),
         ];
-        let defs = type_defs(&syms, &Scope::default());
+        let defs = type_defs(&syms, &SourceScope::default());
         let refs = vec![
             // Both definitions are used by `cli`.
             rf("cli", "f().", "core", "m/Verdict#", "sovereign/crates/cli/src/a.rs"),
@@ -669,7 +673,7 @@ mod tests {
             rf("eval", "g().", "contracts", "c/Anchor#", "sovereign/crates/eval/src/b.rs"),
             rf("cli", "f().", "store", "s/Anchor#", "sovereign/crates/cli/src/a.rs"),
         ];
-        let scope = Scope::default();
+        let scope = SourceScope::default();
         let dag = crate_dag(&refs, &scope);
         let d = dossier("Verdict", &defs, &refs, &dag, &scope);
 
@@ -690,14 +694,14 @@ mod tests {
             sym("archaeology", "n/Verdict#", "sovereign/crates/arch/src/n.rs", 20),
             sym("contracts", "c/Anchor#", "sovereign/crates/contracts/src/c.rs", 1),
         ];
-        let defs = type_defs(&syms, &Scope::default());
+        let defs = type_defs(&syms, &SourceScope::default());
         let refs = vec![
             rf("cli", "f().", "core", "m/Verdict#", "sovereign/crates/cli/src/a.rs"),
             rf("archaeology", "h().", "archaeology", "n/Verdict#", "sovereign/crates/arch/src/n.rs"),
             // Only `cli` reaches contracts. `archaeology` does not.
             rf("cli", "f().", "contracts", "c/Anchor#", "sovereign/crates/cli/src/a.rs"),
         ];
-        let scope = Scope::default();
+        let scope = SourceScope::default();
         let dag = crate_dag(&refs, &scope);
         let d = dossier("Verdict", &defs, &refs, &dag, &scope);
 
@@ -713,12 +717,12 @@ mod tests {
             sym("a", "m/Thing#", "sovereign/crates/a/src/m.rs", 1),
             sym("b", "n/Thing#", "sovereign/crates/b/src/n.rs", 1),
         ];
-        let defs = type_defs(&syms, &Scope::default());
+        let defs = type_defs(&syms, &SourceScope::default());
         let refs = vec![
             rf("a", "f().", "a", "m/Thing#", "sovereign/crates/a/src/m.rs"),
             rf("b", "g().", "b", "n/Thing#", "sovereign/crates/b/src/n.rs"),
         ];
-        let scope = Scope::default();
+        let scope = SourceScope::default();
         let dag = crate_dag(&refs, &scope);
         let d = dossier("Thing", &defs, &refs, &dag, &scope);
         assert!(d.owner_candidates.is_empty());
