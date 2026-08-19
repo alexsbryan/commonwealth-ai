@@ -3514,3 +3514,89 @@ re-measures on TWO tasks (56 + 65), not ten.
 ### Execution record
 
 (appended at landing)
+
+## T6c — the open-question control order: the gap-ledger fold (order deep-research-t6c, operator-approved 2026-08-18) — DECLARATION
+
+Written BEFORE any code change or flight of this order (§18.6). The target:
+the v1 gap trajectory (1 → 39 → 66 on the t6b pilot's v1 flight,
+dr-1787085202) — the loop OPENS gaps faster than it closes them.
+
+### Forensics (evidence-cited, runs-t6b/loop/v1/dr-1787085202/)
+
+1. **The floor is not the villain.** Round 3 audited 74 claims: 7 PASSED
+   (citation_grounded, corroboration origins=2 — the floor passed exactly
+   the double-origin claims), 66 gaps, 1 failed. The floor's accounting is
+   honest on both sides (audit.rs:384-443).
+2. **The growth is the DRAFT's re-expression.** Round 3's gap list = 35
+   prior texts verbatim (re-audits) + 31 NEW texts; only 4 prior gaps
+   closed. All 31 new texts carry figures already present in the prior
+   gap texts (provenance tabulation: figs-in-window+prior = 31/31) — the
+   same facts, re-stated as new sentences over the accumulated window
+   ("Still-open specifics to resolve", synthesize.rs:91-97 invites the
+   re-assertion). Re-phrasing, not new knowledge, is the growth engine.
+3. **The abstention gap is an artifact of the empty round-1 window** —
+   the r1→r2 transition can never be a strict subset (39 ⊄ {abstention});
+   the v1 R-12 row is journaled, not gated (the bar gates v0 seeds).
+
+### The fix (revolution 1 — the gap-ledger fold; the smallest fix at the measured seam)
+
+A capped claim whose FACT is already tracked does not enter the ledger as
+a new text; it folds into the tracked entry. Fact identity = ONE new
+decider, `gap_identity(claim, question_specifiers)`:
+- figures = the claim's figure tokens (the existing `figure_runs`
+  decider) MINUS the question's own specifiers (the era figures every
+  claim carries — never identity);
+- subjects = the claim's content words (≥3 chars, non-stopword, the
+  `fact_query` convention);
+- fold iff (figures intersect AND subjects intersect), or — for
+  figureless claims — (≥2 common subjects).
+
+Canonical text = first-seen; prior gaps re-audit verbatim as today, so
+CLOSING is unchanged (the re-audit passes on new evidence). Genuinely-new
+facts still enter (new text). The fold is code-enforced (§7.6: never ask
+a model to guarantee what code can enforce), stateless (identity is
+recomputed deterministically per round from the ledger texts — no ICD
+change, no checkpoint change), and touches NO floor/witness/judge/scorer
+semantics (the scorer's R-12 is READ-only; the audit's claims array keeps
+every capped claim — only the ledger's `gaps` dedupe by fact).
+
+**Validated on the measured v1 data (deterministic simulation, before
+the code change)**: the 31 new round-3 texts fold 30 (1 genuinely new —
+"128 tracts in New York"); the ledger would read 36 < 39 — strict subset.
+The same simulation on v0 seed-01 (1→4→5): round-3 stays 4 = round-2 —
+equal, never strict — the R-12 v0 leg stays failed, as pre-registered
+(fixture-vs-bar: single-origin decks, floor never weakened, gaps never
+close). The fold cannot manufacture a v0 pass.
+
+### Red-first tests (fail at HEAD, pass after)
+
+1. `rephrased_gap_folds_into_prior_entry` — a capped claim re-stating a
+   tracked fact (same figures, same subjects, new wording) adds NO gap.
+2. `genuinely_new_fact_still_enters_the_ledger` — a capped claim with a
+   new figure set (128 tracts) still enters → honest growth stays.
+3. `figureless_restatement_folds_by_subjects` — subject-identity fold;
+   disjoint subjects stay new.
+4. `different_figure_same_subject_does_not_fold` — Gini 0.5469 vs Gini
+   0.40: disjoint figures, no fold (no false merge on shared subject).
+5. `abstention_gap_does_not_absorb_content_gaps` — the round-1
+   empty-window gap never absorbs content gaps (identity disjoint).
+6. Existing `build_gap_list` test call sites updated for the new
+   `question_specifiers` parameter.
+
+### The gate per revolution (the battery, frozen banks, zero API cost)
+
+- **v1 trajectory**: final gap count ≤ round-2 count AND the set stops
+  growing (strict-subset shrinking toward the honest floor set is the
+  full pass). Journaled before/after per revolution.
+- **No regression**: P4/P3/honesty legs re-measured against the t6b
+  score-report baselines (bars unchanged).
+- **R-12 v0**: re-measured and REPORTED, never expected to pass
+  (structural — the evidence package for the operator's disposition).
+
+### Iteration journal
+
+(kept per revolution: what was tried, what the evidence said, keep/revert)
+
+### Execution record
+
+(appended at landing)

@@ -452,6 +452,10 @@ pub async fn assess_claim(
 /// question itself — keyed structurally on `empty_evidence_window`,
 /// never on the abstention text's wording (icd-schemas.md §4:
 /// `actionable_query` is "the compass's output that drives R4").
+/// `question_specifiers` feeds the gap-ledger fold (order
+/// deep-research-t6c): the question's own figure specifiers are not
+/// the claim's figures, so `gap_identity` strips them before the
+/// fold's fact comparison.
 pub fn build_gap_list(
     run_id: &str,
     charter_hash: &str,
@@ -459,6 +463,7 @@ pub fn build_gap_list(
     audits: &[ClaimAudit],
     prior_gap_texts: &[String],
     question: &str,
+    question_specifiers: &[String],
     query_for: &dyn Fn(&str, Option<&CorroborationRecord>) -> String,
 ) -> GapList {
     let claims: Vec<ClaimVerdict> = audits
@@ -484,14 +489,94 @@ pub fn build_gap_list(
             reason: a.reason.clone().unwrap_or_default(),
         })
         .collect();
-    let gaps: Vec<Gap> = audits
+    // ---- Gap-ledger fold (order deep-research-t6c, pre-registered) ----
+    // The ledger's identity is the FACT, not the sentence: a capped
+    // claim whose fact is already tracked folds into the tracked
+    // entry instead of adding a new gap text (the measured v1 churn:
+    // the draft re-expresses already-tracked facts over the growing
+    // window each round — 30/31 new r3 texts shared prior figures).
+    // The prior round's texts are SEEDED first (each an entry with
+    // canonical = its own text), so the canonical (first-seen) text
+    // is always the prior text and the strict-subset relation holds
+    // by construction when nothing new opened; a genuinely new fact
+    // still enters (honest growth). An entry is EMITTED only when a
+    // gap audit matched it — the prior text's own verbatim re-audit
+    // (audit_pass always re-enters it) is the closing path: passing
+    // the floor makes it not-a-gap, the seed stays un-emitted, and
+    // the fact leaves the ledger exactly as before the fold. The
+    // fold rule: figures intersect AND subjects intersect, or both
+    // figureless with ≥2 shared subjects; an EMPTY identity (no
+    // figures, <2 subjects) never folds — the degenerate list-fragment
+    // claims stay honest entries. gap_identity in mod.rs is the ONE
+    // decider; recomputed per round (stateless, no ledger to corrupt).
+    struct Tracked {
+        figures: Vec<String>,
+        subjects: Vec<String>,
+        canonical: String,
+        emitted: bool,
+        from_claim_id: Option<usize>,
+        empty_evidence_window: bool,
+        corroboration: Option<CorroborationRecord>,
+    }
+    let mut tracked: Vec<Tracked> = prior_gap_texts
         .iter()
+        .map(|p| {
+            let (figures, subjects) = super::gap_identity(p, question_specifiers);
+            Tracked {
+                figures,
+                subjects,
+                canonical: p.clone(),
+                emitted: false,
+                from_claim_id: None,
+                empty_evidence_window: false,
+                corroboration: None,
+            }
+        })
+        .collect();
+    for (i, a) in audits.iter().enumerate() {
+        if !a.is_gap() {
+            continue;
+        }
+        let (figures, subjects) = super::gap_identity(&a.claim, question_specifiers);
+        let folds_into = tracked.iter().position(|t| {
+            if !t.figures.is_empty() && !figures.is_empty() {
+                figures.iter().any(|f| t.figures.contains(f))
+                    && subjects.iter().any(|s| t.subjects.contains(s))
+            } else if t.figures.is_empty() && figures.is_empty() {
+                subjects.iter().filter(|s| t.subjects.contains(s)).count() >= 2
+            } else {
+                false // one figured, one not — different facts
+            }
+        });
+        if let Some(j) = folds_into {
+            // Fold: the fact is already tracked — the canonical text
+            // stays the entry; THIS audit's record rides the query
+            // (the closing path's query is unchanged: the prior text's
+            // re-audit emits exactly what it emitted pre-fold).
+            tracked[j].emitted = true;
+            tracked[j].from_claim_id = Some(i);
+            tracked[j].empty_evidence_window = a.empty_evidence_window;
+            tracked[j].corroboration = a.corroboration.clone();
+            continue;
+        }
+        tracked.push(Tracked {
+            figures,
+            subjects,
+            canonical: a.claim.clone(),
+            emitted: true,
+            from_claim_id: Some(i),
+            empty_evidence_window: a.empty_evidence_window,
+            corroboration: a.corroboration.clone(),
+        });
+    }
+    let gaps: Vec<Gap> = tracked
+        .iter()
+        .filter(|t| t.emitted)
         .enumerate()
-        .filter(|(_, a)| a.is_gap())
-        .map(|(i, a)| Gap {
-            id: format!("g{}", i + 1),
-            text: a.claim.clone(),
-            actionable_query: if a.empty_evidence_window {
+        .map(|(k, t)| Gap {
+            id: format!("g{}", k + 1),
+            text: t.canonical.clone(),
+            actionable_query: if t.empty_evidence_window {
                 question.to_string()
             } else {
                 // t1d fix 3 (second-origin): the query form is chosen
@@ -499,10 +584,10 @@ pub fn build_gap_list(
                 // floor-capped claim is queried as a FACT, not as the
                 // prose cut (the query for the missing origin must
                 // carry the figure the second origin must match).
-                query_for(&a.claim, a.corroboration.as_ref())
+                query_for(&t.canonical, t.corroboration.as_ref())
             },
-            from_claim_id: Some(format!("c{}", i + 1)),
-            corroboration: a.corroboration.clone(),
+            from_claim_id: t.from_claim_id.map(|i| format!("c{}", i + 1)),
+            corroboration: t.corroboration.clone(),
         })
         .collect();
     let this_gap_texts: Vec<String> = gaps.iter().map(|g| g.text.clone()).collect();
@@ -602,7 +687,7 @@ mod tests {
     #[test]
     fn empty_window_is_never_ran() {
         let audits = Vec::new();
-        let gaps = build_gap_list("r", "h", 1, &audits, &[], "question?", &|_, _| {
+        let gaps = build_gap_list("r", "h", 1, &audits, &[], "question?", &[], &|_, _| {
             "q".to_string()
         });
         assert!(gaps.gaps.is_empty());
@@ -633,6 +718,7 @@ mod tests {
             &[mk(true)],
             &[],
             "What is the question?",
+            &[],
             &|c, _| format!("TEMPLATED:{c}"),
         );
         assert_eq!(g.gaps.len(), 1);
@@ -648,6 +734,7 @@ mod tests {
             &[mk(false)],
             &[],
             "What is the question?",
+            &[],
             &|c, _| format!("TEMPLATED:{c}"),
         );
         assert_eq!(
@@ -670,9 +757,16 @@ mod tests {
         };
         // Round 2 with gaps ⊆ round 1's → strict subset when smaller.
         let prior = vec!["a".to_string(), "b".to_string()];
-        let g = build_gap_list("r", "h", 2, &[mk("a")], &prior, "question?", &|_, _| {
-            "q".to_string()
-        });
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk("a")],
+            &prior,
+            "question?",
+            &[],
+            &|_, _| "q".to_string(),
+        );
         assert!(g.strict_subset_of_prior);
         assert_eq!(g.gaps.len(), 1);
         // Same size → not strict.
@@ -683,13 +777,190 @@ mod tests {
             &[mk("a"), mk("b")],
             &prior,
             "question?",
+            &[],
             &|_, _| "q".to_string(),
         );
         assert!(!g.strict_subset_of_prior);
         // A new gap (not in prior) → not a subset.
-        let g = build_gap_list("r", "h", 2, &[mk("c")], &prior, "question?", &|_, _| {
-            "q".to_string()
-        });
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk("c")],
+            &prior,
+            "question?",
+            &[],
+            &|_, _| "q".to_string(),
+        );
+        assert!(!g.strict_subset_of_prior);
+    }
+
+    // ---- Gap-ledger fold (order deep-research-t6c, pre-registered):
+    // the open-question control order. A capped claim whose FACT is
+    // already tracked folds into the prior entry instead of entering
+    // the ledger as a new text — the ledger's identity is the one
+    // decider `gap_identity` (figures minus the question's specifiers,
+    // plus subject terms); the canonical text is the first-seen one.
+    // The prior gap's own re-audit (verbatim text) still carries the
+    // closing path; a genuinely-new fact still enters (honest growth).
+    // The audit's claims array keeps every capped claim — only the
+    // ledger dedupes by fact. ----
+
+    fn mk_gap(text: &str) -> ClaimAudit {
+        ClaimAudit {
+            claim: text.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::CorroborationFloor,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("corroboration floor".to_string()),
+            corroboration: None,
+        }
+    }
+
+    /// RED (order deep-research-t6c): the measured v1 churn — the same
+    /// fact re-stated with new wording and figure accretion
+    /// ("Gentrification accelerated significantly after 2000…" gains
+    /// "20%…9%" specifics) enters the ledger as a NEW text at HEAD,
+    /// so the gap set grows 39 → 66. The fold must absorb the
+    /// re-statement into the tracked entry and keep the canonical text.
+    #[test]
+    fn rephrased_gap_folds_into_prior_entry() {
+        let prior = vec![
+            "Gentrification accelerated significantly after 2000, with rates doubling compared \
+             to the 1990s [Source: ev-1]."
+                .to_string(),
+        ];
+        let restated = "Gentrification accelerated significantly after 2000, with rates doubling \
+                        compared to the 1990s; specifically, nearly 20% of lower-income \
+                        neighborhoods experienced gentrification since 2000 [Source: ev-1]."
+            .to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&restated)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert_eq!(
+            g.gaps.len(),
+            1,
+            "the re-stated fact must fold into the tracked gap, not add a new text: {:?}",
+            g.gaps.iter().map(|x| &x.text).collect::<Vec<_>>()
+        );
+        assert_eq!(
+            g.gaps[0].text, prior[0],
+            "the canonical (first-seen) text is kept verbatim"
+        );
+    }
+
+    /// A genuinely-new fact (a figure set never tracked) still enters —
+    /// honest growth is preserved, and the round cannot be a strict
+    /// subset when a new question opened. The fixture mirrors
+    /// audit_pass: the prior text's own verbatim re-audit is present
+    /// (it folds into its seeded entry, keeping the fact tracked).
+    #[test]
+    fn genuinely_new_fact_still_enters_the_ledger() {
+        let prior =
+            vec!["Gentrification accelerated significantly after 2000 [Source: ev-1].".to_string()];
+        let fresh = "In terms of raw totals, the highest number of tracts (128) gentrified in \
+                     New York [Source: ev-1]."
+            .to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&prior[0]), mk_gap(&fresh)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert_eq!(g.gaps.len(), 2, "a new fact is a new gap: {:?}", g.gaps);
+        assert_eq!(g.gaps[0].text, prior[0], "the prior fact stays tracked");
+        assert_eq!(g.gaps[1].text, fresh);
+        assert!(!g.strict_subset_of_prior);
+    }
+
+    /// A figureless re-statement folds by shared subjects (≥2) — the
+    /// measured "Regional patterns show that Pacific Northwest cities…"
+    /// shape.
+    #[test]
+    fn figureless_restatement_folds_by_subjects() {
+        let prior = vec![
+            "Regional patterns show that Pacific Northwest cities exhibited intensive \
+             transformation patterns most frequently [Source: ev-1]."
+                .to_string(),
+        ];
+        let restated = "Regional patterns show that Pacific Northwest cities and Northeast \
+                        Corridor metros exhibited these intensive transformation patterns most \
+                        frequently [Source: ev-1]."
+            .to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&restated)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert_eq!(g.gaps.len(), 1);
+        assert_eq!(g.gaps[0].text, prior[0]);
+    }
+
+    /// Different facts sharing a subject never fold on the subject
+    /// alone — Gini 0.5469 is not Gini 0.40 (the scorer's own
+    /// figure-identity discipline, mirrored). The prior text's
+    /// verbatim re-audit keeps it tracked.
+    #[test]
+    fn different_figure_same_subject_does_not_fold() {
+        let prior = vec!["Gini coefficient reached 0.40 by 2013 [Source: ev-1].".to_string()];
+        let other = "Gini coefficient reached 0.5469 in New York City [Source: ev-1].".to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&prior[0]), mk_gap(&other)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert_eq!(g.gaps.len(), 2, "disjoint figures are disjoint facts");
+        assert_eq!(g.gaps[1].text, other, "the new fact is its own gap");
+    }
+
+    /// The round-1 empty-window abstention gap never absorbs content
+    /// gaps — the r1→r2 transition stays honest (39 ⊄ {abstention}).
+    /// The abstention's own verbatim re-audit keeps it tracked; the
+    /// content gap (figured, so never matching the figureless
+    /// abstention identity) enters as its own entry.
+    #[test]
+    fn abstention_gap_does_not_absorb_content_gaps() {
+        let prior = vec!["No evidence was retrieved this round.".to_string()];
+        let content =
+            "Portland (58.1% of eligible tracts) led gentrification [Source: ev-1].".to_string();
+        let g = build_gap_list(
+            "r",
+            "h",
+            2,
+            &[mk_gap(&prior[0]), mk_gap(&content)],
+            &prior,
+            "q?",
+            &[],
+            &|_, _| "query".to_string(),
+        );
+        assert_eq!(g.gaps.len(), 2);
+        assert_eq!(
+            g.gaps[0].text, prior[0],
+            "the abstention stays its own entry"
+        );
         assert!(!g.strict_subset_of_prior);
     }
 

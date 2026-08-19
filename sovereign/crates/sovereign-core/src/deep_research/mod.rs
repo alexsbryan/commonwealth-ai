@@ -474,6 +474,39 @@ fn figure_tokens(s: &str) -> Vec<String> {
     figure_runs(s).into_iter().map(|r| r.token).collect()
 }
 
+/// The gap-ledger fold's ONE identity decider (order deep-research-t6c,
+/// pre-registered in adversarial/pre-registration.md): a gap claim's
+/// fact identity = (figure tokens minus the QUESTION's own specifiers,
+/// content-word subjects). Citation spans are stripped first — the
+/// "[Source: ev-1]" digits are the evidence's ids, never the claim's
+/// figures (the spurious "1" measured in the fold simulation). Two gap
+/// texts are one fact when their figures intersect AND their subjects
+/// intersect, or both are figureless with ≥2 shared subjects; the fold
+/// rule lives beside the decider in audit.rs. Deterministic C-class,
+/// no model. Recomputed per round — stateless, no ledger to corrupt
+/// (§7.6: code-enforced, never model-judged).
+pub(crate) fn gap_identity(
+    claim: &str,
+    question_specifiers: &[String],
+) -> (Vec<String>, Vec<String>) {
+    let stripped = strip_citation_spans(claim);
+    let figures: Vec<String> = figure_tokens(&stripped)
+        .into_iter()
+        .filter(|t| !question_specifiers.iter().any(|s| s == t))
+        .collect();
+    let mut subjects: Vec<String> = stripped
+        .split(|c: char| !(c.is_alphanumeric() || c == '\''))
+        .filter(|w| {
+            let wl = w.to_lowercase();
+            wl.len() >= 3 && !is_query_stopword(&wl) && !wl.chars().any(|c| c.is_ascii_digit())
+        })
+        .map(|w| w.to_lowercase())
+        .collect();
+    subjects.sort();
+    subjects.dedup();
+    (figures, subjects)
+}
+
 /// The strip-3c anti-leak decider (order deep-research-t2c): remove
 /// every figure run `text` carries whose token is NOT in `allowed` —
 /// the QUESTION's own figure specifiers, never bank vocabulary — each
@@ -1231,6 +1264,7 @@ impl Controller {
             &audits,
             &self.prior_gap_texts,
             &self.question,
+            &self.figure_specifiers,
             &|claim, corroboration| gap_query_for(claim, corroboration, &self.figure_specifiers),
         );
         Ok((audits, gap_list))
@@ -2731,10 +2765,16 @@ mod tests {
                 passes_floor: false,
             }),
         };
-        let gap_list =
-            audit::build_gap_list("run", "hash", 2, &[audit], &[], "question?", &|c, corr| {
-                gap_query_for(c, corr, &specs)
-            });
+        let gap_list = audit::build_gap_list(
+            "run",
+            "hash",
+            2,
+            &[audit],
+            &[],
+            "question?",
+            &specs,
+            &|c, corr| gap_query_for(c, corr, &specs),
+        );
         assert_eq!(gap_list.gaps.len(), 1);
         let gap = &gap_list.gaps[0];
         assert!(
@@ -2771,10 +2811,16 @@ mod tests {
             reason: Some("judge failed to run".to_string()),
             corroboration: None,
         };
-        let gap_list =
-            audit::build_gap_list("run", "hash", 2, &[plain], &[], "question?", &|c, corr| {
-                gap_query_for(c, corr, &specs)
-            });
+        let gap_list = audit::build_gap_list(
+            "run",
+            "hash",
+            2,
+            &[plain],
+            &[],
+            "question?",
+            &specs,
+            &|c, corr| gap_query_for(c, corr, &specs),
+        );
         assert_eq!(
             gap_list.gaps[0].actionable_query,
             acquisition::figure_hunt_query(template_query(&claim, &specs), &specs),
