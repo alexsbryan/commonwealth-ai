@@ -1935,9 +1935,9 @@ second editor on that file."""
 
 [[initiative.bar]]
 id = "dr-compass"
-one_line = "The gap loop converges on the bank — round-N gap sets strictly shrink on >=10 of 12 questions"
+one_line = "The gap loop converges on the bank — round-N gap sets never grow on >=10 of 12 questions; the two-origin v1 flight strictly shrinks"
 derives_from = "DEEP_RESEARCH.md R3, R11, FR-4; PLAN.md §3 R-12 green, §4 T1"
-bar = "the round-N gap set strictly shrinks on >=10 of 12 bank questions (X=10 finalized at bank mint b28c72b7, operator-ratified 2026-08-14, directives 6ab41e6c+c45d8625); gaps stay phrased as things a search query can act on. Red: R-12's 12-question green — convergence at bank scale never observed"
+bar = "the round-N gap set NEVER GROWS on >=10 of 12 bank questions (re-cut from strict-shrink by operator disposition 2026-08-18, option 2 of the t6c evidence package: the single-origin v0 estate + met corroboration floor make strict shrink structurally unreachable — measured 0/12, eight batteries, t1c..t6b); the two-origin v1 flight's gap trajectory converges (final <= round-2, the set stops growing). Gaps stay phrased as things a search query can act on. Red: the non-growth green on the v0 estate — never observed (gap sets grew every battery)"
 declared = "2026-08-13"
 notes = """RE-CUT at T0 landing (directive 65af7264, approved unedited): the
 declared T0 hand-run clause passed — strict convergence 6->0, 6->0, 7->1->0 on
@@ -1945,7 +1945,17 @@ declared T0 hand-run clause passed — strict convergence 6->0, 6->0, 7->1->0 on
 and the evidence. This bar is the T1 green only.
 
 CADENCE, by arithmetic not preference (dry run 2115ba0f): ~19 min/run x 12
-seeds ~= 3.6-4 h per compass pass — the weekly tier."""
+seeds ~= 3.6-4 h per compass pass — the weekly tier.
+
+RE-CUT 2026-08-18 (operator disposition, directive 9bf1d984 — option 2 of
+research/deep-research/adversarial/t6c-r12-v0-disposition.md, operator verbatim
+"option 2 for R-12"): the strict-shrink premise is closed by decision and the
+bar carries the non-growth premise. The t2d freeze (transition 2026-08-17, "the
+bar text is FROZEN") held the text pending exactly this call — the freeze was
+the operator's own discipline and the operator is its authority; this re-cut is
+the dispositioned path, not a silent flip. The scorer's R-12 leg is re-cut to
+the same premise (t6c steer, pre-registered before re-scoring); old-instrument
+strict-shrink citations stay labeled."""
 
   [[initiative.bar.transition]]
   on = "2026-08-13"
@@ -1982,6 +1992,26 @@ seeds ~= 3.6-4 h per compass pass — the weekly tier."""
   disposition is not a re-cut; the bar text is FROZEN; the red (R-12:
   convergence at bank scale never observed) stands measured, seven
   times. Full record: research/deep-research/notes/dispositions-t2d.md."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-18"
+  to = "descoped"
+  by = "operator disposition option 2 (directive 9bf1d984, verbatim: 'option 2 for R-12') — the strict-shrink-on-v0 premise is closed by decision: single-origin estate + met corroboration floor make it structurally unreachable (measured 0/12, eight batteries t1c..t6b); research/deep-research/adversarial/t6c-r12-v0-disposition.md"
+  note = """The t2d freeze (2026-08-17, "the bar text is FROZEN") held the
+  text pending exactly this call. The operator chose option 2 of the t6c
+  evidence package: the v0 R-12 leg transitions to the non-growth premise.
+  The re-cut bar text above replaces strict-shrink-on-v0; the scorer's
+  R-12 leg is re-cut to the same premise (t6c steer, pre-registered
+  before re-scoring, old-instrument citations stay labeled)."""
+
+  [[initiative.bar.transition]]
+  on = "2026-08-18"
+  to = "declared"
+  by = "re-cut per operator disposition option 2 (directive 9bf1d984)"
+  note = """New premise: the v0 gap set NEVER GROWS (>=10/12 seeds) and the
+  two-origin v1 flight's gap trajectory converges (final <= round-2, the
+  set stops growing). First measured at the t6c revolution-1 battery
+  landing — the disposition doc carries the row."""
 
 [[initiative.bar]]
 id = "dr-compass-handrun"

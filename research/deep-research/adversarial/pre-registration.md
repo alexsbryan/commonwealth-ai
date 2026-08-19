@@ -3595,8 +3595,147 @@ close). The fold cannot manufacture a v0 pass.
 
 ### Iteration journal
 
-(kept per revolution: what was tried, what the evidence said, keep/revert)
+**Rev 1 (fix landed 2026-08-18, commit 61e665e7):** the fold implemented
+exactly as declared above, plus one structural correction found by the
+red run itself: the fold's first cut folded claims into seeded entries
+but never EMITTED the entry — a folded ledger read 0 gaps. Corrected:
+the seed is an entry (identity, canonical = prior text, emitted-flag);
+a gap audit matching it marks it open (its own record rides the query —
+the closing path emits exactly what it emitted pre-fold); a seed no gap
+audit matches stays un-emitted and the fact leaves the ledger — the
+verbatim re-audit is the closing path, unchanged. Red-first watched:
+the 5 fold tests failed against the pre-fold logic (0/1/2-gap shapes),
+green after (94/94 audit module). Gates: lint --full exit 0; full test
+9946 pass / 3 fail — the 3 are sovereign-inference `embedded::gates`
+(arch-ladder) failures present at clean HEAD (D2 daemon-scheduler
+worker's domain, failing before this order's code, untouched here).
+Rustfmt churn on render.rs (fmt-dirty at HEAD) reverted — not part of
+this landing. Battery rev 1 launched 18:1x (runs-t6c root, 13 flights,
+daemon up, no competing daemon claims). Keep/revert: pending battery
+read (below).
+
+**Rev 1 battery verdict (runs-t6c, 13 flights, 18:13→19:12 PDT on the
+D2-fixed daemon):** the fold is KEPT — its measured effect is large
+compression with honest accounting:
+
+- **v1 trajectory (the order's gate): 1 → 27 → 35 — NOT converged.**
+  The pilot's 1→39→66 became 1→27→35 (r2 merged 38 content claims to
+  26; r3 = 27 verbatim prior + 8 new). The gate reads final ≤ round-2
+  (35 > 27) — unmet within the 3-round battery. The r3 growth is NOT
+  fold misses: of the 8 new texts, 6 carry figures NEVER tracked at r2
+  (51.9%/50.6%/50% city follow-ons, 92%/41,990/80,610/8.5% income,
+  177%/122,775/339,937/56% home prices, 48/50/15 mobility, 80%/45/1
+  population) — the draft re-expressing the ROUND-2-ACQUIRED second
+  origin's evidence, each capped single-origin by the floor (r3 draft
+  cites [Source: ev-1] [Source: ev-2]); 2 are figureless fragments
+  (section-heading leakage). The tracked-figure CHURN the fold targets
+  is folded (the pilot's 31 new r3 re-expressions → 8 here, 6 with new
+  figures). A round-4 acquisition would target the 8 (t1d fix-3
+  figure-carrying queries) — the 3-round battery truncates the
+  plateau.
+- **v0 seeds: r2→r3 NON-GROWING on 9/12 complete seeds after the
+  seed-01/02 re-flights** (01, 02, 03, 04, 05, 08, 10, 11, 12 stable;
+  06 11→12, 07 2→38, 09 4→6 grew). The three growths are all
+  characterized: seed-06 +1 and seed-09 +2 are new-figure
+  re-expressions of window evidence (11%, May 8 2025, a valuation) —
+  the r3-DRAFT seam, same class as v1's growth; seed-07's 2→38 is a
+  degenerate r3 draft's fragment-claims (draft corruption, forensics
+  in the journal above: quoted fragments, markdown fragments, inner
+  monologue leaking into the draft — splitter turned broken fragments
+  into 36 claims; identity fold can't merge genuinely different
+  fragments).
+- **seed-01/02 first flights died at battery start** with the
+  daemon's `503 local_queue_full` (18:13-18:14, D2's restart load) —
+  transient environment, NOT loop behavior; re-flown after the
+  one-shot arm completed (both exit 0; the scorer picks the newest
+  dr-* per seed).
+- **R-12-nongrow under the directive's literal formula
+  (all(sets[i] <= sets[i-1])): 0/10 complete v0 seeds.** The r1→r2
+  pair fails on EVERY seed — the round-1 empty-window abstention gap
+  is never in the round-2 content set (it closes at r2) — the SAME
+  pre-registered artifact that made strict-shrink unreachable
+  (pre-registration line ~3538: "the r1→r2 transition can never be a
+  strict subset"). The fold's real effect (content-rounds non-growth,
+  7/10) is invisible to the literal all-pairs formula. The
+  intent-vs-formula question (the disposition doc's option 2 text =
+  the v1-style final-pair gate) is flagged for the operator in the
+  landing report; the formula was implemented verbatim.
+- **Verdict: KEEP the fold** (compression 66→35, 39→27, churn folded,
+  v0 content-rounds stable on 7/10); the convergence gate is unmet —
+  the next smallest fix targets the DRAFT seam (the r3 re-expression
+  of newly-acquired evidence), pre-registered + red-first in
+  revolution 2.
 
 ### Execution record
 
-(appended at landing)
+**Landing 1 (commit 61e665e7, 2026-08-18):** the fold landed as declared —
+the red run surfaced one structural correction (seeds are entries with
+emitted-flags; the verbatim re-audit is the closing path), journaled in
+rev 1 above. Red→green: 5 fold tests watched red against the pre-fold
+logic; audit module 94/94; lint --full exit 0; full test 9946 pass /
+3 pre-existing sovereign-inference embedded::gates failures (clean
+HEAD, D2 domain).
+
+**Landing 2 (this landing): the R-12 leg re-cut — PRE-REGISTERED BEFORE
+the scorer edit and before re-scoring** (directive 9bf1d984, resolved
+UNEDITED on the operator's verbatim words "option 2 for R-12"; the
+seat's disposition + bar transitions are in the same landing):
+
+- The scorer's R-12 leg (arms/score-arms.py:744-752) transitions from
+  the strict-shrink premise (`all(sets[i] < sets[i-1])`) to the
+  NON-GROWTH premise (`all(sets[i] <= sets[i-1])`) — the v0 bar is now
+  >=10/12 non-growing seeds. Old-instrument strict-shrink citations
+  stay labeled: the t6b 0/12 numbers remain citable under the old leg
+  name ("R-12 strict-shrink, retired by disposition 2026-08-18").
+- Rationale (measured, pre-registered in the disposition package):
+  single-origin v0 decks + the met corroboration floor make strict
+  shrinking structurally unreachable (0/12, eight batteries t1c..t6b);
+  non-growth is the honest bar for the v1 two-origin shape's control
+  (the fold's measured effect: equal-or-new, never grown).
+- The new leg is named "R-12-nongrow" in the score report so old rows
+  stay citable under the old name; the dr-compass bar text and its
+  transition rows are the seat's edits (quality/initiative-bars.toml).
+- The v1 trajectory remains THIS order's gate (final <= round-2, set
+  stops growing — journaled, not gated by the scorer).
+
+**Revolution-1 battery result (filled after re-scoring):**
+
+(battery = 13 flights, runs-t6c root, 18:13→19:12 PDT on the
+D2-fixed daemon; seed-01/02 re-flown after the daemon-503 start;
+the one-shot arm was reaper-killed in-flight and re-run manually —
+all 13 pairs freshly written, test exit 0. Score report:
+research/deep-research/arms/score-report-t6c.json.)
+
+- **v1 trajectory (the order's gate): 1 → 27 → 35 — NOT converged**
+  (35 > 27; the pilot's 1→39→66 became 1→27→35). r3's 8 new = 6
+  new-figure re-expressions of the round-2-acquired second origin
+  (51.9%/50.6%/50%, 92%/41,990/80,610/8.5%, 177%/122,775/339,937/56%,
+  48/50/15, 80%/45/1 — capped single-origin by the floor) + 2
+  figureless fragments. Growth seam = the r3 DRAFT, not the fold.
+- **R-12-nongrow (re-cut leg, literal formula): 0/12 v0 seeds** —
+  the r1→r2 abstention pair fails on every seed (the pre-registered
+  artifact); content-rounds non-growing on 9/12 (the fold's real
+  effect, invisible to the all-pairs formula). Intent-vs-formula
+  question flagged for the operator; formula implemented verbatim.
+- **No-regression legs vs score-report-t6b.json (bars unchanged):**
+  P3 12/13 → 12/13 CLEAN; T1.7 12/12 → 12/12 CLEAN; two-arm lift
+  failed in both batteries (pooled 1.0 vs 0.979 → 0.797 vs 0.807).
+  TWO LEGS CROSSED: P4-v1 (loop) 13/16 → 11/16 (below ≥12/16) and
+  honesty (loop 0.0 vs one-shot 0.021 → 0.203 vs 0.193). Mechanism
+  check on every dropped key (seed-02 K4, seed-03 K6, seed-09 K4,
+  v1 K11, v1 K15): the figures were IN the round-1 evidence windows
+  (589b; 2.6b; 4.1/4.5; 7pp/2000/53%; 100/2014/2007) — all five are
+  ANSWER-SIDE figure omissions in the sampled draft, not acquisition
+  failures (the fold's only query-side channel). The untouched
+  one-shot arm moved in the same battery with zero code change
+  (pooled density 0.979→0.807, coverage ±3 keys, ungrounded
+  0.021→0.193) — the crossings sit inside the battery's own noise
+  band; no fold-attributable regression is demonstrated, and
+  no-regression is not demonstrated at the bar level either. Rev-2's
+  battery (draft-seam fix) is the second sample (§18.5).
+- **Keep/revert: KEEP the fold** (compression 66→35 / 39→27, churn
+  31→8, v0 content-rounds stable on 9/12, all five dropped keys
+  answer-side with figures present in-window, honesty movement
+  battery-wide). The convergence gate is unmet; the rev-2 fix
+  (pre-registered, red-first) targets the DRAFT seam — the r3 draft
+  re-expressing newly-acquired evidence with untracked figures.

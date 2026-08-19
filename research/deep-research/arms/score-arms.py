@@ -52,17 +52,21 @@
 # draft-1 is the empty-window abstention). A question with round-1
 # fetched == 0 cannot be compared -> could-not-judge.
 #
-# R-12: gap-set strict shrinking on the v0 seeds — the dr-compass bar
-# ("each round's gap set is a strict subset of the previous round's",
-# quality/initiative-bars.toml dr-compass-handrun): comparing the
-# gap-list-N.json gap TEXT sets across consecutive rounds. The mock
-# estate is empty, so round-1's set is the empty-window abstention gap;
-# the round-2 audit of the first content draft carries the claims the
-# corroboration floor keeps open (single-origin) — the measured shape
-# is journaled per seed. A 1-round run (never observed here: the
-# abstention draft always yields a gap) or a run whose sets cannot be
-# compared -> could-not-judge (four-verdict: a gate not watched fail is
-# not a gate).
+# R-12-nongrow: gap-set NON-GROWTH on the v0 seeds — the dr-compass bar
+# re-cut by operator disposition 2026-08-18 ("the round-N gap set never
+# grows on >=10 of 12 bank questions", directive 9bf1d984 — option 2 of
+# adversarial/t6c-r12-v0-disposition.md): comparing the gap-list-N.json
+# gap TEXT sets across consecutive rounds, all(sets[i] <= sets[i-1]).
+# The OLD leg was strict-shrink (all(sets[i] < sets[i-1])) — retired by
+# the same disposition; its citations stay labeled ("R-12
+# strict-shrink, retired 2026-08-18"): the t6b 0/12 numbers remain
+# citable under the old leg name. The mock estate is empty, so round-1's
+# set is the empty-window abstention gap; the round-2 audit of the
+# first content draft carries the claims the corroboration floor keeps
+# open (single-origin) — the measured shape is journaled per seed. A
+# 1-round run (never observed here: the abstention draft always yields
+# a gap) or a run whose sets cannot be compared -> could-not-judge
+# (four-verdict: a gate not watched fail is not a gate).
 #
 # Four-verdict reporting (§18.2): every leg row is passed / failed /
 # could-not-judge / never-ran. Nothing defaults to passed.
@@ -741,16 +745,21 @@ def main():
                     else:
                         row["p3"] = "could-not-judge"
                         row["p3_reason"] = "no draft-2 (round-1-evidence answer missing)"
-                # R-12: gap-set strict shrinking (gap TEXT sets, consecutive)
+                # R-12-nongrow: gap-set NON-GROWTH (gap TEXT sets,
+                # consecutive) — re-cut by operator disposition
+                # 2026-08-18 (directive 9bf1d984, pre-registered in the
+                # t6c execution record); the old strict-shrink premise
+                # is retired and stays labeled in citations.
                 gs = run["gap_sets"]
                 if len(gs) >= 2:
                     rounds_ord = sorted(gs)
                     sets = [set(gs[r]) for r in rounds_ord]
-                    strict = all(sets[i] < sets[i - 1] for i in range(1, len(sets)))
-                    row["r12"] = "passed" if strict else "failed"
+                    nongrow = all(sets[i] <= sets[i - 1] for i in range(1, len(sets)))
+                    row["r12"] = "passed" if nongrow else "failed"
                     row["r12_gap_sizes"] = [len(s) for s in sets]
-                    row["r12_reason"] = ("strict subset across rounds" if strict else
-                                         "a round's gap set is NOT a strict subset of the previous")
+                    row["r12_reason"] = ("gap set never grows across rounds" if nongrow else
+                                         "a round's gap set GREW vs the previous (old "
+                                         "strict-shrink premise retired 2026-08-18)")
                 else:
                     row["r12"] = "could-not-judge"
                     row["r12_reason"] = "fewer than two gap lists persisted"
@@ -850,9 +859,11 @@ def bars_block(rows, summary):
         leg("P3", f"{p3_passed}/13 passed (+{p3_cn} could-not-judge)", ">=10/13",
             p3_passed >= 10,
             "the v0 seeds all re-fetch the same exemplar (no fetch dedup); the v1 flight passed (round-2 fetched 0, coverage not worse)"),
-        leg("R-12", f"{r12_passed}/12 v0 seeds", ">=10/12",
+        leg("R-12-nongrow", f"{r12_passed}/12 v0 seeds", ">=10/12",
             r12_passed >= 10,
-            "gap sets GROW on every seed (audits add single-origin floor caps); v1 journaled 1->26, not gated"),
+            "non-growth premise per disposition 2026-08-18 (option 2, directive 9bf1d984); "
+            "old strict-shrink leg retired and stays labeled in citations; "
+            "v1 trajectory is the t6c order's gate, journaled not gated"),
         leg("T1.7 plan presence", f"{len(t17_pass)}/{len(t17_scoped)} scoped flights",
             "all scoped flights carry", t17_verdict == "passed", t17_note),
         leg("two-arm lift (pooled)", f"{summary.get('pooled_loop_density')} vs {summary.get('pooled_oneshot_density')}",
@@ -1083,14 +1094,18 @@ cited?"
                    "48 50 1.1% Houston", None)
     check("k9 uncorrected all-of can clear", r[0]["covered"] is True, r[0]["reason"])
 
-    # R-12 strict-subset semantics (gap TEXT sets, consecutive rounds)
+    # R-12-nongrow semantics (gap TEXT sets, consecutive rounds; the
+    # strict-shrink premise retired 2026-08-18 by operator disposition,
+    # directive 9bf1d984 — old-instrument citations stay labeled)
     shrink = {1: ["g1", "g2"], 2: ["g1"], 3: []}
     grow = {1: ["no evidence"], 2: ["claim a", "claim b"]}
     conv = {1: ["no evidence"], 2: []}
-    check("r12 shrink",
-          set(shrink[2]) < set(shrink[1]) and set(shrink[3]) < set(shrink[2]))
-    check("r12 grown not subset", not set(grow[2]) < set(grow[1]))
-    check("r12 converged subset", set(conv[2]) < set(conv[1]))
+    stable = {1: ["g1"], 2: ["g1"], 3: ["g1"]}
+    check("r12-nongrow shrink passes",
+          set(shrink[2]) <= set(shrink[1]) and set(shrink[3]) <= set(shrink[2]))
+    check("r12-nongrow grown fails", not (set(grow[2]) <= set(grow[1])))
+    check("r12-nongrow converged passes", set(conv[2]) <= set(conv[1]))
+    check("r12-nongrow stable passes", set(stable[2]) <= set(stable[1]))
 
     # P3 arithmetic: 0 < 0.2*f1 passes; f2 >= 0.2*f1 fails
     check("p3 zero round-2 passes", 0 < 0.2 * 1)
