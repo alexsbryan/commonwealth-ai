@@ -4,6 +4,12 @@ members = [
     # Wire-protocol types — bottom of the dep graph.
     "oicp-client",
     "oicp-types",
+    # The NEUTRAL kernel — identity + provenance owned by no product domain.
+    # Minted 2026-08-20 (noun-convergence rung nc-1-kernel) because the 23
+    # types all three domains spoke were 22-owned by corpus-engine. A second
+    # layer-0 membrane beside oicp-types, deliberately NOT merged with it:
+    # oicp is what a node advertises, this is what content IS.
+    "kernel-types",
 
     # Knowledge layer (LanceDB + Tantivy + extractors + chunkers).
     "corpus-engine",
@@ -175,6 +181,7 @@ cognitive_complexity = "warn"
 # ── Internal crates (paths are relative to the workspace root) ──────────
 oicp-client = { path = "oicp-client" }
 oicp-types = { path = "oicp-types" }
+kernel-types = { path = "kernel-types" }
 corpus-engine = { path = "corpus-engine" }
 corpus-engine-scip = { path = "corpus-engine-scip" }
 corpus-engine-atos = { path = "corpus-engine-atos" }

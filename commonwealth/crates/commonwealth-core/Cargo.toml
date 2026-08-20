@@ -6,6 +6,9 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# The neutral kernel (layer 0). `NodeId` and the `define_id!` macro live there
+# since noun-convergence rung nc-1-kernel — see src/ids.rs for why.
+kernel-types = { workspace = true }
 oicp-types = { path = "../../../oicp-types" }
 serde = { workspace = true }
 serde_json = { workspace = true }

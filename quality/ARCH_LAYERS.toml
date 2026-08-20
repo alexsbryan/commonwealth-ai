@@ -25,9 +25,19 @@ schema_version = 1
 # sovereign-time is the Tier-0 wall-clock leaf (zero deps by design — its own
 # doc comment is the contract); it lives at the bottom so the light app crates
 # can share it without pulling sovereign-core.
+#
+# kernel-types is the NEUTRAL kernel — identity + provenance (ContentHash,
+# CorpusId, NodeId, Origin, Custody, Attribution) owned by no product domain.
+# It is the second layer-0 membrane and deliberately NOT merged with
+# oicp-types: oicp is what one node ADVERTISES to another, kernel-types is what
+# a piece of content IS and where it came from. Minted 2026-08-20
+# (noun-convergence rung nc-1-kernel) after measurement showed the 23 types all
+# three product domains speak were 22-owned by corpus-engine. It may name
+# nothing above it — that is the whole contract, and scripts/nc-boundary.py
+# scores an edge out of it as a BACKFLOW violation.
 [[layer]]
 name = "contract"
-crates = ["oicp-types", "sovereign-contracts", "oicp-client", "arch-layers", "sovereign-time"]
+crates = ["oicp-types", "kernel-types", "sovereign-contracts", "oicp-client", "arch-layers", "sovereign-time"]
 
 # The knowledge layer: corpus-engine + its carve-outs. Self-contained by
 # design — neither sovereign nor commonwealth types appear here.

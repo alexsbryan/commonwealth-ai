@@ -1,0 +1,43 @@
+[package]
+name = "kernel-types"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "The neutral kernel — identity and provenance types owned by no product domain. Layer 0, beside oicp-types. Four deps (serde, getrandom, hex, blake3); depends on no product crate, by construction."
+
+# Minted 2026-08-20 for noun-convergence rung nc-1-kernel. The finding that
+# made this a rung: the types all three product domains speak numbered 23, and
+# 22 of them were owned by corpus-engine — including `CorpusEngine` (102
+# methods) and corpus-engine's own `Error`/`Result`. That is not a contract, it
+# is three systems depending on one system's implementation.
+#
+# The dependency rule is the whole point and it is one-way: this crate may name
+# NOTHING from sovereign, corpus-engine, commonwealth or studio. It is below
+# all of them. `oicp-types` is the FEDERATION membrane (Capability,
+# ProviderManifest, LatencyClass) and stays separate — two membranes at layer
+# 0, not one.
+
+[dependencies]
+# Origin crosses the mesh wire, so the kernel is a serde contract, not a
+# pure-Rust leaf. Kept to derive + the two tiny primitives the identity
+# family needs; anything heavier belongs in a domain crate, not here.
+serde = { workspace = true }
+# Random bytes for `*Id::generate()`. Already a commonwealth-core dep.
+getrandom = "0.3"
+# Hex for the wire forms of ContentHash and the id family. Deliberately a dep
+# rather than a sixth hand-rolled encoder — the census found five already.
+hex = "0.4"
+# The ONE content-hash implementation (ARCH §10.6). Carrying the algorithm
+# here rather than only the digest is what stops the four incompatible
+# `content_hash: String` encodings from being re-derived a fifth time; the
+# alternative — a kernel that can hold a hash but not compute one — leaves
+# every domain hashing its own way, which is the defect.
+blake3 = "1"
+
+[dev-dependencies]
+# Wire-form assertions only. Not a runtime dep of the kernel.
+serde_json = { workspace = true }
+
+[lints]
+workspace = true
