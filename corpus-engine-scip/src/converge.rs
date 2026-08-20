@@ -82,6 +82,11 @@ use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 /// program cites as the reason it exists. Six of the ten patterns had that
 /// same shape (a bare token a longer segment can end with), so the repair is
 /// the matching rule, not the one string.
+///
+/// `external` joined the list on 2026-08-20 for the same reason `vendor` is on
+/// it — `sovereign/bench/external/` is third-party repo checkouts, and it was
+/// 68% of everything `dry_report` reported once that report started using this
+/// scope at all.
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceScope {
     /// Path prefixes that count. Empty = everything not excluded.
@@ -106,6 +111,27 @@ impl Default for SourceScope {
                 "node_modules",
                 ".cargo-container",
                 "research",
+                // `sovereign/bench/external/` holds full third-party repo
+                // checkouts — SWE-bench task repos, RewardBench fixtures. Same
+                // rubric as `vendor`, and measured as the single largest term
+                // in the duplication report: with the segment list as it stood
+                // on 2026-08-20, `dry-report` read 1,982 groups / ~39,053
+                // redundant lines, of which 1,416 groups / ~26,687 lines were
+                // fixture repos. Excluding it lands the report at 566 groups /
+                // ~12,366 lines, which is the first-party production figure
+                // this scope claims to produce.
+                //
+                // It moves the CENSUS too, and in the direction that flatters
+                // the campaign — so it is stated here rather than only where it
+                // helps (§18.6). Measured at `285878ff`: type definitions
+                // 5,465 -> 5,139 (-326), and the ratchet number (names defined
+                // as a type in >1 crate) 278 -> 275. `Relationship` leaves the
+                // table entirely, `Verdict` drops one definition, and
+                // `ListEntry` enters the visible top rows. Three of the 278
+                // were only ever multi-crate because a fixture repo defined
+                // them. Any bar stamped before this commit is not comparable to
+                // one stamped after it.
+                "external",
                 // Build output and agent worktree shadows. The worktree clause
                 // is load-bearing: `.claude/worktrees/agent-*/` carries full
                 // copies of first-party crates and will otherwise be counted
@@ -675,6 +701,10 @@ mod tests {
             "sovereign/crates/a/src/xvendor/x.rs",
             "sovereign/crates/a/src/my_target/x.rs",
             "sovereign/crates/a/src/prebuild.rs",
+            // `external` is a segment, so a module or file merely NAMED for it
+            // is still source.
+            "sovereign/crates/a/src/external_api.rs",
+            "sovereign/crates/a/src/api_external/mod.rs",
         ] {
             assert!(s.admits(admitted), "must be counted: {admitted}");
         }
@@ -690,6 +720,10 @@ mod tests {
             "sovereign/crates/a/benches/b.rs",
             "sovereign/crates/a/examples/e.rs",
             "sovereign/crates/a/build.rs",
+            // Third-party fixture repos vendored under the bench tree — 68% of
+            // everything `dry_report` reported before this entry existed.
+            "sovereign/bench/external/swebench/repos/django/django/db/models/sql/query.py",
+            "sovereign/bench/external/rewardbench2/run.py",
         ] {
             assert!(!s.admits(excluded), "must be excluded: {excluded}");
         }
