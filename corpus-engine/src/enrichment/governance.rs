@@ -62,8 +62,6 @@ impl Journaled for GovernanceOpKind {
     const LABEL: &'static str = "governance_oplog";
 }
 
-
-
 // ── The acts ─────────────────────────────────────────────────
 
 /// The six governance acts (spec §6.3) plus the one general reversal op.

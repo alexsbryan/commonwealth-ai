@@ -25,6 +25,7 @@ mod concept_gate;
 mod docs_gate;
 mod env_gate;
 mod layer_gate;
+mod layout_gate;
 mod lint_gate;
 mod lock_gate;
 mod manifests;
@@ -43,6 +44,7 @@ fn main() {
         "api-gate" => api_gate::run(&args[1..]),
         "env-gate" => env_gate::run(&args[1..]),
         "layer-gate" => layer_gate::run(&args[1..]),
+        "layout-gate" => layout_gate::run(&args[1..]),
         "lint-gate" => lint_gate::run(&args[1..]),
         "lock-gate" => lock_gate::run(&args[1..]),
         "help" | "--help" | "-h" => {
@@ -84,6 +86,9 @@ fn print_usage() {
     );
     eprintln!(
         "  env-gate [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml; renders docs/ENV_FLAGS.md"
+    );
+    eprintln!(
+        "  layout-gate [--update-baseline|--tighten]  Ratchet hand-spelled corpus-engine layout (reach `Corpus`)"
     );
     eprintln!(
         "  lint-gate --from <clippy.json> [--update-baseline|--tighten]  Per-crate/lint warning-count ratchet"

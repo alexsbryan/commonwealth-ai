@@ -25,7 +25,9 @@
 //! spoke up. The same gate is hard where its evidence is authoritative — CI and
 //! every landing verdict call `svrn code converge status` and gate on its exit.
 
-use crate::{arch_gate, boundary_gate, concept_gate, docs_gate, env_gate, layer_gate, lock_gate};
+use crate::{
+    arch_gate, boundary_gate, concept_gate, docs_gate, env_gate, layer_gate, layout_gate, lock_gate,
+};
 
 /// Whether a gate's verdict may fail this command.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -55,6 +57,11 @@ pub fn run() -> i32 {
             layer_gate::run(&no_args)
         }),
         ("lock-gate", Enforcement::Hard, &|| lock_gate::run(&no_args)),
+        // Hard: unlike the SCIP-backed concept-gate, this one reads the
+        // WORKING TREE, so its evidence is authoritative wherever it runs.
+        ("layout-gate", Enforcement::Hard, &|| {
+            layout_gate::run(&no_args)
+        }),
         ("env-gate", Enforcement::Hard, &|| env_gate::run(&no_args)),
         ("concept-gate", Enforcement::Advisory, &|| {
             concept_gate::run(&no_args)

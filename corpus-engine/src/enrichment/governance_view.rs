@@ -37,10 +37,10 @@ use serde::{Deserialize, Serialize};
 use super::governance::{
     derive_active, ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus,
 };
-use crate::oplog::{Op, OpId, Oplog};
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeType, EdgesFile};
 use crate::error::{Error, Result};
+use crate::oplog::{Op, OpId, Oplog};
 
 // ── Inputs: minimal projections of the atlas graph ───────────
 

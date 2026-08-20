@@ -15,12 +15,12 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::oplog::ReconciliationAct;
-use crate::oplog::Op;
 use super::signals::{
     collect_emails, default_signals, fold_name, strip_org_suffixes, MergeSignal, MergeSignalCheck,
 };
 use crate::enrichment::atlas::atoms::{AtomId, Entity, Provenance};
 use crate::enrichment::pipeline::atlas::EntityType;
+use crate::oplog::Op;
 
 /// Policy knobs for the merger. Mirrors the
 /// `[enrichment.reconciliation]` TOML schema.
