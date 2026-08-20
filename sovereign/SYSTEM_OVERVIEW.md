@@ -230,8 +230,15 @@ schema/evaluator crate both consumers use. `quality/baselines/` holds
 the machine-written ratchet baselines (oversized files, fan-in caps,
 Cargo.lock duplicates, clippy counts, public-API snapshots) —
 regenerated only via `cargo xtask <gate> --update-baseline`, banked
-weekly via `--tighten`. `cargo xtask quality` runs every sub-second
-local gate with one summary table; `lint-gate` (clippy-count ratchet)
+weekly via `--tighten`; `concepts.txt` is the concept-duplication ratchet
+(`cargo xtask concept-gate`, minted through `svrn code converge status
+--mint`). `cargo xtask quality` runs every fast local gate with one
+summary table, and since 2026-08-20 that table carries FOUR verdicts —
+PASS / FAIL / COULD-NOT-JUDGE / NEVER-RAN — with per-gate enforcement:
+concept-gate is ADVISORY there because it counts type definitions in the
+SCIP graph at the last indexed commit rather than in the working tree
+being gated, and hard where the graph is authoritative (CI, landing
+verdicts, `svrn code converge status`). `lint-gate` (clippy-count ratchet)
 and `api-gate` (public-API surface diffs on the pinned nightly from
 `quality/nightly-pin.txt`) run on their own cadence — locally and in
 the weekly CI lane, never on the PR critical path.
@@ -4541,6 +4548,7 @@ of them shadow `SetupConfig` fields — declared debt via the registry's
 | `quality/ARCH_LAYERS.toml` | crate layer map + exceptions | humans | `cargo xtask layer-gate`, `arch_report` |
 | `quality/env-flags.toml` | the env-knob registry (cluster/default/status/`alias_of`/`shadows`) | humans | `cargo xtask env-gate` + pin-tests in the two in-code flags tables |
 | `quality/baselines/` | shrink-only ratchet baselines | **machine only** (`--update-baseline` / `--tighten`) | every count-based xtask gate |
+| `quality/CONCEPTS.toml` | the concept register — one canonical owner per noun; the noun-convergence program's source of truth | humans | `cargo xtask concept-gate` (the ratchet, over `quality/baselines/concepts.txt`) + `svrn code converge status` |
 | `quality/source-tree.toml` | the residual "not our source" dirs a gate walk must skip — only what git's ignore rules cannot express (`vendor/` is tracked but not authored here) | humans | `common::SourceTree::discover` → arch-gate, docs-gate, env-gate |
 | `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans | `cli_contract_journeys`, `svrn contract` |
 | `models.toml` | model selection per hardware | humans | daemon model selection |

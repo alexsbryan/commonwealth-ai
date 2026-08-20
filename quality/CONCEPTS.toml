@@ -12,13 +12,13 @@
 #                                   tests/, examples/, benches/ are out of
 #                                   scope by construction, or a test helper
 #                                   named `Evidence` breaks the build)
-#   svrn converge status          — the metric, re-run live per row
+#   svrn code converge status     — the metric, re-run live per row
 #
 # THE METRIC — two levels, and numbers are MINTED, not typed (2026-08-17):
 #   headline   the register burn-down: rows converged / rows in_program.
 #              Every order's landing verdict re-runs its row's `measure`
 #              method at land time and reports before/after.
-#   feed       the D1 census (`svrn converge census`): names defined as a
+#   feed       the D1 census (`svrn code converge census`): names defined as a
 #              type in more than one FIRST-PARTY PRODUCTION crate, idiom
 #              patterns excluded. It DISCOVERS candidates and ranks them;
 #              every hit gets a `disposition`. Its raw count is not the
@@ -70,7 +70,7 @@
 #   phase       which phase lands it. omit when in_program = false.
 #   verified_at freeze | differential | journey  (see NOUN_CONVERGENCE §5)
 #   measure     the row's live metric as a one-line method (a query or
-#               command). `svrn converge status` re-runs it; the landing
+#               command). `svrn code converge status` re-runs it; the landing
 #               verdict re-runs it; nobody recalls it.
 #   today       DATED snapshot of the current shape, with citations. Evidence
 #               lives here — and it decays: the 2026-08-17 verification pass
