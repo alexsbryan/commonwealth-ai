@@ -120,9 +120,20 @@ pub use grounding_journal::{
 };
 mod routing;
 pub use routing::{
-    compute_trust_level, AuthorityClaim, Effect, Effort, Idempotency, Intent, Latency, Operation,
-    Permission, Scope, ToolContext, ToolDescriptor, ToolExample, TrustLevel,
+    compute_trust_level, AuthorityClaim, Effort, Intent, Operation, Permission, ToolContext,
+    TrustLevel,
 };
+
+// ─── Tool Vocabulary ───────────────────────────────────────────
+
+// What a host publishes ABOUT a tool — the descriptor and its four behavioural
+// properties — lives in `oicp-types` (layer 0) and is re-exported here at its
+// historical path. It moved down when `commonwealth-api`'s injector middleware,
+// a layer-1 crate, turned out to be reaching UP into sovereign for the very
+// vocabulary it renders into every request (noun-convergence rung 2c, family
+// A). Sovereign's tool POLICY did NOT move: `Permission`, `AuthorityClaim` and
+// `ToolContext` are re-exported above, from `crate::types::routing`.
+pub use crate::oicp::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};
 mod conversation;
 pub use conversation::{
     Conversation, ConversationContext, ConversationTopicContext, HistoryRetrievalHit,

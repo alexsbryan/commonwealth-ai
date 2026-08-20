@@ -302,22 +302,35 @@ except = ["sovereign-contracts"]
 reason = "the standalone mesh daemon must not drag the agent runtime"
 
 # WHAT actually crosses, so R6 has a size rather than a feeling. Census
-# 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 22 types /
-# 122 refs, all from `commonwealth-api` —
-#   sovereign-contracts (11, permitted by the `except` below — the declared seam)
-#     routing.rs           Effect, Scope, ToolDescriptor, Idempotency, Latency
+# 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 11 types /
+# 38 refs, all from `commonwealth-api` —
+#   sovereign-contracts (5, permitted by the `except` below — the declared seam)
 #     next_edit_journal.rs NextEditEpisode, JournalLine, NextEditOutcome,
 #                          NextEditOutcomeLine
-#     journal.rs           JournalStream        completion.rs  SamplingMode
+#     journal.rs           JournalStream
 #   sovereign-tools (6, grandfathered below)
 #     atlas_postinstall.rs Tier2LaunchOutcome, StructuralAtlasOutcome, TriageOutcome
 #     atlas_peer_advice.rs PeerAtlasView, PeerAtlasPullCandidate
 #     atlas_status.rs      AtlasStatusRow
-#   sovereign-atos (5, grandfathered below)
+#   sovereign-atos (grandfathered below; named from the ATOS-feature middleware,
+#   which is off in default builds so the type census does not count it)
 #     session.rs           ArtifactDelta, MilestonePassEvent, SessionStore
 #     approval.rs          FeatureApproval, ApprovalSource
-# The 11 contract types are the seam working as designed. The other 11 are the
+# The 5 contract types are the seam working as designed. The other 6 are the
 # in-process runtime embed, and they are what R6 has to delete.
+#
+# Burn-down: 22/122 -> 16/98 (rung 2b moved the inference vocabulary to
+# oicp-types) -> 11/38 (rung 2c family A moved the tool vocabulary — Effect,
+# Scope, ToolDescriptor, Idempotency, Latency, ToolExample — to oicp-types
+# too). The `except` below stays for now, and the reason is worth stating
+# because the two halves of this rule measure different things: the `except`
+# is CRATE-level and is already inert — no commonwealth crate carries a direct
+# `sovereign-contracts` dep, so it grants nothing today. What is still live is
+# the TYPE-level reach: the next-edit journal family (rung 2c/B) names
+# sovereign-contracts types through `sovereign_core`'s re-exports, which the
+# `commonwealth-api -> sovereign-core` exception below already covers. Dropping
+# the `except` is therefore a free ratchet against a dep nobody has taken yet —
+# it belongs with the family that makes the type census zero, not with this one.
 # The mesh API's reach into the agent runtime is real, load-bearing debt —
 # the OICP-only seam is the goal state (remediation R6). Forbidden so every
 # such edge must be individually grandfathered below and burns down visibly.

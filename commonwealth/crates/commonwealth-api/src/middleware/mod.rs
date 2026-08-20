@@ -655,3 +655,73 @@ mod tests {
         // No panics, no errors — default impl ran.
     }
 }
+
+#[cfg(test)]
+mod tool_vocabulary_boundary {
+    //! The MODULE-level half of the layer rule for the injector middlewares.
+    //!
+    //! `commonwealth` is layer 1 and `sovereign` is layer 2, so this crate must
+    //! not reach UP for vocabulary. The injectors need tool descriptors — that
+    //! is their whole job — and until noun-convergence rung 2c they got them by
+    //! naming the agent runtime hub's `types` module, which was 60 of the 98
+    //! references on the `commonwealth -> sovereign` backflow edge. The
+    //! definitions now live in `oicp-types` (layer 0) and the hub re-exports
+    //! them at their historical path, so the reach is gone.
+    //!
+    //! This test is what stops it coming back by habit: the next author who
+    //! needs `Effect` or `ToolDescriptor` here reaches for whatever import the
+    //! IDE suggests, and the hub's re-export is still a valid path. ARCH §7 —
+    //! structural, not remembered.
+    //!
+    //! Deliberately narrow. `sovereign-atos` and `sovereign-tools` are still
+    //! named in this directory (the feature-gated ATOS surface and
+    //! `notes::response_mine`); both carry their own `[[exception]]` in
+    //! `quality/ARCH_LAYERS.toml` tracked at R6 and are not this rung's
+    //! subject. What this asserts is exactly what rung 2c family A bought.
+    //!
+    //! Failing input, if you want to watch it fail: put
+    //! `Vec<…::types::ToolDescriptor>` back on `ContextInjector::new`.
+
+    #[test]
+    fn no_injector_names_the_agent_runtime_hub() {
+        // Assembled at runtime, never written as a literal — THIS FILE IS
+        // INSIDE THE SCANNED TREE, so a literal would make the guard match its
+        // own source. Keep the token out of this file entirely, doc comments
+        // and assertion text included.
+        let needle = ["sovereign", "core"].join("_");
+
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("src")
+            .join("middleware");
+        let mut offenders = Vec::new();
+        let mut scanned = 0usize;
+        for entry in std::fs::read_dir(&dir)
+            .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()))
+            .flatten()
+        {
+            let path = entry.path();
+            if path.extension().is_none_or(|e| e != "rs") {
+                continue;
+            }
+            scanned += 1;
+            if std::fs::read_to_string(&path)
+                .unwrap_or_default()
+                .contains(&needle)
+            {
+                offenders.push(path.file_name().unwrap().to_string_lossy().into_owned());
+            }
+        }
+
+        // An empty walk would pass while proving nothing — the classic
+        // zero-case false green (ARCH §18.1).
+        assert!(
+            scanned >= 8,
+            "scanned only {scanned} middleware files; the walk is broken, not the boundary"
+        );
+        offenders.sort();
+        assert!(
+            offenders.is_empty(),
+            "middleware reaching up a layer for vocabulary that lives in oicp-types: {offenders:?}"
+        );
+    }
+}
