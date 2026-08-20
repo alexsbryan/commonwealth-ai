@@ -344,6 +344,58 @@ proof        = "one commit per feature adding ONLY data files; full suite green;
 instrument   = "scripts/nc-extends.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
 
 [[bar]]
+id           = "nc-reach"
+one_line     = "A type travels beyond the file that declares it, or it is not an abstraction"
+derives_from = "NOUN_CONVERGENCE.md §10.2, minted 2026-08-20 by scripts/nc-reach.py"
+status       = "open"
+# WHY THIS BAR EXISTS, stated bluntly because the alternative is arguing it in
+# prose every turn. After three waves and ~30 commits the three type-counting
+# bars read 477 / 143 / 23 against targets of 50 / 0 / 10 — flat, one backwards.
+# In the same period the campaign shipped: a live HTML-truncation bug (every
+# crawled page cut at the first `</script>` on three ingest paths), three
+# user-visible desktop panics, 1,405 deleted duplicate lines, a trust envelope
+# that exposed ten bench banks being scored as fine, tool descriptors 0 -> 68%
+# data-sourced retiring 4,137 lines of data spelled as code, `code index --help`
+# exiting 1, and a config path that lied to shipped-binary users.
+#
+# NOT ONE OF THOSE IS VISIBLE IN THE THREE BARS ABOVE, because they measure a
+# dimension that was already healthy: `cargo xtask layer-gate` exits 0 — every
+# crate edge points down or sideways — and §10.2 measures 0 of 441 load-bearing
+# types carrying an upward edge. The defect is INSIDE crates, and this bar is
+# where the work already being done becomes scoreable instead of narrated.
+#
+# MEASURED at `0f6bb56d`: 42.9% of 4,998 first-party production types are
+# referenced by NO other file. The per-crate spread is the real signal — same
+# authorship, same five months:
+#   sovereign-cli        93 types   85% private   0% exported
+#   sovereign-server     84         80%           0%
+#   sovereign-desktop   213         78%           0%
+#   sovereign-cli-llm   613         75%           0%   (122k production lines)
+#   corpus-engine       900         28%          34%
+#   sovereign-contracts 284         11%          86%
+#   oicp-types           70          0%          96%
+# A fivefold spread is not idiom, it is the absence of anything to reach for.
+# The instrument independently reproduces §10.2's HAND figures (cli-llm 75/0,
+# contracts 15/84 vs 11/86, desktop 79/0 vs 78/0) — that agreement is its
+# validation (§18.4), not a coincidence.
+#
+# TARGET IS DERIVED, NOT GUESSED: 28% is what `corpus-engine` — the LARGEST
+# first-party crate at 900 types — already achieves today. The target is
+# therefore "the rest of the system reaches what our biggest domain crate has
+# already demonstrated is possible", which is falsifiable and was not chosen to
+# flatter any rung.
+#
+# NOT ALL PRIVACY IS WRONG. A one-endpoint DTO should be private, which is why
+# the target is 28 and not 0. A bar driven to zero here would be actively bad
+# architecture, and any rung that claims movement by making one-use types public
+# is gaming it — check the SPREAD, not the mean.
+today        = 42.9
+target       = 28.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-reach.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"value\"]), \"commit\": d[\"indexed_head\"]}))'"
+kill         = "if the share falls while the per-crate spread does not narrow, the bar is being moved by publishing one-use types rather than by extracting anything — stop and re-read §10.3"
+
+[[bar]]
 id           = "nc-god-objects"
 one_line     = "The four god objects are decomposed along seams the graph already shows"
 derives_from = "NOUN_CONVERGENCE.md §3 (D2)"
