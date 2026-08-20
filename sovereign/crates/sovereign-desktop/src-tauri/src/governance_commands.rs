@@ -32,6 +32,7 @@ use corpus_engine::enrichment::atlas::migrate_ids::migrate_atlas_ids;
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
 use corpus_engine::enrichment::governance_view::section_titles;
 use corpus_engine::enrichment::{GovernanceOpKind, GovernanceView, TensionDisposition};
+use corpus_engine::oplog::{Op, Oplog};
 
 use crate::state::AppState;
 
