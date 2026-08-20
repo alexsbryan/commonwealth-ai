@@ -76,6 +76,7 @@ use std::sync::{Arc, RwLock};
 
 use chrono::Utc;
 
+use crate::corpus::Corpus;
 use crate::error::{Error, Result};
 use crate::index::CorpusIndex;
 use crate::progress::{
@@ -582,8 +583,7 @@ impl CorpusEngine {
     /// materialised only by the finalise/merge step, never by a direct
     /// ingest write.
     pub fn partition_path(&self, corpus_id: &str) -> PathBuf {
-        self.index_dir
-            .join(format!("{corpus_id}-partition-{}", self.self_node_id))
+        self.corpus(corpus_id).partition(&self.self_node_id)
     }
 
     /// Path of the canonical (post-merge / single-node-finalised)
@@ -593,7 +593,37 @@ impl CorpusEngine {
     /// [`Self::partition_path`] for callers that need to probe both
     /// shapes (e.g. `auto_resume` reads provenance from each).
     pub fn canonical_path(&self, corpus_id: &str) -> PathBuf {
-        self.index_dir.join(corpus_id)
+        self.corpus(corpus_id).root()
+    }
+
+    /// Name a corpus under this engine's index root.
+    ///
+    /// [`Corpus`] is what a consumer should hold when all it needs is "which
+    /// corpus, and where does it live" — it carries no engine, so holding one
+    /// does not mean depending on a 102-method object. The engine's own path
+    /// methods above delegate here so there is exactly one place that knows
+    /// the layout (ARCH §10.6).
+    ///
+    /// An empty id is not a corpus. `CorpusId::new` refuses it, and rather
+    /// than surface an `Option` on a method every path site calls, this
+    /// substitutes a visible placeholder id so the resulting path is
+    /// obviously wrong rather than silently equal to `index_dir` itself —
+    /// which is what `index_dir.join("")` used to produce, and which would
+    /// have deleted the whole index root on a `remove_index("")`.
+    pub fn corpus(&self, corpus_id: &str) -> Corpus {
+        match kernel_types::CorpusId::new(corpus_id) {
+            Some(id) => Corpus::at(&self.index_dir, id),
+            None => {
+                tracing::warn!(
+                    "corpus_engine: empty corpus id refused; using the <empty-corpus-id> placeholder"
+                );
+                Corpus::at(
+                    &self.index_dir,
+                    kernel_types::CorpusId::new("<empty-corpus-id>")
+                        .expect("the placeholder is non-empty"),
+                )
+            }
+        }
     }
 
     /// Boot-time resume for interrupted CONVERSATION-corpus tiered
@@ -819,7 +849,7 @@ impl CorpusEngine {
     /// Read the `committed_iter_pos` from a corpus's `_corpus_meta.json`.
     /// Returns 0 when the meta file is absent (corpus not yet started).
     pub fn corpus_committed_iter_pos(&self, corpus_id: &str) -> u64 {
-        let path = self.index_dir.join(corpus_id).join("_corpus_meta.json");
+        let path = self.corpus(corpus_id).meta_path();
         let Ok(content) = std::fs::read_to_string(&path) else {
             return 0;
         };
@@ -959,7 +989,7 @@ impl CorpusEngine {
         let partition = self.partition_path(corpus_id);
 
         let read_meta = |path: &Path| -> Option<serde_json::Value> {
-            let raw = std::fs::read_to_string(path.join("_corpus_meta.json")).ok()?;
+            let raw = std::fs::read_to_string(crate::corpus::Corpus::meta_in(&path)).ok()?;
             serde_json::from_str(&raw).ok()
         };
 
@@ -1042,7 +1072,7 @@ impl CorpusEngine {
             if !is_canonical && !is_partition {
                 continue;
             }
-            let meta_path = path.join("_corpus_meta.json");
+            let meta_path = crate::corpus::Corpus::meta_in(&path);
             let Ok(content) = std::fs::read_to_string(&meta_path) else {
                 continue;
             };
@@ -1190,7 +1220,7 @@ impl CorpusEngine {
                 continue;
             };
             // Must have a meta file to be a real partition.
-            if !entry.path().join("_corpus_meta.json").exists() {
+            if !crate::corpus::Corpus::meta_in(entry.path()).exists() {
                 continue;
             }
             corpora_with_partitions.insert(corpus_id.to_string());
@@ -1201,13 +1231,7 @@ impl CorpusEngine {
         // partition dirs are stale leftovers, not stranded work.)
         corpora_with_partitions
             .into_iter()
-            .filter(|corpus_id| {
-                !self
-                    .index_dir
-                    .join(corpus_id)
-                    .join("_corpus_meta.json")
-                    .exists()
-            })
+            .filter(|corpus_id| !self.corpus(corpus_id).is_installed())
             .collect()
     }
 
@@ -1251,7 +1275,7 @@ impl CorpusEngine {
             if Self::is_out_of_band_index_name(name) {
                 continue;
             }
-            let meta_path = entry.path().join("_corpus_meta.json");
+            let meta_path = crate::corpus::Corpus::meta_in(entry.path());
             let Ok(content) = std::fs::read_to_string(&meta_path) else {
                 continue;
             };
@@ -1310,7 +1334,7 @@ impl CorpusEngine {
                 continue;
             }
 
-            let meta_path = entry.path().join("_corpus_meta.json");
+            let meta_path = crate::corpus::Corpus::meta_in(entry.path());
             let Ok(content) = std::fs::read_to_string(&meta_path) else {
                 continue;
             };
@@ -1474,7 +1498,8 @@ impl CorpusEngine {
             let version_mtime = std::fs::metadata(path.join("chunks.lance").join("_versions"))
                 .and_then(|m| m.modified())
                 .or_else(|_| {
-                    std::fs::metadata(path.join("_corpus_meta.json")).and_then(|m| m.modified())
+                    std::fs::metadata(crate::corpus::Corpus::meta_in(&path))
+                        .and_then(|m| m.modified())
                 })
                 .ok();
             if let Some(mtime) = version_mtime {
@@ -1490,7 +1515,7 @@ impl CorpusEngine {
             // Cache miss (new / changed / unusual layout): run the full
             // validity gates, then open + info() and populate the cache.
             // _corpus_meta.json identifies a valid index dir.
-            if !path.join("_corpus_meta.json").exists() {
+            if !crate::corpus::Corpus::meta_in(&path).exists() {
                 continue;
             }
             // Skip indexes where ingestion was interrupted (process killed
@@ -1699,7 +1724,7 @@ impl CorpusEngine {
 
             report.push_str(&format!("\n--- {} ---\n", name));
 
-            let meta_path = path.join("_corpus_meta.json");
+            let meta_path = crate::corpus::Corpus::meta_in(&path);
             if !meta_path.exists() {
                 report.push_str("  No _corpus_meta.json — not an index.\n");
                 continue;
@@ -1972,7 +1997,7 @@ impl CorpusEngine {
         source_dir: Option<&Path>,
     ) -> Result<ManifestReconstructionReport> {
         let index_path = self.index_dir.join(corpus_id);
-        let meta_path = index_path.join("_corpus_meta.json");
+        let meta_path = crate::corpus::Corpus::meta_in(&index_path);
         if !meta_path.exists() {
             return Err(Error::Recipe(format!(
                 "No index found for corpus '{corpus_id}' at {}",
@@ -2218,7 +2243,7 @@ impl CorpusEngine {
                 canonical.display()
             )));
         }
-        let meta_path = canonical.join("_corpus_meta.json");
+        let meta_path = crate::corpus::Corpus::meta_in(&canonical);
         if !meta_path.exists() {
             return Err(Error::IndexNotFound(format!(
                 "Canonical at {} has no _corpus_meta.json",
@@ -2270,7 +2295,7 @@ impl CorpusEngine {
         }
         let rewritten = serde_json::to_string_pretty(&meta)
             .map_err(|e| Error::Serialization(format!("write meta: {e}")))?;
-        std::fs::write(partition.join("_corpus_meta.json"), rewritten)?;
+        std::fs::write(crate::corpus::Corpus::meta_in(&partition), rewritten)?;
 
         tracing::info!(
             corpus_id,
@@ -2369,7 +2394,7 @@ impl CorpusEngine {
         // landed. Checking directory existence here used to make
         // every solo ingest into a SCIP-pre-populated dir return
         // `Ok(false)` and silently strand the partition.
-        if canonical.join("_corpus_meta.json").exists() {
+        if crate::corpus::Corpus::meta_in(&canonical).exists() {
             return Ok(false);
         }
 
@@ -3162,7 +3187,7 @@ mod tests {
         .await
         .unwrap();
         std::fs::write(
-            canonical.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&canonical),
             r#"{"corpus_id":"wikipedia","corpus_name":"Wikipedia","embedding_model":"test-model",
                  "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
                  "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
@@ -3187,7 +3212,7 @@ mod tests {
         .await
         .unwrap();
         std::fs::write(
-            partition.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&partition),
             r#"{"corpus_id":"wikipedia","corpus_name":"Wikipedia","embedding_model":"test-model",
                  "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
                  "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
@@ -3362,7 +3387,7 @@ mod tests {
             .unwrap();
         // Mark complete so installed_indexes picks it up.
         std::fs::write(
-            real.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&real),
             r#"{"corpus_id":"sep","corpus_name":"SEP","embedding_model":"test-model",
                  "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
                  "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
@@ -3377,7 +3402,7 @@ mod tests {
         let backup = idx_dir.join("sep.legacy-backup");
         std::fs::create_dir_all(&backup).unwrap();
         std::fs::write(
-            backup.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&backup),
             r#"{"corpus_id":"sep","corpus_name":"SEP backup","embedding_model":"test-model",
                  "embedding_dimensions":4,"mesh_sharing":true,"license":"MIT",
                  "created_at":0,"last_updated":0,"schema_version":3,"is_shard":false,
@@ -3457,7 +3482,7 @@ mod tests {
     fn seed_partition_meta(dir: &std::path::Path) {
         std::fs::create_dir_all(dir).unwrap();
         std::fs::write(
-            dir.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&dir),
             r#"{
                 "corpus_id": "wikipedia",
                 "corpus_name": "Wikipedia",
@@ -3529,7 +3554,7 @@ mod tests {
     fn seed_canonical_meta(dir: &std::path::Path, committed: u64, in_progress: bool) {
         std::fs::create_dir_all(dir).unwrap();
         std::fs::write(
-            dir.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&dir),
             serde_json::json!({
                 "corpus_id": "wikipedia",
                 "ingestion_in_progress": in_progress,

@@ -53,6 +53,8 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+
+use corpus_engine::Corpus;
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -87,6 +89,12 @@ pub enum RecoveryOutcome {
     CanonicalDirectoryReserved,
     /// No `<corpus>-partition-*/` dirs on disk — nothing to merge.
     NotEnoughPartitions,
+    /// The caller passed an empty or whitespace-only corpus id. Reported
+    /// rather than defaulted (ARCH §18.3): before `Corpus` owned the layout,
+    /// `index_dir.join("")` silently resolved to the index ROOT, so an empty
+    /// id made "the canonical directory for this corpus" mean "every corpus
+    /// on this node".
+    InvalidCorpusId,
     /// The previous attempt was within the cooldown window. Caller
     /// should fall back to the original behaviour (e.g. emit the
     /// dispatcher's WARN).
@@ -143,9 +151,16 @@ pub enum RecoveryOutcome {
 #[allow(clippy::disallowed_methods)] // real $HOME: the alignment projector materializes rows back to ~/.claude/
 pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) -> RecoveryOutcome {
     // Cheap pre-checks first — these don't consume the cooldown.
-    let canonical_dir = index_dir.join(corpus_id);
-    let canonical_meta = canonical_dir.join("_corpus_meta.json");
-    if canonical_meta.exists() {
+    // `Corpus` is corpus-engine's published noun for "which corpus, where":
+    // the canonical directory, this node's partition dirs and the meta sidecar
+    // are ITS to spell, not ours. Before 2026-08-20 this file hand-joined
+    // `_corpus_meta.json` thirteen times and re-derived the
+    // `<id>-partition-` prefix itself.
+    let Some(corpus) = Corpus::named(index_dir, corpus_id) else {
+        return RecoveryOutcome::InvalidCorpusId;
+    };
+    let canonical_dir = corpus.root();
+    if corpus.is_installed() {
         return RecoveryOutcome::AlreadyHasCanonical;
     }
     // The canonical-named directory exists but doesn't carry our
@@ -164,7 +179,7 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
     // across all of them. The union → coverage check below decides
     // whether merging here would produce a complete or partial
     // canonical.
-    let prefix = format!("{corpus_id}-partition-");
+    let prefix = corpus.partition_prefix();
     let mut partition_count = 0usize;
     let mut shard_union: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
     let mut total_shards: Option<usize> = None;
@@ -177,7 +192,7 @@ pub async fn try_recover_stranded_partitions(index_dir: &Path, corpus_id: &str) 
             if !name_str.starts_with(&prefix) {
                 continue;
             }
-            let meta_path = entry.path().join("_corpus_meta.json");
+            let meta_path = Corpus::meta_in(entry.path());
             if !meta_path.exists() {
                 continue;
             }
@@ -402,7 +417,7 @@ mod tests {
     #[tokio::test]
     async fn returns_already_has_canonical_when_canonical_exists() {
         let dir = tempfile::tempdir().unwrap();
-        let canonical_meta = dir.path().join("foo").join("_corpus_meta.json");
+        let canonical_meta = Corpus::meta_in(dir.path().join("foo"));
         std::fs::create_dir_all(canonical_meta.parent().unwrap()).unwrap();
         std::fs::write(&canonical_meta, "{}").unwrap();
 
@@ -436,11 +451,7 @@ mod tests {
         // A real partition with chunks would normally live next to it.
         let partition = dir.path().join("commonwealth-partition-local");
         std::fs::create_dir_all(&partition).unwrap();
-        std::fs::write(
-            partition.join("_corpus_meta.json"),
-            r#"{"processed_shards":[0]}"#,
-        )
-        .unwrap();
+        std::fs::write(Corpus::meta_in(&partition), r#"{"processed_shards":[0]}"#).unwrap();
 
         let outcome = try_recover_stranded_partitions(dir.path(), "commonwealth").await;
         assert!(
@@ -474,7 +485,7 @@ mod tests {
         std::fs::create_dir_all(&p1).unwrap();
         std::fs::create_dir_all(&p2).unwrap();
         std::fs::write(
-            p1.join("_corpus_meta.json"),
+            Corpus::meta_in(&p1),
             r#"{"processed_shards":[0,1,2],"total_shards":5}"#,
         )
         .unwrap();
@@ -482,7 +493,7 @@ mod tests {
         // either matches or is absent. We test with both stamped
         // values matching to confirm the union is what gates.
         std::fs::write(
-            p2.join("_corpus_meta.json"),
+            Corpus::meta_in(&p2),
             r#"{"processed_shards":[],"total_shards":5}"#,
         )
         .unwrap();
@@ -526,11 +537,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p1 = dir.path().join("foo-partition-aaaa");
         std::fs::create_dir_all(&p1).unwrap();
-        std::fs::write(
-            p1.join("_corpus_meta.json"),
-            r#"{"processed_shards":[0,1]}"#,
-        )
-        .unwrap();
+        std::fs::write(Corpus::meta_in(&p1), r#"{"processed_shards":[0,1]}"#).unwrap();
 
         // Reach the merge attempt — will fail because the meta is
         // junk for actual merge purposes (no embedding model, no
@@ -547,11 +554,7 @@ mod tests {
         // collision with other tests.
         let p1u = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
         std::fs::create_dir_all(&p1u).unwrap();
-        std::fs::write(
-            p1u.join("_corpus_meta.json"),
-            r#"{"processed_shards":[0,1]}"#,
-        )
-        .unwrap();
+        std::fs::write(Corpus::meta_in(&p1u), r#"{"processed_shards":[0,1]}"#).unwrap();
 
         let outcome = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
         assert!(
@@ -578,7 +581,7 @@ mod tests {
         let p1 = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
         std::fs::create_dir_all(&p1).unwrap();
         std::fs::write(
-            p1.join("_corpus_meta.json"),
+            Corpus::meta_in(&p1),
             r#"{"processed_shards":[0,1,2],"total_shards":3}"#,
         )
         .unwrap();
@@ -603,7 +606,7 @@ mod tests {
         // cooldown stamp.)
         let partition_dir = dir.path().join("xyz-partition-aaaa");
         std::fs::create_dir_all(&partition_dir).unwrap();
-        std::fs::write(partition_dir.join("_corpus_meta.json"), "{}").unwrap();
+        std::fs::write(Corpus::meta_in(&partition_dir), "{}").unwrap();
 
         // First call: should fall through to merge attempt and fail
         // (junk meta). Stamps the cooldown.
@@ -611,7 +614,7 @@ mod tests {
         // Need to re-create the partition dir with the unique name.
         let real_partition = dir.path().join(format!("{unique_corpus}-partition-aaaa"));
         std::fs::create_dir_all(&real_partition).unwrap();
-        std::fs::write(real_partition.join("_corpus_meta.json"), "{}").unwrap();
+        std::fs::write(Corpus::meta_in(&real_partition), "{}").unwrap();
 
         let first = try_recover_stranded_partitions(dir.path(), &unique_corpus).await;
         assert!(
@@ -647,7 +650,7 @@ mod tests {
             .join(format!("{unique_corpus}-partition-node-abcd"));
         std::fs::create_dir_all(&partition).unwrap();
         std::fs::write(
-            partition.join("_corpus_meta.json"),
+            Corpus::meta_in(&partition),
             r#"{"ingestion_in_progress":true,"processed_shards":[]}"#,
         )
         .unwrap();
@@ -660,6 +663,6 @@ mod tests {
             outcome
         );
         // Partition was NOT consumed by the failed-merge path.
-        assert!(partition.join("_corpus_meta.json").exists());
+        assert!(Corpus::meta_in(&partition).exists());
     }
 }

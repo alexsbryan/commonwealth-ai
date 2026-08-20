@@ -348,10 +348,7 @@ pub async fn corpus_collaborate(
             //       the existing handoff blob (still in `mesh_store`
             //       via gossip) and re-fire the merge so the corpus
             //       actually finishes.
-            let canonical_exists = engine
-                .canonical_path(&req.corpus_id)
-                .join("_corpus_meta.json")
-                .exists();
+            let canonical_exists = engine.corpus(&req.corpus_id).is_installed();
 
             if !canonical_exists {
                 if let Some(existing) =
@@ -456,6 +453,12 @@ pub async fn corpus_collaborate(
                             "corpus_collaborate: stranded-partition recovery skipped \
                              (incomplete local coverage); peer with full coverage \
                              will produce canonical"
+                        );
+                    }
+                    crate::auto_recover::RecoveryOutcome::InvalidCorpusId => {
+                        tracing::warn!(
+                            corpus_id = %req.corpus_id,
+                            "corpus_collaborate: empty corpus id, nothing to recover"
                         );
                     }
                     crate::auto_recover::RecoveryOutcome::CanonicalDirectoryReserved => {

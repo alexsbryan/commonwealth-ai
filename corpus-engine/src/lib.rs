@@ -22,6 +22,10 @@ pub mod atlas_canonical;
 pub mod atlas_traversal;
 pub mod canonical_sync;
 pub mod chunkers;
+/// `Corpus` — one installed corpus, named and located. The published noun, and
+/// the one decider of corpus-engine's on-disk layout (see the module docs for
+/// the 156 hand-joins it replaces).
+pub mod corpus;
 pub mod engine;
 pub mod enrichment;
 pub mod error;
@@ -112,6 +116,7 @@ pub mod notes_sync;
 // consumers already depend on, so a consumer cannot pick up the predicate
 // without the bound in reach (and need not take a second direct dep on the
 // leaf — ARCH §8.3).
+pub use corpus::{Corpus, CORPUS_META_FILENAME};
 pub use corpus_engine_yield::{DeferralBudget, DeferralStep, YieldHook, MAX_FOREGROUND_DEFERRAL};
 pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
