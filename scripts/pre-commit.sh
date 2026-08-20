@@ -37,21 +37,34 @@ except Exception:
 staged = set(os.environ["STAGED"].split())
 self_hex = os.environ.get("SELF", "")
 def node_str(node): return (node or "")  # null node_id = legacy pre-fix-1 claim
-def is_self(node): return bool(self_hex) and node_str(node).removeprefix("node-") == self_hex
+def is_self(entry):
+    # Trust the atlas's OWN answer first. The daemon computes `node_is_self`
+    # against the identity the observer actually stamped rows with; scraping
+    # `mesh status` for the starred row re-derives the same fact from a second
+    # source, and the two can disagree — observed 2026-08-20, where the star
+    # said 37f17554b6c4ff29 while every locally-observed row was stamped
+    # b88252e4325bc377 (node_is_self=true). On that disagreement the scrape
+    # reports EVERY one of your own edits as a peer's, and a warning that always
+    # fires is one people learn to click past — which costs the real collision
+    # it exists to catch (§10.6: one decider; §18.1: a guard nobody trusts).
+    v = entry.get("node_is_self")
+    if isinstance(v, bool):
+        return v
+    return bool(self_hex) and node_str(entry.get("node_id")).removeprefix("node-") == self_hex
 def touches(scope):
     scope = scope.rstrip("/")
     return any(f == scope or f.startswith(scope + "/") or scope.startswith(f)
                for f in staged)
 warns = []
 for c in atlas.get("claims", []):
-    if not is_self(c.get("node_id")):
+    if not is_self(c):
         for s in c.get("scopes", []):
             if touches(s):
                 warns.append(f"  claim   {s}  ({c.get('node_id','?')}) — "
                              f"{c.get('intent','')[:90]}")
                 break
 for o in atlas.get("observations", []):
-    if not is_self(o.get("node_id")) and o.get("file_path", "") in staged:
+    if not is_self(o) and o.get("file_path", "") in staged:
         warns.append(f"  {o.get('confidence','?'):7} {o['file_path']}  "
                      f"({o.get('node_id','?')}, {o.get('event_count',0)} edits)")
 if warns:
@@ -82,14 +95,22 @@ PY
 STAGED_RS="$(printf '%s\n' "$STAGED" | grep -E '\.rs$' || true)"
 if [ -n "$STAGED_RS" ] && command -v rustfmt >/dev/null 2>&1; then
     # shellcheck disable=SC2086
-    UNFMT="$(printf '%s\n' $STAGED_RS | while read -r f; do
+    UNFMT_PATHS="$(printf '%s\n' $STAGED_RS | while read -r f; do
         [ -f "$f" ] || continue
-        rustfmt --edition 2021 --check "$f" >/dev/null 2>&1 || printf '    %s\n' "$f"
+        rustfmt --edition 2021 --check "$f" >/dev/null 2>&1 || printf '%s ' "$f"
     done)"
-    if [ -n "$UNFMT" ]; then
-        printf 'rustfmt NOTICE (advisory, commit proceeds): staged file(s) need formatting —\n%s\n' "$UNFMT"
-        printf '  fix: cargo fmt --all   · the pre-push gate WILL block on this, and it is\n'
-        printf '       whole-workspace, so leaving it makes it someone else'"'"'s problem to fix.\n'
+    if [ -n "$UNFMT_PATHS" ]; then
+        printf 'rustfmt NOTICE (advisory, commit proceeds): staged file(s) need formatting —\n'
+        for f in $UNFMT_PATHS; do printf '    %s\n' "$f"; done
+        # Name the SCOPED command, not `cargo fmt --all`. This repo is routinely
+        # a shared checkout with several agents mid-edit; a workspace-wide fmt
+        # reformats their in-flight files, which is the exact "someone else's
+        # problem" this notice exists to prevent. The unformatted set is already
+        # known here, so hand it back rather than a blunt instrument.
+        printf '  fix (your staged files only):\n    rustfmt --edition 2021 %s\n' "$UNFMT_PATHS"
+        printf '  the pre-push gate is whole-workspace and WILL block on this, so do not\n'
+        printf '  leave it. Avoid `cargo fmt --all` unless you own every uncommitted\n'
+        printf '  change in the tree — it rewrites other agents'"'"' files too.\n'
     fi
 fi
 exit 0
