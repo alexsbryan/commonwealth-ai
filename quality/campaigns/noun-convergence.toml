@@ -254,6 +254,34 @@ Citation not pointing into a sealed EvidenceSet; a non-shareable Evidence
 composed into a peer-bound reply. Each ships red-first (ARCH §18.1)."""
 kill         = "if a totality rule cannot be implemented without banning a path the product legitimately needs, this bar FAILS and is re-registered with the narrower invariant — never quietly relaxed"
 closes_at    = "rung 11"
+# INSTRUMENTED 2026-08-20 by the seat. Until today this bar carried NO `today`
+# and NO `instrument`, so `co-lineage measure` skipped it and it rendered
+# UNMEASURED — while the three type-counting bars were fully instrumented. That
+# is the same asymmetry `nc-extends` was minted to correct, and it had a live
+# cost: rungs 10 and 11 both declare `moves = ["nc-thesis"]`, so either could
+# have landed with no way to say whether the thesis moved.
+#   2/5 declared constructions un-constructible by type -> 0.4
+#   an Answer with no Judgement                   open   (rung 11)
+#   an Evidence with no Origin                    TYPE   evidence_without_an_origin
+#   an Evidence with no Custody                   TYPE   evidence_without_a_custody
+#   a Citation not into a sealed EvidenceSet      open   (rung 11)
+#   a non-shareable Evidence in a peer-bound reply open  (rung 11)
+# nc-4-evidence landed three FURTHER Evidence reds beyond the declared list
+# (struct literal, no public constructor, not mutable). They are real proof and
+# they are deliberately NOT counted: this scores the DECLARED list, and letting
+# extra fixtures inflate it would let the bar be moved by adding tests next to
+# the claims already proven rather than by proving the open ones.
+# SCOPE: the instrument scores COVERAGE only — it does not re-run rustc, because
+# co-lineage caps an instrument at 10s and trybuild needs a full crate build.
+# That the wired reds still FAIL is proven by the definition-of-done sweep,
+# which builds and runs `evidence_reds.rs` as an ordinary test target. A green
+# here over a red sweep is not a thesis.
+# The `harness_positive_control` fixture gates the whole reading: absent or
+# unwired, the instrument exits 4 (could-not-judge) and emits no value rather
+# than reporting a zero it cannot stand behind (§18.2, §18.4). Watched failing
+# 2026-08-20 before this line was written.
+today        = 0.4
+instrument   = "scripts/nc-thesis.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
 
 [[bar]]
 id           = "nc-extends"
