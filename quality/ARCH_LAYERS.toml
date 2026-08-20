@@ -39,8 +39,13 @@ schema_version = 1
 name = "contract"
 crates = ["oicp-types", "kernel-types", "sovereign-contracts", "oicp-client", "arch-layers", "sovereign-time"]
 
-# The knowledge layer: corpus-engine + its carve-outs. Self-contained by
-# design — neither sovereign nor commonwealth types appear here.
+# The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
+# design — neither sovereign nor commonwealth types appear here" was the claim
+# here until 2026-08-20, and it was false: four types (DetectedSection,
+# SectionDetector, ChapterRegexDetector, TocAnchoredDetector) were owned by
+# `sovereign-contracts` and named from `corpus-engine`. They now live in
+# `corpus-engine-sections`, and the claim is enforced below rather than asserted
+# here (noun-convergence rung 2).
 [[layer]]
 name = "knowledge"
 crates = ["corpus-engine", "corpus-engine-*"]
@@ -132,6 +137,73 @@ crates = [
 # (naming predates the monorepo merge) — their sovereign deps are exempted
 # here rather than grandfathered, since the crates are sovereign-side in all
 # but name.
+# The knowledge layer meets sovereign at the contracts seam and nowhere else.
+# Layer ordering cannot say this on its own: `sovereign-contracts` is declared
+# in the `contract` layer above, so every `corpus-engine-* → sovereign-*` edge
+# reads as downward and legal. `nc-boundary.py` disagrees — it classifies by
+# PATH, so anything under `sovereign/` is domain `sovereign` at layer 2, and a
+# knowledge-layer crate naming it is BACKFLOW. This rule records which of the
+# two readings binds new code: the seam is permitted, a second sovereign
+# dependency is not.
+#
+# What crosses today, census 2026-08-20. Four TYPES stopped crossing when the
+# section detectors moved to `corpus-engine-sections`
+# (`nc-boundary --edge corpus-engine:sovereign`: 4 → 0). The crate dependency
+# SURVIVES, on three modules that carry no types at all — which is why the type
+# census never showed them (`nc-boundary.py` selects `qualified_name LIKE '%#'`,
+# so free functions and consts are invisible to it):
+#   rebrand::svrnmesh_root                          4 sites (+2 in examples)
+#   recipe::url_template::render_template           1 site
+#   recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON   1 site (re-exported)
+# These stay deliberately. `svrnmesh_root` is the workspace path SSOT — 220 call
+# sites over 15 crates, and clippy `disallowed_methods = "deny"` makes
+# hand-rolling the path a build error, so it must remain ONE accessor (ARCH
+# §10.6); relocating it is its own rung. The other two are agreements the engine
+# and the recipe package must hold bit-for-bit, with no home below.
+[[forbid]]
+from = "corpus-engine*"
+to = "sovereign-*"
+except = ["sovereign-contracts"]
+reason = "the knowledge layer must stay consumable without the agent runtime; it meets sovereign at the contracts seam only, and must never again name a sovereign-owned TYPE"
+
+# The wire contract is the floor. `nc-boundary.py` reads the workspace as four
+# systems — oicp(0) < corpus-engine/commonwealth(1) < sovereign(2) < studio(3) —
+# and an `oicp-* → sovereign-*` edge is BACKFLOW under it: the crate that exists
+# to decouple the systems depending on one of them. Layer ordering alone cannot
+# say this, because `sovereign-contracts` is declared in the `contract` layer
+# here; these rules make the direction structural instead of remembered.
+# (noun-convergence rung 2, 2026-08-20.)
+
+[[forbid]]
+from = "oicp-types"
+to = "sovereign-*"
+reason = "the wire contract is the floor — a protocol crate that names the runtime cannot be lifted, versioned, or implemented by a third party"
+
+# oicp-client's ONE surviving sovereign edge, with the finding that keeps it.
+# Census 2026-08-20, `scripts/nc-boundary.py --edge oicp:sovereign`: 12 types /
+# 103 refs, every one of them from `oicp-client/src/lib.rs`, every one defined
+# in `sovereign-contracts` —
+#   traits.rs            InferenceProvider, ResidentSlot
+#   types/completion.rs  CompletionRequest, CompletionResponse, StreamFrame,
+#                        FinishReason, StreamUsage, ProviderCapabilities
+#   types/mod.rs         Speed, Depth
+#   error.rs             Error, Result
+# THE FINDING: the trait and the completion value types belong to oicp —
+# `oicp-client` is the Open Inference Capabilities Protocol client and that IS
+# the inference wire vocabulary; the home is oicp-types, and the fix is a MOVE.
+# `Error`/`Result` do NOT move with them: error.rs is a 150-line sovereign
+# RUNTIME error enum (Planning, Execution, Tool, ToolNotFound, Storage,
+# PermissionDenied, CorpusUpdateNotAuthorised, QueueShed). Every
+# `InferenceProvider` method returns it, so the move needs an oicp-owned error
+# plus conversions across 79 `impl InferenceProvider for` sites — its own rung,
+# not a side effect of another. Until it lands the edge is permitted HERE and
+# nowhere else: oicp-client may not acquire a second sovereign dependency.
+[[forbid]]
+from = "oicp-client"
+to = "sovereign-*"
+except = ["sovereign-contracts"]
+reason = "the OICP client meets the runtime at the contracts seam only; the inference vocabulary it borrows is oicp's own and moves down in its own rung"
+
 [[forbid]]
 from = "commonwealth-core"
 to = "sovereign-*"
@@ -173,6 +245,23 @@ to = "sovereign-*"
 except = ["sovereign-contracts"]
 reason = "the standalone mesh daemon must not drag the agent runtime"
 
+# WHAT actually crosses, so R6 has a size rather than a feeling. Census
+# 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 22 types /
+# 122 refs, all from `commonwealth-api` —
+#   sovereign-contracts (11, permitted by the `except` below — the declared seam)
+#     routing.rs           Effect, Scope, ToolDescriptor, Idempotency, Latency
+#     next_edit_journal.rs NextEditEpisode, JournalLine, NextEditOutcome,
+#                          NextEditOutcomeLine
+#     journal.rs           JournalStream        completion.rs  SamplingMode
+#   sovereign-tools (6, grandfathered below)
+#     atlas_postinstall.rs Tier2LaunchOutcome, StructuralAtlasOutcome, TriageOutcome
+#     atlas_peer_advice.rs PeerAtlasView, PeerAtlasPullCandidate
+#     atlas_status.rs      AtlasStatusRow
+#   sovereign-atos (5, grandfathered below)
+#     session.rs           ArtifactDelta, MilestonePassEvent, SessionStore
+#     approval.rs          FeatureApproval, ApprovalSource
+# The 11 contract types are the seam working as designed. The other 11 are the
+# in-process runtime embed, and they are what R6 has to delete.
 # The mesh API's reach into the agent runtime is real, load-bearing debt —
 # the OICP-only seam is the goal state (remediation R6). Forbidden so every
 # such edge must be individually grandfathered below and burns down visibly.

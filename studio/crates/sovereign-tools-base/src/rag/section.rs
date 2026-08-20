@@ -29,8 +29,8 @@
 
 use async_trait::async_trait;
 
-use sovereign_contracts::error::{Error, Result};
 use corpus_engine_sections::{ChapterRegexDetector, SectionDetector};
+use sovereign_contracts::error::{Error, Result};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::*;
 
