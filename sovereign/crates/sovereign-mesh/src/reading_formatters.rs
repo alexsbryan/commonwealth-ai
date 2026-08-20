@@ -10,41 +10,6 @@
 
 use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeType};
 
-pub(crate) fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
-    match atom {
-        AtomEnvelope::Entity(_) => "entity",
-        AtomEnvelope::Event(_) => "event",
-        AtomEnvelope::State(_) => "state",
-        AtomEnvelope::Relation(_) => "relation",
-        AtomEnvelope::Claim(_) => "claim",
-        AtomEnvelope::Question(_) => "question",
-        AtomEnvelope::Configuration(_) => "configuration",
-        AtomEnvelope::ArgumentReconstruction(_) => "argument",
-        AtomEnvelope::Position(_) => "position",
-        AtomEnvelope::Opposition(_) => "opposition",
-        AtomEnvelope::Asset(_) => "asset",
-    }
-}
-
-pub(crate) fn edge_type_label(t: EdgeType) -> &'static str {
-    match t {
-        EdgeType::Transition => "transition",
-        EdgeType::Causes => "causes",
-        EdgeType::Grounds => "grounds",
-        EdgeType::Tension => "tension",
-        EdgeType::Involves => "involves",
-        EdgeType::Composes => "composes",
-        EdgeType::Configures => "configures",
-        EdgeType::Grounding => "grounding",
-        EdgeType::Framing => "framing",
-        EdgeType::Provenance => "provenance",
-        EdgeType::EvidenceFor => "evidence_for",
-        EdgeType::Concedes => "concedes",
-        EdgeType::OpposesIn => "opposes_in",
-        EdgeType::Attaches => "attaches",
-    }
-}
-
 /// Pull the human-readable fields for any atom type. Not every
 /// type has every field — for atoms without a clean canonical name
 /// we synthesize from the most descriptive available text so the

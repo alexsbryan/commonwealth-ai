@@ -70,7 +70,7 @@ pub fn detect_atom_spans(
         return Vec::new();
     }
 
-    // Stage 1 — gather (atom_id, atom_type_label, surface_forms) for
+    // Stage 1 — gather (atom_id, AtomType::label, surface_forms) for
     // every atom anchored at this section. We only emit spans for
     // atoms whose evidence (or first_appearance, for entities) ties
     // them to this section. This avoids spurious matches from atoms
@@ -87,7 +87,7 @@ pub fn detect_atom_spans(
         }
         candidates.push((
             atom.id().as_str().to_string(),
-            atom_type_label(atom),
+            atom.atom_type().label(),
             surface_forms,
         ));
     }
@@ -146,22 +146,6 @@ pub fn detect_atom_spans(
         }
     }
     accepted
-}
-
-fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
-    match atom {
-        AtomEnvelope::Entity(_) => "entity",
-        AtomEnvelope::Event(_) => "event",
-        AtomEnvelope::State(_) => "state",
-        AtomEnvelope::Relation(_) => "relation",
-        AtomEnvelope::Claim(_) => "claim",
-        AtomEnvelope::Question(_) => "question",
-        AtomEnvelope::Configuration(_) => "configuration",
-        AtomEnvelope::ArgumentReconstruction(_) => "argument",
-        AtomEnvelope::Position(_) => "position",
-        AtomEnvelope::Opposition(_) => "opposition",
-        AtomEnvelope::Asset(_) => "asset",
-    }
 }
 
 /// True when this atom has any anchor (evidence chunk_id, first

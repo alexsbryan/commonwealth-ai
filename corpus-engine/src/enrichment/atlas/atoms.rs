@@ -968,6 +968,34 @@ impl AtomType {
     /// per-kind count, a UI filter list — does not hand-roll a twelfth
     /// fan-out. `atom_type_is_a_closed_set_that_round_trips` fails if a
     /// variant is added to the enum and not to this list.
+    /// Compact lowercase tag for this kind — `"entity"`, `"argument"`,
+    /// `"configuration"`. The single decider for the LABEL spelling.
+    ///
+    /// Deliberately NOT the serde repr: `AtomType` serialises PascalCase
+    /// (`"ArgumentReconstruction"`) because that is the on-disk `atom_type`
+    /// tag, and the two must not be confused. `ArgumentReconstruction` is
+    /// `"argument"` here — a curated label, not a mechanical lowercasing,
+    /// which is exactly why it needs one home.
+    ///
+    /// Byte-identical copies of this fan-out lived in
+    /// `atlas_traversal::spans` and in `sovereign-mesh::reading_formatters`,
+    /// on both sides of the domain boundary. Deleted 2026-08-20.
+    pub fn label(&self) -> &'static str {
+        match self {
+            AtomType::Entity => "entity",
+            AtomType::Event => "event",
+            AtomType::State => "state",
+            AtomType::Relation => "relation",
+            AtomType::Claim => "claim",
+            AtomType::Question => "question",
+            AtomType::Configuration => "configuration",
+            AtomType::ArgumentReconstruction => "argument",
+            AtomType::Position => "position",
+            AtomType::Opposition => "opposition",
+            AtomType::Asset => "asset",
+        }
+    }
+
     pub const ALL: [AtomType; 11] = [
         AtomType::Entity,
         AtomType::Event,

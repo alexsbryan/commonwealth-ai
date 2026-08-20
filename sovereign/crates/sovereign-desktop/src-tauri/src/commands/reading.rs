@@ -603,7 +603,7 @@ fn build_atom_card_dto(
                 atom_id: other_id.as_str().to_string(),
                 atom_type: other_type,
                 canonical_name: other_name,
-                edge_type: edge_type_label_dto(e.edge_type),
+                edge_type: e.edge_type.label(),
                 role,
                 confidence: e.confidence,
             })
@@ -722,26 +722,6 @@ fn atom_surface_dto(
     }
 }
 
-fn edge_type_label_dto(t: corpus_engine::enrichment::atlas::EdgeType) -> &'static str {
-    use corpus_engine::enrichment::atlas::EdgeType;
-    match t {
-        EdgeType::Transition => "transition",
-        EdgeType::Causes => "causes",
-        EdgeType::Grounds => "grounds",
-        EdgeType::Tension => "tension",
-        EdgeType::Involves => "involves",
-        EdgeType::Composes => "composes",
-        EdgeType::Configures => "configures",
-        EdgeType::Grounding => "grounding",
-        EdgeType::Framing => "framing",
-        EdgeType::Provenance => "provenance",
-        EdgeType::EvidenceFor | EdgeType::Concedes | EdgeType::OpposesIn => {
-            unreachable!("typed edges wired in Gap B Stage 4")
-        }
-        EdgeType::Attaches => "attaches",
-    }
-}
-
 fn truncate_dto(s: &str, max_chars: usize) -> String {
     let trimmed: String = s.chars().take(max_chars).collect();
     if trimmed.chars().count() < s.chars().count() {
@@ -817,7 +797,7 @@ fn cross_corpus_links_dto(
             peer_corpus_id: e.peer.corpus_id.clone(),
             peer_atom_id: e.peer.atom_id.as_str().to_string(),
             peer_canonical_name: e.peer.canonical_name.clone(),
-            edge_type: edge_type_label_dto(e.edge.edge_type),
+            edge_type: e.edge.edge_type.label(),
             signal: e.trace.signal.clone(),
             confidence: e.trace.confidence,
         })
