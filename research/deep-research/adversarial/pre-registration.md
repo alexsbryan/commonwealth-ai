@@ -3588,6 +3588,48 @@ never push.
 
 (appended as flights land)
 
+- **2026-08-19 11:39-14:21 PT — thin BANK landed (unit
+  t6a-corpus-scale-bank.service, 2h42m wall):** 13/13 flights terminal
+  done-partial, exit 0 — "ALL FLIGHTS OK"
+  (`runs/corpus-scale/bank-driver.log`). Walls: seed-01 1087s, 02 1985,
+  03 960 (probe), 04 2064, 05 660, 06 496, 07 475, 08 888, 09 734, 10 904,
+  11 1083, 12 366, v1 2088 (upper bounds — co-tenancy journaled). All 13
+  flights persisted estates (`dr-estate-dr-<run-ts>`, state ready —
+  verified live 2026-08-20).
+- **2026-08-20 — thin scored (scorer invoked only, zero daemon calls):**
+  `arms/score-report-corp-scale-thin.json`. Pooled loop density 0.57 vs
+  one-shot 0.979 (lift −0.409); loop ungrounded 0.43 vs one-shot 0.021.
+  Bars: P4-v0 30/72 FAIL (bar ≥58/72), P4-v1 1/16 FAIL, P3 6/13 FAIL,
+  R-12 2/12 FAIL, T1.7 12/12 PASS, both two-arm lifts FAIL, honesty FAIL.
+  Loop verdicts across 263 claims: 9 passed / 17 failed / 237
+  could-not-judge. Same questions, batteries: P4-v0 70/72 (t6b), 68/72
+  (t6c) — the thin leg is the estate at its floor, measured, never
+  assumed.
+- **CORRECTION journaled (flywheel):** the pre-flight record "the deep
+  flights created NO `dr-estate-dr-*` corpora (109 estate corpora, none
+  for the demo13 deep ts range)" is SUPERSEDED by direct evidence: every
+  deep manifest with fetched>0 carries `ingested_into` (drb-58/59/62/65/
+  69/78/83/90/95; drb-56 fetched 0 — none expected), and the estate index
+  dirs exist with flight-time creation Aug 18 (e.g.
+  `dr-estate-dr-1787068173` dir mtime 2026-08-18 09:43 PDT; run id minted
+  08:49 PDT) and are searchable (live probe returns the run's fetched
+  pages). The web arm DID persist estates; the recorded persistence gap
+  is retracted. The warm corpus remains the right bracket — the estates
+  were not in the flight corpus set — but the rationale is corrected:
+  not "no persistence", rather "persisted, not part of the search set".
+- **2026-08-20 — WARM leg DEFERRED (seat directive — operator queue
+  review):** the flight (unit `t6a-corpus-scale-warm`, seeds 01-03,
+  `--corpora wikipedia,dr-estate-demo13-warm`, same budgets/rounds/
+  thresholds) is HELD pending the seat's confirmation. The warm corpus is
+  flight-ready (37 md files from the deep flights' 38 chunks, ingested,
+  searchable, live hits). The write-up `arms/corpus-scale-comparison.md`
+  carries the thin-leg numbers and cites the deep-arm evidence as the
+  ceiling reading in the warm bracket's place. Commit held with the
+  scope.
+- **2026-08-20 — RESOLUTION (seat, operator queue review):** COMMIT GO for
+  the held set (one git invocation, local only); WARM leg CANCELLED — no
+  further flights from this order. T6a phase 1c closed.
+
 ## T6a-t6b pilot — the smallest learning loop (operator steer 2026-08-18) — DECLARATION
 
 The ceiling arm's 5 landed reports (56/58/59/62/65 — truncated, named) with
