@@ -19,6 +19,46 @@ Measured 2026-08-19 before any of this campaign landed:
   102-method god object) and its Error/Result. The three systems do not talk
   through a contract; they talk through corpus-engine's internals.
 
+PROPOSAL — nc-3-backstage, 2026-08-20. NOT the registered instrument.
+`scripts/nc-boundary.py` is seat-owned for this wave; this file exists so the
+change could be MEASURED without re-baselining three bars under two peers
+mid-flight. The seat lands it and re-baselines.
+
+TWO CHANGES, both re-classification. Neither claims a dependency went away.
+  1. the domain() asymmetry — see the comment on domain() below. `load()`
+     passed the crate; the ref loop passed nothing, so BACKSTAGE_CRATES applied
+     to a type's OWNER and never to its REFERENCE SITE. Back-of-house crates
+     referencing their own types scored as violations.
+  2. membership — see BACKSTAGE_CRATES below. +sovereign-atos,
+     -commonwealth-tdd, -sovereign-authoring-harness, each adjudicated against
+     "does the product ship without it?" with the evidence recorded inline.
+
+WHAT LANDING THIS COSTS — it moves bars this rung does NOT own. Measured on
+one graph (mtime 2026-08-20 01:16), same tree, all four variants:
+
+  variant                       core_w  violating  BACKSTAGE  BACKFLOW  kernel
+  registered baseline              485        337        255        82      23
+    +asymmetry fix only            478        187        105        82      22
+    +membership only               480        315        238        77      23
+  BOTH (this file)                 480        162         85        77      22
+
+So: core_boundary_width -5, BACKFLOW -5, kernel_size -1 as SIDE EFFECTS. The
+kernel drop is `FeatureStore`, the one back-of-house-owned kernel type — with
+the asymmetry fixed it is spoken by two core domains plus back-of-house rather
+than three, so it is no longer kernel. The two changes are NOT additive; take
+the bottom row, not the sum.
+
+KNOWN BLIND SPOTS THIS DOES NOT FIX, both worth knowing before trusting a
+reading. Neither is introduced here; both are in the registered instrument.
+  - TYPES ONLY. Both the symbol load and the ref count filter
+    `qualified_name LIKE '%#'`, so a dependency carried by free functions,
+    consts or macros is invisible. `cargo xtask layer-gate` reads CRATE edges
+    from manifests and sees those; the two instruments are complements, not
+    duplicates. `sovereign-cli-llm -> sovereign-eval` happens to be visible to
+    both; a free-function-only edge would be visible to layer-gate alone.
+  - NOT_PRODUCTION still excludes by bare substring, so "research/" also
+    matches "deep_research/". Filed; widths are byte-identical either way.
+
   scripts/nc-boundary.py           # the table
   scripts/nc-boundary.py --json    # for a bar instrument
   scripts/nc-boundary.py --edge sovereign:corpus-engine   # what crosses it
@@ -36,9 +76,36 @@ NOT_PRODUCTION = ("/tests/", "/benches/", "/examples/", "research/",
 # layer gate can enforce — and the finding that made this a rung is that today
 # it is NOT a crate boundary: sovereign-cli-llm holds bench_cmd and gym_judge
 # next to chat and corpus in one crate, so there is nothing to enforce against.
+# v2 MEMBERSHIP (nc-3-backstage, 2026-08-20). The test is the campaign's:
+# does the product ship without it? Answered per crate, with the evidence.
+#
+#   ADDED   sovereign-atos          the ATOS orchestrator over corpus-engine-atos
+#                                   — the same subsystem, and the list already
+#                                   held the store half. Omitting it split one
+#                                   decider across two answers.
+#   REMOVED commonwealth-tdd        NOT back-of-house. It backs two SHIPPED MCP
+#                                   tools, `tdd_solve` and `tdd_bdd_cycle`,
+#                                   listed in tools/list (sovereign-server
+#                                   routes_mcp.rs:469), plus the `solve` verb's
+#                                   daemon route (daemon_cmd/solve_http.rs). A
+#                                   quality control measures SOVEREIGN; this
+#                                   drives red-green-refactor over the USER's
+#                                   repo and emits their code. Caught as a false
+#                                   positive by `cargo xtask layer-gate` on its
+#                                   first real run.
+#   REMOVED sovereign-authoring-harness
+#                                   NOT back-of-house. Carved out of
+#                                   sovereign-eval precisely so sovereign-desktop
+#                                   could consume it without rusqlite/reqwest/
+#                                   clap in the Tauri build; the desktop's
+#                                   recipe-testing panel is a shipped feature.
+#                                   The carve-out's own purpose is the evidence.
+#
+# These MOVE THE BAR by re-classification, not by deletion. See the rung's
+# A/B/C split — nothing here is a claim that a dependency went away.
 BACKSTAGE_CRATES = {
     "sovereign-eval", "sovereign-cli-dev", "sovereign-agent-bench",
-    "sovereign-authoring-harness", "commonwealth-tdd", "xtask",
+    "sovereign-atos", "xtask",
     "corpus-engine-atos", "corpus-engine-archaeology",
 }
 BACKSTAGE_PATHS = ("/bench/", "/xtask/", "gym/",
@@ -46,9 +113,33 @@ BACKSTAGE_PATHS = ("/bench/", "/xtask/", "gym/",
                    "sovereign/crates/sovereign-cli-dev/")
 
 
+def crate_of(path):
+    """Owning crate directory for a repo-relative path.
+
+    `<ws>/crates/<name>/…` for the workspace crates, else the first path
+    component (`corpus-engine-atos/src/…` and friends sit at the repo root).
+    """
+    parts = path.split("/")
+    for i, p in enumerate(parts):
+        if p == "crates" and i + 1 < len(parts):
+            return parts[i + 1]
+    return parts[0] if parts else ""
+
+
 def domain(path, crate=None):
     if any(b in path for b in NOT_PRODUCTION):
         return None
+    # v2 FIX (nc-3-backstage). `load()` passes the crate from the qualified
+    # name; the ref loop only has a file path and used to pass NOTHING, so
+    # BACKSTAGE_CRATES applied to the type's OWNER and never to the REFERENCE
+    # SITE. A back-of-house crate referencing its own types therefore scored as
+    # `sovereign -> back-of-house`, which the instrument's own rule calls legal
+    # (`if src == BACKSTAGE: return None  # observing anything is legal`).
+    # 184 of the 255 BACKSTAGE violations were exactly that self-reference:
+    # sovereign-agent-bench 92, commonwealth-tdd 40, corpus-engine-archaeology
+    # 25, corpus-engine-atos 19, sovereign-authoring-harness 8.
+    if crate is None:
+        crate = crate_of(path)
     if (crate in BACKSTAGE_CRATES) or any(p in path for p in BACKSTAGE_PATHS):
         return "back-of-house"
     if path.startswith("sovereign/"):

@@ -150,7 +150,19 @@ status       = "open"
 # not guessed: corpus-engine publishes Corpus/Evidence/Atom/Note/Record,
 # commonwealth publishes Peer/Capability, sovereign publishes
 # Question/Answer/Judgement/Citation/Gap — 12 nouns plus supporting value types.
-today        = 485.0
+#
+# RE-BASELINED 2026-08-20 by the seat, when nc-boundary.py v2 (handed over by
+# rung nc-3-backstage) replaced v1 as the canonical instrument. v2 fixes a real
+# defect: the reference loop called `domain(fp)` with no crate, so
+# BACKSTAGE_CRATES matched a type's OWNER and never its REFERENCE SITE — a
+# back-of-house crate naming its own type scored as a violation the
+# instrument's own rule (`src == BACKSTAGE: return None`) calls legal.
+# Both halves below are MEASURED on this tree, not asserted (ARCH §18.6 — a
+# judge change reported only in the direction it was meant to fix):
+#   by CODE (rungs 1/2/3, v1 instrument):        485 -> 483   (-2)
+#   by RE-CLASSIFICATION (v1 -> v2, same tree):  483 -> 478   (-5)
+# Original campaign baseline was 485.0; the -5 is not progress toward 50.
+today        = 478.0
 target       = 50.0
 direction    = "lower_is_better"
 instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"core_boundary_width\"])}))'"
@@ -172,7 +184,24 @@ status       = "open"
 # move this number largely by RE-CLASSIFYING, which is a metric moving for a
 # bookkeeping reason. Its landing verdict MUST report the split: how much moved
 # by drawing the boundary vs by deleting a dependency.
-today        = 337.0
+#
+# RE-BASELINED 2026-08-20 by the seat, when nc-boundary.py v2 (handed over by
+# rung nc-3-backstage) replaced v1 as the canonical instrument. v2 fixes a real
+# defect: the reference loop called `domain(fp)` with no crate, so
+# BACKSTAGE_CRATES matched a type's OWNER and never its REFERENCE SITE — a
+# back-of-house crate naming its own type scored as a violation the
+# instrument's own rule (`src == BACKSTAGE: return None`) calls legal.
+# Both halves below are MEASURED on this tree, not asserted (ARCH §18.6 — a
+# judge change reported only in the direction it was meant to fix):
+#   by CODE (rungs 1/2/3, v1 instrument):        337 -> 333   (-4, all BACKFLOW)
+#   by RE-CLASSIFICATION (v1 -> v2, same tree):  333 -> 158   (-175: BACKSTAGE
+#                                                -170, BACKFLOW -5)
+# THE CLAUSE ABOVE IS HEREBY ANSWERED: the campaign has moved this bar by FOUR.
+# The other 175 is bookkeeping the instrument was getting wrong. Original
+# campaign baseline was 337.0. 184 of the 255 BACKSTAGE were self-reference:
+# sovereign-agent-bench 92, commonwealth-tdd 40, corpus-engine-archaeology 25,
+# corpus-engine-atos 19, sovereign-authoring-harness 8.
+today        = 158.0
 target       = 0.0
 direction    = "lower_is_better"
 instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"violating_types\"])}))'"
@@ -185,7 +214,28 @@ status       = "open"
 # Today 23 types, 22 owned by corpus-engine, two of them god objects. Target
 # <= 10 in a crate no domain owns. A kernel is judged by OWNERSHIP as much as
 # size: ten types still owned by one domain is the same disease.
-today        = 23.0
+#
+# RE-BASELINED 2026-08-20 by the seat, when nc-boundary.py v2 (handed over by
+# rung nc-3-backstage) replaced v1 as the canonical instrument. v2 fixes a real
+# defect: the reference loop called `domain(fp)` with no crate, so
+# BACKSTAGE_CRATES matched a type's OWNER and never its REFERENCE SITE — a
+# back-of-house crate naming its own type scored as a violation the
+# instrument's own rule (`src == BACKSTAGE: return None`) calls legal.
+# Both halves below are MEASURED on this tree, not asserted (ARCH §18.6 — a
+# judge change reported only in the direction it was meant to fix):
+#   by CODE (rungs 1/2/3, v1 instrument):        23 -> 23    (0 — the kernel
+#                                                CRATE now exists and is
+#                                                measurable, but no shared type
+#                                                has moved into it yet)
+#   by RE-CLASSIFICATION (v1 -> v2, same tree):  23 -> 22    (-1: FeatureStore,
+#                                                the one back-of-house-owned
+#                                                kernel type, drops below three
+#                                                core users once the asymmetry
+#                                                is fixed)
+# Original campaign baseline was 23.0. All 22 remaining are corpus-engine-owned
+# — `kernel_homes` still names a single product domain, so `also_required`
+# below is UNMET regardless of size.
+today        = 22.0
 target       = 10.0
 direction    = "lower_is_better"
 instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"kernel_size\"])}))'"
