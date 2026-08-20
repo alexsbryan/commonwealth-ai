@@ -37,7 +37,7 @@ use sovereign_contracts::frame::{approx_tokens, Frame, FrameSchema};
 use crate::error::Result;
 use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Message, Role};
+use crate::types::{Message, Role};
 
 /// Frame sections, in render order.
 ///

@@ -30,6 +30,7 @@ pub mod atoms;
 pub mod atoms_delta;
 pub mod axis_catalog;
 pub mod citation;
+pub mod context;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
 pub mod edges;

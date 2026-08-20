@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Atlas-grounded retrieval primitives shared between the eval CLI
-//! and the runtime chat path.
+//! Atlas-grounded retrieval primitives: the traversal surface over the atom
+//! graph, plus the query-time fusion that turns atom hits into `ScoredChunk`s.
+//!
+//! Lived in `sovereign-core` until 2026-08-20 and named 44 corpus-engine types
+//! across 176 references to do it, while importing NOTHING from sovereign —
+//! the whole file was corpus-engine logic on the far side of a domain
+//! boundary. `sovereign_core::atlas_context` re-exports this module at its
+//! historical path, so no call site moved (noun-convergence rung 6).
+//!
+//! This is the VERB the rung's order asked for. `AtomView` / `EdgeView` /
+//! `EvidenceRef` are how a consumer reads the graph without holding
+//! `AtomEnvelope`, `Edge` or `EdgeType` — which is why those types can stay
+//! private to this crate rather than crossing 569 times.
 //!
 //! The atlas is a typed knowledge graph computed offline (see
 //! `corpus-engine/ATLAS.md`). At query time, retrieval can fuse atlas
@@ -16,14 +27,12 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::ann_store::AnnSeedTable;
-use corpus_engine::enrichment::atlas::projection::AtomRecord;
-use corpus_engine::enrichment::atlas::store::LancePreload;
-use corpus_engine::enrichment::atlas::{
-    AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType,
-};
-use corpus_engine::enrichment::pipeline::atlas::EpistemicStatus;
-use corpus_engine::ScoredChunk;
+use crate::enrichment::atlas::ann_store::AnnSeedTable;
+use crate::enrichment::atlas::projection::AtomRecord;
+use crate::enrichment::atlas::store::LancePreload;
+use crate::enrichment::atlas::{AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType};
+use crate::enrichment::pipeline::atlas::EpistemicStatus;
+use crate::ScoredChunk;
 
 /// One pre-embedded atlas atom available to retrieval as a virtual
 /// chunk. Built by a loader, immutable after that.
@@ -564,8 +573,8 @@ fn first_sentence(s: &str, max: usize) -> String {
 /// depth frame so phrasing matches the rest of the atlas brief stack. Each line
 /// cites its atom by qualified name + content-hash id + evidence chunk.
 pub fn render_call_chain_brief(result: &CallChainResult) -> String {
-    use corpus_engine::atlas_traversal::depth_frame_records;
-    use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
+    use crate::atlas_traversal::depth_frame_records;
+    use crate::enrichment::pipeline::atlas::EnrichmentDepth;
 
     let Some(seed) = result.nodes.first() else {
         return "No atom matches that seed in this code atlas.".to_string();
@@ -635,7 +644,7 @@ fn derive_article_slug(atlas_corpus_id: &str) -> String {
 /// `load_from_disk` returns the clean "no v2 store" `Err` instead of reading a
 /// torn store.
 fn v2_store_present(atlas_dir: &Path) -> bool {
-    use corpus_engine::enrichment::atlas::store::{ATOMS_LANCE_DIRNAME, EDGES_CSR_FILENAME};
+    use crate::enrichment::atlas::store::{ATOMS_LANCE_DIRNAME, EDGES_CSR_FILENAME};
     atlas_dir.join(ATOMS_LANCE_DIRNAME).exists() && atlas_dir.join(EDGES_CSR_FILENAME).exists()
 }
 
@@ -1278,7 +1287,7 @@ pub async fn build_persistent_ann_seed_table(
             ctx.atlas_corpus_id
         ));
     }
-    let dir = corpus_engine::enrichment::atlas::ann_store::ann_table_dir(atlas_dir);
+    let dir = crate::enrichment::atlas::ann_store::ann_table_dir(atlas_dir);
     if dir.exists() {
         std::fs::remove_dir_all(&dir)
             .map_err(|e| format!("remove stale ANN table {}: {e}", dir.display()))?;
@@ -1302,7 +1311,7 @@ pub async fn open_and_attach_ann_seed_table(
     atlas_dir: &Path,
     graph: AtlasGraph,
 ) -> AtlasGraph {
-    if !corpus_engine::enrichment::atlas::ann_store::ann_table_present(atlas_dir) {
+    if !crate::enrichment::atlas::ann_store::ann_table_present(atlas_dir) {
         return graph;
     }
     match AnnSeedTable::open_for_atlas(atlas_dir).await {
@@ -1723,12 +1732,12 @@ mod store_io_tests {
     //! L5 — the v2 store read path end to end: projection fidelity through
     //! [`AtomView`] and the `atoms.lance` + `edges.csr` load.
     use super::*;
-    use corpus_engine::enrichment::atlas::atoms::AtomId;
-    use corpus_engine::enrichment::atlas::store;
-    use corpus_engine::enrichment::atlas::{
+    use crate::enrichment::atlas::atoms::AtomId;
+    use crate::enrichment::atlas::store;
+    use crate::enrichment::atlas::{
         AtomEnvelope, ChunkRef, Edge, EdgeId, EdgeProvenance, EdgeType, Entity,
     };
-    use corpus_engine::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
+    use crate::enrichment::pipeline::atlas::{EnrichmentDepth, EntityType};
 
     fn sample_entity(n: usize, name: &str, salience: f32) -> Entity {
         Entity {
@@ -1825,7 +1834,7 @@ mod store_io_tests {
     /// rather than stranded.
     #[test]
     fn load_from_disk_requires_a_v2_store() {
-        use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
+        use crate::enrichment::atlas::ATLAS_DIRNAME;
 
         let tmp = tempfile::tempdir().unwrap();
         let atlas_dir = tmp.path().join("c1").join(ATLAS_DIRNAME);
@@ -1858,8 +1867,8 @@ mod store_io_tests {
     /// v2 Lance backend — the only backend that carries edge provenance.
     #[test]
     fn call_chain_walks_scip_edges_over_the_v2_store() {
-        use corpus_engine::enrichment::atlas::store;
-        use corpus_engine::enrichment::pipeline::atlas::EntityType;
+        use crate::enrichment::atlas::store;
+        use crate::enrichment::pipeline::atlas::EntityType;
 
         let code = |n: usize, name: &str, ty: &str| -> AtomEnvelope {
             AtomEnvelope::Entity(Entity {

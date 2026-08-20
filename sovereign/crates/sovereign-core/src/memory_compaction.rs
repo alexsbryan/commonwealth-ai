@@ -47,7 +47,7 @@ use tokio::sync::mpsc;
 use crate::error::Result;
 use crate::slot_policy::Workload;
 use crate::traits::{InferenceProvider, MemoryStore};
-use crate::types::{CompletionRequest, Memory, MemoryKind};
+use crate::types::{Memory, MemoryKind};
 
 // The operator-facing config knobs (`CompactionConfig`, `CompactionMode`,
 // `DEFAULT_SYNTHESIS_PROMPT`) were relocated to `sovereign-contracts` so

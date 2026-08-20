@@ -1,5 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-pub mod atlas_context;
+// The atlas traversal surface is corpus-engine's — it imports nothing from
+// sovereign — and moved there in noun-convergence rung 6. Re-exported at its
+// historical path so every `sovereign_core::atlas_context::*` import stands.
+pub use corpus_engine::enrichment::atlas::context as atlas_context;
 pub mod context;
 pub mod conv_briefing;
 pub mod conv_entity_graph;
