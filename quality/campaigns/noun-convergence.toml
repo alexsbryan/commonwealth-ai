@@ -1,188 +1,323 @@
-# Flight rules — read raw. Verdicts come from measurement rows, never from
-# prose here. Defer/descope = edit a bar's `status`; git history is the ledger.
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
 #
-# THE ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is
-# the committed artifact, so the LADDER below carries the rung list. If the
-# orders directory is lost, this file is enough to re-mint it.
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact and the LADDER carries the rung list, so the plan survives
+# without them.
 id        = "noun-convergence"
-objective = "An agent extending this codebase has something to reach for, so it stops building new"
-spec      = "quality/TARGET_ARCHITECTURE.md"   # the end state; NOUN_CONVERGENCE.md is the argument
-register  = "quality/CONCEPTS.toml"            # per-noun canonical owner + totality rule
+objective = "Four domains, four boundaries, one small contract at each — so extending one does not require reading the others"
+spec      = "quality/TARGET_ARCHITECTURE.md"
+register  = "quality/CONCEPTS.toml"
 declared  = "2026-08-19"
 status    = "active"
 
-# THE DIAGNOSIS, because it decides the order of work.
+# ── THE SYSTEM, AS THE OPERATOR DESCRIBES IT ────────────────────────────────
 #
-# The rot is not carelessness. An agent adding a feature has excellent local
-# context and no cheap way to learn the concept already exists three crates
-# over, so it writes a correct new one. The measured specimen:
-# `sovereign-core/src/deep_research/icd.rs`, minted the week this program was
-# drafted, re-derived FIVE register nouns including a `Verdict` — privately,
-# because no canonical home existed to import.
+#   BACK OF HOUSE — the quality controls
+#   eval · benches · judges · code-intel · gates · atos · gym
+#   May observe every layer. NOTHING may depend on it.
+#   Its own nouns: Measurement, Baseline, Attribution, Verdict(the eval kind)
+#   ───────────────────── observes ─────────────────────
 #
-# So the cure has two halves and both are funded here:
-#   HEAL           one canonical per noun, call sites ported to it
-#   STAY HEALTHY   reaching is cheaper than building, and the build fails if
-#                  someone builds new anyway
+#   2  sovereign        the INTERFACE layer — presents and packages the two
+#                       below (operator, 2026-08-19). Owns THE TURN:
+#                       Question, Answer, Judgement, Citation, Gap
+#         |
+#   1  corpus-engine    KNOWLEDGE. Owns Corpus, Evidence, Atom, Note, Record
+#      commonwealth     FEDERATION. Owns Peer, Capability, NodeCapability
+#         |
+#   0  oicp + kernel    THE CONTRACT. ContentHash, CorpusId, NodeId, Origin,
+#                       Custody, Attribution
 #
-# WHAT THIS CAMPAIGN DELIBERATELY DOES NOT FUND (cut 2026-08-19, operator
-# direction — no overhead that does not reach the end state):
-#   - the seven-domain golden freeze. 10,130 passing tests ARE the golden;
-#     running them before/after a conversion is the differential.
-#   - fingerprint-keyed Measurement as a PREREQUISITE. It is noun #10 here,
-#     not a gate on the other thirteen — almost no convergence work puts a
-#     model in the loop.
+# AGENTS.md's "commonwealth != sovereign, they are peer projects, not
+# parent/child" is a GOVERNANCE claim — separate repos, separate cadence — not
+# a layering one. The traffic settles it: sovereign -> commonwealth is 751 refs
+# (deliberate composition), commonwealth -> sovereign is 122 (leakage).
+#
+# `studio` is a FIFTH system this framing does not name (44 types each way with
+# sovereign). Out of scope, named so it is not mistaken for noise.
+
+# ── MEASURED 2026-08-19 by scripts/nc-boundary.py ───────────────────────────
+#
+#   sovereign     -> corpus-engine  5103 refs /  337 types
+#   sovereign     -> back-of-house  2374 refs /  210 types   BACKSTAGE
+#   sovereign     -> commonwealth    751 refs /   92 types
+#   corpus-engine -> back-of-house   376 refs /   44 types   BACKSTAGE
+#   commonwealth  -> sovereign       122 refs /   22 types   BACKFLOW
+#   oicp          -> sovereign       103 refs /   12 types   BACKFLOW
+#   corpus-engine -> sovereign        24 refs /    4 types   BACKFLOW
+#
+#   SHARED KERNEL: 23 types, 22 of them owned by corpus-engine — including
+#   CorpusEngine (102 methods), CorpusIndex (112 methods), and its Error and
+#   Result. The domains do not talk through a contract. They talk through one
+#   domain's implementation.
+#
+# THE FAT BOUNDARY IS FOUR UNNAMED SURFACES. The 337 types crossing into
+# corpus-engine cluster by traffic:
+#   atlas      AtomEnvelope 542, AtomId 217, EdgeType 141, AtomType 118,
+#              EntityType 109, Entity 89, Edge 69          -> ONE noun: Atom
+#   notes      NoteStore 231, NoteScope 89, NoteRow 73, NoteSource -> Note
+#   retrieval  ScoredChunk 231, ChunkRef 66, EmbedFn 65    -> Evidence
+#   engine     CorpusEngine 193, CorpusIndex, IndexInfo, CorpusSpec,
+#              IngestProgress 94, PipelinePhase 121        -> Corpus
+# Four nouns replace about thirty of the fattest crossing types.
+
+# ── WHY THE FIRST TWO DRAFTS WERE WRONG (both 2026-08-19) ───────────────────
+#
+# v1 ranked by re-derivation pressure off CONCEPTS.toml. That register came
+# from the D1 census — names typed in more than one crate — which is a census
+# of copy-paste accidents, not a decomposition. Measured: following ONE turn
+# from `handle_message_stream` crosses 205 first-party production types; the
+# 27-noun register names FOUR, and at depth<=2 names ONE of fourteen. All v1
+# rungs could have landed green with ~200 main-path types still unnamed — the
+# "orders land, headline never moves" failure that minted initiative-bars.toml.
+#
+# v2 modelled sovereign and commonwealth as peers and got the layer direction
+# wrong, and omitted back-of-house entirely.
+#
+# v3 ranks by DOMAIN BOUNDARY. A noun earns a rung when it is what one domain
+# PUBLISHES to another.
+
+# ── NOT FUNDED (stated so the omissions are choices, not oversights) ────────
+#   - the seven-domain golden freeze. 10,130 passing tests ARE the golden.
 #   - the replay tape, the >=0.8 level-2 agreement experiment, the non-Rust
-#     portability demo. Real ambitions about the harness-as-product; overhead
-#     against this objective.
-#   - shadow mode + N-run promotion as a universal step. Ceremony on a `From`.
-#   - driving the raw census to 0. The 221-row two-crate tail is a DISCOVERY
-#     FEED, not a work queue: zeroing it means renaming ~130 name coincidences
-#     apart, which is churn with no architectural gain. A name is adjudicated
-#     when a register noun touches it, never in a batch up front.
+#     portability demo.
+#   - shadow mode + N-run promotion as a universal step.
+#   - driving the raw census to 0 — the 221-row two-crate tail is a discovery
+#     feed, not a work queue.
+#   - Step/Artifact substrate: studio's domain, the fifth system.
+#   - god-object splitting: deferred bar, lands as a consequence of rungs 4-7.
+
+# ── THE MISCELLANEA HAS CATEGORIES; IT IS UNMAPPED, NOT UNCATEGORIZED ───────
+#
+# Measured 2026-08-19: of 5,003 first-party production types, 1,515 (30%) end
+# in one of 26 recurring suffixes. They are not 1,515 concepts. They are
+# instances of categories this ladder already names. A worker adjudicating a
+# name uses this table: `FooOutcome` is not a new noun, it is a Judgement.
+#
+#   SHAPE                                        COUNT  BELONGS TO
+#   *Result *Outcome *Verdict *Status              290  Judgement          (r10)
+#   *Request *Response                             218  a domain boundary  (r4-8)
+#   *Row *Record *Entry                            188  Record             (r5)
+#   *Config *Args *Options                         161  per-crate IDIOM — mostly
+#                                                       correct as-is; the register
+#                                                       already dispositions Args
+#   *Report *Summary                               160  back-of-house      (r3)
+#   *Kind *Type                                     86  closed sets — correct as-is
+#   *Store *Registry *Provider                      85  Capability         (r8)
+#   *Phase *Stage *Step *Pass *Pipeline *Runner      74  THE SUBSTRATE     (r3b)
+#   *Id *Ref *Hash                                  48  the kernel         (r1)
+#
+# The dataflow family is the one with no home until rung 3b: seven distinct
+# *Phase enums (BootstrapPhase, IngestPhase, EnrichmentPhase, NarrationPhase,
+# ClearKvPhase, CorpusInstallPhase, HandoffPhase), six *Runner, six *Step,
+# five *Pipeline — all hand-rolling Step / Artifact / Runner, which already
+# exists in studio/crates/sovereign-workflow and is wired as a product feature
+# rather than as substrate. TARGET_ARCHITECTURE §3.2: "five tenants, one engine."
+
+# ── STREAMING — DECIDED 2026-08-19, was a blocking open question ────────────
+#
+# The question was whether "no Answer without a Judgement" survives an
+# assistant that streams tokens before any judgement exists. Reading
+# runtime/streaming.rs settles it: the system ALREADY holds. Gate mode buffers
+# (`held_tokens`, `gate_held_answer` :564, "buffered until the verdicts. An
+# ARMED turn must hold" :1444) and the user sees a heartbeat carrying a COUNT,
+# not the text. The invariant makes structural what the gate already does.
+#
+# The real question was un-gated turns. DECISION: `Answer` always carries a
+# `Judgement`; an un-gated turn carries `Judgement::NeverRan(Reason)` — a
+# variant the target type already declares, which "carries no quote BY
+# CONSTRUCTION". Satisfies §18.2 (a gate that did not execute is not a gate
+# that abstained), costs no architectural change, and fixes a real defect:
+# today an un-gated turn is INDISTINGUISHABLE at the type level from a
+# gated-and-passed one.
+#
+# Rejected: (B) invariant on persisted answers only — creates two classes and
+# the user-facing one is the unchecked class; (C) separate StreamedText and
+# Answer types — duplicates the noun, which is the disease.
+#
+# Tokens on the wire are NOT an Answer. They are frames; the Answer is the
+# released whole. That distinction is what makes this cheap.
 
 # ── Bars ────────────────────────────────────────────────────────────────────
 
 [[bar]]
+id           = "nc-boundary"
+one_line     = "Each domain publishes a small named surface instead of leaking its internals"
+derives_from = "the measurement above; TARGET_ARCHITECTURE.md §6"
+status       = "open"
+# Distinct types crossing between the three product domains. Target derived,
+# not guessed: corpus-engine publishes Corpus/Evidence/Atom/Note/Record,
+# commonwealth publishes Peer/Capability, sovereign publishes
+# Question/Answer/Judgement/Citation/Gap — 12 nouns plus supporting value types.
+today        = 485.0
+target       = 50.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"core_boundary_width\"])}))'"
+kill         = "if narrowing a boundary forces a re-export shim that renames the leak rather than removing it, the boundary was drawn in the wrong place — stop and redraw, do not ship the shim"
+
+[[bar]]
+id           = "nc-no-violation"
+one_line     = "No edge runs the wrong way, and nothing depends on the quality controls"
+derives_from = "the layer map above; the back-of-house one-way rule"
+status       = "open"
+# 337 types on edges that should not exist: BACKSTAGE 255 (product naming its
+# own instrument), BACKFLOW 82 (a lower layer naming a higher one).
+#
+# HONESTY CLAUSE, and it is load-bearing: most of the BACKSTAGE 255 is a
+# CLASSIFICATION problem, not a code problem — sovereign-cli-llm holds
+# bench_cmd and gym_judge next to chat and corpus in ONE crate, so the boundary
+# cannot be drawn. Only 14 types are named by unambiguous product crates
+# (sovereign-server 11, sovereign-desktop 2, commonwealth-api 1). Rung 3 will
+# move this number largely by RE-CLASSIFYING, which is a metric moving for a
+# bookkeeping reason. Its landing verdict MUST report the split: how much moved
+# by drawing the boundary vs by deleting a dependency.
+today        = 337.0
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"violating_types\"])}))'"
+
+[[bar]]
+id           = "nc-kernel"
+one_line     = "What every domain speaks is a CONTRACT, owned by none of them"
+derives_from = "the measurement above"
+status       = "open"
+# Today 23 types, 22 owned by corpus-engine, two of them god objects. Target
+# <= 10 in a crate no domain owns. A kernel is judged by OWNERSHIP as much as
+# size: ten types still owned by one domain is the same disease.
+today        = 23.0
+target       = 10.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"kernel_size\"])}))'"
+also_required = "`kernel_homes` must name a neutral crate, not a single product domain — nc-boundary.py prints it"
+
+[[bar]]
 id           = "nc-thesis"
 one_line     = "The product claim is a TYPE, not a runtime gate"
-derives_from = "TARGET_ARCHITECTURE.md §1 (the thesis invariant), §7 rows 1-4"
+derives_from = "TARGET_ARCHITECTURE.md §1, §7 rows 1-4"
 status       = "open"
-# "Nothing reaches the user that did not come from Evidence, and no Evidence
-# exists without an Origin and a Custody." Binary: either rustc refuses the
-# illegal construction or it does not.
 target       = 1.0
 direction    = "higher_is_better"
 proof        = """compile-fail tests, one per illegal construction: an Answer
-built with no Judgement; an Evidence built with no Origin; an Evidence built
-with no Custody; a Citation that does not point into a sealed EvidenceSet; a
-non-shareable Evidence composed into a peer-bound reply. A gate never observed
-to fail is not a gate (ARCH §18.1) — each ships red-first."""
-kill         = "if a totality rule cannot be implemented without banning a path the product legitimately needs, this bar FAILS and is re-registered with the narrower invariant — it is never quietly relaxed to keep the tick"
-closes_at    = "rung 7"
+with no Judgement; an Evidence with no Origin; an Evidence with no Custody; a
+Citation not pointing into a sealed EvidenceSet; a non-shareable Evidence
+composed into a peer-bound reply. Each ships red-first (ARCH §18.1)."""
+kill         = "if a totality rule cannot be implemented without banning a path the product legitimately needs, this bar FAILS and is re-registered with the narrower invariant — never quietly relaxed"
+closes_at    = "rung 11"
 
 [[bar]]
-id           = "nc-reach"
-one_line     = "Every register noun has a canonical an agent can find in one command"
-derives_from = "the diagnosis above; TARGET_ARCHITECTURE.md §6 (a noun lives in the lowest tier that needs it)"
+id           = "nc-extends"
+one_line     = "Adding a thing is a DATA change, not a code change"
+derives_from = "TARGET_ARCHITECTURE.md §2.1 — Recipe is the reference implementation of the whole architecture"
 status       = "open"
-# 11 of 24 in_program rows have NO definition today — the concept exists only
-# as untyped data (SharingPolicy is two registry bools at ~149 sites). You
-# cannot reach for what was never named.
-today        = 13.0        # 2026-08-19, minted by scripts/nc-pressure.py
-target       = 24.0
+# The end-goal bar, and the only one testing extensibility directly. Scored
+# today:  add a corpus -> DATA (46 TOML recipes)         PASS
+#         add a tool   -> CODE (60 `impl Tool for`)      FAIL
+#         add an intent-> CODE (per-intent runtime fan-out) FAIL
+# The move is already proven in-house on Recipe; this generalizes it upward
+# rather than importing a foreign idea (ARCH §19).
+today        = 1.0
+target       = 3.0
 direction    = "higher_is_better"
-instrument   = "scripts/nc-pressure.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"reach\"])}))'"
-
-[[bar]]
-id           = "nc-pressure"
-one_line     = "No register noun is defined twice, and the ratchet stops it rising"
-derives_from = "the diagnosis above; NOUN_CONVERGENCE.md §3 (Register)"
-status       = "open"
-# EXCESS DEFINITIONS = sum(max(0, defs-1)) over in_program rows: how many
-# redundant definitions of a register noun exist. Today 21, spread over six
-# rows (Verdict 9, Evidence 5, Gap 5, Citation 3, Step 3, Artifact 2).
-#
-# `kin` is DELIBERATELY NOT in this number. It over-collects by construction —
-# PartialKvVerdict is not a Verdict — so a target on kin would mean renaming
-# ~130 coincidences apart, which is churn with no architectural gain. Kin is
-# tracked with a FLOOR (must not rise), reported by the same instrument as
-# total_pressure, and adjudicated per-noun when a rung touches it.
-today        = 21.0        # 2026-08-19, minted by scripts/nc-pressure.py
-target       = 0.0
-direction    = "lower_is_better"
-instrument   = "scripts/nc-pressure.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"excess_definitions\"])}))'"
-tracked      = "total_pressure (defs+kin) — 255 on 2026-08-19. Floor: must not rise. Not a target."
-ratchet      = "`svrn code converge status` exits 0 on every landing, against quality/baselines/concepts.txt. It has already been observed to fail live (272 -> 273, 2026-08-19) catching two duplicates its own author introduced — the §18.1 red proof was earned, not staged."
-kill         = "if a rung needs more rename-aparts than convergences, the register row was wrong about the noun: stop, re-disposition, do not churn to move the number"
+proof        = "one commit per feature adding ONLY data files; full suite green; no new `impl` block"
 
 [[bar]]
 id           = "nc-god-objects"
 one_line     = "The four god objects are decomposed along seams the graph already shows"
-derives_from = "NOUN_CONVERGENCE.md §3 (D2); TARGET_ARCHITECTURE.md §6"
+derives_from = "NOUN_CONVERGENCE.md §3 (D2)"
 status       = "deferred"
-# DEFERRED ON PURPOSE, not forgotten (operator direction 2026-08-19). Runtime
-# has 130 methods across 32 files (score 4160), SqliteStateStore 125x15,
-# CorpusIndex 112x7, CorpusEngine 102x6 — measured 2026-08-19. Splitting them
-# FIRST prevents nothing: the rot recurs because there is nothing to reach
-# for, and a file split adds no affordance. Runtime is also unsplittable while
-# its 32 fields are anonymous (15 are Option<Arc<dyn ..>> assembled by 18
-# with_* builders); once Capabilities and Evidence are real types the seams
-# draw themselves. `svrn code suggest-seams <file>` already proposes them.
-today        = 4160.0      # Runtime, methods x files, 2026-08-19
+# Runtime 130 methods x 32 files (4160), SqliteStateStore 125x15, CorpusIndex
+# 112x7, CorpusEngine 102x6. Deferred with a sharper reason than earlier
+# drafts had: CorpusEngine and CorpusIndex are IN the shared kernel, so
+# splitting them is boundary work and lands as a consequence of rungs 4-7.
+# Runtime is unsplittable while its 32 fields are anonymous (rung 8).
+today        = 4160.0
 direction    = "lower_is_better"
-review_by    = "when rung 9 (Capabilities) lands — re-scope as its own campaign"
+review_by    = "when rung 8 lands — re-scope as its own campaign"
 
-# ── The ladder (rungs in landing order) ─────────────────────────────────────
-# Orders live at .sovereign/features/<id>/order.md (gitignored). This list is
-# the durable copy.
+# ── The ladder ──────────────────────────────────────────────────────────────
 
 [[rung]]
 id = "nc-0-reach"
-moves = ["nc-pressure"]
-one_line = "Reaching becomes cheaper than building — the anti-rot half, first"
+moves = ["nc-boundary"]
+one_line = "Reaching becomes cheaper than building — the anti-rot half, armed before anything is added"
 
 [[rung]]
-id = "nc-1-provenance"
-moves = ["nc-thesis", "nc-reach"]
-one_line = "Origin + Custody + SharingPolicy — the provenance leaves"
+id = "nc-1-kernel"
+moves = ["nc-kernel", "nc-thesis"]
+one_line = "Mint the neutral kernel — ContentHash, CorpusId, NodeId, Origin, Custody, Attribution — owned by no domain"
 
 [[rung]]
-id = "nc-2-evidence"
-moves = ["nc-thesis", "nc-reach", "nc-pressure"]
-one_line = "Evidence — the retrieval unit, 5 definitions collapse to 1"
+id = "nc-2-backflow"
+moves = ["nc-no-violation"]
+one_line = "Delete the 82 wrong-way types; the layer map becomes one-way for the first time"
 
 [[rung]]
-id = "nc-3-evidence-set"
-moves = ["nc-thesis", "nc-reach"]
-one_line = "EvidenceSet — the seal; retrieve becomes the only door"
+id = "nc-3-backstage"
+moves = ["nc-no-violation"]
+one_line = "Back-of-house becomes a CRATE boundary, so the one-way rule can be enforced instead of hoped for"
 
 [[rung]]
-id = "nc-4-citation"
-moves = ["nc-thesis", "nc-pressure"]
-one_line = "Citation — a pointer INTO the seal, 3 definitions collapse"
+id = "nc-3b-substrate"
+moves = ["nc-boundary"]
+one_line = "Promote Step / Artifact / Runner to substrate — 74 hand-rolled dataflow types become tenants of one engine"
 
 [[rung]]
-id = "nc-5-verdict"
-moves = ["nc-pressure"]
-one_line = "Verdict — four states with Reason, the highest-pressure noun (45)"
+id = "nc-4-evidence"
+moves = ["nc-boundary", "nc-thesis"]
+one_line = "corpus-engine publishes Evidence — the retrieval surface, and the only door"
 
 [[rung]]
-id = "nc-6-judgement"
-moves = ["nc-thesis", "nc-reach"]
-one_line = "Judgement — a Verdict with its evidence and calibration"
+id = "nc-5-corpus"
+moves = ["nc-boundary", "nc-kernel"]
+one_line = "corpus-engine publishes Corpus (+ Record) — the engine stops being the interface"
 
 [[rung]]
-id = "nc-7-answer"
+id = "nc-6-atom"
+moves = ["nc-boundary"]
+one_line = "corpus-engine publishes Atom — AtomEnvelope alone crosses the boundary 542 times"
+
+[[rung]]
+id = "nc-7-note"
+moves = ["nc-boundary", "nc-kernel"]
+one_line = "corpus-engine publishes Note — NoteStore is a god object serving as a contract"
+
+[[rung]]
+id = "nc-8-peer-capability"
+moves = ["nc-boundary", "nc-no-violation"]
+one_line = "commonwealth publishes Peer + Capability; sovereign composes them instead of naming Mesh and AppState"
+
+[[rung]]
+id = "nc-9-question"
+moves = ["nc-boundary"]
+one_line = "sovereign publishes Question — message, context and intent as one noun"
+
+[[rung]]
+id = "nc-10-judgement"
 moves = ["nc-thesis"]
-one_line = "Draft -> Answer — THE THESIS CLOSES: no Answer without a Judgement"
+one_line = "Judgement, with Verdict as a field rather than a rung of its own"
 
 [[rung]]
-id = "nc-8-record-gap"
-moves = ["nc-reach", "nc-pressure"]
-one_line = "Record + Gap — Record has 0 definitions and 45 kin, the purest specimen"
+id = "nc-11-answer"
+moves = ["nc-thesis", "nc-boundary"]
+one_line = "Answer + Citation — THE THESIS CLOSES: no Answer without a Judgement"
 
 [[rung]]
-id = "nc-9-capabilities"
-moves = ["nc-reach", "nc-god-objects"]
-one_line = "Capabilities + Endpoint + Command — absence becomes a value, and Runtime becomes splittable"
+id = "nc-12-gap"
+moves = ["nc-boundary"]
+one_line = "Gap — Evidence's dual, and the research loop's driving input"
 
 [[rung]]
-id = "nc-10-measurement"
-moves = ["nc-reach"]
-one_line = "Measurement + Baseline + Attribution — two numbers compare only if comparable"
+id = "nc-13-tools-as-data"
+moves = ["nc-extends"]
+one_line = "Adding a tool becomes a data change — the Recipe move, generalized"
 
 [[rung]]
-id = "nc-11-substrate"
-moves = ["nc-reach", "nc-pressure"]
-one_line = "Step + Artifact — one dataflow engine, five tenants"
+id = "nc-14-intent-as-data"
+moves = ["nc-extends"]
+one_line = "Adding an intent becomes a row — every per-intent attribute is a column"
 
 [[rung]]
-id = "nc-12-wire"
-moves = ["nc-reach", "nc-pressure"]
-one_line = "WireMessage — the OpenAI mirror family, 14 definitions, empty dependency gap"
-
-[[rung]]
-id = "nc-13-turn"
-moves = ["nc-reach"]
-one_line = "Intent + Question + Claim — the turn's own vocabulary"
+id = "nc-15-generate"
+moves = ["nc-boundary"]
+one_line = "Generate the noun list and boundary map from the register; retire the reconciliation machinery it replaces"
