@@ -22,18 +22,21 @@ path = "src/main.rs"
 
 [dependencies]
 sovereign-core = { workspace = true }
-# The pure-HTTP OICP client, in place of `sovereign-inference`. The only
-# thing this binary ever wanted from that crate was `RemoteApiProvider`
-# (one import, `code_cmd.rs`), which sovereign-inference merely re-exports
-# from here — while itself linking llama.cpp unconditionally.
+# oicp-client is NOT a direct dependency here any more (2026-08-20). The one
+# import that wanted it — `RemoteApiProvider`, in `code_cmd.rs`'s copy of
+# `build_daemon_embed_fn` — moved with the rest of `svrn code index` into
+# `sovereign-cli-shared::code_index`, so it now arrives through the
+# `code-index` feature below.
 #
-# This removes the DIRECT dependency only. Measured delta: 3.5 KB of a
-# 395 MB debug binary, because `sovereign-mesh` below still pulls
-# `sovereign-inference` unconditionally. Shedding llama.cpp requires
-# `sovereign-mesh` to leave this crate's default build, which in turn
-# needs `sovereign_mesh::projects` (the only thing the index path uses
-# from it) extracted to a leaf crate.
-oicp-client = { workspace = true }
+# The measurement that put it here is still worth knowing: taking the HTTP
+# client directly rather than through `sovereign-inference` (which merely
+# re-exports it while linking llama.cpp unconditionally) saved 3.5 KB of a
+# 395 MB debug binary. llama.cpp still arrives transitively via
+# `sovereign-mesh`, which depends on `sovereign-inference` unconditionally
+# across 8 files of inference-serving guts. The workbench only sheds
+# llama.cpp when `sovereign-mesh` leaves its default build — which needs
+# `sovereign_mesh::projects` (the only thing the index path uses from it)
+# extracted to a leaf crate. Do not cite the swap as the size win.
 sovereign-store = { workspace = true }
 # The dev workbench drives the ATOS code-intel tools (project_context,
 # provision/archive/record-atos-event, design-signals, drift), so it enables
@@ -43,6 +46,9 @@ sovereign-atos = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-cli-shared = { workspace = true, features = [
     "scip",
+    # `svrn code index` — the workbench's `code` router serves it, and so does
+    # the shipped dispatcher. One implementation lives there since 2026-08-20.
+    "code-index",
     "mcp-client",
     # `observation` + `project_toml` live here since 2026-08-07; `found`,
     # `phase`, `audit` and `charter amend` read the model the shipped

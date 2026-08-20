@@ -41,7 +41,6 @@ mod charter_cmd;
 #[cfg(feature = "code-intel")]
 mod code_index_cmd;
 #[cfg(feature = "code-intel")]
-mod code_index_incremental;
 #[cfg(feature = "code-intel")]
 mod code_refresh;
 // `svrn init` / `svrn project init`. Same gate as the index path it drives —

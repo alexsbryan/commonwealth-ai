@@ -41,8 +41,8 @@ use sovereign_cli_shared::repo::{find_repo_root, remove_legacy_hook};
 // Already in this binary from slices 1-2 — reused rather than re-ported, so
 // `init` and `register` keep deriving the same corpus id and posting to the
 // same daemon base (they must agree, or a repo indexes under two names).
-use crate::code_index_cmd::tempfile_dir;
 use crate::project_registry::daemon_post;
+use sovereign_cli_shared::code_index::tempfile_dir;
 
 const HELP_INIT: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "svrn project init",

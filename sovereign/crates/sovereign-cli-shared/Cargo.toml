@@ -14,6 +14,12 @@ description = "Neutral filesystem + SCIP helpers shared between sovereign-cli bi
 
 [dependencies]
 corpus-engine-scip = { workspace = true, optional = true }
+# `code_index` only (feature `code-index`). The `svrn code index` verb needs the
+# ingest engine and the loopback embed client; both binaries that serve the verb
+# already link both, and every other sibling skips them.
+corpus-engine = { workspace = true, optional = true }
+oicp-client = { workspace = true, optional = true }
+sovereign-core = { workspace = true, optional = true }
 # Bottom-layer wall-clock SSOT — `project_toml` stamps `observed_at`. Depended
 # on directly rather than through `sovereign-core::time`, which re-exports the
 # same function but would drag corpus-engine + tokio + dashmap into a crate
@@ -69,6 +75,11 @@ mcp-client = ["dep:reqwest"]
 # either binary alone. Gated because `observation` probes for SCIP exporters
 # (`corpus-engine-scip`); binaries that never touch a project skip both.
 project-model = ["dep:corpus-engine-scip", "dep:sovereign-time", "dep:which"]
+# Enables `sovereign_cli_shared::code_index` — the `svrn code index` verb,
+# shared by `sovereign-cli` (which ships it) and `sovereign-cli-dev` (whose
+# `code` router also serves it). Each carried its own copy until 2026-08-20 and
+# the two drifted; see the module docs for the three defects that merged.
+code-index = ["dep:corpus-engine", "dep:oicp-client", "dep:sovereign-core"]
 
 [lints]
 workspace = true

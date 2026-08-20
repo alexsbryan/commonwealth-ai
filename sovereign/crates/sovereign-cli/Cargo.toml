@@ -141,6 +141,9 @@ code-intel = [
     "dep:oicp-client",
     "dep:corpus-engine-scip",
     "corpus-engine/treesitter",
+    # The verb itself. One implementation, shared with the workbench, which
+    # served a byte-drifting copy of it until 2026-08-20.
+    "sovereign-cli-shared/code-index",
     # `project init` (2026-08-07) reads the project model — `observation` to
     # derive what the repo IS, `project_toml` to persist it. Both live in
     # sovereign-cli-shared because the workbench still reads what init writes.

@@ -26,7 +26,6 @@ mod audit_recover;
 mod code_capability_graph;
 mod code_cmd;
 mod code_fieldglass;
-mod code_index_incremental;
 mod code_map;
 mod converge_cmd;
 mod design_onboarding;
