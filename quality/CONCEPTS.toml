@@ -359,12 +359,31 @@ today       = "2026-08-17: query_sharing/mesh_sharing are two bools — and not 
 
 [[concept]]
 name        = "Evidence"
-canonical   = "sovereign_contracts::evidence::Evidence"
+# CORRECTED 2026-08-20 by rung nc-4-evidence. Was
+# `sovereign_contracts::evidence::Evidence`, which (a) names a type that does
+# not exist on this tree and (b) contradicts the campaign's own layer map,
+# where corpus-engine is the domain that owns Corpus/Evidence/Atom/Note/Record
+# and sovereign is the INTERFACE layer above it. Recorded because rung 15
+# generates the architecture description FROM this register, so a wrong
+# `canonical` propagates into the description of the system.
+canonical   = "corpus_engine::Evidence"
 disposition = "converge (and `layered` for the contracts ScoredChunk wrapper — see today)"
 totality    = """
-Constructible ONLY by retrieve. No public constructor, no Default, no path
-from raw text to Evidence that skips origin and custody. This is the noun
-the whole product rests on."""
+No public constructor, no Default, no public fields, and NO `Deserialize` —
+a derive that would put the back door straight back on. Every door that mints
+one lives inside corpus-engine and takes an Origin and a Custody BY VALUE, so
+there is no path from raw text to Evidence that skips provenance.
+
+NARROWED 2026-08-20 by rung nc-4-evidence, and the narrowing is the honest
+part. The rung was drafted as "constructible ONLY by retrieve". Taken
+literally that bans six of the seven acquisition paths rung 1's kernel pins
+as SHIPPING TODAY — `kernel_types::origin::Source` is a closed sum of Corpus,
+Web, Attachment, ToolOutput, Memory, Conversation, Note, and its own test
+`every_shipping_acquisition_path_has_a_variant` is what pins them. Only one of
+the seven is a corpus. What survives, and is implementable, is the invariant
+above: one door per acquisition family, all of them inside the owning crate.
+`retrieve` is the corpus door and the only one built at this rung; the other
+six are rungs 9-12."""
 status      = "target"
 in_program  = true
 phase       = 4
