@@ -27,9 +27,10 @@ use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
 use corpus_engine::enrichment::atlas::{read_atlas_cross_corpus_edges, read_atlas_edges};
 use serde::{Deserialize, Serialize};
 
-use super::atom_browse::cached_atoms;
+use super::atom_browse::{cached_atoms, AtomQueryError};
 use super::reader::{CurationStatus, FileAtlasReader};
 use super::stable_key::{compute_stable_key, StableAtomKey};
+use super::DISPLAY_NAME_TRUNCATION;
 
 /// Full per-atom inspector record. Carries the entire atom envelope
 /// (so the desktop renders the type-specific fields directly) plus
@@ -144,16 +145,6 @@ pub struct CrossCorpusLink {
     pub confidence: f32,
 }
 
-#[derive(Debug, thiserror::Error)]
-pub enum AtomDetailError {
-    #[error("corpus `{0}` has no atlas")]
-    UnknownCorpus(String),
-    #[error("read atoms.json: {0}")]
-    ReadAtoms(#[source] std::io::Error),
-    #[error("background task: {0}")]
-    Task(String),
-}
-
 impl FileAtlasReader {
     /// Build the detail record for one atom. Returns `Ok(None)` when
     /// the atom id isn't present in the corpus's atoms.json.
@@ -161,20 +152,20 @@ impl FileAtlasReader {
         &self,
         corpus_id: &str,
         atom_id: &str,
-    ) -> Result<Option<AtomDetail>, AtomDetailError> {
+    ) -> Result<Option<AtomDetail>, AtomQueryError> {
         let atlas_dir = self
             .atlas_dir(corpus_id)
-            .ok_or_else(|| AtomDetailError::UnknownCorpus(corpus_id.to_string()))?;
+            .ok_or_else(|| AtomQueryError::UnknownCorpus(corpus_id.to_string()))?;
         let target = AtomId::from_raw(atom_id);
         let corpus_id_owned = corpus_id.to_string();
 
         let started = Instant::now();
         let detail =
-            tokio::task::spawn_blocking(move || -> Result<Option<AtomDetail>, AtomDetailError> {
+            tokio::task::spawn_blocking(move || -> Result<Option<AtomDetail>, AtomQueryError> {
                 build_detail(&corpus_id_owned, &atlas_dir, &target)
             })
             .await
-            .map_err(|join_err| AtomDetailError::Task(join_err.to_string()))??;
+            .map_err(|join_err| AtomQueryError::Task(join_err.to_string()))??;
 
         tracing::debug!(
             corpus_id,
@@ -311,8 +302,8 @@ fn build_detail(
     corpus_id: &str,
     atlas_dir: &Path,
     target: &AtomId,
-) -> Result<Option<AtomDetail>, AtomDetailError> {
-    let atoms = cached_atoms(atlas_dir).map_err(AtomDetailError::ReadAtoms)?;
+) -> Result<Option<AtomDetail>, AtomQueryError> {
+    let atoms = cached_atoms(atlas_dir).map_err(AtomQueryError::ReadAtoms)?;
     // Index atoms by id ONCE (one O(n) pass) so the target lookup and the
     // per-neighbour / per-reference lookups below are O(1) instead of a
     // full Vec scan each. Wikipedia has 1.69M atoms and hub entities carry
@@ -354,9 +345,9 @@ fn build_detail(
         corpus_id: corpus_id.to_string(),
         atom_id: target.clone(),
         stable_key: compute_stable_key(corpus_id, atom),
-        atom_type: atom_type_of(atom),
-        display_name: display_name_of(atom),
-        salience: scalar_score(atom),
+        atom_type: atom.atom_type(),
+        display_name: atom.display_name(Some(DISPLAY_NAME_TRUNCATION)),
+        salience: atom.salience(),
         atom: atom.clone(),
         evidence_excerpts,
         related,
@@ -386,8 +377,8 @@ fn build_related(
             let other = by_id.get(other_id.as_str()).copied()?;
             Some(RelatedAtom {
                 atom_id: other_id.clone(),
-                atom_type: atom_type_of(other),
-                display_name: display_name_of(other),
+                atom_type: other.atom_type(),
+                display_name: other.display_name(Some(DISPLAY_NAME_TRUNCATION)),
                 edge_type: e.edge_type,
                 role,
                 confidence: e.confidence,
@@ -501,8 +492,8 @@ fn build_referenced_atoms(
             out.insert(
                 key,
                 ReferencedAtom {
-                    display_name: display_name_of(target),
-                    atom_type: atom_type_of(target),
+                    display_name: target.display_name(Some(DISPLAY_NAME_TRUNCATION)),
+                    atom_type: target.atom_type(),
                 },
             );
         }
@@ -513,22 +504,11 @@ fn build_referenced_atoms(
 }
 
 fn build_evidence(atom: &AtomEnvelope) -> Vec<EvidenceExcerpt> {
-    let chunks: Vec<&corpus_engine::enrichment::atlas::atoms::ChunkRef> = match atom {
-        AtomEnvelope::Entity(e) => vec![&e.first_appearance],
-        AtomEnvelope::Event(e) => e.evidence.iter().collect(),
-        AtomEnvelope::State(a) => a.evidence.iter().collect(),
-        AtomEnvelope::Relation(a) => a.evidence.iter().collect(),
-        AtomEnvelope::Claim(a) => a.evidence.iter().collect(),
-        AtomEnvelope::Question(a) => a.raised_at.iter().collect(),
-        AtomEnvelope::Configuration(a) => a.evidence.iter().collect(),
-        AtomEnvelope::ArgumentReconstruction(a) => a.evidence.iter().collect(),
-        AtomEnvelope::Position(p) => vec![&p.first_appearance],
-        AtomEnvelope::Opposition(o) => vec![&o.first_appearance],
-        // Asset atoms carry no chunk evidence — the asset IS the
-        // evidence. Detail-view UI surfaces sha256/size/parsed_form
-        // through a separate panel.
-        AtomEnvelope::Asset(_) => Vec::new(),
-    };
+    // `AtomEnvelope::evidence()` is the canonical per-variant accessor and its
+    // doc comment forbids re-matching the variants "so a new atom kind can't
+    // silently escape evidence checks". This function carried a byte-identical
+    // copy of that match until 2026-08-20.
+    let chunks = atom.evidence();
     chunks
         .into_iter()
         .map(|c| EvidenceExcerpt {
@@ -569,68 +549,10 @@ fn edge_type_rank(t: EdgeType) -> u8 {
     }
 }
 
-// ── Helpers (duplicate-but-tiny — shared with atom_browse via
-//     intentional copy. Keeping a private `atoms_helpers` mod would
-//     save a few lines but tangle the call graph.) ───────────────
-
-fn atom_type_of(atom: &AtomEnvelope) -> AtomType {
-    match atom {
-        AtomEnvelope::Entity(_) => AtomType::Entity,
-        AtomEnvelope::Event(_) => AtomType::Event,
-        AtomEnvelope::State(_) => AtomType::State,
-        AtomEnvelope::Relation(_) => AtomType::Relation,
-        AtomEnvelope::Claim(_) => AtomType::Claim,
-        AtomEnvelope::Question(_) => AtomType::Question,
-        AtomEnvelope::Configuration(_) => AtomType::Configuration,
-        AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
-        AtomEnvelope::Position(_) => AtomType::Position,
-        AtomEnvelope::Opposition(_) => AtomType::Opposition,
-        AtomEnvelope::Asset(_) => AtomType::Asset,
-    }
-}
-
-fn display_name_of(atom: &AtomEnvelope) -> String {
-    const DISPLAY_NAME_TRUNCATION: usize = 120;
-    fn truncate(s: &str) -> String {
-        if s.chars().count() <= DISPLAY_NAME_TRUNCATION {
-            return s.to_string();
-        }
-        let mut out: String = s.chars().take(DISPLAY_NAME_TRUNCATION).collect();
-        out.push('…');
-        out
-    }
-    match atom {
-        AtomEnvelope::Entity(a) => a.canonical_name.clone(),
-        AtomEnvelope::Event(a) => truncate(&a.description),
-        AtomEnvelope::State(a) => a.label.clone(),
-        AtomEnvelope::Relation(a) => a.label.clone(),
-        AtomEnvelope::Claim(a) => truncate(&a.content),
-        AtomEnvelope::Question(a) => truncate(&a.content),
-        AtomEnvelope::Configuration(a) => a.label.clone(),
-        AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
-        AtomEnvelope::Position(a) => a.canonical_name.clone(),
-        AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
-        AtomEnvelope::Asset(a) => {
-            if a.original_filename.is_empty() {
-                format!(
-                    "{} asset {}",
-                    a.asset_kind,
-                    &a.sha256[..12.min(a.sha256.len())]
-                )
-            } else {
-                a.original_filename.clone()
-            }
-        }
-    }
-}
-
-fn scalar_score(atom: &AtomEnvelope) -> Option<f32> {
-    match atom {
-        AtomEnvelope::Entity(a) => Some(a.salience),
-        AtomEnvelope::Configuration(a) => Some(a.confidence),
-        _ => None,
-    }
-}
+// The three helpers that lived here — `atom_type_of`, `display_name_of` and
+// `scalar_score` — were byte-identical copies of `atom_browse`'s, kept under a
+// comment that called the duplication intentional. They are accessors on
+// `AtomEnvelope` now; see the note at the same place in `atom_browse`.
 
 #[cfg(test)]
 mod tests {
@@ -776,7 +698,7 @@ mod tests {
             .get_atom_detail("nonexistent", "entity-0001")
             .await
             .unwrap_err();
-        assert!(matches!(err, AtomDetailError::UnknownCorpus(_)));
+        assert!(matches!(err, AtomQueryError::UnknownCorpus(_)));
     }
 
     #[tokio::test]

@@ -27,6 +27,13 @@
 //! ([`CurationStatus`], `overlay_supports`) are plumbed through Phase
 //! 1 DTOs so the UI gate flips on without a schema migration.
 
+/// Max characters of PROSE shown in a row label before an ellipsis. The
+/// atlas view's presentation policy, decided once here rather than in each
+/// submodule — `atom_browse` and `atom_detail` each carried their own copy of
+/// this constant (both 120) until 2026-08-20. Which atom kinds are prose is
+/// `AtomEnvelope::display_name`'s business, not this module's.
+pub(crate) const DISPLAY_NAME_TRUNCATION: usize = 120;
+
 pub mod atom_browse;
 pub mod atom_detail;
 pub mod conv;
@@ -34,10 +41,8 @@ pub mod reader;
 pub mod stable_key;
 pub mod subgraph;
 
-pub use atom_browse::{AtomBrowseError, AtomFilter, AtomListPage, AtomSummary, PageCursor};
-pub use atom_detail::{
-    AtomDetail, AtomDetailError, CrossCorpusLink, EvidenceExcerpt, ReferencedAtom, RelatedAtom,
-};
+pub use atom_browse::{AtomFilter, AtomListPage, AtomQueryError, AtomSummary, PageCursor};
+pub use atom_detail::{AtomDetail, CrossCorpusLink, EvidenceExcerpt, ReferencedAtom, RelatedAtom};
 pub use conv::{
     ConvCorpusSummary, ConvDetailView, ConvEntityChip, ConvListPage, ConvRaptorNodeView,
     ConvSummary, SummaryCorrectionView,

@@ -18,8 +18,8 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Entity};
-use corpus_engine::enrichment::atlas::edges::{Edge, EdgesFile};
+use corpus_engine::enrichment::atlas::atoms::{AtomId, Entity};
+use corpus_engine::enrichment::atlas::edges::Edge;
 use corpus_engine::enrichment::atlas::writer::{
     read_atlas_atoms, read_atlas_edges, write_atlas, ATLAS_DIRNAME,
 };
@@ -454,11 +454,6 @@ fn print_summary(s: &ExtractSummary) {
         );
     }
 }
-
-// Suppress unused warnings on read_atlas_* (they're used inside
-// write_remapped_atlas).
-#[allow(dead_code)]
-fn _force_use(_a: AtomEnvelope, _af: AtomsFile, _ef: EdgesFile, _cr: ChunkRef) {}
 
 #[cfg(test)]
 mod tests {
