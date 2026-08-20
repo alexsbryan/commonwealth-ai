@@ -5528,3 +5528,825 @@ strict-shape re-draft's compression); v1 trajectory PASS (converged
 (12/12, up from 8/12); P3 FAIL (6/13, worse than #4's 9/13 and t6b-re's
 9/13 — re-draft truncation, not the word-number class); honesty PASS
 (loop 0.0 vs one-shot 0.022).
+
+---
+
+## T7a — the first DRB-II measurement: scorer + calibration + baseline flight (order `deep-research-t7a`, operator accountability directive 2026-08-19, "full DRB II measurement") — DECLARATION
+
+Appended 2026-08-19, BEFORE the sample is drawn, BEFORE any calibration
+judge call, BEFORE any flight. The order's §18.6 seam is unconditional:
+this section is the contract; the selection, the calibration record, and
+the execution record append below it as they happen. Append-only.
+
+### 1. What is measured
+
+The loop AS-IS (the landed stack the t6d battery #5 measured: word-number
+fix, render-race, refused-URL dedup, shed retry) scored on 8 DRB-II tasks
+by the DRB-II rubric pipeline implemented from the benchmark's shipped
+instrument (arXiv 2601.08536; repo imlrz/DeepResearch-Bench-II, pinned
+clone commit `087c1b8d4a0ed46fd3dd8615a0b5e93ce3acf6f8`, cloned 2026-08-19,
+read-only). Baseline = the FIRST DRB-II number for the loop; every future
+revolution is judged against it.
+
+### 2. The instrument (research/deep-research/drb2/)
+
+Structural template: the DRB-I scorer at `research/deep-research/drb/`
+(vendored paper definitions, one decider per threshold, per-fact rows
+persisted, seeded cluster bootstrap, four verdicts). The rubric protocol
+is VENDORED VERBATIM from the pinned DRB-II clone (the instrument's
+decision surface — §10.6, one implementation):
+
+- Prompt template: `run_evaluation.py` PROMPT_TEMPLATE (the three-way
+  rubric judge protocol, score ∈ {1, 0, -1}; 1 = satisfied with valid
+  evidence and no blocked reference, 0 = not mentioned, -1 = mentioned
+  but evidence relies on blocked references).
+- Response validation: `run_evaluation.py` `parse_model_text` +
+  `validate_batch_result` (exact rubric_item text match, full coverage,
+  retries).
+- Aggregation: `aggregate_scores.py` `compute_dimension_averages`
+  (per-dimension pass rate = ones/items; total = ones across all dims /
+  all items; blocked_rate = -1s/all items; model score = mean over tasks,
+  ×100 on the leaderboard). The paper's statement that blocked items are
+  "excluded from the score and reported separately" (Appendix D) differs
+  from the shipped script (they stay in the denominator); the SHIPPED
+  SCRIPT is the reference — the difference is named, not reconciled
+  (t5a §7 precedent). Our loop cannot fetch the blocked source articles
+  (the expert article is the blocked set), so the -1 channel is expected
+  near-zero; it is measured, never assumed.
+- Judge client: the repo's `gpt_client.py` chat-completions schema,
+  pointed at the local daemon (127.0.0.1:9741/v1/chat/completions,
+  api key placeholder). Judge pin: `Qwen3.8-27B-UD-Q6_K_XL` (the 27B
+  pin, seat-verified loaded). 27B for calibration runs; the 122B window
+  is rung 2 and routes through the seat.
+
+Named deviations from the official defaults (each pre-registered, none
+silent):
+
+1. **Paper truncation**: official MAX_PAPER_CHARS=150,000 (GPT-5.5
+   context). Ours: 45,000 chars (~13K tokens, measured 27B serving
+   context ≥17.5K prompt tokens on 2026-08-19 probes, 4K and 12K-token
+   prompts both served). Truncation semantics identical (keep the
+   head, `text[:max]`). The same budget applies to ALL report sets in
+   the comparison (our loop's, Perplexity's, Qwen3-Max's) — a constant
+   instrument.
+2. **Batch size**: official CHUNK_SIZE=50. Ours: 50, with the
+   pre-registered fallback to 25 if a batch exceeds the context budget
+   (measured at calibration time; the fallback fires only if the prompt
+   exceeds 16K tokens).
+3. **Output tokens**: official OPENAI_MAX_OUTPUT_TOKENS=32768. Ours:
+   16384 (a 50-item batch's verdict JSON is ~5K tokens).
+4. **Retries**: official 5-10. Ours: 5 (the vendored retry semantics
+   verbatim).
+5. **reasoning_effort**: the vendored client sends
+   `reasoning_effort: medium` by default; the local daemon may not
+   recognize it. Measured at calibration time: if the daemon rejects
+   the field, the scorer omits it via the environment override
+   (OPENAI_REASONING_EFFORT unset) — named either way in the
+   calibration record.
+
+Per-rubric rows persist (rubric_item, score, reason, evidence — the
+official result shape, which already persists per-rubric). Our
+additions to the report: seeded cluster bootstrap over tasks (10k
+resamples, seed string `deep-research-t7a-bootstrap-2026-08-19`) and
+the four-verdict read per leg (§5). No changes to the measured loop
+path — the scorer is a NEW, separate instrument under `drb2/`.
+
+### 3. The sample (content-blind, stratified, seeded)
+
+- Population: the 64 English tasks (66 en − 2 NC-licensed, idx 26 and
+  110, excluded per the t6g control-arm design — cited, not re-derived;
+  CC0 idx 119 included: not NC). English-only is a NAMED substitution:
+  the loop's measured envelope is English (the frozen banks are
+  English; t2b precedent restricted to the 10 English tasks). The
+  baseline is therefore an ENGLISH baseline; the en-only reference
+  line (Perplexity en 38.03, paper Table 6) rides every comparison
+  alongside the 132-task 38.58.
+- Strata: the 22 themes, weighted inverse to Perplexity's per-theme
+  totals (arXiv 2601.08536 v2, Appendix B Table 8, "Model performance
+  across thematic categories", fetched 2026-08-19). NAMED SUBSTITUTION
+  (§18.3): the order's "domains where Perplexity's InfoRecall was
+  weakest" — per-domain InfoRecall is NOT published (the leaderboard
+  site ships no per-task/per-domain data — Data Viewer renders a
+  placeholder, verified 2026-08-19; the paper ships theme-level TOTALS
+  only). The theme totals track the InfoRecall ranking (t6g teardown
+  read: the leaderboard ranking IS the InfoRecall ranking — cited), so
+  inverse theme totals stand in for IR weakness; the substitution is
+  named in every read. Perplexity's theme totals (Table 8, verbatim):
+  Art & Design 0.4292, Crime & Law 0.4861, Education & Jobs 0.3304,
+  Entertainment 0.2957, Fashion & Beauty 0.2042, Finance & Business
+  0.4145, Food & Dining 0.3927, Games 0.2766, Hardware 0.3494, Health
+  0.4635, History 0.4183, Home & Hobbies 0.5311, Industrial 0.3320,
+  Literature 0.3810, Religion 0.3587, Science & Technology 0.3727,
+  Social Life 0.2866, Software 0.5523, Software Development 0.3819,
+  Sports & Fitness 0.3216, Transportation 0.3692, Travel 0.4231.
+  Weight per theme = round(1000/score)/1000 (weaker theme → larger
+  weight). Theme names map to the data's `theme` field ("Science &
+  Technology", "Software Development").
+- Content-blind: the selection reads ONLY (idx, theme, language,
+  license) from `tasks_and_rubrics.jsonl` — never a prompt, description,
+  or rubric text. The drawn prompts are read first at flight time by
+  the flight driver.
+- Seed: `deep-research-t7a-drb2-sample-2026-08-19` →
+  seed = int(sha256(seed_string)[:8], 16); rng = random.Random(seed).
+  Draw 8 tasks without replacement: each draw picks a theme with
+  probability ∝ weight, then one task uniformly from that theme's en
+  non-NC tasks. Themes may repeat across draws (the weighting is the
+  point).
+- 8 tasks × 12 searches = 96 web searches, the operator's ≤96 cap —
+  the whole order's web spend, and the declared cap's value.
+- The drawn idx list, themes, and weights are recorded here in the
+  execution record when the selection runs — the seed string is the
+  audit key.
+
+### 4. The flight protocol (the loop, AS-IS)
+
+- Arm config: the loop's STANDARD battery arm — `deep-research
+  "<prompt>" --backend auto --search-source web --consent personal
+  --search 12 --fetch 12 --max-rounds 3` (the config the frozen banks
+  validate; web because the DRB-II tasks have no decks — a NAMED
+  substitution: the banks validate the mock-deck surface, the DRB-II
+  flight needs the live web surface, same budget values).
+- Binary: `target/debug/sovereign-cli`, sha256
+  `3892178302ecefa706a216566897d615b68d5fd2c12e7529f2772c2101828267`,
+  mtime 2026-08-19 15:13:52 PT — the EXACT binary that ran battery #5
+  (the measured instrument; the loop flies AS-IS, nothing rebuilt).
+  NAMED: HEAD's tree includes the 17:17 commit that swept the t6d
+  fix into git; the binary's provenance is journaled, the binary is
+  what flies.
+- Run root: `research/deep-research/arms/runs-drb2-baseline/<id>/`
+  (fresh root; the frozen arms are never touched). One flight per task
+  via the shipped CLI; the driver propagates exit codes (wrappers never
+  mask them — case law 72c0a0fb). systemd-run --user for the flight.
+  The daemon is shared: never restarted, never re-loaded; the 122B
+  stays unloaded. Flight sequencing routes through the seat (quiet 27B
+  slot).
+- The judged artifact: the loop's final `report.md`, renamed to the
+  official `report/<model>/idx-N.md` contract; N is the DRB-II task
+  idx. The flight's own reports, plus the shipped reports of
+  Perplexity-Research and Qwen-3-Max-DeepResearch for the same 8 idx
+  (HF dataset `muset-ai/DeepResearch-Bench-II-Dataset`, the official
+  dataset — the two models' shipped reports, 132/132 coverage; the
+  dataset ships articles, no scores — verified 2026-08-19) — all three
+  sets scored by the SAME 27B judge on the SAME tasks: the
+  judge-independent comparison.
+- Data is local-only, never uploaded (t2b precedent).
+
+### 5. Calibration protocol (BEFORE any scored flight — §18.4, the
+instrument is validated before the result)
+
+The known judge bias (ab-arm: our 122B +2.97 generous on RACE-style
+judging — t5a) must be MEASURED at rubric level, not assumed away. The
+repo ships NO official scored examples (verified 2026-08-19: the
+leaderboard site has no per-task data; the dataset ships articles only;
+the paper's 738 human-annotated judgments are not released). NAMED
+SUBSTITUTION: the official evaluator's own outputs are not available as
+a same-task reference; the calibration therefore measures the judge on
+the OFFICIAL SHIPPED ARTICLES of two leaderboard models against their
+OFFICIAL AGGREGATE lines. Task-set confound (our 8 tasks vs the
+official 132) rides every number; nothing is assumed away.
+
+- **M1 — same-judge, same-task, cross-model**: our 27B judge scores
+  Perplexity-Research's and Qwen-3-Max-DeepResearch's shipped reports
+  for the 8 sampled tasks. Official aggregate lines (GPT-5.5-judged,
+  132 tasks): Perplexity Total 38.58 (IR 33.05 / A 44.47 / P 79.34),
+  Qwen3-Max Total 39.25 (34.18 / 48.04 / 74.59); en-only Perplexity
+  38.03 (Table 6). Expected under an unbiased judge, same tasks:
+  Perplexity and Qwen3-Max land near each other (official gap +0.67
+  Total), with Perplexity ahead on Presentation (-4.75 official gap) and
+  behind on IR/Analysis. The measured gap and ordering vs the official
+  gap and ordering is the judge-offset read (direction + magnitude on
+  the rubric scale).
+- **M2 — scale band check**: our judge's Presentation rates must land
+  in the official saturating band (74.59-94.77 across the 17-entry
+  leaderboard; the t6g teardown's table, cited). A judge outside the
+  band reports scale drift.
+- **M3 — mechanical channels** (deterministic, judge-independent):
+  (a) blocked-channel fidelity: every -1 judgment's evidence must name
+  the blocked title or one of its urls — automated; a -1 without a
+  blocked hit is a judge error, counted; (b) evidence-extraction
+  fidelity: each non-empty evidence string must appear verbatim (or
+  near-verbatim) in the judged report — automated substring check;
+  (c) repeat self-consistency: 20 rubric items re-judged twice, score
+  agreement rate.
+- Calibration verdicts: each of M1/M2/M3 has a pre-registered
+  acceptance band (stated here): M1 — if our judge's Perplexity-vs-Qwen
+  Total delta lands within ±5 pts of the official +0.67 gap AND the
+  Presentation ordering (Perplexity > Qwen) holds, the judge tracks the
+  official ranking (calibration HOLD); else the judge is off-scale and
+  the flight's number is reported with the M1 read as the bias
+  correction band (reported, never silently applied — §18.6). M2 — the
+  Presentation band check passes if our Presentation rates land in
+  [60, 100]; else scale-drift flagged. M3 — blocked-channel fidelity
+  errors ≤ 2, evidence-fidelity ≥ 90%, repeat agreement ≥ 85%; each
+  failure is named in the calibration record, never repaired silently.
+- The calibration runs on the SAME 8 tasks as the flight; its numbers
+  are the same-judge reference lines the flight is read against.
+
+### 6. Verdict rules (pre-registered; every leg gets one of four)
+
+- **Leg A — same-judge, same-task (the primary read)**: our loop's
+  TotalScore (and per-dimension) vs Perplexity's shipped reports on the
+  same 8 tasks, same 27B judge. Cluster-bootstrap 95% CI over tasks on
+  the per-task delta. Verdict: met if CI_lo > 0; failed if CI_hi ≤ 0;
+  could-not-judge otherwise; never-ran if no scored flight.
+- **Leg B — official reference lines (descriptive, caveats ride every
+  number)**: our TotalScore vs Perplexity 38.58 and nvidia-aiq 54.50
+  (t6g teardown's leaderboard facts, GPT-5.5-judged, 132 tasks) and the
+  en-only line 38.03. Cross-judge AND cross-task-set — reported as a
+  number with its caveats (judge identity, task set, sample), never a
+  gate verdict.
+- **Leg C — honesty channel**: blocked_rate (the -1 channel) per report
+  set, reported; our loop's structural inability to cite blocked
+  sources is expected to show near-zero blocked_rate on all three sets.
+- Calibration HOLD is a precondition for the flight's scoring being
+  read at all: the flight's scored numbers are produced only after the
+  calibration record exists in this file.
+
+### 7. Budgets
+
+- Web: 8 tasks × 12 searches = 96 ≤ 96 (the operator's cap; no other
+  web spend in this order).
+- Judge calls: 24 reports (8 ours + 8 Perplexity + 8 Qwen) × ≤3
+  batches ≈ ≤90 calls on the 27B, sequenced in the quiet slot.
+- One git invocation at landing, local only, no push, no assistant
+  attribution. One full test run at landing, not per change (the order
+  changes no Rust).
+
+### 8. Not worth continuing
+
+If the rubric pipeline cannot be implemented faithfully from the shipped
+instrument (prompt template, validation, aggregation — vendored
+verbatim with SHA256SUMS), the constraint is reported with the measured
+alternatives (t6g's not-worth-continuing clause carried over). Not
+triggered by any absence above — every absence is a NAMED substitution,
+which is the protocol's job.
+
+---
+
+## T7a — NAMED AMENDMENT N1 (2026-08-19, BEFORE any scored flight)
+
+Instrument property measured while building the scorer, before calibration:
+the official `_try_clean_and_load` (vendored byte-exact) CORRUPTS compact
+single-line JSON. Verified on the vendored copy: pretty-printed JSON
+parses; compact JSON fails at the first `", "key":` adjacency (the regex
+`"(?P<k>.*?)"(?=\s*:)` lazily spans value-to-key and escapes the inner
+quote). The official pipeline never sees this because its judge emits
+multi-line JSON.
+
+Amendment: the scorer's parse path is (1) the vendored `parse_model_text`
+verbatim; (2) if it fails, a plain `json.loads` fallback (fenced block
+first, then raw text) — COUNTED per run and reported in the instrument
+block of `drb2-report.json` (`parse_fallback_count_amendment_n1`). The
+prompt template, the result validation, and the aggregation are untouched
+byte-exact vendor. The fallback is a superset parser, never a scorer
+change. The mock judge emits pretty JSON (the official judge's format), so
+the selftest exercises the vendored happy path and asserts the fallback
+does NOT fire on it; a compact-JSON case asserts the fallback DOES parse.
+
+---
+
+## T7a — SELECTION EXECUTION RECORD (2026-08-19)
+
+Ran `select-drb2-sample.py` (content-blind: reads only idx/language/theme/
+license). Seed string `deep-research-t7a-drb2-sample-2026-08-19` →
+seed = 4248975044. Population 64 (66 en − NC idx 26, 110), all 22 themes
+present, weight per theme = round(1000/Table8 score)/1000. Drawn 8:
+
+| draw | idx | theme | weight |
+|---|---|---|---|
+| 1 | 4 | Finance & Business | 2.413 |
+| 2 | 96 | Industrial | 3.012 |
+| 3 | 126 | Social Life | 3.489 |
+| 4 | 112 | Sports & Fitness | 3.109 |
+| 5 | 98 | Art & Design | 2.330 |
+| 6 | 114 | Software | 1.811 |
+| 7 | 70 | Health | 2.157 |
+| 8 | 128 | Food & Dining | 2.546 |
+
+All CC BY 4.0; 8 distinct themes. The draws touch the weakest Table 8
+themes (Fashion & Beauty 0.2042 did not draw; Social Life 0.2866 and
+Sports & Fitness 0.3216 did — the weighting did its job). selection.json
+(pinned: seed string, weights, draws, content-blind rule) lives at
+research/deep-research/drb2/selection.json. Prompts are opened first at
+flight time by the flight driver, per the content-blind rule.
+
+---
+
+## T7a — NAMED AMENDMENT N2 (2026-08-19, BEFORE any scored flight)
+
+Fixture reality, verified against the HF dataset (muset-ai/
+DeepResearch-Bench-II-Dataset, main): Perplexity-Research ships 127 .md +
+5 .pdf (idx 21, 105, 106, 109, 126); Qwen-3-Max-DeepResearch ships 130
+.pdf + 1 .md. Of the sampled 8: Perplexity idx-126 is a PDF; all 8 Qwen
+reports are PDFs. The official evaluator is text-only (.md/.docx; PDF is
+"unsupported file type").
+
+Amendment: fixture PDFs are converted to text with `pdftotext -layout`
+(deterministic; images ignored — the same text-only semantics as the
+official .md/.docx extraction). The extracted text is the judged artifact,
+placed under reports/<model>/idx-N.md exactly like .md fixtures; a
+manifest (fixtures/MANIFEST.json) records per file: source URL, sha256 of
+the downloaded PDF, page count, extracted-char count, sha256 of the
+extracted text. The same extraction applies to every PDF in the
+comparison; no PDF is judged by vision. This is fixture preparation, not
+a scorer change — the prompt, validation, aggregation, and judge path are
+untouched.
+
+---
+
+## T7a — NAMED AMENDMENT N3 (2026-08-19, BEFORE any scored flight)
+
+Measured on the M0 canary (2026-08-19): the daemon-side generation of a
+10-item rubric batch had not completed after 15+ min (host-level: daemon
+process at 22.9% CPU sustained; /status shows no in-flight state — a
+display gap). The vendored client's HTTP timeout (official
+OPENAI_TIMEOUT default 600s) is therefore below the measured batch
+duration: a 600s-bound client would abort every batch of the calibration.
+
+Amendment: the scorer's judge client timeout is env DRB2_CLIENT_TIMEOUT,
+default 2700s (45 min), named against the vendored 600s official
+baseline. A transport bound only — the prompt template, validation,
+aggregation, retry semantics, and judge path are untouched. The first
+completed canary batch records the true per-batch duration; the
+calibration duration is re-estimated from it (reported to the seat
+before any M1-M3 work).
+
+## T7b — THE SILENT-EMPTY-WINDOW DEFECT: OBSERVABILITY FIX
+
+Pre-registered 2026-08-20 before any code (order deep-research-t7b §2; §18.6).
+
+### Mechanism (named with evidence, forensics (a)(b)(c) reported to main first)
+
+- (a) The empty windows are neither silent-empty fetches nor unrecorded
+  failures. All 39/39 empty windows across runs-t6c/r2/r4 carry
+  `dedup_refused` non-empty (38x exactly the one seed URL; v1-r2 x2) and
+  `fetch_failures: []`. ZERO windows anywhere have chunks [] +
+  fetch_failures [] + dedup_refused []. The frozen mock decks expose exactly
+  ONE URL per seed; rounds 2+ re-admit only already-fetched URLs, and the
+  dedup gate (fetch.rs:107-112, documented at fetch.rs:47-50) refuses the
+  re-fetch — the evidence is kept in the merged window, only the spend is
+  refused. The round window records NEW chunks only, so a fully-refused
+  round lands chunks: [], fetch_failures: [], dedup_refused: [url]. The
+  operator's "silent empty fetch or unrecorded failure" tell is refuted at
+  the mechanism level; the record exists in the third field.
+- (b) The round-level "no evidence fetched" state has NO reader in the
+  verdict assembly. "No evidence retrieved for this round" (audit.rs:222)
+  keys on the MERGED audit window, fired exactly 39x, ALL round 1 (empty
+  estate window; estate_corpus_ids: []); it aggregates into
+  GapList.empty_evidence_windows (audit.rs:637), which has ZERO readers
+  (only icd.rs:363 + audit.rs:637 reference it). Round-window emptiness is
+  read only at mod.rs:1803 (RoundRow.fetched, checkpoint bookkeeping).
+  VerdictSet (icd.rs:653) has no empty-window field; final_claims carries it
+  only as the NeverRan flag. Round-1 never-ran claims re-audit at round 2
+  against merged [ev-1] and become could-not-judge — the no-evidence
+  attribution DISSOLVES into per-claim could-not-judge. The verdict set and
+  report are indistinguishable between "considered new evidence, found it
+  wanting" and "never added any evidence".
+- (c) Budget ledger: exactly ONE web-fetch entry per run (round 1, allow);
+  rounds 2+ have ZERO web-fetch entries (dedup gate precedes the decider,
+  fetch.rs:106-112 — refusals spend nothing, never reach the ledger).
+  Searches: round 1 = 11 allowed, round 2 = 12th allowed + 5 refused
+  "no-allowance-or-exhausted". Fetches attempted, refused at dedup, never
+  scheduled at budget level, recorded only in dedup_refused. t6a thin-leg
+  corroboration (corpus-scale-comparison.md): rounds fetched 0, gap trace
+  8→8→8→44→17, loop density 0.57 vs one-shot 0.979.
+
+### Fix declaration (smallest, scoped to the named mechanism)
+
+1. `EmptyRound { round: u32, reason: EmptyRoundReason }` (icd.rs, additive,
+   `#[serde(default)]` — ICD_VERSION stays 1 per the additive-field
+   precedent: residue, corroboration, empty_evidence_windows).
+2. `EmptyRoundReason` — closed enum, wire `as_str`, ONE decider
+   `empty_round_reason(&EvidenceWindow) -> Option<EmptyRoundReason>` in
+   audit.rs reading the window's own fields (chunks / fetch_failures /
+   dedup_refused):
+   - Refused = "all-admitted-fetches-refused" (chunks empty, failures empty,
+     dedup_refused non-empty)
+   - Failed = "all-admitted-fetches-failed" (failures non-empty)
+   - Mixed (both non-empty)
+   - NoAdmits = "no-admitted-hits" (all empty, nothing admitted to fetch)
+   Non-empty chunks → None. One decider, one name (§10.6); closed set is an
+   enum (§2); never ask a model to guarantee it (§7.6).
+3. Recorded at acquire_round, the moment the round window is final (before
+   the evidence-window-N.json write, mod.rs:1985), with tracing::warn —
+   glassbox (§9): a no-evidence round is visible at debug/warn in the run
+   log.
+4. Carried through Controller (init at start, restored at resume_start) and
+   RunCheckpoint (serde default — resume-safe, old checkpoints restore as
+   empty).
+5. Surfaced on VerdictSet as additive `empty_rounds: Vec<EmptyRound>` (built
+   at finish) and as a report section "## No evidence fetched" following the
+   "Searched but absent" residue pattern (render.rs:226-239): present when
+   non-empty, ABSENT when empty — no section for clean runs. Prose only
+   (no figure keys), so score-arms.py coverage keys cannot collide.
+   render_report signature gains the param (mod.rs:2018 + 8 render.rs test
+   call sites updated mechanically).
+6. NO scorer change. NO verdict-semantics change. Claims, verdicts, flags,
+   gaps, and evidence_ids are byte-identical — the load-bearing claim the
+   battery confirms.
+
+### Red-first (must fail at HEAD, pass after)
+
+- `empty_rounds_section_renders_every_empty_round` (render.rs): report
+  contains "## No evidence fetched" and names each round + reason.
+- `empty_rounds_empty_renders_no_section` (render.rs): empty vec → section
+  absent, remainder byte-identical to the no-residue goldens.
+- `empty_round_reason_classifies_round_windows` (audit.rs): four arms
+  (Refused / Failed / Mixed / NoAdmits) + non-empty window → None.
+
+### Battery re-measure (standing gate, mirrors battery #4)
+
+- 13 loop flights (12 v0 + v1) + one-shot comparator arm, systemd-run --user
+  with explicit --working-directory, fresh ARMS_RUN_ROOT absolute root.
+- --backend mock --mock-deck <frozen deck> --search 12 --fetch 12
+  --max-rounds 3; daemon :9741 model pin unchanged; frozen banks untouched;
+  score-arms.py invoked unmodified (never edited).
+- Acceptance: legs must not regress (byte-identical verdicts ⇒ legs move
+  only via scorer noise); state plainly whether legs move when windows stop
+  being silently empty. Report section presence checked on the run root.
+- Exit conditions: lint + tests exit 0; battery legs within noise; the
+  section renders exactly on no-evidence rounds. "Not worth continuing"
+  unchanged from the order: windows empty with nothing ever scheduled =
+  different defect (refuted: ledger shows refusals, not absence).
+
+### Landing
+
+ONE commit, local only, never push, no assistant attribution; scope
+sovereign/crates/sovereign-core/src/deep_research/ + this file. Execution
+record appended below after the battery.
+
+---
+
+## T7a — NAMED AMENDMENT N4 (2026-08-19, BEFORE any scored flight)
+
+Chunk size 50 -> 4. Measured on the M0 canary series (2026-08-19): the
+shared daemon enforces an MTP inference deadline of 300s
+(SOVEREIGN_INFERENCE_TIMEOUT_SECS default, sovereign-inference
+model_slot.rs:758, OnceLock-resolved at first use — not changeable
+without a daemon restart, which the shared-daemon constraint forbids).
+Evidence: a 10-item rubric batch completed at 252.6s / 2889 tokens
+(run 1); the SAME batch was killed at the deadline on run 2 — HTTP 503,
+"MTP inference deadline exceeded after 300s (3712 tokens)". Output length
+for identical input varies run-to-run by >=28%, so 10-item batches
+straddle the deadline and fail intermittently. The official pipeline's
+chunk-50 sizing assumes a judge with no such deadline; on this daemon,
+chunk-50 batches (~14.4K output tokens ~= 21 min) exceed it ~4x.
+
+Measured 4-item batches (3 runs, all three rubric dimensions):
+
+| run | items | tokens | tok/item | secs | parse | format |
+|---|---|---|---|---|---|---|
+| m0b-4 | 0-3 (info_recall) | 570 | 142.5 | 74.6 | OK | plain JSON |
+| m0b-4b | 4-7 (info_recall) | 1485 | 371.2 | 146.8 | OK | ```json fence |
+| m0b-analysis | 53-56 (analysis) | 727 | 181.8 | 90.1 | OK | plain JSON |
+
+Amendment: the scorer's default chunk size is 4 (env DRB2_CHUNK_SIZE
+override). Sized so expected generation per request (~1.2-1.5K output
+tokens ~= 90-150s) sits at ~1/3-1/2 of the 300s deadline, absorbing the
+observed run-to-run output variance (2.6x range on identical input) and
+retry-kill slack. This is a transport parameter only: the prompt
+template, per-item validation, aggregation, retry semantics, and judge
+path are untouched; per-item scoring is identical at any chunk size.
+Retries on a deadline kill cost one full 300s slot each, which is why
+the operating size is 4, not 6 or 8 (6-item at 2.6x variance reaches
+~228-300s; 4-item worst plausible ~190s).
+
+## T7a — INSTRUMENT VALIDATION RECORD (M0 series, 2026-08-19, before any scored flight)
+
+The seat's discriminator question: is a slow rubric batch a healthy slot
+doing big constrained outputs, or a degraded slot? Answer, from the M0
+series: HEALTHY. Measured tok/s across runs: 11.44 (10-item, 2889
+tokens), 12.37 (10-item kill rate), 7.64 (4-item), 10.12 (4-item), 8.07
+(analysis 4-item). The spread is slot contention/thermal variance, not
+degradation; per-item output is 142-371 tokens because the judge writes
+long reasons and evidence strings, not because inference is slow.
+reasoning_effort "medium" is accepted (STRIP_EVENTS [] on every run).
+Prompt tokens measured 5573-5820 for 4-10 item batches (21.7K chars) —
+chunk-4 prompts (~12K tokens at 45K-char paper cap) fit the 16K budget.
+
+Parse-path classification (the seat's (a) vs (b)): neither. The 27B's
+output format is correct — official-shape JSON (results array, exact
+rubric_item echoes, scores in {-1,0,1}), emitted plain or ```json-fenced;
+the vendored parser handles both (fence case exercised on m0b-4b). The
+one observed parse failure (M0 run 1, 10-item, 2889 tokens) was a single
+unescaped double-quote in a value string ~char 4877 (verbatim report
+text quoted unescaped) — an intermittent judge-fidelity failure, not a
+format deviation. It is handled by the vendored retry semantics (5
+attempts, DRB2_MAX_RETRIES), unchanged here; residual batch-failure rate
+is counted and reported in the calibration run log (glassbox). No
+lenient-extraction amendment is added: at the operating chunk-4 size,
+outputs are ~4x shorter and the failure rate is measured at 0/3 batches
+(95% CI upper bound ~63% per batch, so the calibration log's retry
+count is the instrument's own reliability record).
+
+Cost consequence (reported to the seat): calibration M1-M3 ~= 1094
+items / 4 = 274 requests; ~7.0h generation (measured per-item token
+range 142-371) + ~40 min prefill/overhead ~= 7.7h slot. Flight scoring
+~= 3.9h, M3(c) ~= 20 min. Total ~= 11.8h 27B slot, consistent with the
+pre-N4 estimate; the per-item token shrink at chunk 4 offsets the
+request overhead. Flights and scored runs fly with the chunk-4 default.
+
+---
+
+## T7a — N4 ADDENDUM: the 300s deadline is a standing commons constraint (2026-08-19)
+
+The deadline measured here is not new — it is the same signature that has
+killed long single generations on the shared daemon before, named
+precisely for the first time in the N4 amendment above. Prior records of
+the same death shape:
+
+- t6b one-shot re-arm, A3: "panic at oneshot_rag.rs:268 — seed-05 MTP
+  inference deadline exceeded after 300s (the baseline seed-05 death
+  shape)" (pre-registration, A3 record, 2026-08-19).
+- t6c-era 503 evidence: "MTP inference deadline exceeded after 300s
+  (3990 tokens)" (pre-registration journal; arms/dr-t6c-r2-oneshot.log
+  seed-06).
+
+Mechanism (first measured precisely here): SOVEREIGN_INFERENCE_TIMEOUT_SECS
+default 300s, OnceLock-resolved at first use (sovereign-inference
+model_slot.rs:758-767), enforced on the MTP generation loop
+(model_slot.rs:3390-3403 — "mtp:deadline exceeded — clearing KV caches",
+ErrorAbort, kv-phase: ErrorAbort). The code comment's design envelope
+("any legitimate Slow-slot Phase-1 call (~60-160s observed worst-case
+under heavy grammar)") shows the deadline was never sized for ~5-minute
+rubric generations. Consequence for ANY long-output judge/scorer work on
+this daemon: per-request generation must fit ~300s with margin — the
+chunk-4 operating point is the standing constraint's requirement, not a
+scorer preference.
+
+---
+
+## T7c — MTP draft-depth expansion nmax 3 → 5: PRE-REGISTERED BENCH PROTOCOL (order `deep-research-t7c`, operator direction 2026-08-19, "configuring nmax at >2 (some say 5 is optimal)")
+
+Written BEFORE any bench run is scored. The order's seat-deltas are verified
+at write time: mtp_n_rs_seq = 4 hardcoded (model_slot.rs:1499), the env
+filter admits only `1..mtp_n_rs_seq` (model_slot.rs:1631-1635) so nmax=3 is
+the ceiling, out-of-range SILENTLY falls back to 3 (§18.3 — the defect this
+order fixes), SOVEREIGN_MTP_DRAFT_MAX is undeclared in quality/env-flags.toml
+(it rides quality/baselines/env_unregistered.txt:93 — env-gate debt), the
+env-gate census regex requires the var literal to stay at a
+`std::env::var("...")` call site, and the daemon unit (sovereign.service)
+carries no RUST_LOG — the `mtp: end-of-generation` acceptance line is
+DEBUG, dark at default `sovereign_inference=info` (DAEMON_TRACING_FILTER,
+sovereign-cli-daemon/src/lib.rs:53).
+
+### 1. What is measured
+
+Judge-shaped workload on the shared daemon (127.0.0.1:9741,
+Qwen3.8-27B-UD-Q6_K_XL primary, MTP active — "MTP speculative mode active —
+probe round-trip succeeded" observed at load 2026-08-19): the vendored DRB-II
+PROMPT_TEMPLATE (research/deep-research/drb2/vendor/prompt_template.py,
+byte-exact vendored), task idx-4, rubric items = the concatenation of
+info_recall+analysis+presentation sliced [0:4] (the chunk-4 operating point,
+amendment N4 — deadline-safe: 4-item batches measured 74.6-146.8s vs the
+300s MTP deadline), paper = the idx-4 Perplexity-Research report truncated
+at 15,000 chars. Fixed input, byte-identical across every run and both arms.
+Driver: /tmp/t7c-bench/run-judge-batch.py, sha256 pinned at first use,
+imports the vendored template + parse path through drb2-score.py exactly as
+canary-m0b.py does (no edit to any t7a file). One 4-item batch per run.
+
+Metrics per run:
+- PRIMARY tok/s: client-side completion_tokens / wall seconds (the same
+  shape as the t7a baseline's 11.44 tok/s = 252.6s/2889 tok).
+- SECONDARY (same instrument both arms): the daemon's `mtp:
+  end-of-generation` line — tok_per_s, accept_rate, drafts_proposed,
+  drafts_accepted — harvested from journalctl --user -u sovereign.service
+  over each run window (window is quiet, so every line in it is this
+  bench's). Requires RUST_LOG=sovereign_inference=debug (restart #1).
+- Structured-output acceptance per run: the vendored parse path
+  (parse_model_text + validate_batch_result, the scorer's own functions)
+  verdict on the raw output — OK/FAIL, counted.
+- Structural activation gate per arm: "MTP speculative mode active — probe
+  round-trip succeeded" at load, and ZERO MTP quarantine / demote /
+  decode-error lines inside any run window.
+
+### 2. Protocol
+
+- n=3 runs per arm, one 4-item batch per run, runs spaced ≥30s
+  (thermal/contention settling), all inside ONE quiet slot window per arm
+  (the seat pauses t7a's drb2-cal; resumable at batch granularity — a
+  window costs at most one calibration batch). The daemon is not touched
+  between a window's runs.
+- Arms: A = nmax=3, HEAD binary, restart #1 adds RUST_LOG=sovereign_inference=debug
+  and nothing else; B = nmax=5, the change (below) built and installed,
+  restart #2 sets SOVEREIGN_MTP_DRAFT_MAX=5 (RUST_LOG kept).
+- Journal harvest per run window; the record table carries every run's
+  client TOKPS, daemon tok_per_s, accept_rate, parse verdict.
+
+### 3. The change (red-first, in order)
+
+1. RED-FIRST: extract the draft-max decision into a pure fn
+   `mtp_draft_max_decide(value: Option<String>, n_rs_seq: u32) ->
+   (i32, DraftMaxFallback)` in model_slot.rs, unit tests pinning the FULL
+   contract — admitted range 1..n_rs_seq, fallback value 3, and a
+   non-silent fallback signal (OutOfRange/Unparseable). The tests for the
+   signal fail before it exists (watched failing). The env read stays
+   exactly where it is (`std::env::var("SOVEREIGN_MTP_DRAFT_MAX")` at
+   model_slot.rs:1631 — the census regex needs the literal there).
+2. `mtp_n_rs_seq` 4 → 6 (model_slot.rs:1499): preserves the documented
+   one-slot headroom (n_rs_seq > n_draft_max — the M-RoPE position assert +
+   partial KV rollback, lines 105/1445); the filter then admits 5. Both
+   contexts keep with_n_rs_seq from the same const (:1534 target, :1657
+   draft).
+3. The caller WARNs, naming the value, the admitted range, and the fallback
+   when the signal fires — never a silent default (§18.3).
+4. Declare SOVEREIGN_MTP_DRAFT_MAX in quality/env-flags.toml (cluster
+   inference, default 3, status shipped) and regenerate docs/ENV_FLAGS.md
+   (env-gate --update-doc — the gate fails on a stale doc).
+5. Comments at 1441-1447 / 1627-1630 updated: the Qwen3.6-A3B sweet-spot
+   provenance stays as history; the 3.8-UD measurement is this record.
+
+### 4. Verdict rules (one of four, §18.5)
+
+- nmax=5 WINS (land 6 + registry + WARN; the daemon unit carries
+  SOVEREIGN_MTP_DRAFT_MAX=5): mean TOKPS(B) − mean TOKPS(A) exceeds the
+  noise band AND acceptance intact — mean accept_rate(B) ≥ mean
+  accept_rate(A) − 0.05, all 3 B-runs parse OK, activation gate holds on B.
+- REVERT (land the WARN fix + registry, restore n_rs_seq=4, no env var):
+  the delta is below the band or acceptance degrades (any B-run accept_rate
+  < A-mean − 0.05, any B-run parse FAIL, or the gate fails on B).
+- COULD-NOT-JUDGE (§18.5 — inside the noise band): re-run n=3 once; if
+  still inside, REVERT per the order's "Not worth continuing" — land the
+  measurement + WARN fix + registry, revert the depth, report plainly.
+- NEVER-RAN: the seat cannot schedule the windows / daemon unavailable.
+
+Noise band (pre-registered): max(arm-A's own run spread, 1.5 tok/s). The
+t7a instrument's measured spread on this workload was 7.64-12.37 tok/s
+under contention; the quiet-window protocol is designed to shrink the
+intra-arm spread so the band floor does the work.
+
+### 5. Restarts (seat-owned, never self-served — each costs t7a's
+calibration at most one batch; MTP changes are output-preserving, so no
+calibration re-validation)
+
+- Restart #1 — RUST_LOG=sovereign_inference=debug (no code change).
+- Restart #2 — SOVEREIGN_MTP_DRAFT_MAX=5 (after the change is built).
+- Restart #3 (only if REVERT) — drop SOVEREIGN_MTP_DRAFT_MAX.
+
+### 6. Budget / not worth continuing
+
+One session-chunk + 2-3 seat restarts (~5-10 min each, 27B reload) + 2 quiet
+windows (3 runs each, ~75-150s per run) + lint/test runs. Not worth
+continuing: nmax=5 cannot beat 3 on the judge workload after the headroom
+bump — land the measurement and the WARN fix, revert the depth, report.
+
+### 7. Landing
+
+ONE commit, local only, never push, no assistant attribution; files:
+sovereign/crates/sovereign-inference/src/embedded/model_slot.rs,
+quality/env-flags.toml, docs/ENV_FLAGS.md (regenerated), this file (the
+shared file carries t7a/t7b's concurrent sections verbatim; the pre-existing
+3 embedded::gates failures at HEAD — named in the baseline snapshot above —
+stay untouched and must be byte-identical in the post-change run). Execution
+record appended below after the benches.
+
+
+---
+
+## T7a — PAUSE PROTOCOL (t7c restart choreography, 2026-08-19)
+
+The t7c worker restarts the daemon (MTP draft-depth experiment) during
+calibration. Choreography (seat-directed): seat says PAUSE -> the scorer
+stops cleanly at the next report boundary -> seat restarts the daemon
+with the new env -> seat says RESUME -> the scorer restarts and
+load_scored picks up completed reports. Zero batches lost, zero report
+re-scores.
+
+Mechanism: results_dir/PAUSE marker. The scorer checks it only BETWEEN
+reports (persistence granularity — a report's results are written at its
+end, never mid-report), so an in-flight report finishes, persists, and
+the process exits 0. Stop latency bound: one report (~13-45 min worst
+case). Pause checkpoints: top of each score_set report iteration, after
+scoring before verdict computation, and before the report write (M3(c)
+is not persisted; a resumed run re-runs it, ~20 min). Selftest covers
+the pause path (no judge calls fire after the marker). Each restart
+window is timestamped (PAUSE/RESUME) and carries the MTP-config caveat:
+the judge's tok/s, and marginally its output distribution, can shift
+after a draft-depth change; M3(c) repeat self-consistency is the
+stability channel watched.
+
+## T7c — EXECUTION RECORD (appended 2026-08-19/20, after the benches)
+
+Verdict: **REVERT** — nmax=5 loses to nmax=3 on the judge workload. The
+landed configuration is the pre-change one (mtp_n_rs_seq=4, n_draft_max=3
+default), plus the two independent fixes this order carried: the
+out-of-range SOVEREIGN_MTP_DRAFT_MAX value now WARNs naming the value,
+admitted range, and fallback — never a silent default (§18.3) — and the
+env var is declared in quality/env-flags.toml (cluster inference, default
+3, status shipped) with docs/ENV_FLAGS.md regenerated.
+
+### Instrument
+
+Driver /tmp/t7c-bench/run-judge-batch.py, sha256
+0f2f3d4c8be85495df9f848451b5d75e9505f0831917c3291b613eb27833c7bf (pinned
+at first use, 2026-08-19). Workload: task idx-4, rubric items = the
+concatenation of info_recall+analysis+presentation sliced [0:4], paper =
+idx-4 Perplexity-Research report truncated at 15,000 chars (prompt 20,617
+chars / 5,573 prompt tokens, fixed). One 4-item batch per run, judge =
+drb2-score.py Judge (chat completions, stream=false,
+reasoning_effort=medium), vendored parse chain. Runs spaced >=30s, all
+inside quiet windows (t7a's drb2-cal paused by the seat at batch
+granularity; restart choreography per the T7a PAUSE PROTOCOL section).
+
+Protocol amendment (seat-directed, recorded at the time): after restart #1
+the 27B was not resident, so one warm-up request preceded run a1 — the
+warm-up paid the model load and is excluded from the n=3 (its client
+TOKPS 6.20 includes ~10s load; the activation line harvested from it
+confirmed the config in-process). The same warm-up step ran before arm B
+(warmup-B, excluded: 3,430-token generation, parse FAIL — recorded, not
+counted).
+
+### Arm A — nmax=3 (HEAD binary, n_rs_seq=4; restart #1 added
+RUST_LOG=sovereign_inference=debug and nothing else)
+Window 2026-08-20 06:03:56Z - 06:12:01Z (warmup-A excluded).
+
+| run | client TOKPS | daemon tok/s | accept_rate | n_gen | gen ms | parse |
+|-----|-------------|--------------|-------------|-------|--------|-------|
+| a1  | 9.84        | 16.1         | 0.683       | 791   | 49254  | OK    |
+| a2  | 10.37       | 13.7         | 0.524       | 1336  | 97411  | OK    |
+| a3  | 9.52        | 15.5         | 0.644       | 773   | 49817  | OK    |
+| mean| 9.91        | 15.1         | 0.617       |       |        | 3/3   |
+
+Activation (journal 06:04:06): "MTP speculative mode active — probe
+round-trip succeeded" n_rs_seq=4 n_draft_max=3. Validate False on all
+three (the model scores 3 of the 4 rubric items in every run — a stable
+completeness shape, identical across arms).
+
+### Arm B — nmax=5 (the change: mtp_n_rs_seq 4->6 + WARN; restart #2 set
+SOVEREIGN_MTP_DRAFT_MAX=5, RUST_LOG kept)
+Window 2026-08-20 06:22:36Z - 06:27:24Z (warmup-B excluded: 3,430 tok,
+328.9s, parse FAIL, accept 0.313 — one long sample).
+
+| run | client TOKPS | daemon tok/s | accept_rate | n_gen | gen ms | parse |
+|-----|-------------|--------------|-------------|-------|--------|-------|
+| b1  | 9.95        | 18.4         | 0.640       | 648   | 35263  | OK    |
+| b2  | 7.60        | 21.0         | 0.743       | 364   | 17367  | OK    |
+| b3  | 9.64        | 14.7         | 0.457       | 838   | 56852  | OK    |
+| mean| 9.06        | 18.0         | 0.613       |       |        | 3/3   |
+
+Activation (journal 06:16:10): n_rs_seq=6 n_draft_max=5 — the change is
+live. Gate holds: zero MTP quarantine/demote/decode-error lines in any
+run window (only pre-existing iroh mesh WARN noise). Activation lines and
+end-of-generation lines are quoted in the session transcript.
+
+Interim: delta mean(B) - mean(A) = -0.85 tok/s on the PRIMARY client
+metric; noise band = max(arm-A spread 0.85, 1.5) = 1.5 -> INSIDE the band
+-> COULD-NOT-JUDGE per pre-registration section 4, re-run n=3 once
+(window C, arm-B config, no restart).
+
+### Window C — the pre-registered re-run (nmax=5, n=3)
+Window 2026-08-20 06:28:53Z - 06:39:44Z.
+
+| run | client TOKPS | daemon tok/s | accept_rate | n_gen | gen ms | parse |
+|-----|-------------|--------------|-------------|-------|--------|-------|
+| c1  | 9.12        | 13.6         | 0.408       | 826   | 60644  | OK    |
+| c2  | 10.45       | 12.1         | 0.337       | 2333  | 193312 | FAIL  |
+| c3  | 10.73       | 12.2         | 0.340       | 2679  | 219976 | FAIL  |
+
+### Pooled verdict (n=6 arm B vs n=3 arm A)
+
+- PRIMARY client TOKPS: 9.58 vs 9.91 — delta -0.33, still inside the
+  1.5-tok/s band (arm-B wins nothing on the primary; the early b1/b2
+  daemon-side spike did not hold once the long runs are included).
+- Acceptance: 0.487 vs 0.617 — -13 points, far past the pre-registered
+  -0.05 tolerance (c2/c3 at 0.337/0.340). The draft model's confidence
+  collapses at depth 4-5 on this workload.
+- Parse: 4/6 vs 3/3 — c2 and c3 emitted malformed JSON (2,333 / 2,679
+  tokens). REVERT clause "any B-run parse FAIL" fires.
+- Daemon-side tok/s (secondary): 15.3 vs 15.1 — flat.
+- Gate: holds on B (no quarantine/decode errors; the parse failures are
+  model output distribution, not engine failure — speculative decoding
+  is lossless, so depth does not change what the model samples, but it
+  changes how far the judge batch runs before the first mismatch breaks
+  the JSON).
+
+The REVERT clauses fire twice over (acceptance degraded AND parse FAIL),
+so this is a REVERT, not the CNJ-fallback revert.
+
+### Operational note (recorded for the calibration owner)
+
+At nmax=5 the same chunk-4 batch runs 193-220s of generation (vs 17-97s
+at nmax=3), approaching the 300s MTP inference deadline, and 2/6 runs
+produced unparseable output that would need re-scoring. nmax=5 trades
+generation-rate headroom for deadline risk and re-run probability with no
+client-visible win at this batch size. Per-request fixed cost (prefill +
+slot setup, ~30s at 5,573 prompt tokens) is the binding term at
+chunk-4 sizes — it amortizes only on longer generations, which is where
+nmax=5's acceptance collapses. Both effects argue against depth 5 on
+this stack; the Qwen3.6-A3B sweet-spot provenance (n_draft_max=3,
+upstream) stands for the 3.8-UD as well, now measured rather than
+inherited.
+
+### Landing
+
+ONE commit (local only, no push, no assistant attribution):
+sovereign/crates/sovereign-inference/src/embedded/model_slot.rs
+(n_rs_seq restored to 4; mtp_draft_max_decide + DraftMaxFallback +
+WARN-on-fallback + unit tests kept — 5/5 green, boundary test pins
+"4" out of range at n_rs_seq=4; provenance comments carry the verdict),
+quality/env-flags.toml (SOVEREIGN_MTP_DRAFT_MAX declared),
+docs/ENV_FLAGS.md (regenerated), this file. Full gate on the landed
+build: lint workspace clean; tests 10184 pass / 3 fail — the same three
+pre-existing embedded::gates failures as HEAD, byte-identical. Restart #3
+(drop SOVEREIGN_MTP_DRAFT_MAX) returns the daemon to the landed config;
+the load line must show n_rs_seq=4 n_draft_max=3.

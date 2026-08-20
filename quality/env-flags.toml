@@ -603,6 +603,13 @@ status = "guard"
 purpose = "Kill-switch: disable multi-token-prediction speculative decoding."
 
 [[flag]]
+name = "SOVEREIGN_MTP_DRAFT_MAX"
+cluster = "inference"
+default = "3"
+status = "shipped"
+purpose = "MTP speculative draft depth (n_draft_max). Admitted range is 1..mtp_n_rs_seq (structural cap n_rs_seq - 1: one slot of headroom for partial KV rollback on the recurrent layers). Out-of-range or unparseable values WARN and fall back to 3 — a named substitution, never silent (ARCH_PRINCIPLES §18.3). Default 3 is upstream's Qwen3.6-A3B sweet spot; the 3.8-UD A/B is order deep-research-t7c (2026-08-19)."
+
+[[flag]]
 name = "SOVEREIGN_NEXT_EDIT_FALLBACK"
 cluster = "inference"
 default = "off"

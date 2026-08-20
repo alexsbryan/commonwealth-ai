@@ -766,6 +766,112 @@ fn inference_deadline_secs() -> u64 {
     })
 }
 
+/// Why `SOVEREIGN_MTP_DRAFT_MAX` did not take effect. `None` from
+/// [`mtp_draft_max_decide`] means the value was admitted; `Some`
+/// carries the reason the caller MUST WARN about — a named
+/// substitution, never a silent default (ARCH_PRINCIPLES §18.3).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum DraftMaxFallback {
+    /// Parsed as an integer but outside the admitted range
+    /// `1..n_rs_seq` (the structural cap is `n_rs_seq - 1` — one slot
+    /// of headroom for partial KV rollback on the recurrent layers).
+    OutOfRange(String),
+    /// Not an integer.
+    Unparseable(String),
+}
+
+impl DraftMaxFallback {
+    fn value(&self) -> &str {
+        match self {
+            Self::OutOfRange(v) | Self::Unparseable(v) => v,
+        }
+    }
+}
+
+impl std::fmt::Display for DraftMaxFallback {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::OutOfRange(v) => write!(f, "value {v:?} is outside the admitted range"),
+            Self::Unparseable(v) => write!(f, "value {v:?} is not an integer"),
+        }
+    }
+}
+
+/// Resolve the MTP draft depth (`n_draft_max`) from the env var's raw
+/// value. Admitted range is `1..n_rs_seq`; anything else falls back
+/// to the default 3 AND reports the reason so the caller WARNs.
+/// Pure: takes the value, not the env, so the contract is
+/// unit-testable without process-global env races (the
+/// `jump_fwd_*_from_env` pattern, prompt_helpers.rs).
+fn mtp_draft_max_decide(value: Option<String>, n_rs_seq: u32) -> (i32, Option<DraftMaxFallback>) {
+    const DEFAULT_DRAFT_MAX: i32 = 3;
+    let Some(raw) = value else {
+        return (DEFAULT_DRAFT_MAX, None);
+    };
+    match raw.parse::<i32>() {
+        Ok(n) if (1..n_rs_seq as i32).contains(&n) => (n, None),
+        Ok(_) => (DEFAULT_DRAFT_MAX, Some(DraftMaxFallback::OutOfRange(raw))),
+        Err(_) => (DEFAULT_DRAFT_MAX, Some(DraftMaxFallback::Unparseable(raw))),
+    }
+}
+
+#[cfg(test)]
+mod mtp_draft_max_tests {
+    use super::{mtp_draft_max_decide, DraftMaxFallback};
+
+    fn decide(s: Option<&str>) -> (i32, Option<DraftMaxFallback>) {
+        mtp_draft_max_decide(s.map(str::to_string), 6)
+    }
+
+    #[test]
+    fn unset_uses_default_three_quietly() {
+        assert_eq!(decide(None), (3, None));
+    }
+
+    #[test]
+    fn in_range_values_admitted_quietly() {
+        assert_eq!(decide(Some("1")), (1, None));
+        assert_eq!(decide(Some("3")), (3, None));
+        assert_eq!(decide(Some("5")), (5, None));
+    }
+
+    #[test]
+    fn boundary_at_n_rs_seq_is_out_of_range_and_must_warn() {
+        assert_eq!(
+            decide(Some("6")),
+            (3, Some(DraftMaxFallback::OutOfRange("6".into())))
+        );
+        // The pre-2026-08-19 ceiling: with n_rs_seq=4, "4" was out of
+        // range and silently fell back to 3.
+        assert_eq!(
+            mtp_draft_max_decide(Some("4".into()), 4),
+            (3, Some(DraftMaxFallback::OutOfRange("4".into())))
+        );
+    }
+
+    #[test]
+    fn zero_and_negative_are_out_of_range_and_must_warn() {
+        for s in ["0", "-1", "-3"] {
+            assert_eq!(
+                decide(Some(s)),
+                (3, Some(DraftMaxFallback::OutOfRange(s.into()))),
+                "{s}"
+            );
+        }
+    }
+
+    #[test]
+    fn unparseable_values_must_warn() {
+        for s in ["abc", "", "3.5", "five"] {
+            assert_eq!(
+                decide(Some(s)),
+                (3, Some(DraftMaxFallback::Unparseable(s.into()))),
+                "{s}"
+            );
+        }
+    }
+}
+
 /// How long a blocked stream send waits between retries. Two orders of
 /// magnitude below the deadline's second-scale granularity, and well
 /// under a token's decode cost, so a healthy consumer never notices it.
@@ -1442,9 +1548,10 @@ impl ModelSlot {
         // alongside the draft, otherwise partial KV rollback after
         // rejected drafts fails inside the target's recurrent layers
         // (Qwen3.6-A3B is hybrid Mamba/attention) and the next verify
-        // batch hits an M-RoPE position assert. n_draft_max=3 is the
-        // sweet spot per upstream; we set n_rs_seq=4 (one slot of
-        // headroom) on both contexts.
+        // batch hits an M-RoPE position assert. n_draft_max=3 was the
+        // sweet spot per upstream (A3B-measured; the 3.8-UD A/B is
+        // deep-research-t7c, 2026-08-19); we set n_rs_seq =
+        // n_draft_max + 1 (one slot of headroom) on both contexts.
         // MTP candidacy combines two signals:
         //
         // 1. Filename substring "MTP" — community naming convention
@@ -1496,6 +1603,17 @@ impl ModelSlot {
             is_mtp_candidate = is_mtp_model,
             "MTP candidacy decided — draft-ctx build will confirm or fall back"
         );
+        // Recurrent-state sequences on both contexts. Must be > the
+        // admitted n_draft_max: partial KV rollback after rejected
+        // drafts needs the extra slot (see the speculative-mode
+        // comment below). The deep-research-t7c A/B (2026-08-19)
+        // raised this to 6 to admit n_draft_max=5 and REVERTED by
+        // measurement: pooled nmax=5 lost to nmax=3 on the judge
+        // workload (client TOKPS 9.58 vs 9.91, accept_rate 0.487 vs
+        // 0.617, 2/6 parse-failed generations vs 3/3 OK — the full
+        // record lives in
+        // research/deep-research/adversarial/pre-registration.md).
+        // nmax=4 stays out of range by the same headroom rule.
         let mtp_n_rs_seq: u32 = 4;
         // NEGATIVE RESULT (2026-07-10, mechanism removed per the
         // complexity-must-move-a-metric rule): a with_flash_attention(true)
@@ -1624,15 +1742,28 @@ impl ModelSlot {
         // ctx that may have been touched by a failed
         // `common_speculative_init`.
         //
-        // n_draft_max = 3 matches upstream's Qwen3.6-A3B-MTP sweet
-        // spot. Overridable via `SOVEREIGN_MTP_DRAFT_MAX` for
-        // measurement passes; n_rs_seq=4 on both contexts gives one
-        // slot of headroom for partial KV rollback.
-        let n_draft_max: i32 = std::env::var("SOVEREIGN_MTP_DRAFT_MAX")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .filter(|n: &i32| *n >= 1 && *n < (mtp_n_rs_seq as i32))
-            .unwrap_or(3);
+        // n_draft_max default 3 matches upstream's Qwen3.6-A3B-MTP
+        // sweet spot (A3B-measured; the 3.8-UD A/B is
+        // deep-research-t7c, 2026-08-19). Overridable via
+        // `SOVEREIGN_MTP_DRAFT_MAX` for measurement passes; the
+        // admitted range is 1..mtp_n_rs_seq (structural cap
+        // n_rs_seq - 1 — one slot of headroom for partial KV
+        // rollback). Out-of-range or unparseable values WARN and
+        // fall back to 3 — a named substitution, never silent
+        // (§18.3). The env literal stays at this `std::env::var`
+        // call site: the env-gate census regex scans for it there
+        // (corpus-engine/xtask/src/env_gate.rs).
+        let (n_draft_max, draft_max_fallback) =
+            mtp_draft_max_decide(std::env::var("SOVEREIGN_MTP_DRAFT_MAX").ok(), mtp_n_rs_seq);
+        if let Some(reason) = draft_max_fallback {
+            tracing::warn!(
+                value = %reason.value(),
+                min = 1_i32,
+                max_admitted = (mtp_n_rs_seq as i32) - 1,
+                fallback = 3_i32,
+                "SOVEREIGN_MTP_DRAFT_MAX {reason} — falling back to 3 (named substitution, never silent)"
+            );
+        }
         let rebuild_params = MtpRebuildParams {
             backend: Arc::clone(backend),
             context_size,
