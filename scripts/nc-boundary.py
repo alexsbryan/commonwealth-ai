@@ -57,6 +57,17 @@ def domain(path, crate=None):
         return "corpus-engine"
     if path.startswith("commonwealth/"):
         return "commonwealth"
+    if path.startswith("kernel-types/"):
+        # Layer-0 identity + provenance, owned by NO product domain. Registered
+        # by the seat 2026-08-20 for rung nc-1-kernel. Without this branch the
+        # kernel is unmeasurable in either direction: under `sovereign/` it
+        # classifies as a PRODUCT domain (the exact failure the rung's done-when
+        # names), and at any new top-level path it falls through to None, which
+        # `load()` DROPS — so kernel_size would fall as types moved into it and
+        # read as progress while actually meaning "stopped being measured"
+        # (ARCH §18.3). The branch matches nothing on the tree at the time it was
+        # added, so every prior reading is byte-identical under both versions.
+        return "kernel"
     if path.startswith(("oicp-types/", "oicp-client/")):
         return "oicp"          # the intended shared membrane
     if path.startswith("studio/"):
@@ -84,7 +95,7 @@ CORE = ("sovereign", "corpus-engine", "commonwealth")
 # One violation class: an edge from a lower layer to a higher one. A lower
 # layer that names a higher one's type cannot be released, reasoned about, or
 # reused independently — which is the whole point of the boundary.
-LAYER = {"oicp": 0, "corpus-engine": 1, "commonwealth": 1, "sovereign": 2, "studio": 3}
+LAYER = {"oicp": 0, "kernel": 0, "corpus-engine": 1, "commonwealth": 1, "sovereign": 2, "studio": 3}
 # Back-of-house sits outside the stack, not on top of it: it may observe every
 # layer, and NOTHING may depend on it. That one-way rule is what separates a
 # quality control from a product feature — a bench you cannot ship without is
