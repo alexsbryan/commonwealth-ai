@@ -115,6 +115,26 @@ A self-contained library between "raw source on the internet" and
 
 Major modules under `corpus-engine/src/`:
 
+- `corpus.rs` — **`Corpus`**, the published noun: which corpus, and where it
+  lives. An id (`kernel_types::CorpusId`) plus an index root, answering
+  `root()` / `partition(node)` / `partition_prefix()` / `meta_path()` /
+  `meta_in(dir)` / `is_installed()` / `open()` / `info()`. It is the ONE
+  decider of corpus-engine's on-disk layout (ARCH §10.6): before 2026-08-20
+  that layout was folklore, hand-spelled at 147 sites across the three
+  workspaces (`"_corpus_meta.json"` 62/63/22, `format!("{id}-partition-{node}")`
+  6/16/13) with no constant anywhere. `CorpusEngine::canonical_path` and
+  `partition_path` DELEGATE here — the responsibility moved off the engine
+  rather than being wrapped. The ratchet that keeps it from growing back is
+  `cargo xtask layout-gate` (baseline `quality/baselines/corpus_layout.txt`).
+- `oplog.rs` — **`Op<K>` + `Oplog<K>`**, one append-only JSONL journal with
+  three tenants declaring `Journaled`: `enrichment::governance`,
+  `enrichment::reconciliation` and `meta_atlas::bridge`. Until 2026-08-20 each
+  carried its own copy of the envelope and the file IO (7 types); the two
+  younger logs had no op id, no actor and no version gate, which is why
+  reconciliation's documented reversible `Split` — "walk backwards finding the
+  matching `Merge`" — was unimplementable. The envelope carries provenance
+  only (`id`, `v`, `ts_unix`, `actor`); the act is the tenant's `K`, flattened,
+  so each log keeps its wire form.
 - `engine/` — `CorpusEngine` façade (`ingest`, `expand`, `reindex`)
 - `acquirers/`, `extractors/`, `chunkers/`, `filters/` — pipeline stages
 - `asset_store/` — content-addressed filesystem store for binary
@@ -387,7 +407,7 @@ criterion-vocabulary versions. See `sovereign/bench/situated/README.md`.
 
 **Governance** (`svrn bench governance`, FR-9) — gates the
 event-sourced common-law tool (the `govern` verbs over a corpus's
-`GovernanceView` + `GovernanceOplog`). **Lane A** is a precision/recall
+`GovernanceView` + its `Oplog<GovernanceOpKind>`). **Lane A** is a precision/recall
 detector over `EdgeType::Tension` edges vs an exhaustive `truth.json`
 (scorer: `sovereign-eval/src/governance_bench.rs`). **Lane B** reuses
 the chaos two-red-line scorer and adds **RL-3 (no dead law)**: the gated
