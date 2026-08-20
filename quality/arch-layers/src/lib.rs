@@ -610,7 +610,11 @@ crates = ["*"]
             &backstage_crates(),
             &[edge("sovereign-cli", "sovereign-eval", DepKind::Normal)],
         );
-        assert_eq!(v.len(), 1, "expected exactly the backstage violation: {v:?}");
+        assert_eq!(
+            v.len(),
+            1,
+            "expected exactly the backstage violation: {v:?}"
+        );
         assert!(matches!(
             &v[0],
             Violation::BackstageEdge { from, to, .. }
@@ -620,8 +624,14 @@ crates = ["*"]
         // only this line must not walk away thinking the crate boundary is
         // tighter than it is.
         let msg = v[0].describe();
-        assert!(msg.contains("still links"), "gate must disclose that Cargo still links the backstage crate: {msg}");
-        assert!(msg.contains("CRATE"), "gate must disclose its unit is the crate: {msg}");
+        assert!(
+            msg.contains("still links"),
+            "gate must disclose that Cargo still links the backstage crate: {msg}"
+        );
+        assert!(
+            msg.contains("CRATE"),
+            "gate must disclose its unit is the crate: {msg}"
+        );
     }
 
     #[test]
@@ -675,7 +685,8 @@ reason = "one module in a mixed crate; the boundary is drawn in the wrong place"
         // is forced to be recorded rather than quietly accruing dead policy.
         let v = evaluate(&map, &backstage_crates(), &[]);
         assert!(
-            v.iter().any(|x| matches!(x, Violation::StaleException { .. })),
+            v.iter()
+                .any(|x| matches!(x, Violation::StaleException { .. })),
             "a fixed backstage violation must retire its own exception: {v:?}"
         );
     }
@@ -688,7 +699,10 @@ reason = "one module in a mixed crate; the boundary is drawn in the wrong place"
             &backstage_crates(),
             &[edge("sovereign-cli", "sovereign-eval", DepKind::Dev)],
         );
-        assert!(v.is_empty(), "a dev-dep cannot reach a shipped artifact: {v:?}");
+        assert!(
+            v.is_empty(),
+            "a dev-dep cannot reach a shipped artifact: {v:?}"
+        );
     }
 
     #[test]

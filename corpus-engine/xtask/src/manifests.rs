@@ -536,7 +536,10 @@ dev-tools = ["dep:sovereign-agent-bench"]
 "#;
         let absent = deps_absent_from_default_build(m);
         assert!(absent.contains("sovereign-agent-bench"));
-        assert!(!absent.contains("sovereign-core"), "non-optional is always present");
+        assert!(
+            !absent.contains("sovereign-core"),
+            "non-optional is always present"
+        );
     }
 
     #[test]
@@ -579,8 +582,14 @@ mid = ["deep"]
 deep = ["dep:a-crate"]
 "#;
         let absent = deps_absent_from_default_build(m);
-        assert!(!absent.contains("a-crate"), "reached via default -> mid -> deep");
-        assert!(!absent.contains("b-crate"), "`b-crate/feat` enables b-crate");
+        assert!(
+            !absent.contains("a-crate"),
+            "reached via default -> mid -> deep"
+        );
+        assert!(
+            !absent.contains("b-crate"),
+            "`b-crate/feat` enables b-crate"
+        );
     }
 
     #[test]
