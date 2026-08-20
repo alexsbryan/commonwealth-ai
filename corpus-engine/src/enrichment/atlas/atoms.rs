@@ -1129,6 +1129,57 @@ impl AtomEnvelope {
         }
     }
 
+    /// Every other atom this atom names through its type-specific reference
+    /// fields — participants, causal antecedents, the entity a State describes,
+    /// a Claim's attribution, a Question's answering claims, a Configuration's
+    /// constituents, an Opposition's two sides, an Asset's describing atom.
+    ///
+    /// The single canonical accessor over those fields, for the same reason
+    /// [`AtomEnvelope::evidence`] is one: a new atom kind that carries an
+    /// atom-id reference must not be able to silently escape the link graph.
+    /// This fan-out lived as `build_referenced_atoms` in `sovereign-tools`'
+    /// `atlas_view::atom_detail` until 2026-08-20 — a second crate reading
+    /// these variants' private fields to answer a question about the atom's own
+    /// shape (ARCH §10.6). Resolving the ids to labels is still the reader's
+    /// business; producing them is the atom's.
+    ///
+    /// Ids come out in declaration order and may repeat — a caller wanting a
+    /// set dedupes. Evidence chunks are NOT here; those are
+    /// [`AtomEnvelope::evidence`].
+    pub fn referenced_atom_ids(&self) -> Vec<&AtomId> {
+        match self {
+            AtomEnvelope::Entity(a) => a.participants.iter().collect(),
+            AtomEnvelope::Event(a) => a
+                .participants
+                .iter()
+                .chain(a.causal_antecedents.iter())
+                .collect(),
+            AtomEnvelope::State(a) => vec![&a.entity_id],
+            AtomEnvelope::Relation(a) => a.participants.iter().collect(),
+            AtomEnvelope::Claim(a) => a.attributed_to.iter().collect(),
+            AtomEnvelope::Question(a) => {
+                let mut refs: Vec<&AtomId> = a.addressed_by.iter().collect();
+                match &a.resolution_status {
+                    ResolutionStatus::Resolved { claim_id } => refs.push(claim_id),
+                    ResolutionStatus::Contested { claim_ids } => refs.extend(claim_ids.iter()),
+                    ResolutionStatus::Open | ResolutionStatus::Dissolved => {}
+                }
+                refs
+            }
+            AtomEnvelope::Configuration(a) => a.constituent_atoms.iter().collect(),
+            AtomEnvelope::ArgumentReconstruction(a) => a.proponent.iter().collect(),
+            AtomEnvelope::Position(a) => {
+                a.proponent_id.iter().chain(a.evidence_ids.iter()).collect()
+            }
+            AtomEnvelope::Opposition(a) => a
+                .left_atom_id
+                .iter()
+                .chain(a.right_atom_id.iter())
+                .collect(),
+            AtomEnvelope::Asset(a) => a.described_by.iter().collect(),
+        }
+    }
+
     /// Best human label for this atom, and the single decider for WHICH field
     /// names each kind — `canonical_name` for Entity and Position,
     /// `canonical_label` for Opposition, `label` for State / Relation /

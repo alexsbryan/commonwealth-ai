@@ -21,15 +21,16 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 use std::time::Instant;
 
-use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, ResolutionStatus};
+use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType};
 use corpus_engine::enrichment::atlas::cross_corpus::CrossCorpusEdge;
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType};
-use corpus_engine::enrichment::atlas::{read_atlas_cross_corpus_edges, read_atlas_edges};
+use corpus_engine::enrichment::atlas::{
+    read_atlas_cross_corpus_edges, read_atlas_edges, StableAtomKey,
+};
 use serde::{Deserialize, Serialize};
 
 use super::atom_browse::{cached_atoms, AtomQueryError};
 use super::reader::{CurationStatus, FileAtlasReader};
-use super::stable_key::{compute_stable_key, StableAtomKey};
 use super::DISPLAY_NAME_TRUNCATION;
 
 /// Full per-atom inspector record. Carries the entire atom envelope
@@ -344,7 +345,7 @@ fn build_detail(
     let detail = AtomDetail {
         corpus_id: corpus_id.to_string(),
         atom_id: target.clone(),
-        stable_key: compute_stable_key(corpus_id, atom),
+        stable_key: atom.stable_key(corpus_id),
         atom_type: atom.atom_type(),
         display_name: atom.display_name(Some(DISPLAY_NAME_TRUNCATION)),
         salience: atom.salience(),
@@ -416,74 +417,21 @@ fn build_cross_corpus(target: &AtomId, edges: &[CrossCorpusEdge]) -> Vec<CrossCo
     out
 }
 
-/// Collect every atom_id this atom references through its
-/// type-specific fields and resolve each to a `ReferencedAtom`
-/// label. Drives the desktop's `<AtomLink>` lookup so refs like
-/// `attributed_to: "entity-0002"` render as clickable
-/// `Entity · David Hume` chips instead of opaque ids.
+/// Resolve the atoms this one references to display labels. Drives the
+/// desktop's `<AtomLink>` lookup so refs like `attributed_to: "entity-0002"`
+/// render as clickable `Entity · David Hume` chips instead of opaque ids.
+///
+/// WHICH ids an atom references is the atom's own shape, so it comes from
+/// [`AtomEnvelope::referenced_atom_ids`]; an eleven-arm copy of that fan-out
+/// reading each variant's private fields lived here until 2026-08-20. What is
+/// left is the part this view actually owns: turning ids into labels, and
+/// deciding that a dangling ref renders as its raw id rather than failing.
 fn build_referenced_atoms(
     atom: &AtomEnvelope,
     by_id: &HashMap<&str, &AtomEnvelope>,
 ) -> BTreeMap<String, ReferencedAtom> {
-    let mut refs: Vec<&AtomId> = Vec::new();
-    match atom {
-        AtomEnvelope::Entity(e) => {
-            refs.extend(e.participants.iter());
-        }
-        AtomEnvelope::Event(e) => {
-            refs.extend(e.participants.iter());
-            refs.extend(e.causal_antecedents.iter());
-        }
-        AtomEnvelope::State(s) => {
-            refs.push(&s.entity_id);
-        }
-        AtomEnvelope::Relation(r) => {
-            refs.extend(r.participants.iter());
-        }
-        AtomEnvelope::Claim(c) => {
-            if let Some(a) = &c.attributed_to {
-                refs.push(a);
-            }
-        }
-        AtomEnvelope::Question(q) => {
-            refs.extend(q.addressed_by.iter());
-            match &q.resolution_status {
-                ResolutionStatus::Resolved { claim_id } => refs.push(claim_id),
-                ResolutionStatus::Contested { claim_ids } => refs.extend(claim_ids.iter()),
-                ResolutionStatus::Open | ResolutionStatus::Dissolved => {}
-            }
-        }
-        AtomEnvelope::Configuration(c) => {
-            refs.extend(c.constituent_atoms.iter());
-        }
-        AtomEnvelope::ArgumentReconstruction(a) => {
-            if let Some(p) = &a.proponent {
-                refs.push(p);
-            }
-        }
-        AtomEnvelope::Position(p) => {
-            if let Some(prop) = &p.proponent_id {
-                refs.push(prop);
-            }
-            refs.extend(p.evidence_ids.iter());
-        }
-        AtomEnvelope::Opposition(o) => {
-            if let Some(l) = &o.left_atom_id {
-                refs.push(l);
-            }
-            if let Some(r) = &o.right_atom_id {
-                refs.push(r);
-            }
-        }
-        AtomEnvelope::Asset(a) => {
-            if let Some(d) = &a.described_by {
-                refs.push(d);
-            }
-        }
-    }
-
     let mut out: BTreeMap<String, ReferencedAtom> = BTreeMap::new();
-    for id in refs {
+    for id in atom.referenced_atom_ids() {
         let key = id.as_str().to_string();
         if out.contains_key(&key) {
             continue;
@@ -497,8 +445,8 @@ fn build_referenced_atoms(
                 },
             );
         }
-        // Unresolved (dangling ref) — leave absent. The frontend
-        // renders the raw id as fallback text.
+        // Unresolved (dangling ref) — leave absent. The frontend renders the
+        // raw id as fallback text.
     }
     out
 }

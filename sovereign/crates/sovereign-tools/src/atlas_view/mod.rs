@@ -9,9 +9,6 @@
 //!
 //! ## Phase 1 (this module today)
 //!
-//! - [`StableAtomKey`] — content-derived hash that survives
-//!   re-extraction's `AtomId` renumbering (see decision note "Atlas
-//!   inspector: stable_key by content hash").
 //! - [`FileAtlasReader`] — reads `atoms.json` / `edges.json` directly
 //!   from the indexes dir. No daemon required, no cache: each call
 //!   re-reads the JSON. Fine for inspection rates.
@@ -21,7 +18,9 @@
 //! ## Phase 2 (deferred — see todo note "Atlas inspector Phase 2")
 //!
 //! Curation overlay. An `atlas/overlay.sqlite` keyed by
-//! [`StableAtomKey`] will store user edits and approval state.
+//! [`StableAtomKey`](corpus_engine::enrichment::atlas::StableAtomKey) —
+//! corpus-engine's, since it is the atom's identity and not this view's —
+//! will store user edits and approval state.
 //! `FileAtlasReader` will grow an overlay-merging branch (no new
 //! trait — one struct, one concern). Forward-compat fields
 //! ([`CurationStatus`], `overlay_supports`) are plumbed through Phase
@@ -38,7 +37,6 @@ pub mod atom_browse;
 pub mod atom_detail;
 pub mod conv;
 pub mod reader;
-pub mod stable_key;
 pub mod subgraph;
 
 pub use atom_browse::{AtomFilter, AtomListPage, AtomQueryError, AtomSummary, PageCursor};
@@ -50,5 +48,4 @@ pub use conv::{
 pub use reader::{
     AtlasCorpusSummary, AtlasMemberSummary, AtlasViewError, CurationStatus, FileAtlasReader,
 };
-pub use stable_key::{compute_stable_key, StableAtomKey};
 pub use subgraph::{AtlasEdge, AtlasNode, AtlasSubgraph, SubgraphCensus, DEFAULT_MAX_NODES};

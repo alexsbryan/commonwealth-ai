@@ -13,12 +13,11 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
-use corpus_engine::enrichment::atlas::read_atlas_atoms;
+use corpus_engine::enrichment::atlas::{read_atlas_atoms, StableAtomKey};
 use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use serde::{Deserialize, Serialize};
 
 use super::reader::{CurationStatus, FileAtlasReader};
-use super::stable_key::{compute_stable_key, StableAtomKey};
 use super::DISPLAY_NAME_TRUNCATION;
 
 /// Server-side filter the desktop's `AtlasCorpusView` posts on every
@@ -324,7 +323,7 @@ fn build_summary(
 ) -> AtomSummary {
     AtomSummary {
         atom_id: atom.id().clone(),
-        stable_key: compute_stable_key(corpus_id, atom),
+        stable_key: atom.stable_key(corpus_id),
         atom_type: atom.atom_type(),
         display_name: atom.display_name(Some(DISPLAY_NAME_TRUNCATION)),
         salience: atom.salience(),

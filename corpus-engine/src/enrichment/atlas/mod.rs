@@ -42,6 +42,7 @@ pub mod registry;
 pub mod resolution;
 pub mod schema_validation;
 pub mod section_cache;
+pub mod stable_key;
 pub mod store;
 pub mod strategies;
 pub mod summary;
@@ -74,6 +75,7 @@ pub use schema_validation::{
     count_transitions_without_trigger, count_ungrounded_claims, SchemaComparison,
     SchemaValidationInput, SchemaValidationReport,
 };
+pub use stable_key::StableAtomKey;
 pub use summary::{
     compute_summary as compute_atlas_summary,
     read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary,
