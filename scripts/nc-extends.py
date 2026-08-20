@@ -38,18 +38,56 @@ import sys
 SKIP = (".claude/worktrees/", "target/", "/tests/", "studio/")
 
 
+def code_part(content):
+    """The executable part of a source line — comments removed.
+
+    THE BAR MUST NOT COUNT PROSE. Found by nc-13's worker 2026-08-20: the tool
+    axis transiently read 86 instead of 83 because THREE DOC-COMMENT MENTIONS
+    of `impl Tool for`, in a module whose whole subject is that trait, scored as
+    implementations. In their words: anyone writing prose about this trait
+    inflates the campaign's own bar by doing so. They fixed it by rewording
+    their comments (`290b7e3d`), which un-inflated the number without removing
+    the hazard — the next author to document the trait re-inflates it.
+
+    A measurement an author can move by writing a sentence is not a
+    measurement, so the guard belongs here rather than in everyone's prose.
+
+    Known and accepted limit: a `//` inside a string literal (a URL) truncates
+    the line early, so a pattern appearing AFTER such a literal on the same line
+    would be missed. That direction UNDER-counts, which for a bar that passes
+    only at zero is the safe direction — it can never manufacture a pass.
+    """
+    stripped = content.lstrip()
+    if stripped.startswith(("//", "*", "/*")):
+        return ""
+    idx = content.find("//")
+    return content if idx == -1 else content[:idx]
+
+
 def rg(pattern, glob="*.rs"):
-    """Hit count and files for a pattern over TRACKED sources.
+    """Hit count and files for a pattern over TRACKED sources, CODE ONLY.
 
     `git grep` rather than a filesystem walk: the question is how many code
     sites a maintainer must edit, so the universe is what is committed. It also
     cannot wander into `target/` (46GB here) or an untracked agent worktree —
     a plain `grep -r` took 23s and blew the 10s measurement budget.
+
+    git grep finds the candidate lines; `code_part` decides which are real.
     """
     out = subprocess.run(
         ["git", "grep", "-nI", "-e", pattern, "--", glob],
         capture_output=True, text=True).stdout.splitlines()
-    hits = [l for l in out if not any(s in l for s in SKIP)]
+    rx = re.compile(pattern)
+    hits = []
+    for line in out:
+        if any(s in line for s in SKIP):
+            continue
+        # `path:lineno:content` — split twice so content keeps any colons.
+        parts = line.split(":", 2)
+        if len(parts) < 3:
+            continue
+        if rx.search(code_part(parts[2])):
+            hits.append(line)
     files = {l.split(":", 1)[0] for l in hits}
     return len(hits), sorted(files)
 
@@ -80,7 +118,51 @@ def axis_corpus():
 AXES = [("corpus", axis_corpus), ("tool", axis_tool), ("intent", axis_intent)]
 
 
+def self_test():
+    """Watch the comment guard decide, on planted lines (ARCH §18.1).
+
+    The guard shipped with ZERO movement on the live tree, because nc-13's
+    worker had already reworded the three doc comments that exposed it. A fix
+    with no observable delta is exactly the kind that quietly stops working, so
+    its evidence is here rather than in a tree diff.
+    """
+    counts_as_code = [
+        "impl Tool for CorpusSearch {",
+        "    impl Tool for Nested {",
+        "let x = 1; // impl Tool for is named in this trailing comment",
+    ]
+    counts_as_prose = [
+        "/// Every tool writes `impl Tool for` by hand.",
+        "//! Module docs mentioning impl Tool for.",
+        "// impl Tool for Foo {",
+        "     * impl Tool for, in a block-comment continuation",
+        "/* impl Tool for */",
+    ]
+    bad = []
+    for line in counts_as_code:
+        # The third case is subtle and deliberate: real code precedes the
+        # comment, but the PATTERN is only in the comment, so it must NOT count.
+        expected = "impl Tool for" in code_part(line)
+        if line.startswith("let x") and expected:
+            bad.append(f"trailing comment counted as code: {line!r}")
+        elif not line.startswith("let x") and not expected:
+            bad.append(f"real impl missed: {line!r}")
+    for line in counts_as_prose:
+        if "impl Tool for" in code_part(line):
+            bad.append(f"prose counted as code: {line!r}")
+    for line in bad:
+        print(f"  FAIL  {line}")
+    if bad:
+        print(f"\nself-test: {len(bad)} failure(s) — the bar counts prose.")
+        return 1
+    print(f"self-test: pass — {len(counts_as_code)} code shapes counted, "
+          f"{len(counts_as_prose)} prose shapes refused.")
+    return 0
+
+
 def main():
+    if "--self-test" in sys.argv:
+        return self_test()
     rows, score = [], 0
     for name, fn in AXES:
         sites, files, note = fn()
