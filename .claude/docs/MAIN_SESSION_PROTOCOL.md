@@ -214,6 +214,24 @@ Unchanged inside the targeted forms: gate on exit codes, never a summary line; a
 zero-test run exits 4 and is NOT green (`--filter` matches the TEST NAME, not the
 file, so a typo verifies nothing).
 
+**`target/sovereign-test/latest/` IS NOT YOURS during a fan-out.** Field-reported
+2026-08-20 by a worker whose raw cargo log was overwritten mid-triage. The script
+writes to a private, uncollidable `${LOG_DIR}/.runs/$$-<epoch>` while it runs —
+but on the way out it does `rm -rf latest && mv "$RUN_DIR" latest`
+(`sovereign-test.sh:979-987`). So your run's artifacts BECOME `latest`, and stay
+yours only until the next peer finishes; `.runs` is then pruned to the most
+recent five. Reading `latest/counts.env` in a concurrent wave can hand you a
+peer's numbers with nothing to mark them as such.
+
+- **Gate on the script's EXIT CODE.** It is per-process and cannot be clobbered.
+- **For counts, read the `{"t":"summary",...}` line the script prints to YOUR
+  stdout** — capture it from the run (`| tee`, or the background task's output
+  file). That is uncollidable too.
+- Treat `latest/` as advisory in a fan-out, and never quote it as evidence for
+  whose result it is. Outside a fan-out it is fine.
+- Same applies to the shared `target/` dir generally: if you need an isolated
+  build for triage, `CARGO_TARGET_DIR=/tmp/<yours> cargo check -p <crate>`.
+
 ## Work atlas — privacy
 
 **Privacy.** Sessions inherit `node.default_privacy` from `~/.sovereign/work-atlas.toml` (default `public`). Private claims/observations are written to `work-atlas-private` and structurally never gossip — peers never see them. The daemon enforces this at three layers (store, gossip, read). Toggling to private mid-session does NOT retroactively unpublish prior records.
