@@ -6350,3 +6350,446 @@ build: lint workspace clean; tests 10184 pass / 3 fail — the same three
 pre-existing embedded::gates failures as HEAD, byte-identical. Restart #3
 (drop SOVEREIGN_MTP_DRAFT_MAX) returns the daemon to the landed config;
 the load line must show n_rs_seq=4 n_draft_max=3.
+
+---
+
+## T7a — CALIBRATION INCIDENT + REPLAY PROBE SERIES (2026-08-20, executed record)
+
+### Incident: drb2-cal crashed 02:20:29 PDT, exit 134
+
+The calibration unit (python3 drb2-score.py --calibrate, run since 23:57:29,
+~2h18m, zero persists) was aborted by a gdb-injected `sys.stdout.flush()` —
+`PyGILState_Release` fired with a stale thread state ("must be current when
+releasing") → Fatal Python error. Operator standing rule from this incident:
+**no ptrace/gdb injection into the scorer process, ever.** The scorer's stdout
+was block-buffered at 0 bytes (below the 8KB flush); the buffered [info]/[warn]
+lines died with the process. Nothing was resumable (no jsonl persisted).
+
+### The falsification (seat-conditioned probe, verdict FAIL — no restart)
+
+The seat's GO was conditioned on one live-shaped probe passing the vendored
+parse+validate through the exact Judge._call path. Result: 0/4 probes passed.
+All probes: idx-4, info_recall items 0-3, paper =
+reports/Perplexity-Research/idx-4.md (truncated at the probe's paper cap),
+vendored PROMPT_TEMPLATE + parse/validate, judge = local 27B
+(Qwen3.8-27B-UD-Q6_K_XL, pin held — decision ids d00000034/35/36/37, all
+named_local).
+
+| probe | paper cap | latency | parse | results | validate | failure mode |
+|---|---|---|---|---|---|---|
+| 1 | 45000 | 138.4s | OK | 4 | FAIL | name substitution: "Taspen - THT"→"BPJS - THT"; "BPJS - JP"→"JPBI - JP [sic: Rubric says 'BPJS - JP']" |
+| 2 | 45000 | 104.5s | OK | 2 of 4 | FAIL | substitution + dropped items (count mismatch) |
+| 3 | 45000 | 297.9s | FAIL | — | — | malformed JSON: unescaped quote at char 5038 ("Expecting ',' delimiter") |
+| 4 | 20000 | ~110s | OK | 4 | FAIL | substitution + typo corruption: "Taspen"→"Taspes", "Pay-As-You-Go (PAYG DB)"→"Pay-At-You-Go (PAG DB)", "Asset-backed"→"Asse-backd", "BPJS"→"BPS" |
+
+Raw responses: results/replay-probe-{2,3,4}-raw.txt (probe 1's raw was
+overwritten by probe 2's run; its excerpts above are from recorded output).
+
+Reads: (1) three distinct failure classes — item-name substitution
+(self-annotated with [sic]), item dropping, malformed JSON; all three fired
+in the live run (2h18m, zero persists, 3-5 attempts/batch). (2) Paper length
+is NOT the driver — probe 4 at 20K fails the same way; the M0 canaries' 3/3
+pass (same judge, ~18.5K paper) does not transfer — run-to-run variance
+(the pre-registration's own 2.6x measured range); 0/16+ total attempts
+(4 probes + ~12 live batches). (3) Long-write behavior compounds it: failed
+attempts write up to 9.1K-char responses, pushing 300s-deadline risk
+(probe 3 = 298s).
+
+Verdict: the vendored instrument out-specs the 27B judge on the live-shaped
+path; the calibration premise (M1/M2/M3 from this scorer on this judge) is
+falsified as-wired. Amendment options deferred to the operator (the seat's
+declared boundary): dropout-accepting calibration (count 5-retry drops,
+report dropout as a judge-fidelity finding — multi-day pace), fuzzy
+validation (REJECTED on integrity: a substituted item is a different claim),
+stronger judge (122B window), or report the calibration as could-not-judge
+on this judge. No restart performed (seat condition).
+
+---
+
+## T7a — INSTRUMENT AMENDMENT N5 (2026-08-20, operator disposition ffe67b0f; §18.6 declaration BEFORE the re-probe)
+
+STATUS 2026-08-20: NOT PURSUED — operator re-target to DRB-I (the proven DRB-I scorer at research/deep-research/drb/); declaration retained as the record of what was considered, nothing re-probed under it.
+
+### Why (the measured record this amendment answers)
+
+The vendored gate (character-level exact echo, first-fence parse) was falsified on BOTH judges:
+27B 0/4 probes (replay-probe-{2,3,4}-raw.txt; three failure classes) and 122B 0/4 gate slots
+(122b-1, 122b-2r, 122b-3r, 122b-4; raws replay-probe-122b-{1,4,2r,3r}-raw.txt, series record
+replay-probe-122b-series.json). On the 122B, all four completed calls produced echo drift confined
+to typography classes (whitespace collapse/insert, case, quote-style substitution, markdown bold
+decorations) plus one parse-breaking `<think>` CoT prefix with fenced blocks inside the think block
+(122b-2r; the payload after `</think>` was valid JSON). Letter-level substitutions observed
+(Taspen→Tashen, BPJS→BJPS, dropped letter You→Yo, ">" artifact) are NOT typography and remain
+failures under N5.
+
+### Official-evaluator citation (checked 2026-08-20, pinned clone run_evaluation.py @ 087c1b8d)
+
+The paper's official evaluator does NOT normalize: its prompt demands rubric_item text "MUST match
+the input text EXACTLY (character-level match)"; parse_model_text latches the FIRST fenced block;
+validate_batch_result requires exact text match. The official pipeline's ONLY tolerance for echo
+drift is per-batch retries (official default max_retries=10; ours 5, pre-registered N4-adjacent).
+The repo's evaluator-consistency study (README; 738 judgments, GPT-5.5 91.19% 3-way, κ 0.7993)
+measures score-label agreement with humans — it does not relax echo validation. N5 is therefore a
+pre-registered DEVIATION from the paper's evaluator, not an alignment; the order's
+"vendored-byte-exact" promise now reads "vendored + pre-registered amendments (2026-08-20)".
+Empirical justification for deviating: the official retry-only tolerance was measured insufficient
+on our judge (27B: live batches failed after 3-5 retries; 122B: 0/4 gate slots).
+
+### What N5 normalizes — EXACTLY (one function, normalize_typography, applied to BOTH sides)
+
+1. case — casefold()
+2. whitespace — ALL whitespace removed (handles collapse and insertion symmetrically:
+   "Indonesia's'Taspen" ≡ "Indonesia's 'Taspen"; "B P J S" ≡ "BPJS"; "foremploy" ≡ "for employ")
+3. quote style — ' " and the four curly quotes all → '
+4. markdown inline decorations — ** * _ ` ~~ removed
+
+Property: N5 is acceptance-monotone — any output that passed the vendored gate verbatim still
+passes N5 (normalization cannot turn a pass into a fail).
+
+### What must STILL fail (integrity property unchanged)
+
+Letter-level claim substitution (Taspen→Tashen, BPJS→BJPS, You→Yo, any ">" token artifact), dropped
+items, count mismatch, missing rubric_item — none of these are typography. The vendored
+validate_batch_result remains the SINGLE validation decider (§10.6); N5 only normalizes both inputs
+before it runs. No second copy of validation logic anywhere.
+
+### Parse amendment (N5, same declaration)
+
+Order: (1) strip `<think>...</think>` blocks (DOTALL), (2) vendored parse_model_text verbatim
+(fenced-first then full text), (3) last-fence attempt — json.loads on the LAST ```json fence when
+the vendored path failed, (4) N1 parse_fallback (unchanged, counted). Think-strip and last-fence
+uses are counted and land in the instrument report.
+
+### Re-probe gate (the gate for THIS amendment)
+
+- Same 4-probe shape: idx-4, info_recall items 0-3; tags 122b-1..4 (3× paper 45000 + 1× paper
+  20000); judge Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003 (DRB2_JUDGE_MODEL); deadline 900s
+  (SOVEREIGN_INFERENCE_TIMEOUT_SECS=900, live since 2026-08-20 ~08:00 UTC).
+- Per-probe verdict: amended parse_amended AND validate_amended both ok → pass; otherwise fail with
+  the failing stage named. The raw vendored parse/validate outcomes are printed alongside for the
+  record (glassbox) — never the gate.
+- 3/4+ pass → calibration GO (seat sequences the drb2-cal restart; worker confirms RUN-STARTED).
+  Below 3/4 → the could-not-judge deliverable stands: execution record + ONE landing commit (local
+  only, never push).
+
+## T7a amendment — the DRB-I flight (directive 7f0e276b) — DECLARATION
+
+Order deep-research-t7a amendment (directive 7f0e276b, operator-approved
+unedited, 2026-08-20): re-target to DRB-I — the FIRST DRB-I number for the
+loop AS-IS (the landed stack: word-number fix t6d, render-race, refused-URL
+dedup, shed retry), scored with the PROVEN DRB-I scorer at
+research/deep-research/drb/, against Perplexity's DRB-I 40.46; the frozen
+DRB-I banks are the pre-flight diagnostic gate; the flight must also
+produce the forensics package (gap trace, loop density, fetch/search
+counts, honesty flags, stalled rounds; ranked failure-mode taxonomy; fix
+priorities ranked against the t6g AIQ teardown as the design lens). This
+section is the declaration; the execution record is appended below it after
+the flight (append-only, nothing backdated). Appended 2026-08-20, BEFORE
+any flight task fires.
+
+### 1. Why the number's shape is RACE — a named choice, never silent
+
+The comparison target "Perplexity's DRB-I 40.46" is the RACE comprehensive
+score. Leaderboard row (drb/leaderboard.csv, vendored 2026-08-16):
+`perplexity-Research,40.46,39.10,35.65,46.11,43.08,82.63,31.20` —
+comprehensive 40.46 over the dims Comprehensiveness 39.10 / Insight 35.65 /
+Instruction-Following 46.11 / Readability 43.08 (the 82.63 is the FACT
+citation-accuracy figure — a different instrument's number, not the
+target). The proven scorer whose output shape matches the target is
+`drb/overall-derivation/score_race.py` — the official RACE recipe executed
+locally: shipped frozen per-task criteria (clone @ 469cce54, dimension
+weights asserted to sum to 1.0), shipped cleaned reference articles, the
+vendored score_calculator (byte-identical, asserted), verify_derivation.py
+28/28 (re-run before this flight). It is the instrument that measured local
+8.0848 / hybrid 8.6538 / ab 45.1454 (T5a / T5a-hybrid records) — the loop's
+DRB-I measurement history. `drb-score.py` is the FACT instrument
+(fabrication rate) — not the 40.46 comparison shape; FACT stays
+old-instrument, not re-run (T5a item 6 inherited). No new instrument build:
+score_race.py is used as-is except the ONE pre-registered judge-pin
+amendment (item 4).
+
+### 2. The flight (the loop AS-IS, current landed stack)
+
+- **Tasks**: the frozen 10-task holdout `drb/query.subset.jsonl`, ids
+  [56, 58, 59, 62, 65, 69, 78, 83, 90, 95], in file order (content-blind
+  selection frozen at T2b).
+- **Arm config**: the loop's STANDARD battery arm on the web leg — the
+  config the frozen banks validate (T1d record, pre-registration line
+  517-547; the DRB-II declaration's "standard battery arm" verbatim):
+  `sovereign deep-research "<question>" --backend auto --search-source web
+  --consent personal --search 12 --fetch 12 --max-rounds 3
+  --run-dir arms/runs-t7a/std/drb-<id>`
+- **Draft**: the daemon's primary Qwen3.8-27B-UD-Q6_K_XL on 127.0.0.1:9741
+  (the standard stack; loaded=true verified 2026-08-20 before this
+  declaration). DISABLE_PEER_INFERENCE=1 pin stands; the 900s inference
+  deadline stands (labeled in the records). No daemon changes, no restarts.
+- **Driver**: run-drb-arms.py gains the pre-registered ARM_FLAGS entry
+  `"std"` (the T6a "deep" precedent — driver transport, not an instrument;
+  resume semantics preserved: a flight whose nested manifest is terminal is
+  skipped, so a crash never re-fires completed tasks).
+- **Run root**: `arms/runs-t7a/` (fresh; the frozen drb/runs/ and
+  demo/demo12|13 are never touched). ONE `systemd-run --user` unit for the
+  flight (the harness-reaper directive; the dr-t6d precedent), driver
+  stdout to arms/runs-t7a-std.console.log.
+- **Web-spend cap ≤96 (the operator's 100-query discipline) — arithmetic
+  stated**: 10 tasks × 12 allowance = 120 > 96, so the cap binds unless
+  actual spend is below allowance (the deep arm's actuals were 8-10
+  searches/task — t6a phase-1c record, read from manifests). Handling
+  pre-registered: cumulative actual web searches are read per task from the
+  landed manifest (the loop records per-round search_calls — the same field
+  the battery score reports read); the flight flies in subset order and
+  STOPS at the first task boundary where cumulative ≥ 96; any task not
+  flown by the stop is recorded never-ran with reason "web budget cap ≤96"
+  (§18.2); the score covers the completed tasks, N named. No per-task
+  allowance is ever reduced to fit the cap (that would silently substitute
+  a different config — refused).
+- **Terminal-state rule** (T2b §4 inherited): a flight whose manifest never
+  reaches a terminal state is re-run once; a second failure is recorded
+  with its cause and the task still scores from whatever verdict-set.json
+  exists; an absent verdict set → the task has no citable pairs. Any
+  search/fetch refusal or rate limit is journaled in the budget ledger,
+  never silent (t6a language inherited).
+
+### 3. The pre-flight diagnostic gate (the frozen DRB-I banks)
+
+Battery on the flight binary, fresh root `arms/runs-t7a/` (loop/ + oneshot/
++ pairs.json — pairs extracted from the frozen bank files; the driver never
+hardcodes a question): ONE `systemd-run --user` unit, 13 loop flights
+(12 v0 + v1) at 12/12 mock-deck + the one-shot comparator (oneshot_rag),
+model pin Qwen3.8-27B-UD-Q6_K_XL, daemon idle check before launch, no
+daemon restarts mid-battery (T6d protocol inherited verbatim; ARMS_RUN_ROOT
+crosses via the host launcher). Scored by arms/score-arms.py (frozen —
+legs, bars, canon untouched).
+
+**Gate rule (pre-registered):** the floors the banks froze — P4-v0 ≥58/72,
+R-12-nongrow ≥10/12 (intent-form leg, directive 19909d5f), honesty not
+worse (loop ungrounded ≤ one-shot) — must PASS on the flight binary; all
+three floors PASS → flight GO. Any floor measured below the t6d battery #5
+numbers (P4-v0 59/72, R-12 12/12, honesty 0.0 vs 0.022) → STOP, report
+could-not-judge for the flight with the regression evidence. The bars
+already failed at t6d battery #5 (P4-v1 10/16 vs ≥12/16, P3 6/13 vs ≥10/13,
+two-arm lift pooled 1.0 vs 0.978 at +0.10, v1 1.0 vs 1.0 at +0.15) are
+known limits: reported with the four-verdict set, never re-litigated,
+never blocking — they are the gate's diagnostic content, not new bars. The
+gate's verdict table enters the forensics package.
+
+**Addendum — judge continuity (seat question 2026-08-20, answered on the
+record):** the battery verdicts are DRAFT-model-dependent and JUDGE-FREE —
+score-arms.py is C-class deterministic structured match, never an LLM judge
+(score-report-t6d.json scorer line; bank/README.md "coverage is scored by
+structured match, a deterministic rule, not an LLM judge"). The t6d battery
+#5 floors (P4-v0 59/72, R-12 12/12, honesty 0.0 vs 0.022) were scored under
+the SAME draft pin this gate runs — Qwen3.8-27B-UD-Q6_K_XL on 127.0.0.1:9741
+(T6d declaration, "model pin unchanged"; the 122B was not up during battery
+#5 — "This is the LAST revolution before the 122B judge window", T6d
+section). Same-instrument comparison holds: same draft pin, same frozen
+decks, same deterministic scorer, same frozen bars. The mixed-judge
+caveat applies ONLY to the RACE scorer (item 4): the t5a-era rows were
+122B-judged, this flight is 27B-judged — named, never collapsed.
+
+### 4. The scorer's judge — ONE named amendment (§18.3), and the caveats
+
+`score_race.py` line 89 pins JUDGE_PIN = the 122B
+(Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003, the seat's T5a/T6a-era window
+judge). This baseline is rung 1 on the 27B ("the 122B window is rung 2,
+gated on this baseline"; the 122B stays unloaded — seat claim protocol).
+**Pre-registered amendment: JUDGE_PIN := "Qwen3.8-27B-UD-Q6_K_XL"** (the
+daemon's primary — the standard stack; loaded=true verified 2026-08-20),
+plus the exit-2 guard message drops the literal "122B window" phrase (the
+guard logic itself is untouched: exit 2 unless the pinned model is listed
+AND loaded; AIClient(model=JUDGE_PIN) is the one judge path — the explicit
+argument wins over any env). The recipe, criteria, references, derivation
+formula, sidecar shape, and the one decider are unchanged.
+
+Judge discipline inherited verbatim (T5a item 7): the guard runs before ANY
+judge call; every sidecar row carries judge_model; the decision-journal
+cross-check (T3c-(c0) method) runs at landing; --dry-run (zero judge calls)
+validates every linkage BEFORE any judge call. Judge calls: 10 serial, each
+~72-127k chars → durable tier (systemd-run --user), the proven route.
+
+**The judge-identity caveat rides every number**: the 27B has never
+RACE-judged — this flight is its first use; its calibration is unmeasured
+(the 122B's calibration-gate record does not transfer). The ab-arm judge
+offset (122B-era 45.1454 on perplexity's articles) does not transfer to the
+27B judge — the 27B-era offset is a future, separately-declared
+measurement, listed in the forensics priorities. Comparisons to official
+judges (gemini-2.5-pro / GPT-5.5) carry the judge + cleaning offsets named,
+never collapsed (T5a item 6).
+
+Scorer invocation (T6a shape):
+
+```
+cd drb/overall-derivation && LLM_BACKEND=openai OPENAI_BASE_URL=http://127.0.0.1:9741/v1 OPENAI_API_KEY=local \
+python3 score_race.py --arm hybrid --landed-root arms/runs-t7a/std --arm-label t7a --out flights
+```
+
+→ `flights/race-<ts>/t7a/` (raw_results.jsonl official record shape,
+race_result.txt 5-line summary, judge_output.jsonl sidecar, manifest with
+judge pin + timestamps + landed-flight dirs).
+
+### 5. Comparison targets (each labeled)
+
+| measure | value | task set | article_1 | judge | cleaning |
+|---|---|---|---|---|---|
+| this flight (web 12/12/3) | **TBD** | 10 (subset) | our re-flight reports | our 27B | uncleaned (the report IS the deliverable) |
+| t5a hybrid arm (web 4/4/3, prior stack) | 8.6538 | 10 (subset) | our re-flight reports | our 122B | uncleaned |
+| t5a local arm (corpus 12/12/3, prior stack) | 8.0848 | 10 (subset) | our re-flight reports | our 122B | uncleaned |
+| official, gemini era | 42.1779 | 10 (subset) | perplexity's targets | gemini-2.5-pro | LLM-cleaned |
+| official, GPT-5.5 era | 44.9683 | 10 (subset) | perplexity's targets | GPT-5.5 | LLM-cleaned |
+| order reference (leaderboard row) | 40.46 | 100 (full) | perplexity's targets | official judges | LLM-cleaned |
+
+The primary read is the flight vs 40.46 (order literal) with the subset +
+judge + cleaning caveats; the like-for-like task-set rows (42.1779 /
+44.9683) carry only the judge + cleaning offsets; the t5a-era rows carry
+the prior-stack + 122B-judge labels (this flight is the CURRENT stack's
+first number — the baseline every future revolution is judged against).
+Dimension breakdown reported in the official 4-dim shape (means ×100).
+
+### 6. Forensics package (the amendment's NEW item — pre-registered shape)
+
+Per task, from the landed flight artifacts (manifest.json, verdict-set.json,
+report.md, and the audit empty-round instrumentation — audit.rs
+empty_round_reason): the gap trace (round-by-round gaps_before /
+gaps_after), stalled rounds (a round with 0 searches AND 0 fetches, with
+the recorded empty_round_reason), fetch/search counts (the budget ledger),
+loop density (traced numeric claims / numeric claims), honesty flags
+(untraced / ungrounded claims; verdict-flagged claims; the four-verdict
+set), terminal states. Then: the ranked failure-mode taxonomy — frequency ×
+points lost per dimension (the RACE judge's per-task per-dim ratios make
+the loss attribution direct), and the fix priorities ranked against the
+t6g AIQ teardown (research/deep-research/aiq-teardown.md — commit
+dc8fc4235) as the design lens: per-sub-question concurrent dispatch, writer
+separation, per-job budgets, citation-whitelist discipline, source-capture
+record shape, the recall-tax decomposition. The taxonomy and priorities are
+triage input for the next wave — not this order's implementation.
+
+### 7. Landing
+
+ONE local commit (never pushed, no assistant attribution): this declaration
++ the run-drb-arms.py ARM_FLAGS "std" entry + the score_race.py JUDGE_PIN
+amendment + the execution record + the forensics write-up. Flight evidence
+(runs/, console logs, flights/) stays untracked. drb2/ + the N5 amendment
+untouched. The t7b 10-file frozen list is never committed from this order.
+
+---
+
+## T7a flight — GATE VERDICT execution record (2026-08-20, STOP)
+
+Battery landed on the flight binary under `dr-t7a-gate.service` (13 loop
+flights exit=0, one-shot comparator 1 passed / 452.10s after the cwd-trap
+re-run under `dr-t7a-oneshot.service` — WorkingDirectory was /home/alexbryan,
+not the repo root; the t6b-documented trap, fixed the same way). Scored by
+the frozen arms/score-arms.py (fixtures green). Verdicts:
+
+| leg | bar | measured | t6d #5 | verdict |
+|---|---|---|---|---|
+| P4-v0 | >=58/72 | 62/72 | 59/72 | PASS (+3) |
+| R-12-nongrow | >=10/12 | 10/12 | 12/12 | PASS at bar, FLOOR BELOW #5 |
+| honesty not worse | loop <= one-shot | 0.0 vs 0.0 | 0.0 vs 0.022 | PASS |
+| P4-v1 | >=12/16 | 5/16 | 10/16 | FAIL (known limit at #5) |
+| P3 | >=10/13 | 9/13 | 6/13 | FAIL (known limit at #5) |
+| two-arm pooled | +0.10 | 1.0 vs 1.0 | 1.0 vs 0.978 | FAIL (known limit at #5) |
+| two-arm v1 | +0.15 | 1.0 vs 1.0 | 1.0 vs 1.0 | FAIL (known limit at #5) |
+
+Gate rule applied: any floor below the t6d #5 numbers -> STOP. R-12 10/12
+< 12/12 -> **STOP, flight COULD-NOT-JUDGE pending seat resolution; no
+flight task launched.** Regression evidence (GATE-VERDICT.json in
+runs-t7a/): seed-03 final-round gap growth 1->2 on a refused-empty round
+(the R-12 engine gap-growth class; deck unchanged, t6d #5 passed the same
+seed); seed-04 r1->r2 empty-window abstention — the pre-registered named
+exclusion, not counted. P4-v0 above #5 and honesty not worse are the
+counter-signals. T7b instrumentation confirmed live in the measured binary
+(empty_rounds on every verdict-set; working-tree diff verified additive,
+diagnostic-only). Forensics collector (arms/forensics-collect.py) validated
+on t6d + gate roots.
+
+---
+
+## T7a flight — GATE RE-MEASURE execution record (2026-08-20, GO)
+
+Seat resolution de441b82: RE-MEASURE ONCE on a fresh root
+(`arms/runs-t7a-re`), same frozen scorer, same 27B pin, same floors, same
+stop rule; decision rule: R-12 >=11/12 -> single-run noise confirmed -> GO;
+R-12 <=10/12 -> consistent regression -> STOP. Unit `dr-t7a-re-gate.service`
+with WorkingDirectory = repo root (the cwd trap fixed in-unit; one-shot
+comparator ran in the same unit: 1 passed / 488.81s; loop 13/13 exit=0).
+Verdicts: P4-v0 64/72 PASS (bar >=58/72; t6d #5 59/72), P3 11/13 PASS
+(bar >=10/13; t6d #5 6/13), R-12-nongrow **11/12 v0** PASS at the seat's
+decision bar (t6d #5 12/12; gate1 10/12), honesty 0.0 vs 0.031 PASS (loop
+side not worse), P4-v1 6/16 FAIL + two-arm pooled 1.0 vs 0.969 FAIL + v1
+two-arm FAIL (known limits at #5, never blocking), T1.7 11/12 FAIL (one
+plan-implying flight lost the digit/measure word — diagnostic leg, not a
+floor, single-run swing, reported not blocking). R-12 misses named with
+traces and empty-reasons in runs-t7a-re/GATE-VERDICT.json: seed-08
+(growth 1->5 on a refused-empty round then 5->7 at the final round) and v1
+(journaled-not-gated, fails both runs: [0,1]->[1,14]->[14,14] and
+[0,1]->[1,17]->[17,18]); first gate's misses were seed-03 and v1 with
+seed-04 cnj (pre-registered named exclusion). Noise signature: the v0
+failure rotated seeds on the unchanged deck (10/12 -> 11/12) while P4-v0
+rose 62 -> 64/72. **Decision: GO — the flight launches per the
+declaration.**
+## T7a flight — EXECUTION RECORD (2026-08-20, the DRB-I measurement flight)
+
+Flight launched per the declaration on the GO verdict above: std arm
+web 12/12/3 (`--backend auto --search-source web --consent personal
+--search 12 --fetch 12 --max-rounds 3`), 27B draft + 27B judge
+(JUDGE_PIN Qwen3.8-27B-UD-Q6_K_XL), one unit `dr-t7a-std.service`,
+pre-registered cumulative-search cap 96 (task-boundary hard stop,
+per-task allowance never reduced). Ten frozen DRB-I tasks: **9 flew
+(56 58 59 62 65 69 78 83 90), all exit=0 done-partial, truncation
+declared 9/9; task 95 NEVER-RAN — cumulative 102 >= 96 at its
+boundary**, terminal line `FLIGHT STOPPED AT CUMULATIVE-SEARCH CAP —
+remaining tasks never-ran with reason (pre-registered rule)`; unit
+inactive exit 0. Ledger: 102 searches / 79 fetches / 137 claims /
+**0 ungrounded (honesty 1.0 on all 9)**; loop density 1.0 on 8/9,
+0.333 on task 56 (fetch-failure empties, `empty_round_reason=failed`
+on rounds 1+3). Forensics: `arms/forensics-collect.py` on the flight
+root; taxonomy + ranked fix list in `arms/t7a-flight-forensics.md`
+(F1 search front-loading 8/9, F2 fetch-failure empties, F3 render
+truncation 9/9, F4 early 2-round stop 3/9, F5 under-fetch 5/9,
+positive growth-with-evidence on 69/90).
+
+Scoring: `score_race.py --skip-tasks 95` (new: never-ran ids are
+named NEVER-RAN, excluded from the means over scored rows only,
+manifest carries the skip + reason; dry-run passed with 9 prompts
+built, zero judge calls). Comparison targets recomputed on the SAME
+9-task set from the official per-task data (inputs/perplexity-raw_results.jsonl
+sha-pinned, full-set means reproduce the official aggregates exactly:
+40.4581 / 43.0516): **42.0849** gemini-era (gemini-2.5-pro; was
+42.1779 on the 10-task subset) and **44.9237** GPT-5.5 era (was
+44.9683); 9-task dims gemini-era 41.3656/38.3559/47.0869/43.4210,
+gpt55-era 44.5194/43.6077/46.2567/47.0476. Rows labeled with task
+set + judge: 40.46 (100-task leaderboard), 42.1779/44.9683 (10-task
+subsets, t5a), 8.0848/45.1454 (t5a-era local/ab arms, 122B judge).
+
+Verdict table vs bars and vs 40.46: **15.6783 overall** (official
+5-line summary, flights/race-20260820T151943/t7a/race_result.txt;
+9/9 tasks scored, 4 dims parsed on all, task 95 NEVER-RAN per the
+pre-registered cap stop; unit exit 0). Dims C/I/IF/R:
+**15.5255 / 13.4210 / 17.8394 / 17.4066** (27B judge
+Qwen3.8-27B-UD-Q6_K_XL, uncleaned).
+
+Per-task overalls: 56: 5.93, 58: 16.76, 59: 19.30, 62: 26.52,
+65: 7.00, 69: 28.11, 78: 7.39, 83: 2.84, 90: 27.25.
+
+| row | task set | judge | overall | C | I | IF | R |
+|---|---|---|---|---|---|---|---|
+| **t7a flight (loop AS-IS)** | 9 | 27B local | **15.6783** | 15.53 | 13.42 | 17.84 | 17.41 |
+| official, gemini era | 9 | gemini-2.5-pro | 42.0849 | 41.37 | 38.36 | 47.09 | 43.42 |
+| official, GPT-5.5 era | 9 | GPT-5.5 | 44.9237 | 44.52 | 43.61 | 46.26 | 47.05 |
+| leaderboard | 100 | labeled | 40.46 | — | — | — | — |
+| t5a-era local arm | 10 | 122B | 8.0848 | — | — | — | — |
+| t5a-era ab arm | 10 | 122B | 45.1454 | — | — | — | — |
+
+Flight is **61-63% below the official 9-task references** on every
+dimension (15.68/42.08 = 0.373; vs 40.46: 0.388). Dimension spread is
+flat — no dim recovers — with Insight the weakest relative shortfall
+(13.42/38.36 = 0.350) and Readability the strongest (17.41/43.42 =
+0.401). The flight is above the t5a-era local arm (8.08) — consistent
+with the t6d word-number/re-draft fixes landing — but remains in the
+same regime; the loop AS-IS is ~2.6x below the official reference, and
+the honesty floor held (0 ungrounded on all 9, honesty 1.0). Judge
+caveat stands: 27B vs the official judges; per-task values track the
+t5a-era 122B-judged regime (task 56: 5.93 here vs 6.18 there). The
+flight manifest carries a legacy `order` label (fixed in score_race.py
+for future runs; the written evidence was not rewritten).
