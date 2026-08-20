@@ -213,7 +213,11 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli-dev (LocalDaemon; doc_fetcher is InboundOnly) ----
-    ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 4),
+    // code_cmd 4 -> 3 (2026-08-20): the fourth site was
+    // `build_daemon_embed_fn`'s /v1/models probe, which left with the rest of
+    // `svrn code index` for sovereign-cli-shared::code_index. The three that
+    // remain are cmd_facts' http client and cmd_watch's two.
+    ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/plan_enricher.rs", Class::LocalDaemon, 2),
@@ -248,10 +252,37 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli/src/serve_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/project_init/mod.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/notes_cmd.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli/src/code_index_cmd.rs", Class::LocalDaemon, 1),
+    // code_index_cmd.rs has no row since 2026-08-20: the dispatcher's copy of
+    // `svrn code index` (and with it the probe client) moved to
+    // sovereign-cli-shared::code_index; what is left here is a 42-line
+    // subcommand shim that constructs nothing.
 
     // ---- sovereign-cli-shared (LocalDaemon: daemon MCP proxy + project-local) ----
     ("sovereign/crates/sovereign-cli-shared/src/mcp_client.rs", Class::LocalDaemon, 3),
+    // code_index.rs (2026-08-20): `svrn code index` was two copies, one per
+    // binary, and one of them carried a live `--help` defect; converging it put
+    // `build_daemon_embed_fn` here. CLASSIFIED FRESH, not carried across, since
+    // a client constructor moving from a leaf binary into a SHARED library is a
+    // different reachability story on its face. Three checks, and all three say
+    // LocalDaemon is still right:
+    //   - Destination is pinned, not passed. The one site builds a 2s-timeout
+    //     probe for `format!("http://localhost:{port}/v1")/models`, where only
+    //     the PORT comes from config. No parameter of the function names a
+    //     host, so no caller can aim it off-box. The classes in this registry
+    //     are about where the bytes go, and these go to loopback.
+    //   - It carries nothing out. The site is a bare GET liveness probe; no
+    //     estate content, not even a query, is in the request.
+    //   - Reachability did not actually widen. `code_index` is behind the
+    //     `code-index` feature, enabled by exactly `sovereign-cli` (via
+    //     `code-intel`) and `sovereign-cli-dev` — the same two binaries that
+    //     held the code before. The other two crates depending on this one
+    //     (sovereign-cli-daemon, sovereign-cli-llm) leave the feature off, so
+    //     the module is not compiled into them at all.
+    // What this row does NOT guarantee: if someone later gives
+    // `build_daemon_embed_fn` an endpoint parameter, the count stays 1 and this
+    // census stays green. The pinned-localhost literal is the invariant; a
+    // change to it is the review moment, not a change to the count.
+    ("sovereign/crates/sovereign-cli-shared/src/code_index.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-tools ----
     // knowledge_lookup: the tool-registry web-search evidence path —
