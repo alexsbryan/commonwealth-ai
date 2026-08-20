@@ -564,7 +564,7 @@ impl WorkerEligibility {
                     endpoint = %st.endpoint,
                     from = ?before,
                     to = ?after,
-                    evidence = ?evidence,
+                    grade = ?grade,
                     flaps = st.flaps.len(),
                     quarantine_count = st.quarantine_count,
                     cooldown_secs = st.quarantine_remaining(now),
