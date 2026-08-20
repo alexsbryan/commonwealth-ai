@@ -685,6 +685,9 @@ mod tests {
             callee_qualified: callee.to_string(),
             file_path: String::new(),
             line: 1,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: "call".into(),
         }
     }

@@ -45,6 +45,68 @@ enum Repair {
     None,
 }
 
+/// True when `cmd` still carries an unresolved `<placeholder>`.
+///
+/// `Repair::executable("svrn code index <path> --corpus-id X")` shipped as an
+/// executable repair and could never run: `doctor --fix` would have invoked a
+/// literal `<path>`. It was a `Manual` wearing an `Executable`'s coat, and
+/// nothing caught it because no test ever watched the repair succeed
+/// (ARCH_PRINCIPLES §18.1 — a gate you have not watched fail is not a gate).
+fn has_placeholder(cmd: &str) -> bool {
+    let mut chars = cmd.char_indices();
+    while let Some((i, c)) = chars.next() {
+        if c != '<' {
+            continue;
+        }
+        // `<foo>` with no whitespace inside is a template slot; `a < b` is not.
+        if let Some(close) = cmd[i + 1..].find('>') {
+            let inner = &cmd[i + 1..i + 1 + close];
+            if !inner.is_empty() && !inner.contains(char::is_whitespace) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+impl Repair {
+    /// Mint an executable repair. A command that still holds a `<placeholder>`
+    /// is demoted to [`Repair::Manual`] rather than handed to `--fix`: the user
+    /// still sees it, but the fixer never pretends it can run it. Refuse or
+    /// name the substitution — never silently run the wrong thing (§18.3).
+    fn executable(cmd: impl Into<String>) -> Self {
+        let cmd = cmd.into();
+        if has_placeholder(&cmd) {
+            // NOT a debug_assert: this repo builds debug by default, so an
+            // assert here would panic `doctor` — the one command an operator
+            // runs when things are already broken. Degrade loudly instead.
+            tracing::warn!(
+                command = %cmd,
+                "doctor: repair carries an unresolved <placeholder>; demoted to manual \
+                 (resolve it via registered_root, or construct Repair::Manual directly)"
+            );
+            return Repair::Manual(cmd);
+        }
+        Repair::Executable(cmd)
+    }
+}
+
+/// Repo root for a registered corpus, straight from `~/.svrnmesh/projects.json`.
+///
+/// Deliberately reads the FILE rather than `/v1/projects`: doctor has to work
+/// when the daemon is down, which is exactly when a repair path matters most.
+/// This is also the only source that can answer for a corpus whose
+/// `_corpus_meta.json` does not exist yet — the never-indexed case, where the
+/// index dir itself cannot say where the code lives.
+fn registered_root(corpus_id: &str) -> Option<String> {
+    let raw = std::fs::read_to_string(sovereign_root().join("projects.json")).ok()?;
+    let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    v.as_array()?
+        .iter()
+        .find(|p| p.get("corpus_id").and_then(|c| c.as_str()) == Some(corpus_id))
+        .and_then(|p| p.get("root")?.as_str().map(str::to_string))
+}
+
 #[derive(Debug, Clone, Serialize)]
 struct CheckResult {
     name: &'static str,
@@ -111,7 +173,7 @@ async fn check_server_running() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "svrn server not reachable at :9741".into(),
-            repair: Repair::Executable("svrn project serve".into()),
+            repair: Repair::executable("svrn project serve"),
         }
     }
 }
@@ -136,7 +198,7 @@ async fn check_server_tools() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "could not reach /mcp endpoint".into(),
-            repair: Repair::Executable("svrn project serve".into()),
+            repair: Repair::executable("svrn project serve"),
         },
         Some(r) => match r.json::<serde_json::Value>().await {
             Ok(json) => {
@@ -244,7 +306,7 @@ async fn check_scip_indexed() -> CheckResult {
                  scip_exporters finding.",
                 empty.len(),
             ),
-            repair: Repair::Executable(format!("svrn project refresh --name {example} --local")),
+            repair: Repair::executable(format!("svrn project refresh --name {example} --local")),
         };
     }
     if !populated.is_empty() {
@@ -265,7 +327,7 @@ async fn check_scip_indexed() -> CheckResult {
         layer: Layer::Sovereign,
         status: CheckStatus::Failed,
         message: "no SCIP graph DB found — call graph tools unavailable".into(),
-        repair: Repair::Executable("svrn project init".into()),
+        repair: Repair::executable("svrn project init"),
     }
 }
 
@@ -289,7 +351,7 @@ async fn check_code_indexed() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "no code indexes found — semantic code search unavailable".into(),
-            repair: Repair::Executable("svrn code index .".into()),
+            repair: Repair::executable("svrn code index ."),
         };
     };
     let mut healthy = Vec::new();
@@ -318,7 +380,34 @@ async fn check_code_indexed() -> CheckResult {
         // they silently return empty. Surfacing the corpus list +
         // remediation is the whole point of this check.
         let list = broken.join(", ");
-        let example = broken.first().cloned().unwrap_or_else(|| "<corpus>".into());
+        // Resolve each corpus to its registered root so `--fix` can actually
+        // run this. An unregistered corpus gets a Manual telling the operator
+        // to register it — never a template pretending to be runnable.
+        let mut cmds: Vec<String> = Vec::new();
+        let mut unresolved: Vec<String> = Vec::new();
+        for id in &broken {
+            match registered_root(id) {
+                Some(root) => cmds.push(format!("svrn code index {root} --corpus-id {id}")),
+                None => unresolved.push(id.clone()),
+            }
+        }
+        let repair = if !cmds.is_empty() && unresolved.is_empty() {
+            Repair::MultiExecutable(cmds)
+        } else if !cmds.is_empty() {
+            let mut all = cmds;
+            all.push(format!(
+                "# not registered, so no root is known: {}. \
+                 Register first: svrn project register --root <repo> --corpus-id <id>",
+                unresolved.join(", ")
+            ));
+            Repair::Manual(all.join("\n"))
+        } else {
+            Repair::Manual(format!(
+                "no registered root for {list} — register the repo first: \
+                 svrn project register --root <repo> --corpus-id <id>, \
+                 then svrn code index <repo> --corpus-id <id>"
+            ))
+        };
         return CheckResult {
             name: "code_indexed",
             layer: Layer::Sovereign,
@@ -329,7 +418,7 @@ async fn check_code_indexed() -> CheckResult {
                  SCIP call graph is unaffected.",
                 broken.len()
             ),
-            repair: Repair::Executable(format!("svrn code index <path> --corpus-id {example}")),
+            repair,
         };
     }
     if healthy.is_empty() {
@@ -338,7 +427,7 @@ async fn check_code_indexed() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "no code indexes found — semantic code search unavailable".into(),
-            repair: Repair::Executable("svrn code index .".into()),
+            repair: Repair::executable("svrn code index ."),
         };
     }
     CheckResult {
@@ -370,7 +459,7 @@ fn check_notes_db() -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Failed,
             message: "notes.db not found — note tools unavailable".into(),
-            repair: Repair::Executable("svrn init".into()),
+            repair: Repair::executable("svrn init"),
         }
     }
 }
@@ -396,7 +485,7 @@ fn check_project_indexed() -> CheckResult {
             // that rebuilds this index is `refresh` (main.rs help: "Rebuild
             // the project code index"), which dispatches to the sibling's
             // `project-refresh`.
-            repair: Repair::Executable("svrn refresh".into()),
+            repair: Repair::executable("svrn refresh"),
         }
     }
 }
@@ -514,7 +603,7 @@ async fn check_watcher_live(sovereign_dir: &std::path::Path) -> CheckResult {
             layer: Layer::Sovereign,
             status: CheckStatus::Warning,
             message: "daemon /mcp unreachable — cannot probe watcher liveness".into(),
-            repair: Repair::Executable("svrn daemon restart".into()),
+            repair: Repair::executable("svrn daemon restart"),
         };
     };
     let Ok(json) = r.json::<serde_json::Value>().await else {
@@ -564,7 +653,7 @@ async fn check_watcher_live(sovereign_dir: &std::path::Path) -> CheckResult {
                         "lint/test watcher NOT live (reason: {reason}) — stored results are orphaned; \
                          the supervisor should restart it shortly"
                     ),
-                    repair: Repair::Executable("svrn daemon restart".into()),
+                    repair: Repair::executable("svrn daemon restart"),
                 }
             }
         }
@@ -575,7 +664,7 @@ async fn check_watcher_live(sovereign_dir: &std::path::Path) -> CheckResult {
             message:
                 "lint_status returned no `watcher` health object — daemon/tool version mismatch?"
                     .into(),
-            repair: Repair::Executable("svrn daemon restart".into()),
+            repair: Repair::executable("svrn daemon restart"),
         },
     }
 }
@@ -819,7 +908,7 @@ fn check_daemon_supervised() -> CheckResult {
             message: "daemon is NOT service-managed — it will not auto-restart \
                       after a crash or jetsam/OOM kill"
                 .into(),
-            repair: Repair::Executable("svrn install-service".into()),
+            repair: Repair::executable("svrn install-service"),
         }
     }
 }
@@ -840,7 +929,7 @@ async fn check_daemon_running() -> CheckResult {
             layer: Layer::Commonwealth,
             status: CheckStatus::Failed,
             message: "commonwealth daemon not reachable at :9741".into(),
-            repair: Repair::Executable("commonwealth daemon start".into()),
+            repair: Repair::executable("commonwealth daemon start"),
         }
     }
 }
@@ -890,7 +979,7 @@ async fn check_mesh_member(client_url: &str) -> CheckResult {
             layer: Layer::Commonwealth,
             status: CheckStatus::Failed,
             message: format!("could not reach {url}"),
-            repair: Repair::Executable("svrn daemon restart".into()),
+            repair: Repair::executable("svrn daemon restart"),
         },
     }
 }
@@ -987,9 +1076,7 @@ async fn check_inference_capable(client_url: &str) -> CheckResult {
                     layer: Layer::Commonwealth,
                     status: CheckStatus::Warning,
                     message: "no models registered — /v1/models is empty. restart the daemon after `svrn setup` completes.".into(),
-                    repair: Repair::Executable(
-                        "svrn daemon restart".into(),
-                    ),
+                    repair: Repair::executable("svrn daemon restart"),
                 }
             }
         }
@@ -1257,7 +1344,7 @@ async fn check_mcp_live() -> CheckResult {
             layer: Layer::Omo,
             status: CheckStatus::Failed,
             message: "MCP /mcp unreachable — agents cannot use svrn tools".into(),
-            repair: Repair::Executable("svrn daemon restart".into()),
+            repair: Repair::executable("svrn daemon restart"),
         },
     }
 }
@@ -1294,7 +1381,7 @@ async fn check_project_watchers() -> CheckResult {
                 layer: Layer::Sovereign,
                 status: CheckStatus::Warning,
                 message: "daemon unreachable — /v1/projects did not answer".into(),
-                repair: Repair::Executable("svrn daemon restart".into()),
+                repair: Repair::executable("svrn daemon restart"),
             };
         }
     };
@@ -1307,7 +1394,7 @@ async fn check_project_watchers() -> CheckResult {
             message:
                 "/v1/projects returned 404 — project_http_router not mounted (restart the daemon)"
                     .into(),
-            repair: Repair::Executable("svrn daemon restart".into()),
+            repair: Repair::executable("svrn daemon restart"),
         };
     }
 
@@ -1374,7 +1461,7 @@ async fn check_project_watchers() -> CheckResult {
                 disabled.len(),
                 disabled.join(", ")
             ),
-            repair: Repair::Executable("svrn project watch restart <corpus_id>".into()),
+            repair: Repair::Manual("svrn project watch restart <corpus_id>".into()),
         };
     }
     if !crashed.is_empty() {
@@ -1941,7 +2028,7 @@ async fn check_watcher_freshness() -> CheckResult {
                 wedged.len(),
                 wedged.join("; ")
             ),
-            repair: Repair::Executable("svrn project refresh".into()),
+            repair: Repair::executable("svrn project refresh"),
         };
     }
     if !slow_rebuild.is_empty() {
@@ -2290,8 +2377,8 @@ fn check_legacy_hooks() -> CheckResult {
             stale.len(),
             stale.join(", ")
         ),
-        repair: Repair::Executable(
-            "svrn project install-hooks  (in the affected repo — removes the legacy hook)".into(),
+        repair: Repair::executable(
+            "svrn project install-hooks  (in the affected repo — removes the legacy hook)",
         ),
     }
 }
@@ -2809,5 +2896,48 @@ async fn run_watch(sovereign_dir: &std::path::Path, json: bool) -> i32 {
 
         prev_statuses = results.iter().map(|r| (r.name, r.status.clone())).collect();
         tokio::time::sleep(Duration::from_secs(30)).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn placeholder_detects_unresolved_templates() {
+        assert!(has_placeholder("svrn code index <path> --corpus-id x"));
+        assert!(has_placeholder("svrn project watch restart <corpus_id>"));
+        assert!(has_placeholder("svrn project register --root <repo>"));
+    }
+
+    #[test]
+    fn placeholder_allows_real_commands() {
+        assert!(!has_placeholder("svrn daemon restart"));
+        assert!(!has_placeholder(
+            "svrn code index /Users/me/dev/repo --corpus-id repo"
+        ));
+        // A comparison inside a message is not a template slot.
+        assert!(!has_placeholder("rss 19042 MiB < 32768 MiB soft limit"));
+        assert!(!has_placeholder("nothing here"));
+    }
+
+    /// The defect this guard exists for: `code_indexed` shipped
+    /// `Repair::Executable("svrn code index <path> …")`, which `--fix` could
+    /// never run. A template must degrade to Manual, visibly, rather than be
+    /// handed to the fixer (§18.3 — never silently substitute).
+    #[test]
+    fn executable_demotes_a_template_to_manual() {
+        match Repair::executable("svrn code index <path> --corpus-id demo") {
+            Repair::Manual(cmd) => assert!(cmd.contains("<path>")),
+            other => panic!("expected Manual demotion, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn executable_keeps_a_resolved_command() {
+        match Repair::executable("svrn code index /tmp/repo --corpus-id demo") {
+            Repair::Executable(cmd) => assert!(cmd.ends_with("--corpus-id demo")),
+            other => panic!("expected Executable, got {other:?}"),
+        }
     }
 }

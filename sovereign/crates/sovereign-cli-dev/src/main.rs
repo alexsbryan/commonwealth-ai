@@ -39,6 +39,7 @@ mod phases;
 mod plan_composer;
 mod plan_enricher;
 mod project_cmd;
+mod redirect_cmd;
 mod suggest_seams_cmd;
 mod tools_cmd;
 

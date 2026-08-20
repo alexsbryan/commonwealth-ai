@@ -275,7 +275,7 @@ fn resolve_corpus(explicit: Option<String>, indexes_dir: &std::path::Path) -> Re
 // caveat and do not move the verdict.
 
 /// What the graph's number is about, relative to the commit being gated.
-enum Freshness {
+pub(crate) enum Freshness {
     /// The graph's head is this repo's HEAD.
     Current,
     /// The graph is behind HEAD, but nothing in the gap feeds this count.
@@ -295,8 +295,8 @@ enum Freshness {
 }
 
 /// The graph's lag, in the two forms that read differently.
-struct Lag {
-    freshness: Freshness,
+pub(crate) struct Lag {
+    pub(crate) freshness: Freshness,
     /// Working-tree paths (tracked edits + untracked files) that carry the
     /// extensions this count reads. Caveat only — never a verdict.
     uncommitted: Vec<String>,
@@ -306,14 +306,14 @@ struct Lag {
 
 impl Lag {
     /// True when the printed number can be said to be about THIS commit.
-    fn can_judge(&self) -> bool {
+    pub(crate) fn can_judge(&self) -> bool {
         matches!(
             self.freshness,
             Freshness::Current | Freshness::BehindIrrelevant { .. }
         )
     }
 
-    fn verdict_word(&self) -> &'static str {
+    pub(crate) fn verdict_word(&self) -> &'static str {
         match self.freshness {
             Freshness::Current => "current",
             Freshness::BehindIrrelevant { .. } => "behind-irrelevant",
@@ -323,7 +323,7 @@ impl Lag {
     }
 
     /// The one line (or three) that says what the number is about.
-    fn render(&self, corpus_id: &str) -> String {
+    pub(crate) fn render(&self, corpus_id: &str) -> String {
         let mut s = String::new();
         match &self.freshness {
             Freshness::Current => {
@@ -383,7 +383,7 @@ impl Lag {
     }
 }
 
-fn short(sha: &str) -> &str {
+pub(crate) fn short(sha: &str) -> &str {
     &sha[..sha.len().min(8)]
 }
 
@@ -432,7 +432,7 @@ fn counts_path(path: &str, exts: &[String], scope: &SourceScope) -> bool {
             .is_some_and(|(_, e)| exts.iter().any(|x| x == &e.to_ascii_lowercase()))
 }
 
-fn assess_lag(
+pub(crate) fn assess_lag(
     indexed_head: Option<String>,
     defs: &[corpus_engine_scip::converge::TypeDef],
     scope: &SourceScope,

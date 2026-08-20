@@ -634,6 +634,9 @@ mod tests {
             callee_qualified: callee_q.to_string(),
             file_path: file.to_string(),
             line: 1,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: "direct".to_string(), // hardcoded by the exporter
         }
     }

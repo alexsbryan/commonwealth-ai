@@ -598,6 +598,9 @@ mod tests {
             callee_qualified: format!("rust-analyzer cargo {to_pkg} 0.1.0 {to_desc}"),
             file_path: file.into(),
             line: 1,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: "direct".into(),
         }
     }

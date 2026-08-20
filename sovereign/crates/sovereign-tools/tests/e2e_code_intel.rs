@@ -951,6 +951,9 @@ fn refr(caller: &str, callee: &str, file: &str, line: i32) -> ScipRefRecord {
         callee_qualified: String::new(),
         file_path: file.to_string(),
         line,
+        start_col: -1,
+        end_line: -1,
+        end_col: -1,
         ref_kind: "direct".to_string(),
     }
 }
