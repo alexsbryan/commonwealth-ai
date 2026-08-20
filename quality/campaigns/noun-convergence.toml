@@ -319,6 +319,11 @@ moves = ["nc-no-violation"]
 one_line = "Delete the 82 wrong-way types; the layer map becomes one-way for the first time"
 
 [[rung]]
+id = "nc-2b-inference-vocabulary"
+moves = ["nc-no-violation", "nc-boundary"]
+one_line = "The wire contract stops naming the runtime — 10 inference types move down to oicp-types, and the forbid rule loses its escape"
+
+[[rung]]
 id = "nc-3-backstage"
 moves = ["nc-no-violation"]
 one_line = "Back-of-house becomes a CRATE boundary, so the one-way rule can be enforced instead of hoped for"
