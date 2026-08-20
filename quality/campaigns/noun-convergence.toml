@@ -408,6 +408,22 @@ moves = ["nc-boundary", "nc-kernel"]
 one_line = "corpus-engine publishes Note — NoteStore is a god object serving as a contract"
 
 [[rung]]
+id = "nc-2c-backflow-tail"
+moves = ["nc-no-violation"]
+one_line = "The last commonwealth -> sovereign edge — 16 types / 98 refs, six files, three families — so rung 8 can narrow without narrowing around a leak"
+
+[[rung]]
+# BLOCKED 2026-08-20 by the seat, dependency UNMET — do not dispatch as written.
+# The order's own premise is "rung 2's commonwealth -> sovereign backflow must be
+# gone before the published surface can be narrowed, or you narrow around a
+# leak." Measured today, `nc-boundary.py --edge commonwealth:sovereign`:
+#   16 distinct types / 98 refs still crossing (rung 2 took it 22 -> 16, not to 0)
+#   Effect 20 · Scope 20 · ToolDescriptor 14 · Tier2LaunchOutcome 6 ·
+#   NextEditEpisode 5 · JournalLine 5 · + 10 more
+# The head of that list is one coherent sub-problem, not 16 scattered leaks:
+# Effect / Scope / ToolDescriptor are sovereign's TOOL-REGISTRY vocabulary
+# (the `Effect x Scope` manifest grouping), named by commonwealth crates. That
+# wants a home decision of its own before rung 8 narrows anything.
 id = "nc-8-peer-capability"
 moves = ["nc-boundary", "nc-no-violation"]
 one_line = "commonwealth publishes Peer + Capability; sovereign composes them instead of naming Mesh and AppState"
