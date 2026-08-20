@@ -16,7 +16,63 @@
 #   cargo run -p xtask -- layer-gate     Cargo-DECLARED edges (CI, <1s)
 #   sovereign code arch-report           SCIP-OBSERVED symbol references
 
-schema_version = 1
+schema_version = 2
+
+# ── Back-of-house: the quality controls ──────────────────────────────────────
+# eval, benches, judges, gates, harnesses, archaeology, ATOS. These sit OUTSIDE
+# the ordered stack rather than on top of it, because their rule is sharper
+# than direction: back-of-house may observe every layer, and NOTHING may depend
+# on it. A bench you cannot ship without is not a bench.
+#
+# Declared once, here. The rule is synthesized from this list in
+# quality/arch-layers (ARCH §10.6 — one decider, one name), so layer-gate and
+# arch-report cannot drift on it.
+#
+# The test is "does the product ship without it?", and it is answered
+# MECHANICALLY rather than by taste: a product crate may reach a back-of-house
+# crate only through an `optional = true` dependency that `default` does not
+# turn on. Eight such edges already existed as convention before this rule
+# named them (sovereign-cli/dev-tools, sovereign-tools/atos,
+# commonwealth-api/atos …); the rule makes them contract.
+#
+# ── WHAT THIS RULE CANNOT ENFORCE — read before trusting it ──────────────────
+# Its unit is the CRATE. Where quality-control code shares a crate with product
+# code it cannot tell which MODULE named the type, and every [[exception]]
+# below leaves the back-of-house crate LINKED INTO THE PRODUCT BINARY. So an
+# exception here is weaker than it looks: it does not say "this edge is fine",
+# it says "the boundary is drawn in the wrong place and the crate split that
+# would fix it has not been paid for". `sovereign-cli-llm` is the live example
+# — `bench_cmd` (51 files, 31k lines) sits beside `chat_cmd` and `corpus_cmd`,
+# so the shipped binary carries `sovereign-eval` no matter what this gate says.
+# layer-gate repeats this warning whenever the rule fires; do not delete it
+# from either place while an exception is outstanding.
+backstage = [
+    "sovereign-eval",
+    "sovereign-cli-dev",
+    "sovereign-agent-bench",
+    "sovereign-atos",
+    "corpus-engine-atos",
+    "corpus-engine-archaeology",
+    "xtask",
+]
+# NOT back-of-house, adjudicated 2026-08-20 (noun-convergence rung 3):
+#   sovereign-authoring-harness — reads as a harness and is not one. It was
+#     carved out of `sovereign-eval` precisely so `sovereign-desktop` could
+#     consume it without dragging rusqlite/reqwest/clap into the Tauri build,
+#     and the desktop's recipe-testing panel is a shipped end-user feature.
+#     The product does NOT ship without it, so it stays a capability.
+#   sovereign-tools — the MCP tool surface agents call at work time. Product.
+#     Its ATOS and archaeology reach is optional and off by default, which is
+#     the rule being satisfied, not evaded.
+#   commonwealth-tdd — `scripts/nc-boundary.py` classifies it back-of-house and
+#     that is WRONG; this rule caught it as a false positive on first run, from
+#     `sovereign-server` and `sovereign-cli-daemon`. It backs two SHIPPED MCP
+#     tools — `tdd_solve` and `tdd_bdd_cycle`, listed in `tools/list`
+#     (routes_mcp.rs:469) — and the `solve` verb's daemon route
+#     (daemon_cmd/solve_http.rs). The product does not ship without those.
+#     The distinction that decides it: a quality control measures SOVEREIGN,
+#     while this drives red-green-refactor over the USER's repo and emits their
+#     code. It is a feature about tests, not a test of the product.
 
 # ── Layers (bottom → top) ────────────────────────────────────────────────────
 
@@ -280,6 +336,18 @@ reason = "cross-family reach — harness should simulate against the OICP/contra
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).
+
+# ── Back-of-house exceptions ─────────────────────────────────────────────────
+# Read these as "the boundary is drawn in the wrong place here", never as "this
+# edge is fine". Each one leaves a back-of-house crate LINKED into a product
+# binary; the crate gate cannot do better, and the module rule named alongside
+# is what actually holds the line until the split is paid for.
+
+[[exception]]
+from = "sovereign-cli-llm"
+to = "sovereign-eval"
+reason = "bench_cmd (51 files, ~31k lines) shares this bin-only crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs a [lib] over ~130k lines plus pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/main.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the sovereign_eval::authoring_harness alias) was repointed at sovereign-authoring-harness directly and no longer does."
+tracking = "nc-3-backstage"
 
 [[exception]]
 from = "commonwealth-api"
