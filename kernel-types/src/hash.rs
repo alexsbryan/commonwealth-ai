@@ -136,7 +136,10 @@ mod tests {
     fn to_hex_is_64_lowercase_hex() {
         let h = ContentHash::of_str("x");
         assert_eq!(h.to_hex().len(), 64);
-        assert!(h.to_hex().chars().all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
+        assert!(h
+            .to_hex()
+            .chars()
+            .all(|c| c.is_ascii_hexdigit() && !c.is_uppercase()));
     }
 
     #[test]
@@ -174,8 +177,7 @@ mod tests {
         // SHA-256 of the same input do not collide, so a mixed store is
         // detectable as garbage rather than as agreement.
         let blake = ContentHash::of(b"hello").to_hex();
-        let sha256_of_hello =
-            "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
+        let sha256_of_hello = "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824";
         assert_ne!(blake, sha256_of_hello);
     }
 

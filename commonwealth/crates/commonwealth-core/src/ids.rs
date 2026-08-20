@@ -14,8 +14,8 @@ use std::fmt;
 // mesh-specific ids here does neither: there is still exactly one
 // implementation (ARCH §10.6), the five ids below are unchanged, and `NodeId`
 // is re-exported so all 755 existing reference sites are untouched.
-pub use kernel_types::NodeId;
 use kernel_types::define_id;
+pub use kernel_types::NodeId;
 
 define_id!(MeshId, "mesh");
 define_id!(ModelId, "model");

@@ -115,7 +115,10 @@ pub enum Source {
     /// registry is an open set — a tool exists iff `ToolRegistry` lists it,
     /// and a closed enum here would have to be edited to add a tool
     /// (principle 9). `call_hash` identifies the specific invocation.
-    ToolOutput { tool: String, call_hash: ContentHash },
+    ToolOutput {
+        tool: String,
+        call_hash: ContentHash,
+    },
     /// The estate's long-term memory pool. WIDENS the drafted sum: memory
     /// recall reaches the model on every turn that has any, and it is
     /// modelled today by a separate `Provenance::Memory` enum precisely
@@ -321,33 +324,54 @@ mod tests {
         // if a path exists with no variant, the sum is too narrow and must be
         // widened — never escaped with `Other(String)`.
         let paths: Vec<(&str, Source)> = vec![
-            ("corpus index search", Source::Corpus {
-                corpus: CorpusId::new("c").unwrap(),
-                document: ContentHash::of_str("d"),
-                locator: locator(),
-            }),
-            ("web fetch", Source::Web {
-                url: "https://example.org".into(),
-                fetched_at: 1_755_000_000,
-            }),
-            ("uploaded document / pasted text", Source::Attachment {
-                asset: ContentHash::of_str("a"),
-                locator: locator(),
-            }),
-            ("tool result transcript", Source::ToolOutput {
-                tool: "knowledge_lookup".into(),
-                call_hash: ContentHash::of_str("call"),
-            }),
-            ("long-term memory recall", Source::Memory {
-                entry: ContentHash::of_str("m"),
-            }),
-            ("earlier conversation turn", Source::Conversation {
-                conversation: ContentHash::of_str("conv"),
-                turn: 3,
-            }),
-            ("note store", Source::Note {
-                note: ContentHash::of_str("n"),
-            }),
+            (
+                "corpus index search",
+                Source::Corpus {
+                    corpus: CorpusId::new("c").unwrap(),
+                    document: ContentHash::of_str("d"),
+                    locator: locator(),
+                },
+            ),
+            (
+                "web fetch",
+                Source::Web {
+                    url: "https://example.org".into(),
+                    fetched_at: 1_755_000_000,
+                },
+            ),
+            (
+                "uploaded document / pasted text",
+                Source::Attachment {
+                    asset: ContentHash::of_str("a"),
+                    locator: locator(),
+                },
+            ),
+            (
+                "tool result transcript",
+                Source::ToolOutput {
+                    tool: "knowledge_lookup".into(),
+                    call_hash: ContentHash::of_str("call"),
+                },
+            ),
+            (
+                "long-term memory recall",
+                Source::Memory {
+                    entry: ContentHash::of_str("m"),
+                },
+            ),
+            (
+                "earlier conversation turn",
+                Source::Conversation {
+                    conversation: ContentHash::of_str("conv"),
+                    turn: 3,
+                },
+            ),
+            (
+                "note store",
+                Source::Note {
+                    note: ContentHash::of_str("n"),
+                },
+            ),
         ];
         assert_eq!(paths.len(), 7, "a path family lost its variant");
         let kinds: Vec<&str> = paths.iter().map(|(_, s)| s.kind()).collect();
@@ -362,10 +386,20 @@ mod tests {
         // One decider (ARCH §10.6): a trace line and a stored row must not
         // be able to disagree about what this content is.
         for s in [
-            Source::Web { url: "u".into(), fetched_at: 0 },
-            Source::Memory { entry: ContentHash::of_str("m") },
-            Source::Note { note: ContentHash::of_str("n") },
-            Source::Conversation { conversation: ContentHash::of_str("c"), turn: 0 },
+            Source::Web {
+                url: "u".into(),
+                fetched_at: 0,
+            },
+            Source::Memory {
+                entry: ContentHash::of_str("m"),
+            },
+            Source::Note {
+                note: ContentHash::of_str("n"),
+            },
+            Source::Conversation {
+                conversation: ContentHash::of_str("c"),
+                turn: 0,
+            },
         ] {
             let v: serde_json::Value = serde_json::to_value(&s).unwrap();
             assert_eq!(v["kind"].as_str().unwrap(), s.kind());

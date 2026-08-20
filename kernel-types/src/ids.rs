@@ -51,15 +51,14 @@ pub mod __private {
 #[macro_export]
 macro_rules! define_id {
     ($name:ident, $prefix:expr) => {
-        #[derive(
-            Clone, Copy, PartialEq, Eq, Hash, ::serde::Serialize, ::serde::Deserialize,
-        )]
+        #[derive(Clone, Copy, PartialEq, Eq, Hash, ::serde::Serialize, ::serde::Deserialize)]
         pub struct $name([u8; 16]);
 
         impl $name {
             pub fn generate() -> Self {
                 let mut bytes = [0u8; 16];
-                $crate::ids::__private::getrandom::fill(&mut bytes).expect("failed to generate random bytes");
+                $crate::ids::__private::getrandom::fill(&mut bytes)
+                    .expect("failed to generate random bytes");
                 Self(bytes)
             }
 
@@ -82,14 +81,22 @@ macro_rules! define_id {
             /// Inverse of [`to_hex`](Self::to_hex). `None` on malformed input
             /// (non-hex, or not exactly 16 bytes).
             pub fn from_hex(s: &str) -> Option<Self> {
-                let arr: [u8; 16] = $crate::ids::__private::hex::decode(s.trim()).ok()?.try_into().ok()?;
+                let arr: [u8; 16] = $crate::ids::__private::hex::decode(s.trim())
+                    .ok()?
+                    .try_into()
+                    .ok()?;
                 Some(Self(arr))
             }
         }
 
         impl ::std::fmt::Display for $name {
             fn fmt(&self, f: &mut ::std::fmt::Formatter<'_>) -> ::std::fmt::Result {
-                write!(f, "{}-{}", $prefix, $crate::ids::__private::hex::encode(&self.0[..8]))
+                write!(
+                    f,
+                    "{}-{}",
+                    $prefix,
+                    $crate::ids::__private::hex::encode(&self.0[..8])
+                )
             }
         }
 
