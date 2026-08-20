@@ -49,6 +49,15 @@ pub mod mcp_surface;
 pub mod notes;
 pub mod parcel_analytics;
 pub mod rag;
+pub mod sec_edgar;
+pub mod sec_facts;
+/// THE one decider for SEC XBRL companyfacts: turns a raw companyfacts
+/// document + the concept-normalization registry into the ingested
+/// `facts/*.txt` lines and the typed `sec_facts.json` sidecar that
+/// `sec_facts` (above) answers from. Ported from `scripts/sec_facts.py`,
+/// which was deleted in the same commit — one decider, one name
+/// (ARCH §10.6).
+pub mod sec_facts_render;
 /// The recipe-authoring tool bundle moved into the extractable
 /// `sovereign-recipe-author` package; re-exported here as the `recipe_author`
 /// module so every existing `sovereign_tools::recipe_author::…` path (and the

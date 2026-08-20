@@ -46,57 +46,124 @@ impl HybridProvider {
     }
 
     /// Start a background health check loop.
-    /// Every `interval_secs`, pings each backend and updates OICP manifests
-    /// for remote backends.
+    /// Every `interval_secs`, refreshes OICP manifests and re-probes any
+    /// backend currently marked unavailable. See [`Self::health_sweep`] for
+    /// why healthy backends are deliberately left alone.
     pub fn start_health_loop(self: &Arc<Self>, interval_secs: u64) {
         let this = Arc::clone(self);
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(interval_secs));
             loop {
                 interval.tick().await;
-                for (i, provider) in this.providers.iter().enumerate() {
-                    let entry = &this.entries[i];
-                    let probe = CompletionRequest {
-                        prompt: "ping".to_string(),
-                        system_message: None,
-                        preferred_speed: Speed::Fast,
-                        max_tokens: Some(1),
-                        temperature: Some(0.0),
-                        structured_output: None,
-                        think_budget: None,
-                        top_k: None,
-                        top_p: None,
-                        oicp: None,
-                        tools: None,
-                        tool_choice: None,
-                        model_id: None,
-                        enable_thinking: None,
-                        sampling_mode: None,
-                        assistant_prefix: None,
-                        cmd_prefix: None,
-                        url_allowlist: None,
-                        evidence_id_allowlist: None,
-                        lark_grammar: None,
-                        prompt_shape: None,
-                        stable_prefix_len: None,
-                    };
+                this.health_sweep().await;
+            }
+        });
+    }
 
-                    match provider.complete(&probe).await {
-                        Ok(resp) => entry.health.record_success(resp.latency_ms),
-                        Err(_) => entry.health.record_failure(),
-                    }
+    /// One tick of the health loop. Public within the crate so the sweep can
+    /// be driven directly by tests rather than by waiting on a wall clock.
+    ///
+    /// ## Why this only probes UNHEALTHY backends
+    ///
+    /// The probe is a real completion, and against a `remote` backend it is an
+    /// ordinary `POST /v1/chat/completions` to that peer's daemon. At the
+    /// receiving end nothing distinguishes it from a person typing: the
+    /// handler calls `bump_foreground_active()` unconditionally
+    /// (`commonwealth-api/src/routes_inference.rs:43`), which holds that
+    /// node's foreground-yield window open for `yield_to_foreground_secs`.
+    ///
+    /// This loop ran at 30s against a 60s default window, so the window on the
+    /// probed daemon never lapsed and its ingest enrichment was starved
+    /// indefinitely — measured 2026-08-18 across three runs
+    /// (`runs/sec-filings-ship-e2e/evidence/real-daemon.log`), with a live
+    /// `sovereign-server` mobile host (`~/.svrnmesh/mobile-host-server.toml`,
+    /// `[[inference.backends]] type = "remote"` → `127.0.0.1:9741`) as the
+    /// caller. A synthetic user turn on a fixed cadence is not a liveness
+    /// check; it is a denial-of-service with good intentions.
+    ///
+    /// Nothing needed those probes. [`Self::complete`] already records success
+    /// and failure on the very same [`HealthTracker`](crate::health::HealthTracker)
+    /// from real traffic, so a backend carrying traffic keeps its health
+    /// current for free. The job left for this loop is **repair**: an entry
+    /// that three consecutive failures marked unavailable is filtered out of
+    /// the selector's candidate set, so no real request will ever reach it
+    /// again and only a probe can bring it back.
+    ///
+    /// What this gives up, stated plainly: a backend that dies silently while
+    /// carrying zero traffic is no longer discovered before the next real
+    /// request. Nothing consumes that fact while there is no traffic, and the
+    /// first real request already retries the next-best backend
+    /// ([`Self::complete`] retries up to twice), so the cost is one extra hop
+    /// on one request — paid only in the case where the old behaviour's cost
+    /// was a permanently starved peer.
+    pub(crate) async fn health_sweep(&self) {
+        for (i, provider) in self.providers.iter().enumerate() {
+            let entry = &self.entries[i];
 
-                    // Update OICP manifest for remote backends.
-                    if !entry.is_local {
-                        if let Some(remote) = as_remote(provider) {
-                            if let Some(manifest) = remote.fetch_oicp_manifest().await {
-                                *entry.oicp_manifest.write().await = Some(manifest);
-                            }
-                        }
+            // Manifest refresh is not gated on health: an entry's advertised
+            // capabilities should stay fresh whether or not it is currently
+            // serving. (`as_remote` is a documented stub today, so this is a
+            // no-op — kept unconditional so it stays correct when it isn't.)
+            if !entry.is_local {
+                if let Some(remote) = as_remote(provider) {
+                    if let Some(manifest) = remote.fetch_oicp_manifest().await {
+                        *entry.oicp_manifest.write().await = Some(manifest);
                     }
                 }
             }
-        });
+
+            if entry.health.is_healthy() {
+                tracing::trace!(
+                    backend = %entry.name,
+                    "health: backend is available — no probe sent (real traffic maintains it)"
+                );
+                continue;
+            }
+
+            let probe = CompletionRequest {
+                prompt: "ping".to_string(),
+                system_message: None,
+                preferred_speed: Speed::Fast,
+                max_tokens: Some(1),
+                temperature: Some(0.0),
+                structured_output: None,
+                think_budget: None,
+                top_k: None,
+                top_p: None,
+                oicp: None,
+                tools: None,
+                tool_choice: None,
+                model_id: None,
+                enable_thinking: None,
+                sampling_mode: None,
+                assistant_prefix: None,
+                cmd_prefix: None,
+                url_allowlist: None,
+                evidence_id_allowlist: None,
+                lark_grammar: None,
+                prompt_shape: None,
+                stable_prefix_len: None,
+            };
+
+            match provider.complete(&probe).await {
+                Ok(resp) => {
+                    entry.health.record_success(resp.latency_ms);
+                    tracing::info!(
+                        backend = %entry.name,
+                        latency_ms = resp.latency_ms,
+                        "health: repair probe succeeded — backend returned to the candidate set"
+                    );
+                }
+                Err(e) => {
+                    entry.health.record_failure();
+                    tracing::debug!(
+                        backend = %entry.name,
+                        error = %e,
+                        "health: repair probe failed — backend stays unavailable"
+                    );
+                }
+            }
+        }
     }
 
     /// Return the `HealthTracker` for the primary (first) backend, if any.
@@ -274,14 +341,21 @@ mod tests {
     use crate::health::HealthTracker;
     use std::sync::Arc;
 
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
     struct MockProvider {
         response: String,
         should_fail: bool,
+        /// Every `complete` this provider is asked for, probe or not. The
+        /// health-loop tests assert on this, because "did the peer daemon see
+        /// a chat completion?" is the whole question.
+        calls: Arc<AtomicUsize>,
     }
 
     #[async_trait]
     impl InferenceProvider for MockProvider {
         async fn complete(&self, _request: &CompletionRequest) -> Result<CompletionResponse> {
+            self.calls.fetch_add(1, Ordering::SeqCst);
             if self.should_fail {
                 return Err(Error::Inference("mock failure".to_string()));
             }
@@ -324,12 +398,29 @@ mod tests {
         should_fail: bool,
         priority: u32,
     ) -> (Arc<dyn InferenceProvider>, BackendEntry) {
+        counted_backend(name, response, should_fail, priority).0
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn counted_backend(
+        name: &str,
+        response: &str,
+        should_fail: bool,
+        priority: u32,
+    ) -> (
+        (Arc<dyn InferenceProvider>, BackendEntry),
+        Arc<AtomicUsize>,
+        Arc<HealthTracker>,
+    ) {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let health = Arc::new(HealthTracker::new());
         let provider: Arc<dyn InferenceProvider> = Arc::new(MockProvider {
             response: response.to_string(),
             should_fail,
+            calls: calls.clone(),
         });
-        let entry = BackendEntry::new_local(name, Arc::new(HealthTracker::new()), priority);
-        (provider, entry)
+        let entry = BackendEntry::new_local(name, health.clone(), priority);
+        ((provider, entry), calls, health)
     }
 
     #[tokio::test]
@@ -365,6 +456,108 @@ mod tests {
 
         let request = CompletionRequest::new("test");
         assert!(hybrid.complete(&request).await.is_err());
+    }
+
+    // ─── health sweep: the probe that starved a peer's enrichment ────────
+    //
+    // The defect these pin: this loop's probe is a real completion, and
+    // against a remote backend it lands on the peer daemon's
+    // `/v1/chat/completions` where it is indistinguishable from a user turn
+    // and bumps that node's foreground-yield window. At 30s against a 60s
+    // window the window never lapsed. See `HybridProvider::health_sweep`.
+
+    /// A healthy backend must see ZERO completions from the health loop, no
+    /// matter how many times it ticks. This is the arm that fixes the
+    /// starvation: with no probe there is no foreground bump on the peer.
+    #[tokio::test]
+    async fn a_healthy_backend_is_never_probed() {
+        let (backend, calls, health) = counted_backend("daemon", "pong", false, 1);
+        let hybrid = Arc::new(HybridProvider::with_defaults(vec![backend]));
+        assert!(health.is_healthy(), "premise: the backend starts healthy");
+
+        // Ten ticks — i.e. five minutes at the shipped 30s cadence, which is
+        // longer than the 60s yield window it used to hold open.
+        for _ in 0..10 {
+            hybrid.health_sweep().await;
+        }
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            0,
+            "a healthy backend must receive no synthetic user turns"
+        );
+    }
+
+    /// The WATCHED PASS for the same gate, and the reason it is not simply
+    /// "delete the probe": a backend three failures have taken out of the
+    /// candidate set can only come back via a probe, and it must.
+    #[tokio::test]
+    async fn an_unhealthy_backend_is_probed_and_repaired() {
+        let (backend, calls, health) = counted_backend("daemon", "pong", false, 1);
+        let hybrid = Arc::new(HybridProvider::with_defaults(vec![backend]));
+
+        // Drive it unavailable exactly the way real traffic would
+        // (`health.rs`: three consecutive failures).
+        health.record_failure();
+        health.record_failure();
+        health.record_failure();
+        assert!(!health.is_healthy(), "premise: three failures take it out");
+
+        hybrid.health_sweep().await;
+
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "an unavailable backend must be probed — nothing else can revive it"
+        );
+        assert!(
+            health.is_healthy(),
+            "and the successful probe must actually return it to service"
+        );
+
+        // ...and having been repaired, it goes quiet again.
+        hybrid.health_sweep().await;
+        assert_eq!(
+            calls.load(Ordering::SeqCst),
+            1,
+            "a repaired backend must stop being probed"
+        );
+    }
+
+    /// A backend that is still down stays down and keeps being retried —
+    /// the repair path must not mark it healthy on a failed probe.
+    #[tokio::test]
+    async fn a_still_dead_backend_stays_out_and_keeps_being_retried() {
+        let (backend, calls, health) = counted_backend("daemon", "", true, 1);
+        let hybrid = Arc::new(HybridProvider::with_defaults(vec![backend]));
+        health.record_failure();
+        health.record_failure();
+        health.record_failure();
+
+        hybrid.health_sweep().await;
+        hybrid.health_sweep().await;
+
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert!(!health.is_healthy());
+    }
+
+    /// Real traffic is what keeps a healthy backend's health current — the
+    /// premise the "don't probe healthy backends" decision rests on. If this
+    /// ever stops being true, the sweep change above loses its justification.
+    #[tokio::test]
+    async fn real_traffic_records_health_so_the_probe_is_redundant() {
+        let (backend, _calls, health) = counted_backend("primary", "ok", false, 1);
+        let hybrid = HybridProvider::with_defaults(vec![backend]);
+
+        assert_eq!(health.latency_ms(), 0, "premise: no observations yet");
+        let _ = hybrid
+            .complete(&CompletionRequest::new("test"))
+            .await
+            .unwrap();
+        assert!(
+            health.latency_ms() > 0,
+            "a real request must feed the same tracker the probe used to feed"
+        );
     }
 
     #[tokio::test]

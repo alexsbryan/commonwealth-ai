@@ -278,6 +278,7 @@ impl Step for ToolStep {
             in_reasoning_loop: false,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         };
         let tool = self.tools.get(&self.tool_id)?;
         let output = tool.execute(&params, &ctx).await?;

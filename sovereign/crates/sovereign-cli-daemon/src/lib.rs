@@ -78,7 +78,10 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      fim=info,\
      next_edit=info,\
      admission=info,\
-     corpus_maintenance=info";
+     corpus_maintenance=info,\
+     sec_edgar=info,\
+     sec_facts=info,\
+     sec_facts_render=info";
 
 /// The daemon tracing filter plus the always-on iroh observability layer:
 /// `commonwealth_transport` (endpoint egress posture) at info, and `iroh` /
@@ -303,6 +306,21 @@ mod tests {
             // logs, from the node being broken — and the per-request decision
             // at `debug` would be unreachable even with the directive raised.
             "admission",
+            // SEC filings install + figure answering (FINANCIAL_CORPORA.md
+            // §7). This was the NEXT instance of the trap, and it cost a
+            // 20.5-minute e2e run to find: `sec_edgar` names every install
+            // decision — ticker -> CIK, which 10-K was selected, which were
+            // SKIPPED and why, First/Refresh/Replaces — and `sec_facts` names
+            // every refusal. All of it rode literal targets that this
+            // allowlist did not carry, so an install by ticker was TOTALLY
+            // SILENT in the deployed daemon: the acquire phase logged
+            // nothing, and because the allowlist has no default level the
+            // `warn!` in `install_fact_sidecar` (the one that says figures
+            // will refuse until a store is rendered) was dropped too. A
+            // 20-minute acquire and a wedged one looked identical.
+            "sec_edgar",
+            "sec_facts",
+            "sec_facts_render",
             // Pre-existing custom targets, guarded against accidental removal.
             "prefix_state",
             "post_stream",

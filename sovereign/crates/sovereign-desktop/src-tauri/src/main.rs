@@ -645,6 +645,7 @@ fn main() -> ExitCode {
                 commands::delete_document_asset,
                 commands::get_corpus_progress,
                 commands::get_corpus_health,
+                commands::corpus_coverage_card,
                 commands::retry_enrichment_failures,
                 commands::read_get_chunk,
                 commands::read_get_chunk_neighbors,

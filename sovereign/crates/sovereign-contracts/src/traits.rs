@@ -822,11 +822,17 @@ pub trait Planner: Send + Sync {
     ) -> Result<Plan>;
 
     /// Produce a recovery plan after `failure`, given the original plan and the step outputs already banked in `completed`.
+    ///
+    /// `available_tools` is the same list `plan` was given. It is not
+    /// derivable from `original` — a recovery plan routinely needs a
+    /// tool the failed plan never used — and an implementation that
+    /// constrains decoding needs the vocabulary to constrain against.
     async fn replan(
         &self,
         original: &Plan,
         completed: &[(usize, StepOutput)],
         failure: &StepError,
+        available_tools: &[ToolDescriptor],
     ) -> Result<Plan>;
 }
 
@@ -871,6 +877,49 @@ pub trait Tool: Send + Sync {
     /// have nothing to signal and keep the default.
     async fn signal(&self) -> Option<String> {
         None
+    }
+
+    /// Deterministic authority claims over `question`
+    /// (FINANCIAL_CORPORA.md §7.3). A tool backed by a typed
+    /// authoritative store — where the same corpus's prose carries
+    /// lookalike values that are NOT authoritative, and confusing the
+    /// two causes material harm — answers from its own enumerable
+    /// domain: does this question name an entity and an assertion class
+    /// the store covers, for a corpus whose recipe DECLARED this tool
+    /// authoritative (`[authority]` block)?
+    ///
+    /// Contract: pure, cheap (~µs after a lazily cached store load), no
+    /// inference, no network, no threshold. The router consults this
+    /// BEFORE intent classification; a claim routes the turn to the
+    /// agentic path where the tool runs and the numeric audit applies.
+    /// Over-claiming fails safe (an honest refusal naming what IS
+    /// available), so implementations should prefer recall over
+    /// precision — but must never claim without an entity match.
+    ///
+    /// Default: no claims — the overwhelming majority of tools are not
+    /// authoritative stores and keep the default.
+    fn claims(&self, question: &str) -> Vec<crate::types::AuthorityClaim> {
+        let _ = question;
+        Vec::new()
+    }
+
+    /// The corpora this tool declares authority OVER, question-independent
+    /// (order authority-guard-at-exit, 2026-08-17). Same declaration index
+    /// as [`Self::claims`] read at CORPUS granularity: `claims` asks "does
+    /// this tool serve this question?" (a routing decision, deliberately
+    /// narrowed — e.g. explanation-shaped questions are declined so they
+    /// reach the prose path); this asks "does this tool vouch for figures
+    /// over this corpus at all?" (a provenance decision, which must NOT
+    /// inherit the routing narrowing — the answer-exit numeric guard arms
+    /// off it precisely for the questions `claims` declines).
+    ///
+    /// One `AuthorityClaim` per declared corpus; `matched` describes the
+    /// declaration, not a question match. Same purity contract as
+    /// `claims`. Default: none — tools that are not authoritative stores
+    /// keep the default, which is what makes corpora with no declaration
+    /// structurally invisible to the exit guard.
+    fn authority_domains(&self) -> Vec<crate::types::AuthorityClaim> {
+        Vec::new()
     }
 }
 

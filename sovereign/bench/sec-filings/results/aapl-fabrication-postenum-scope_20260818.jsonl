@@ -1,0 +1,9 @@
+{"id": "figure-revenue", "verdict": "passed", "half": null, "detail": "2 figure(s), all attributable"}
+{"id": "figure-eps", "verdict": "passed", "half": null, "detail": "2 figure(s), all attributable"}
+{"id": "segment-services", "verdict": "FAILED", "half": "honesty", "detail": "unattributable numeral(s): $416,161 million, $416,161,000,000.00"}
+{"id": "period-beyond-asof", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable"}
+{"id": "period-calendar-trap", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable"}
+{"id": "near-neighbour-gross-margin-pct", "verdict": "passed", "half": null, "detail": "9 figure(s), all attributable"}
+{"id": "stale-concept-advertising", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable"}
+{"id": "arithmetic-yoy-revenue", "verdict": "passed", "half": null, "detail": "11 figure(s), all attributable"}
+{"id": "prose-explanation-mac", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable; guard disclosed withheld numeral(s): 503493 (named, not asserted)"}

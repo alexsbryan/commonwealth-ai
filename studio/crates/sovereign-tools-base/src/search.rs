@@ -215,6 +215,20 @@ impl Tool for SearchTool {
     }
 }
 
+/// Truncate to at most `max` BYTES, backing up to the nearest char
+/// boundary. A plain byte slice (`&s[..2000]`) panicked mid-'’' on a
+/// real DDG response body (2026-08-15).
+fn truncate_at_char_boundary(s: &str, max: usize) -> &str {
+    if s.len() <= max {
+        return s;
+    }
+    let mut end = max;
+    while end > 0 && !s.is_char_boundary(end) {
+        end -= 1;
+    }
+    &s[..end]
+}
+
 impl SearchTool {
     async fn local_search(&self, query: &str) -> Vec<ScoredChunk> {
         let embedding = self.inference.embed(query).await.ok();
@@ -276,14 +290,16 @@ impl SearchTool {
             let origin = source_origin(&sc.chunk);
             let label = format_origin(&origin);
             sources.push(format!("[{source_idx}] {label}"));
-            let truncated = &sc.chunk.content[..sc.chunk.content.len().min(2000)];
+            let truncated = truncate_at_char_boundary(&sc.chunk.content, 2000);
             context_parts.push(format!("[Source {source_idx}: {label}]\n{truncated}"));
             source_idx += 1;
         }
 
         for (title, url, content) in web {
             sources.push(format!("[{source_idx}] {title} — {url}"));
-            let truncated = &content[..content.len().min(2000)];
+            // Byte-index truncation panicked mid-'’' on a real DDG body
+            // (2026-08-15) — always cut at a char boundary.
+            let truncated = truncate_at_char_boundary(content, 2000);
             context_parts.push(format!(
                 "[Source {source_idx}: {title} ({url})]\n{truncated}"
             ));
@@ -643,5 +659,21 @@ mod tests {
         };
         let origin = source_origin(&chunk);
         assert!(matches!(origin, SourceOrigin::Local { corpus, .. } if corpus == "sep"));
+    }
+}
+
+#[cfg(test)]
+mod truncate_tests {
+    use super::truncate_at_char_boundary;
+
+    #[test]
+    fn cuts_at_a_char_boundary_never_inside_a_multibyte_char() {
+        // The failing input, by name: a curly apostrophe straddling the
+        // cut point (bytes 4..7 of this string; cut at 5 lands inside).
+        let s = "abcd’efgh";
+        let t = truncate_at_char_boundary(s, 5);
+        assert_eq!(t, "abcd", "backs up to the boundary before '’'");
+        assert_eq!(truncate_at_char_boundary(s, 7), "abcd’");
+        assert_eq!(truncate_at_char_boundary("short", 2000), "short");
     }
 }

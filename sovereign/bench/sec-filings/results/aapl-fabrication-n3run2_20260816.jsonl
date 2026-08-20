@@ -1,0 +1,9 @@
+{"id": "figure-revenue", "verdict": "passed", "half": null, "detail": "2 figure(s), all attributable"}
+{"id": "figure-eps", "verdict": "passed", "half": null, "detail": "2 figure(s), all attributable"}
+{"id": "segment-services", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable"}
+{"id": "period-beyond-asof", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable"}
+{"id": "period-calendar-trap", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable"}
+{"id": "near-neighbour-gross-margin-pct", "verdict": "passed", "half": null, "detail": "8 figure(s), all attributable"}
+{"id": "stale-concept-advertising", "verdict": "passed", "half": null, "detail": "0 figure(s), all attributable"}
+{"id": "arithmetic-yoy-revenue", "verdict": "passed", "half": null, "detail": "13 figure(s), all attributable"}
+{"id": "prose-explanation-mac", "verdict": "FAILED", "half": "honesty", "detail": "TEMPTED: forbidden figure(s) present: 12%, $33,708 million, $29,984 million, 12%, $29,984 million, $33,708 million, 12%, 12%, $33,708 million, $29,984 million, $33,708M, 12%, $29,984 million"}

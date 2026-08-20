@@ -1835,7 +1835,7 @@ impl Runtime {
         // refined answer. Empty doc_context (parametric path) is a
         // no-op — nothing to verify against. See
         // `quote_verification::verify_answer_against_turn_evidence`.
-        let final_content = {
+        let (final_content, verified_spans) = {
             let v = crate::quote_verification::verify_answer_against_turn_evidence(
                 &final_content,
                 &plan.doc_context,
@@ -1848,7 +1848,41 @@ impl Runtime {
                     "knowledge_query: post-synthesis guardrail demoted unverified quotations"
                 );
             }
-            v.rewritten
+            (v.rewritten, v.verified_spans)
+        };
+
+        // Authority guard — exit seam, non-streaming KQ (order
+        // authority-guard-at-exit). Armed off the evidence pool this
+        // answer drew on; audits the FINAL text before persist/return.
+        // No-op (binding untouched, no metadata) when unarmed.
+        let mut authority_guard_meta: Option<serde_json::Value> = None;
+        let final_content = if let Some(armed) = crate::runtime::authority_guard::armed_for_evidence(
+            &self.tools,
+            &crate::runtime::epistemic::pool_corpora(&plan.chunks),
+            "knowledge_query",
+        ) {
+            let basis = crate::runtime::authority_guard::GuardBasis {
+                question: message,
+                verified_spans: &verified_spans,
+                cited: &[],
+                raw_values: &[],
+                allowed_tokens: &[],
+            };
+            let verdict = crate::runtime::authority_guard::guard_answer(
+                &armed,
+                &final_content,
+                &basis,
+                "knowledge_query",
+            );
+            authority_guard_meta = Some(verdict.metadata(&armed, "knowledge_query"));
+            match verdict {
+                crate::runtime::authority_guard::GuardVerdict::Released => final_content,
+                crate::runtime::authority_guard::GuardVerdict::Blocked { replacement, .. } => {
+                    replacement
+                }
+            }
+        } else {
+            final_content
         };
 
         let (sources_for_prov, coverage_for_prov) = build_provenance_components(
@@ -1992,21 +2026,30 @@ impl Runtime {
             role: Role::Assistant,
             content: final_content,
             created_at: now(),
-            metadata: Some(serde_json::json!({
-                "model": completion.model_id,
-                "tokens": completion.tokens_used,
-                "latency_ms": completion.latency_ms,
-                "intent": "knowledge_query",
-                "documents_found": plan.chunks.len(),
-                "search_ms": plan.search_ms,
-                "result_quality": plan.result_quality,
-                "provenance": provenance,
-                "retrieved_chunks": plan.retrieved_chunks,
-                "prompt_budget": plan.prompt_budget_note,
-                "next_steps": offers_json,
-                "grounding_gate": grounding_gate_meta,
-                "epistemic_state": epistemic_state,
-            })),
+            metadata: Some({
+                let mut m = serde_json::json!({
+                    "model": completion.model_id,
+                    "tokens": completion.tokens_used,
+                    "latency_ms": completion.latency_ms,
+                    "intent": "knowledge_query",
+                    "documents_found": plan.chunks.len(),
+                    "search_ms": plan.search_ms,
+                    "result_quality": plan.result_quality,
+                    "provenance": provenance,
+                    "retrieved_chunks": plan.retrieved_chunks,
+                    "prompt_budget": plan.prompt_budget_note,
+                    "next_steps": offers_json,
+                    "grounding_gate": grounding_gate_meta,
+                    "epistemic_state": epistemic_state,
+                });
+                // Glassbox: armed turns record the guard verdict.
+                // Inserted only when armed — unarmed metadata stays
+                // byte-identical.
+                if let Some(g) = authority_guard_meta {
+                    m["authority_guard"] = g;
+                }
+                m
+            }),
             version: now(),
         };
         self.store.save_message(&assistant_msg).await?;

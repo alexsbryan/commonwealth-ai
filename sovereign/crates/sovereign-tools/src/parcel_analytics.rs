@@ -285,6 +285,9 @@ impl Tool for ParcelAnalyticsTool {
             "derivation": derivation,
             "reproduce": reproduce,
             "summary": summary,
+            // Names this tool in the derivation appendix + epistemic
+            // holdings (harvested by handlers/complex_task.rs).
+            "figure_tool": "parcel_analytics",
         })))
     }
 }

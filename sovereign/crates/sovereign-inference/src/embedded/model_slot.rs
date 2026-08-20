@@ -2378,7 +2378,7 @@ impl ModelSlot {
             });
         }
 
-        let mut sampler = build_sampler(model, request, quirks);
+        let mut sampler = build_sampler(model, request, quirks)?;
         let mut output = String::new();
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
@@ -2582,6 +2582,37 @@ impl ModelSlot {
                 // grammar is actively constraining output to the
                 // envelope schema; without that gate the tracker
                 // matches any `{...}` in prose. See `ToolStopTracker`.
+                // llguidance grammar-stop: when the constraint reports
+                // `is_stopped() == true`, the schema has been satisfied
+                // and nothing further is grammar-legal. Without this
+                // break the model keeps generating free-form prose to
+                // the token cap.
+                //
+                // **Ungated as of 2026-08-19.** This sat inside
+                // `if tools_present`, so a tools-free `response_format`
+                // request decoded UNCONSTRAINED past the closing brace
+                // — the JSON was trustworthy and everything after it
+                // was not. Observed as a stray `</think>` plus prose
+                // trailing valid JSON on both the 4B and the 27B, whose
+                // chat templates pre-open `<think>` in the prompt.
+                // `grammar_is_stopped()` is self-gating (false when no
+                // llguidance constraint is active), so hoisting it
+                // cannot fire on unconstrained requests.
+                //
+                // The two stops below stay gated: `</tool_call>` is a
+                // tool-envelope marker, and the brace-balance tracker
+                // matches any `{...}` in prose without the grammar to
+                // scope it.
+                if sampler.grammar_is_stopped() {
+                    tracing::info!(
+                        model = %model_id,
+                        n_generated,
+                        tools_present,
+                        "inference: stopping on llguidance grammar accept"
+                    );
+                    n_generated += 1;
+                    break;
+                }
                 if tools_present {
                     if tail.contains("</tool_call>") {
                         tracing::info!(
@@ -2589,26 +2620,6 @@ impl ModelSlot {
                             n_generated,
                             tail = %tail,
                             "inference: stopping on </tool_call> marker"
-                        );
-                        n_generated += 1;
-                        break;
-                    }
-                    // llguidance grammar-stop: when the schema-driven
-                    // constraint reports `is_stopped() == true`, the
-                    // JSON envelope has closed. Without this break, the
-                    // chat template's post-tool tail (`</think>`,
-                    // `</tool_call>`) leaks into the response content
-                    // and the model can keep generating free-form prose
-                    // until token cap. Distinct from the brace-balance
-                    // stop below (`ToolStopTracker`, gated on the
-                    // legacy JsonConstraint case) — both close the same
-                    // class but llguidance is the authoritative signal
-                    // when it's the active constraint.
-                    if sampler.grammar_is_stopped() {
-                        tracing::info!(
-                            model = %model_id,
-                            n_generated,
-                            "inference: stopping on llguidance grammar accept"
                         );
                         n_generated += 1;
                         break;
@@ -3309,7 +3320,7 @@ impl ModelSlot {
         // installed on this path (dispatcher filtered structured
         // requests out), so the sampler behaves as a plain chain
         // of {temp/top-p/top-k/penalties} per the request quirks.
-        let mut sampler = build_sampler(model, request, quirks);
+        let mut sampler = build_sampler(model, request, quirks)?;
         let mut last_token = sampler.sample(
             session.target_context(),
             prefill.n_tokens() - 1,
@@ -3712,6 +3723,41 @@ impl ModelSlot {
                     break;
                 }
             }
+            // Grammar accept — the MTP path's copy of the stop the
+            // other three decode loops carry. Added 2026-08-19 with
+            // them; this loop had NO grammar stop at all, so a
+            // schema-forced request on an MTP model ran to max_tokens
+            // and trailed prose after the closing brace even though
+            // the constraint had been satisfied. Measured on
+            // Qwopus3.5-4B: 300 tokens where the JSON was 30, with a
+            // stray `</think>` and a markdown essay after it.
+            //
+            // Placed after the emit block so every token this
+            // iteration produced — accepted drafts and the bonus
+            // token — has been through `sampler.accept()` and the
+            // matcher state is current. Self-gating: false when no
+            // llguidance constraint is active.
+            //
+            // RESIDUE, measured and accepted: the verify loop accepts
+            // tokens into the sampler BEFORE the emit loop writes
+            // them, so `is_stopped()` is already true when emission
+            // starts and a per-token check here would truncate the
+            // JSON itself. Stopping at iteration granularity therefore
+            // leaves up to one draft window of tail — measured as a
+            // 3-token `\n</think>\n\n` on the 4B, down from 300 tokens
+            // of markdown essay. Clients take the first balanced JSON
+            // value (`parse_first_json_value`); closing the last few
+            // tokens would mean restructuring the accept/emit order,
+            // which is not worth the speculative-decode risk.
+            if sampler.grammar_is_stopped() {
+                tracing::info!(
+                    model = %model_id,
+                    n_generated,
+                    "inference: stopping on llguidance grammar accept (mtp)"
+                );
+                finish_reason = FinishReason::Stop;
+                break;
+            }
             last_token = next_token;
             n_past = new_n_past;
         }
@@ -3921,10 +3967,13 @@ impl ModelSlot {
         })?;
 
         // ── Per-seq decode state ────────────────────────────────────
-        let mut samplers: Vec<ConstrainedSampler> = requests
+        // One refusal fails the whole batch: a caller that asked for a
+        // grammar must not be answered unconstrained just because it
+        // shared a batch with requests that compiled (§18.3).
+        let mut samplers = requests
             .iter()
             .map(|r| build_sampler(model, r, quirks))
-            .collect();
+            .collect::<Result<Vec<ConstrainedSampler>>>()?;
         let mut decoders: Vec<encoding_rs::Decoder> = (0..requests.len())
             .map(|_| encoding_rs::UTF_8.new_decoder())
             .collect();
@@ -4049,7 +4098,7 @@ impl ModelSlot {
         ctx.decode(&mut batch)
             .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
 
-        let mut sampler = build_sampler(model, request, quirks);
+        let mut sampler = build_sampler(model, request, quirks)?;
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
 
@@ -4190,6 +4239,17 @@ impl ModelSlot {
                     }
                 }
 
+                // Grammar accept — ungated, see generate_sync. Self-gating:
+                // false when no llguidance constraint is active.
+                if sampler.grammar_is_stopped() {
+                    tracing::info!(
+                        model = %model_id,
+                        n_generated,
+                        tools_present,
+                        "inference: stopping on llguidance grammar accept (stream)"
+                    );
+                    break;
+                }
                 // Tool-emission stop — see generate_sync for rationale.
                 if tools_present {
                     if tail.contains("</tool_call>") {
@@ -4198,14 +4258,6 @@ impl ModelSlot {
                             n_generated,
                             tail = %tail,
                             "inference: stopping on </tool_call> marker (stream)"
-                        );
-                        break;
-                    }
-                    if sampler.grammar_is_stopped() {
-                        tracing::info!(
-                            model = %model_id,
-                            n_generated,
-                            "inference: stopping on llguidance grammar accept (stream)"
                         );
                         break;
                     }
@@ -4882,7 +4934,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         let tokens_len = prompt_len;
         let prompt_tokens = prompt_len;
 
-        let mut sampler = build_sampler(model, request, quirks);
+        let mut sampler = build_sampler(model, request, quirks)?;
         let mut n_generated = 0usize;
         let mut decoder = encoding_rs::UTF_8.new_decoder();
         let mut batch = LlamaBatch::new(512, 1);
@@ -4974,6 +5026,18 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
                     return Ok(());
                 }
 
+                // Grammar accept — ungated, see generate_sync. Self-gating:
+                // false when no llguidance constraint is active.
+                if sampler.grammar_is_stopped() {
+                    tracing::info!(
+                        model = %model_id,
+                        n_generated,
+                        tools_present,
+                        "inference: stopping on llguidance grammar accept (stream-finish)"
+                    );
+                    reason = FinishReason::Stop;
+                    break;
+                }
                 // Tool-emission stop — see generate_sync for rationale.
                 if tools_present {
                     if tail.contains("</tool_call>") {
@@ -4982,15 +5046,6 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
                             n_generated,
                             tail = %tail,
                             "inference: stopping on </tool_call> marker (stream-finish)"
-                        );
-                        reason = FinishReason::Stop;
-                        break;
-                    }
-                    if sampler.grammar_is_stopped() {
-                        tracing::info!(
-                            model = %model_id,
-                            n_generated,
-                            "inference: stopping on llguidance grammar accept (stream-finish)"
                         );
                         reason = FinishReason::Stop;
                         break;

@@ -141,7 +141,7 @@ bundle_p, gym, engine, commit, log, daemon = sys.argv[1:7]
 field_ev_p = sys.argv[7] if len(sys.argv) > 7 else ""
 sys.path.insert(0, gym)
 import markers as M
-from score import extract_verdict, call_daemon, call_claude  # noqa
+from score import basis_gate, extract_verdict, call_daemon, call_claude  # noqa
 
 charter = (Path(gym) / "CHARTER.md").read_text()
 contract = (Path(gym) / "contract.txt").read_text()
@@ -191,13 +191,24 @@ if field_ev_p:
                                  "missing": "field diff output"}
 if parsed and not malformed:
     v = parsed["verdict"]
+    # G1 — resolve the citations HERE, in the live path. The gate itself
+    # is score.basis_gate (one implementation; co-role.py's R4 takes the
+    # same one). Until 2026-08-19 this line copied `basis` straight into
+    # the record and co-closeout.py rendered it as if checked.
     rec.update({"verdict": v, M.ARG_OF[v]: parsed.get(M.ARG_OF[v]),
-                "basis": parsed.get("basis", []),
                 "rationale": parsed.get("rationale", "")})
+    rec.update(basis_gate(parsed))
     arg = parsed.get(M.ARG_OF[v])
-    print(f"VERDICT {v} — {M.ARG_OF[v]}: {json.dumps(arg, ensure_ascii=False)[:200]}")
-    print(f"  basis: {parsed.get('basis', [])}")
-    print(f"  rationale: {parsed.get('rationale','')[:300]}")
+    if rec.get("basis_unresolved"):
+        print(f"VERDICT could-not-judge — engine proposed {v!r} on "
+              f"{len(rec['basis_unresolved'])} unresolvable anchor(s): "
+              f"{rec['basis_unresolved']}")
+        print(f"  rationale: {parsed.get('rationale','')[:300]}")
+    else:
+        note = "" if rec.get("basis_checked") else "  (NOT verified)"
+        print(f"VERDICT {v} — {M.ARG_OF[v]}: {json.dumps(arg, ensure_ascii=False)[:200]}")
+        print(f"  basis: {rec['basis']}{note}")
+        print(f"  rationale: {parsed.get('rationale','')[:300]}")
 else:
     rec["verdict"] = "could-not-judge"
     rec["missing"] = f"a well-formed engine reply ({malformed})"

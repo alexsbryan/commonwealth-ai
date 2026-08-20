@@ -232,6 +232,7 @@ async fn document_tool_summarize_small() {
                 in_reasoning_loop: false,
                 agent_session_token: None,
                 turn_index: 0,
+                ..Default::default()
             },
         )
         .await
@@ -279,6 +280,7 @@ async fn document_tool_summarize_large() {
                 in_reasoning_loop: false,
                 agent_session_token: None,
                 turn_index: 0,
+                ..Default::default()
             },
         )
         .await
@@ -311,6 +313,7 @@ async fn document_tool_source_not_found() {
                 in_reasoning_loop: false,
                 agent_session_token: None,
                 turn_index: 0,
+                ..Default::default()
             },
         )
         .await

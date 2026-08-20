@@ -1,0 +1,140 @@
+# arch-probes.toml — the per-commit architecture audit's rule set, as DATA.
+#
+# `scripts/co-arch.py` carries the mechanism (gate -> one batched
+# forced-choice call -> rows); this file carries the JUDGEMENT SET. That
+# split is ARCH §6: a rule set is configuration, and a new rule must not
+# require editing Python. It is also what makes the audit portable — a
+# different codebase ships a different profile and the same mechanism runs.
+#
+# ONE SOURCE OF TRUTH. co-arch.py has no inline copy of these rules; if
+# this file cannot be read the run refuses and says so (§18.3), rather
+# than falling back to a second definition that would drift (§10.6).
+#
+# WRITING A PROFILE FOR YOUR OWN CODEBASE
+#   - `anchor` is whatever your house cites: a doc section, an ADR id, a
+#     style-guide rule. It is echoed into the row and never interpreted.
+#   - `question` must be answerable FROM THE DIFF ALONE. A rule whose
+#     honest answer is always "cannot tell from here" burns a call and
+#     trains the reader to skip the block — see [[refused]] below for a
+#     worked example of one that was measured and dropped.
+#   - `gate.any` is what makes the rule ELIGIBLE; `gate.none` suppresses
+#     it. No gate match means no model call, which is where the speed
+#     comes from: on this repo 56% of commits fire nothing at all.
+#   - Gates are deliberately loose. A gate's job is recall (never miss a
+#     violation), the judge's job is precision. Tightening a gate to cut
+#     false positives hides cases from the judge instead.
+#   - Prove any change with the bank: `gym/comaintainer/score_arch.py`.
+
+[profile]
+id = "commonwealth-rust"
+description = "Commonwealth AI — ARCH_PRINCIPLES §15 smell rows that code cannot enforce"
+# Only these files are bundled; everything else is invisible to the audit.
+globs = ["*.rs", "*.py", "*.sh", "*.ts", "*.svelte", "*.toml"]
+
+# The evidence/cost trade, SWEPT on a frozen 12-commit set (2026-08-17).
+# Prefill dominates at ~7-8ms per prompt token on this host, so context is
+# paid for in seconds — but too narrow is also a failure, and a quieter
+# one: the judge answers could-not-judge instead of wrong.
+#
+#   window/sites   median/commit   could-not-judge   verdicts
+#      2/4             9.2s             0.38         A13 B2 C9
+#      4/8            13.4s             0.38         A13 B2 C9   (dominated)
+#   >> 8/16           19.1s             0.25         A17 B1 C6   <<
+#    999/999          46.3s             0.25         A17 B1 C6   (dominated)
+#
+# 8/16 is the knee: it extracts everything the FULL diff has to offer
+# (identical verdicts) at 40% of the cost, and 4/8 buys nothing over 2/4.
+# ~19s per fired commit sits inside a lint run; at the sweep's 20-commit
+# cap the whole audit is ~2.8 min/night.
+#
+# Widen if your rows are mostly C; narrow if the sweep does not finish.
+# Re-run the bank after either — changing the evidence changes the judge's
+# input, so the catch/false-B numbers do not carry over.
+window = 8       # lines of context each side of a gate match
+max_sites = 16   # match sites shown per rule; overflow is counted in-bundle
+
+# --------------------------------------------------------------------------
+# Model-judged rules
+# --------------------------------------------------------------------------
+
+[[rule]]
+id = "silent-sub"
+anchor = "ARCH §18.3"
+question = """Does the change collapse an error or an absent value into a \
+success-shaped or default value (a real failure defaulted, an empty \
+collection meaning not-configured, an Err swallowed)?"""
+gate.any = [
+  "unwrap_or", "\\.ok\\(\\)", "let _ =", "if let Err\\(_\\)",
+  "except\\s*:", "catch\\s*\\{", "\\|\\| *(?:Ok|Some)\\(",
+]
+
+[[rule]]
+id = "unwatchable-gate"
+anchor = "ARCH §18.1"
+question = """Does the change add a check, gate, or test with no input that \
+could make it fail — or one that asserts on data the subject under test \
+itself supplies or echoes back?"""
+gate.any = ["#\\[test\\]", "assert!", "assert_eq!", "def test_", "expect\\(", "\\bexpect_"]
+
+[[rule]]
+id = "untraced-branch"
+anchor = "ARCH §9.1"
+question = "Does the change add a production decision branch carrying no tracing event?"
+gate.any = ["^\\+?\\s*(if|match|else if)\\b"]
+# A hunk that already traces is not the target; this is what keeps the
+# rule from firing on every branch in the codebase.
+gate.none = ["tracing::", "debug!", "info!", "warn!", "error!", "trace!"]
+
+[[rule]]
+id = "additive-bias"
+anchor = "ARCH §19"
+question = """Does the change add a new store, pass, script, harness, or \
+registry without citing the existing surface it checked first?"""
+# Fires on newly ADDED FILES whose name suggests a new surface, not on
+# line content — the smell is the file existing at all.
+gate.new_file = "(store|registry|cache|heap|ledger|harness|pass|index|pool|manager)"
+gate.new_file_suffix = [".py", ".sh"]
+
+[[rule]]
+id = "addr-identity"
+anchor = "ARCH §7.5"
+question = """Does the change derive an identity or key from a row count, \
+sequence number, or network address instead of from essence?"""
+gate.any = [
+  "\\.len\\(\\)\\s*(?:as\\s+\\w+\\s*)?[,);]?\\s*$",
+  "next_id", "SocketAddr", "peer_addr", "local_addr",
+  "\\bcounter\\b", "seq(?:uence)?_no", "\\.count\\(\\)",
+]
+
+# --------------------------------------------------------------------------
+# Code-decided rules — never reach the model (ARCH §7.6)
+# --------------------------------------------------------------------------
+# `kind = "count"`: count lines matching `pattern`, grouped by `per`, and
+# report a violation above `max`. Code can count; asking a model to count
+# is spending a call on arithmetic and getting a worse answer.
+
+[[decider]]
+id = "stringly"
+anchor = "ARCH §2.1"
+kind = "count"
+pattern = '^\s*\+?\s*"[^"]+"\s*(?:\||=>)'
+max = 3
+per = "file"
+message = "string-literal match arms added"
+
+# --------------------------------------------------------------------------
+# Refused — measured, dropped, and kept here so it is not re-proposed
+# --------------------------------------------------------------------------
+
+[[refused]]
+id = "dup-decider"
+anchor = "ARCH §10.6"
+question = """Does the change add a SECOND implementation of a threshold, \
+formula, scorer, schema, or key already decided elsewhere in this codebase?"""
+refused_on = "2026-08-17"
+reason = """could-not-judge on 2 of 3 planted violations. The evidence for \
+"already decided elsewhere" is the rest of the repository, which the diff \
+bundle does not carry, so the honest answer is always C. The judge was \
+right and the probe was under-evidenced. Returns only with a deterministic \
+duplicate-detection pass supplying the other definition sites — a separate \
+build, not a prompt change."""

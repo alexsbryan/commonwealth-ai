@@ -28,6 +28,7 @@ import type {
   NotebookSummary,
   CorpusProgressPayload,
   CorpusHealthDetail,
+  CoverageCard,
   HardwareInfo,
   PrimaryOption,
   ProfileName,
@@ -1208,6 +1209,19 @@ export async function getCorpusHealth(
   corpusId: string,
 ): Promise<CorpusHealthDetail | null> {
   return invoke("get_corpus_health", { corpusId });
+}
+
+/**
+ * The corpus's own statement of what it answers, over what period, as of
+ * which filing, and what it structurally cannot (§7.7).
+ *
+ * `null` for every corpus whose recipe declares no typed authoritative
+ * store — which is most of them. Absence is reported, not defaulted.
+ */
+export async function corpusCoverageCard(
+  corpusId: string,
+): Promise<CoverageCard | null> {
+  return invoke("corpus_coverage_card", { corpusId });
 }
 
 export async function retryEnrichmentFailures(

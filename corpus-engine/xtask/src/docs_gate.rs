@@ -29,8 +29,15 @@ const DOCS_GATE_EXTS: &[&str] = &[
 
 pub fn run() -> i32 {
     let root = common::repo_root();
+    let scope = match common::SourceTree::discover(&root) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("docs-gate: cannot resolve this repo's source tree: {e}");
+            return 1;
+        }
+    };
     let mut index: Vec<Vec<String>> = Vec::new();
-    build_path_index(&root, &root, &mut index);
+    build_path_index(&root, &root, &scope, &mut index);
     let allowlist_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("doc_path_allowlist.txt");
     let allow: BTreeSet<String> = std::fs::read_to_string(&allowlist_path)
         .map(|t| {
@@ -88,9 +95,11 @@ pub fn run() -> i32 {
 
     eprintln!(
         "docs-gate: {checked} cited paths + enumeration sync (extractors, workspace \
-         crates; {n_enum} failing) across {} docs ({} allowlisted spans)",
+         crates; {n_enum} failing) across {} docs ({} allowlisted spans; \
+         index over source only, {} non-source trees excluded)",
         DOCS_GATE_DOCS.len(),
-        allow.len()
+        allow.len(),
+        scope.ignored_dir_count()
     );
     for f in &fails {
         eprintln!("  ✗ {f}");
@@ -109,31 +118,36 @@ pub fn run() -> i32 {
     }
 }
 
-/// Build the resolution index: every file and directory path in the repo
-/// (skipping build/vendor/vcs trees) as component vectors. Citations are
+/// Build the resolution index: every file and directory path in THIS REPO'S
+/// SOURCE as component vectors — `scope` (`common::SourceTree`) is the single
+/// decider for that, so vendored trees, build outputs and agent worktree
+/// copies never enter the index. They must not: an over-broad index makes a
+/// citation resolve that should have failed, which is a false PASS (§18.1).
+/// Citations are
 /// matched as ordered component subsequences against this index, because
 /// the docs deliberately cite in shorthand — `runtime/prompts.rs` for
 /// `sovereign/crates/sovereign-core/src/runtime/prompts.rs`,
 /// `commonwealth-api/admission.rs` skipping the `src/`. Subsequence
 /// matching tolerates that while still failing on a renamed, moved-away,
 /// or deleted terminal file.
-fn build_path_index(dir: &Path, root: &Path, out: &mut Vec<Vec<String>>) {
+fn build_path_index(
+    dir: &Path,
+    root: &Path,
+    scope: &common::SourceTree,
+    out: &mut Vec<Vec<String>>,
+) {
     let entries = match std::fs::read_dir(dir) {
         Ok(e) => e,
         Err(_) => return,
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().to_string();
         if path.is_dir() {
-            if matches!(
-                name.as_str(),
-                "target" | "vendor" | ".git" | "node_modules" | ".sovereign" | "dist"
-            ) {
+            if scope.excludes_dir(&common::rel_path(&path, root)) {
                 continue;
             }
             push_components(&path, root, out);
-            build_path_index(&path, root, out);
+            build_path_index(&path, root, scope, out);
         } else {
             push_components(&path, root, out);
         }

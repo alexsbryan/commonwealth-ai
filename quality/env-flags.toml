@@ -98,9 +98,9 @@ purpose = "Age below which superseded dataset versions are KEPT by the maintenan
 [[flag]]
 name = "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER"
 cluster = "grounding"
-default = "off"
-status = "experiment"
-purpose = "Two-stage claim audit: judge each claim against the prompt window FIRST and issue the per-claim corpus fan-out only for claims that fail without it. Targets the fan-out measured at 25% of wall-clock on `bench sep/summarize --synth` (one hybrid search per allowed corpus per claim; 2218ms per wikipedia call). Lossless for rescues BY CONSTRUCTION — a rescue is by definition a claim that fails without re-search and passes with it, so every rescue has stage-1 vp >= tau and always reaches stage 2; measured 7/7 rescues kept while searching 11 of 18 claims on `summary_cosmological_argument` (2026-08-05). Named behaviour change: a re-searched hit can currently dilute a claim the prompt window alone supported (the longform judge scores all passages in ONE joint forced-choice — no per-chunk max, no rescue floor), and the ladder releases such claims on stage 1 instead; measured newly_failed=0 on the specimen. Default OFF pending the multi-question confirmation and a net wall-clock number."
+default = "on"
+status = "shipped"
+purpose = "Two-stage claim audit: batched triage against the prompt window FIRST (claims_support_batched, triage only — the released verdict stays the calibrated per-claim forced-choice), per-claim corpus fan-out only for claims the window fails. DEFAULT ON since 2026-08-14 (order audit-economy D6, the registered flip bar met non-vacuously on the 21-turn shadow arm: lost_rescue 0/160 with 8 REAL rescues present in the bank and the skip set disjoint from all of them; newly_failed 0/160; 96/160 searches skippable, ~-3.5s/turn at healthy search prices). =0 (also false/off) opts out and restores search-every-claim. Flip record + reversal condition: sovereign/DEFAULTS_LEDGER.md."
 
 [[flag]]
 name = "SOVEREIGN_GATE_BATCH_VERIFY"

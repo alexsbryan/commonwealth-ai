@@ -180,10 +180,17 @@ export async function assertTurnInvariants(
   }
 
   // ── 4. Numeric honesty ──
+  // The MESSAGE carries the answer text; the CONDITION is untouched. Ring 2
+  // of `sec-filings-close` (2026-08-18) failed here naming four numerals —
+  // `2024, 2023, 2027, 40%` — and nothing in the run's evidence recorded the
+  // prose they came from, so "is 2023 a prose year or a figure claiming to be
+  // a datum?" could not be decided without re-running a live SEC install. An
+  // assertion that judges text must print the text it judged.
   if (prov?.self_assessment) {
     expect(
       prov.self_assessment.includes("not traceable"),
-      `numeric audit failed: ${prov.self_assessment}`,
+      `numeric audit failed: ${prov.self_assessment}\n` +
+        `--- the answer text this audit judged ---\n${complete.full_text}`,
     ).toBe(false);
   }
 

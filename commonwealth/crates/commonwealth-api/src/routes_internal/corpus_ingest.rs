@@ -873,6 +873,23 @@ pub async fn spawn_corpus_install_outcome(
                 let indexes = engine.index_dir().to_path_buf();
                 let recipes = indexes.clone();
                 let enrich_activity = state_for_task.inner.activity_emitter.clone();
+                // The SEC filings corpus's typed fact store moves into
+                // the index dir HERE, synchronously, BEFORE the detached
+                // block below. The `sec_facts` tool resolves a corpus by
+                // the presence of that store, so any window where the
+                // corpus is installed and the store is not yet placed is
+                // a window where the tool reports "no installed SEC
+                // corpus" for a corpus the user just watched install.
+                // The atlas pass below is detached because it is
+                // expensive; a file copy is not. No-op for every corpus
+                // that has no staged store.
+                if let Err(e) = sovereign_tools::sec_edgar::install_fact_sidecar(&cid, &indexes) {
+                    tracing::warn!(
+                        corpus = %cid, error = %e,
+                        "post-install: typed fact store could not be placed — financial \
+                         figures will refuse for this corpus until it is"
+                    );
+                }
                 tokio::spawn(async move {
                     // Recipe opted out of auto-enrichment (retrieval-only):
                     // skip the structural-atlas + Tier-2 RAPTOR pass entirely

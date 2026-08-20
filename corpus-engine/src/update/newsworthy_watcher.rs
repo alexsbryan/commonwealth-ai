@@ -262,6 +262,12 @@ pub struct TickReport {
     /// writes this tick. Used by the host for incremental atlas
     /// update of the wikipedia-newsworthy corpus.
     pub portal_doc_ids: Vec<String>,
+    /// D5 (order audit-economy): corpus ids whose fragments this tick
+    /// folded at tick end (`CorpusIndex::optimize`, non-destructive
+    /// phases only). A corpus that received writes but is absent here
+    /// means its fold FAILED (warned in the log) and its fragments wait
+    /// for the hourly maintenance sweep.
+    pub folded_corpora: Vec<String>,
     pub elapsed_ms: u64,
 }
 
@@ -907,6 +913,50 @@ impl WikipediaNewsworthyWatcher {
                 "newsworthy.atlas_dispatch — notifying host with per-doc delta for incremental atlas update"
             );
             self.host.on_chunks_committed_with_docs(&committed);
+        }
+
+        // The write burst folds ITSELF (order audit-economy D5). A tick that
+        // committed chunks leaves the corpus fragmented, and every hybrid
+        // search flat-scans those fragments until they are folded. Measured
+        // 2026-08-14: the initial-fetch burst after a daemon restart wrote
+        // ~17K rows across ~170 commits into wikipedia; searches inflated
+        // 394ms -> 1777ms within minutes (11-15.7s at peak under memory
+        // pressure) and stayed inflated for ~53 min until the HOURLY
+        // maintenance sweep folded them — which put the decay inside every
+        // latency arm measured that day. Closure is a byproduct of the write
+        // (the creation-closure loop): fold here, inline at tick end. The
+        // "is there anything to fold" decider stays INSIDE
+        // `CorpusIndex::optimize` — its index phase self-gates and reports
+        // `skipped_as_clean` (ARCH §10.6, one decider; no second floor here).
+        // Pruning is destructive and stays the maintenance sweep's decision:
+        // `None` is passed deliberately.
+        for c in &committed {
+            match self.engine.open_index_for_corpus(&c.corpus_id).await {
+                Ok(idx) => match idx.optimize(None).await {
+                    Ok(stats) => {
+                        tracing::info!(
+                            corpus_id = %c.corpus_id,
+                            unindexed_before = stats.unindexed_rows_before,
+                            fragments_removed = stats.fragments_removed,
+                            fragments_added = stats.fragments_added,
+                            indexes_optimized = stats.indexes_optimized,
+                            skipped_as_clean = stats.skipped_as_clean,
+                            "newsworthy.burst_folded — this tick's writes folded into the index"
+                        );
+                        report.folded_corpora.push(c.corpus_id.clone());
+                    }
+                    Err(e) => tracing::warn!(
+                        corpus_id = %c.corpus_id,
+                        error = %e,
+                        "newsworthy.burst_fold_failed — corpus stays queryable but fragmented; the hourly sweep retries"
+                    ),
+                },
+                Err(e) => tracing::warn!(
+                    corpus_id = %c.corpus_id,
+                    error = %e,
+                    "newsworthy.burst_fold_failed — open_index_for_corpus"
+                ),
+            }
         }
 
         self.publish_status(&report, true, now);

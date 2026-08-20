@@ -100,6 +100,12 @@ pub enum RecipeId {
     /// checkout with no network dependency on the standalone recipe
     /// mirror; see `sovereign/bench/literary/README.md`.
     BrothersKaramazov,
+    /// SEC Filings — single-company TEMPLATE (never installed under its
+    /// own id): `scripts/setup-sec-corpus.sh <TICKER>` materializes a
+    /// per-company `sec-cik<10-digit>` override. Registered so the
+    /// catalog names the capability and `fetch_recipe()` can resolve
+    /// the template; see `docs/specs/FINANCIAL_CORPORA.md`.
+    SecFilingsCompany,
 }
 
 impl RecipeId {
@@ -138,6 +144,7 @@ impl RecipeId {
             Self::UapBlueBookIndex => "uap-blue-book-index",
             Self::EmailArchive => "email-archive",
             Self::BrothersKaramazov => "brothers-karamazov-book-1",
+            Self::SecFilingsCompany => "sec-filings-company",
         }
     }
 
@@ -173,6 +180,7 @@ impl RecipeId {
             "uap-blue-book-index" => Some(Self::UapBlueBookIndex),
             "email-archive" => Some(Self::EmailArchive),
             "brothers-karamazov-book-1" => Some(Self::BrothersKaramazov),
+            "sec-filings-company" => Some(Self::SecFilingsCompany),
             _ => None,
         }
     }
@@ -325,6 +333,12 @@ impl RecipeId {
                     "/recipes/email-archive/recipe.toml"
                 ))
             }
+            Self::SecFilingsCompany => {
+                include_str!(concat!(
+                    env!("OUT_DIR"),
+                    "/recipes/sec-filings-company/recipe.toml"
+                ))
+            }
             Self::BrothersKaramazov => {
                 include_str!(concat!(
                     env!("OUT_DIR"),
@@ -366,6 +380,7 @@ impl RecipeId {
         Self::UapBlueBookIndex,
         Self::EmailArchive,
         Self::BrothersKaramazov,
+        Self::SecFilingsCompany,
     ];
 }
 

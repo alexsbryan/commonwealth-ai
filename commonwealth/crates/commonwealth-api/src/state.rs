@@ -1076,6 +1076,52 @@ pub struct AppStateInner {
 }
 
 impl AppStateInner {
+    /// **The** foreground-yield predicate: seconds left in the current yield
+    /// window, or `None` when nothing is being yielded to.
+    ///
+    /// One decider, one name (ARCH §10.6). This arithmetic used to exist three
+    /// times — `AppState::should_yield_to_foreground`,
+    /// `AppState::seconds_until_foreground_idle`, and
+    /// `yield_hook::AppStateYieldHook::should_yield` — and the copies had
+    /// already drifted: on a backwards clock jump (`elapsed < 0`) the first
+    /// said "not yielding" while the second said "a full window remains", so
+    /// the `/internal/daemon/foreground_state` route could report the exact
+    /// opposite of what ingest was doing. Reconciled here in favour of the
+    /// conservative reading — a timestamp in the future means a foreground
+    /// request landed *very* recently, so yield — and the deferral bound in
+    /// `corpus-engine-yield` caps the cost of being wrong.
+    ///
+    /// `window == 0` disables the feature; the `0` last-active sentinel means
+    /// no foreground request has ever landed, and a fresh boot must not pause.
+    pub(crate) fn foreground_yield_remaining_secs(&self) -> Option<u64> {
+        let window = self
+            .yield_window_secs
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if window == 0 {
+            return None;
+        }
+        let last = self
+            .foreground_last_active_ts
+            .load(std::sync::atomic::Ordering::Relaxed);
+        if last == 0 {
+            return None;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        let elapsed = now.saturating_sub(last);
+        if elapsed < 0 {
+            return Some(window);
+        }
+        let elapsed = elapsed as u64;
+        if elapsed >= window {
+            None
+        } else {
+            Some(window - elapsed)
+        }
+    }
+
     /// Open a peer's tally row: `active += 1`, `served_total += 1`,
     /// stamp `last_request_at`. Called by the admission middleware the
     /// moment a peer request is ADMITTED — before the handler runs, so
@@ -1921,26 +1967,7 @@ impl AppState {
     /// `0` last-active sentinel always returns `false` (a fresh boot
     /// shouldn't pause before the first user request).
     pub fn should_yield_to_foreground(&self) -> bool {
-        let window = self
-            .inner
-            .yield_window_secs
-            .load(std::sync::atomic::Ordering::Relaxed);
-        if window == 0 {
-            return false;
-        }
-        let last = self
-            .inner
-            .foreground_last_active_ts
-            .load(std::sync::atomic::Ordering::Relaxed);
-        if last == 0 {
-            return false;
-        }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let elapsed = now.saturating_sub(last);
-        elapsed >= 0 && (elapsed as u64) < window
+        self.inner.foreground_yield_remaining_secs().is_some()
     }
 
     /// Seconds remaining in the current yield window, when one is
@@ -1949,34 +1976,7 @@ impl AppState {
     /// progress messages and the `/internal/daemon/foreground_state`
     /// introspection route.
     pub fn seconds_until_foreground_idle(&self) -> Option<u64> {
-        let window = self
-            .inner
-            .yield_window_secs
-            .load(std::sync::atomic::Ordering::Relaxed);
-        if window == 0 {
-            return None;
-        }
-        let last = self
-            .inner
-            .foreground_last_active_ts
-            .load(std::sync::atomic::Ordering::Relaxed);
-        if last == 0 {
-            return None;
-        }
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
-        let elapsed = now.saturating_sub(last);
-        if elapsed < 0 {
-            return Some(window);
-        }
-        let elapsed = elapsed as u64;
-        if elapsed >= window {
-            None
-        } else {
-            Some(window - elapsed)
-        }
+        self.inner.foreground_yield_remaining_secs()
     }
 
     /// Replace the yield window at runtime. The daemon constructor

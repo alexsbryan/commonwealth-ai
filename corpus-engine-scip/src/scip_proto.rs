@@ -386,6 +386,31 @@ pub fn extract_symbol_name(scip_symbol: &str) -> String {
 }
 
 /// Map a SCIP SymbolInformation::Kind to a human-readable kind string.
+/// Decode a SCIP `Range` into `(start_line, end_line)`, 0-based.
+///
+/// SCIP encodes a range **two ways** and the length is the discriminator:
+///   - 4 elements — `[start_line, start_char, end_line, end_char]`
+///   - 3 elements — `[line, start_char, end_char]`, the short form used when
+///     the range begins and ends on the SAME line
+///
+/// So `range[2]` is an end LINE in the first form and an end CHARACTER in the
+/// second. Reading it without checking the length is the defect that stored a
+/// column as `line_end` — it was fixed for the 4-element case in 2026-06-25 and
+/// stayed live for the 3-element one, which is the common shape for a
+/// single-line name occurrence. Measured 2026-08-19 on the `commonwealth-ai`
+/// graph before this fix: 175,489 of 313,741 symbol rows had `line_end <
+/// line_start`, and 2,399 of 6,042 enum-variant rows (the doc's cited
+/// `StartupOutcome#Failed#` case: start 433, "end" 18 — a column).
+///
+/// Returns `None` for a range too short to carry either form.
+pub fn range_lines(range: &[i32]) -> Option<(i32, i32)> {
+    match range.len() {
+        0..=2 => None,
+        3 => Some((range[0], range[0])),
+        _ => Some((range[0], range[2])),
+    }
+}
+
 pub fn kind_to_str(kind: i32) -> &'static str {
     use symbol_information::Kind;
     match Kind::try_from(kind) {
@@ -461,5 +486,38 @@ mod tests {
     #[test]
     fn kind_to_str_unknown_for_zero() {
         assert_eq!(kind_to_str(0), "unknown");
+    }
+}
+
+#[cfg(test)]
+mod range_tests {
+    use super::range_lines;
+
+    #[test]
+    fn four_element_range_carries_a_true_end_line() {
+        assert_eq!(range_lines(&[10, 4, 42, 1]), Some((10, 42)));
+    }
+
+    #[test]
+    fn three_element_range_is_single_line_not_an_end_column() {
+        // `[line, start_char, end_char]`. Reading [2] here yielded 18 as a
+        // "line" for a symbol starting at 433 — the inverted-span defect.
+        assert_eq!(range_lines(&[433, 4, 18]), Some((433, 433)));
+    }
+
+    #[test]
+    fn a_range_too_short_to_decode_is_none_not_a_guess() {
+        assert_eq!(range_lines(&[]), None);
+        assert_eq!(range_lines(&[7]), None);
+        assert_eq!(range_lines(&[7, 2]), None);
+    }
+
+    #[test]
+    fn no_decoded_range_is_ever_inverted() {
+        for r in [vec![5, 0, 3], vec![5, 0, 9, 2], vec![0, 0, 0, 0]] {
+            if let Some((s, e)) = range_lines(&r) {
+                assert!(e >= s, "range {r:?} decoded inverted: {s}..{e}");
+            }
+        }
     }
 }

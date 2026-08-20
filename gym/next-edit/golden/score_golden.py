@@ -40,6 +40,7 @@ import argparse
 import collections
 import json
 import math
+import random
 import re
 import sys
 import time
@@ -223,6 +224,62 @@ def wilson(k: int, n: int, z: float = 1.96) -> tuple[float, float]:
     c = p + z * z / (2 * n)
     m = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
     return ((c - m) / d, (c + m) / d)
+
+
+# Reliability bands for chance-corrected agreement, in the conventional
+# reading (Krippendorff; Landis & Koch). Fixed constants, not tunables — a
+# threshold that moves to flatter a result is not a threshold (ARCH §18.6).
+KAPPA_RELIABLE = 0.80
+KAPPA_TENTATIVE = 0.667
+
+
+def cohens_kappa(pairs: list[tuple[str, str]]) -> tuple[float, float, float]:
+    """-> (observed_agreement, chance_agreement, kappa) over (rater_a, rater_b).
+
+    Raw percent agreement is inflated by base rates and is the wrong headline
+    for an unbalanced multi-class nominal rating task; kappa is what that
+    problem class is measured with. Returns nan for kappa when chance
+    agreement is 1.0 (a degenerate single-category set) rather than dividing
+    by zero and reporting a number nothing supports.
+    """
+    n = len(pairs)
+    if n == 0:
+        return (float("nan"),) * 3
+    po = sum(a == b for a, b in pairs) / n
+    ma = collections.Counter(a for a, _ in pairs)
+    mb = collections.Counter(b for _, b in pairs)
+    pe = sum((ma[k] / n) * (mb[k] / n) for k in set(ma) | set(mb))
+    return (po, pe, (po - pe) / (1 - pe) if pe < 1 else float("nan"))
+
+
+def kappa_band(k: float) -> str:
+    """The conventional reading, so a number is never reported bare."""
+    if k != k:
+        return "UNDEFINED"
+    if k >= KAPPA_RELIABLE:
+        return "reliable"
+    if k >= KAPPA_TENTATIVE:
+        return "tentative conclusions only"
+    return "NOT RELIABLE"
+
+
+def kappa_ci(pairs: list[tuple[str, str]], seed: int = 20260818,
+             draws: int = 4000) -> tuple[float, float]:
+    """Percentile bootstrap CI for kappa. Seeded: the same rows must give the
+    same interval on a re-score, or the number is not reproducible (§18.4)."""
+    if not pairs:
+        return (float("nan"), float("nan"))
+    rng = random.Random(seed)
+    vals = []
+    for _ in range(draws):
+        s = [rng.choice(pairs) for _ in pairs]
+        k = cohens_kappa(s)[2]
+        if k == k:
+            vals.append(k)
+    if not vals:
+        return (float("nan"), float("nan"))
+    vals.sort()
+    return (vals[int(0.025 * len(vals))], vals[int(0.975 * len(vals))])
 
 
 def main() -> None:

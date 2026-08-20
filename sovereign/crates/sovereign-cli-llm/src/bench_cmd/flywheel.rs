@@ -308,11 +308,7 @@ async fn run(rest: &[String]) -> i32 {
     }
 
     eprintln!("[out] wrote {} verdicts → {:?}", verdicts.len(), args.out);
-    if verdict.overall_pass {
-        0
-    } else {
-        1
-    }
+    verdict.overall.exit_code()
 }
 
 /// One probe → live answer → observation (judge classification) → verdict.

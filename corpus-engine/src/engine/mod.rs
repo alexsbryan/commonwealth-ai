@@ -9,6 +9,7 @@ mod ingest;
 mod ingest_factories;
 mod ingest_helpers;
 mod ingest_prebuilt;
+mod yield_gate;
 
 pub mod reindex;
 
@@ -1343,8 +1344,11 @@ impl CorpusEngine {
 
     /// Path the engine resolves recipe-relative files (e.g. `title_list`
     /// filter files) against. The authoring-harness runner uses it to build
-    /// the same filter pipeline `ingest` does.
-    pub(crate) fn recipes_dir(&self) -> &Path {
+    /// the same filter pipeline `ingest` does. Public since 2026-08-15:
+    /// tools that need a corpus's declared `[authority]` binding
+    /// (FINANCIAL_CORPORA §7.3) resolve the materialized override recipe
+    /// at `<recipes_dir>/<corpus_id>/recipe.toml`.
+    pub fn recipes_dir(&self) -> &Path {
         self.recipes_dir.as_path()
     }
 

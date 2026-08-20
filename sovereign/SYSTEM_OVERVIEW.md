@@ -58,7 +58,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
-| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both | — |
+| `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below | — |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`   |
@@ -248,12 +248,43 @@ reference is `SCHEMA.md` (generated from `corpus-engine/src/recipe.rs` and gated
 by the `recipe_schema` test); `GETTING_STARTED.md` + `_templates/` onboard
 contributors.
 
-The catalog (`registry.toml`) lists 26 recipes: `wikipedia`,
+The catalog (`registry.toml`) lists 27 recipes: `wikipedia`,
 `wikipedia-simple`, `wikipedia-newsworthy`, `wikipedia-article`,
 `wikipedia-catalog`, `sep`, `stackexchange`, `stackexchange-knowledge`,
 `openalex`, `gutenberg`, `gutenberg-work`, `crs_reports`, `us-code`,
 `olc-opinions`, `scotus-opinions`, `federal-register-presidential`,
-`conversations-anthropic`, `conversations-chatgpt`, the five
+`conversations-anthropic`, `conversations-chatgpt`,
+`sec-filings-company` (one public company's 10-K prose + typed XBRL
+figures, installed BY TICKER under its own id: `[parameters.ticker]`
+feeds the `sec_edgar` custom acquirer in
+`sovereign-tools/src/sec_edgar.rs`, registered on the engine at
+`daemon_cmd/bootstrap.rs::build_corpus_engine`, which resolves
+ticker -> CIK, selects the 10-K NAMING every in-window filing it skips,
+fetches the bytes, and then CALLS the decider (step 6) — `render` with
+`fiscal_years: None`, whose outputs `place_rendered` writes: `docs/facts/*.txt`
+BEFORE the returned `docs/` reaches extraction, the sidecar staged at
+`raw/sec_facts.json` for `install_fact_sidecar`, and `_unmapped_concepts.json`
+in `raw/` so the plaintext extractor never ingests it. A render resolving NO
+concept is an `Err`, never a prose-only corpus carrying an `[authority]`
+claim it cannot honour. SINGLE-INSTANCE — no `id_template` exists in the
+engine, so a second company REPLACES the first and the acquirer says so
+naming both, recording the resident company in
+`_downloads/sec_edgar_resident.json`. Several companies at once still go
+through `scripts/setup-sec-corpus.sh`, which materializes CIK-keyed
+`sec-cik<10-digit>` overrides with a `local_file` acquire, so the two
+paths' namespaces cannot collide; the
+concept-normalization registry is `concept-map.toml` beside the recipe, its
+one decider is `sovereign-tools/src/sec_facts_render.rs` — a PURE
+`render(RenderRequest) -> RenderOutput` that turns raw companyfacts + the
+registry into the ingested `facts/*.txt` lines, the `sec_facts.json`
+typed-fact sidecar the `sec_facts` tool answers from, and the
+`_unmapped_concepts.json` coverage deliverable, with all file placement left
+to the caller; it replaced `scripts/sec_facts.py` (deleted, order
+`sec-facts-decider-port`) under a parity test against that Python's committed
+output — the retrieval-side bar judge is
+`scripts/check-sec-corpus.py`, and the product-path fabrication judge is
+`scripts/check-sec-answer-path.py` with its frozen adversarial prereg under
+`prereg/`; see `docs/specs/FINANCIAL_CORPORA.md`), the five
 `enron-sample*` recipes, and the three `uap-blue-book*` recipes.
 Further recipe dirs ship outside the catalog (installed by path or by a
 setup script): `codebase`, `arch-principles`, `system-overview`,
@@ -468,6 +499,181 @@ deterministic audit (`runtime::numeric_audit`) value-matches every $/%
 figure in the prose against the tool's outputs. `svrn corpus
 export-parcels` writes the input set to CSV for independent re-summing.
 See `sovereign-recipes/sf-assessor-roll/`.
+
+The SEC filings corpora reuse that same guarantee contract
+(`FINANCIAL_CORPORA.md` §6): the read-only `sec_facts` tool
+(`sovereign-tools/src/sec_facts.rs`, pure lookup/derivation lib in
+`enrichment/atlas/analysis/sec_facts.rs`) answers from the typed
+`sec_facts.json` sidecar written by the one decider
+(`sovereign-tools/src/sec_facts_render.rs`) with `cited_figures` + `derivation` +
+`reproduce`, computes ratios and year-over-year changes in Rust, and
+refuses first-class naming what IS available (coverage, freshness, and
+the consolidated-only source limit). The `concept` vocabulary is FIXED
+at compile time, not per corpus: `sovereign-recipes/sec-filings-company/
+concept-map.toml` holds the 20 canonical ids and is `include_str!`'d into
+the binary (`sec_edgar.rs` `CONCEPT_MAP_TOML`), so `concept_vocabulary()`
+derives BOTH the schema's `enum` and the tool's own acceptance check from
+one source (§10.6); a filer's store is a SUBSET of that fixed set. The
+two refusals this produces are deliberately distinct — "not a concept id"
+(malformed request, names all 20) versus `resolve_concept`'s "this corpus
+does not hold it" (a coverage fact, names what the store has). They
+arrived as one indistinguishable `UnmappedConcept` until order
+`sec-facts-concept-enum`, and a planner-invented label was read as a
+coverage limit three occurrences running. Both stay `Ok`-valued
+refusals rather than `Err`: measured n=3, failing a bad parameter as an
+error made the executor replan, drop `period`, fail again, and answer
+from pretraining with no tool output at all — a dead tool step does not
+degrade the honesty machinery, it deletes it. The planner SEES this
+vocabulary: `planner/mod.rs` `format_param_hint` renders a declared `enum`
+into the plan prompt's `Params:` line as `concept* (string: revenue|…)`,
+in FULL and never truncated — a partial list biases the planner to the
+head of it while the tool still rejects everything below the cut. Until
+that change the hint rendered only `name (type)`, so no tool's declared
+enum reached the prompt and `mode`'s enum had never bound either; the
+schema asymmetry the order was raised against was real and inert.
+`description` is still discarded — the enum is the closed set, the prose
+is not. Since F3 the planner is also MASKED to that shape, not merely
+shown it: `planner/schema.rs` `plan_schema` sets `structured_output` on
+both `plan` and `replan`, with one `oneOf` branch PER TOOL — `tool_id`
+pinned to a `const` and that branch's `params` bound to the tool's own
+`parameters` schema, verbatim. So this `concept` enum is now masked at
+logit level, not merely rendered: a non-member id is unreachable rather
+than discouraged, which is what the hand-fought version of this section
+was working around. Verbatim is load-bearing — copying the schema would
+be a second decider that drifts from what the tool accepts (§10.6). A
+tool whose `parameters` is not a typed object is REFUSED, never widened
+back to an open `params`: that shape compiles and masks nothing, so
+accepting it would leave a plan looking constrained while the tool's
+arguments stayed free. Watched live 2026-08-19, same model and prompt
+both ways: told to use a nonexistent `bloomberg_terminal`, the
+unconstrained planner emitted it; the masked planner could not. The
+SAME substitution hazard this section names for concepts applies to
+tool ids and is NOT closed — the masked planner picked the nearest
+legal id (`knowledge_lookup`) while its `description` still said "Query
+the Bloomberg terminal", so a plan step can read as one thing and
+dispatch another. The mask makes fabrication impossible, not honesty
+automatic. The enum closed the in-vocabulary hole and SHARPENED an
+out-of-vocabulary one, so a second guard sits beside it: asked for a
+figure scoped BELOW the consolidated entity, the planner substitutes the
+nearest LEGAL concept (`revenue` for "Mac segment revenue"), the store
+resolves it, and no other refusal can fire — a company-wide figure
+narrated as a segment one, reproduced 2/2. `scope_qualifier_in_question`
++ `SecRefusal::ScopeNotInSource` refuse it at the same `ToolContext` seam
+`PeriodNotAsAsked` uses and for the same reason: the schema already asks
+the planner not to, and asking is not a guarantee (§7.6). The guard keys
+on STRUCTURAL segment vocabulary, never on one filer's product names —
+so a bare product name with no structural word is KNOWN RESIDUE, scoped
+to the clear case as the calendar check was. The provenance guard does
+not cover this class: it binds numerals to the tool datum, and the datum
+IS the tool's, so its catches here were incidental. Because financial answers carry
+BARE figures (`416,161` millions, EPS `7.46`) outside the default $/%
+audit scope, the tool declares the OPT-IN bare-numeral audit on its step
+output (`numeric_audit.audit_bare_numerals` + `allowed_tokens`, lexed by
+the auditor's own `numeric_tokens`); `handlers/complex_task.rs` harvests
+the declaration and runs `uncited_numerics_including_bare`, which also
+audits refusal turns — a model reciting a figure from pretraining over a
+refusal is caught. On violation the narration is WITHHELD and replaced by
+the tool's own verbatim rendering, naming each untraceable numeral —
+zero unattributable numerals by construction, not by model compliance
+(ARCH §7.6). General turns keep the historical audit scope unchanged.
+Routing reaches this path deterministically: the corpus recipe's
+`[authority]` block names `sec_facts` authoritative, the tool's
+`claims()` answers from its enumerable domain (entity + ask_terms from
+the concept map), and the router's authority pre-check
+(`router.rs` Pre-check -0.5, `AUTHORITY_CLAIM` meta) routes a claimed
+question to ComplexTask before any similarity classification — see
+FINANCIAL_CORPORA.md §7.3.
+
+The audit no longer depends on that routing (order
+authority-guard-at-exit, 2026-08-17): `runtime/authority_guard.rs`
+binds it to the ANSWER EXIT on every dispatch surface. Arming is
+corpus-granular off the same declaration index (`Tool::authority_domains`
+→ `ToolRegistry::authority_domains`, the question-independent read of
+`claims()`'s cache — necessary because `store_claims` deliberately
+declines explanation-shaped questions to keep them on the prose path):
+a turn whose retrieved-evidence pool (`epistemic::pool_corpora`)
+intersects a declared authority domain is audited at bare scope at its
+exit seam, with an allowed basis of tool-emitted figures ∪ numerals in
+quote-verification-VERIFIED verbatim spans
+(`VerificationResult::verified_spans`) ∪ the user's own question
+numerals. Armed streaming turns force hold-mode (`hold` /
+`deep_hold`) so no token is released before the audit, and skip the
+post-stream refinement rewrite; armed turns cannot take the team
+pipeline (`scope_is_armed` gates both branch sites). On violation the
+prose is withheld §6.2(4)-style, naming every numeral, quoting the
+verified spans, and naming the authoritative tool. Corpora declaring
+nothing are structurally untouched (empty intersection, no metadata,
+byte-identical delivery). The same emptiness arises per-SURFACE, and
+there it is a DEFECT rather than a no-op: arming reads the registry of
+the process that serves the turn, so "every dispatch surface" above is
+true of the SEAM and not of the ARMING. A binary that can install a
+corpus but never registers the tool declaring authority over it has an
+empty `authority_domains()`, never arms, and answers ungrounded —
+while every gate stays green, because the gates run in binaries that
+DO register it. `sovereign-desktop` was exactly this until 2026-08-18:
+it registered the `sec_edgar` acquirer and not `SecFactsTool`, and
+answered a capex question with a figure absent from the store and a
+manufactured source quotation. Registration on an install-capable
+surface is therefore UNCONDITIONAL, never gated on `enabled_tools`
+config, and is pinned by a source census
+(`sovereign-desktop/src-tauri/tests/authority_surface_census.rs`).
+Coverage is code: `guard_story` in
+`authority_guard.rs` is an exhaustive per-`Intent` table (Covered /
+No-op-by-construction / Excluded-by-decision), pinned by test, with
+the non-intent-keyed streaming exits dispositioned in its doc table;
+ComplexTask DELEGATES to the richer in-handler §6.2(4) audit above,
+unchanged. Glassbox target: `authority_guard`.
+
+Which corpora the tool is authoritative FOR has exactly one
+implementation: `discover_authoritative_stores` /
+`authoritative_store` in `enrichment/atlas/analysis/sec_facts.rs`, keyed
+on the recipe's `[authority] tool` declaration plus sidecar presence and
+never on the corpus id's spelling (a name prefix is an address, not an
+essence — ARCH §7.5). The tool's claim index and the desktop coverage
+card both resolve through it, so a corpus cannot be answerable by one and
+invisible to the other (ARCH §10.6).
+
+That coverage card is the user-facing half (`FINANCIAL_CORPORA.md` §7.7,
+bars F5/F6): `coverage_card()` derives what the corpus answers, over what
+period, as of which filing, and its named structural limits from the same
+store the tool answers from — `corpus_coverage_card` (desktop
+`commands/corpus.rs`, in-process, `None` for corpora declaring no typed
+store) hands it to `library/CoverageCard.svelte`, mounted above "Where
+this came from" in the notebook's Sources tab. Three §7.7 rules are
+structural rather than remembered: the card type carries no coverage
+ratio and not the two tag counts one would need to compute a percentage;
+`CoverageLimit` carries no severity field, so no renderer can style a
+refusal as a fault; and capability and boundaries share one CSS rule, so
+neither can be demoted to fine print without visibly demoting the other.
+Nothing in the derivation or the component names a company, so a second
+installed filer renders truthfully with no new copy written.
+
+F5's demand-side half — of the concepts people actually ASK for, how many
+miss for a reason we could fix — is a LOG READER, not a store (order
+sec-filings-ship). `resolve_concept` in
+`enrichment/atlas/analysis/sec_facts/mod.rs` is the single covering entry
+point for every concept ask, so it emits exactly one `f5_demand` debug
+event per ask (target `sec_facts`), carrying the requested spelling, the
+outcome arm (`resolved` / `unmapped` / `ambiguous`), and the store's
+`consolidated_only` flag. Emitting from the wrapper rather than from the
+match arms is what makes the DENOMINATOR — the number of asks —
+answerable at all. `scripts/sec-miss-demand.py` reads that back out of
+logs a run already produced: no new store, no cadence, nothing to
+remember to run. A miss counts as FIXABLE only on a declared membership
+test against the corpus's own `_unmapped_concepts.json` (token-equality,
+or a ≥2-token boundary prefix such as `deferred revenue` naming
+`DeferredRevenueCurrent`); everything else reports `unclassified` and
+never enters the numerator, because `consolidated_only` is a STORE-level
+source limit and cannot classify an individual ask — a segment miss is a
+limit to DISCLOSE, never a gap to close. Zero asks exits 3 with a named
+reason rather than scoring 0.0 (ARCH §18.3). The cross-language contract
+is pinned on both sides: `F5_DEMAND_ANCHOR` is grepped by the reader's
+`--self-test`, and
+`f5_demand_event_renders_the_grammar_the_reader_parses` renders a real
+event through a real subscriber to pin the field grammar the reader
+parses — it caught `outcome="resolved"` arriving quoted, which the
+reader's first draft would have matched zero times while reporting a
+clean score.
 
 The `email` + `described_asset` extractors and the `column_aware`
 reconciliation extractor (configured via
@@ -3487,6 +3693,52 @@ absent and the guards fail closed for *every* caller.
 - See [`docs/MESH_LOAD_AWARENESS.md`](./docs/MESH_LOAD_AWARENESS.md)
   for peer-admission, contribution ceiling, and foreground-yield.
 
+### Foreground yield is bounded (2026-08-18)
+
+`YieldHook::should_yield()` answers "should I stand aside *right now*".
+It is a **level** predicate — `now - foreground_last_active_ts < window`
+— with no memory of how long the asker has already been parked, so any
+request cadence shorter than `window` holds it true indefinitely. Every
+consumer that parks on it therefore pairs it with
+`corpus_engine_yield::DeferralBudget`, and that pairing is the
+invariant, not a convention:
+
+- `MAX_FOREGROUND_DEFERRAL = 300 s` (five whole default 60 s windows,
+  and half the desktop's 600 s `enrich-once` client timeout). It is
+  deliberately **not** an env flag or a config field: a liveness bound
+  someone must remember to switch on is not a liveness bound.
+  `DeferralBudget::with_cap_at_most` clamps to it, so a caller can only
+  tighten the bound, never weaken it.
+- `corpus-engine`'s two checkpoints (before each embed batch, before the
+  enrichment phase) both go through `engine::yield_gate`, which owns the
+  wait loop, the 5 s poll interval, and the three events — `yield:
+  deferring`, `yield: resuming`, and `yield: deferral cap reached`
+  (WARN, carrying `deferred_secs` and `cap_secs`). The override event is
+  emitted inside the helper so no checkpoint can adopt the bound and
+  forget to announce it. `YieldExit` is an enum rather than a bool so
+  "resuming — foreground idle" cannot be printed after an exit that was
+  a cap override.
+- `AppStateInner::foreground_yield_remaining_secs` is the single
+  implementation of the predicate itself. It previously existed three
+  times (the hook, `should_yield_to_foreground`,
+  `seconds_until_foreground_idle`) and the copies had already diverged
+  on the backwards-clock case, so the `/internal/daemon/foreground_state`
+  route could report the opposite of what ingest was doing.
+
+**Why this exists.** On 2026-08-18 a `sovereign-server` mobile host
+(`[[inference.backends]] type = "remote"` → `127.0.0.1:9741`) ran
+`HybridProvider::start_health_loop(30)`, which POSTed a 16-token
+`"ping"` completion to the local daemon's `/v1/chat/completions` every
+30.0 s. That handler bumps foreground unconditionally, so a 30 s probe
+against the 60 s window meant the window never lapsed; three consecutive
+real-e2e runs died with `resuming enrichment` appearing zero times and a
+misleading "bridge listen_any regression" message. The probe side is
+fixed too — `HybridProvider::health_sweep` now probes only backends the
+tracker has marked unavailable, since real traffic already maintains a
+healthy backend's health — but the bound is what makes the invariant
+hold for the case nobody predicted, including an ordinary user who sends
+a chat every 30 seconds.
+
 ### Test harness
 
 `commonwealth-test-harness`:
@@ -4227,6 +4479,8 @@ Default ports:
 | Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
 | Tune model selection per hardware                | `sovereign/models.toml`                                             |
 | Understand the SCIP call graph                   | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`)           |
+| Classify a symbol / detect trait dispatch        | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Derives kind + dispatch from the descriptor, which is 100% populated. Do NOT read `symbols.kind` (88.7% `unknown`, and every top-level type descriptor is mislabelled) or `refs.ref_kind` (100% `direct`, the `dynamic` constant is never written) |
+| Find duplicated concept IDENTITY (a name typed in >1 crate) | `svrn code converge census` / `noun <Name>` / `status`, over `corpus-engine-scip/src/converge.rs`. Also computes the canonical owner from the observed crate DAG and names the users that cannot reach it. Duplicated BEHAVIOUR is a different verb — `svrn code dry-report`; oversized FILES are `svrn code suggest-seams` |
 | See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd/serve.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd/`(`run_daemon`) |
 | See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
 | **Deploy to a shared, air-gapped box (the on-prem pilot)** | `sovereign/deploy/onprem/` — `PLAN.md` (why each choice), `README.md` (the IT-facing brief), `EGRESS.md` (line-by-line audit of every outbound call + its kill switch), both hand-written config files, two systemd units, the nginx route allowlist, `package.sh` (our side) / `install.sh` + `acceptance.sh` (theirs). **Read `EGRESS.md` before claiming this system makes no outbound connections:** three agent tools (`search`'s web fallback, `web_fetch`, `wikipedia_fetch`) reached the internet on ordinary chat turns with no config switch until the `net-tools` feature was added 2026-08-03 |
@@ -4287,6 +4541,7 @@ of them shadow `SetupConfig` fields — declared debt via the registry's
 | `quality/ARCH_LAYERS.toml` | crate layer map + exceptions | humans | `cargo xtask layer-gate`, `arch_report` |
 | `quality/env-flags.toml` | the env-knob registry (cluster/default/status/`alias_of`/`shadows`) | humans | `cargo xtask env-gate` + pin-tests in the two in-code flags tables |
 | `quality/baselines/` | shrink-only ratchet baselines | **machine only** (`--update-baseline` / `--tighten`) | every count-based xtask gate |
+| `quality/source-tree.toml` | the residual "not our source" dirs a gate walk must skip — only what git's ignore rules cannot express (`vendor/` is tracked but not authored here) | humans | `common::SourceTree::discover` → arch-gate, docs-gate, env-gate |
 | `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans | `cli_contract_journeys`, `svrn contract` |
 | `models.toml` | model selection per hardware | humans | daemon model selection |
 | `../sovereign-recipes/registry.toml` | recipe registry | humans | `corpus-engine/src/registry.rs` |

@@ -102,6 +102,20 @@ async fn first_tick_fetches_pending_articles_into_parent() {
     let kyiv = tracked.iter().find(|t| t.title == "Kyiv").unwrap();
     assert_eq!(kyiv.lifecycle, Lifecycle::Present);
     assert!(kyiv.last_known_rev_id.is_some());
+
+    // D5 (order audit-economy): the tick folds its OWN writes at tick end,
+    // so a second optimize finds no fragments left to compact. Without the
+    // tick-end fold, this burst's per-article commits sat as unfolded
+    // fragments for up to an hour (until the maintenance sweep) while every
+    // hybrid search flat-scanned them — measured 2026-08-14 at ~17K rows /
+    // ~170 fragments on the production wikipedia corpus, inflating every
+    // latency arm run that day.
+    assert!(
+        r1.folded_corpora.iter().any(|c| c == "wikipedia"),
+        "the tick must fold the parent corpus it wrote into at tick end — \
+         folded_corpora={:?}",
+        r1.folded_corpora,
+    );
 }
 
 #[tokio::test]

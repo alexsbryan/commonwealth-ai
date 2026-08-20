@@ -102,7 +102,13 @@ pub mod notes_sync;
 
 // ─── Public API Re-exports ──────────────────────────────
 
-pub use corpus_engine_yield::YieldHook;
+// The yield seam, whole. `YieldHook` answers "stand aside right now?" and has
+// no notion of how long you have already stood aside; `DeferralBudget` is the
+// bound that makes parking on it safe. Re-exported together, from the crate
+// consumers already depend on, so a consumer cannot pick up the predicate
+// without the bound in reach (and need not take a second direct dep on the
+// leaf — ARCH §8.3).
+pub use corpus_engine_yield::{DeferralBudget, DeferralStep, YieldHook, MAX_FOREGROUND_DEFERRAL};
 pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
     CustomExtractorFn,
@@ -133,9 +139,10 @@ pub use progress::{
     SourceFileManifest, SourceFileRecord, SourceFileStatus,
 };
 pub use recipe::{
-    Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl, FollowConfig, HttpMethod,
-    PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue, PatternDecl, PrebuiltConfig,
-    Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters, RetrievalConfig,
+    AuthorityConfig, Comparison, DisplayMeta, DocFormat, EnrichmentConfig, EntityTypeDecl,
+    FollowConfig, HttpMethod, PaginationStrategy, ParameterKind, ParameterSpec, ParameterValue,
+    PatternDecl, PrebuiltConfig, Recipe, RelationshipTypeDecl, RequestTemplate, ResolvedParameters,
+    RetrievalConfig,
 };
 pub use registry::{RecipeRegistry, RegistryEntry, RegistryPrebuilt, RegistrySnapshot};
 pub use sharding::{

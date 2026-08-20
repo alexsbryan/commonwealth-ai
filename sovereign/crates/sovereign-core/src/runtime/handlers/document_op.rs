@@ -208,6 +208,7 @@ impl Runtime {
             in_reasoning_loop: false,
             agent_session_token: None,
             turn_index: 0,
+            ..Default::default()
         };
 
         // Tool-activity narration — bracket the tool.execute call with

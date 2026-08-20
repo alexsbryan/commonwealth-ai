@@ -46,7 +46,15 @@ pub fn run(args: &[String]) -> i32 {
         }
     };
 
-    let observed = census(&root);
+    let scope = match common::SourceTree::discover(&root) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("env-gate: cannot resolve this repo's source tree: {e}");
+            return 1;
+        }
+    };
+
+    let observed = census(&root, &scope);
     let baseline_path = common::baselines_dir(&root).join(BASELINE_FILE);
     let baseline = common::load_line_set(&baseline_path);
 
@@ -151,11 +159,13 @@ pub fn run(args: &[String]) -> i32 {
         .filter(|n| !unregistered.contains_key(n))
         .count();
     eprintln!(
-        "env-gate: {} observed name(s) · {} registered · {} allowlisted · {} riding the baseline",
+        "env-gate: {} observed name(s) · {} registered · {} allowlisted · {} riding the baseline \
+         (censused over source only, {} non-source trees excluded)",
         observed.len(),
         registry.flags.len(),
         registry.allowlist.len(),
         baseline.len().saturating_sub(now_registered),
+        scope.ignored_dir_count()
     );
     if now_registered > 0 {
         eprintln!(
@@ -265,7 +275,7 @@ fn load_registry(path: &Path) -> Result<Registry, String> {
 // Static regex literals + guaranteed capture groups: a panic here is a
 // programmer error in this file, not a runtime condition to handle.
 #[allow(clippy::expect_used)]
-fn census(root: &Path) -> BTreeMap<String, Vec<String>> {
+fn census(root: &Path, scope: &common::SourceTree) -> BTreeMap<String, Vec<String>> {
     let rust_read =
         regex::Regex::new(r#"env::var(?:_os)?\s*\(\s*"((?:SOVEREIGN|SVRNMESH)_[A-Z0-9_]+)""#)
             .expect("rust_read regex");
@@ -295,7 +305,7 @@ fn census(root: &Path) -> BTreeMap<String, Vec<String>> {
             .push(format!("{}:{line}", rel.display()));
     };
 
-    for file in rust_files(root) {
+    for file in rust_files(root, scope) {
         let Ok(content) = std::fs::read_to_string(&file) else {
             continue;
         };
@@ -312,7 +322,7 @@ fn census(root: &Path) -> BTreeMap<String, Vec<String>> {
         }
     }
 
-    for file in shell_files(root) {
+    for file in shell_files(root, scope) {
         let Ok(content) = std::fs::read_to_string(&file) else {
             continue;
         };
@@ -327,9 +337,13 @@ fn census(root: &Path) -> BTreeMap<String, Vec<String>> {
     observed
 }
 
-fn rust_files(root: &Path) -> Vec<PathBuf> {
+/// Every `.rs` file in THIS REPO'S SOURCE. Censusing a vendored dependency
+/// tree or an agent worktree copy would report third-party (or duplicate)
+/// env reads as unregistered knobs of ours — `scope` is the single decider
+/// (`common::SourceTree`).
+fn rust_files(root: &Path, scope: &common::SourceTree) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    walk(root, &mut |p| {
+    walk(root, root, scope, &mut |p| {
         if p.extension().is_some_and(|e| e == "rs") {
             out.push(p.to_path_buf());
         }
@@ -337,10 +351,10 @@ fn rust_files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-fn shell_files(root: &Path) -> Vec<PathBuf> {
+fn shell_files(root: &Path, scope: &common::SourceTree) -> Vec<PathBuf> {
     let mut out = Vec::new();
     for dir in [root.join("scripts"), root.join(".claude/hooks")] {
-        walk(&dir, &mut |p| {
+        walk(&dir, root, scope, &mut |p| {
             if p.extension().is_some_and(|e| e == "sh") {
                 out.push(p.to_path_buf());
             }
@@ -349,19 +363,17 @@ fn shell_files(root: &Path) -> Vec<PathBuf> {
     out
 }
 
-fn walk(dir: &Path, f: &mut impl FnMut(&Path)) {
+fn walk(dir: &Path, root: &Path, scope: &common::SourceTree, f: &mut impl FnMut(&Path)) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
     for entry in entries.flatten() {
         let path = entry.path();
-        let name = entry.file_name();
-        let name = name.to_string_lossy();
         if path.is_dir() {
-            if name == "target" || name == "node_modules" || name == ".git" || name == "dist" {
+            if scope.excludes_dir(&common::rel_path(&path, root)) {
                 continue;
             }
-            walk(&path, f);
+            walk(&path, root, scope, f);
         } else {
             f(&path);
         }

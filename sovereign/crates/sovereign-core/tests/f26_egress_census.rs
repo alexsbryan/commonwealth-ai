@@ -259,6 +259,18 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // search_client) with the boundary, and the query egress passes
     // the release gate (user-formed-query clause — the user's own
     // question). No row: the file's construction sites are zero.
+    // sec_edgar: the SEC filings acquirer's client (order
+    // sec-filings-last-mile). InboundOnly on the same reading as every
+    // other acquirer (corpus-engine/src/acquirers/*): it FETCHES from
+    // data.sec.gov and www.sec.gov — company_tickers.json, submissions,
+    // the 10-K primary document, companyfacts — and no estate content
+    // travels out. The only outbound datum is the ticker the user typed
+    // and the contact address the recipe declares in its User-Agent
+    // (`[parameters.contact]`, visible and editable precisely because it
+    // is sent on the user's behalf); neither is corpus content, and SEC
+    // is a public-record endpoint rather than a model provider or a
+    // search engine.
+    ("sovereign/crates/sovereign-tools/src/sec_edgar.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-tools/src/notes/diff_extract_backend.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/local_corpus/ocr/cleanup.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-tools/src/corpus/manager.rs", Class::InboundOnly, 1),

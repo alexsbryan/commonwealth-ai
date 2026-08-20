@@ -1,0 +1,26 @@
+# Which directories the quality gates' filesystem walks treat as NOT this
+# repo's authored source. Read by `SourceTree::discover`
+# (corpus-engine/xtask/src/common.rs) — the ONE decider every whole-tree gate
+# walk goes through (arch-gate, docs-gate, env-gate).
+#
+# The PRIMARY decider is git, not this file. Any directory git would ignore
+#   git ls-files --others --ignored --exclude-standard --directory
+# is excluded automatically: build outputs, `.cargo-container/`,
+# `.claude/worktrees/`, `target-container-linux/`, `target-xwin/`. Those need
+# NO entry here, and a new one stays excluded the day it appears. That is the
+# point. The hardcoded skip-list this replaced knew only `target`/`vendor`/
+# `.git`/`node_modules`/`.sovereign`, had rotted past four such trees, and the
+# arch-gate was reporting 2183 failures of which 2115 were not this repo's
+# source (2026-08-18).
+#
+# Declare here ONLY what git cannot express: directories TRACKED in this repo
+# that are not authored here, plus `.git`, which git never reports as ignored.
+# Entries are matched by directory NAME at any depth, matching the semantics
+# of the skip-list they replace.
+excluded_dirs = [
+  ".git",       # the object store; git never reports it as ignored
+  ".sovereign", # local feature/notes/mesh state; partly tracked, never Rust source
+  "vendor",     # forked upstream crates (llama-cpp-4, llama-cpp-sys-4, lance-linalg):
+                # tracked in this repo, but not authored here — 75 .rs files
+  "node_modules",
+]

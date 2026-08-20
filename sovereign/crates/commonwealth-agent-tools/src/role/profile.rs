@@ -77,7 +77,90 @@ pub const IMPLEMENTER_REWRITE_SUBSET: &[PrimitiveKind] = &[PrimitiveKind::WriteF
 
 /// Compiled-in default profile for a role. Used when no TOML
 /// override is present and as the test-stability anchor.
+/// Is the agent's workdir a bench scaffold or a real repository?
+///
+/// This is ONE distinction, not a family of knobs. The scaffold case —
+/// 1-3 files, whole contents rendered into the user message — is what
+/// `native` was built for, and it is why the Planner and Implementer
+/// hold no read primitive: there is nothing to read that is not already
+/// in front of them.
+///
+/// A repository breaks every part of that assumption at once. Measured
+/// on a pylint checkout (2026-08-18): rendering the workdir cost 27,630
+/// tokens and still showed the model almost none of the relevant code.
+/// Turning the render off without also granting a read left the
+/// Implementer blind AND compelled by `forced_first_tool: WriteFile` to
+/// write before looking — it emitted "# I need to see the file first"
+/// into an unrelated source file, which was an accurate description of
+/// the position it had been put in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WorkdirScale {
+    /// Bench scaffold: contents fit in the prompt, no read needed.
+    Scaffold,
+    /// Real repository: the agent must look before it edits.
+    Repository,
+}
+
+impl Default for WorkdirScale {
+    fn default() -> Self {
+        Self::Scaffold
+    }
+}
+
+/// Scaffold-scale profile. Preserved as the default so every existing
+/// caller (the agent-coding bench) renders bit-identically.
 pub fn default_profile_for(role: Role) -> RoleProfile {
+    profile_for(role, WorkdirScale::Scaffold)
+}
+
+/// Role profile for a given workdir scale.
+///
+/// At `Repository` scale the read-blind roles gain `InspectWorkdir`
+/// (which returns full file content, not just a listing) and the
+/// Implementer is forced to look before its first write instead of
+/// writing before it can look.
+pub fn profile_for(role: Role, scale: WorkdirScale) -> RoleProfile {
+    let mut p = scaffold_profile_for(role);
+    if scale == WorkdirScale::Repository {
+        match role {
+            Role::Planner => {
+                p.allowed_primitives.insert(0, PrimitiveKind::InspectWorkdir);
+                p.forced_first_tool = Some(PrimitiveKind::InspectWorkdir);
+                p.system_prompt.push_str(
+                    " The workdir is a full repository and is NOT in your context. Use                      `inspect_workdir` to list directories and read files before you plan.                      Name the exact files and functions your plan touches.",
+                );
+            }
+            Role::Implementer => {
+                p.allowed_primitives.insert(0, PrimitiveKind::InspectWorkdir);
+                // Look before you write. The scaffold default forces
+                // WriteFile first, which at repository scale compels an
+                // edit the model has no basis to make.
+                p.forced_first_tool = Some(PrimitiveKind::InspectWorkdir);
+                // Strip the scaffold-only denial by locating it rather
+                // than matching a wrapped literal: a `replace` that
+                // silently missed would ship a prompt telling the role
+                // it lacks a primitive it now holds. The test pins it.
+                if let Some(start) = p.system_prompt.find("You do not have `inspect_workdir`") {
+                    let rest = &p.system_prompt[start..];
+                    let end = rest
+                        .find(". ")
+                        .map(|i| start + i + 2)
+                        .unwrap_or(p.system_prompt.len());
+                    p.system_prompt.replace_range(start..end, "");
+                }
+                p.system_prompt.push_str(
+                    "The workdir is a full repository and is NOT in your user message. \
+                     Call `inspect_workdir` to read a file BEFORE editing it; never write \
+                     content for a file you have not read this run.",
+                );
+            }
+            Role::Evaluator => {}
+        }
+    }
+    p
+}
+
+fn scaffold_profile_for(role: Role) -> RoleProfile {
     match role {
         Role::Planner => RoleProfile {
             role: Role::Planner,
@@ -161,6 +244,59 @@ pub fn default_profile_for(role: Role) -> RoleProfile {
             },
             forced_first_tool: None,
         },
+    }
+}
+
+#[cfg(test)]
+mod repo_scale_tests {
+    use super::*;
+
+    /// At repository scale the read-blind roles must be able to look.
+    ///
+    /// Regression for 2026-08-18: with anchors off and no read
+    /// primitive, the Implementer was forced by `forced_first_tool:
+    /// WriteFile` to edit a file it could not see. It wrote
+    /// "# I need to see the file first" into an unrelated source file
+    /// — valid Python, so the syntax validator passed it, and 50 lines
+    /// were destroyed.
+    #[test]
+    fn repository_scale_grants_read_and_never_forces_a_blind_write() {
+        for role in [Role::Planner, Role::Implementer] {
+            let p = profile_for(role, WorkdirScale::Repository);
+            assert!(
+                p.allowed_primitives.contains(&PrimitiveKind::InspectWorkdir),
+                "{role:?} must hold inspect_workdir at repository scale"
+            );
+            assert_ne!(
+                p.forced_first_tool,
+                Some(PrimitiveKind::WriteFile),
+                "{role:?} must not be forced to write before it can read"
+            );
+        }
+        let imp = profile_for(Role::Implementer, WorkdirScale::Repository);
+        assert!(
+            !imp.system_prompt.contains("You do not have `inspect_workdir`"),
+            "the repository prompt must not deny a primitive the role now holds"
+        );
+    }
+
+    /// Scaffold scale is the agent-coding contract and must not move.
+    #[test]
+    fn scaffold_scale_is_unchanged() {
+        for role in [Role::Planner, Role::Implementer, Role::Evaluator] {
+            let a = default_profile_for(role);
+            let b = profile_for(role, WorkdirScale::Scaffold);
+            assert_eq!(a.allowed_primitives, b.allowed_primitives);
+            assert_eq!(a.forced_first_tool, b.forced_first_tool);
+            assert_eq!(a.system_prompt, b.system_prompt);
+        }
+        assert!(!default_profile_for(Role::Implementer)
+            .allowed_primitives
+            .contains(&PrimitiveKind::InspectWorkdir));
+        assert_eq!(
+            default_profile_for(Role::Implementer).forced_first_tool,
+            Some(PrimitiveKind::WriteFile)
+        );
     }
 }
 

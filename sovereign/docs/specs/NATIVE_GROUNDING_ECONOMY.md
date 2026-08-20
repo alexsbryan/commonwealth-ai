@@ -389,6 +389,25 @@ n=11, warm, one query, one host — a bound, not a distribution.
 
 ### 7.2 Where the gate's spend comes from — and it is not where anyone assumed
 
+> **CORRECTION 2026-08-14 (order `audit-economy`, close directive).** The
+> call-shape below is STALE: under `SOVEREIGN_GATE_BATCH_VERIFY` the N
+> per-claim calls are largely replaced by ONE batched pre-pass with
+> asymmetric trust (batch "supported" clears; "unsupported"/parse-gap fall
+> to the calibrated per-claim judge; `gate_batch_min_claims=6`, so small
+> answers still take the per-claim path), and the scan rides the judges'
+> prefix family (72dd4097). The section's thesis — the fan-out driver is
+> ANSWER LENGTH — SURVIVES and sharpens: measured this order,
+> `extract_claim_list` = 327ms + 4.65 ms/out_char and the scan = 2656ms
+> floor + 4.32 ms/out_char, decode 75-90% of the claim_list call — answer
+> length THROUGH DECODE. And the obvious next move is REFUTED, so it is
+> not re-proposed: converting a generative register to enumerate +
+> forced-choice sweep does not remove the work, it moves it to the prompt
+> — the candidate suffix (30-40 lines, ~1.6K tok) prefilled at 450-770
+> tok/s (~3.4s) and ate the decode saving; measured 4272ms median against
+> a 2.5s bar (candidate c95f209a, reverted 05b5f451). The
+> enumeration-recall risk everyone expected to kill that shape did NOT:
+> 15/15 frozen-3 catches were covered by deterministic enumeration.
+
 Code-verified cost model, which predicts the observed call count exactly on four
 separate turns (note `c5d16402`):
 
@@ -563,6 +582,23 @@ one.** Its value is threefold and none of it is milliseconds:
    (§7.2). It cannot be fixed in prose.
 
 ### 7.6 The retrieval term is unmeasured, and it is stated as unmeasured
+
+> **CORRECTION 2026-08-14 (order `audit-economy` D5, eb726eea) — partly
+> answered, and not by a funded measurement phase.** The dominant variance
+> was root-caused: `WikipediaNewsworthyWatcher` re-ingests all ~85 tracked
+> articles on EVERY daemon restart (tracked registry empty at boot; every
+> revid extracts as 0, so its KV short-circuit never engages), writing
+> ~17K rows / ~170 Lance commits that hybrid search flat-scans for up to
+> ~52 min until the hourly sweep. Manifest mtimes put those bursts under
+> the 2026-08-14 measurement windows — this section's worry that someone
+> would "model retrieval cost from that turn" was correct, and it happened
+> to us. Fixed: the tick now folds its own writes (verified live at
+> 21:22:54Z: unindexed_before=7803, fragments_removed=28,
+> fragments_added=1). The root persistence/revid defect is FILED, not
+> fixed (note 237fd467). Production consequence: every user turn within
+> ~52 min of any daemon restart paid 2-15s extra per wikipedia search, and
+> the re-ingest is MediaWiki-rate-limited, so its duration is not a bound
+> we control. The 428-embed burst below is STILL unexamined.
 
 Retrieval + CLI is 32.6–51.1s and after the phases below it becomes the largest
 remaining term. **Its internal decomposition has not been measured.** The census

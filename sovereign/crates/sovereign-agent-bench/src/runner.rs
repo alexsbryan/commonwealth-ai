@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
-use commonwealth_agent_tools::RoleModelMap;
+use commonwealth_agent_tools::{RoleModelMap, WorkdirScale};
 use serde::{Deserialize, Serialize};
 use tempfile::TempDir;
 use thiserror::Error;
@@ -225,11 +225,58 @@ pub struct AgentRunContext {
     /// (`role_model_map_used`) when non-empty so replay reproduces
     /// the per-role dispatch.
     pub role_model_map: RoleModelMap,
+    /// Scaffold or repository? One distinction, from which the prompt
+    /// preamble sizes AND the role profiles derive. See
+    /// `commonwealth_agent_tools::WorkdirScale` for the measurements.
+    pub workdir_scale: WorkdirScale,
 }
+
+/// The scaffold anchor budget. Anchors are load-bearing at that scale —
+/// see the failure classes cited in `runners/native.rs`.
+pub const DEFAULT_ANCHOR_BUDGET_LINES: usize = 1200;
+
+/// The scaffold listing depth.
+pub const DEFAULT_WORKDIR_LISTING_DEPTH: usize = 3;
 
 impl AgentRunContext {
     pub fn workdir(&self) -> &Path {
         self.workdir.path()
+    }
+
+    /// Declare the workdir's scale. Everything preamble-shaped and
+    /// every role profile derives from this one answer.
+    pub fn with_workdir_scale(mut self, scale: WorkdirScale) -> Self {
+        self.workdir_scale = scale;
+        self
+    }
+
+    /// Source-anchor line budget for this scale. A repository renders
+    /// no anchors: enumeration by directory sort order is noise, and
+    /// the roles hold `inspect_workdir` there instead.
+    pub fn anchor_budget_lines(&self) -> usize {
+        match self.workdir_scale {
+            WorkdirScale::Scaffold => DEFAULT_ANCHOR_BUDGET_LINES,
+            WorkdirScale::Repository => 0,
+        }
+    }
+
+    /// Workdir-listing depth for this scale.
+    ///
+    /// Repository scale uses depth 2. The first cut of this was 0 —
+    /// chosen while reasoning about a 16,000-token slot, and kept after
+    /// the window moved to 131,072, which was an over-correction: with
+    /// only root entries the model must GUESS its way down to a file
+    /// and `inspect_workdir` fails identically until sticky-retry kills
+    /// the run (measured 2026-08-18, StickyRetry on inspect_workdir at
+    /// 3 repeats). Measured listing cost on a pylint checkout: root 174
+    /// tok, depth 1 581, depth 2 2,266, depth 3 2,384. Against a 128k
+    /// window, 2,266 tokens of accurate orientation is not the scarce
+    /// resource — a wasted tool call is.
+    pub fn workdir_listing_depth(&self) -> usize {
+        match self.workdir_scale {
+            WorkdirScale::Scaffold => DEFAULT_WORKDIR_LISTING_DEPTH,
+            WorkdirScale::Repository => 2,
+        }
     }
 }
 
@@ -337,6 +384,7 @@ pub fn context_for(
         problem_id: problem.meta.id.clone(),
         prompt: problem.prompt_text.clone(),
         workdir,
+        workdir_scale: WorkdirScale::Scaffold,
         tool_allowlist,
         token_budget: token_budget_override.unwrap_or(problem.budget.token_cap),
         wall_seconds_cap: wall_seconds_override.unwrap_or(problem.budget.wall_seconds_cap),

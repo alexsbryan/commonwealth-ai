@@ -2,7 +2,8 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
   import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup, newsworthyStatus, newsworthyTickNow, meshAssistStart, type NewsworthyStatus } from "../api";
+  import { listCorpora, installCorpus, removeCorpus, pauseCorpus, buildCorpusIndex, getCorpusHealth, retryEnrichmentFailures, expandCorpus, canExpandCorpus, startLayeredSetup, newsworthyStatus, newsworthyTickNow, meshAssistStart, corpusGetRecipeParameters, type NewsworthyStatus } from "../api";
+  import RecipeParameterForm from "./library/RecipeParameterForm.svelte";
   import { corpusProgressStore, isTerminalPhase } from "../stores/corpusProgress.svelte";
   import { assistProgressStore } from "../stores/assistProgress.svelte";
   import PeerAssistOffer from "./mesh/PeerAssistOffer.svelte";
@@ -194,6 +195,12 @@
     }
   }
 
+  /// The corpus whose install-time parameter form is open, if any.
+  /// A recipe that declares `[parameters]` cannot be installed by
+  /// clicking Install alone — the acquirer would receive the literal
+  /// `{ticker}` — so the click opens the form and the FORM installs.
+  let parameterForm: string | null = $state(null);
+
   async function handleInstall(id: string) {
     try {
       // Installing Wikipedia gives the curated Core (Vital Articles).
@@ -204,6 +211,40 @@
       if (id === "wikipedia") {
         await startLayeredSetup();
       } else {
+        // Ask the recipe what it needs before assuming it needs
+        // nothing. Local registry read, no daemon round trip, and it
+        // is what makes the form GENERIC: the catalog knows nothing
+        // about tickers, only about parameters.
+        //
+        // The form opens when a parameter is REQUIRED and carries NO
+        // default — that is exactly the condition under which the
+        // install cannot proceed without the user, and the plain
+        // path would reach the acquirer with an un-interpolated
+        // `{ticker}`. Recipes whose parameters all carry defaults
+        // (us-code, scotus-opinions, …) keep installing on one click,
+        // unchanged. Once the form IS open it renders every declared
+        // parameter, so a defaulted one like sec-filings-company's
+        // `contact` stays visible and editable rather than being sent
+        // on the user's behalf without their seeing it.
+        //
+        // An unreadable schema falls through to the plain install:
+        // it means the registry cannot resolve this recipe at all, and
+        // that install fails with a message the `install-failed` card
+        // renders. Warned here so the cause is greppable rather than
+        // presenting as a mysterious install failure.
+        let needsInput = false;
+        try {
+          const schema = await corpusGetRecipeParameters(id);
+          needsInput = schema.parameters.some(
+            (p) => p.required && (p.default === null || p.default === undefined),
+          );
+        } catch (e) {
+          console.warn(`recipe parameters unreadable for '${id}':`, e);
+        }
+        if (needsInput) {
+          parameterForm = id;
+          return;
+        }
         await installCorpus(id);
       }
       corpora = corpora.map((c) =>
@@ -212,6 +253,16 @@
     } catch (e) {
       console.error("Install failed:", e);
     }
+  }
+
+  /// The daemon accepted a parameterized install: close the form and
+  /// flip the row the same way the plain path does, so progress
+  /// renders through the shared `corpus-progress` store.
+  function handleParameterizedInstalled(id: string) {
+    parameterForm = null;
+    corpora = corpora.map((c) =>
+      c.id === id ? { ...c, status: "installing" as const } : c,
+    );
   }
 
   async function handleRemove(id: string) {
@@ -697,12 +748,28 @@
             </button>
           </div>
         {:else}
-          <button class="action-btn install" onclick={() => handleInstall(corpus.id)}>
+          <button
+            class="action-btn install"
+            data-testid="corpus-install"
+            data-corpus-id={corpus.id}
+            onclick={() => handleInstall(corpus.id)}
+          >
             Install
           </button>
         {/if}
       </div>
     </div>
+    {#if parameterForm === corpus.id}
+      <!-- The install-time form for a recipe that cannot be installed
+           without user input. Rendered from the recipe's own
+           `[parameters]` schema; see RecipeParameterForm.svelte. -->
+      <RecipeParameterForm
+        corpusId={corpus.id}
+        corpusName={corpus.name}
+        onInstalled={() => handleParameterizedInstalled(corpus.id)}
+        onCancel={() => (parameterForm = null)}
+      />
+    {/if}
   {/each}
 
   {#if comingSoonCorpora.length > 0}

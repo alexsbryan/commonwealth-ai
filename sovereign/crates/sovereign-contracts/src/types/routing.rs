@@ -247,6 +247,29 @@ pub enum Scope {
     External,
 }
 
+/// A deterministic authority claim (FINANCIAL_CORPORA.md §7.3): a tool
+/// asserting, from its own enumerable domain, that it is the AUTHORITATIVE
+/// answer surface for a question. Produced by [`crate::traits::Tool::claims`]
+/// and consulted by the router BEFORE any similarity-based intent
+/// classification — the question the gate asks stops being "is this more
+/// tool-like than knowledge-like" (a contest a typed store can never win
+/// against knowledge exemplars) and becomes "does this store claim
+/// authority here". No embeddings, no threshold; the failure direction is
+/// good — an over-claiming tool produces an honest refusal naming what IS
+/// available, never a wrong number.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuthorityClaim {
+    /// Registry id of the claiming tool.
+    pub tool_id: String,
+    /// The corpus whose recipe declared this tool authoritative
+    /// (`[authority]` block, registry data — never a user setting).
+    pub corpus_id: String,
+    /// The matched evidence, for glassbox logs: which entity term and
+    /// which domain term fired (e.g. "entity 'apple' + concept term
+    /// 'revenue'").
+    pub matched: String,
+}
+
 /// Everything the router/planner/executor needs to know about a tool without
 /// running it: identity, parameter schema, examples, and behavioural properties.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,7 +331,11 @@ pub struct ToolExample {
 }
 
 /// Ambient state handed to every `Tool::execute` call: who is asking (conversation/task) and per-call flags.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+///
+/// `Default` exists so a caller names only the fields it actually has
+/// (`ToolContext { conversation_id: id, ..Default::default() }`) — adding a
+/// turn fact here must not be a workspace-wide edit every time.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ToolContext {
     /// Conversation the call belongs to.
     pub conversation_id: ConversationId,
@@ -340,6 +367,24 @@ pub struct ToolContext {
     /// but valid (handles render as `ev-T0-NNNN`).
     #[serde(default)]
     pub turn_index: usize,
+    /// The user's question for this turn, verbatim, when the executor
+    /// knows it (plan steps carry the task goal; direct//in-process
+    /// invocations leave it `None`).
+    ///
+    /// Exists so a tool that claims AUTHORITY over a question can
+    /// enforce, in code, that what it answers is what was asked —
+    /// `Tool::claims` already receives the question at routing time, so
+    /// this is the same fact at execute time and keeps ONE decider for
+    /// question-derived constraints at both ends (ARCH §10.6).
+    /// Motivating failure (FINANCIAL_CORPORA §7.6, reproduced
+    /// 2026-08-16): asked for CALENDAR 2025, the planner called
+    /// `sec_facts` with `period: "FY2025"` — while its own next step
+    /// explained that Apple's fiscal year is not calendar 2025. A model
+    /// instruction is not a guarantee; only code is.
+    ///
+    /// Never a permission or trust input — it is the asker's own text.
+    #[serde(default)]
+    pub question: Option<String>,
 }
 
 /// Capability grants the consent layer manages, declared per tool via

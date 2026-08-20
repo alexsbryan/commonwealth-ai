@@ -23,6 +23,7 @@
   import NotebookOpenQuestions from "./NotebookOpenQuestions.svelte";
   import ConflictsPanel from "./ConflictsPanel.svelte";
   import NotebookKindIcon from "./NotebookKindIcon.svelte";
+  import CoverageCard from "./CoverageCard.svelte";
   import { cardSend, cardReceive } from "../../motion";
   import { kindLabel, kindTitle, normalizeKind } from "./notebookKind";
   import {
@@ -584,6 +585,10 @@
       />
     {:else if tab === "sources"}
       <div class="pad page-body page-measure">
+        <!-- Capability leads (§7.7(2)): what this corpus can answer sits
+             ABOVE where it came from. Renders nothing unless the corpus
+             declares a typed authoritative store. -->
+        <CoverageCard corpusId={notebook.id} />
         <h2>Where this came from</h2>
         <div class="source-card">
           <span class="src-icon"><NotebookKindIcon kind={notebook.source_kind} size={20} /></span>

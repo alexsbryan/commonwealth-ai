@@ -26,6 +26,7 @@ pub mod configuration;
 pub mod gaps;
 pub mod holistic_classifier;
 pub mod parcel_analytics;
+pub mod sec_facts;
 pub mod tension_classifier;
 pub mod tensions;
 
@@ -41,6 +42,14 @@ pub use holistic_classifier::{
 pub use parcel_analytics::{
     compute_aggregates, flags, per_parcel_deltas, FlagKind, ParcelAggregates, ParcelDelta,
     ParcelFlag,
+};
+pub use sec_facts::{
+    authoritative_store as sec_authoritative_store, change as sec_change,
+    coverage_card as sec_coverage_card, coverage_summary as sec_coverage_summary,
+    discover_authoritative_stores as sec_discover_authoritative_stores, lookup as sec_lookup,
+    ratio as sec_ratio, store_claims as sec_store_claims, AnsweredConcept, ConceptKind,
+    CoverageCard, CoverageLimit, LimitKind, SecFact, SecFactStore, SecRefusal,
+    SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
 };
 pub use tension_classifier::{
     classification_to_edge, parse_phase6_classifier_response, phase6_classifier_response_schema,

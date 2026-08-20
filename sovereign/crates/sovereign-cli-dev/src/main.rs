@@ -27,6 +27,7 @@ mod code_cmd;
 mod code_fieldglass;
 mod code_index_incremental;
 mod code_map;
+mod converge_cmd;
 mod design_onboarding;
 mod design_session;
 mod doc_fetcher;

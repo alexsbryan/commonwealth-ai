@@ -266,9 +266,10 @@ pub(crate) fn claim_search_shadow_enabled() -> bool {
         .unwrap_or(false)
 }
 
-/// THE LADDER (`SOVEREIGN_GATE_CLAIM_SEARCH_LADDER=1`, default OFF): in
-/// `gate_longform`, decide which claims are already supported by the prompt
-/// window and issue the per-claim corpus fan-out only for the rest.
+/// THE LADDER (`SOVEREIGN_GATE_CLAIM_SEARCH_LADDER`, default ON — the knob
+/// is the opt-out): in `gate_longform`, decide which claims are already
+/// supported by the prompt window and issue the per-claim corpus fan-out
+/// only for the rest.
 ///
 /// Stage 1 is [`claims_support_batched`](super::judge::claims_support_batched)
 /// — ONE generation covering every claim off a single evidence prefill — used
@@ -302,9 +303,19 @@ pub(crate) fn claim_search_shadow_enabled() -> bool {
 /// max, no rescue floor), and the ladder releases such claims on stage 1
 /// instead. Measured `newly_failed = 0` on the specimen.
 pub(crate) fn claim_search_ladder_enabled() -> bool {
-    std::env::var("SOVEREIGN_GATE_CLAIM_SEARCH_LADDER")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    // DEFAULT ON since 2026-08-14 (order audit-economy D6; flip bar
+    // lost_rescue = 0 met non-vacuously: 0/160 lost with 8 real rescues in
+    // the bank and the skip set disjoint from all of them, newly_failed
+    // 0/160, 96/160 searches skippable — runs/audit-economy-ladder-shadow).
+    // This knob is now the OPT-OUT: =0/false/off disables; anything else,
+    // including unset, leaves it on. Ledger: sovereign/DEFAULTS_LEDGER.md.
+    !matches!(
+        std::env::var("SOVEREIGN_GATE_CLAIM_SEARCH_LADDER")
+            .ok()
+            .as_deref()
+            .map(str::trim),
+        Some("0") | Some("false") | Some("off") | Some("False") | Some("OFF") | Some("Off")
+    )
 }
 
 /// AUDIT FORENSICS (`SOVEREIGN_GATE_AUDIT_FORENSICS=<path>`, default unset).
@@ -622,8 +633,8 @@ pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
             "gate",
             EnvFlag {
                 name: "SOVEREIGN_GATE_CLAIM_SEARCH_LADDER",
-                default: "off",
-                purpose: "Spend the per-claim corpus fan-out only on claims the prompt window FAILS: judge against the shared window first, re-search and re-judge only on failure. Lossless for rescues by construction (a rescue is a claim that fails without re-search and passes with it, so it always reaches stage 2) — 7/7 rescues kept at 11-of-18 claims searched on the measured specimen.",
+                default: "on",
+                purpose: "Spend the per-claim corpus fan-out only on claims the prompt window FAILS: batched triage against the shared window first, re-search and judge only on failure. DEFAULT ON since 2026-08-14 (audit-economy D6 shadow arm: lost_rescue 0/160 with 8 real rescues in the bank and the skip set disjoint from all of them, newly_failed 0/160, 96/160 searches skippable, ~-3.5s/turn at healthy search prices); =0 opts out.",
             },
         ),
         (

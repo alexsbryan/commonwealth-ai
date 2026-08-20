@@ -1432,6 +1432,7 @@ pub async fn run_live_trial(argv: &[String]) -> i32 {
         in_reasoning_loop: false,
         agent_session_token: None,
         turn_index: 0,
+        ..Default::default()
     };
     let http = match reqwest::Client::builder()
         // A single --via-runtime /messages POST blocks for the daemon's

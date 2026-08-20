@@ -14,8 +14,19 @@
 #
 # Fails silently when the server is not running — offline work is unaffected,
 # and a hook must never block a prompt.
+#
+# SEAT PATH (order seat-boot-block item 1). A comaintainer session also gets
+# the assembled rail block — open orders, seat todos, recent seat decisions,
+# directive-log stats — rendered ONCE by scripts/co-boot-block.sh at its own
+# ~12000-char budget. Before this existed the skill ASSERTED the block was
+# injected while no code path emitted it, so every seat restart fell through
+# to the manual ritual (measured 2026-08-17 on session 71419a44: reqs 2-3 ran
+# the four reads by hand AND then ran co-boot-block.sh, context 68k->130k
+# over six requests). The script owns the once-per-session marker, so the
+# hook and the skill's fallback cannot double-render between them.
 import json
 import os
+import subprocess
 import sys
 import time
 import urllib.request
@@ -45,6 +56,91 @@ try:
 except Exception:
     envelope = {}
 session_id = (envelope.get("session_id") or "").strip()
+
+
+def is_seat_session(env, sid):
+    """True iff THIS session holds the comaintainer seat.
+
+    Three signals, cheapest first. Discussing the seat must never trip it —
+    a session that merely greps for `comaintainer` is not the seat, so the
+    transcript test matches the two SKILL-INVOCATION shapes rather than the
+    bare word. Validated 2026-08-17: the markers score 58 and 1 on a real
+    seat transcript (71419a44) and 0/0 on a session that spent its whole
+    length reading and quoting the comaintainer surface (254c52f4).
+    """
+    if os.environ.get("SOVEREIGN_SEAT", "").strip() == "1":
+        return True
+    # A fresh restart types `/comaintainer` BEFORE any marker can exist in
+    # the transcript — the skill has not been invoked yet at UserPromptSubmit
+    # time. This is the boot case the whole order is about. Harnesses spell
+    # the same invocation differently (Claude Code `/comaintainer`, pi
+    # `/skill:comaintainer` per the Agent Skills standard), so match both —
+    # a seat that boots under pi must trip the same signal.
+    prompt = (env.get("prompt") or "").lstrip()
+    if prompt.startswith("/comaintainer") or prompt.startswith("/skill:comaintainer"):
+        return True
+    # Already-running seat: the skill fired on an earlier turn. Bounded
+    # to the transcript TAIL — this runs on every prompt of every
+    # non-seat session (which never writes the marker that short-
+    # circuits it), and transcripts here reach 4.8MB, so an unbounded
+    # read would be a fresh per-prompt cost paid by sessions that get
+    # nothing from it. The tail is sufficient: the harness stamps
+    # `attributionSkill` on EVERY assistant message the skill owns (58
+    # occurrences in seat transcript 71419a44), so a live seat always
+    # has one recently. Failing closed here costs a missing block, and
+    # the skill's manual fallback covers that.
+    path = env.get("transcript_path") or ""
+    if not path:
+        return False
+    try:
+        window = 512 * 1024
+        size = os.path.getsize(path)
+        with open(path, "rb") as fh:
+            if size > window:
+                fh.seek(size - window)
+            blob = fh.read()
+        return (
+            b'"attributionSkill":"comaintainer"' in blob
+            or b'"skill":"comaintainer"' in blob
+        )
+    except Exception:
+        return False
+
+
+# The block is rendered once per session. The SCRIPT owns that marker
+# (boot-block.json) — the skill's manual fallback calls the same script, so
+# the two entry points cannot double-render, and a FAILED run writes no
+# marker and is retried on the next prompt (ARCH §18.3: absence reported,
+# never defaulted).
+if session_id and not os.path.exists(
+    os.path.join(SESSIONS_ROOT, session_id, "boot-block.json")
+):
+    # Marker first: one stat retires the whole path for every prompt
+    # after the block has rendered, so the seat-detection scan below
+    # runs at most once per seat session.
+    if is_seat_session(envelope, session_id):
+        root = os.environ.get("CLAUDE_PROJECT_DIR", "").strip()
+        if not root:
+            try:
+                root = subprocess.run(
+                    ["git", "rev-parse", "--show-toplevel"],
+                    capture_output=True, text=True, timeout=3,
+                ).stdout.strip()
+            except Exception:
+                root = ""
+        script = os.path.join(root, "scripts", "co-boot-block.sh")
+        if root and os.path.exists(script):
+            try:
+                # Bounded well inside the hook's own 15s timeout — a slow
+                # daemon must degrade to "no block", never to a lost prompt.
+                res = subprocess.run(
+                    [script, session_id],
+                    capture_output=True, text=True, timeout=10, cwd=root,
+                )
+                if res.stdout.strip():
+                    print(res.stdout.rstrip() + "\n")
+            except Exception:
+                pass  # a hook must never block a prompt
 
 # ATOS scope-aware payload: globals plus the active feature's notes when
 # $SOVEREIGN_FEATURE_ID is set (svrn atos start-milestone); globals only

@@ -71,6 +71,7 @@ pub fn personal_knowledge_recipe(db_path: &Path) -> Recipe {
         },
         chunk: ChunkerConfig::Passthrough,
         index: IndexConfig::default(),
+        authority: None,
         enrichment: Some(EnrichmentConfig {
             enabled: true,
             enrichment_type: "field_model".into(),
@@ -166,6 +167,7 @@ pub fn institutional_notes_recipe(db_path: &Path) -> Recipe {
         },
         chunk: ChunkerConfig::Passthrough,
         index: IndexConfig::default(),
+        authority: None,
         enrichment: Some(EnrichmentConfig {
             enabled: true,
             enrichment_type: "field_model".into(),
@@ -301,6 +303,7 @@ pub fn conversation_history_recipe(db_path: &Path, local_only_skill_ids: &[&str]
         // Replaces the v1 `field_model` skeleton; KnowledgeView's
         // splice path now reads the digest from `atlas/atoms.json`
         // via `atlas_digest::render_atlas_digest`.
+        authority: None,
         enrichment: Some(EnrichmentConfig {
             enabled: true,
             enrichment_type: "atlas".into(),

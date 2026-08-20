@@ -129,6 +129,7 @@ mod tests {
             prompt: "do x".into(),
             workdir,
             tool_allowlist: &["read", "write"],
+            workdir_scale: commonwealth_agent_tools::WorkdirScale::Scaffold,
             token_budget: 1_000,
             wall_seconds_cap: 60,
             model_handle: "commonwealth/coder".into(),

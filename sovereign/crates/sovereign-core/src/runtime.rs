@@ -204,7 +204,11 @@ mod intent_helpers;
 /// recall judge's `--calibrate-recall`).
 pub mod memory_grounding;
 mod merge_select;
-mod numeric_audit;
+// Public: figure-emitting tools (sovereign-tools::sec_facts) build their
+// declared allowed-token sets with `numeric_tokens` — the auditor's own
+// lexer, so "allowed" and "audited" cannot drift (ARCH §10.6).
+pub(crate) mod authority_guard;
+pub mod numeric_audit;
 mod prompt_budget;
 mod question_analysis;
 mod retrieval;

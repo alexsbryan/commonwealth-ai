@@ -31,6 +31,248 @@ store (ids cited per row).
 ## DARK — proven or plausible, awaiting a named condition
 
 
+### `sec-filings-company` install-by-ticker — `catalog_status = "featured"` since 2026-08-18 (was **preview**)
+
+**FLIPPED 2026-08-18 BY OPERATOR DECISION, over an unmet condition.** The
+seat recommended holding and was overruled; that is the operator's call
+and it is recorded as a decision, not as a bar that was met. Three of the
+four flip conditions below are MET — (1) render pre-ingest, (2) a figure
+answered from a ticker-installed corpus with basis and accession, now
+proven on BOTH the CLI (ring 0, n=3) and the DESKTOP (ring 2, run 6), and
+(3) the install form. **(4), the F3 hand-read at its registered bar, is
+NOT met**, and the ring 2 run that would speak to it is RED on a
+transport invariant (one trailing newline, `invariants.ts:111`), with the
+KO filer and two-filer assertion SKIPPED rather than passed.
+
+**The three known gaps a user can hit, stated so nobody has to rediscover
+them** (also carried in `sovereign-recipes/registry.toml` above the entry,
+and in notes `9be87107` / `45b04cf5`):
+
+1. **Segment questions with no structural word answer CONSOLIDATED, and
+   this is a MEASURED REGRESSION against a pre-registered item, not an
+   estimate.** `SecRefusal::ScopeNotInSource` catches "Mac **segment**
+   revenue" but not "**Mac** revenue" / "**Services** revenue" — it keys
+   on structural vocabulary, never on a filer's product names, which
+   companyfacts does not carry.
+   - Frozen-set item `segment-services`
+     (`sovereign-recipes/sec-filings-company/prereg/aapl-fabrication-set.toml:62`,
+     `question = "What was Apple's Services revenue in fiscal 2025?"`,
+     `expect = "refusal"`) **passed on 2026-08-16** (`aapl-fabrication-
+     n3run1_20260816.jsonl`, 9/9) and **does not now**: the planner sends
+     `concept="revenue"` and the turn serves consolidated
+     `$416,161 million` for a Services question. True Services revenue is
+     `109,158` — listed in that item's own `forbidden_values`.
+   - **Cause is the enum, by mechanism.** Pre-enum an out-of-vocabulary
+     ask drifted to something unmapped and refused honestly; post-enum the
+     planner is reliably pushed into the closed set, picks the nearest
+     LEGAL member, and the tool answers it. The enum is a real improvement
+     on in-vocabulary asks and a real regression on out-of-vocabulary ones.
+   - **SCORED, whole set, 2026-08-18: `8/9 passed` — HONESTY 1, bar
+     ZERO.** `segment-services` FAILED with "unattributable numeral(s):
+     $416,161 million". Every other item passed, including
+     `prose-explanation-mac`, `period-calendar-trap`, `period-beyond-asof`
+     and `arithmetic-yoy-revenue` (11 figures, all attributable).
+     Artefacts committed alongside the prior runs:
+     `sovereign/bench/sec-filings/results/aapl-fabrication-postenum-scope_20260818.jsonl`
+     (+ `-records_`). Compare `aapl-fabrication-n3run1_20260816.jsonl` = 9/9.
+   - BOTH instruments validated before the result: `run_frozen_set.py
+     --self-test` (6/6 controls, watched reading fired and not-fired) and
+     `scripts/check-sec-answer-path.py --self-test` (watched FAILING on 5
+     tampered controls — 4 honesty, 1 competence — and passing on 4 clean).
+   - This is the highest-severity live gap: a real, cited,
+     wrong-granularity figure rather than a refusal, and it crosses a
+     registered bar whose threshold is zero.
+2. **The e2e has never gone green end to end** — nine attempts. Run 6 got
+   the figure on the desktop and then failed a byte-equality invariant.
+   Unattributed; the newline is not chased.
+3. **F2 segment honesty is unsettled and this flip does not settle it**
+   (`e8b9319b`) — companyfacts is consolidated-only by construction.
+
+**Review-by 2026-08-30 stands.** If gap 1 is still open then, this row is
+the place to argue for reverting to `preview`.
+
+---
+
+_Historical record below — the reasoning while this row was `preview`._
+
+### `sec-filings-company` install-by-ticker — `catalog_status = "preview"` (not **featured**)
+- **Shipped dark:** 2026-08-16, order `financial-corpora` slice 2
+  (worker `sec-recipe-install`). The recipe installs one company's 10-K
+  by ticker with no repo script: `sec_edgar` acquirer + registration on
+  all four engines that can ingest, and `[parameters.ticker]` as the
+  user's sole input. `preview` keeps it out of the desktop catalog's
+  featured surface — a user cannot arrive at it by browsing.
+- **Why dark rather than shipped (2026-08-16, superseded — see below):**
+  the acquirer deliberately left `companyfacts.json` untouched under
+  `raw/`, because rendering figures there would be a SECOND
+  implementation of the `sec_facts_render::render` decider (ARCH §10.6).
+  Until that renderer was called pre-ingest, an installed corpus carried
+  PROSE ONLY and the `sec_facts` tool could not claim it.
+- **Why still dark, 2026-08-17 (order `sec-filings-last-mile`, M4):** the
+  reason above is GONE — the acquirer now calls the decider at step 6 and
+  `place_rendered` writes `docs/facts/*.txt` pre-ingest and stages the
+  sidecar where `install_fact_sidecar` already places it synchronously.
+  What is missing now is not code, it is a RUN. The journey has never
+  been executed end to end on this host: three attempts, none of which
+  reached the assertions — a harness livelock in `global-setup`'s own
+  fixture ingest, then a 20.5-minute install that was TOTALLY SILENT
+  because the daemon's tracing allowlist did not carry `sec_edgar`, then
+  a workspace build broken by an unrelated in-flight change. So the
+  install is UNPROVEN, not disproven, and an unproven button stays off.
+  Arming it now would ship exactly the failure F3 exists to prevent, on
+  a guess: a user picks a ticker, waits, and finds out.
+- **Evidence so far, cited:** live against real SEC, not a fixture —
+  `svrn recipe test … --params ticker=AAPL --recapture` VERDICT GREEN
+  on Apple 10-K accession 0000320193-25-000079. ACQUIRE 5 docs from
+  `custom:sec_edgar`, 0 empty; CHUNK 0 over the 3000 limit
+  (2587..2621); FTS rare-token probe returns its source chunk. 22
+  `sec_edgar` tests, instrument validated (a deliberately broken
+  assertion took the run to exit 100 naming the right test).
+- **Flip condition (falsifiable):** `catalog_status` moves to
+  `featured` when ALL of (1) `sec_facts_render::render` is called
+  pre-ingest, writing `fact_files` into `docs/facts/` and staging its
+  sidecar where `install_fact_sidecar` places it; (2) `sec_facts`
+  answers a figure from a corpus installed BY TICKER — not from a
+  script-built one — with fiscal-period basis and accession citation;
+  (3) the desktop install form exists and passes `ticker`; (4) the F3
+  hand-read passes at its registered bar. Any one unmet keeps it
+  `preview`.
+- **Condition audit, 2026-08-17 — two met, two `never-ran`:**
+  (1) **MET** — `sec_edgar::acquire` step 6 + `place_rendered`; 4 tests,
+  instrument validated (redirecting the sidecar write reddened exactly
+  one test, two controls in the same file stayed green).
+  (3) **MET** — `RecipeParameterForm.svelte`, rendered from
+  `ParameterSpec.kind` with nothing ticker-specific; 8 tests, one of
+  which renders a DIFFERENT recipe's `int`/`date`/`list` parameters with
+  no new code.
+  (2) and (4) are **`never-ran`, NOT failed** — the e2e that would decide
+  them (`tests/e2e/real/sec-filings-by-ticker.real.spec.ts`) has never
+  reached its assertions. Recording them as failures would put a wrong
+  verdict against work that is probably correct; recording them as met
+  would be the F2 mistake in another costume. They are unmeasured.
+- **Condition audit, 2026-08-18 — (2) moves `never-ran` → FAILED, for a
+  cause that is not the corpus.** Order `sec-filings-close`, ring 2
+  (`runs/sec-filings-close-e2e/`, `DONE 15:35:15Z`). The e2e reached its
+  assertions for the first time in seven attempts.
+  - **Arming is PROVEN on the desktop.** `sec_facts: discovery complete
+    declared=1` → `coarse=Some("AUTHORITY_CLAIM")`, neither ever logged
+    on this surface before. Registering `SecFactsTool` (`655c6ab5`) is
+    the whole of the change; run 4 logged `not armed — no evidence
+    corpus declares authority handler="kq_stream"` at the same point.
+  - **(2) FAILED — no figure was answered.** The planner called the tool
+    with `concept="capital_expenditures|acquisitions|property_plant_equipment"`,
+    a pipe-alternation hedge. `resolve_concept` is a DECLARED two-step
+    resolver that never similarity-guesses (§18.3), so it normalized that
+    to a single id containing pipes, matched nothing, and refused
+    (`outcome="unmapped"`, `store_concepts=20`). The store DOES hold
+    `capital_expenditures` — the first alternative would have resolved
+    at step 1.
+  - **Two structural defects behind it, neither in scope for that order.**
+    (a) `concept` is a CLOSED set — the store's 20 ids, known at call
+    time — passed to the planner as free text with six examples and no
+    `enum`, while `mode` in the same schema IS an enum (ARCH §2 /
+    principle 9; §7.6 on asking a model to guarantee what a schema can
+    enforce). (b) `executor: step done success=true` for a step whose
+    tool REFUSED — an `Err` collapsed into a success-shaped value (§18.3,
+    smell table). The empty basis is why the provenance audit then
+    flagged all four numerals: with no tool datum in the basis,
+    "untraceable" is correct by construction, so the guard is right about
+    a symptom.
+- **Condition audit, 2026-08-18 (later) — (2) moves FAILED → MET.** Order
+  `sec-facts-concept-enum` + the planner change it was blocked on
+  (`format_param_hint` now renders a declared `enum` into the plan
+  prompt). Ring 0, `svrn chat ask` against `sec-cik0000320193`, n=3:
+  - The planner sent `concept="capital_expenditures"` — a bare canonical
+    id — **3/3**. No hedge, no label, no pipe alternation. The prior
+    failing inputs were a label (`"Payments to acquire property, plant
+    and equipment"`, deterministic 3/3) and the pipe hedge; both are gone.
+  - **A figure was answered, with basis and citation, 3/3 identical:**
+    `capital_expenditures = $12,715,000,000.00`, us-gaap
+    `PaymentsToAcquirePropertyPlantAndEquipment`, period
+    `2024-09-29..2025-09-27`, Form 10-K accession `0000320193-25-000079`,
+    plus a reproduce path to the companyfacts URL. Zero `refusal emitted`.
+  - **Still `preview`, because (4) is unmeasured.** (1) (2) (3) are now
+    MET; the F3 hand-read has never run. Any one unmet keeps it `preview`,
+    so this does not flip the row — it removes the blocker that made the
+    initiative close NOT-SHIPPABLE.
+  - Ring 2 (desktop e2e) NOT re-run: ring 0 proves the planner→tool→basis
+    path, and the desktop's own arming was already proven at `655c6ab5`.
+  - **NEW BLOCKER, same session — the REFUSAL half now fails, 2/2.** This
+    registry entry's flip condition wants an answered figure AND a refusal
+    naming what IS available; only the first is met. Asked for Apple's
+    **Mac** and then **iPhone** segment revenue, the planner sent
+    `concept="revenue"` both times and got consolidated $416,161M, which
+    the model narrated as "Apple Inc.'s Mac segment revenue in FY2025 was
+    $416,161 million". The enum closed the in-vocabulary hole and
+    SHARPENED this one: the schema tells the planner to "send the closest
+    single id and let the tool refuse", but that premise is false when the
+    closest id is in the store — so no refusal ever fires (§18.3, moved
+    from the resolver to the planner). The provenance guard withheld both
+    answers only INCIDENTALLY — on a rounding restatement (`$416.2
+    billion`) and on an accession fragment (`0000320`) — neither catch
+    about granularity. Detail + fix shape (compare the ask against the
+    resolved concept at the `ToolContext` seam, as M1b already does for
+    period): note `45b04cf5`. **Do not flip until this refuses.**
+  - **CLOSED, same session.** `SecRefusal::ScopeNotInSource` +
+    `scope_qualifier_in_question`, wired at the same seam as
+    `PeriodNotAsAsked` and gated on `store.coverage.consolidated_only`.
+    Re-run of the exact failing probe: the planner still sends
+    `concept="revenue"` (the enum correctly pushes it into the closed
+    set), and the tool now REFUSES — "this question asks for a
+    'segment'-level figure … the consolidated 'revenue' figure is NOT
+    that number and is not offered as a substitute", followed by all 20
+    typed concepts. Consolidated control unchanged: capex still answers
+    `$12,715,000,000.00`, zero refusals. So both halves of this entry's
+    flip condition — an answered figure AND a refusal naming what IS
+    available — now hold at ring 0.
+  - **RESIDUE, disclosed not hidden (§18.3).** The guard keys on
+    STRUCTURAL segment vocabulary (`segment`, `division`, `business unit`,
+    `product line`, `by region`, `geographic`, …), deliberately not on one
+    filer's product names, which would not transfer to the next company.
+    So "What was **Mac** revenue in FY2025?" — a product name with no
+    structural word — is NOT caught and would still answer consolidated.
+    Closing that needs the filer's own segment names, which companyfacts
+    does not carry. Scoped to the clear case exactly as the calendar check
+    was, by the same operator direction.
+- **Ring 2, run 6 (`runs/sec-filings-scope-e2e/`) — the figure LANDED on
+  the desktop, and the run is still RED.** Both are true and neither
+  cancels the other.
+  - **The substantive win, first time in nine attempts.** Installed BY
+    TICKER through the catalog, in `sovereign-desktop`, the turn returned
+    `capital_expenditures = $12,715,000,000.00 — us-gaap
+    PaymentsToAcquirePropertyPlantAndEquipment, period
+    2024-09-29..2025-09-27, Form 10-K accession 0000320193-25-000079`.
+    That is condition (2) on the surface that ships — the inference M2.5
+    existed to stop us making, now measured instead of inferred.
+  - **Why it is still red, and it is NOT the figure.** The spec aborted in
+    `assertTurnInvariants` (`invariants.ts:111`) on a TRANSPORT invariant:
+    `concat(message-chunk)` differs from `message-complete.full_text` by
+    exactly one trailing newline. It failed BEFORE reaching the figure
+    assertion at `:475`; the figure is visible only in the failure diff.
+    The describe block is serial, so **KO and the two-filer assertion
+    never ran** (skipped, not passed).
+  - **UNATTRIBUTED.** Neither order touches the answer-rendering or
+    streaming path — the enum changes a prompt, the scope guard is inert
+    here (the spec has no segment vocabulary, grepped). Leading hypothesis
+    is REVEALED-not-caused: this assertion had never executed on an
+    answered figure in eight prior attempts, so a pre-existing off-by-one
+    newline would surface exactly now. **That is a hypothesis, not a
+    finding** — proving it needs a control run on a stashed tree, which
+    was not spent.
+  - **Condition (4) therefore does NOT pass, and the row stays
+    `preview`.** A red e2e is not an F3 hand-read at its registered bar.
+- **Instrument gap this run exposed:** the answer TEXT is preserved
+  nowhere in `evidence/` — only the audit's violation list — so whether
+  `2023`/`2024` were prose years or claimed data CANNOT be decided from
+  this run's record. That question is left open rather than guessed.
+- **Known gap this does NOT cover:** segment figures. The acquirer
+  refuses segment concepts because companyfacts is consolidated-only;
+  the F2 honesty violation at `e8b9319b` is the same gap seen from the
+  answer end (prose-served Mac segment numbers). Flipping this row
+  does not settle F2.
+- **Review-by:** 2026-08-30. If slice 3 closes without the flip, this
+  row moves to Rejected naming which of the four conditions failed.
+
 ### Batched claim verify (one prefill, N verdicts) — `SOVEREIGN_GATE_BATCH_VERIFY` (default **OFF**)
 - **Shipped dark:** 2026-08-14, order `audit-economy` D2 (approval
   directive 086f6682; worker directive 233d3558). The family-joined
@@ -726,6 +968,74 @@ store (ids cited per row).
   seat's stewardship notes.
 - **Review by:** 2026-08-21.
 
+### Per-commit architecture audit — `CO_ARCH` in `co-sweep.sh` → **GRADUATED 2026-08-17, default ON**
+
+- **Graduated same day it shipped, by operator direction, on an AMENDED
+  bar — not on the bar it was registered against.** The candidate missed
+  bar (c) as written (2.5s/commit); the operator re-anchored the bar to
+  the house tolerance for a quality check ("running tests is about the
+  anchor... realistically it takes 10 mins") and directed the flip. At the
+  shipped config the audit costs ~19s per fired commit and ~2.8 min/night
+  at the sweep's 20-commit cap — inside a lint run per commit, and well
+  inside the ceiling for the night. The seat proposed the amendment and
+  did not make it: a bar moved by the seat after seeing the data it failed
+  is not a bar.
+- **Standing exit condition (operator's words):** "we can modify if it
+  hurts ergonomics too much." That is what review-by asks.
+- **Config shipped:** `window = 8`, `max_sites = 16` in
+  `quality/arch-probes.toml`, chosen from a 4-point sweep on a frozen
+  12-commit set. It is the knee: identical verdicts to the full diff at
+  40% of the cost, and the two cheaper configs judge strictly worse
+  (could-not-judge 0.38 vs 0.25).
+- **Residual, named:** 25% of rule-verdicts are could-not-judge at every
+  config tested. They render as an explicit `C` line in the rollup — the
+  seat sees "not judged", never "clean".
+- **Shipped:** 2026-08-17, same commit as this row.
+  `scripts/co-arch.py` + bars at
+  `gym/comaintainer/PREREG_arch_probes_20260817.md`.
+- **What it does:** per swept commit, judges the added code against the
+  §15 smell rows that code cannot enforce, in ONE batched forced-choice
+  call (A/B/C per rule, ~3 chars per rule). A model-free gate decides
+  which rules can fire and SUPPLIES THE CITATIONS, so no model authors a
+  character of the row; §2.1 is decided by an arm counter and never
+  reaches the model (§7.6). Rows land as `kind:"arch"`, `shadow:true` in
+  `~/.sovereign/comaintainer/verdicts.jsonl`; the seat reads
+  `co-arch.py --rollup`.
+- **Quality bars, all MET on the 27B and re-run at the shipped config:**
+  gate recall 21/21, catch 0.952 on planted violations, **false-B 0.000
+  across 13 hard negatives** (clean code that trips the gate), bit-stable
+  0/39 across repeats. The 4B is DISQUALIFIED and may carry no rule:
+  catch 0.667.
+- **MEASURED AND REFUSED, 2026-08-17 (same day):** bars ran on a restored
+  daemon. Gate recall 21/21 MET; catch 0.952 on the 27B MET; false-B
+  0.000 MET; bit-stability 0/39 MET. **Bar (c) cost MISSED on both
+  engines** — 27B median 5,398ms per fired commit (kill tripped at
+  ≥4,000ms), 4B median 2,509ms against a 2,500ms bar — and the 4B is
+  separately disqualified on catch (0.667). So it stays OFF.
+- **Why cost missed:** the shape is right and decode is genuinely free
+  (5-12 output tokens per commit); the price is PREFILL, measured at
+  ~7-8ms per prompt token. The registration's ~1.2s projection was
+  borrowed from a batched register whose speed came from a shared cached
+  prefix, which a per-commit bundle does not have. Full-bundle candidate:
+  46.3s/commit, well-evidenced. Gate-localised windows: 5.4s/commit but
+  could-not-judge on 6 of 12 real commits — speed bought by removing
+  evidence. Both refused; data in the prereg's RESULTS section.
+- **Open question for the operator (do NOT let the seat self-resolve):**
+  bar (c)'s 2.5s came from an interactive register; this is a nightly
+  batch where the full-bundle candidate costs ~34 min/night and the
+  windowed one ~4 min. Amending the bar to total sweep wall-clock is
+  defensible, but a bar moved after seeing the data it failed is not a
+  bar — so it is the operator's call, not the seat's.
+- **Flip condition (unchanged):** every bar in the prereg met, including
+  whatever bar (c) becomes if the operator amends it, PLUS the standing
+  reporting duty added 2026-08-17 — the real-commit could-not-judge rate
+  reported beside the bank score, because the bank passed while
+  production returned all-C on half the commits.
+- **Settled by:** `~/.sovereign/comaintainer/verdicts.jsonl`
+  (`kind:"arch"`) against the bank's labels;
+  `gym/comaintainer/score_arch.py` is the instrument.
+- **Review by:** 2026-08-24.
+
 ## OWED A ROW — dark capabilities with no flip condition (audit 2026-08-05)
 
 **How this section came about.** Cross-referencing
@@ -1094,6 +1404,33 @@ it is an experiment (then it should not be default-on). Resolve it with the
   "fixes" the default.
 
 ## GRADUATED — the pipeline completing, for the record
+
+### Claim-search ladder — `SOVEREIGN_GATE_CLAIM_SEARCH_LADDER` → **default ON 2026-08-14**
+- **Lifespan dark: 2026-08-05 to 2026-08-14** (shipped as an experiment
+  with its safety counter pre-built; flipped by operator close decision,
+  order `audit-economy` D6).
+- **Flip condition, met non-vacuously.** The registered bar was
+  bank-level `lost_rescue = 0` from shadow rows. The 21-turn ladder-shadow
+  arm (`runs/audit-economy-ladder-shadow/`, 2026-08-14, baseline verdicts,
+  D5 corpus pre-flight applied): **lost_rescue 0/160** with **8 REAL
+  rescues present in the bank** and the ladder's skip set disjoint from
+  all of them — the zero had every chance to be nonzero; `newly_failed`
+  0/160 (the dilution-avoidance direction, reported per §18.6); 96/160
+  searches skippable, ~-3.5s/turn at healthy search prices.
+- **What flipped, precisely.** `claim_search_ladder_enabled()`
+  (`grounding/config.rs`) now returns `true` when the knob is unset. The
+  knob is the opt-OUT: `=0` (also `false`/`off`, trimmed) disables;
+  every other value including unset and unrecognised leaves it ON. The
+  batched stage-1 remains TRIAGE ONLY — the released verdict stays the
+  calibrated per-claim forced-choice.
+- **Reversal condition:** any production `lost_rescue` evidence
+  (re-arm `SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW` to collect it) or a
+  CONFAB-LEAK NEW>OLD read on the next paired chaos arm reverts by flag
+  (`=0`), not by code. **Review-by: 2026-08-28** — if the next chaos arm
+  has not run by then, that is the signal, not noise.
+- **Settling plan:** the order closed short (bar missed at the composed
+  level; mechanism wins banked). The next chaos/composed arm on the
+  longform banks reads the ladder's live effect; no dedicated arm owed.
 
 ### Native grounding, DISPLAY — `SOVEREIGN_NATIVE_GROUNDING` → **default ON 2026-08-11**
 - **Lifespan dark: 2026-08-09 to 2026-08-11.** Shipped dark (`bb48e8c6`),

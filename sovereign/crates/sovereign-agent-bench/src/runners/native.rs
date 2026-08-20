@@ -33,7 +33,7 @@ use commonwealth_agent_tools::adapter::{
 use commonwealth_agent_tools::executor::ExecCtx;
 use commonwealth_agent_tools::registry::Registry;
 use commonwealth_agent_tools::role::{
-    profile::default_profile_for,
+    profile::{default_profile_for, profile_for},
     transition::{transition_after, NextRole},
     Role, RoleDossier, RoleProfile, TransitionTrigger,
 };
@@ -593,6 +593,10 @@ async fn run_native_role_aware(
     ctx: AgentRunContext,
 ) -> Result<AgentRunArtifact, AgentRunError> {
     let problem_id = ctx.problem_id.clone();
+    // Read scale-derived values BEFORE moving the workdir out of ctx.
+    let anchor_budget = ctx.anchor_budget_lines();
+    let listing_depth = ctx.workdir_listing_depth();
+    let scale = ctx.workdir_scale;
     let workdir = ctx.workdir;
     let model_handle = ctx.model_handle.clone();
     let role_model_map = ctx.role_model_map.clone();
@@ -669,7 +673,7 @@ async fn run_native_role_aware(
     // Forced-first-tool fires only once per role-entry. Each
     // transition resets this so re-entering Evaluator forces
     // `build` again.
-    let mut force_first_tool_pending = default_profile_for(active_role).forced_first_tool;
+    let mut force_first_tool_pending = profile_for(active_role, scale).forced_first_tool;
     // Recovery-escalation flag: armed when the Implementer re-emits a
     // rejected SPLICE edit at the same site (one rejection before the
     // sticky-kill); forces its next turn onto write_file (full rewrite).
@@ -765,7 +769,7 @@ async fn run_native_role_aware(
         // re-rendered every turn with the CURRENT workdir state so
         // that Implementer's "what files exist" signal matches reality
         // after each successful write (see note above the loop).
-        let profile = default_profile_for(active_role);
+        let profile = profile_for(active_role, scale);
         // Promote any source-file declarations whose names appear in
         // the Planner's pseudocode to full-body inline anchor
         // (instead of outline). Lets the Implementer see exact
@@ -778,7 +782,13 @@ async fn run_native_role_aware(
             .map(extract_referenced_names)
             .unwrap_or_default();
         let user_msg =
-            format_initial_prompt_with_promoted(workdir.path(), &ctx.prompt, &promoted_names);
+            format_initial_prompt_with_promoted(
+                workdir.path(),
+                &ctx.prompt,
+                &promoted_names,
+                anchor_budget,
+                listing_depth,
+            );
         let role_messages = build_role_messages(
             active_role,
             &profile,
@@ -972,7 +982,7 @@ async fn run_native_role_aware(
                         format!("{} produced no tool call", active_role.id()),
                     );
                     active_role = r;
-                    force_first_tool_pending = default_profile_for(r).forced_first_tool;
+                    force_first_tool_pending = profile_for(r, scale).forced_first_tool;
                     role_chat_history.clear();
                     tracing::debug!(
                         problem = %problem_id,
@@ -999,6 +1009,9 @@ async fn run_native_role_aware(
             assistant_for_history["tool_calls"] = tc.clone();
         }
         let mut this_turn_tool_results: Vec<Value> = Vec::new();
+        // Kinds dispatched this turn — read by the no-progress
+        // exemption below (a read is not an attempt to mutate).
+        let mut this_turn_kinds: Vec<PrimitiveKind> = Vec::new();
 
         // Tool calls non-empty — reset the EmptyToolCallStreak
         // detector. The model is actively driving the workdir.
@@ -1139,6 +1152,7 @@ async fn run_native_role_aware(
                 }
             };
             let kind = canonical_kind.unwrap();
+            this_turn_kinds.push(kind);
 
             // NOTE: write/verify counters used to live HERE (before
             // dispatch). That double-counted writes the pre-write
@@ -1533,7 +1547,7 @@ async fn run_native_role_aware(
                         );
                     }
                     active_role = r;
-                    force_first_tool_pending = default_profile_for(r).forced_first_tool;
+                    force_first_tool_pending = profile_for(r, scale).forced_first_tool;
                     tool_calls_in_tenure = 0;
                     transitioned_this_turn = true;
                     role_chat_history.clear();
@@ -1572,7 +1586,20 @@ async fn run_native_role_aware(
         // expected; firing here would kill every Planner-only
         // turn). Only meaningful in Implementer/Evaluator where
         // an unchanged workdir really does signal stuck-state.
-        if !matches!(active_role, Role::Planner) {
+        //
+        // A READ is exempt for the same reason the Planner is: it is
+        // not an attempt to mutate, so an unchanged workdir after one
+        // carries no signal. This only matters at Repository scale,
+        // where `inspect_workdir` is the role's way of seeing the code
+        // at all — measured 2026-08-18, the 27B spent all 8 calls
+        // reading and was killed for "no progress" while doing exactly
+        // what the prompt told it to do. Runaway reading is still
+        // bounded by the token and wall caps.
+        let read_only_turn = !this_turn_kinds.is_empty()
+            && this_turn_kinds
+                .iter()
+                .all(|k| matches!(k, PrimitiveKind::InspectWorkdir));
+        if !matches!(active_role, Role::Planner) && !read_only_turn {
             let new_hash = hash_workdir(workdir.path());
             if new_hash == last_workdir_hash {
                 consecutive_no_progress = consecutive_no_progress.saturating_add(1);
@@ -1616,7 +1643,7 @@ async fn run_native_role_aware(
                 "planner exhausted inspect budget; no plan emitted".to_string(),
             );
             active_role = Role::Implementer;
-            force_first_tool_pending = default_profile_for(Role::Implementer).forced_first_tool;
+            force_first_tool_pending = profile_for(Role::Implementer, scale).forced_first_tool;
             total_role_calls = 0;
             role_chat_history.clear();
             tracing::debug!(
@@ -1830,7 +1857,13 @@ fn tool_result_message(tool_call_id: &str, content: &str) -> Value {
 }
 
 fn format_initial_prompt(workdir: &Path, problem_prompt: &str) -> String {
-    format_initial_prompt_with_promoted(workdir, problem_prompt, &Default::default())
+    format_initial_prompt_with_promoted(
+        workdir,
+        problem_prompt,
+        &Default::default(),
+        crate::runner::DEFAULT_ANCHOR_BUDGET_LINES,
+        crate::runner::DEFAULT_WORKDIR_LISTING_DEPTH,
+    )
 }
 
 /// Variant that promotes named declarations from outline → inline.
@@ -1845,9 +1878,11 @@ fn format_initial_prompt_with_promoted(
     workdir: &Path,
     problem_prompt: &str,
     promoted_names: &std::collections::HashSet<String>,
+    anchor_budget: usize,
+    listing_depth: usize,
 ) -> String {
-    let state = summarize_workdir(workdir);
-    let anchors = render_workdir_anchors_with_promoted(workdir, promoted_names);
+    let state = summarize_workdir_to_depth(workdir, listing_depth);
+    let anchors = render_workdir_anchors_with_promoted(workdir, promoted_names, anchor_budget);
     format!(
         "## Workdir state (factual, current state of `.`)\n{state}\n{anchors}\n---\n\n{problem_prompt}"
     )
@@ -1924,7 +1959,11 @@ const MAX_TOTAL_ANCHOR_LINES: usize = 1200;
 /// Returns an empty string when no source files are present (e.g.
 /// FromScratch tier before the first write).
 fn render_workdir_anchors(workdir: &Path) -> String {
-    render_workdir_anchors_with_promoted(workdir, &Default::default())
+    render_workdir_anchors_with_promoted(
+        workdir,
+        &Default::default(),
+        crate::runner::DEFAULT_ANCHOR_BUDGET_LINES,
+    )
 }
 
 /// Extract the declaration NAME from a top-level line.
@@ -1973,7 +2012,12 @@ fn decl_name(line: &str) -> Option<&str> {
 fn render_workdir_anchors_with_promoted(
     workdir: &Path,
     promoted_names: &std::collections::HashSet<String>,
+    anchor_budget: usize,
 ) -> String {
+    if anchor_budget == 0 {
+        // Repository-scale workdir: enumeration is noise, not orientation.
+        return String::new();
+    }
     let mut files: Vec<(std::path::PathBuf, String)> = Vec::new();
     collect_source_files(workdir, workdir, 0, &mut files);
     if files.is_empty() {
@@ -1982,10 +2026,10 @@ fn render_workdir_anchors_with_promoted(
     let mut out = String::from("\n## Current source files (line-numbered, factual)\n");
     let mut total_lines_rendered: usize = 0;
     for (rel, content) in files {
-        if total_lines_rendered >= MAX_TOTAL_ANCHOR_LINES {
+        if total_lines_rendered >= anchor_budget {
             out.push_str(&format!(
                 "\n(further source files omitted — total anchor budget {} lines exceeded)\n",
-                MAX_TOTAL_ANCHOR_LINES
+                anchor_budget
             ));
             break;
         }
@@ -1998,7 +2042,7 @@ fn render_workdir_anchors_with_promoted(
         if lines.len() <= MAX_FILE_LINES_INLINE {
             let take = lines
                 .len()
-                .min(MAX_TOTAL_ANCHOR_LINES.saturating_sub(total_lines_rendered));
+                .min(anchor_budget.saturating_sub(total_lines_rendered));
             for (i, l) in lines.iter().take(take).enumerate() {
                 // Use `:` separator (not `| `) — pipe visually
                 // suggests unified-diff format, which the model
@@ -2068,7 +2112,7 @@ fn render_workdir_anchors_with_promoted(
                     .unwrap_or(false);
                 if name_promoted {
                     let body_len = end - start + 1;
-                    let remaining = MAX_TOTAL_ANCHOR_LINES.saturating_sub(total_lines_rendered);
+                    let remaining = anchor_budget.saturating_sub(total_lines_rendered);
                     let take = body_len.min(remaining);
                     out.push_str(&format!(
                         "{:>4}: {}  [lines {}-{}]  ← PROMOTED (named in pseudocode)\n",
@@ -2176,8 +2220,20 @@ fn collect_source_files(
 }
 
 fn summarize_workdir(workdir: &Path) -> String {
+    summarize_workdir_to_depth(workdir, crate::runner::DEFAULT_WORKDIR_LISTING_DEPTH)
+}
+
+fn summarize_workdir_to_depth(workdir: &Path, max_depth: usize) -> String {
     let mut entries: Vec<String> = Vec::new();
-    collect_workdir_entries(workdir, workdir, 0, &mut entries);
+    collect_workdir_entries(workdir, workdir, 0, max_depth, &mut entries);
+    // Emitted once, by the single caller — pushing it inside the
+    // recursion appends one notice per stack frame.
+    if entries.len() >= MAX_WORKDIR_ENTRIES {
+        entries.truncate(MAX_WORKDIR_ENTRIES);
+        entries.push(format!(
+            "  (listing truncated at {MAX_WORKDIR_ENTRIES} entries — use `ls`/`find` to explore)"
+        ));
+    }
     if entries.is_empty() {
         "(empty — the workdir contains no files. You must create Cargo.toml and src/lib.rs via the `write_file` tool.)".to_string()
     } else {
@@ -2185,8 +2241,25 @@ fn summarize_workdir(workdir: &Path) -> String {
     }
 }
 
-fn collect_workdir_entries(root: &Path, dir: &Path, depth: usize, out: &mut Vec<String>) {
-    if depth > 3 {
+/// Cap on entries in the workdir-state preamble.
+///
+/// This listing was unbounded until 2026-08-18, which is invisible on
+/// an agent-coding scaffold (1-3 files) and fatal on a real repository:
+/// measured on a pylint checkout it rendered 1,122 entries / 56,510
+/// chars / ~14,127 tokens, and the resulting 39,251-token prompt was
+/// rejected by a 16,000-token slot before the planner's first call.
+/// A listing is orientation, not an inventory — the agent has `ls`,
+/// `find` and `grep` for the rest.
+const MAX_WORKDIR_ENTRIES: usize = 200;
+
+fn collect_workdir_entries(
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    max_depth: usize,
+    out: &mut Vec<String>,
+) {
+    if depth > max_depth || out.len() >= MAX_WORKDIR_ENTRIES {
         return;
     }
     let Ok(rd) = std::fs::read_dir(dir) else {
@@ -2195,6 +2268,9 @@ fn collect_workdir_entries(root: &Path, dir: &Path, depth: usize, out: &mut Vec<
     let mut items: Vec<_> = rd.flatten().collect();
     items.sort_by_key(|e| e.file_name());
     for entry in items {
+        if out.len() >= MAX_WORKDIR_ENTRIES {
+            return;
+        }
         let p = entry.path();
         let rel = p
             .strip_prefix(root)
@@ -2202,8 +2278,14 @@ fn collect_workdir_entries(root: &Path, dir: &Path, depth: usize, out: &mut Vec<
             .unwrap_or_else(|_| p.to_string_lossy().into_owned());
         if let Ok(meta) = entry.metadata() {
             if meta.is_dir() {
+                // Same skip-list the anchor renderer uses. Without it
+                // this walked `.git/objects/**` and the full test tree.
+                let name = entry.file_name().to_string_lossy().into_owned();
+                if ANCHOR_SKIP_DIRS.iter().any(|s| *s == name) {
+                    continue;
+                }
                 out.push(format!("  {rel}/"));
-                collect_workdir_entries(root, &p, depth + 1, out);
+                collect_workdir_entries(root, &p, depth + 1, max_depth, out);
             } else if meta.is_file() {
                 out.push(format!("  {rel}  ({} bytes)", meta.len()));
             }
@@ -2262,6 +2344,114 @@ fn cap_raw_lines(lines: Vec<String>) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    /// The preamble must stay bounded on a repository-scale tree.
+    ///
+    /// Regression for 2026-08-18: `collect_workdir_entries` had no
+    /// skip-list and no cap, so a real checkout rendered 1,122 entries
+    /// (~14,127 tokens) and the resulting 39,251-token prompt was
+    /// rejected by a 16,000-token slot before the planner's first call.
+    /// A scaffold never reveals this — only a tree with depth and a
+    /// `.git`/`tests` directory does.
+    #[test]
+    fn workdir_listing_is_bounded_on_a_repo_scale_tree() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        // 6 top-level dirs x 4 subdirs x 30 files = 720 source files,
+        // plus the two directories the skip-list must exclude.
+        for d in 0..6 {
+            for sub in 0..4 {
+                let dir = root.join(format!("pkg{d}")).join(format!("mod{sub}"));
+                std::fs::create_dir_all(&dir).unwrap();
+                for f in 0..30 {
+                    std::fs::write(dir.join(format!("f{f}.py")), "x = 1\n").unwrap();
+                }
+            }
+        }
+        for skipped in ["\u{2e}git", "tests"] {
+            let dir = root.join(skipped).join("deep");
+            std::fs::create_dir_all(&dir).unwrap();
+            for f in 0..200 {
+                std::fs::write(dir.join(format!("o{f}.py")), "y = 2\n").unwrap();
+            }
+        }
+
+        let full = super::summarize_workdir_to_depth(root, 3);
+        assert!(
+            full.lines().count() <= super::MAX_WORKDIR_ENTRIES + 1,
+            "depth-3 listing must honour MAX_WORKDIR_ENTRIES, got {} lines",
+            full.lines().count()
+        );
+        assert!(
+            !full.contains("tests/") && !full.contains(".git/"),
+            "skip-list must exclude .git and tests from the listing"
+        );
+
+        // Root-only is what the repository-scale caller asks for: cheap
+        // orientation, with the rest left to ls/find/grep.
+        let root_only = super::summarize_workdir_to_depth(root, 0);
+        assert!(
+            root_only.lines().count() <= 12,
+            "root-only listing should be ~6 dirs, got {} lines",
+            root_only.lines().count()
+        );
+        assert!(root_only.len() < full.len());
+    }
+
+    /// A zero anchor budget renders nothing, so a repository-scale
+    /// caller pays no source-enumeration tokens at all.
+    #[test]
+    fn zero_anchor_budget_renders_no_source() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(tmp.path().join("a.py"), "def f():\n    return 1\n").unwrap();
+        let with = super::render_workdir_anchors_with_promoted(
+            tmp.path(),
+            &Default::default(),
+            crate::runner::DEFAULT_ANCHOR_BUDGET_LINES,
+        );
+        let without =
+            super::render_workdir_anchors_with_promoted(tmp.path(), &Default::default(), 0);
+        assert!(with.contains("def f()"), "default budget should render source");
+        assert!(without.is_empty(), "zero budget must render nothing");
+    }
+
+    /// Diagnostic probe: measure the two prompt-preamble builders
+    /// against a REAL repository checkout, not a synthetic tempdir.
+    /// Set `NATIVE_PROBE_DIR=/path/to/checkout` to run it.
+    ///
+    /// Exists because the 2026-08-18 SWE-bench smoke run sent a
+    /// 39,251-token prompt into a 16,000-token window and the split
+    /// between the two builders was unknown. Guessing which one
+    /// dominates is how you fix the wrong one.
+    #[test]
+    fn probe_preamble_sizes_on_real_checkout() {
+        let Ok(dir) = std::env::var("NATIVE_PROBE_DIR") else {
+            eprintln!("skipped: set NATIVE_PROBE_DIR to a real checkout");
+            return;
+        };
+        let p = std::path::Path::new(&dir);
+        let state = super::summarize_workdir(p);
+        let anchors = super::render_workdir_anchors(p);
+        let est = |s: &str| s.len() / 4;
+        eprintln!("--- preamble probe: {dir}");
+        eprintln!(
+            "  summarize_workdir : {:>9} chars  ~{:>7} tok  ({} lines)",
+            state.len(),
+            est(&state),
+            state.lines().count()
+        );
+        eprintln!(
+            "  anchors           : {:>9} chars  ~{:>7} tok  ({} lines)",
+            anchors.len(),
+            est(&anchors),
+            anchors.lines().count()
+        );
+        eprintln!(
+            "  TOTAL preamble    : {:>9} chars  ~{:>7} tok",
+            state.len() + anchors.len(),
+            est(&state) + est(&anchors)
+        );
+    }
+
     use super::*;
 
     #[test]
@@ -2380,7 +2570,11 @@ mod tests {
         std::fs::write(tmp.path().join("big.py"), &content).unwrap();
         let mut promoted = std::collections::HashSet::new();
         promoted.insert("keep_me".to_string());
-        let s = render_workdir_anchors_with_promoted(tmp.path(), &promoted);
+        let s = render_workdir_anchors_with_promoted(
+            tmp.path(),
+            &promoted,
+            crate::runner::DEFAULT_ANCHOR_BUDGET_LINES,
+        );
         // Promoted: full body visible with line numbers.
         assert!(s.contains("def keep_me():"));
         assert!(s.contains("preserved body line"));

@@ -524,7 +524,8 @@ pub async fn bootstrap_with_progress(
         all_wired = router_report.all_wired(),
         "router classifier stack assembled"
     );
-    let router: Box<dyn sovereign_core::traits::Router> = Box::new(llm_router);
+    // Boxed AFTER tool registration completes (below): the authority
+    // probe (FINANCIAL_CORPORA §7.3) needs the finished registry.
 
     emit(BootstrapPhase::WiringKnowledge);
 
@@ -762,6 +763,11 @@ pub async fn bootstrap_with_progress(
     if let Some(extractor) = chunk_entity_extractor.clone() {
         engine_builder = engine_builder.with_chunk_entity_extractor(extractor);
     }
+    // A custom acquirer must be registered on EVERY engine that can
+    // ingest a recipe naming it, or the install fails at acquire time
+    // with "No custom acquirer registered for kind 'sec_edgar'". The
+    // desktop's embedded daemon is one of those engines.
+    sovereign_tools::sec_edgar::register(&engine_builder);
     let corpus_engine = Arc::new(engine_builder);
     *state.corpus_engine.write().await = Some(Arc::clone(&corpus_engine));
 
@@ -1268,6 +1274,18 @@ pub async fn bootstrap_with_progress(
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
     )));
+    // Typed SEC-filing figures with basis + accession, or first-class refusals.
+    //
+    // UNCONDITIONAL, never gated on `config.enabled_tools`: this tool is what
+    // DECLARES authority over an installed SEC corpus (`authority_domains()`
+    // -> `claim_stores()`), and the guard arms only when a registered tool
+    // claims a corpus the answer drew on. An install-capable surface without
+    // it is a FABRICATION surface, not a reduced one.
+    // Pinned by `tests/authority_surface_census.rs`, which carries the
+    // measured evidence.
+    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
+        Arc::clone(&corpus_engine),
+    )));
     // Code Intelligence tools. Build the merged SCIP handle first so
     // SymbolLookupTool can share it — exact-name lookup now reads
     // SCIP directly (Lance kept only embeddings/content/mtime).
@@ -1511,11 +1529,16 @@ pub async fn bootstrap_with_progress(
     );
 
     emit(BootstrapPhase::BuildingRuntime);
+    // Authority probe (FINANCIAL_CORPORA §7.3): the router consults the
+    // registry's deterministic claims before intent classification.
+    let tools = Arc::new(tools);
+    let router: Box<dyn sovereign_core::traits::Router> =
+        Box::new(llm_router.with_authority_probe(Arc::clone(&tools)));
     let mut runtime = Runtime::new(
         inference,
         router,
         Box::new(planner),
-        Arc::new(tools),
+        Arc::clone(&tools),
         Arc::clone(&store),
         skills,
         approval,

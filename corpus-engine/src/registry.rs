@@ -671,7 +671,10 @@ mod tests {
         // Book I — the corpus the literary/bk-book-1 CI enrichment gate
         // scores; registered because fetch_recipe() cannot reach its bundled
         // fallback for an unregistered id).
-        assert_eq!(entries.len(), 28, "snapshot should have 28 entries");
+        // + the 2026-08 sec-filings-company template (financial corpora,
+        // FINANCIAL_CORPORA.md F3 — per-company installs materialize as
+        // sec-cik<10-digit>; the template itself is never installed).
+        assert_eq!(entries.len(), 29, "snapshot should have 29 entries");
     }
 
     #[test]
@@ -785,9 +788,11 @@ sha256 = ""
         //   (hero / scans / index) + conversations-chatgpt (2026-06
         //   ChatGPT import) + email-archive (2026-07 own-mailbox
         //   ingest). (`alignment` removed 2026-06-19.)
-        //   + brothers-karamazov-book-1 (2026-08 literary-atlas bench corpus).
-        assert_eq!(catalog.len(), 28);
+        //   + brothers-karamazov-book-1 (2026-08 literary-atlas bench corpus)
+        //   + sec-filings-company (2026-08 financial-corpora template).
+        assert_eq!(catalog.len(), 29);
         assert!(catalog.iter().any(|c| c.id == "brothers-karamazov-book-1"));
+        assert!(catalog.iter().any(|c| c.id == "sec-filings-company"));
         assert!(catalog.iter().any(|c| c.id == "email-archive"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book"));
         assert!(catalog.iter().any(|c| c.id == "uap-blue-book-index"));

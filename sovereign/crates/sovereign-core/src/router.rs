@@ -300,6 +300,18 @@ pub struct LlmRouter {
     /// heuristic + LLM cascade. Ambiguous queries fall through to
     /// the existing path. Installed via `with_embed_router`.
     embed_router: Option<Arc<EmbedRouter>>,
+    /// Optional authority probe (FINANCIAL_CORPORA.md §7.3): the tool
+    /// registry, consulted DETERMINISTICALLY before intent
+    /// classification. A tool backed by a typed authoritative store
+    /// claims questions in its enumerable domain; a claim routes the
+    /// turn to `ComplexTask` where the tool runs and the numeric audit
+    /// applies. No embeddings, no threshold — this is what lets a
+    /// knowledge-worded figure question ("What was Apple's revenue in
+    /// fiscal 2025?", measured exemplar cosine 0.93) reach the typed
+    /// store, which the similarity-based tool gate below structurally
+    /// cannot (it would need tool_sim > top_sim + margin). Installed
+    /// via `with_authority_probe`.
+    authority: Option<Arc<crate::registry::ToolRegistry>>,
     /// Optional binary classifier for the personal-vs-external scope
     /// axis. Independent of intent. When installed, called once per
     /// query (reusing the embed_router's query embedding when both
@@ -413,12 +425,21 @@ impl LlmRouter {
             store,
             skills,
             embed_router: None,
+            authority: None,
             scope_classifier: None,
             effort_classifier: None,
             current_info_classifier: None,
             archive_classifier: None,
             tool_embed_cache: std::sync::RwLock::new(None),
         }
+    }
+
+    /// Install the authority probe — the tool registry whose
+    /// [`crate::registry::ToolRegistry::authority_claims`] the router
+    /// consults before intent classification (FINANCIAL_CORPORA §7.3).
+    pub fn with_authority_probe(mut self, tools: Arc<crate::registry::ToolRegistry>) -> Self {
+        self.authority = Some(tools);
+        self
     }
 
     /// Install an `EmbedRouter` as the first pre-check. When the
@@ -1984,6 +2005,74 @@ impl Router for LlmRouter {
                 timing: None,
                 scope: None,
             });
+        }
+
+        // Pre-check -0.5: DETERMINISTIC authority claims
+        // (FINANCIAL_CORPORA.md §7.3). A tool backed by a typed
+        // authoritative store claims questions in its own enumerable
+        // domain (entity + assertion class, declared authoritative by
+        // the corpus recipe's `[authority]` block). A claim routes to
+        // ComplexTask — the agentic path where the tool runs, its
+        // figures arrive pre-cited, and the numeric audit applies.
+        //
+        // Placement: AFTER the locator/metalingual/thread pre-checks
+        // (a question about this conversation is never a store lookup)
+        // and BEFORE the embed router — the claim is deterministic and
+        // must not depend on whether the similarity classifiers decide
+        // or abstain (measured 2026-08-14: financial questions abstain
+        // or land on knowledge intents at cosine 0.88-0.93, so a gate
+        // consulted only inside the embed-decided branch never fires).
+        //
+        // Failure direction is good: an over-claiming store produces an
+        // honest refusal naming what IS available — never a wrong
+        // number. Tie rule when several stores claim: claims arrive
+        // sorted by (tool_id, corpus_id); the first is named in logs
+        // and meta, and the planner sees the full registry regardless.
+        if let Some(reg) = self.authority.as_ref() {
+            let claims = reg.authority_claims(message);
+            if let Some(first) = claims.first() {
+                let latency_ms = start.elapsed().as_millis() as i64;
+                let hash = message_hash(message);
+                let _ = self
+                    .store
+                    .log_routing(&hash, "ComplexTask", latency_ms)
+                    .await;
+                let _ = self
+                    .store
+                    .log_routing_meta(&hash, "AUTHORITY_CLAIM", None)
+                    .await;
+                tracing::debug!(
+                    target: "router.authority",
+                    tool = %first.tool_id,
+                    corpus = %first.corpus_id,
+                    matched = %first.matched,
+                    claimants = claims.len(),
+                    "router: authority claim routes to ComplexTask"
+                );
+                eprintln!(
+                    "[router] \"{}\" → ComplexTask: tool '{}' claims authority for corpus '{}' ({}; {} claimant(s))",
+                    message.chars().take(50).collect::<String>(),
+                    first.tool_id,
+                    first.corpus_id,
+                    first.matched,
+                    claims.len(),
+                );
+                return Ok(RouterClassification {
+                    primary: IntentCandidate {
+                        intent: Intent::ComplexTask,
+                        confidence: 0.95,
+                    },
+                    alternatives: Vec::new(),
+                    rationale: Some(format!(
+                        "authority claim: tool '{}' is declared authoritative for corpus '{}' and claims this question ({}; {} claimant(s)) — routed to the agentic path",
+                        first.tool_id, first.corpus_id, first.matched, claims.len()
+                    )),
+                    coarse_intent: Some("AUTHORITY_CLAIM".to_string()),
+                    self_assessment: None,
+                    timing: None,
+                    scope: None,
+                });
+            }
         }
 
         // Pre-check -1: embedding-based intent classification.

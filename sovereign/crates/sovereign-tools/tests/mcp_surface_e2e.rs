@@ -207,3 +207,61 @@ fn new_tools_advertise_canonical_ids() {
         assert!(is_mcp_exposed(name), "{name} should be exposed");
     }
 }
+
+/// The planner's constrained-decoding schema is built from REAL tool
+/// descriptors, and every tool's `parameters` becomes the `params`
+/// sub-schema of its own `oneOf` branch. A tool whose schema is not a
+/// typed object cannot be masked, and `plan_schema` refuses rather
+/// than widening `params` back to "anything" — so this test is what
+/// catches that refusal on descriptors the registry actually serves,
+/// instead of on a hand-written fixture that can drift from them.
+///
+/// Coverage note, stated because a green tick here reads broader than
+/// it is: this registry holds the six code-intel tools, not all forty
+/// the server registers (the rest need a store, an inference provider
+/// and the egress boundary). The tools NOT covered here still fail
+/// loudly rather than quietly — a non-object schema refuses in
+/// `plan_schema`, an uncompilable one 503s at the sampler (F1).
+#[test]
+fn plan_schema_builds_over_real_tool_descriptors() {
+    let engine = empty_engine();
+    let graph = empty_graph();
+    let dir = tempfile::tempdir().unwrap();
+    let notes = Arc::new(NoteStore::open(&dir.path().join("notes.db")).unwrap());
+
+    let mut registry = ToolRegistry::new();
+    registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
+        Arc::clone(&engine),
+        Arc::clone(&graph),
+    )));
+    registry.register(Box::new(sovereign_tools::FindCallersTool::new(
+        Arc::clone(&engine),
+        Arc::clone(&graph),
+    )));
+    registry.register(Box::new(sovereign_tools::BlastRadiusTool::new(Arc::clone(
+        &graph,
+    ))));
+    registry.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
+        &notes,
+    ))));
+
+    let descriptors = registry.descriptors();
+    let schema = sovereign_core::planner::plan_schema(&descriptors)
+        .expect("every registered tool must declare a maskable `parameters` schema");
+
+    let branches = schema["properties"]["steps"]["items"]["oneOf"]
+        .as_array()
+        .expect("steps.items.oneOf");
+    for d in &descriptors {
+        let branch = branches
+            .iter()
+            .find(|b| b["properties"]["tool_id"]["const"] == d.id.as_str())
+            .unwrap_or_else(|| panic!("no branch for registered tool {}", d.id));
+        assert_eq!(
+            branch["properties"]["params"], d.parameters,
+            "tool {} must be masked to ITS OWN declared arguments, verbatim — a \
+             copy here would be a second decider and would drift from the tool",
+            d.id
+        );
+    }
+}
