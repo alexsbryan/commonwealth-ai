@@ -442,7 +442,7 @@ async fn get_atom_elsewhere(
         return not_found("atom not found");
     };
 
-    let evidence = atom_evidence_section_refs(atom);
+    let evidence = atom.evidence_anchors();
     let unique_sections: Vec<String> = {
         let mut seen = std::collections::HashSet::new();
         evidence
@@ -578,7 +578,7 @@ fn build_atom_card(
     }
 }
 
-use crate::reading_formatters::{atom_evidence_section_refs, atom_surface_fields};
+use crate::reading_formatters::atom_surface_fields;
 
 fn cross_corpus_links_for_atom(
     atom_id: &AtomId,

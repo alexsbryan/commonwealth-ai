@@ -530,7 +530,7 @@ pub async fn read_get_atom_elsewhere(
         return Ok(None);
     };
 
-    let evidence = atom_evidence_section_refs_dto(atom);
+    let evidence = atom.evidence_anchors();
     let unique_sections: Vec<String> = {
         let mut seen = std::collections::HashSet::new();
         evidence
@@ -728,61 +728,6 @@ fn truncate_dto(s: &str, max_chars: usize) -> String {
         format!("{trimmed}…")
     } else {
         trimmed
-    }
-}
-
-fn atom_evidence_section_refs_dto(
-    atom: &corpus_engine::enrichment::atlas::AtomEnvelope,
-) -> Vec<(String, Option<String>)> {
-    use corpus_engine::enrichment::atlas::AtomEnvelope;
-    match atom {
-        AtomEnvelope::Entity(e) => vec![(
-            e.first_appearance.chunk_id.clone(),
-            e.first_appearance.passage_preview.clone(),
-        )],
-        AtomEnvelope::Event(e) => {
-            let mut out = vec![(e.section_position.section_id.clone(), None)];
-            for c in &e.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-        AtomEnvelope::State(s) => s
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Relation(r) => r
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Claim(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Question(q) => q
-            .raised_at
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Configuration(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::ArgumentReconstruction(a) => {
-            let mut out = vec![(a.section_position.section_id.clone(), None)];
-            for c in &a.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => {
-            unreachable!("typed atoms wired in Gap B Stage 4")
-        }
-        AtomEnvelope::Asset(_) => Vec::new(),
     }
 }
 

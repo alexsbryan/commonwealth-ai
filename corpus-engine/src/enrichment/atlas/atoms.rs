@@ -1180,6 +1180,37 @@ impl AtomEnvelope {
         }
     }
 
+    /// Every `(section_or_chunk_id, optional_preview)` this atom anchors to,
+    /// in written order. Broader than [`AtomEnvelope::evidence`]: Event and
+    /// ArgumentReconstruction lead with their `section_position` — the section
+    /// they occur in, which is an anchor even when no evidence chunk was
+    /// recorded — and the pair shape is what a reading surface needs to link a
+    /// passage.
+    ///
+    /// Existed as two copies in `sovereign-mesh` and `sovereign-desktop`, and
+    /// THEY DISAGREED: the desktop copy answered
+    /// `unreachable!("typed atoms wired in Gap B Stage 4")` for `Position` and
+    /// `Opposition`, two kinds `atlas::resolution` produces and
+    /// `atlas::writer` chains straight into `atoms.json`. The desktop reading
+    /// surface panicked on them; the mesh returned their `first_appearance`.
+    /// Same stale assumption as the one that was frozen into the edge labels,
+    /// in the same file. Collapsed here 2026-08-20.
+    pub fn evidence_anchors(&self) -> Vec<(String, Option<String>)> {
+        let pair = |c: &ChunkRef| (c.chunk_id.clone(), c.passage_preview.clone());
+        let led_by = |section: &SectionPosition, ev: &[ChunkRef]| {
+            let mut out = vec![(section.section_id.clone(), None)];
+            out.extend(ev.iter().map(pair));
+            out
+        };
+        match self {
+            AtomEnvelope::Event(a) => led_by(&a.section_position, &a.evidence),
+            AtomEnvelope::ArgumentReconstruction(a) => led_by(&a.section_position, &a.evidence),
+            // Everything else is exactly its evidence, and `evidence()` is the
+            // one place that knows which field each kind keeps it in.
+            _ => self.evidence().into_iter().map(pair).collect(),
+        }
+    }
+
     /// The atom's scalar prominence score, where its kind carries one:
     /// `Entity.salience` and `Configuration.confidence`. `None` for the nine
     /// kinds that have no scalar — NOT `Some(0.0)`, so a caller ranking atoms
