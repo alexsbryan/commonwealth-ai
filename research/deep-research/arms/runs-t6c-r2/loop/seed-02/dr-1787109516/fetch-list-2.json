@@ -1,0 +1,73 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787109516",
+  "charter_hash": "f56407d20297762b",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class, open-weights reasoning mode (1)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "on - - following its predecessor DeepSeek-V (released - - ), which reported training on roughly million GPU-hours at a claimed cost of about",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "efficiency revealed scarcity driven export controls forced Chinese labs optimize economics rather relying solely massive compute budgets",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-02",
+      "title": "DeepSeek R1 and the Nvidia loss (2025-01)",
+      "snippet": "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27.",
+      "content": null,
+      "engine": "mock",
+      "score": 19.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-02",
+      "title": "DeepSeek R1 and the Nvidia loss (2025-01)",
+      "snippet": "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 17.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

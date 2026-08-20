@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787156998",
+  "charter_hash": "ebb36572348ad2e5",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's single-day market capitalization loss in dollars and percentage on January 27, 2025",
+      "Historical record of Nvidia's largest previous single-day stock price decline or market cap loss prior to January 2025",
+      "DeepSeek R1 model architecture specifications regarding Mixture-of-Experts (MoE) activation parameters during inference",
+      "Estimated GPU hours required for DeepSeek V3/R1 training as reported by the company versus typical industry estimates",
+      "Cost per token generation for DeepSeek R1 compared to OpenAI o1-preview and Anthropic Claude 3.5 Sonnet API pricing",
+      "Total estimated cost of DeepSeek V3 pre-training in US dollars according to official technical reports",
+      "Market share of NVIDIA GPUs in AI data centers globally in Q4 2024",
+      "Average capital expenditure on AI infrastructure by major hyperscalers (Microsoft, Google, Amazon, Meta) in fiscal year 2024",
+      "Ratio of active parameters to total parameters in DeepSeek-R1 model configuration",
+      "Comparison of inference efficiency metrics such as tokens per second per GPU between DeepSeek R1 and comparable closed-source frontier models"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1"
+    ]
+  }
+}

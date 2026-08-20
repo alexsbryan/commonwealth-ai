@@ -1,0 +1,193 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787178938",
+  "charter_hash": "3b1b5a515efaa7dd",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787178938",
+    "question": "Why did Anthropic release Claude 4 as two models in May 2025, and what did the launch signal about the agentic-coding market?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6d/loop/seed-09/dr-1787178938",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did Anthropic release Claude 4 as two models in May 2025, and what did the launch signal about the agentic-coding market?",
+  "frontier": [
+    "Anthropic Claude 4 model names and release date",
+    "Count of distinct models in the Claude 4 family released by Anthropic",
+    "May 2025",
+    "Claude Opus 4 vs Claude Sonnet 4 pricing per million tokens (input/output)",
+    "Price difference between top-tier LLMs from OpenAI, Google, and Anthropic as of May 2025",
+    "Percentage change in agentic coding tool market size from Q1 to Q2 2025",
+    "Market share of AI-assisted code generation tools among developers in 2025",
+    "Median time-to-completion for complex software tasks using Claude 4 versus previous versions"
+  ],
+  "frontier_question": "Why did Anthropic release Claude 4 as two models in May 2025, and what did the launch signal about the agentic-coding market?",
+  "figure_specifiers": [
+    "4",
+    "2",
+    "2025"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787178938",
+      "charter_hash": "3b1b5a515efaa7dd",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787178938",
+      "charter_hash": "3b1b5a515efaa7dd",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-09",
+          "source_url": "https://estate.example/seed-09",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Anthropic released Claude Opus 4 and Claude Sonnet 4 on 2025-05-08 — the \"Claude 4\" family: Opus 4 the flagship (\"Claude 4\"), Sonnet 4 the fast workhorse. Pricing: Opus 4 at $15 / $75 per million tokens (input/output), Sonnet 4 at $3 / $15 — Sonnet priced as the developer-default coding model. The headline capability was agentic coding and computer use: Claude 4's \"computer use 2.0\" (browser control) was roughly twice as reliable as the 3.x generation's, and the launch was timed to the rise of Claude Code as the defining agentic-coding product of 2025. The 4.1 update (2025-06-18) improved coding and agentic reliability at the same prices; the naming (\"4.1\" rather than \"4.5\") followed a reported internal dispute about Anthropic's version-naming policy. The direct competitive context was the OpenAI o-series and the enterprise agentic-coding gold rush; Anthropic positioned Claude 4 as the safest and most reliable coding agent and reported record API usage. Driven by Claude Code adoption, Anthropic raised a large funding round in late September 2025 at a reported ~$183 billion valuation, cementing its position as the coding-agent leader.\n",
+          "ingested_into": null,
+          "tags": [
+            "2025",
+            "anthropic",
+            "claude",
+            "launch"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-09"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787178938",
+      "charter_hash": "3b1b5a515efaa7dd",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-09"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "Anthropic released the \"Claude 4\" family, consisting of two models—Opus 4 and Sonnet 4—on May 8, 2025 [Source: ev-1].",
+    "This dual-model strategy allowed Anthropic to differentiate its offerings by positioning Opus 4 as the flagship model with a price of $15 per million input tokens and $75 per million output tokens, while designating Sonnet 4 as the fast workhorse and developer-default coding model at a lower cost of $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+    "The launch signaled that agentic coding was becoming the defining product trend of 2025, driven largely by the rise of Claude Code [Source: ev-1].",
+    "The company aimed to establish its models as the safest and most reliable coding agents in this market shift [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "Anthropic released the \"Claude 4\" family, consisting of two models—Opus 4 and Sonnet 4—on May 8, 2025 [Source: ev-1].",
+      "actionable_query": "—on May . (4, 2, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This dual-model strategy allowed Anthropic to differentiate its offerings by positioning Opus 4 as the flagship model with a price of $15 per million input tokens and $75 per million output tokens, while designating Sonnet 4 as the fast workhorse and developer-default coding model at a lower cost of $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "actionable_query": "as the flagship model with a price of $ per million input tokens and $ as the fast workhorse and developer-default coding model at a lower c",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "The launch signaled that agentic coding was becoming the defining product trend of 2025, driven largely by the rise of Claude Code [Source: ev-1].",
+      "actionable_query": "2025 launch signaled agentic coding becoming defining product trend driven largely rise Claude Code",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "The company aimed to establish its models as the safest and most reliable coding agents in this market shift [Source: ev-1].",
+      "actionable_query": "company aimed establish models safest reliable coding agents market shift",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 3
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-09",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787162591",
+  "charter_hash": "fd1dca711c12f92d",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Date of the official announcement or release of GPT-5 by OpenAI",
+      "Number of new model variants included in the initial GPT-5 launch package",
+      "Percentage change in API pricing per million tokens for GPT-5 compared to GPT-4o",
+      "Count of enterprise customers reporting adoption rates within 30 days of GPT-5 release",
+      "Share of total OpenAI revenue attributed to consumer subscriptions versus enterprise contracts in Q3 2025",
+      "Median latency improvement (in milliseconds) between GPT-5 and its predecessor on standard benchmarks"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "5",
+      "2025"
+    ]
+  }
+}

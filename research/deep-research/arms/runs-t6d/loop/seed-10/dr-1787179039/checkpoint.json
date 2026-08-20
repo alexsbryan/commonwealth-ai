@@ -1,0 +1,226 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787179039",
+  "charter_hash": "f0a3b441d7ecdb9c",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787179039",
+    "question": "Why did OpenAI release GPT-5 in August 2025, and what did it change about how the company sells its models?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6d/loop/seed-10/dr-1787179039",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did OpenAI release GPT-5 in August 2025, and what did it change about how the company sells its models?",
+  "frontier": [
+    "Date of OpenAI GPT-5 official announcement and release",
+    "OpenAI GPT-5 pricing per million input tokens compared to GPT-4o",
+    "OpenAI GPT-5 API availability status at launch (public vs. limited)",
+    "Number of enterprise customers using OpenAI models in Q3 2025 versus Q3 2024",
+    "Percentage change in OpenAI revenue from API usage between July 2025 and August 2025",
+    "Name of the new licensing or subscription tier introduced by OpenAI for GPT-5 access"
+  ],
+  "frontier_question": "Why did OpenAI release GPT-5 in August 2025, and what did it change about how the company sells its models?",
+  "figure_specifiers": [
+    "5",
+    "2025"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787179039",
+      "charter_hash": "f0a3b441d7ecdb9c",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787179039",
+      "charter_hash": "f0a3b441d7ecdb9c",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-10",
+          "source_url": "https://estate.example/seed-10",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "OpenAI released GPT-5 (with GPT-5 mini) on 2025-08-07, available to free users immediately — a deliberate shift to give-away-the-frontier pricing. GPT-5 retired the separate o-series products: o3, o4-mini, o3-mini and o3-pro were folded into GPT-5's internal \"reasoning modes\"; OpenAI's pitch was \"GPT-5 is not a 'reasoning model'; it's a model that thinks\" — one model, no model picker. The features: a 5-million-token context window, native image generation built in (no separate image model), deep research integrated, and file upload and web search out of the box. Pricing: free on the free tier; Plus $20/month (unlimited GPT-5); Pro $200/month; API pricing $1.25 / $10 per million tokens for GPT-5 and $0.25 / $2 for GPT-5 mini. GPT-5 scored about 78.6% on SWE-bench Verified, with GPT-5 mini close behind — both at a fraction of the o-series prices. The launch consolidated OpenAI's strategy around one unified model plus aggressive free-tier distribution: the reasoning-vs-non-reasoning split ended, price collapsed, and the competitive battleground moved from benchmark demos to default agency — models that act, not models that answer.\n",
+          "ingested_into": null,
+          "tags": [
+            "2025",
+            "gpt",
+            "openai"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-10"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787179039",
+      "charter_hash": "f0a3b441d7ecdb9c",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-10"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "OpenAI released GPT-5 on August 7, 2025 [Source: ev-1].",
+    "This release marked a deliberate strategic shift toward \"give-away-the-frontier\" pricing by making the model immediately available to free users [Source: ev-1].",
+    "The launch changed how OpenAI sells its models in several key ways:\n*   **Consolidation of Models:** It retired separate o-series products (o3, o4-mini, o3-mini, and o3-pro) by folding them into GPT-5's internal reasoning modes [Source: ev-1].",
+    "The company’s pitch emphasized that it is no longer selling distinct \"reasoning models,\" but rather one unified model that simply \"thinks,\" eliminating the need for a model picker [Source: ev-1].",
+    "*   **Pricing Structure:** While maintaining tiers such as Plus at $20/month (unlimited access), Pro at $200/month, and API rates of $1.25 per million input tokens / $10 per million output tokens for GPT-5 (and $0.25/$2 for GPT-5 mini) [Source: ev-1], the overall price point collapsed compared to previous offerings [Source: ev-1].",
+    "*   **Competitive Focus:** The competitive battleground moved from benchmark demos to \"default agency,\" focusing on models that act rather than just answer [Source: ev-1].",
+    "Additionally, GPT-5 introduced a 5-million-token context window, native image generation, deep research integration, file upload, and web search capabilities out of the box [Source: ev-1].",
+    "Performance-wise, it scored approximately 78.6% on SWE-bench Verified at these lower prices [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "OpenAI released GPT-5 on August 7, 2025 [Source: ev-1].",
+      "actionable_query": "on August . (5, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This release marked a deliberate strategic shift toward \"give-away-the-frontier\" pricing by making the model immediately available to free users [Source: ev-1].",
+      "actionable_query": "release marked deliberate strategic shift toward give-away-the-frontier pricing making model immediately available free users",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The launch changed how OpenAI sells its models in several key ways:\n*   **Consolidation of Models:** It retired separate o-series products (o3, o4-mini, o3-mini, and o3-pro) by folding them into GPT-5's internal reasoning modes [Source: ev-1].",
+      "actionable_query": "The launch changed how OpenAI sells its models in several key ways: * **Consolidation of Models:** It retired separate o-series products (o  (5, 2025)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The company’s pitch emphasized that it is no longer selling distinct \"reasoning models,\" but rather one unified model that simply \"thinks,\" eliminating the need for a model picker [Source: ev-1].",
+      "actionable_query": "The company’s pitch emphasized that it is no longer selling distinct \"reasoning models,\" but rather unified model that simply \"thinks,\" elim (5, 2025)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "*   **Pricing Structure:** While maintaining tiers such as Plus at $20/month (unlimited access), Pro at $200/month, and API rates of $1.25 per million input tokens / $10 per million output tokens for GPT-5 (and $0.25/$2 for GPT-5 mini) [Source: ev-1], the overall price point collapsed compared to previous offerings [Source: ev-1].",
+      "actionable_query": "* **Pricing Structure:** While maintaining tiers such as Plus at $ month (unlimited access), Pro at $ month, and API rates of $ per million  (5, 2025)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "*   **Competitive Focus:** The competitive battleground moved from benchmark demos to \"default agency,\" focusing on models that act rather than just answer [Source: ev-1].",
+      "actionable_query": "Competitive Focus battleground moved benchmark demos default agency focusing models act rather just answer",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "Additionally, GPT-5 introduced a 5-million-token context window, native image generation, deep research integration, file upload, and web search capabilities out of the box [Source: ev-1].",
+      "actionable_query": "-million-token context window, native image generation, deep research integration, file upload, and web search capabilities out of the box . (5, 2025)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "Performance-wise, it scored approximately 78.6% on SWE-bench Verified at these lower prices [Source: ev-1].",
+      "actionable_query": "Performance-wise scored approximately SWE-bench Verified lower prices",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-10"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 8,
+      "fetched": 0,
+      "search_calls": 5
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-10",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

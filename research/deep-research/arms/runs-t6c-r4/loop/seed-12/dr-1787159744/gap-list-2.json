@@ -1,0 +1,250 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787159744",
+  "charter_hash": "b1211e890b78ea5a",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) in a local SQLite database [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "Privacy scandal"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This meant sensitive information visible on the screen—such as passwords and private messages—was captured by default and accessible to any process running under the user's account [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The feature had been announced on May 20, 2024, at Microsoft Build as an AI \"memory\" tool that took frequent screenshots of the user's screen [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "20",
+          "2024"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "In response to the controversy and inquiries from regulators such as the Irish Data Protection Commission, the UK Information Commissioner’s Office, and the Washington State Attorney General, Microsoft delayed the release in June 2024 and fundamentally changed its design [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The relaunched version is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and excludes incognito or DRM content [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "This revised, privacy-focused version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "Copilot+ PCs",
+          "Privacy-focused version",
+          "General availability"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "Therefore, I cannot answer the question or provide any citations from an estate evidence block, as no such data is available to synthesize.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) in a local SQLite database [Source: ev-1].",
+      "actionable_query": "2024 Microsoft’s Recall feature became privacy scandal because despite claims data encrypted security researchers demonstrated screenshots stored unencrypted plaintext local SQLite database",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This meant sensitive information visible on the screen—such as passwords and private messages—was captured by default and accessible to any process running under the user's account [Source: ev-1].",
+      "actionable_query": "meant sensitive information visible screen—such passwords private messages—was captured default accessible any process running under user's account",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The feature had been announced on May 20, 2024, at Microsoft Build as an AI \"memory\" tool that took frequent screenshots of the user's screen [Source: ev-1].",
+      "actionable_query": "2024 feature announced May Microsoft Build memory tool took frequent screenshots user's screen",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "The relaunched version is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and excludes incognito or DRM content [Source: ev-1].",
+      "actionable_query": "relaunched version now opt-in default OFF requires Windows Hello authentication presence detection access timeline excludes incognito DRM content",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "This revised, privacy-focused version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "actionable_query": "revised privacy-focused version reached general availability Copilot PCs",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

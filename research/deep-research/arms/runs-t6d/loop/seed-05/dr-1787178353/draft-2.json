@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787178353",
+  "charter_hash": "3990466c238b0e8f",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1]. This schedule also serves as a compliance roadmap for providers worldwide, exporting what is known as the \"Brussels effect\" [Source: ev-1].\n\nRegarding the specific deadlines and their requirements:\n*   **August 1, 2024:** The law officially entered into force after being published on July 12, 2024 [Source: ev-1].\n*   **February 2, 2025:** Obligations regarding prohibited practices (classified as \"unacceptable risk\") apply. These include bans on social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].\n*   **August 2, 2026:** High-risk system obligations begin to apply [Source: ev-1].\n*   **August 2, 207:** A subset of high-risk system obligations applies from this date [Source: ev-1].\n\nAdditionally, the evidence notes that general-purpose AI (GPAI) model obligations are scheduled for August 2, 205 [Source: ev-1], although the specific text in the source states \"from 205-08-02\" which appears to be a typo for a year likely intended to be within the 2024–2027 range or potentially 2025/2026 based on standard legislative phrasing, but strictly following the provided text, it is listed as **August 2, 05** [Source: ev-1]. The GPAI category includes duties scaled by systemic-risk status, defined by a threshold of $10^{26}$ FLOPs [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web"
+    }
+  ]
+}

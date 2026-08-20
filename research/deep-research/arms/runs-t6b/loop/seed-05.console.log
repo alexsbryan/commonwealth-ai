@@ -1,0 +1,10 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787083718 — Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6b/loop/seed-05/dr-1787083718
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-05 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+deep-research: run failed: draft failed: draft ask: Inference error: Remote API returned 503 Service Unavailable: {"error":{"message":"local inference failed: Inference error: MTP inference deadline exceeded after 300s (3560 tokens)","type":"backend_error","code":null}}

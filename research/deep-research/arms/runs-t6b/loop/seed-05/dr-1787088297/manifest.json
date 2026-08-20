@@ -1,0 +1,79 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787088297",
+  "charter_hash": "acae1d43f993d282",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 5
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 10,
+      "fetched": 0,
+      "search_calls": 7
+    },
+    {
+      "round": 3,
+      "gaps_before": 10,
+      "gaps_after": 16,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-05",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787088297"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "The EU’s AI Act entered into force in phases between 2024 and 2027 as a deliberate design choice to ensure that obligations would only land as institutional capacity and technology mature [Source: ev-1].",
+    "This phased schedule also doubles as the compliance roadmap exported worldwide through the \"Brussels effect\" [Source: ev-1].",
+    "The specific deadlines require the following actions based on risk tiers and model categories:\n*   **July 12, 2024**: The law was published in the EU Official Journal [Source: ev-1].",
+    "*   **August 1, 2024**: The Act formally entered into force [Source: ev-1].",
+    "*   **February 2, 2025**: Obligations for prohibited practices (classified as \"unacceptable risk\") apply; these bans cover social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+    "*   **August 2, 2026**: High-risk system obligations begin to apply [Source: ev-1].",
+    "*   **August 2, 27**: A subset of high-risk system obligations applies from this date [Source: ev-1].",
+    "Additionally, the Act includes a separate category for general-purpose AI (GPAI) models with duties scaled by systemic-risk status, using a threshold of $10^{26}$ FLOPs [Source: ev-1].",
+    "The European AI Office leads implementation, and a GPAI Code of Practice was drafted through 2024–2025 with industry participation [Source: ev-1].",
+    "Violations carry fines of up to €35 million or 7% of global annual turnover for prohibited practices, and €15 million or 3% for most other breaches [Source: ev-1].",
+    "The EU AI Act entered into force in phases because the schedule was a deliberate design choice to ensure that obligations would only land as institutional capacity and technology mature. [Source: ev-1]",
+    "This phased approach also serves as a compliance roadmap, which is exported globally through the \"Brussels effect\" [Source: ev-1].",
+    "The specific deadlines between 2024 and 2027 require the following actions based on risk tiers and model categories:\n*   **August 1, 2024**: The law formally enters into force after being published on July 12, 2024 [Source: ev-1].",
+    "*   **February 2, 2025**: Obligations for prohibited practices (classified as \"unacceptable risk\") apply. [Source: ev-1]",
+    "These bans cover social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+    "The European AI Office leads implementation, and a GPAI Code of Practice was drafted through 2024–2025 with industry participation. [Source: ev-1]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787088297",
+    "acquired_at_unix": 1787088297,
+    "released_at_unix": 1787088506
+  }
+}

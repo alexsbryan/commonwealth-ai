@@ -1,0 +1,31 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787110117",
+  "charter_hash": "9bd086d09d47f174",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://estate.example/seed-07",
+      "source_url": "https://estate.example/seed-07",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "The Protecting Americans from Foreign Adversary Controlled Applications Act — signed by President Biden on 2024-04-24 — required ByteDance to divest TikTok's US operations within roughly 270 days (extendable by 90), or face a US ban. The Supreme Court upheld the law 9-0 (per curiam) on 2025-01-17, one day before the effective date of 2025-01-19. TikTok went dark in the US on 2025-01-18/19 (roughly 14 hours) and was restored 2025-01-19 after President Trump pledged to pause enforcement; his executive order of 2025-01-20 delayed enforcement for 75 days. The resolution was an Oracle-led deal (announced 2025-06-10 per Bloomberg) giving Oracle about a 12.5% stake in TikTok's US operations, with SoftBank and other investors participating; Vice President JD Vance led the White House negotiations, and ByteDance retained a majority interest. The national-security case rested on Chinese government access to US user data and the algorithm (CFIUS review, Project Texas hosting). The app stayed live, structured as a joint venture rather than an outright sale — \"Project Texas\": US user data in Oracle's cloud under US control — with the final ownership structure completed through 2025.\n",
+      "ingested_into": null,
+      "tags": [
+        "2024",
+        "2025",
+        "ban",
+        "divest",
+        "saga",
+        "tiktok"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-07"
+  ],
+  "derived_custody": "public-web"
+}

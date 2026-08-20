@@ -1,0 +1,87 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787156910",
+  "charter_hash": "b93309866471fc84",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2025 Google acquired cloud-security firm Wiz approximately billion all-cash deal transaction announced March",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "acquisition driven Google Cloud's strategic goal close security gap competitors AWS Azure betting cloud-security consolidation become next battleground cloud wars leveraging AI-driven adoption key",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "deal signaled major tech firms view specialized cloud security critical asset worth significant investment evidenced becoming largest acquisition Google’s history following Wiz’s rejection earlier",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 13.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

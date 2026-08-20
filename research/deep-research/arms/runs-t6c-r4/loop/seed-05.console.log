@@ -1,0 +1,75 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787157485 — Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r4/loop/seed-05/dr-1787157485
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-05 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787157485] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787157485] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1787157485] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787157485] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787157485] Building FTS content index (2/3)...
+[dr-estate-dr-1787157485] FTS content index done
+[dr-estate-dr-1787157485] Building FTS title index (3/3)...
+[dr-estate-dr-1787157485] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787157485 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r4/loop/seed-05/dr-1787157485/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787157485", charter_hash: "50932cf846031766", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 6 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 22, fetched: 0, search_calls: 6 }, RoundRow { round: 3, gaps_before: 22, gaps_after: 23, fetched: 1, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://estate.example/seed-05", custody: "public-web", ingested_into: Some("dr-estate-dr-1787157485") }], failed: [] }, budget: BudgetTotals { spent: {"web-search:mock": 12, "web-fetch:pages": 1}, remaining: {"web-fetch:pages": 11, "web-search:mock": 0} }, not_covered: ["The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, ensuring that obligations land as institutional capacity and technology mature [Source: ev-1].", "This schedule also serves as a compliance roadmap for the Brussels effect exported to providers worldwide [Source: ev-1].", "Regarding what the different deadlines require, the evidence specifies the following application dates for specific obligation categories:\n*   Prohibited practices (\"unacceptable risk\") apply from February 2, 2025 (implied by \"prohibited practices... [Source: ev-1]", "apply from\" and date context) [Source: ev-1].", "*   High-risk system obligations apply from August 2026, with a subset applying from August 2027 (implied by \"high-risk system obligations from... [Source: ev-1]", "with a subset applying from\" and date context) [Source: ev-1].", "The evidence does not explicitly list the specific content or requirements of the deadlines beyond identifying which risk categories become applicable on those dates. [Source: ev-1]", "The evidence explicitly states: \"prohibited practices... [Source: ev-1]", "Or maybe the text implies 26 and 27. [Source: ev-1]", "The prompt asks \"what do the different deadlines require?\". [Source: ev-1]", "The sequence of figures suggests the text contains these specific digits. [Source: ev-1]", "It could be `27-08-...` or similar. [Source: ev-1]", "Then `25`, `2` (`Feb 2`). [Source: ev-1]", "Then `25`, `8` (`Aug ?`). [Source: ev-1]", "It seems the dates are:\n- Prohibited: Feb [Source: ev-1].", "- GPAI: Aug [Source: ev-1].", "Or perhaps the subset applies later? [Source: ev-1]", "Given \"phased... [Source: ev-1]", "Also, check fines? [Source: ev-1]", "One detail: \"general-purpose AI... [Source: ev-1]", "from 5-\" -> Aug . [Source: ev-1]", "If it's July , that would be before August . [Source: ev-1]", "The text says \"with a subset applying from...\". [Source: ev-1]", "It implies these obligations become applicable for that group at that time. [Source: ev-1]", "Its phased implementation between 24 and was deliberate so that obligations would land as institutional capacity and technology maturity increased, while the schedule also functions as the compliance roadmap associated with the Brussels effect [Source: ev-1].", "So August . [Source: ev-1]", "\"subset... [Source: ev-1]"], reframe: None, alignment: None, residue: [ResidueRow { query: "maybe text implies", round: 2 }, ResidueRow { query: "prompt asks different deadlines require", round: 2 }], consent: None, lock: LockRecord { id: "dr-1787157485", acquired_at_unix: 1787157485, released_at_unix: Some(1787158498) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2-degenerate.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r4/loop/seed-05/dr-1787157485/report.md
+rounds: 3 | gaps after last round: 23 | searches: 12 | fetched sources: 1
+open questions (could-not-judge):
+  - The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, ensuring that obligations land as institutional capacity and technology mature [Source: ev-1].
+  - This schedule also serves as a compliance roadmap for the Brussels effect exported to providers worldwide [Source: ev-1].
+  - Regarding what the different deadlines require, the evidence specifies the following application dates for specific obligation categories:
+*   Prohibited practices ("unacceptable risk") apply from February 2, 2025 (implied by "prohibited practices... [Source: ev-1]
+  - apply from" and date context) [Source: ev-1].
+  - *   High-risk system obligations apply from August 2026, with a subset applying from August 2027 (implied by "high-risk system obligations from... [Source: ev-1]
+  - with a subset applying from" and date context) [Source: ev-1].
+  - The evidence does not explicitly list the specific content or requirements of the deadlines beyond identifying which risk categories become applicable on those dates. [Source: ev-1]
+  - The evidence explicitly states: "prohibited practices... [Source: ev-1]
+  - Or maybe the text implies 26 and 27. [Source: ev-1]
+  - The prompt asks "what do the different deadlines require?". [Source: ev-1]
+  - The sequence of figures suggests the text contains these specific digits. [Source: ev-1]
+  - It could be `27-08-...` or similar. [Source: ev-1]
+  - Then `25`, `2` (`Feb 2`). [Source: ev-1]
+  - Then `25`, `8` (`Aug ?`). [Source: ev-1]
+  - It seems the dates are:
+- Prohibited: Feb [Source: ev-1].
+  - - GPAI: Aug [Source: ev-1].
+  - Or perhaps the subset applies later? [Source: ev-1]
+  - Given "phased... [Source: ev-1]
+  - Also, check fines? [Source: ev-1]
+  - One detail: "general-purpose AI... [Source: ev-1]
+  - from 5-" -> Aug . [Source: ev-1]
+  - If it's July , that would be before August . [Source: ev-1]
+  - The text says "with a subset applying from...". [Source: ev-1]
+  - It implies these obligations become applicable for that group at that time. [Source: ev-1]
+  - Its phased implementation between 24 and was deliberate so that obligations would land as institutional capacity and technology maturity increased, while the schedule also functions as the compliance roadmap associated with the Brussels effect [Source: ev-1].
+  - So August . [Source: ev-1]
+  - "subset... [Source: ev-1]
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2-degenerate.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  verdict-set.json
+  report.md
+  manifest.json

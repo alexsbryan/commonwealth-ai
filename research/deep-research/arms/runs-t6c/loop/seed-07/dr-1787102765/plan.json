@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787102765",
+  "charter_hash": "67b3544fd50ee3b6",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The number of US federal laws enacted in 2024 and 2025 mandating the divestiture or ban of TikTok",
+      "The percentage change in US government officials' public statements citing national security risks associated with ByteDance data access from 2019 to 2023",
+      "The count of executive orders signed by President Biden regarding foreign ownership of critical infrastructure between January 2021 and August 2024",
+      "The share of US internet traffic attributed to TikTok as measured by monthly active users in Q1 2024 versus Q1 2023",
+      "The median age of TikTok's user base in the United States for the year 2024",
+      "The number of congressional hearings held specifically on Chinese influence via social media platforms during the 118th Congress (2023-2025)",
+      "The date when the Supreme Court ruled on the constitutionality of the TikTok divestment law signed into effect in April 2024",
+      "The percentage change in TikTok's daily active usage rates in the US following the implementation of a temporary ban or threat thereof in January 2025",
+      "The count of alternative ownership structures proposed by ByteDance to resolve regulatory concerns between September 2024 and February 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2025"
+    ]
+  }
+}

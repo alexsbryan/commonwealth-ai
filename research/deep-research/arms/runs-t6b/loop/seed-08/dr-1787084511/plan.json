@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787084511",
+  "charter_hash": "918d32b2f50128cd",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of US federal judges who ruled in favor of the DOJ and state AGs on specific antitrust claims against Google's search business",
+      "Percentage share of global desktop web browser market held by Chrome as reported by StatCounter or NetApplications for 2019-2023",
+      "Annual revenue generated from Google Search advertising services compared to total Alphabet Inc. net income for fiscal years 2018 through 2022",
+      "Count of exclusive distribution agreements between Google and mobile device manufacturers (OEMs) that pre-installed Google Search as default, specifically involving Apple iPhone and Samsung Galaxy devices",
+      "Median monthly payment amount paid by Google to Apple under their search partnership agreement per query or user session during the period covered in court filings",
+      "Number of state attorneys general who filed amicus briefs supporting the DOJ's motion for specific performance remedies regarding browser unbundling",
+      "Percentage change in Google Search market share in the US following the announcement of the antitrust ruling versus the year prior",
+      "List of specific structural remedies proposed by Judge Amit Mehta including divestiture requirements for Chrome browser or Android operating system components"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

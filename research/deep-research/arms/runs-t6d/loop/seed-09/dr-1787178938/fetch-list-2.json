@@ -1,0 +1,100 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787178938",
+  "charter_hash": "3b1b5a515efaa7dd",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "—on May . (4, 2, 2025)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "as the flagship model with a price of $ per million input tokens and $ as the fast workhorse and developer-default coding model at a lower c",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "2025 launch signaled agentic coding becoming defining product trend driven largely rise Claude Code",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "company aimed establish models safest reliable coding agents market shift",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 4.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 4.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

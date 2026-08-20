@@ -1,0 +1,67 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787178938",
+  "charter_hash": "3b1b5a515efaa7dd",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-09",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787178938"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "Anthropic released the \"Claude 4\" family, consisting of two models—Opus 4 and Sonnet 4—on May 8, 2025 [Source: ev-1].",
+    "This dual-model strategy allowed Anthropic to differentiate its offerings by positioning Opus 4 as the flagship model with a price of $15 per million input tokens and $75 per million output tokens, while designating Sonnet 4 as the fast workhorse and developer-default coding model at a lower cost of $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+    "The launch signaled that agentic coding was becoming the defining product trend of 2025, driven largely by the rise of Claude Code [Source: ev-1].",
+    "The company aimed to establish its models as the safest and most reliable coding agents in this market shift [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787178938",
+    "acquired_at_unix": 1787178938,
+    "released_at_unix": 1787179039
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787177799",
+  "charter_hash": "ca75ca45979144be",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Wiz acquisition price by Google in March 2025",
+      "Google's stated strategic rationale for acquiring Wiz as reported in official press releases or earnings calls",
+      "Wiz annual recurring revenue (ARR) at the time of the acquisition announcement (2025)",
+      "Number of enterprise customers using Wiz prior to its acquisition by Google",
+      "Market share of cloud security spending held by top five vendors globally in 2024",
+      "Total global market size for cloud workload protection platforms (CWPP) in 2023 and projected growth rate through 2028",
+      "Comparison of average deal values for cybersecurity acquisitions over $1 billion between 2020 and 2025",
+      "Percentage increase in cyberattacks targeting cloud infrastructure year-over-year from 2022 to 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2025"
+    ]
+  }
+}

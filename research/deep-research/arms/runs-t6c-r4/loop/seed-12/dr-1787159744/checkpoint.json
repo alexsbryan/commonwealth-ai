@@ -1,0 +1,216 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787159744",
+  "charter_hash": "b1211e890b78ea5a",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787159744",
+    "question": "Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r4/loop/seed-12/dr-1787159744",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?",
+  "frontier": [
+    "Number of security researchers who publicly demonstrated the ability to access Recall screenshots from an unattended Windows 11 PC in early 2024",
+    "Percentage change in Microsoft's official stance on Recall availability for consumer devices between March and April 2024",
+    "Count of specific privacy concerns cited by major tech news outlets regarding local storage of sensitive data (passwords, banking info) in the initial Recall rollout plan for Q1 2024",
+    "Name of the specific encryption method initially planned for storing Recall screenshots locally versus the method required after public backlash in April 2024",
+    "Date when Microsoft officially announced that Recall would be disabled by default and require explicit user opt-in via a new security PIN or biometric authentication (2024)"
+  ],
+  "frontier_question": "Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?",
+  "figure_specifiers": [
+    "2024"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787159744",
+      "charter_hash": "b1211e890b78ea5a",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787159744",
+      "charter_hash": "b1211e890b78ea5a",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-12",
+          "source_url": "https://estate.example/seed-12",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Microsoft announced Recall on 2024-05-20 at the Copilot+ PC launch (Microsoft Build) — an AI \"memory\" feature that screenshots the screen every few seconds, stores them locally, and makes them searchable (\"photographic memory\" for your PC). Security researchers, notably Kevin Beaumont, showed Recall's screenshots were stored unencrypted (plaintext) in a local SQLite database despite Microsoft's \"encrypted\" claims, and that passwords and sensitive content visible on screen were captured by default — accessible to any process running as the user. Microsoft delayed Recall (June 2024), then reversed the default: the relaunched feature is opt-in (default OFF), requires Windows Hello and presence detection to open the timeline, and excludes incognito/DRM content. The Irish Data Protection Commission (DPC) and the UK Information Commissioner's Office raised questions; the Washington State Attorney General (Bob Ferguson) opened an investigation. The feature's value proposition — searchable local memory — collided with privacy expectations for local data: a default-on recorder of everything on screen, including passwords, health data and private messages, with security claims that did not hold; the episode became the AI-PC era's first major privacy crisis and a case study in shipping AI features default-on. The revised opt-in Recall reached general availability on Copilot+ PCs in 2025, but the controversy permanently shaped the \"AI PC\" privacy conversation.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2025",
+            "feature",
+            "microsoft",
+            "recall"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-12"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787159744",
+      "charter_hash": "b1211e890b78ea5a",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-12"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) in a local SQLite database [Source: ev-1].",
+    "This meant sensitive information visible on the screen—such as passwords and private messages—was captured by default and accessible to any process running under the user's account [Source: ev-1].",
+    "The feature had been announced on May 20, 2024, at Microsoft Build as an AI \"memory\" tool that took frequent screenshots of the user's screen [Source: ev-1].",
+    "The relaunched version is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and excludes incognito or DRM content [Source: ev-1].",
+    "This revised, privacy-focused version reached general availability on Copilot+ PCs in 2025 [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) in a local SQLite database [Source: ev-1].",
+      "actionable_query": "2024 Microsoft’s Recall feature became privacy scandal because despite claims data encrypted security researchers demonstrated screenshots stored unencrypted plaintext local SQLite database",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This meant sensitive information visible on the screen—such as passwords and private messages—was captured by default and accessible to any process running under the user's account [Source: ev-1].",
+      "actionable_query": "meant sensitive information visible screen—such passwords private messages—was captured default accessible any process running under user's account",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The feature had been announced on May 20, 2024, at Microsoft Build as an AI \"memory\" tool that took frequent screenshots of the user's screen [Source: ev-1].",
+      "actionable_query": "2024 feature announced May Microsoft Build memory tool took frequent screenshots user's screen",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "The relaunched version is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and excludes incognito or DRM content [Source: ev-1].",
+      "actionable_query": "relaunched version now opt-in default OFF requires Windows Hello authentication presence detection access timeline excludes incognito DRM content",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "This revised, privacy-focused version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "actionable_query": "revised privacy-focused version reached general availability Copilot PCs",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 2,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 5
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-12",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

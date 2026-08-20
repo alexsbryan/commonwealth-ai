@@ -1,0 +1,75 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787085024",
+  "charter_hash": "fe16a161818c5705",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 11
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 1
+    },
+    {
+      "round": 3,
+      "gaps_before": 6,
+      "gaps_after": 12,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-12",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787085024"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "Microsoft's Recall feature became a privacy scandal in 2024 because, although it was announced on May 20, 2024 [Source: ev-1] as an AI \"memory\" tool that screenshots the screen every few seconds to provide searchable local memory [Source: ev-1], security researchers demonstrated critical flaws in its implementation.",
+    "Specifically, despite Microsoft’s claims of encryption, the feature stored these screenshots unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+    "This design allowed sensitive content visible on the user’s screen—including passwords and private messages—to be captured by default and made accessible to any process running with user privileges [Source: ev-1].",
+    "The collision between this default-on recording capability and privacy expectations triggered scrutiny from regulatory bodies, including the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by the Washington State Attorney General [Source: ev-1].",
+    "In response to these security failures and public backlash, Microsoft delayed the launch in June 2024 and reversed its implementation strategy [Source: ev-1].",
+    "The relaunched feature is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and explicitly excludes incognito browser windows and DRM content from capture [Source: ev-1].",
+    "This revised version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+    "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite being marketed as an AI \"memory\" tool for Copilot+ PCs announced on May 20, 2024 [Source: ev-1], security researchers demonstrated that it stored screenshots of the screen unencrypted (in plaintext) within a local SQLite database, contradicting Microsoft's claims of encryption [Source: ev-1].",
+    "This design flaw meant that sensitive content visible on the user's screen—including passwords and private messages—was captured by default and remained accessible to any process running with user privileges [Source: ev-1].",
+    "The collision between this default-on recording capability and privacy expectations led regulatory bodies such as the Irish Data Protection Commission, the UK Information Commissioner's Office, and the Washington State Attorney General to raise questions or open investigations [Source: ev-1].",
+    "In response to these security failures and public backlash, Microsoft delayed the feature in June 2024 and subsequently reversed its implementation strategy [Source: ev-1].",
+    "The relaunched Recall is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and explicitly excludes incognito browser windows and DRM content from capture [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787085024",
+    "acquired_at_unix": 1787085024,
+    "released_at_unix": 1787085202
+  }
+}

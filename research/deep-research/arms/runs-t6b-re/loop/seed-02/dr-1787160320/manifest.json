@@ -1,0 +1,67 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787160320",
+  "charter_hash": "7e0bef2be9112eeb",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 11
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 1
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-02",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787160320"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class reasoning model could be trained at a fraction of incumbent costs, thereby repricing the market thesis that AI capital expenditure and Nvidia demand are moated by compute scale [Source: ev-1].",
+    "Specifically, on January 27, 2025, Nvidia lost approximately US$589 billion in market capitalization—the largest single-day loss in stock-market history—with about US$1 trillion erased across the tech complex as investors reacted to this efficiency breakthrough [Source: ev-1].",
+    "This event revealed several key aspects regarding frontier-AI training economics:\n*   **Cost Efficiency:** The predecessor DeepSeek-V3 was reported to have been trained on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million [Source: ev-1].",
+    "*   **Hardware Constraints Driving Innovation:** The use of export-restricted H800 chips meant that US export controls forced Chinese labs toward greater efficiency, indicating that scarcity rather than preference drove these economic outcomes [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787160320",
+    "acquired_at_unix": 1787160320,
+    "released_at_unix": 1787160451
+  }
+}

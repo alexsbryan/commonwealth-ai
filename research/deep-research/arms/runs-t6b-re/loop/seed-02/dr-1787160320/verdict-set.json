@@ -1,0 +1,55 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787160320",
+  "charter_hash": "7e0bef2be9112eeb",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class reasoning model could be trained at a fraction of incumbent costs, thereby repricing the market thesis that AI capital expenditure and Nvidia demand are moated by compute scale [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "Specifically, on January 27, 2025, Nvidia lost approximately US$589 billion in market capitalization—the largest single-day loss in stock-market history—with about US$1 trillion erased across the tech complex as investors reacted to this efficiency breakthrough [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "This event revealed several key aspects regarding frontier-AI training economics:\n*   **Cost Efficiency:** The predecessor DeepSeek-V3 was reported to have been trained on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "*   **Hardware Constraints Driving Innovation:** The use of export-restricted H800 chips meant that US export controls forced Chinese labs toward greater efficiency, indicating that scarcity rather than preference drove these economic outcomes [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-02"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ]
+}

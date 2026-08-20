@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787162003",
+  "charter_hash": "b2aadf358bfc32b2",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The specific legal standard and market definition used by the US District Court to determine Google's dominance in general web search",
+      "The estimated market share percentage of Google in the US general web search engine market as cited in the 2024 ruling",
+      "The count of exclusive default distribution agreements between Google and major browser manufacturers (Chrome, Safari) or mobile device makers (Android, iOS) identified as anticompetitive conduct",
+      "The annual revenue figure attributed to Google from its advertising business within the defined relevant market",
+      "The list of specific structural remedies ordered by Judge Mehta regarding the divestiture of Chrome browser or Android operating system components",
+      "The monetary value of any civil penalties or fines assessed against Alphabet Inc. for past violations prior to the final judgment"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

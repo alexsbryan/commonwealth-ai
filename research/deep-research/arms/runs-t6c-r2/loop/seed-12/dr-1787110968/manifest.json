@@ -1,0 +1,73 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787110968",
+  "charter_hash": "e48efae544f91d51",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 5
+    },
+    {
+      "round": 3,
+      "gaps_before": 5,
+      "gaps_after": 5,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-12",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787110968"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data would be encrypted, security researchers demonstrated that the screenshots were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+    "This made sensitive content visible on screen, such as passwords and private messages, accessible to any process running under the user account by default [Source: ev-1].",
+    "The episode was described as the first major privacy crisis of the AI PC era due to this collision between the feature's value proposition and privacy expectations for local data [Source: ev-1].",
+    "In response to the controversy, Microsoft delayed the release of Recall in June 2024 and fundamentally reversed its defaults [Source: ev-1].",
+    "The relaunched version is now opt-in (default OFF) rather than enabled by default [Source: ev-1].",
+    "Additionally, accessing the timeline now requires Windows Hello authentication and presence detection, while incognito mode and DRM content are explicitly excluded from capture [Source: ev-1].",
+    "This revised, more secure version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+    "Despite Microsoft claiming the data would be encrypted, security researchers demonstrated that these screenshots were stored unencrypted (in plaintext) within a local SQLite database, making them accessible to any process running under the user account [Source: ev-1].",
+    "In response to this controversy, which marked the first major privacy crisis in the AI PC era, Microsoft delayed the feature's release in June 2024 and fundamentally reversed its defaults [Source: ev-1].",
+    "This revised, more secure version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787110968",
+    "acquired_at_unix": 1787110968,
+    "released_at_unix": 1787111101
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787083103",
+  "charter_hash": "41aa12eeef37f11b",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 5,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-01",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787083103"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Google acquired the cloud-security firm Wiz to close a security gap with competitors AWS and Azure, betting that cloud-security consolidation would be the next battleground in the \"cloud wars\" driven by AI-driven cloud adoption [Source: ev-1].",
+    "The deal signaled a major shift toward consolidation in the cloud-security market [Source: ev-1].",
+    "Announced on March 18, 2025, for approximately $32 billion in cash, it represented Google's largest acquisition ever [Source: ev-1].",
+    "The transaction followed Wiz’s rejection of an earlier $23 billion offer from Google in July 2024 [Source: ev-1].",
+    "The deal signaled a major shift toward consolidation in the cloud-security market. [Source: ev-1]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787083103",
+    "acquired_at_unix": 1787083103,
+    "released_at_unix": 1787083178
+  }
+}

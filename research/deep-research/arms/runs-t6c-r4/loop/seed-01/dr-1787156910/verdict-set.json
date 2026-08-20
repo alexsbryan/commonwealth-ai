@@ -1,0 +1,57 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787156910",
+  "charter_hash": "b93309866471fc84",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Google acquired the cloud-security firm Wiz for approximately $32 billion in an all-cash deal, a transaction announced on March 18, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This acquisition was driven by Google Cloud's strategic goal to close the security gap with competitors AWS and Azure, betting that cloud-security consolidation would become the next battleground in the \"cloud wars\" while leveraging AI-driven cloud adoption as a key demand driver [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The deal signaled that major tech firms view specialized cloud security as a critical asset worth significant investment, evidenced by it becoming the largest acquisition in Google’s history following Wiz’s rejection of an earlier $23 billion offer in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ]
+}

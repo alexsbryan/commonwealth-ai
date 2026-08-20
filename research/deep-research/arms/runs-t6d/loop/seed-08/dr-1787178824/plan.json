@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787178824",
+  "charter_hash": "978f4e7797e0c494",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Share of US desktop search engine market held by Google in 2019",
+      "Percentage change in default browser agreement payments from Apple to Google between 2018 and 2021",
+      "Count of exclusive distribution agreements signed by Google with major web browsers prior to 2023",
+      "Median cost per click for advertisers on Google Search versus Bing in 2022",
+      "Rate at which users switch away from Google as their primary search engine annually",
+      "Price paid by OEMs for pre-installed Google apps compared to competitors in the Android ecosystem"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

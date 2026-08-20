@@ -1,0 +1,148 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787104010",
+  "charter_hash": "70dfa7953f2460a2",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "A US court found Google’s general search and text advertising businesses to be monopolies because of its “default-distribution” deals, which",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Specifically Judge Amit Mehta District Court Columbia issued his liability ruling holding Google violated Section Sherman Act paying companies like Apple Samsung Mozilla billions dollars make default",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "theory self-reinforcing loop defaults create scale creates data improves quality better protects default position making hard rivals compete",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Trial evidence showed Google paid roughly billion distribution costs per CEO Sundar Pichai’s testimony gave Apple Safari search-ad revenue part arrangements",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "order imposed limits certain acquisitions AI-related investments prevent re-concentration entrenchment through channels",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "Google appealed Circuit notice filed arguing remedies punish procompetitive innovation final outcome remained pending late",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1"
+    ],
+    "threshold": 16.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

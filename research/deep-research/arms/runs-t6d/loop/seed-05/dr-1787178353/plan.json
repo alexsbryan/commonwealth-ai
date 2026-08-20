@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787178353",
+  "charter_hash": "3990466c238b0e8f",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of phases in the EU AI Act implementation timeline",
+      "Specific dates for each phase entry into force between 2024 and 2027",
+      "List of prohibited AI practices subject to immediate ban on February 2, 2025",
+      "Share of high-risk AI systems required to comply with conformity assessment by August 2, 2026",
+      "Percentage change in compliance requirements for general-purpose AI models from 2023 draft to final text",
+      "Count of specific obligations applicable to GPAI providers entering into force on August 2, 20"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2027"
+    ]
+  }
+}

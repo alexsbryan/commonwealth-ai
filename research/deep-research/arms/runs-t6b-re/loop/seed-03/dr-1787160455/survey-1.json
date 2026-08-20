@@ -1,0 +1,20 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1787160455",
+  "charter_hash": "adaabf304ad18c21",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "Why did NASA order Boeing's Starliner to return uncrewed from its first crewed flight, and what did the decision mean for the program?",
+      "hits": []
+    }
+  ],
+  "estate_answer": "No evidence was retrieved this round, so I cannot answer the question."
+}

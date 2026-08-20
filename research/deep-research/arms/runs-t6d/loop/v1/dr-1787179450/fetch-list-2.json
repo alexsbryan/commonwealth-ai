@@ -1,0 +1,411 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787179450",
+  "charter_hash": "be18c8340b037f53",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "with gentrification accelerating significantly after . (4, 1980, 2024)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Portland experienced intensive gentrification eligible tracts transforming followed Washington D.C",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Minneapolis Seattle",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Inequality risen sharply across metropolitan areas creating stark divides high low-income residents despite general nominal wealth growth",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "Gini coefficient reached New York City led major metros",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "Atlanta Miami recorded coefficients New Orleans reached",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q7",
+      "text": "Several metros exhibit extreme inequality patterns Gini coefficients exceeding income ratios reaching top bottom earners",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "Specifically income ratio shows Atlanta Washington D.C",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "meaning percentile earns times",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "Home prices increased median household income grew during period",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q11",
+      "text": "Price-to-income ratios in California cities range between and which is more than double the national average of .",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q12",
+      "text": "Displacement worsening economic mobility evident across major metros",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q13",
+      "text": "largest metropolitan areas experienced worsening economic mobility low-income families period",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q14",
+      "text": "Only Houston showed an improvement in income outcomes for people growing up in the s, with a gain of just .",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q15",
+      "text": "In gentrifying neighborhoods, poverty rates decreased by percentage points as populations became whiter and increased, whereas non-gentrifyi",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q16",
+      "text": "Demographic shifts further characterize four-decade transformation",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q17",
+      "text": "Currently urban counties majority nonwhite compared suburban",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q18",
+      "text": "Nearly of the country's under- was concentrated in metro areas with over million residents . (4, 1980, 2024)",
+      "from_gap_id": "g18",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q19",
+      "text": "Urban counties gained prime-age workers aged rural lost demographic group",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q20",
+      "text": "Educational attainment shifted urban areas now having residents holding bachelor's degrees higher compared suburbs rural",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q21",
+      "text": "labor market transformation contributed changes manufacturing jobs fell million under during pandemic period referenced data",
+      "from_gap_id": "g21",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q22",
+      "text": "Conversely finance professional services grew million jobs concentrating high-income professionals urban cores",
+      "from_gap_id": "g22",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q23",
+      "text": "San Francisco specifically top incomes rose approximately",
+      "from_gap_id": "g23",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q24",
+      "text": "Federal Reserve data tracking inequality series confirms reached record levels through U.S",
+      "from_gap_id": "g24",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q25",
+      "text": "1980 showing sharpest increase among advanced economies since",
+      "from_gap_id": "g25",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h11",
+      "query_id": "q1",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "snippet": "Governing analyzed Census tract data for the nation's 50 largest cities. Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) led; nearly 20 percent of lower-income neighborhoods gentrified since 2000, compared to 9 percent in the 1990s; poverty rate percentage-point change -0.7 gentrifying vs +6.7 not gentrifying.",
+      "content": null,
+      "engine": "mock",
+      "score": 4.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h4",
+      "query_id": "q1",
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "snippet": "SmartAsset ranked 98 of the largest U.S. cities by income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. New Orleans tops the list with a ratio of 7.87; Boston follows with 7.81 ($172,476 at the 80th percentile versus $22,095 at the 20th).",
+      "content": null,
+      "engine": "mock",
+      "score": 3.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h5",
+      "query_id": "q1",
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "snippet": "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities.",
+      "content": null,
+      "engine": "mock",
+      "score": 3.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h11",
+      "h1",
+      "h4"
+    ],
+    "eps_admits": [
+      "h5"
+    ],
+    "below_cut": [
+      "h5",
+      "h6",
+      "h8",
+      "h10",
+      "h9",
+      "h2",
+      "h3"
+    ],
+    "threshold": 3.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

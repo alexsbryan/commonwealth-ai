@@ -1,0 +1,99 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787157485",
+  "charter_hash": "50932cf846031766",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 6
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 22,
+      "fetched": 0,
+      "search_calls": 6
+    },
+    {
+      "round": 3,
+      "gaps_before": 22,
+      "gaps_after": 23,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-05",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787157485"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, ensuring that obligations land as institutional capacity and technology mature [Source: ev-1].",
+    "This schedule also serves as a compliance roadmap for the Brussels effect exported to providers worldwide [Source: ev-1].",
+    "Regarding what the different deadlines require, the evidence specifies the following application dates for specific obligation categories:\n*   Prohibited practices (\"unacceptable risk\") apply from February 2, 2025 (implied by \"prohibited practices... [Source: ev-1]",
+    "apply from\" and date context) [Source: ev-1].",
+    "*   High-risk system obligations apply from August 2026, with a subset applying from August 2027 (implied by \"high-risk system obligations from... [Source: ev-1]",
+    "with a subset applying from\" and date context) [Source: ev-1].",
+    "The evidence does not explicitly list the specific content or requirements of the deadlines beyond identifying which risk categories become applicable on those dates. [Source: ev-1]",
+    "The evidence explicitly states: \"prohibited practices... [Source: ev-1]",
+    "Or maybe the text implies 26 and 27. [Source: ev-1]",
+    "The prompt asks \"what do the different deadlines require?\". [Source: ev-1]",
+    "The sequence of figures suggests the text contains these specific digits. [Source: ev-1]",
+    "It could be `27-08-...` or similar. [Source: ev-1]",
+    "Then `25`, `2` (`Feb 2`). [Source: ev-1]",
+    "Then `25`, `8` (`Aug ?`). [Source: ev-1]",
+    "It seems the dates are:\n- Prohibited: Feb [Source: ev-1].",
+    "- GPAI: Aug [Source: ev-1].",
+    "Or perhaps the subset applies later? [Source: ev-1]",
+    "Given \"phased... [Source: ev-1]",
+    "Also, check fines? [Source: ev-1]",
+    "One detail: \"general-purpose AI... [Source: ev-1]",
+    "from 5-\" -> Aug . [Source: ev-1]",
+    "If it's July , that would be before August . [Source: ev-1]",
+    "The text says \"with a subset applying from...\". [Source: ev-1]",
+    "It implies these obligations become applicable for that group at that time. [Source: ev-1]",
+    "Its phased implementation between 24 and was deliberate so that obligations would land as institutional capacity and technology maturity increased, while the schedule also functions as the compliance roadmap associated with the Brussels effect [Source: ev-1].",
+    "So August . [Source: ev-1]",
+    "\"subset... [Source: ev-1]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [
+    {
+      "query": "maybe text implies",
+      "round": 2
+    },
+    {
+      "query": "prompt asks different deadlines require",
+      "round": 2
+    }
+  ],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787157485",
+    "acquired_at_unix": 1787157485,
+    "released_at_unix": 1787158498
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787104761",
+  "charter_hash": "971f8bba9ae60fb4",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median household income by city for 1980, 2000, and 2024",
+      "Share of households earning less than half the median income (poverty rate) by city for 1984, 1994, 2004, and 2014",
+      "Gini coefficient or Theil index measuring income inequality within metropolitan statistical areas for 1979-1983, 1989-1993, and 1999-2003",
+      "Average asking rent per square foot in major US cities for 1985, 1995, 2005, and 2023",
+      "Median sale price of single-family homes in designated gentrifying neighborhoods versus non-gentrifying neighborhoods from 1980 to 2020",
+      "Percentage change in the share of households spending more than 30% of income on housing by city between 1984 and 2022",
+      "Number of displaced residents or evictions recorded annually in specific urban districts during periods of rapid property value appreciation from 1990 to 2015",
+      "Change in racial composition (percentage of White vs. Black/Hispanic residents) in census tracts classified as gentrified between 1970, 1980, and 2000"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1980",
+      "2024"
+    ]
+  }
+}

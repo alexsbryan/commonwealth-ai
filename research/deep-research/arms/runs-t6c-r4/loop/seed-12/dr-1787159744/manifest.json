@@ -1,0 +1,70 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787159744",
+  "charter_hash": "b1211e890b78ea5a",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 2,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 5
+    },
+    {
+      "round": 3,
+      "gaps_before": 5,
+      "gaps_after": 5,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-12",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787159744"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Microsoft's Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) in a local SQLite database [Source: ev-1].",
+    "This meant sensitive information visible on the screen—such as passwords and private messages—was captured by default and accessible to any process running under the user's account [Source: ev-1].",
+    "The feature had been announced on May 20, 2024, at Microsoft Build as an AI \"memory\" tool that took frequent screenshots of the user's screen [Source: ev-1].",
+    "In response, the relaunched version is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and excludes incognito or DRM content [Source: ev-1].",
+    "This revised, privacy-focused version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+    "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) in a local SQLite database [Source: ev-1].",
+    "The relaunched version is now opt-in (default OFF), requires Windows Hello authentication and presence detection to access the timeline, and excludes incognito or DRM content [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787159744",
+    "acquired_at_unix": 1787159744,
+    "released_at_unix": 1787159881
+  }
+}

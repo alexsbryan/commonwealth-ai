@@ -1,0 +1,70 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787159630",
+  "charter_hash": "4ffce2c06f587956",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, driven primarily by strong demand for its Blackwell accelerator rack systems (GB200/GB300) and the broader AI-capex supercycle [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This milestone was further propelled by the Stargate project's approximately $500 billion plan for AI infrastructure and repeatedly raised capital expenditure guidance from major hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The crossing of the $4 trillion threshold indicates that the market is pricing AI infrastructure as the largest new capital cycle since the internet era, with Nvidia positioned as a dominant \"toll-booth\" in this sector [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "CEO Jensen Huang framed this moment as a transition from training to inference demand, describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "This valuation reflects a rapid trajectory where Nvidia reached $1 trillion mid-2023, $2 trillion in February 2024, and $3 trillion in June 2024 before hitting the $4 trillion mark in July 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ]
+}

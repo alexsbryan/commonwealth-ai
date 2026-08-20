@@ -1,0 +1,28 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787159881",
+  "charter_hash": "f97be8882a9d9c53",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median household income by metro area for 1980, 2000, and 2024 from the U.S. Census Bureau American Community Survey",
+      "Gini coefficient of income inequality at the metropolitan statistical area level for 1979-2023 from the Economic Policy Institute",
+      "Share of renter households spending more than 30% of their income on housing costs (cost-burdened) in major US cities for 1985, 2005, and 2023",
+      "Average annual percentage change in median home prices in top 20 US metros between 1980 and 2024 based on Case-Shiller or Zillow indices",
+      "Number of low-income residents displaced due to rising rents in specific neighborhoods over a five-year period using displacement index methodologies",
+      "Percentage point increase in college-educated population share in gentrifying census tracts from 1990 to 2020 compared to non-gentrified tracts",
+      "Median rent per square foot for apartments in New York City, Los Angeles, and Chicago for the years 1985, 1995, 2010, and 2022",
+      "Ratio of median home price to median household income (affordability ratio) for major US cities calculated annually from 1984 through 2023",
+      "Count of households priced out of their previous neighborhoods due to eviction or sale between 2007 and 2021 in high-growth metros",
+      "Change in racial composition percentage points within specific gentrifying census blocks from decennial censuses spanning 1980 to 202"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1980",
+      "2024"
+    ]
+  }
+}

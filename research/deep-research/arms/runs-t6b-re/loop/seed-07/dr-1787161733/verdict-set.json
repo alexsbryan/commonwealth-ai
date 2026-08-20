@@ -1,0 +1,94 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787161733",
+  "charter_hash": "4d5a870f8c2f8e0c",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The United States moved to force TikTok's sale or ban it primarily due to national security concerns regarding potential Chinese government access to US user data and the platform’s algorithm, which were subjects of CFIUS review [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "Legislatively, President Biden signed the Protecting Americans from Foreign Adversary Controlled Applications Act on 2024-04-24, requiring ByteDance to divest TikTok's US operations within roughly 270 days (extendable by 90) or face a US ban [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The Supreme Court upheld this law with a 9-0 per curiam decision on 2025-01-17, one day before its effective date of 2025/6/10. [Source: ev-1]",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "The dispute was resolved through an Oracle-led deal announced on 2025/06/10.[Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "This structure created a joint venture rather than an outright sale, giving Oracle about a 12.5% stake in TikTok's US operations while ByteDance retained a majority interest [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "SoftBank and other investors also participated in the investment [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ]
+}

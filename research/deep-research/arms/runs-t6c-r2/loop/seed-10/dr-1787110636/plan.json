@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787110636",
+  "charter_hash": "b3ac9570934a6618",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI official announcement date for GPT-5 release in August 2025",
+      "Number of new features or capabilities listed in the GPT-5 launch press release",
+      "Percentage change in API pricing per million tokens between GPT-4o and GPT-5",
+      "Count of enterprise customers announced as adopting GPT-5 within 30 days of release",
+      "Share of OpenAI revenue attributed to direct model sales versus application subscriptions in Q3 2025",
+      "Median latency improvement (in milliseconds) reported by developers migrating from GPT-4 to GPT-5",
+      "Price difference per seat per month between ChatGPT Plus subscription before and after GPT-5 integration"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "5",
+      "2025"
+    ]
+  }
+}

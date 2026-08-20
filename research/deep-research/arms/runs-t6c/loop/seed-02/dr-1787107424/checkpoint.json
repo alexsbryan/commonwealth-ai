@@ -1,0 +1,189 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787107424",
+  "charter_hash": "26f892ac1e476867",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787107424",
+    "question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c/loop/seed-02/dr-1787107424",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+  "frontier": [
+    "Nvidia's single-day market capitalization loss in dollars and percentage on January 27, 2025",
+    "Historical ranking of Nvidia's largest single-day stock price declines by dollar amount prior to January 2024",
+    "DeepSeek R1 model architecture type (Mixture-of-Experts) and total parameter count versus active parameter count during inference",
+    "Estimated GPU cluster size (number of H800 GPUs) used for DeepSeek R1 pre-training as reported by third-party analyses or official statements",
+    "Cost per token estimate for DeepSeek R1 training compared to comparable frontier models like Llama 3.1 or GPT-4",
+    "Nvidia data center segment revenue growth rate year-over-year from FY2023 Q4 through FY2025 Q1",
+    "Market share of Nvidia in the AI accelerator market prior to January 27, 25, expressed as a percentage",
+    "Number of analyst downgrades on Nvidia stock issued within 24 hours following the release of DeepSeek R1 technical report"
+  ],
+  "frontier_question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+  "figure_specifiers": [
+    "1"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787107424",
+      "charter_hash": "26f892ac1e476867",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787107424",
+      "charter_hash": "26f892ac1e476867",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-02",
+          "source_url": "https://estate.example/seed-02",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "DeepSeek released DeepSeek-R1, its open-weights reasoning model with accompanying paper, on 2025-01-20. Its predecessor DeepSeek-V3 (released 2024-12-26) reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million, on export-restricted H800 chips. R1's reasoning was produced by reinforcement learning (GRPO), and R1-Zero was trained with no supervised fine-tuning at all. On 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization — at the time the largest single-day loss in stock-market history — with about US$1 trillion erased across the tech complex. Markets repriced the thesis that frontier-AI capex, and therefore Nvidia's demand, is moated by compute scale: an open-weights frontier-class reasoning model had been trained for a fraction of the incumbent cost. US export controls (the H800 restrictions) had forced Chinese labs toward efficiency — scarcity, not preference, drove the economics.\n",
+          "ingested_into": null,
+          "tags": [
+            "2025",
+            "deepseek",
+            "loss",
+            "nvidia"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-02"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787107424",
+      "charter_hash": "26f892ac1e476867",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-02"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "DeepSeek’s release of the open-weights reasoning model DeepSeek-R1 on 2025-01-20 triggered a market repricing that led to Nvidia losing approximately US$589 billion in market capitalization on 2025-1, which was at the time the largest single-day loss in stock-market history [Source: ev-1].",
+    "This event revealed that frontier-AI training economics are not necessarily moated by compute scale or high incumbent costs. [Source: ev-1]",
+    "Specifically, R1 demonstrated that an open-weights frontier-class reasoning model could be trained for a fraction of the typical cost; its predecessor, DeepSeek-V3 (released 2024-1), reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+    "The evidence indicates that this efficiency was driven by scarcity rather than preference, as US export controls forced Chinese labs to optimize their processes [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "DeepSeek’s release of the open-weights reasoning model DeepSeek-R1 on 2025-01-20 triggered a market repricing that led to Nvidia losing approximately US$589 billion in market capitalization on 2025-1, which was at the time the largest single-day loss in stock-market history [Source: ev-1].",
+      "actionable_query": "on - - triggered a market repricing that led to Nvidia losing approximately US$ billion in market capitalization on which was at the time th (1)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This event revealed that frontier-AI training economics are not necessarily moated by compute scale or high incumbent costs. [Source: ev-1]",
+      "actionable_query": "event revealed frontier-AI training economics necessarily moated compute scale high incumbent costs",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Specifically, R1 demonstrated that an open-weights frontier-class reasoning model could be trained for a fraction of the typical cost; its predecessor, DeepSeek-V3 (released 2024-1), reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+      "actionable_query": "demonstrated that an open-weights frontier-class reasoning model could be trained for a fraction of the typical cost; its predecessor, DeepS",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The evidence indicates that this efficiency was driven by scarcity rather than preference, as US export controls forced Chinese labs to optimize their processes [Source: ev-1].",
+      "actionable_query": "evidence indicates efficiency driven scarcity rather preference export controls forced Chinese labs optimize processes",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 3
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-02",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

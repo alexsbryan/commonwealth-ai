@@ -1,0 +1,141 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787109611",
+  "charter_hash": "17a154d237ec11a6",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach, and NASA determined that these thrusters could not be guaranteed safe for the deorbit burn as they could not be ground-tested in their flight condition [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This decision meant that astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 2025, resulting in a stay of roughly 9.5 months compared to a planned duration of approximately 8 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9.5, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "The incident had significant implications for the program’s financials and operations [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Under the fixed-price contract from the 2014 Commercial Crew program, Boeing faced cumulative losses exceeding $1.5 billion by 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1.5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "The incident had significant implications for the program’s financials and operations. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach, and NASA determined that these thrusters could not be guaranteed safe for the deorbit burn as they could not be ground-tested in their flight condition [Source: ev-1].",
+      "actionable_query": "NASA ordered Boeing's Starliner return uncrewed because spacecraft experienced five reaction-control system RCS thruster anomalies during docking approach determined thrusters could guaranteed safe",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This decision meant that astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 2025, resulting in a stay of roughly 9.5 months compared to a planned duration of approximately 8 days [Source: ev-1].",
+      "actionable_query": "This decision meant that astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March resulting in a s (mean)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "The incident had significant implications for the program’s financials and operations. [Source: ev-1]",
+      "actionable_query": "incident significant implications program’s financials operations",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Under the fixed-price contract from the 2014 Commercial Crew program, Boeing faced cumulative losses exceeding $1.5 billion by 2025 [Source: ev-1].",
+      "actionable_query": "Under the fixed-price contract from the Commercial Crew program, Boeing faced cumulative losses exceeding $ billion by .",
+      "from_claim_id": "c4",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

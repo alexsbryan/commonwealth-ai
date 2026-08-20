@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787161183",
+  "charter_hash": "668cb75ad1ef3ee0",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Date the EU AI Act entered into force in 2024",
+      "Percentage of high-risk AI systems subject to compliance by August 2, 2025",
+      "Count of prohibited AI practices banned from July 1, 2026",
+      "Share of general-purpose AI models required to meet transparency obligations by August 2, 2127",
+      "Number of large-scale IT systems covered under Article 6(3) exemptions as of August 2, 2030"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2027"
+    ]
+  }
+}

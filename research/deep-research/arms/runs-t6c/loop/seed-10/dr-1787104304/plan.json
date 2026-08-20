@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787104304",
+  "charter_hash": "e1472d5b31f84d39",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI GPT-5 release date announcement",
+      "OpenAI GPT-5 pricing model changes from 2024 to 2025",
+      "OpenAI revenue breakdown by API vs consumer subscription in Q3 2025",
+      "Number of OpenAI enterprise customers adopting GPT-5 within first month of launch",
+      "Percentage change in OpenAI daily active users between July and August 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "5",
+      "2025"
+    ]
+  }
+}

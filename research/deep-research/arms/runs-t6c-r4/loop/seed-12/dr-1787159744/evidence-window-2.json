@@ -1,0 +1,13 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787159744",
+  "charter_hash": "b1211e890b78ea5a",
+  "round": 2,
+  "chunks": [],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-12"
+  ],
+  "derived_custody": "public-web"
+}

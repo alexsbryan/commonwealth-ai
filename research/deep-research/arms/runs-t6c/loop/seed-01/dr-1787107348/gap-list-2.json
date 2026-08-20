@@ -1,0 +1,142 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787107348",
+  "charter_hash": "8b1c8929e1f7fc11",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Google acquired Wiz in March 2025 to close the security gap with competitors AWS and Azure, positioning cloud-security consolidation as a key battleground in the ongoing \"cloud wars\" [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "March 2025"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The deal signaled that Google was betting on AI-driven cloud adoption as the primary demand driver for these services [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "-"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "The acquisition was announced on 2025-03-18 for approximately $32 billion in an all-cash transaction, which marked the largest acquisition in Google's history [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025-03-18",
+          "$32 billion",
+          "all-cash transaction",
+          "Google's history"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "This final price followed Wiz’s rejection of an earlier offer from Google worth $23 billion in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "No evidence was retrieved this round, so I cannot answer the question.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Google acquired Wiz in March 2025 to close the security gap with competitors AWS and Azure, positioning cloud-security consolidation as a key battleground in the ongoing \"cloud wars\" [Source: ev-1].",
+      "actionable_query": "to close the security gap with competitors AWS and Azure, positioning cloud-security consolidation as a key battleground in the ongoing \"clo (2025)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The acquisition was announced on 2025-03-18 for approximately $32 billion in an all-cash transaction, which marked the largest acquisition in Google's history [Source: ev-1].",
+      "actionable_query": "2025 acquisition announced approximately billion all-cash transaction marked largest Google's history",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "This final price followed Wiz’s rejection of an earlier offer from Google worth $23 billion in July 2024 [Source: ev-1].",
+      "actionable_query": "final price followed Wiz’s rejection earlier offer Google worth billion July",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

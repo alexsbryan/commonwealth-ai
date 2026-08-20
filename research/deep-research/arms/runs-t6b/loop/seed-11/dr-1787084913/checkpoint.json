@@ -1,0 +1,220 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787084913",
+  "charter_hash": "bb8f606fdd6eeb1f",
+  "written_after_round": 3,
+  "config": {
+    "run_id": "dr-1787084913",
+    "question": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6b/loop/seed-11/dr-1787084913",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+  "frontier": [
+    "Nvidia's market capitalization in July 2025",
+    "Global AI infrastructure spending forecast for 2025 and 2026",
+    "Year-over-year growth rate of data center capex by major hyperscalers (Microsoft, Amazon, Google, Meta) from 2023 to 2024",
+    "Share of total semiconductor revenue attributed to Nvidia in Q1 and Q2 2025",
+    "Average annualized return on equity for top-tier cloud service providers driven by GPU-intensive workloads between 2022 and 2024"
+  ],
+  "frontier_question": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+  "figure_specifiers": [
+    "4",
+    "2025"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787084913",
+      "charter_hash": "bb8f606fdd6eeb1f",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787084913",
+      "charter_hash": "bb8f606fdd6eeb1f",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-11",
+          "source_url": "https://estate.example/seed-11",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to close above $4T (Apple had touched $4T intraday the day before, 2025-07-08). The trajectory: $1T (mid-2023), $2T (Feb 2024), $3T (June 2024), $4T (July 2025) — with a multi-hundred-billion-dollar run in the first half of July 2025. The drivers were Blackwell accelerator demand (GB200/GB300 rack systems), the Stargate project's ~$500B AI-infrastructure plan, and hyperscaler capex guidance raised repeatedly through 2025 (Microsoft, Meta, Google, Amazon), with Nvidia holding a dominant share of the AI-accelerator market. Nvidia's share price crossed about $160; CEO Jensen Huang framed the moment as the transition from training to inference demand — \"AI factories\" selling compute as a commodity. The milestone measured the AI-capex supercycle: the market priced AI infrastructure as the largest new capital cycle since the internet, and Nvidia as its toll-booth. The risk backdrop was concentration — Nvidia's weight in the S&P 500 reached record levels, and the $4T club's membership rotated among Nvidia, Apple, and Microsoft through 2025.\n",
+          "ingested_into": null,
+          "tags": [
+            "2025",
+            "crosses",
+            "nvidia",
+            "trillion"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-11"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787084913",
+      "charter_hash": "bb8f606fdd6eeb1f",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-11"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787084913",
+      "charter_hash": "bb8f606fdd6eeb1f",
+      "round": 3,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-11"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "Nvidia’s market value crossed $4 trillion on July 9, 2025, driven by strong demand for its Blackwell accelerator (GB200/GB300 rack systems), the Stargate project's ~$500 billion AI-infrastructure plan, and repeatedly raised capital expenditure guidance from hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+    "This milestone indicates that investors are pricing AI infrastructure as the largest new capital cycle since the internet era, with Nvidia positioned as a central \"toll-booth\" in this spending supercycle [Source: ev-1].",
+    "The rapid valuation trajectory highlights the scale of recent growth, moving from $1 trillion in mid-2023 to $2 trillion in February 2024, $3 trillion in June 2024, and finally $4 trillion in July 2025 following a significant price run in early July 2025 when shares crossed approximately $160 [Source: ev-1].",
+    "This surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring risks related to Nvidia's record weight in the S&P 500 and its rotation within the elite group of companies valued at or above this threshold alongside Apple (which touched $4T intraday on July 8, 2025) and Microsoft during 2025 [Source: ev-1].",
+    "This surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring risks related to Nvidia's record weight in the S&P 500 and its rotation within the elite group of companies valued at or above this threshold alongside Apple and Microsoft during 2025 [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, driven by strong demand for its Blackwell accelerator (GB200/GB300 rack systems), the Stargate project's ~$500 billion AI-infrastructure plan, and repeatedly raised capital expenditure guidance from hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+      "actionable_query": "trillion on July driven by strong demand for its Blackwell accelerator (GB GB rack systems), the Stargate project's ~$ . (4, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This milestone indicates that investors are pricing AI infrastructure as the largest new capital cycle since the internet era, with Nvidia positioned as a central \"toll-booth\" in this spending supercycle [Source: ev-1].",
+      "actionable_query": "milestone indicates investors pricing infrastructure largest new capital cycle since internet era Nvidia positioned central toll-booth spending supercycle",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The rapid valuation trajectory highlights the scale of recent growth, moving from $1 trillion in mid-2023 to $2 trillion in February 2024, $3 trillion in June 2024, and finally $4 trillion in July 2025 following a significant price run in early July 2025 when shares crossed approximately $160 [Source: ev-1].",
+      "actionable_query": "The rapid valuation trajectory highlights the scale of recent growth, moving from $ trillion in mid- to $ trillion in February $ trillion in (4, 2025)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "This surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring risks related to Nvidia's record weight in the S&P 500 and its rotation within the elite group of companies valued at or above this threshold alongside Apple (which touched $4T intraday on July 8, 2025) and Microsoft during 2025 [Source: ev-1].",
+      "actionable_query": "This surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring (4, 2025)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "This surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring risks related to Nvidia's record weight in the S&P 500 and its rotation within the elite group of companies valued at or above this threshold alongside Apple and Microsoft during 2025 [Source: ev-1].",
+      "actionable_query": "2025 surge reflects CEO Jensen Huang’s framing industry transition toward inference demand factories underscoring risks related Nvidia's record weight S&P rotation within elite group companies valued",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 6
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 2
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-11",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json",
+    "draft-3.json",
+    "gap-list-3.json",
+    "fetch-list-3.json",
+    "skip-ledger-3.json",
+    "evidence-window-3.json"
+  ],
+  "aborted_at_round": null
+}

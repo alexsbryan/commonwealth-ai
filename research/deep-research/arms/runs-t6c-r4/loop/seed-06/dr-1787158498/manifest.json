@@ -1,0 +1,79 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787158498",
+  "charter_hash": "0b537a3f11026fa9",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 9,
+      "fetched": 0,
+      "search_calls": 5
+    },
+    {
+      "round": 3,
+      "gaps_before": 9,
+      "gaps_after": 9,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-06",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787158498"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Based on the evidence provided, here is why a single CrowdStrike software update caused a global IT outage in July 2024 and what the consequences were:\n\n**Cause of the Outage**\nOn July 19, 2024 [Source: ev-1], a global IT outage was triggered by a faulty CrowdStrike Falcon Sensor content update that caused Windows machines to crash in blue-screen loops [Source: ev-1].",
+    "The root cause of this failure was identified as an out-of-bounds memory read in the sensor's C++ code, specifically resulting from an untrusted pointer dereference triggered by a 21-byte input that bypassed flawed validation checks due to missing input validation and a memory-safety defect [Source: ev-1].",
+    "This incident highlighted risks associated with monoculture concentration—where a single security agent deployed at enterprise scale becomes a global vulnerability—and drove industry-wide discussions regarding chaos-engineering and blast-radius limits for endpoint agents [Source: ev-1].",
+    "**Consequences**\nThe consequences of this single point of failure were severe and widespread [Source: ev-1]:\n*   **Device Impact:** Microsoft estimated that roughly 8.5 million Windows devices were affected globally [Source: ev-1].",
+    "*   **Sector Disruption:** Key sectors experienced significant disruption, including airlines (with Delta cancelling approximately 7,000 flights), banks, hospitals, broadcasters, and 911 services [Source: ev-1].",
+    "*   **Financial Costs:** Financially, Delta incurred about $500M in costs related to the outage [Source: ev-1].",
+    "*   **Market Reaction:** In response to the incident, CrowdStrike shares fell by about 11% on July 22, 2024, following the initial crash [Source: ev-1].",
+    "**Subsequent Actions**\nFollowing the event, CEO George Kurtz testified before Congress on September 24, 2024 where the company apologized and promised changes to its deployment processes [Source: ev-1].",
+    "On July 19, 2024 [Source: ev-1], a global IT outage was triggered by a faulty CrowdStrike Falcon Sensor content update that caused Windows machines to crash in blue-screen loops [Source: ev-1].",
+    "The consequences of this single point of failure were severe and widespread. [Source: ev-1]",
+    "Microsoft estimated that roughly 8.5 million Windows devices were affected globally [Source: ev-1].",
+    "Key sectors experienced significant disruption, including airlines (with Delta cancelling approximately 7,000 flights), banks, hospitals, broadcasters, and 911 services [Source: ev-1].",
+    "Financially, Delta incurred about $500M in costs related to the outage [Source: ev-1].",
+    "In response to the incident, CrowdStrike shares fell by about 11% on July 22, 2024, following the initial crash [Source: ev-1].",
+    "Subsequent actions included CEO George Kurtz testifying before Congress on September 24, 2024 where the company apologized and promised changes to its deployment processes [Source: ev-1].",
+    "The episode highlighted risks associated with monoculture concentration—where a single security agent deployed at enterprise scale becomes a global vulnerability—and drove industry-wide discussions regarding chaos-engineering and blast-radius limits for endpoint agents [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787158498",
+    "acquired_at_unix": 1787158498,
+    "released_at_unix": 1787158750
+  }
+}

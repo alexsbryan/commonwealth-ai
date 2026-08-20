@@ -1,0 +1,153 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787160895",
+  "charter_hash": "d7b1127a60075d76",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, OpenAI released o3 and o4-mini in April 2025 to defend the reasoning-model frontier against DeepSeek's R1 cost shock and Anthropic's agentic-coding push [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The launch signaled a direction for frontier models characterized by tool-using reasoning at commodity prices [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Specifics supported by the evidence include:\n*   OpenAI released o3 and o3-mini (referred to as o4-mini) on April 16, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "*   The launch signaled a strategic shift toward integrating vision directly into the model architecture rather than bolting it on, as well as incorporating native tool use (such as web search and code interpreter) trained into the model itself [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "*   This strategy involved using budget forcing with task-adaptive compute, allowing harder questions to think longer within a fixed maximum thought budget [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "*   Additionally, o3 set a record on the ARC-AGI benchmark, achieving about 87.5% on ARC-AGI-1 at high compute, which met or exceeded the ~85% human baseline—the first model to reach this milestone [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "*   Pricing for these models was set at $10 / $40 per million tokens (input/output) for o3 and $1.10 / $4.40 for o4-mini [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "The launch signaled a strategic shift in the direction of frontier reasoning models toward integrating vision directly into the model architecture rather than bolting it on, as well as incorporating native tool use (such as web search and code interpreter) trained into the model itself [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "This strategy involved using budget forcing with task-adaptive compute, allowing harder questions to think longer within a fixed maximum thought budget [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "Additionally, o3 set a record on the ARC-AGI benchmark, achieving about 87.5% on ARC-AGI-1 at high compute, which met or exceeded the ~85% human baseline—the first model to reach this milestone [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "Pricing for these models was set at $10 / $40 per million tokens (input/output) for o3 and $1.10 / $4.40 for o4-mini [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ]
+}

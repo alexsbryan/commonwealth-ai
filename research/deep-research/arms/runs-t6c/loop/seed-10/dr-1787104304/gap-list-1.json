@@ -1,0 +1,40 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787104304",
+  "charter_hash": "e1472d5b31f84d39",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "never-ran",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": true,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "No evidence was retrieved this round.",
+      "actionable_query": "Why did OpenAI release GPT-5 in August 2025, and what did it change about how the company sells its models?",
+      "from_claim_id": "c1",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [
+    {
+      "claim_id": "c1",
+      "reason": "no evidence retrieved for this round"
+    }
+  ],
+  "strict_subset_of_prior": true
+}

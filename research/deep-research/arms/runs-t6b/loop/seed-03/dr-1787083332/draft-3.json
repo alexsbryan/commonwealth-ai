@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787083332",
+  "charter_hash": "e58301a65b82b74f",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "NASA ordered Boeing's Starliner to return uncrewed from its first crewed flight because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach on 2024-06-05 [Source: ev-1]. NASA announced this decision on 2024/08/24, stating that the safety of these thrusters could not be guaranteed for the deorbit burn since they could not be ground-tested in their flight condition [Source: ev-1].\n\nThis decision had several significant implications for the program and crew:\n*   **Crew Duration:** Astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station until returning via a Crew-9 Dragon on 2025/03/18, resulting in roughly 9.5 months aloft compared to the planned ~8 days [Source: ev-1].\n*   **Spacecraft Recovery:** The Starliner undocked from the station on 2024–09–06 and landed at White Sands on 2024‑09‑07 without its crew [Source: ev-1].\n*   **Financial Impact:** Under the fixed-price NASA contract originating from the 2014 Commercial Crew program (where Boeing had about $4.2B versus SpaceX's about $2.6B), Boeing disclosed cumulative program losses of more than $1.5B by 2025 [Source: ev-1].\n*   **Workforce Changes:** In June 2025, Boeing announced roughly 400 job cuts in its space division [Source: ev-1].\n*   **Certification Status:** As of 2025, NASA’s path to certifying Starliner remained unresolved [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-03",
+      "custody": "public-web"
+    }
+  ]
+}

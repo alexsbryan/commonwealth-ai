@@ -1,0 +1,29 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787107348",
+  "charter_hash": "8b1c8929e1f7fc11",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://estate.example/seed-01",
+      "source_url": "https://estate.example/seed-01",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Google announced on 2025-03-18 that it had agreed to acquire Wiz, the cloud-security firm, for approximately $32 billion in an all-cash deal — the largest acquisition in Google's history. The deal followed Wiz's rejection of Google's earlier $23 billion offer in July 2024. Wiz co-founder and CEO Assaf Rappaport remained a named principal in the transaction. Google Cloud, under Thomas Kurian, pursued Wiz to close the security gap with AWS and Azure, betting on cloud-security consolidation as the cloud wars' next battleground and on AI-driven cloud adoption as the demand driver. The deal closed in 2025 after shareholder and regulatory steps, with completion reported in July 2025.\n",
+      "ingested_into": null,
+      "tags": [
+        "2025",
+        "acquisition",
+        "google",
+        "wiz"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-01"
+  ],
+  "derived_custody": "public-web"
+}

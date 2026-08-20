@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787160121",
+  "charter_hash": "adf9c39841cdaf23",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, here is why Google acquired Wiz and what it signaled about the market:\n\n**Why Google Acquired Wiz**\nGoogle agreed to acquire cloud-security firm Wiz for approximately $32 billion in an all-cash deal [Source: ev-1]. The primary driver was strategic; under Thomas Kurian, Google Cloud sought to close its security gap with competitors AWS and Azure by pursuing consolidation in the cloud-security sector [Source: ev-1]. Additionally, Google bet on AI-driven cloud adoption as a demand driver for this acquisition [Source: ev-1].\n\n**What the Deal Signaled About the Market**\nThe transaction represented the largest acquisition in Google's history [Source: ev-1]. It signaled that cloud-security consolidation is viewed as the next battleground of the \"cloud wars\" [Source: ev-1]. Furthermore, the fact that Wiz rejected an earlier $23 billion offer from Google in July 2024 before accepting the final deal indicates high valuation leverage within the market [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-01",
+      "custody": "public-web"
+    }
+  ]
+}

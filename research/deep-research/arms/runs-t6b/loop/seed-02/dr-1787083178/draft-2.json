@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787083178",
+  "charter_hash": "2a46d9d85947c26c",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class reasoning model could be trained at a fraction of incumbent costs, thereby challenging the market thesis that AI capital expenditure and demand for Nvidia chips are protected by compute scale [Source: ev-1]. Specifically, on 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization—the largest single-day loss in stock-market history—with about $1 trillion erased across the tech complex as markets repriced this new economic reality [Source: ev-1].\n\nThe release revealed several key aspects of frontier-AI training economics:\n*   **Low-Cost Efficiency:** DeepSeek-R1’s predecessor, DeepSeek-V3 (released 2024-12-26), was trained using roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million [Source: ev-1]. This low-cost profile suggested that massive spending on hardware is not strictly necessary to achieve competitive reasoning capabilities.\n*   **Impact of Export Controls:** The use of export-restricted H800 chips indicated that US export controls forced Chinese labs toward efficiency; the evidence notes that scarcity, rather than preference, drove these economic outcomes [Source: ev-1].\n*   **Methodological Shifts:** R1’s reasoning capability was produced via reinforcement learning (GRPO), and its variant R1-Zero was trained without any supervised fine-tuning, further highlighting alternative paths to frontier performance that may reduce traditional training costs or dependencies [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-02",
+      "custody": "public-web"
+    }
+  ]
+}

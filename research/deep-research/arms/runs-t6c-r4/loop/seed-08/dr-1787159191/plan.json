@@ -1,0 +1,19 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787159191",
+  "charter_hash": "af8eeb988f047f84",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The specific legal grounds cited by the US District Court for finding Google's search engine a monopoly in the DOJ v. Google case",
+      "The list of structural remedies ordered by Judge Mehta regarding browser distribution agreements and default settings",
+      "The estimated annual revenue share paid to Apple under its exclusive Safari default search agreement with Google",
+      "The percentage market share held by Google Search Engine Results Pages (SERPs) as reported by StatCounter or similar analytics firms during 2019-2023"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

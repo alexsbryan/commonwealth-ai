@@ -1,0 +1,239 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787179196",
+  "charter_hash": "b5bf38db8d385fc5",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Nvidia’s market value crossed $4 trillion on 2025-07-09, making it the first company in history to close above that threshold [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This milestone was driven by several key factors:\n\n*   **Product Demand:** Strong demand for Blackwell accelerator rack systems (GB200/GB300) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "200/",
+          "300"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "*   **Major Projects and Capex:** The Stargate project's ~$500 billion AI-infrastructure plan and repeatedly raised capital expenditure guidance from hyperscalers such as Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "500",
+          "2025"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "*   **Market Position:** Nvidia’s dominant share of the AI-accelerator market allowed it to act as a \"toll-booth\" in this sector [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The milestone indicates that the market is pricing AI infrastructure as the largest new capital cycle since the internet era [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "CEO Jensen Huang framed this moment as a transition from training demand to inference demand, describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "This trajectory followed rapid growth milestones where Nvidia reached $1 trillion in mid-2023, $2 trillion in February 2024, and $3 trillion in June 2024 before hitting $4 trillion in July 2025, with its share price crossing approximately $160 during this period [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1, 2, 3, 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Nvidia’s market value crossed $4 trillion on 2025-07-09, making it the first company in history to close above that threshold [Source: ev-1].",
+      "actionable_query": "- - making it the company in history to close above that threshold . (4, 2025)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This milestone was driven by several key factors:\n\n*   **Product Demand:** Strong demand for Blackwell accelerator rack systems (GB200/GB300) [Source: ev-1].",
+      "actionable_query": "milestone driven several key factors Product Demand Strong Blackwell accelerator rack systems",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "*   **Major Projects and Capex:** The Stargate project's ~$500 billion AI-infrastructure plan and repeatedly raised capital expenditure guidance from hyperscalers such as Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+      "actionable_query": "2025 Major Projects Capex Stargate project's billion AI-infrastructure plan repeatedly raised capital expenditure guidance hyperscalers Microsoft Meta Google Amazon throughout",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "*   **Market Position:** Nvidia’s dominant share of the AI-accelerator market allowed it to act as a \"toll-booth\" in this sector [Source: ev-1].",
+      "actionable_query": "Market Position Nvidia’s dominant share AI-accelerator allowed act toll-booth sector",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "The milestone indicates that the market is pricing AI infrastructure as the largest new capital cycle since the internet era [Source: ev-1].",
+      "actionable_query": "milestone indicates market pricing infrastructure largest new capital cycle since internet era",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "CEO Jensen Huang framed this moment as a transition from training demand to inference demand, describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+      "actionable_query": "CEO Jensen Huang framed moment transition training demand inference describing factories selling compute commodity",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

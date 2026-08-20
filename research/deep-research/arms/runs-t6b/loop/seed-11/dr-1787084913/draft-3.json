@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787084913",
+  "charter_hash": "bb8f606fdd6eeb1f",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, driven by strong demand for its Blackwell accelerator (GB200/GB300 rack systems), the Stargate project's ~$500 billion AI-infrastructure plan, and repeatedly raised capital expenditure guidance from hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].\n\nThis milestone indicates that investors are pricing AI infrastructure as the largest new capital cycle since the internet era, with Nvidia positioned as a central \"toll-booth\" in this spending supercycle [Source: ev-1]. The rapid valuation trajectory highlights the scale of recent growth, moving from $1 trillion in mid-2023 to $2 trillion in February 2024, $3 trillion in June 2024, and finally $4 trillion in July 2025 following a significant price run in early July 2025 when shares crossed approximately $160 [Source: ev-1].\n\nThis surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring risks related to Nvidia's record weight in the S&P 500 and its rotation within the elite group of companies valued at or above this threshold alongside Apple (which touched $4T intraday on July 8, 2025) and Microsoft during 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-11",
+      "custody": "public-web"
+    }
+  ]
+}

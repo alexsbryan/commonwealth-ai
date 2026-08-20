@@ -1,0 +1,28 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787084256",
+  "charter_hash": "1cdecf03d574d0c4",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "National Security Assessment of TikTok by the US Department of Defense in 2024",
+      "TikTok's monthly active user count in the United States as of Q1 2025",
+      "Percentage change in TikTok app store downloads in the US from January to March 2024",
+      "Number of federal employees banned from using TikTok on government devices under OMB Memorandum M-23-16 effective May 2023",
+      "Date and vote count for the House passage of H.R. 7898 (Protecting Americans from Foreign Adversary Controlled Applications Act) in April 2024",
+      "Textual content regarding \"unacceptable risk\" cited by President Biden in Executive Order 14117 signed October 2024",
+      "Market capitalization valuation of ByteDance as reported by Bloomberg Intelligence in late 2024",
+      "Percentage share of US social media video views attributed to TikTok users aged 13–17 according to Pew Research Center data from 2023",
+      "Number of days remaining until the potential ban deadline set by the Protecting Americans from Foreign Adversary-Controlled Applications Act before the Supreme Court ruling in December 2025",
+      "Terms of the Oracle-led investment consortium agreement with TikTok announced September 20, 2025 including equity stake percentage"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2025"
+    ]
+  }
+}

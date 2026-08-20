@@ -1,0 +1,14 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787111101",
+  "charter_hash": "eb814c7e11469ce2",
+  "round": 2,
+  "chunks": [],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://v1-demo.example/source-report",
+    "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+  ],
+  "derived_custody": "public-web"
+}

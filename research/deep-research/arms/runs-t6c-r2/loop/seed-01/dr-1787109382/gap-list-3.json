@@ -1,0 +1,305 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787109382",
+  "charter_hash": "15d427ef60ef5741",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Google acquired the cloud-security firm Wiz to close a security gap with its major competitors, AWS and Azure. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This strategic move was driven by Google Cloud under Thomas Kurian, which viewed cloud-security consolidation as the next battleground in the \"cloud wars\" and bet on AI-driven cloud adoption as a key demand driver [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Google Cloud",
+          "Thomas Kurian",
+          "Cloud-security consolidation",
+          "AI-driven cloud adoption"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The deal signaled that securing robust cloud infrastructure is now a critical competitive priority for hyperscalers. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "By agreeing to pay approximately $32 billion in an all-cash deal—the largest acquisition in Google's history—announced on March 18, 2025, Google demonstrated the high value placed on this capability. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The transaction also highlighted intense market competition; it followed Wiz’s rejection of an earlier $23 billion offer from Google in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "-"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "Although announced in March 2025 and involving Wiz co-founder Assaf Rappaport as a named principal, the deal completed its regulatory and shareholder steps later that year, with completion reported in July 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "March 2025",
+          "July 2025",
+          "Wiz co-founder Assaf Rappaport",
+          "Regulatory and shareholder steps"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Google announced on March 18, 2025 that it had agreed to acquire the cloud-security firm Wiz for approximately $32 billion in an all-cash deal [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "March 18, 2025",
+          "All-cash deal",
+          "Approximately $32 billion"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "This transaction represented the largest acquisition in Google's history and followed Wiz's rejection of a previous $23 billion offer from Google in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "The strategic rationale behind the acquisition was driven by Google Cloud under Thomas Kurian, which sought to close the security gap with competitors AWS and Azure [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Thomas Kurian",
+          "Google Cloud",
+          "AWS",
+          "Azure"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "Although announced in March 2025, the deal completed its regulatory and shareholder steps later that year, with completion reported in July 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "March 2025",
+          "July 2025",
+          "ev-1"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Google announced on March 18, 2025 that it had agreed to acquire the cloud-security firm Wiz for approximately $32 billion in an all-cash deal [Source: ev-1].",
+      "actionable_query": "2025 Google announced March agreed acquire cloud-security firm Wiz approximately billion all-cash deal",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This transaction represented the largest acquisition in Google's history and followed Wiz's rejection of a previous $23 billion offer from Google in July 2024 [Source: ev-1].",
+      "actionable_query": "transaction represented largest acquisition Google's history followed Wiz's rejection previous billion offer Google July",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The strategic rationale behind the acquisition was driven by Google Cloud under Thomas Kurian, which sought to close the security gap with competitors AWS and Azure [Source: ev-1].",
+      "actionable_query": "strategic rationale behind acquisition driven Google Cloud under Thomas Kurian sought close security gap competitors AWS Azure",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Although announced in March 2025, the deal completed its regulatory and shareholder steps later that year, with completion reported in July 2025 [Source: ev-1].",
+      "actionable_query": "2025 Although announced March deal completed regulatory shareholder steps later year completion reported July",
+      "from_claim_id": "c10",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "The deal signaled that securing robust cloud infrastructure is now a critical competitive priority for hyperscalers. [Source: ev-1]",
+      "actionable_query": "deal signaled securing robust cloud infrastructure now critical competitive priority hyperscalers",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

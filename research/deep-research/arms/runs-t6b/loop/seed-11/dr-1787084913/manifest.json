@@ -1,0 +1,68 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787084913",
+  "charter_hash": "bb8f606fdd6eeb1f",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 6
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 2
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-11",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787084913"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "Nvidia’s market value crossed $4 trillion on July 9, 2025, driven by strong demand for its Blackwell accelerator (GB200/GB300 rack systems), the Stargate project's ~$500 billion AI-infrastructure plan, and repeatedly raised capital expenditure guidance from hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+    "This milestone indicates that investors are pricing AI infrastructure as the largest new capital cycle since the internet era, with Nvidia positioned as a central \"toll-booth\" in this spending supercycle [Source: ev-1].",
+    "The rapid valuation trajectory highlights the scale of recent growth, moving from $1 trillion in mid-2023 to $2 trillion in February 2024, $3 trillion in June 2024, and finally $4 trillion in July 2025 following a significant price run in early July 2025 when shares crossed approximately $160 [Source: ev-1].",
+    "This surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring risks related to Nvidia's record weight in the S&P 500 and its rotation within the elite group of companies valued at or above this threshold alongside Apple (which touched $4T intraday on July 8, 2025) and Microsoft during 2025 [Source: ev-1].",
+    "This surge reflects CEO Jensen Huang’s framing of an industry transition toward inference demand and \"AI factories,\" while also underscoring risks related to Nvidia's record weight in the S&P 500 and its rotation within the elite group of companies valued at or above this threshold alongside Apple and Microsoft during 2025 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787084913",
+    "acquired_at_unix": 1787084913,
+    "released_at_unix": 1787085024
+  }
+}

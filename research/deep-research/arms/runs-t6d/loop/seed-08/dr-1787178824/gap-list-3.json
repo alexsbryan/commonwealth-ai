@@ -1,0 +1,162 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787178824",
+  "charter_hash": "978f4e7797e0c494",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "A US court found Google’s search business a monopoly because it violated Section 2 of the Sherman Act through exclusionary conduct involving default-distribution deals [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "Specifically, Judge Amit Mehta ruled on August 5, 2024, that Google is a monopolist in general search services and text advertising by paying companies like Apple, Samsung, and Mozilla billions to be their default search engine [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "This practice created a self-reinforcing loop where defaults generated scale, which produced data, improved quality, and protected the default status against rivals [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Evidence showed Google paid approximately $26.3 billion for distribution in 2021 and gave Apple roughly 36% of Safari search-ad revenue [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2021",
+          "$26.3 billion",
+          "26.3",
+          "36%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The ruling also imposed limits on future acquisitions and AI-related investments [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "A US court found Google’s search business a monopoly because it violated Section 2 of the Sherman Act through exclusionary conduct involving default-distribution deals [Source: ev-1].",
+      "actionable_query": "A US court found Google’s search business a monopoly because it violated Section of the Sherman Act through exclusionary conduct involving d",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "Specifically, Judge Amit Mehta ruled on August 5, 2024, that Google is a monopolist in general search services and text advertising by paying companies like Apple, Samsung, and Mozilla billions to be their default search engine [Source: ev-1].",
+      "actionable_query": "Specifically, Judge Amit Mehta ruled on August that Google is a monopolist in general search services and text advertising by paying compani",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "This practice created a self-reinforcing loop where defaults generated scale, which produced data, improved quality, and protected the default status against rivals [Source: ev-1].",
+      "actionable_query": "practice created self-reinforcing loop defaults generated scale produced data improved quality protected default status against rivals",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Evidence showed Google paid approximately $26.3 billion for distribution in 2021 and gave Apple roughly 36% of Safari search-ad revenue [Source: ev-1].",
+      "actionable_query": "Evidence showed Google paid approximately billion distribution gave Apple roughly Safari search-ad revenue",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "The ruling also imposed limits on future acquisitions and AI-related investments [Source: ev-1].",
+      "actionable_query": "ruling imposed limits future acquisitions AI-related investments",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

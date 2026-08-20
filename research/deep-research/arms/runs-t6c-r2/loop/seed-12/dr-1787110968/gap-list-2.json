@@ -1,0 +1,230 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787110968",
+  "charter_hash": "e48efae544f91d51",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Microsoft’s Recall feature became a privacy scandal in 2024 because it was initially designed as an opt-in \"photographic memory\" that took screenshots of the user's screen every few seconds, capturing sensitive content such as passwords and private messages by default [Source: ev-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "Despite Microsoft claiming the data would be encrypted, security researchers demonstrated that these screenshots were stored unencrypted (in plaintext) within a local SQLite database, making them accessible to any process running under the user account [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This discrepancy between security claims and actual implementation, combined with the default-on nature of recording everything on-screen, triggered investigations from regulators including the Irish Data Protection Commission, the UK Information Commissioner’s Office, and the Washington State Attorney General [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "In response to this controversy, which marked the first major privacy crisis in the AI PC era, Microsoft delayed the feature's release in June 2024 and fundamentally reversed its defaults [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The relaunched version is now opt-in (default OFF) rather than enabled by default [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Additionally, accessing the timeline now requires Windows Hello authentication and presence detection, while incognito mode and DRM content are explicitly excluded from capture [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "This revised, more secure version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "Copilot+ PCs"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Despite Microsoft claiming the data would be encrypted, security researchers demonstrated that these screenshots were stored unencrypted (in plaintext) within a local SQLite database, making them accessible to any process running under the user account [Source: ev-1].",
+      "actionable_query": "Despite Microsoft claiming data encrypted security researchers demonstrated screenshots stored unencrypted plaintext within local SQLite database making them accessible any process running under user",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "In response to this controversy, which marked the first major privacy crisis in the AI PC era, Microsoft delayed the feature's release in June 2024 and fundamentally reversed its defaults [Source: ev-1].",
+      "actionable_query": "2024 response controversy marked first major privacy crisis era Microsoft delayed feature's release June fundamentally reversed defaults",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The relaunched version is now opt-in (default OFF) rather than enabled by default [Source: ev-1].",
+      "actionable_query": "relaunched version now opt-in default OFF rather enabled",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Additionally, accessing the timeline now requires Windows Hello authentication and presence detection, while incognito mode and DRM content are explicitly excluded from capture [Source: ev-1].",
+      "actionable_query": "Additionally accessing timeline now requires Windows Hello authentication presence detection incognito mode DRM content explicitly excluded capture",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "This revised, more secure version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "actionable_query": "revised secure version Recall reached general availability Copilot PCs",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

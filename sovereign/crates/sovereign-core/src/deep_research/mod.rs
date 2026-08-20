@@ -467,11 +467,218 @@ fn figure_runs(s: &str) -> Vec<FigureRun> {
     out
 }
 
+/// One entry in the word→digit table (order deep-research-t6d): a
+/// spelled number word's digit value, and whether it is a scale word
+/// (hundred, thousand — multiplicative).
+struct NumberWord {
+    value: u64,
+    scale: bool,
+}
+
+/// The word→digit inversion (order deep-research-t6d, pre-registered):
+/// every word in the adversarial generator's NUMBER_WORDS/ORDINAL_WORDS
+/// (sovereign-eval/src/flywheel/generators/adversarial.rs:588) maps to
+/// its digit value — closed with the units/teens/tens ranges the
+/// generator's words imply: the battery's frozen shapes carry
+/// "seventeen" and "ninety-five", which the literal arrays lack.
+/// Ordinals share the cardinals' values ("twentieth" → 20). Matched
+/// case-insensitively, whole-word (the generator's find_word_ci
+/// convention). Deterministic, no model.
+fn number_word_value(w: &str) -> Option<NumberWord> {
+    let (value, scale) = match w.to_ascii_lowercase().as_str() {
+        "one" | "first" => (1, false),
+        "two" | "second" => (2, false),
+        "three" | "third" => (3, false),
+        "four" | "fourth" => (4, false),
+        "five" | "fifth" => (5, false),
+        "six" | "sixth" => (6, false),
+        "seven" | "seventh" => (7, false),
+        "eight" | "eighth" => (8, false),
+        "nine" | "ninth" => (9, false),
+        "ten" | "tenth" => (10, false),
+        "eleven" | "eleventh" => (11, false),
+        "twelve" | "twelfth" => (12, false),
+        "thirteen" | "thirteenth" => (13, false),
+        "fourteen" | "fourteenth" => (14, false),
+        "fifteen" | "fifteenth" => (15, false),
+        "sixteen" | "sixteenth" => (16, false),
+        "seventeen" | "seventeenth" => (17, false),
+        "eighteen" | "eighteenth" => (18, false),
+        "nineteen" | "nineteenth" => (19, false),
+        "twenty" | "twentieth" => (20, false),
+        "thirty" | "thirtieth" => (30, false),
+        "forty" | "fortieth" => (40, false),
+        "fifty" | "fiftieth" => (50, false),
+        "sixty" | "sixtieth" => (60, false),
+        "seventy" | "seventieth" => (70, false),
+        "eighty" | "eightieth" => (80, false),
+        "ninety" | "ninetieth" => (90, false),
+        "hundred" => (100, true),
+        "thousand" => (1000, true),
+        _ => return None,
+    };
+    Some(NumberWord { value, scale })
+}
+
+/// Is this word a number word or a hyphen-compound of number words
+/// ("fifty-eight", "twenty-first")? A hyphen-compound counts only if
+/// EVERY hyphen-separated part is a number word — "state-of-the-art"
+/// is not a figure.
+fn is_number_word(w: &str) -> bool {
+    w.split('-').all(|part| number_word_value(part).is_some())
+}
+
+/// The word-number class decoder (order deep-research-t6d,
+/// pre-registered): replace spelled-out figures with their digit forms
+/// so the digit-run extractor reads word forms and digit forms
+/// identically ("twenty percent" → "20%", "ninety-five over twenty" →
+/// "95/20"). Applied at the ONE choke point, inside `figure_tokens`;
+/// every consumer (the witness, the fold identity, the figure
+/// inventory, the question specifiers, the fact query) inherits it.
+///
+/// Structure, never remembered: number phrases evaluate by the
+/// standard composition (tens+unit compounds, scale words, "and"
+/// connectors); the unit words are guarded — "percent"/"per cent"
+/// convert to "%" only after a figure, "point" to "." and "over" to
+/// "/" only BETWEEN two figure phrases (the prepositional "grew over
+/// twenty percent" is not a ratio); "times" is never mapped (the
+/// digit run already reads "17.5 times" as "17.5"). Everything
+/// unconverted is carried byte-for-byte; the output feeds only the
+/// token extraction, never user-visible text.
+fn normalize_word_figures(s: &str) -> String {
+    // Word tokens: alphanumeric + apostrophe + hyphen runs with byte
+    // spans (the subject-split convention).
+    let mut words: Vec<(&str, usize, usize)> = Vec::new();
+    let mut start: Option<usize> = None;
+    for (i, c) in s.char_indices() {
+        if c.is_alphanumeric() || c == '\'' || c == '-' {
+            start.get_or_insert(i);
+        } else if let Some(st) = start.take() {
+            words.push((&s[st..i], st, i));
+        }
+    }
+    if let Some(st) = start.take() {
+        words.push((&s[st..s.len()], st, s.len()));
+    }
+
+    let mut out = String::with_capacity(s.len());
+    let mut prev_figure = false;
+    let mut skip_sep = false;
+    let mut cursor = 0usize;
+    let mut i = 0usize;
+    while i < words.len() {
+        let (w, wst, wen) = words[i];
+        let sep = &s[cursor..wst];
+        let out_before_sep = out.len();
+        if !skip_sep {
+            out.push_str(sep);
+        }
+        skip_sep = false;
+        cursor = wen;
+        let lower = w.to_ascii_lowercase();
+
+        // The two-word "per cent" unit.
+        let per_cent = lower == "per"
+            && words
+                .get(i + 1)
+                .is_some_and(|(n, _, _)| n.eq_ignore_ascii_case("cent"));
+
+        // "%" absorbs the whitespace before the unit.
+        if (lower == "percent" || per_cent) && prev_figure {
+            out.truncate(out_before_sep);
+            out.push('%');
+            prev_figure = true;
+            i += if per_cent { 2 } else { 1 };
+            continue;
+        }
+
+        // Decimal / ratio markers: structural — only BETWEEN two
+        // figure phrases ("fifty-eight point one", "95 over 20"), and
+        // the whitespace on both sides is absorbed so the digit-run
+        // extractor reads one run ("58.1%", "95/20").
+        if (lower == "point" || lower == "over") && prev_figure {
+            let next_is_figure = words.get(i + 1).is_some_and(|(n, _, _)| {
+                n.chars().next().is_some_and(|c| c.is_ascii_digit()) || is_number_word(n)
+            });
+            if next_is_figure {
+                out.truncate(out_before_sep);
+                out.push(if lower == "point" { '.' } else { '/' });
+                prev_figure = true;
+                skip_sep = true;
+                i += 1;
+                continue;
+            }
+        }
+
+        if is_number_word(w) {
+            // The maximal phrase run: consecutive number words with
+            // optional "and" connectors. The word's own leading
+            // separator stays (word forms glue to their prose exactly
+            // like digit forms — "affected twenty percent" reads as
+            // "affected 20%", never "affected20%"); the separators
+            // BETWEEN the absorbed words are consumed by advancing
+            // the cursor past the run's last word ("one hundred"
+            // never re-emits "hundred" as prose).
+            let mut j = i;
+            let mut parts: Vec<(u64, bool)> = Vec::new();
+            while j < words.len() {
+                let (nw, _, _) = words[j];
+                if is_number_word(nw) {
+                    for part in nw.split('-') {
+                        let nwv = number_word_value(part).expect("is_number_word checked");
+                        parts.push((nwv.value, nwv.scale));
+                    }
+                    j += 1;
+                } else if nw.eq_ignore_ascii_case("and") && !parts.is_empty() {
+                    j += 1; // connector — absorbed into the span
+                } else {
+                    break;
+                }
+            }
+            let mut total = 0u64;
+            let mut current = 0u64;
+            for (v, scale) in &parts {
+                if *scale {
+                    current = if current == 0 { 1 } else { current } * v;
+                    total += current;
+                    current = 0;
+                } else {
+                    current += v;
+                }
+            }
+            total += current;
+            out.push_str(&total.to_string());
+            prev_figure = true;
+            cursor = words[j - 1].2;
+            i = j;
+            continue;
+        }
+
+        // A digit-carrying word is a figure run already — pushed
+        // verbatim; everything else is prose.
+        out.push_str(w);
+        prev_figure = w.chars().any(|c| c.is_ascii_digit());
+        i += 1;
+    }
+    if !skip_sep {
+        out.push_str(&s[cursor..]);
+    }
+    out
+}
+
 /// C-class figure tokens for the fact query: every maximal run of
 /// digits plus adjacent ratio/currency punctuation (`$ % . : / ,`),
-/// trailing sentence separators trimmed. Deterministic, no model.
+/// trailing sentence separators trimmed. Word-form figures (order
+/// deep-research-t6d — the word-number class) are normalized to their
+/// digit forms first, so "twenty percent" yields the same token as
+/// "20%" and the witness, fold identity, figure inventory, question
+/// specifiers, and fact query read word and digit forms identically.
+/// Deterministic, no model.
 fn figure_tokens(s: &str) -> Vec<String> {
-    figure_runs(s).into_iter().map(|r| r.token).collect()
+    figure_runs(&normalize_word_figures(s))
+        .into_iter()
+        .map(|r| r.token)
+        .collect()
 }
 
 /// The gap-ledger fold's ONE identity decider (order deep-research-t6c,
@@ -507,22 +714,29 @@ pub(crate) fn gap_identity(
     (figures, subjects)
 }
 
-/// The strip-3c anti-leak decider (order deep-research-t2c): remove
-/// every figure run `text` carries whose token is NOT in `allowed` —
-/// the QUESTION's own figure specifiers, never bank vocabulary — each
-/// replaced by a single space (seams collapsed). Both gap-query shapes
-/// read it; deterministic C-class, no model.
+/// The strip-3c anti-leak decider (order deep-research-t2c; word-form
+/// closure, order deep-research-t6d): remove every figure `text`
+/// carries whose token is NOT in `allowed` — the QUESTION's own figure
+/// specifiers, never bank vocabulary — each replaced by a single space
+/// (seams collapsed). Word-form figures are normalized to their digit
+/// forms first, so "four" strips exactly like "4": a word-figure claim
+/// never keeps a figure specifier the question did not allow, the
+/// estate's spelled-out echo ("one hundred cities") never leaks into
+/// the query, and the t1e fold-in still fires for a claim whose only
+/// figure was a stripped word. Both gap-query shapes read it;
+/// deterministic C-class, no model.
 fn strip_disallowed_figures(text: &str, allowed: &[String]) -> String {
-    let mut out = String::with_capacity(text.len());
+    let normalized = normalize_word_figures(text);
+    let mut out = String::with_capacity(normalized.len());
     let mut cursor = 0;
-    for run in figure_runs(text) {
+    for run in figure_runs(&normalized) {
         if !allowed.iter().any(|a| a == &run.token) {
-            out.push_str(&text[cursor..run.start]);
+            out.push_str(&normalized[cursor..run.start]);
             out.push(' ');
         }
         cursor = run.end;
     }
-    out.push_str(&text[cursor..]);
+    out.push_str(&normalized[cursor..]);
     out.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
@@ -2703,6 +2917,240 @@ mod tests {
         );
     }
 
+    /// RED-first (order deep-research-t6d — the word-number class,
+    /// pre-registered): the strict-shape re-draft spelled every figure
+    /// as words (battery #4's v1 flight — loop_gap_trace [1, 21, 26],
+    /// 40/40 could-not-judge, P4-v1 5/16) and the digit-only decider
+    /// went blind. The fix: a word→digit table inverted from the
+    /// adversarial generator's NUMBER_WORDS/ORDINAL_WORDS
+    /// (sovereign-eval/src/flywheel/generators/adversarial.rs:588),
+    /// applied inside figure_tokens — word-form text must yield the
+    /// SAME figure tokens as its digit form. Watch-it-fail at HEAD:
+    /// every pair below tokenizes differently (the word side blind or
+    /// the unit word dropped).
+    #[test]
+    fn word_figures_tokenize_like_their_digit_forms() {
+        for (word_form, digit_form) in [
+            ("twenty percent", "20%"),
+            ("fifty-eight point one percent", "58.1%"),
+            ("seventeen point five times", "17.5"),
+            ("ninety-five over twenty", "95/20"),
+            ("eight point five", "8.5"),
+            // The in-tree fixture shape (synthesize.rs:730 — the
+            // complete-sentence-bullet test's "8 percent of all
+            // reviewed neighborhoods").
+            ("8 percent of all reviewed neighborhoods", "8%"),
+            ("20 per cent", "20%"),
+            ("one hundred twenty", "120"),
+            ("twenty-first", "21"),
+            ("two thousand", "2000"),
+        ] {
+            assert_eq!(
+                figure_tokens(word_form),
+                figure_tokens(digit_form),
+                "the word form {word_form:?} must tokenize like {digit_form:?}"
+            );
+        }
+    }
+
+    /// RED-first (t6d — guard: NO false conversions). The unit
+    /// mappings are structural: the prepositional "over" is not a
+    /// ratio and "point" between non-figures is not a decimal. Green
+    /// at HEAD, must stay green — the class fix must not invent
+    /// figures.
+    #[test]
+    fn word_figure_guards_do_not_fabricate_tokens() {
+        assert_eq!(
+            figure_tokens("spending increased by over 20 percent last year"),
+            figure_tokens("spending increased by over 20% last year"),
+            "the prepositional 'over' must not become a ratio slash"
+        );
+        assert!(
+            figure_tokens("the point of the study was the eviction rate").is_empty(),
+            "a prose 'point' between non-figures is not a decimal"
+        );
+        assert_eq!(
+            figure_tokens("8 point five percent"),
+            figure_tokens("8.5%"),
+            "a digit-run on the left still closes the decimal"
+        );
+    }
+
+    /// RED-first (t6d — inversion completeness): every word in the
+    /// adversarial generator's NUMBER_WORDS/ORDINAL_WORDS
+    /// (sovereign-eval adversarial.rs:588) must tokenize to its digit
+    /// value — the generator's vocabulary and the decider's
+    /// vocabulary are the same set, embedded here verbatim from the
+    /// generator. Watch-it-fail at HEAD: the word-only forms
+    /// ("twelve", "twentieth", "hundred", "thousand") yield no tokens
+    /// at all.
+    #[test]
+    fn adversarial_number_words_invert_to_figures() {
+        let cardinals = [
+            ("one", "1"),
+            ("two", "2"),
+            ("three", "3"),
+            ("four", "4"),
+            ("five", "5"),
+            ("six", "6"),
+            ("seven", "7"),
+            ("eight", "8"),
+            ("nine", "9"),
+            ("ten", "10"),
+            ("eleven", "11"),
+            ("twelve", "12"),
+            ("twenty", "20"),
+            ("thirty", "30"),
+            ("forty", "40"),
+            ("fifty", "50"),
+            ("hundred", "100"),
+            ("thousand", "1000"),
+        ];
+        let ordinals = [
+            ("first", "1"),
+            ("second", "2"),
+            ("third", "3"),
+            ("fourth", "4"),
+            ("fifth", "5"),
+            ("sixth", "6"),
+            ("seventh", "7"),
+            ("eighth", "8"),
+            ("ninth", "9"),
+            ("tenth", "10"),
+            ("eleventh", "11"),
+            ("twelfth", "12"),
+            ("thirteenth", "13"),
+            ("fourteenth", "14"),
+            ("fifteenth", "15"),
+            ("sixteenth", "16"),
+            ("seventeenth", "17"),
+            ("eighteenth", "18"),
+            ("nineteenth", "19"),
+            ("twentieth", "20"),
+        ];
+        for (word, digits) in cardinals.iter().chain(ordinals.iter()) {
+            assert_eq!(
+                figure_tokens(word),
+                vec![digits.to_string()],
+                "the adversarial vocabulary word {word:?} must invert to {digits:?}"
+            );
+        }
+    }
+
+    /// RED-first (t6d — inheritance into the question specifiers): the
+    /// acquisition specifiers read the SAME decider; a question
+    /// spelling a figure in words must yield the same FIGURE specifier
+    /// as the digit form. Watch-it-fail at HEAD: "twenty percent"
+    /// yields "20", not "20%". (The raw-text measure-word pass is
+    /// orthogonal and pre-existing: the word form's "percent" is a
+    /// MEASURE_WORDS specifier, the digit form's "%" is not — the
+    /// figure specifier itself is identical, which is this order's
+    /// contract.)
+    #[test]
+    fn word_figures_inherit_into_question_specifiers() {
+        let word_q = "Why did spending on cloud security rise by twenty percent in 2025?";
+        let digit_q = "Why did spending on cloud security rise by 20% in 2025?";
+        let word_specs = acquisition::figure_specifiers(word_q);
+        let digit_specs = acquisition::figure_specifiers(digit_q);
+        assert!(
+            word_specs.iter().any(|s| s == "20%"),
+            "the question's word-form figure must read as its digit form: {word_specs:?}"
+        );
+        assert!(
+            digit_specs.iter().any(|s| s == "20%"),
+            "the digit-form question carries the same figure: {digit_specs:?}"
+        );
+        assert!(
+            word_specs.iter().any(|s| s == "2025") && digit_specs.iter().any(|s| s == "2025"),
+            "both forms carry the era year"
+        );
+    }
+
+    /// RED-first (t6d — inheritance into the fold identity): a claim
+    /// spelling its figure in words must carry the same identity
+    /// figures as the digit-form claim. Watch-it-fail at HEAD: the
+    /// word-form claim's figures come back without the unit (the
+    /// 40/40 could-not-judge blindness).
+    #[test]
+    fn word_figures_inherit_into_gap_identity() {
+        let word_claim =
+            "Gentrification affected fifty-eight point one percent of eligible tracts.";
+        let digit_claim = "Gentrification affected 58.1% of eligible tracts.";
+        let (word_figs, _) = gap_identity(word_claim, &[]);
+        let (digit_figs, _) = gap_identity(digit_claim, &[]);
+        assert_eq!(
+            word_figs, digit_figs,
+            "word-form and digit-form claims share one figure identity"
+        );
+        assert!(
+            word_figs.iter().any(|f| f == "58.1%"),
+            "the word-form claim's figure must read as 58.1%: {word_figs:?}"
+        );
+    }
+
+    /// RED-first (order deep-research-t6d — the strip-3c anti-leak in
+    /// word form): the t2c strip decider read digit runs only, so a
+    /// word-figure claim's figure bypassed the strip — "four" survived
+    /// in the template, the fold-in guard saw a figure specifier, and
+    /// the question's era years silently dropped out of the follow-up
+    /// query (the t1e numbers-drop-out failure mode, re-opened in word
+    /// form; the estate's spelled-out echo "one hundred cities" leaked
+    /// the same way). Word-form and digit-form claims must produce
+    /// IDENTICAL templates, queries, and carried figure sets.
+    #[test]
+    fn word_figures_strip_and_fold_like_digit_forms() {
+        // A word figure the question does NOT allow is stripped, and
+        // the claim becomes specifier-less — the t1e fold-in fires
+        // exactly as it does for the digit form.
+        let specs = ["1980".to_string(), "2024".to_string()];
+        let word_claim = "Cities gentrified across the four decades, driven by economic factors.";
+        let digit_claim = "Cities gentrified across the 4 decades, driven by economic factors.";
+        assert_eq!(
+            template_query(word_claim, &specs),
+            template_query(digit_claim, &specs),
+            "the word-form template strips to the digit-form template"
+        );
+        let word_q = gap_query_for(word_claim, None, &specs);
+        let digit_q = gap_query_for(digit_claim, None, &specs);
+        assert_eq!(
+            word_q, digit_q,
+            "the word-form and digit-form follow-up queries are identical"
+        );
+        assert!(
+            word_q.contains("1980") && word_q.contains("2024"),
+            "the word-figure claim's query still hunts the era years: {word_q:?}"
+        );
+        // A word figure the question DOES allow rides — and the two
+        // forms still agree (the claim keeps its own shape).
+        let with_four = ["4".to_string(), "1980".to_string(), "2024".to_string()];
+        assert_eq!(
+            gap_query_for(word_claim, None, &with_four),
+            gap_query_for(digit_claim, None, &with_four),
+            "an allowed word figure rides exactly like its digit form"
+        );
+        // The estate's spelled-out echo never leaks — the word form
+        // strips to the digit form's template.
+        let estate = "researcher Martin analyzed data from the nation's one hundred largest cities.";
+        let estate_digit =
+            "researcher Martin analyzed data from the nation's 100 largest cities.";
+        let stripped = strip_disallowed_figures(estate, &["1980".to_string()]);
+        assert_eq!(
+            stripped,
+            strip_disallowed_figures(estate_digit, &["1980".to_string()]),
+            "the spelled-out estate figure strips like the digit"
+        );
+        assert!(
+            !stripped.contains('1') && !stripped.contains("hundred"),
+            "the estate's spelled-out figure is gone from the template: {stripped:?}"
+        );
+        assert!(
+            figure_tokens(&gap_query_for(estate, None, &specs))
+                .iter()
+                .all(|f| specs.contains(f)),
+            "the estate's word figure never rides in the query"
+        );
+    }
+
     /// RED-first (order deep-research-t2c — the strip-3c query-side
     /// leak, Instrument 2): a gap claim carrying figures QUOTED FROM
     /// THE ESTATE's admitted chunk must not echo them into the next
@@ -2727,8 +3175,9 @@ mod tests {
         let specs = acquisition::figure_specifiers(question);
         assert_eq!(
             specs,
-            ["1980".to_string(), "2024".to_string()],
-            "the allowed set is the question's own figure tokens — the era years"
+            ["4".to_string(), "1980".to_string(), "2024".to_string()],
+            "the allowed set is the question's own figure tokens — the era years, and the \
+             word figure four (order deep-research-t6d: a spelled-out number word IS a figure)"
         );
         // Both gap shapes: the floor-capped FACT query and the prose
         // template.
@@ -3244,4 +3693,5 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
+
 }

@@ -1,0 +1,78 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787163421",
+  "charter_hash": "df07f368e1ba8d59",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 8,
+      "fetched": 0,
+      "search_calls": 5
+    },
+    {
+      "round": 3,
+      "gaps_before": 8,
+      "gaps_after": 9,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-11",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787163421"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "Based on the evidence provided, here is why Nvidia’s market value crossed $4 trillion in July 2025 and what this milestone indicates about AI infrastructure spending:\n\n**Why Nvidia Crossed $4 Trillion**\nNvidia closed above a $4 trillion market cap on 2025-07-09, becoming the first company in history to close above this threshold [Source: ev-1].",
+    "This achievement was driven by several specific factors related to demand and positioning:\n\n*   **Accelerator Demand:** There was strong demand for Blackwell accelerator systems, specifically GB200/GB300 rack systems [Source: ev-1].",
+    "*   **Major Infrastructure Projects:** The Stargate project contributed significantly with its ~$500 billion plan for AI infrastructure [Source: ev-1].",
+    "*   **Hyperscaler Capex:** Capital expenditure guidance from major hyperscalers—including Microsoft, Meta, Google, and Amazon—was raised repeatedly throughout 2025 [Source: ev-1].",
+    "*   **Market Position:** Nvidia maintained a dominant share of the AI-accelerator market during this period [Source: ev-1].",
+    "**Contextual Details**\nCEO Jensen Huang characterized this moment as a transition from training to inference demand, describing it as \"AI factories\" selling compute as a commodity [Source: ev-1].",
+    "This valuation follows a rapid trajectory where Nvidia reached $1 trillion in mid-2023, $2 trillion in February 2024, and $3 trillion in June 2024 before hitting $4 trillion in July 25 [Source: ev-1].",
+    "During this rise, Nvidia’s share price crossed approximately $160 [Source: ev-1].",
+    "**What the Milestone Says About AI Infrastructure Spending**\nThe milestone measured the AI-capex supercycle. [Source: ev-1]",
+    "The market priced AI infrastructure as the largest new capital cycle since the internet, positioning Nvidia as its toll-booth [Source: ev-1].",
+    "Nvidia’s market value crossed $4 trillion on 2025-07-09, becoming the first company in history to close above this threshold [Source: ev-1].",
+    "This milestone was driven by several key factors related to AI infrastructure spending and demand:\n\n*   **Accelerator Demand:** Strong demand for Blackwell accelerator systems, specifically GB200/GB300 rack systems, fueled the valuation increase [Source: ev-1].",
+    "*   **Hyperscaler Capex:** Repeated raises in capital expenditure guidance throughout 2025 from major hyperscalers including Microsoft, Meta, Google, and Amazon supported Nvidia’s growth [Source: ev-1].",
+    "CEO Jensen Huang characterized this moment as a transition from training to inference demand, describing it as \"AI factories\" selling compute as a commodity [Source: ev-1].",
+    "This valuation follows a rapid trajectory where Nvidia reached $1 trillion in mid-2023, $2 trillion in February 2024, and $3 trillion in June 2024 before hitting $4 trillion in July 2025 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787163421",
+    "acquired_at_unix": 1787163421,
+    "released_at_unix": 1787164070
+  }
+}

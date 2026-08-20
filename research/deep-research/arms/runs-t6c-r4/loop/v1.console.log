@@ -1,0 +1,87 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787159881 — How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r4/loop/v1/dr-1787159881
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/bank/v1/deck (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787159881] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787159881] Dedupe: no duplicates found (4 rows)
+[dr-estate-dr-1787159881] Dedupe preserved 4 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787159881] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787159881] Building FTS content index (2/3)...
+[dr-estate-dr-1787159881] FTS content index done
+[dr-estate-dr-1787159881] Building FTS title index (3/3)...
+[dr-estate-dr-1787159881] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787159881 built — 4 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r4/loop/v1/dr-1787159881/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787159881", charter_hash: "f97be8882a9d9c53", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 3, search_calls: 11 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 21, fetched: 1, search_calls: 1 }, RoundRow { round: 3, gaps_before: 21, gaps_after: 26, fetched: 4, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://v1-demo.example/source-report", custody: "public-web", ingested_into: Some("dr-estate-dr-1787159881") }, FetchedSource { url: "https://www.governing.com/archive/gentrification-in-cities-governing-report.html", custody: "public-web", ingested_into: Some("dr-estate-dr-1787159881") }, FetchedSource { url: "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/", custody: "public-web", ingested_into: Some("dr-estate-dr-1787159881") }, FetchedSource { url: "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/", custody: "public-web", ingested_into: Some("dr-estate-dr-1787159881") }], failed: [] }, budget: BudgetTotals { spent: {"web-search:mock": 12, "web-fetch:pages": 4}, remaining: {"web-fetch:pages": 8, "web-search:mock": 0} }, not_covered: ["American cities have undergone a fundamental transformation between 1980 and 2024 characterized by accelerated gentrification, widening income inequality, deteriorating housing affordability relative to income growth, and significant demographic shifts that often displace lower-income residents [Source: ev-1].", "Gentrification rates more than doubled after the year 2000 compared to the 1990s, affecting nearly twenty percent of eligible lower-income neighborhoods in major cities during this period [Source: ev-1] [Source: ev-2].", "While Portland saw fifty-eight point one percent of its eligible tracts gentrify, other cities like Detroit at two point eight percent, Las Vegas at two percent, El Paso at zero percent, and Arlington Texas at zero percent experienced little to no such change [Source: ev-2].", "Educational gentrification is evident as urban areas now have thirty-five percent of residents with bachelor's degrees or higher, compared to thirty-one percent in suburbs and nineteen percent in rural areas [Source: ev-1].", "Income inequality has widened significantly across metropolitan regions. [Source: ev-1]", "New York City leads with a Gini coefficient of 0.5469, while Atlanta and Miami are at 0.57, and New Orleans is at 0.56 [Source: ev-1].", "Several metros show extreme patterns with Gini coefficients exceeding 0.54 [Source: ev-1].", "The Bridgeport area led the list for top inequality cities with a very high threshold of at least $560,000 for the top five percent of households [Source: ev-3].", "Atlanta exhibited a massive disparity where high-income city households earned seventeen point five times their low-income counterparts [Source: ev-3].", "Other cities with extreme ratios include Washington D.C. [Source: ev-1]", "and Atlanta at an eighteen to one ratio between the top and bottom earners [Source: ev-1].", "The national ninety-five over twenty income ratio rose from eight point five in 2007 to nine point three by 2014 [Source: ev-3] [Source: ev-1].", "Housing affordability has deteriorated relative to wage growth, as home prices increased significantly while median household income grew more slowly since 2000 [Source: ev-1].", "In California cities, price-to-income ratios range between 9.6 and 12.2, which is more than double the national average of 4.7 [Source: ev-1].", "Economic mobility for low-income families worsened in forty-eight of the fifty largest metros over a fifteen-year period, with only Houston showing improvement in income outcomes, gaining just one point one percent [Source: ev-1].", "The financial crisis accelerated these negative trends; Federal Reserve data tracking over three thousand one hundred forty inequality series confirms that inequality reached record levels by 2018 to 2021 [Source: ev-1].", "Gentrifying neighborhoods saw population increases and became whiter, with non-Hispanic white share increasing an average of four point three percentage points [Source: ev-2] [Source: ev-1].", "Simultaneously, poverty rates in gentrifying tracts decreased by an average of zero point seven percentage points [Source: ev-2] [Source: ev-1].", "In contrast, lower-income areas that did not gentrify experienced slight population losses of negative two point four percent and a sharp increase in poverty of plus six point seven percentage points [Source: ev-2] [Source: ev-1].", "Broader demographic trends since 1980 show that nearly eighty percent of the country's under-forty-five population growth was concentrated in metro areas over one million residents [Source: ev-1].", "However, displacement remains a critical issue for minority communities [Source: ev-1].", "The underlying economic structure supporting these changes involves a shift away from manufacturing toward professional services [Source: ev-1].", "Based on the evidence provided, American cities have undergone a fundamental transformation between 1980 and 2024 characterized by accelerated gentrification, widening income inequality, deteriorating housing affordability relative to income growth, and significant demographic shifts that often displace lower-income residents. [Source: ev-1]", "Conversely, cities like Detroit (2.8% of eligible tracts), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification in this period [Source: ev-2].", "Educational gentrification is evident as urban areas now have 35% of residents with bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-1].", "However, many large cities exceed this average significantly. [Source: ev-1]", "*   **Top Inequality Cities:** The Bridgeport area led with a very high threshold of at least $560,000 for the top 5 percent of households [Source: ev-3].", "Atlanta exhibited a massive disparity where high-income city households earned 17.5 times their low-income counterparts [Source: ev-3].", "and Atlanta at an 18:1 ratio (top quintile vs. [Source: ev-1]", "bottom quintile) [Source: ev-1].", "The national 95/20 rose from 8.5 to 9.3 during this period [Source: ev-3] [Source: ev-1].", "In California cities, price-to-income ratios range between 9.6 and 12.2, more than double the national average of 4.7 [Source: ev-1].", "Only Houston showed improvement in income outcomes, gaining just 1.1% [Source: ev-1].", "The financial crisis accelerated these negative trends; Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018–2021 [Source: ev-1].", "Gentrifying neighborhoods saw population increases and became whiter, with non-Hispanic white share increasing an average of 4.3 percentage points [Source: ev-2] [Source: ev-1].", "Simultaneously, poverty rates in gentrifying tracts decreased by an average of 0.7 percentage points [Source: ev-2] [Source: ev-1].", "In contrast, lower-income areas that did *not* gentrify experienced slight population losses (-2.4%) and a sharp increase in poverty (+6.7 percentage points) [Source: ev-2] [Source: ev-1].", "Broader demographic trends since 1980 show that nearly 80% of the country's under-45 population growth was concentrated in metro areas over 1 million residents [Source: ev-1].", "However, displacement remains a critical issue for minority communities. [Source: ev-1]", "### Structural Economic Shifts\nThe underlying economic structure supporting these changes involves a shift away from manufacturing toward professional services. [Source: ev-1]"], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1787159881", acquired_at_unix: 1787159881, released_at_unix: Some(1787160651) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3-degenerate.json", "draft-3.json", "gap-list-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r4/loop/v1/dr-1787159881/report.md
+rounds: 3 | gaps after last round: 26 | searches: 12 | fetched sources: 4
+open questions (could-not-judge):
+  - American cities have undergone a fundamental transformation between 1980 and 2024 characterized by accelerated gentrification, widening income inequality, deteriorating housing affordability relative to income growth, and significant demographic shifts that often displace lower-income residents [Source: ev-1].
+  - Gentrification rates more than doubled after the year 2000 compared to the 1990s, affecting nearly twenty percent of eligible lower-income neighborhoods in major cities during this period [Source: ev-1] [Source: ev-2].
+  - While Portland saw fifty-eight point one percent of its eligible tracts gentrify, other cities like Detroit at two point eight percent, Las Vegas at two percent, El Paso at zero percent, and Arlington Texas at zero percent experienced little to no such change [Source: ev-2].
+  - Educational gentrification is evident as urban areas now have thirty-five percent of residents with bachelor's degrees or higher, compared to thirty-one percent in suburbs and nineteen percent in rural areas [Source: ev-1].
+  - Income inequality has widened significantly across metropolitan regions. [Source: ev-1]
+  - New York City leads with a Gini coefficient of 0.5469, while Atlanta and Miami are at 0.57, and New Orleans is at 0.56 [Source: ev-1].
+  - Several metros show extreme patterns with Gini coefficients exceeding 0.54 [Source: ev-1].
+  - The Bridgeport area led the list for top inequality cities with a very high threshold of at least $560,000 for the top five percent of households [Source: ev-3].
+  - Atlanta exhibited a massive disparity where high-income city households earned seventeen point five times their low-income counterparts [Source: ev-3].
+  - Other cities with extreme ratios include Washington D.C. [Source: ev-1]
+  - and Atlanta at an eighteen to one ratio between the top and bottom earners [Source: ev-1].
+  - The national ninety-five over twenty income ratio rose from eight point five in 2007 to nine point three by 2014 [Source: ev-3] [Source: ev-1].
+  - Housing affordability has deteriorated relative to wage growth, as home prices increased significantly while median household income grew more slowly since 2000 [Source: ev-1].
+  - In California cities, price-to-income ratios range between 9.6 and 12.2, which is more than double the national average of 4.7 [Source: ev-1].
+  - Economic mobility for low-income families worsened in forty-eight of the fifty largest metros over a fifteen-year period, with only Houston showing improvement in income outcomes, gaining just one point one percent [Source: ev-1].
+  - The financial crisis accelerated these negative trends; Federal Reserve data tracking over three thousand one hundred forty inequality series confirms that inequality reached record levels by 2018 to 2021 [Source: ev-1].
+  - Gentrifying neighborhoods saw population increases and became whiter, with non-Hispanic white share increasing an average of four point three percentage points [Source: ev-2] [Source: ev-1].
+  - Simultaneously, poverty rates in gentrifying tracts decreased by an average of zero point seven percentage points [Source: ev-2] [Source: ev-1].
+  - In contrast, lower-income areas that did not gentrify experienced slight population losses of negative two point four percent and a sharp increase in poverty of plus six point seven percentage points [Source: ev-2] [Source: ev-1].
+  - Broader demographic trends since 1980 show that nearly eighty percent of the country's under-forty-five population growth was concentrated in metro areas over one million residents [Source: ev-1].
+  - However, displacement remains a critical issue for minority communities [Source: ev-1].
+  - The underlying economic structure supporting these changes involves a shift away from manufacturing toward professional services [Source: ev-1].
+  - Based on the evidence provided, American cities have undergone a fundamental transformation between 1980 and 2024 characterized by accelerated gentrification, widening income inequality, deteriorating housing affordability relative to income growth, and significant demographic shifts that often displace lower-income residents. [Source: ev-1]
+  - Conversely, cities like Detroit (2.8% of eligible tracts), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification in this period [Source: ev-2].
+  - Educational gentrification is evident as urban areas now have 35% of residents with bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-1].
+  - However, many large cities exceed this average significantly. [Source: ev-1]
+  - *   **Top Inequality Cities:** The Bridgeport area led with a very high threshold of at least $560,000 for the top 5 percent of households [Source: ev-3].
+  - Atlanta exhibited a massive disparity where high-income city households earned 17.5 times their low-income counterparts [Source: ev-3].
+  - and Atlanta at an 18:1 ratio (top quintile vs. [Source: ev-1]
+  - bottom quintile) [Source: ev-1].
+  - The national 95/20 rose from 8.5 to 9.3 during this period [Source: ev-3] [Source: ev-1].
+  - In California cities, price-to-income ratios range between 9.6 and 12.2, more than double the national average of 4.7 [Source: ev-1].
+  - Only Houston showed improvement in income outcomes, gaining just 1.1% [Source: ev-1].
+  - The financial crisis accelerated these negative trends; Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018–2021 [Source: ev-1].
+  - Gentrifying neighborhoods saw population increases and became whiter, with non-Hispanic white share increasing an average of 4.3 percentage points [Source: ev-2] [Source: ev-1].
+  - Simultaneously, poverty rates in gentrifying tracts decreased by an average of 0.7 percentage points [Source: ev-2] [Source: ev-1].
+  - In contrast, lower-income areas that did *not* gentrify experienced slight population losses (-2.4%) and a sharp increase in poverty (+6.7 percentage points) [Source: ev-2] [Source: ev-1].
+  - Broader demographic trends since 1980 show that nearly 80% of the country's under-45 population growth was concentrated in metro areas over 1 million residents [Source: ev-1].
+  - However, displacement remains a critical issue for minority communities. [Source: ev-1]
+  - ### Structural Economic Shifts
+The underlying economic structure supporting these changes involves a shift away from manufacturing toward professional services. [Source: ev-1]
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3-degenerate.json
+  draft-3.json
+  gap-list-3.json
+  verdict-set.json
+  report.md
+  manifest.json

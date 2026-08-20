@@ -306,7 +306,10 @@ pub async fn draft_round(
             "\n\nShape constraint (re-draft): plain prose only — complete \
              sentences, no markdown, no bold, no bullet lists, no \
              parenthetical asides, and no self-interrogation or asides \
-             about the evidence text itself; state each fact at most once.",
+             about the evidence text itself; state each fact at most once. \
+             Spelled-out figures are forbidden in the re-draft: every \
+             figure must appear as digits (e.g. \"20%\", \"58.1%\"), or \
+             not at all.",
         );
     }
     let urls = allowed_urls(evidence);
@@ -756,6 +759,10 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
             default_prompt.contains("Figures present in the evidence"),
             "the default prompt must still carry the figure inventory"
         );
+        assert!(
+            !default_prompt.contains("Spelled-out figures"),
+            "the default prompt must stay byte-shaped as before: {default_prompt}"
+        );
 
         draft_round(&port, "r", "h", 1, "How did cities change?", &w, &[], true)
             .await
@@ -768,6 +775,14 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
         assert!(
             retry_prompt.contains("Figures present in the evidence"),
             "the constraint APPENDS; the inventory must survive it"
+        );
+        // RED-first (order deep-research-t6d — the figures-as-digits
+        // clause): the strict-shape re-draft spelled every figure as
+        // words (battery #4's v1, 40/40 could-not-judge); the clause
+        // forbids that shape in the re-draft.
+        assert!(
+            retry_prompt.contains("Spelled-out figures"),
+            "the retry prompt must carry the figures-as-digits clause: {retry_prompt}"
         );
     }
 }

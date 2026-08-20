@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787084256",
+  "charter_hash": "1cdecf03d574d0c4",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The United States moved to force TikTok’s sale or ban it primarily due to national-security concerns regarding the potential for Chinese government access to U.S. user data and the platform's algorithm [Source: ev-1]. This concern was formalized through CFIUS review, which examined Project Texas hosting arrangements, and led to the passage of the Protecting Americans from Foreign Adversary Controlled Applications Act, signed by President Biden on 2024-04-24 [Source: ev-1]. The law required ByteDance to divest TikTok’s U.S. operations within roughly 270 days (extendable by an additional 90 days) or face a ban in the United States [Source: ev-1].\n\nThe Supreme Court upheld the law with a 9-0 per curiam decision on 2025-01-17, one day before its effective date of 2025-03-19 was originally set but adjusted in context; specifically, the text notes the ruling occurred on 2025/01/17 and the app went dark on 2025-/01/18/19 for roughly 14 hours [Source: ev-1]. The service was restored on 2025/-01/-19 after President Trump pledged to pause enforcement, followed by an executive order dated 2025/--01--20 that delayed enforcement for 75 days [Source: ev-1].\n\nThe dispute was ultimately resolved through an Oracle-led deal announced on 2025--06--10 per Bloomberg reporting [Source: ev-1]. This resolution structured TikTok’s U.S. operations as a joint venture rather than an outright sale, ensuring the app stayed live under \"Project Texas,\" which hosted US user data in Oracle's cloud under US control [Source: ev-1]. Under this agreement, ByteDance retained a majority interest, while Oracle received about a 12.5% stake in TikTok's U.S. operations, with participation from SoftBank and other investors [Source: ev-1]. Vice President JD Vance led the White House negotiations for this final ownership structure, which was completed through 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-07",
+      "custody": "public-web"
+    }
+  ]
+}

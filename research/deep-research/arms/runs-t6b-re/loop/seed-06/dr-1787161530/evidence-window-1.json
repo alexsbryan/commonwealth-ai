@@ -1,0 +1,28 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787161530",
+  "charter_hash": "fcb0c2971e1f8fe0",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://estate.example/seed-06",
+      "source_url": "https://estate.example/seed-06",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "On 2024-07-19, a faulty CrowdStrike Falcon Sensor content update (a \"Rapid Response Content\" channel file) crashed Windows machines worldwide in blue-screen loops — roughly 8.5 million Windows devices affected, per Microsoft's estimate. CrowdStrike's own root-cause analysis (August 2024) named an out-of-bounds memory read in the sensor's C++ code: an untrusted pointer dereference triggered by a 21-byte input that passed a flawed content validator — the missing input validation and the memory-safety defect. The impact was global: airlines grounded (Delta cancelled roughly 7,000 flights and took about $500M in costs, later suing CrowdStrike and hiring David Boies), banks, hospitals, 911 services, and broadcasters disrupted. CrowdStrike shares fell about 11% on the following Monday (2024-07-22); CEO George Kurtz testified before Congress on 2024-09-24, and the company apologized and promised deployment-process changes. The causal link was monoculture concentration: one security agent deployed at enterprise scale, updated with a fast-cadence push, became a global single point of failure. CrowdStrike moved to staged (phased) rollouts with canary testing and added sensor-level validation, and the episode drove industry-wide discussion of chaos-engineering and blast-radius limits for endpoint agents.\n",
+      "ingested_into": null,
+      "tags": [
+        "2024",
+        "crowdstrike",
+        "outage"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-06"
+  ],
+  "derived_custody": "public-web"
+}

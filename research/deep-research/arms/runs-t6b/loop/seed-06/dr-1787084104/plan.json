@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787084104",
+  "charter_hash": "38adce9e7735fa9d",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of Windows devices affected by the CrowdStrike Falcon sensor update in July 2024",
+      "Percentage of global commercial flights disrupted due to IT outages caused by the CrowdStrike incident on July 19, 2024",
+      "Estimated financial cost of the CrowdStrike outage for major airlines and banks in USD",
+      "Count of countries where critical infrastructure experienced downtime following the CrowdStrike software failure",
+      "Median time required for organizations to restore systems after the CrowdStrike bug was identified",
+      "Share of US hospital systems reporting operational disruptions during the July 2024 CrowdStrike event"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

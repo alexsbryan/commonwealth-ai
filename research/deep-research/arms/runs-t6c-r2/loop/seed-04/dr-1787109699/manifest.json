@@ -1,0 +1,65 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787109699",
+  "charter_hash": "f5c253da0659163f",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 12
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 6,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-04",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787109699"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+    "The launch signaled a shift in the direction of frontier reasoning models toward integrating vision natively into the model architecture rather than bolting it on, as well as incorporating native tool use (such as web search and code interpreter) directly during training [Source: ev-1].",
+    "The release also indicated that OpenAI was reframing frontier capability to focus on \"tool-using reasoning at commodity prices\" [Source: ev-1].",
+    "This strategic move served to defend the company’s position against DeepSeek's R1 cost shock and Anthropic's agentic-coding push while GPT-5 had not yet shipped [Source: ev-1].",
+    "Additionally, the launch highlighted a new technical approach using \"budget forcing,\" which employs a fixed maximum thought budget with task-adaptive compute, allowing harder questions to require longer thinking times [Source: ev-1].",
+    "It also marked the implementation of OpenAI's first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+    "The models were positioned as high-performing yet accessible; o3 set a record on the ARC-AGI benchmark by achieving approximately 87.5% on ARC-AGI-1 at high compute, meeting or exceeding the ~85% human baseline and becoming the first model to reach this level [Source: ev-1].",
+    "Pricing was structured to reflect varying capabilities and costs: o3 was priced at $10 per million input tokens and $40 per million output tokens, while o4-mini was priced more competitively at $1.10 per million input tokens and 4.40 dollars per million output tokens [Source: ev-1].",
+    "The launch strategy was API-first, with both models available to developers from day one, although o3 was not initially included in the ChatGPT app (whereas o4-mini was) [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787109699",
+    "acquired_at_unix": 1787109699,
+    "released_at_unix": 1787109799
+  }
+}

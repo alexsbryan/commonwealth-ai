@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787104463",
+  "charter_hash": "450b48015ceb6682",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's total market capitalization on the specific date it first exceeded $4 trillion in July 2025",
+      "Number of Nvidia shares outstanding as of July 2025",
+      "Nvidia stock price per share on the day its market cap crossed $4 trillion",
+      "Global AI data center infrastructure spending forecast for fiscal year 2026 by major research firms like Gartner or IDC",
+      "Year-over-year percentage growth rate of global hyperscaler capital expenditure (CapEx) allocated to AI servers from Q1 2024 to Q3 2025",
+      "Share of Nvidia's revenue derived from Data Center segment versus Gaming segment in the most recent quarterly report prior to July 2025",
+      "Total addressable market size estimate for generative AI hardware and software combined as projected for 2030",
+      "Count of major cloud service providers announcing multi-billion dollar contracts with Nvidia between January 2025 and June 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

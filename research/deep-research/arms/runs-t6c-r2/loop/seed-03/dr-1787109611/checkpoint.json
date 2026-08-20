@@ -1,0 +1,198 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787109611",
+  "charter_hash": "17a154d237ec11a6",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787109611",
+    "question": "Why did NASA order Boeing's Starliner to return uncrewed from its first crewed flight, and what did the decision mean for the program?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c-r2/loop/seed-03/dr-1787109611",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did NASA order Boeing's Starliner to return uncrewed from its first crewed flight, and what did the decision mean for the program?",
+  "frontier": [
+    "Number of helium tank leaks detected on the Boeing Starliner spacecraft during its first crewed flight (BoeStar-1)",
+    "Date and time of the decision to return the Boeing Starliner uncrewed from orbit in 2024",
+    "Name of the NASA administrator who authorized the uncrewed return of the Boeing Starliner (mean)",
+    "Total cost incurred by NASA for the aborted Boeing Starliner mission compared to budget projections",
+    "Change in launch schedule dates for subsequent Boeing Starliner missions following the uncrewed return incident (mean)",
+    "Percentage change in public approval ratings or media sentiment regarding NASA's Commercial Crew Program after the Starliner abort",
+    "Count of technical anomalies identified in post-flight analyses of the Boeing CFT capsule",
+    "Number of astronauts assigned to backup crew roles during the extended stay on the International Space Station due to Starliner delay"
+  ],
+  "frontier_question": "Why did NASA order Boeing's Starliner to return uncrewed from its first crewed flight, and what did the decision mean for the program?",
+  "figure_specifiers": [
+    "mean"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787109611",
+      "charter_hash": "17a154d237ec11a6",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787109611",
+      "charter_hash": "17a154d237ec11a6",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-03",
+          "source_url": "https://estate.example/seed-03",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Boeing's Starliner Crew Flight Test launched on 2024-06-05 with astronauts Butch Wilmore and Suni Williams aboard, and docked to the station on 2024-06-06 after helium leaks and five reaction-control system (RCS) thruster anomalies during the docking approach. NASA announced on 2024-08-24 that Starliner would return uncrewed: the thruster anomalies could not be guaranteed safe for the deorbit burn, since the thrusters could not be ground-tested in their flight condition. The spacecraft undocked 2024-09-06 and landed at White Sands on 2024-09-07. Wilmore and Williams returned on a Crew-9 Dragon on 2025-03-18 — roughly 9.5 months aloft against a planned ~8 days. Starliner runs under a fixed-price NASA contract from the 2014 Commercial Crew program (Boeing about $4.2B vs SpaceX about $2.6B), and Boeing disclosed cumulative program losses of more than $1.5B by 2025. In June 2025 Boeing announced roughly 400 job cuts in its space division, and NASA's Starliner certification path remained unresolved through 2025.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2025",
+            "boeing",
+            "decision",
+            "return",
+            "starliner"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-03"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787109611",
+      "charter_hash": "17a154d237ec11a6",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-03"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach, and NASA determined that these thrusters could not be guaranteed safe for the deorbit burn as they could not be ground-tested in their flight condition [Source: ev-1].",
+    "This decision meant that astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 2025, resulting in a stay of roughly 9.5 months compared to a planned duration of approximately 8 days [Source: ev-1].",
+    "The incident had significant implications for the program’s financials and operations. [Source: ev-1]",
+    "Under the fixed-price contract from the 2014 Commercial Crew program, Boeing faced cumulative losses exceeding $1.5 billion by 2025 [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach, and NASA determined that these thrusters could not be guaranteed safe for the deorbit burn as they could not be ground-tested in their flight condition [Source: ev-1].",
+      "actionable_query": "NASA ordered Boeing's Starliner return uncrewed because spacecraft experienced five reaction-control system RCS thruster anomalies during docking approach determined thrusters could guaranteed safe",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This decision meant that astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 2025, resulting in a stay of roughly 9.5 months compared to a planned duration of approximately 8 days [Source: ev-1].",
+      "actionable_query": "decision meant astronauts Butch Wilmore Suni Williams remained International Space Station until March resulting stay roughly months compared planned duration approximately days",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The incident had significant implications for the program’s financials and operations. [Source: ev-1]",
+      "actionable_query": "incident significant implications program’s financials operations",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Under the fixed-price contract from the 2014 Commercial Crew program, Boeing faced cumulative losses exceeding $1.5 billion by 2025 [Source: ev-1].",
+      "actionable_query": "Under the fixed-price contract from the Commercial Crew program, Boeing faced cumulative losses exceeding $ billion by .",
+      "from_claim_id": "c4",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 3
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-03",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

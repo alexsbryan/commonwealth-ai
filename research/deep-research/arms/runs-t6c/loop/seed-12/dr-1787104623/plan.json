@@ -1,0 +1,22 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787104623",
+  "charter_hash": "00f97a2a21b03660",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of security researchers who demonstrated remote access to user data via Recall's local database in 2024",
+      "Percentage of Windows 11 users with Copilot+ PCs estimated by Microsoft for the initial launch window in May 2024",
+      "Count of privacy organizations that issued public statements condemning Recall before its official release date in June 2024",
+      "Change in default configuration status of the Recall feature from enabled-by-default to opt-in between April and July 2024",
+      "Share of sensitive file types (passwords, financial documents) captured in the screenshot index according to independent technical audits in 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

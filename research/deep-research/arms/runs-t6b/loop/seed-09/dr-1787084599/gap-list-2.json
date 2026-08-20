@@ -1,0 +1,180 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787084599",
+  "charter_hash": "73bab0a58a4c5244",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Anthropic released the Claude 4 family on May 8, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The launch included two distinct models to serve different market segments and use cases:\n\n*   **Claude Opus 4:** Positioned as the flagship model (\"Claude 4\"), it was priced at $15 per million input tokens and $75 per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4:, 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "*   **Claude Sonnet 4:** Positioned as a \"fast workhorse\" and the developer-default coding model, it was significantly cheaper at $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4:, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "The decision to release these specific tiers signaled that Anthropic viewed agentic coding as its primary competitive battleground against OpenAI’s o-series in an enterprise \"agentic-coding gold rush\" [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "By highlighting capabilities such as \"computer use 2.0,\" which was roughly twice as reliable as the previous generation's browser control, Anthropic positioned Claude 4 as the safest and most reliable coding agent available [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2.0, 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "This strategy aimed to capture both high-end performance needs with Opus and volume-driven developer adoption with Sonnet, a move that contributed to record API usage and helped cement Anthropic’s position as a leader in the coding-agent market [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "No estate evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Anthropic released the Claude 4 family on May 8, 2025 [Source: ev-1].",
+      "actionable_query": "family on May . (4, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The launch included two distinct models to serve different market segments and use cases:\n\n*   **Claude Opus 4:** Positioned as the flagship model (\"Claude 4\"), it was priced at $15 per million input tokens and $75 per million output tokens [Source: ev-1].",
+      "actionable_query": "The launch included two distinct models to serve different market segments and use cases: * **Claude Opus \"), it was priced at $ per million (4, 2025)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "*   **Claude Sonnet 4:** Positioned as a \"fast workhorse\" and the developer-default coding model, it was significantly cheaper at $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "actionable_query": "* **Claude Sonnet ** Positioned as a \"fast workhorse\" and the developer-default coding model, it was significantly cheaper at $ per million  (4, 2025)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The decision to release these specific tiers signaled that Anthropic viewed agentic coding as its primary competitive battleground against OpenAI’s o-series in an enterprise \"agentic-coding gold rush\" [Source: ev-1].",
+      "actionable_query": "decision release specific tiers signaled Anthropic viewed agentic coding primary competitive battleground against OpenAI’s o-series enterprise agentic-coding gold rush",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "By highlighting capabilities such as \"computer use 2.0,\" which was roughly twice as reliable as the previous generation's browser control, Anthropic positioned Claude 4 as the safest and most reliable coding agent available [Source: ev-1].",
+      "actionable_query": "By highlighting capabilities such as \"computer use as the safest and most reliable coding agent available . (4, 2025)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "This strategy aimed to capture both high-end performance needs with Opus and volume-driven developer adoption with Sonnet, a move that contributed to record API usage and helped cement Anthropic’s position as a leader in the coding-agent market [Source: ev-1].",
+      "actionable_query": "strategy aimed capture both high-end performance needs Opus volume-driven developer adoption Sonnet move contributed record API usage helped cement Anthropic’s position leader coding-agent market",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

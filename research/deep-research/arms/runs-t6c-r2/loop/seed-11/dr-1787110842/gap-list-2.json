@@ -1,0 +1,156 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787110842",
+  "charter_hash": "09ac7082f3817d7c",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, driven primarily by strong demand for its Blackwell accelerator rack systems (specifically GB200 and GB300) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This surge was further fueled by the Stargate project’s approximately $500 billion AI-infrastructure plan and repeatedly raised capital expenditure guidance from major hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "At this milestone, Nvidia held a dominant share of the AI-accelerator market, with its stock price crossing roughly $160 per share as CEO Jensen Huang highlighted the industry's transition from training to inference demand, describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "This milestone indicates that the market is pricing AI infrastructure as the largest new capital cycle since the internet era, effectively treating Nvidia as the primary \"toll-booth\" for this spending supercycle [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The rapid valuation trajectory—from $1 trillion in mid-2023 to $4 trillion by July 2025—underscores the scale of current investment, though it also highlights risks related to concentration, evidenced by Nvidia’s record weight in the S&P 500 and its rotation within the \"$4T club\" alongside Apple (which touched $4 trillion intraday on July 8, 2025) and Microsoft during 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1, 4, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, driven primarily by strong demand for its Blackwell accelerator rack systems (specifically GB200 and GB300) [Source: ev-1].",
+      "actionable_query": "trillion on July driven primarily by strong demand for its Blackwell accelerator rack systems (specifically GB and GB ) . (4, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This surge was further fueled by the Stargate project’s approximately $500 billion AI-infrastructure plan and repeatedly raised capital expenditure guidance from major hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+      "actionable_query": "This surge was further fueled by the Stargate project’s approximately $ . (4, 2025)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "At this milestone, Nvidia held a dominant share of the AI-accelerator market, with its stock price crossing roughly $160 per share as CEO Jensen Huang highlighted the industry's transition from training to inference demand, describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+      "actionable_query": "milestone Nvidia held dominant share AI-accelerator market stock price crossing roughly per CEO Jensen Huang highlighted industry's transition training inference demand describing factories selling",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "This milestone indicates that the market is pricing AI infrastructure as the largest new capital cycle since the internet era, effectively treating Nvidia as the primary \"toll-booth\" for this spending supercycle [Source: ev-1].",
+      "actionable_query": "milestone indicates market pricing infrastructure largest new capital cycle since internet era effectively treating Nvidia primary toll-booth spending supercycle",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

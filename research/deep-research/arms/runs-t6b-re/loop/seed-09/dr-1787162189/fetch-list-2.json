@@ -1,0 +1,81 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787162189",
+  "charter_hash": "69d568fdf7a5f7a0",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "—on May . (4, 2025)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "served as the flagship model priced at $ per million input tokens and $ acted as a \"fast workhorse\" developer-default coding model priced at (4, 2025)",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "2025 launch signaled agentic coding become defining product category driven rise Claude Code",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "as the \"safest and most reliable coding agent,\" Anthropic highlighted its competitive advantage in reliability; specifically, the new \"compu (4, 2025)",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 19.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 3.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 3.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

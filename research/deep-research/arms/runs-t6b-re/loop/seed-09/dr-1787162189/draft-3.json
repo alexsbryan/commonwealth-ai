@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787162189",
+  "charter_hash": "69d568fdf7a5f7a0",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Anthropic released Claude 4 as two models, Claude Opus 4 and Claude Sonnet 4, on May 8, 2025 [Source: ev-1]. This dual-model strategy was designed to address different market segments with specific pricing structures: Opus 4 served as the flagship model priced at $15 per million input tokens and $75 per million output tokens, while Sonnet 4 acted as a \"fast workhorse\" developer-default coding model priced at $3 per million input tokens and $15 per million output tokens [Source: ev-1].\n\nThe launch signaled that agentic coding had become a defining product category for 2025, driven by the rise of Claude Code [Source: ev-1]. By positioning Claude 4 as the \"safest and most reliable coding agent,\" Anthropic highlighted its competitive advantage in reliability; specifically, the new \"computer use 2.0\" feature was roughly twice as reliable as the previous generation's capabilities [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-09",
+      "custody": "public-web"
+    }
+  ]
+}

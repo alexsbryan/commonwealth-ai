@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787102047",
+  "charter_hash": "2ee8ee0958ba0cc9",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's stock price percentage change on January 27, 2025",
+      "Nvidia's market capitalization loss in dollars on January 27, 1984 to present",
+      "DeepSeek-R1 model release date and initial performance benchmarks versus GPT-4o and Claude 3.5 Sonnet",
+      "Cost per token for DeepSeek-R1 inference compared to OpenAI GPT-4 Turbo and Anthropic Claude 3 Opus",
+      "Number of H800 GPUs used in DeepSeek-V3 training run as reported by SemiAnalysis or Epoch AI",
+      "Total estimated compute cost in FLOPs for DeepSeek-V3 pre-training phase",
+      "Comparison of hardware efficiency (FLOPS per dollar) between Nvidia H800 clusters and Huawei Ascend 910B clusters",
+      "Share of global GPU market held by Nvidia in fiscal year 2024",
+      "Nvidia's data center revenue growth rate quarter-over-quarter from Q1 FY2025 to Q2 FY2025",
+      "Investor sentiment index regarding AI infrastructure spending before and after January 27, 2"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1"
+    ]
+  }
+}

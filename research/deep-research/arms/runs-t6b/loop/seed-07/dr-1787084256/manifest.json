@@ -1,0 +1,79 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787084256",
+  "charter_hash": "1cdecf03d574d0c4",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 11
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 11,
+      "fetched": 0,
+      "search_calls": 1
+    },
+    {
+      "round": 3,
+      "gaps_before": 11,
+      "gaps_after": 16,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-07",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787084256"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "The United States moved to force TikTok’s sale or ban it primarily due to national-security concerns regarding the potential for Chinese government access to U.S. [Source: ev-1]",
+    "user data and the platform's algorithm [Source: ev-1].",
+    "This concern was formalized through CFIUS review, which examined Project Texas hosting arrangements, and led to the passage of the Protecting Americans from Foreign Adversary Controlled Applications Act, signed by President Biden on 2024-04-24 [Source: ev-1].",
+    "The law required ByteDance to divest TikTok’s U.S. [Source: ev-1]",
+    "operations within roughly 270 days (extendable by an additional 90 days) or face a ban in the United States [Source: ev-1].",
+    "The service was restored on 2025/-01/-19 after President Trump pledged to pause enforcement, followed by an executive order dated 2025/--01--20 that delayed enforcement for 75 days [Source: ev-1].",
+    "The dispute was ultimately resolved through an Oracle-led deal announced on 2025--06--10 per Bloomberg reporting [Source: ev-1].",
+    "This resolution structured TikTok’s U.S. [Source: ev-1]",
+    "operations as a joint venture rather than an outright sale, ensuring the app stayed live under \"Project Texas,\" which hosted US user data in Oracle's cloud under US control [Source: ev-1].",
+    "Under this agreement, ByteDance retained a majority interest, while Oracle received about a 12.5% stake in TikTok's U.S. [Source: ev-1]",
+    "operations, with participation from SoftBank and other investors [Source: ev-1].",
+    "Vice President JD Vance led the White House negotiations for this final ownership structure, which was completed through 2025 [Source: ev-1].",
+    "This concern was formalized through CFIUS review and led to the passage of the Protecting Americans from Foreign Adversary Controlled Applications Act, which President Biden signed on 2024-04-24 [Source: ev-1].",
+    "operations within roughly 270 days (extendable by 90) or face a ban in the United States [Source: ev-1].",
+    "The dispute was ultimately resolved through an Oracle-led deal announced on 2025-. [Source: ev-1]",
+    "operations as a joint venture rather than an outright sale, ensuring that the app stayed live under \"Project Texas,\" which hosted US user data in Oracle's cloud under US control [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787084256",
+    "acquired_at_unix": 1787084256,
+    "released_at_unix": 1787084511
+  }
+}

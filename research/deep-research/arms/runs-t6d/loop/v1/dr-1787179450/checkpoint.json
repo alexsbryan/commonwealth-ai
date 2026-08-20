@@ -1,0 +1,551 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787179450",
+  "charter_hash": "be18c8340b037f53",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787179450",
+    "question": "How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6d/loop/v1/dr-1787179450",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?",
+  "frontier": [
+    "Median home price in major US metros 1980 vs 2024",
+    "Share of households earning less than 30% Area Median Income (AMI) in US cities 1980-2024",
+    "Gini coefficient for income inequality in top 50 US metropolitan statistical areas by decade from 1980 to 2020",
+    "Percentage change in rent-to-income ratio for renters in New York City, Los Angeles, and Chicago between 1980 and 2023",
+    "Number of neighborhoods classified as gentrified according to the American Community Survey definition per metro area from 2000 to 2022",
+    "Median household income growth rate versus median home price appreciation rate in San Francisco from 1990 to 2023",
+    "Share of low-income households displaced due to housing costs in Washington DC, Boston, and Seattle between 2015 and 2024",
+    "Count of affordable rental units lost or converted to market-rate in Austin, Denver, and Phoenix from 2010 to 2024",
+    "Percentage point change in racial segregation index for Black residents in major US cities between 1980 census data and 2020 Census data",
+    "Ratio of median renter burden (housing cost as percentage of income) exceeding 50% by city tier (large metro vs small town) across decades 1980s through 2020s"
+  ],
+  "frontier_question": "How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?",
+  "figure_specifiers": [
+    "4",
+    "1980",
+    "2024"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787179450",
+      "charter_hash": "be18c8340b037f53",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787179450",
+      "charter_hash": "be18c8340b037f53",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://v1-demo.example/source-report",
+          "source_url": "https://v1-demo.example/source-report",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "American cities have undergone dramatic economic and demographic transformation since 1980, with gentrification accelerating significantly after 2000. The data reveals a stark divide across major metropolitan areas. While cities have generally become wealthier in nominal terms, this prosperity has been unevenly distributed, creating stark divides between high and low-income residents. [University of Georgia]\n\nThe research identifies Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) as experiencing the most intensive gentrification, with over half of their eligible neighborhoods transforming. Meanwhile, several metros show the most extreme inequality patterns, with Gini coefficients exceeding 0.54 and income ratios reaching 18:1 between top and bottom earners. [governing]\n\nCity-specific inequality data shows that major metropolitan areas have seen inequality rise sharply. New York City leads with a Gini coefficient of 0.5469, compared to the national average of 0.40 in 2013. Atlanta and Miami follow closely at 0.57, while New Orleans reaches 0.56. [Wikipedia]\n\nThe data reveals a crucial distinction: urban cores concentrate both high-earning professionals and low-income service workers, while suburbs maintain more moderate income distributions. [Wikipedia]\n\nThe 80/20 income ratio analysis shows New Orleans topping the list at 7.87, meaning the 80th percentile earns nearly 8 times the 20th percentile. Boston follows at 7.81, with the 80th percentile earning $172,476 versus just $22,095 for the 20th percentile. [SmartAsset]\n\nHistorical trends indicate a steady widening of inequality. The U.S. Gini coefficient reached 0.40 by 2013, with metropolitan areas showing even steeper increases. Research documents that 57 of the 100 largest metropolitan areas had significantly higher inequality in 2014 compared to 2007, coinciding with the tech boom and accelerated gentrification. [SSTI]\n\nUrban areas have experienced substantial nominal income growth, but the relationship with cost of living tells a more complex story. Since 2000, home prices increased 177% while median household income grew only 92%. The Case-Shiller Index reached 325.78 in July 2024, representing a 225% increase since January 2000. California cities show price-to-income ratios between 9.6 and 12.2, more than double the national average of 4.7. [Statista]\n\nThe data confirms that 48 of the 50 largest metros experienced worsening economic mobility for low-income families over 15 years. Only Houston showed improvement in income outcomes for people growing up in the 1990s versus 1980s, gaining a 1.1% improvement.\n\nBeyond Gini coefficients, multiple measures confirm the widening gap. The 95/20 income ratio shows Atlanta and Washington D.C. at 18:1, meaning the 95th percentile earns 18 times more than the 20th percentile. Boston, New York, and San Francisco all rank among the highest ratios. [Wikipedia] In San Francisco, top incomes rose approximately $120,000 in just two years (2014-2016). Bottom quintile gains remained minimal across all cities. [Brookings]\n\nThe financial crisis accelerated these trends. From 2007-2014, the 95/20 ratio rose from 8.5 nationally, with Bridgeport, New Orleans, San Francisco, Boston, and New Haven most affected. [Brookings]\n\nFederal Reserve data tracking 3,140+ inequality series confirms that inequality reached record levels by 2018-2021, with the U.S. showing the sharpest increase among advanced economies since the 1980s. [FRED]\n\nThe gentrification rate doubled after 2000 compared to the 1990s, affecting nearly 20% of lower-income neighborhoods in major cities. The most intensive gentrification occurred in Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%). [governing]\n\nEducational gentrification: urban areas now have 35% of residents with bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas. [pewresearch]\n\nManufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic, while finance and professional services grew from 12 million to 32 million jobs. This shift concentrated high-income professionals in urban cores. [Cooper Center]\n\nWhite population share fell 7 points in urban cores and 8 points in suburbs since 2000. 53% of urban counties are now majority nonwhite, compared to only 10% of suburban counties. [Pew Research Center]\n\nSince 1980, nearly 80% of the country's under-45 population growth was concentrated in metro areas over 1 million residents. Urban counties gained prime-age workers (25-54) while rural counties lost this demographic. [Cooper Center]\n\nGentrifying neighborhoods saw population increases and became whiter, experiencing 0.7 percentage point decreases in poverty rates. Non-gentrifying low-income areas saw poverty increase 6.7 percentage points and experienced slight population losses. [governing]\n\nThe data reveals clear regional patterns. Pacific Northwest cities (Portland, Seattle), Northeast Corridor metros (Boston, New York, Washington D.C.), and select Sun Belt cities (Atlanta) show the most intensive transformation patterns. The metros most frequently cited for inequality include New York-Newark-Jersey City, San Francisco Bay Area, Boston-Cambridge-Newton, Washington-Arlington-Alexandria, Los Angeles-Long Beach-Anaheim, and Miami-Fort Lauderdale-West Palm Beach.\n\nResearch shows residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, while residents from other gentrifying neighborhoods move to wealthier areas. Minority communities face more challenges during gentrification. [Stanford University]\n\nThe analysis confirms that income-based gentrification, rare in the 1970s-1980s, became the dominant form by 2000-2020, with educational and occupational gentrification following similar acceleration patterns. [University of Georgia]\n\nFour decades of data demonstrate that American cities have experienced a fundamental transformation. While urban areas generate substantial wealth and attract educated professionals, these benefits concentrate among high earners while displacing lower-income residents through rising costs and neighborhood change. [Brookings]\n\nThe surge in inequality and gentrification represents a fundamental shift in urban development patterns. Cities that successfully balance economic growth with affordability and inclusion will likely determine the future of American metropolitan development. The current trajectory suggests continued polarization unless policy interventions address housing affordability, economic mobility, and equitable development strategies. [PubMed Central]\n",
+          "ingested_into": null,
+          "tags": [
+            "american",
+            "city",
+            "decades",
+            "exemplar",
+            "four",
+            "gentrification"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://v1-demo.example/source-report"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787179450",
+      "charter_hash": "be18c8340b037f53",
+      "round": 2,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "source_url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Dramatic changes are playing out across parts of urban America, making many neighborhoods hardly recognizable from a relatively short time ago. A new class of more affluent residents is moving into once underinvested and predominately-poor communities. Development has followed, typically accompanied by sharp increases in housing prices that can displace a neighborhood’s longtime residents. It’s a scenario known as gentrification, and one that presents a growing dilemma for policymakers. To assess the extent to which gentrification has reshaped urban communities, Governing analyzed Census tract data for the nation’s 50 largest cities . Main findings from the neighborhoods examined include: Gentrification greatly accelerated in several cities. Nearly 20 percent of neighborhoods with lower incomes and home values have experienced gentrification since 2000, compared to only 9 percent during the 1990s. Gentrification still remains rare nationally, with only 8 percent of all neighborhoods reviewed experiencing gentrification since the 2000 Census. Compared to lower-income areas that failed to gentrify, gentrifying Census tracts recorded increases in the non-Hispanic white population and declines in the poverty rate. Researchers define gentrification differently. For this report, an initial test determined a tract was eligible to gentrify if its median household income and median home value were both in the bottom 40th percentile of all tracts within a metro area at the beginning of the decade. To assess gentrification, growth rates were computed for eligible tracts’ inflation-adjusted median home values and percentage of adults with bachelors’ degrees. Gentrified tracts recorded increases in the top third percentile for both measures when compared to all others in a metro area. ( Read complete methodology ) Where Gentrification Is Occurring A select group of cities experienced extensive gentrification in recent years. Perhaps nowhere were changes more visible than in Portland , where 58 percent of eligible tracts gentrified – more than any other city reviewed. Comparing 2000 data to the most recent Census estimates suggests at least half of lower-income neighborhoods also gentrified in Minneapolis, Seattle and Washington, D.C. In terms of raw totals, the highest number of tracts (128) gentrified in New York. The following table shows cities’ gentrification rates and tract counts for the period since the 2000 Census: City Share of Eligible Tracts Gentrifying Gentrified Tracts Did Not Gentrify Not Eligible to Gentrify Total Tracts Portland, OR 58.1% 36 26 80 142 Washington, DC 51.9% 54 50 75 179 Minneapolis, MN 50.6% 39 38 39 116 Seattle, WA 50% 7 7 118 132 Atlanta, GA 46.2% 30 35 62 127 Virginia Beach, VA 46.2% 6 7 86 99 Denver, CO 42.1% 24 33 87 144 Austin, TX 39.7% 25 38 119 182 Sacramento, CA 30% 15 35 54 104 New York, NY 29.8% 128 301 1723 2152 Oakland, CA 29.3% 24 58 31 113 Philadelphia, PA 28.7% 84 209 90 383 Albuquerque, NM 28.1% 9 23 95 127 San Diego, CA 27.5% 22 58 202 282 Baltimore, MD 23.2% 39 129 32 200 Long Beach, CA 22.4% 11 38 62 111 Fort Worth, TX 21.5% 17 62 71 150 Omaha, NE 21.4% 12 44 75 131 Nashville, TN 21.1% 12 45 96 153 Boston, MA 21.1% 12 45 122 179 San Francisco, CA 18.8% 3 13 180 196 Houston, TX 18.4% 35 155 271 461 Colorado Springs, CO 17.6% 6 28 61 95 Chicago, IL 16.8% 54 268 473 795 Jacksonville, FL 16.2% 11 57 95 163 Charlotte, NC 15.8% 9 48 137 194 Los Angeles, CA 15.1% 51 287 661 999 Phoenix, AZ 14.2% 20 121 214 355 Oklahoma City, OK 13.2% 9 59 128 196 Raleigh, NC 13% 3 20 59 82 Kansas City, MO 12.8% 10 68 70 148 Miami, FL 12.8% 5 34 58 97 Indianapolis, IN 12.2% 12 86 109 207 Columbus, OH 12.2% 11 79 117 207 Milwaukee, WI 12.1% 16 116 77 209 Mesa, AZ 12.1% 4 29 77 110 San Antonio, TX 11.7% 14 106 165 285 Fresno, CA 11.4% 5 39 69 113 Wichita, KS 11.4% 5 39 57 101 Louisville, KY 10.6% 7 59 97 163 Dallas, TX 10.2% 13 114 167 294 San Jose, CA 10% 7 63 125 195 Memphis, TN 8.8% 7 73 91 171 Tucson, AZ 8.3% 4 44 74 122 Tulsa, OK 7% 3 40 80 123 Cleveland, OH 6.7% 10 139 28 177 Detroit, MI 2.8% 7 243 46 296 Las Vegas, NV 2% 1 48 100 149 El Paso, TX 0% 0 27 104 131 Arlington, TX 0% 0 19 52 71 Source: Governing analysis of 2009-2013 American Community Survey , US2010 Longitudinal Tract Data Base While it has become m While it has become much more prevalent, gentrification remains a phenomenon largely confined to select regions, not yet making its way into most urban areas. In the majority of cities reviewed, less than one-fifth of poorer, lower priced neighborhoods experienced gentrification. If all city neighborhoods are considered -- including wealthier areas not eligible to gentrify -- less than one of every ten tracts gentrified. Cities like Detroit, El Paso and Las Vegas experienced practically no gentrification at all. How Gentrification Accelerated The initial seeds of gentrification date back several decades in some communities. In fact, a British sociologist first coined the term “gentrification” in 1963. Gentrification particularly accelerated, though, in recent years as growing numbers of Americans opted to pursue urban lifestyles. The gentrification rate, or share of eligible lower-income tracts experiencing gentrification, was 20 percent for the period following the 2000 Census, more than double the rate of the 1990s. Rates increased in 39 of the 50 cities reviewed. Some cities experienced rapid gentrification after decades of little or no economic growth. In the District of Columbia, for example, 54 neighborhoods were found to have gentrified since 2000. Back in the 1990s, just five neighborhoods had gentrified in a decade when the city was dubbed the nation’s “murder capital.” Other neighborhoods began their transition decades ago. In San Francisco, for instance, few tracts were eligible to gentrify by 2000 as much of the city’s housing stock had already increased in price. It’s important to note that Census Bureau estimates provide only snapshots of different times. So, depending on when a neighborhood gentrified, it may or may not be reflected in data over a 10-year period. Characteristics of Gentrifying Neighborhoods Distinct differences emerge between neighborhoods that gentrified and those that haven’t. Neighborhoods gentrifying since 2000 recorded population increases and became whiter, with the share of non-Hispanic white residents increasing an average of 4.3 percentage points. Meanwhile, lower-income neighborhoods that failed to gentrify experienced slight population losses and saw the concentration of minorities increase. They have also experienced different economic fates: Average poverty rates climbed nearly 7 percent in already lower-income tracts that didn’t gentrify, while dropping slightly in gentrifying neighborhoods. Neighborhood Type Tract Count Total Population Change White Non-Hispanic Share of Population Percentage-Point Change Poverty Rate Percentage-Point Change Gentrifying Tracts 948 6.5% +4.3 -0.7 Gentrification-Eligible Tracts Not Gentrifying 3,802 -2.4% -5.0 +6.7 All Tracts (includes ineligible tracts) 11,829 +9.7% -4.5 +3.6 NOTE: Figures represent average changes for each group.\n",
+          "ingested_into": null,
+          "tags": [
+            "america",
+            "gentrification"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://smartasset.com/data-studies/income-inequality-2024",
+          "source_url": "https://smartasset.com/data-studies/income-inequality-2024",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "With this in mind, SmartAsset ranked 98 of the largest U.S. cities by the size of their income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. Key Findings New Orleans has the highest income inequality of major U.S. cities. While the highest earners make 7.8 times as much as the lowest earners in New Orleans, they still earn lower than average ($110,800) when compared to other cities. But the bottom 20% of earners in New Orleans has the lowest income ceiling studywide, making less than $14,078 annually. Three cities from the New York City metro area rank in the top 10 for highest income inequality. Newark ranks third, with the highest earners making over 6.8 times as much as the lowest earners. Jersey City ranks fourth, at 6.1 times the earnings for the upper quintile. And New York City ranks sixth, with top earners making about 5.8 times more than their low-income counterparts. Incomes are most equal in Chesapeake, VA. Thanks to a relatively high-income threshold for the lowest-earning quintile in Chesapeake, high earners only make 3.8 times as much – the smallest multiplier studywide. High earners bring in a minimum of $152,000. Other cities with relatively small income discrepancies are Boise, ID (at 3.9 times) and Aurora, CO (at 4.0 times). More than one-fifth of households make more than $200k annually in these cities. The top 80% in Arlington, VA made $233,500 or more. For Bay Area cities, including Oakland and Fremont, CA, the highest earners made more than $223,500. In Seattle, WA, top earners made more than $209,000 annually. Top 10 Cities With the Highest Income Inequality New Orleans, Louisiana New Orleans tops the list with an income inequality ratio of 7.87. Income at the 80th percentile is $110,820, while those in the 20th percentile earn $14,078. Boston, Massachusetts Boston follows closely with a ratio of 7.81. Income at the 80th percentile is $172,476 and $22,095 for the 20th percentile. Newark, New Jersey In Newark, the income inequality ratio stands at 6.80. Those at the 80th percentile earn $161,577 and those at the 20th percentile make $23,758. Story Continues Jersey City, New Jersey The 80th percentile in Jersey City makes at least 6.09 times more than those at the 20th percentile\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "cities",
+            "highest",
+            "income",
+            "inequality",
+            "lowest"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "source_url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "It measures the gap between the two using what we call the “95/20 ratio.” This analysis examines that ratio for each of the 100 largest U.S. metro areas, and the largest city in each of those metro areas, using new data from the 2014 American Community Survey (ACS). 1 It also examines trends since 2007, before the onset of the Great Recession. (All dollar amounts are adjusted for inflation to 2014 levels.) City and metro income inequality in 2014 On household income, both large metro areas and their big cities tend to be more unequal places than the nation as a whole. In 2014, the 95/20 ratio for the United States was 9.3. For the 100 largest metro areas in the aggregate, that ratio was 9.7, and for big cities in those metro areas, it was 11.8. Only 18 metro areas had inequality ratios exceeding the national average (they tend to be larger areas that pull up the overall average), while the same was true for 59 of the 97 largest cities in those metro areas. The large metropolitan areas with the highest levels of income inequality in 2014 included some usual suspects, but also a couple surprises (Table 1). The Bridgeport area—equivalent to the New York suburb of Fairfield County, Conn.—led the list, largely due to the very high incomes registered by its top earners (at least $560,000 for the top 5 percent of households). 2 Two nearby metro areas—Greater New York and New Haven—also landed in the top 10, as did Northeast neighbor Boston. On the West Coast, both the San Francisco and Los Angeles metro areas also exhibited high levels of income inequality. So did the Southern metro areas of New Orleans, Miami, and Houston, the former two largely due to the low incomes earned by their poorer households (below $20,000 in both cases). Low levels of metro inequality also characterize a diverse set of places (see Appendix for full list). Metro areas along the Wasatch Front in Utah—Ogden, Provo, and Salt Lake City—all rank among those with the 10 lowest inequality ratios. Honolulu and Las Vegas also represent the West among this group. Yet income differences in a few older Northeast and Midwest regions, including Albany, Grand Rapids, and Harrisburg, are also quite low. Like their Utah counterparts, these places tend to have somewhat more homogeneous populations and industrial structures that result in smaller income disparities overall. Many cities with the highest levels of income inequality in 2014 reflect broader patterns across their metro areas. Boston leads the city list; its large student population partly explains its relatively low 20th percentile incomes. The cities of Miami, New Haven, New Orleans, New York, and San Francisco, like Boston, anchor metro areas that also registered very high inequality. Joining them are Atlanta and Washington, D.C., cities that house many poor and rich residents, as well as Cincinnati and Providence, which exhibit relatively high poverty and very low incomes among their bottom-earning households. Likewise, a few of the lowest-inequality cities lie within the lowest-inequality metro areas, namely Las Vegas, Omaha, and Provo. In general, the 10 cities with the smallest income disparities are geographically large Sun Belt places (including three in Florida and two in Southern California) that incorporate significant areas of suburban-style communities within their borders, and thus boast larger middle class populations relative to most cities. In general, cities with higher income inequality are located in metro areas that also exhibit higher income inequality (Figure 1). 3 Of the 97 cities analyzed, 84 had higher inequality than their wider metro areas. Atlanta exhibited the largest difference between its city and region; high-income households in the city earned 17.5 times their low-income counterparts in 2014, twice the disparity seen across the metro area as a whole. Like many other cities, Atlanta contains some of the most sought-after housing and neighborhoods in its region, as well as several of the metro area’s poorest communities and much of its subsidized housing. Changes in city and metro income inequality from 2007 to 2014 Household income inequality in the United States is higher today than before the Great Recession. Between 2007 and 2014, the 95/20 ratio nationwide rose from 8.5 to 9.3. Most places mirror that overall trend, though by varying degrees. Among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007 (Map 1). Most metro areas experienced increases because top incomes were stable or declined modestly over this period, while incomes near the bottom dropped substantially. Indeed, double-digit slides in 20th percentile incomes were quite common across large metro areas. High-income households earned significantly less in 2014 than in 2007 in 33 of the 100 largest metro areas, but the same was true for low-income households in fully 81 of those metro areas. Many of\n",
+          "ingested_into": null,
+          "tags": [
+            "city",
+            "declining",
+            "driven",
+            "incomes",
+            "inequality",
+            "metropolitan"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://v1-demo.example/source-report"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "American cities have undergone dramatic economic and demographic transformation since 1980, with gentrification accelerating significantly after 2000 [Source: ev-1].",
+    "Portland experienced the most intensive gentrification with 58.1% of eligible tracts transforming, followed by Washington D.C. [Source: ev-1]",
+    "at 51.9%, Minneapolis at 50.6%, and Seattle at 50% [Source: ev-1].",
+    "Inequality has risen sharply across metropolitan areas, creating stark divides between high and low-income residents despite general nominal wealth growth [Source: ev-1].",
+    "Gini coefficient reached 0.40 in 2013, while New York City led major metros with a coefficient of 0.5469 [Source: ev-1].",
+    "Atlanta and Miami recorded coefficients of 0.57, and New Orleans reached 0.56 [Source: ev-1].",
+    "Several metros exhibit extreme inequality patterns with Gini coefficients exceeding 0.54 and income ratios reaching 18:1 between top and bottom earners [Source: ev-1].",
+    "Specifically, the 95/20 income ratio shows Atlanta and Washington D.C. [Source: ev-1]",
+    "at 18:1, meaning the 95th percentile earns 18 times more than the 20th percentile [Source: ev-1].",
+    "Home prices increased by 177% while median household income grew only 92% during this period [Source: ev-1].",
+    "Price-to-income ratios in California cities range between 9.6 and 12.2, which is more than double the national average of 4.7 [Source: ev-1].",
+    "Displacement and worsening economic mobility are evident across most major metros. [Source: ev-1]",
+    "Forty-eight of the largest 50 metropolitan areas experienced worsening economic mobility for low-income families over a 15-year period [Source: ev-1].",
+    "Only Houston showed an improvement in income outcomes for people growing up in the 1990 compared to those from the 1980s, with a gain of just 1.1% [Source: ev-1].",
+    "In gentrifying neighborhoods, poverty rates decreased by 0.7 percentage points as populations became whiter and increased, whereas non-gentrifying low-income areas saw poverty increase by 6.7 percentage points alongside slight population losses [Source: ev-1].",
+    "Demographic shifts further characterize this four-decade transformation. [Source: ev-1]",
+    "Currently, 53% of urban counties are majority nonwhite compared to only 10% of suburban counties [Source: ev-1].",
+    "Nearly 80% of the country's under-45 population growth since 1980 was concentrated in metro areas with over 1 million residents [Source: ev-1].",
+    "Urban counties gained prime-age workers aged 25 to 54 while rural counties lost this demographic group [Source: ev-1].",
+    "Educational attainment has also shifted, with urban areas now having 35% of residents holding bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-1].",
+    "The labor market transformation contributed to these changes as manufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic period referenced in the data [Source: ev-1].",
+    "Conversely, finance and professional services grew from 12 million to 32 million jobs, concentrating high-income professionals in urban cores [Source: ev-1].",
+    "In San Francisco specifically, top incomes rose by approximately $120,000 between 2014 and 2016 [Source: ev-1].",
+    "Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018 through 2021, with the U.S. [Source: ev-1]",
+    "showing the sharpest increase among advanced economies since the 1980 [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "American cities have undergone dramatic economic and demographic transformation since 1980, with gentrification accelerating significantly after 2000 [Source: ev-1].",
+      "actionable_query": "with gentrification accelerating significantly after . (4, 1980, 2024)",
+      "from_claim_id": "c23",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "Portland experienced the most intensive gentrification with 58.1% of eligible tracts transforming, followed by Washington D.C. [Source: ev-1]",
+      "actionable_query": "Portland experienced intensive gentrification eligible tracts transforming followed Washington D.C",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "at 51.9%, Minneapolis at 50.6%, and Seattle at 50% [Source: ev-1].",
+      "actionable_query": "Minneapolis Seattle",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "Inequality has risen sharply across metropolitan areas, creating stark divides between high and low-income residents despite general nominal wealth growth [Source: ev-1].",
+      "actionable_query": "Inequality risen sharply across metropolitan areas creating stark divides high low-income residents despite general nominal wealth growth",
+      "from_claim_id": "c21",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Gini coefficient reached 0.40 in 2013, while New York City led major metros with a coefficient of 0.5469 [Source: ev-1].",
+      "actionable_query": "Gini coefficient reached New York City led major metros",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Atlanta and Miami recorded coefficients of 0.57, and New Orleans reached 0.56 [Source: ev-1].",
+      "actionable_query": "Atlanta Miami recorded coefficients New Orleans reached",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "Several metros exhibit extreme inequality patterns with Gini coefficients exceeding 0.54 and income ratios reaching 18:1 between top and bottom earners [Source: ev-1].",
+      "actionable_query": "Several metros exhibit extreme inequality patterns Gini coefficients exceeding income ratios reaching top bottom earners",
+      "from_claim_id": "c10",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "Specifically, the 95/20 income ratio shows Atlanta and Washington D.C. [Source: ev-1]",
+      "actionable_query": "Specifically income ratio shows Atlanta Washington D.C",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "at 18:1, meaning the 95th percentile earns 18 times more than the 20th percentile [Source: ev-1].",
+      "actionable_query": "meaning percentile earns times",
+      "from_claim_id": "c12",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "Home prices increased by 177% while median household income grew only 92% during this period [Source: ev-1].",
+      "actionable_query": "Home prices increased median household income grew during period",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "Price-to-income ratios in California cities range between 9.6 and 12.2, which is more than double the national average of 4.7 [Source: ev-1].",
+      "actionable_query": "Price-to-income ratios in California cities range between and which is more than double the national average of .",
+      "from_claim_id": "c16",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "Displacement and worsening economic mobility are evident across most major metros. [Source: ev-1]",
+      "actionable_query": "Displacement worsening economic mobility evident across major metros",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "Forty-eight of the largest 50 metropolitan areas experienced worsening economic mobility for low-income families over a 15-year period [Source: ev-1].",
+      "actionable_query": "largest metropolitan areas experienced worsening economic mobility low-income families period",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g14",
+      "text": "Only Houston showed an improvement in income outcomes for people growing up in the 1990 compared to those from the 1980s, with a gain of just 1.1% [Source: ev-1].",
+      "actionable_query": "Only Houston showed an improvement in income outcomes for people growing up in the s, with a gain of just .",
+      "from_claim_id": "c19",
+      "corroboration": null
+    },
+    {
+      "id": "g15",
+      "text": "In gentrifying neighborhoods, poverty rates decreased by 0.7 percentage points as populations became whiter and increased, whereas non-gentrifying low-income areas saw poverty increase by 6.7 percentage points alongside slight population losses [Source: ev-1].",
+      "actionable_query": "In gentrifying neighborhoods, poverty rates decreased by percentage points as populations became whiter and increased, whereas non-gentrifyi",
+      "from_claim_id": "c20",
+      "corroboration": null
+    },
+    {
+      "id": "g16",
+      "text": "Demographic shifts further characterize this four-decade transformation. [Source: ev-1]",
+      "actionable_query": "Demographic shifts further characterize four-decade transformation",
+      "from_claim_id": "c22",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "Currently, 53% of urban counties are majority nonwhite compared to only 10% of suburban counties [Source: ev-1].",
+      "actionable_query": "Currently urban counties majority nonwhite compared suburban",
+      "from_claim_id": "c24",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g18",
+      "text": "Nearly 80% of the country's under-45 population growth since 1980 was concentrated in metro areas with over 1 million residents [Source: ev-1].",
+      "actionable_query": "Nearly of the country's under- was concentrated in metro areas with over million residents . (4, 1980, 2024)",
+      "from_claim_id": "c25",
+      "corroboration": null
+    },
+    {
+      "id": "g19",
+      "text": "Urban counties gained prime-age workers aged 25 to 54 while rural counties lost this demographic group [Source: ev-1].",
+      "actionable_query": "Urban counties gained prime-age workers aged rural lost demographic group",
+      "from_claim_id": "c26",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g20",
+      "text": "Educational attainment has also shifted, with urban areas now having 35% of residents holding bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-1].",
+      "actionable_query": "Educational attainment shifted urban areas now having residents holding bachelor's degrees higher compared suburbs rural",
+      "from_claim_id": "c27",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g21",
+      "text": "The labor market transformation contributed to these changes as manufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic period referenced in the data [Source: ev-1].",
+      "actionable_query": "labor market transformation contributed changes manufacturing jobs fell million under during pandemic period referenced data",
+      "from_claim_id": "c28",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g22",
+      "text": "Conversely, finance and professional services grew from 12 million to 32 million jobs, concentrating high-income professionals in urban cores [Source: ev-1].",
+      "actionable_query": "Conversely finance professional services grew million jobs concentrating high-income professionals urban cores",
+      "from_claim_id": "c29",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g23",
+      "text": "In San Francisco specifically, top incomes rose by approximately $120,000 between 2014 and 2016 [Source: ev-1].",
+      "actionable_query": "San Francisco specifically top incomes rose approximately",
+      "from_claim_id": "c30",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g24",
+      "text": "Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018 through 2021, with the U.S. [Source: ev-1]",
+      "actionable_query": "Federal Reserve data tracking inequality series confirms reached record levels through U.S",
+      "from_claim_id": "c31",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g25",
+      "text": "showing the sharpest increase among advanced economies since the 1980 [Source: ev-1].",
+      "actionable_query": "1980 showing sharpest increase among advanced economies since",
+      "from_claim_id": "c32",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 11
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 25,
+      "fetched": 3,
+      "search_calls": 1
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://v1-demo.example/source-report",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2-degenerate.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

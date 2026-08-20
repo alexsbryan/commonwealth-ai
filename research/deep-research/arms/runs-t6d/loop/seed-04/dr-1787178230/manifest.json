@@ -1,0 +1,68 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787178230",
+  "charter_hash": "79adadbcf03bdade",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 5,
+      "gaps_after": 5,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-04",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787178230"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+    "The launch signaled a shift in frontier reasoning models toward integrating vision directly into the model architecture rather than bolting it on, and incorporating native tool use (such as web search and code interpreter) trained into the model itself [Source: ev-1].",
+    "It also marked OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+    "The launch reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini’s pricing of $1.10 per million input tokens and $4.40 per million output tokens [Source: ev-1].",
+    "Additionally, the models introduced a technique called budget forcing, which uses a fixed maximum thought budget but allows for task-adaptive (dynamic) compute so that harder questions require longer thinking times [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787178230",
+    "acquired_at_unix": 1787178230,
+    "released_at_unix": 1787178352
+  }
+}

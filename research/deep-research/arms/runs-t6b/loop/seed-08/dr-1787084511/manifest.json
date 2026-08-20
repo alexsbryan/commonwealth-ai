@@ -1,0 +1,66 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787084511",
+  "charter_hash": "918d32b2f50128cd",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 3,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 3,
+      "gaps_after": 3,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-08",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787084511"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "A US court found Google’s search business a monopoly because it violated Section 2 of the Sherman Act through exclusionary conduct, specifically by paying billions to secure default distribution deals [Source: ev-1].",
+    "Judge Amit Mehta ruled on August 5, 2024, that these payments—such as the approximately $26.3 billion spent in 2021 and the roughly 36% share of Safari search-ad revenue paid to Apple—created a self-reinforcing loop where defaults generated scale, data, and quality that protected the dominant position against rivals [Source: ev-1].",
+    "The remedies ordered on August 5, 25 were structural and behavioral: Google is required to sell Chrome (the first forced divestiture of a major tech company since the Microsoft case of 2000), it may no longer pay for default search placement or engage in revenue-sharing agreements, and it faces limits on acquisitions and AI-related investments [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787084511",
+    "acquired_at_unix": 1787084511,
+    "released_at_unix": 1787084599
+  }
+}

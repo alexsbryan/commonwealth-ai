@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787110485",
+  "charter_hash": "8d8bd0d0fc94bb40",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Anthropic Claude 4 model names and release date May 2025",
+      "Number of distinct models in Anthropic Claude 4 launch lineup",
+      "List price per million tokens for input and output for each Anthropic Claude 4 model variant",
+      "Share of coding-related queries handled by agentic AI tools versus traditional IDEs in Q1 2025",
+      "Growth rate percentage change in enterprise adoption of autonomous software development agents from January to May 2025",
+      "Count of major tech companies announcing partnerships with Anthropic for agentic coding workflows between April and June 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

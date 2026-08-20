@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787109382",
+  "charter_hash": "15d427ef60ef5741",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Google's acquisition price for Wiz in March 2025, USD",
+      "Wiz's annual recurring revenue (ARR) at the time of acquisition, USD (2025)",
+      "Number of enterprise customers using Wiz prior to acquisition, count",
+      "Market share of cloud security market held by top vendors pre-acquisition, percentage",
+      "Year-over-year growth rate of global cloud security spending from 2023 to 2024, percentage change",
+      "Valuation-to-revenue multiple paid by Google for Wiz compared to industry average, ratio"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2025"
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787109382",
+  "charter_hash": "15d427ef60ef5741",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Google acquired Wiz in March 2025 to close the security gap with competitors AWS and Azure, betting on cloud-security consolidation as the next battleground in the \"cloud wars\" and leveraging AI-driven cloud adoption as a key demand driver [Source: ev-1]. The deal signaled that major tech companies view cloud security as a critical area for competitive differentiation and market consolidation.\n\nThe acquisition was announced on **March 18, 2025**, at an approximate value of **$32 billion** in cash, marking it as Google's largest acquisition ever [Source: ev-1]. This final price followed earlier negotiations where Wiz rejected a previous offer from Google in July **2024** worth **$23 billion** [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-01",
+      "custody": "public-web"
+    }
+  ]
+}

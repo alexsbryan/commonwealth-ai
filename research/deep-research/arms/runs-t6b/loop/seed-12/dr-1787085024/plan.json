@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787085024",
+  "charter_hash": "fe16a161818c5705",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of pre-release units of Windows 11 PCs with Recall enabled shipped by OEMs in early 2024",
+      "Percentage of users who opted out of the initial Recall beta program before public launch",
+      "Count of security vulnerabilities identified in Microsoft's internal testing for Recall prior to general availability",
+      "Share of system resources (CPU, RAM) consumed by Recall during background operation on reference hardware configurations",
+      "Median storage space required per day for continuous screen capture and indexing by Recall feature",
+      "Price difference between consumer laptops equipped with Qualcomm Snapdragon X Elite chips versus Intel/AMD counterparts at time of Recall announcement",
+      "Rate of data encryption failures or plaintext exposure incidents reported by independent researchers regarding local Recall databases",
+      "Number of regulatory inquiries opened by European Data Protection Authorities specifically targeting Windows 11 privacy features in Q2-Q3 2024",
+      "Percentage change in Microsoft stock price following the initial backlash against Recall feature announcements",
+      "Count of major tech news outlets publishing critical editorials about Recall privacy risks within two weeks of its reveal"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

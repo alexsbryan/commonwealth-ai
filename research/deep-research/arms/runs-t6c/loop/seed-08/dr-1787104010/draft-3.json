@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787104010",
+  "charter_hash": "70dfa7953f2460a2",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Judge Amit Mehta of the US District Court for the District of Columbia ruled on August 5, 2024 [Source: ev-1], that Google is a monopolist in general search services and general search text advertising, violating Section 2 of the Sherman Act [Source: ev-1]. The court found this monopoly status resulted from \"default-distribution\" deals where Google paid companies such as Apple, Samsung, and Mozilla billions to be their default search engine [Source: ev-1]. This conduct was deemed exclusionary because it created a self-reinforcing loop: defaults create scale, which creates data, leading to better quality, which protects the default position against rivals [Source: ev-1]. Trial evidence supported these findings by showing that CEO Sundar Pichai testified Google spent approximately $26.3 billion on distribution in 2021, and that Google paid Apple roughly 36% of Safari search-ad revenue [Source: ev-1].\n\nRegarding remedies, Judge Mehta ordered structural measures on August 5, 25 (listed as 2025 in the text) [Source: ev-1]:\n*   **Divestiture:** Google must sell its Chrome browser, marking the first forced divestiture of a major tech company since the Microsoft case of 2000 [Source: ev-1].\n*   **Prohibition on Payments:** Google may no longer pay for default search placement or engage in revenue-sharing agreements with distributors [Source: ev-1].\n*   **Investment Limits:** The order imposes limits on certain acquisitions and AI-related investments to prevent re-concentration or entrenchment through those channels [Source: ev-1].\n\nGoogle has appealed this decision to the DC Circuit Court of Appeals (notice filed in 2025), arguing that the trial court's rulings punish procompetitive innovation, leaving the final outcome pending as of late 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-08",
+      "custody": "public-web"
+    }
+  ]
+}

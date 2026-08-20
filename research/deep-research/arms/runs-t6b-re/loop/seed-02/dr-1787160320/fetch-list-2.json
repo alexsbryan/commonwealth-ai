@@ -1,0 +1,71 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787160320",
+  "charter_hash": "7e0bef2be9112eeb",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class reasoning model could be tra (1)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Specifically, on January Nvidia lost approximately US$ trillion erased across the tech complex as investors reacted to this efficiency break (1)",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "This event revealed several key aspects regarding frontier-AI training economics: * **Cost Efficiency:** The predecessor DeepSeek-V was repo",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Hardware Constraints Driving Innovation use export-restricted chips meant export controls forced Chinese labs toward greater efficiency indicating scarcity rather preference drove economic outcomes",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-02"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-02",
+      "title": "DeepSeek R1 and the Nvidia loss (2025-01)",
+      "snippet": "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27.",
+      "content": null,
+      "engine": "mock",
+      "score": 18.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 18.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

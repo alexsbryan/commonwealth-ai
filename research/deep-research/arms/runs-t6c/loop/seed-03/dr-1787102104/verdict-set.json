@@ -1,0 +1,105 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787102104",
+  "charter_hash": "a6988f0f2a494086",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach, and these anomalies could not be guaranteed safe for the deorbit burn [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The primary reason cited was that the affected thrusters could not be ground-tested in their specific flight condition to verify safety [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This decision had significant implications for both the crew and the program:\n*   **Crew Duration:** Astronauts Butch Wilmore and Suni Williams spent roughly 9.5 months aloft, compared to the originally planned duration of approximately 8 days; they eventually returned on a Crew-9 Dragon on March 18, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "*   **Spacecraft Status:** The Starliner spacecraft undocked from the station on September 6, 2024, and landed at White Sands on September 7, 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "*   **Financial Impact:** Under its fixed-price contract from the 2014 Commercial Crew program (valued at about $4.2 billion for Boeing), the company disclosed cumulative program losses exceeding $1.5 billion by 2025; in June 2025, Boeing announced roughly 400 job cuts in its space division [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*   **Certification Status:** As of 2025, NASA's certification path for Starliner remained unresolved [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "This resulted in them spending roughly 9.5 months aloft, compared to the originally planned duration of approximately 8 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "*   **Financial Impact:** Under its fixed-price contract from the 2014 Commercial Crew program (valued at about $4.2 billion for Boeing), the company disclosed cumulative program losses exceeding $1.5 billion by 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ]
+}

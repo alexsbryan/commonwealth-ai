@@ -1,0 +1,45 @@
+pairs: 13 (12 v0 + 1 v1) -> /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/pairs.json
+=== loop arm: 13 flights ===
+seed-01	Why did Google acquire cloud-security firm Wiz in March 2025, and what did the deal signal about the cloud-security market?
+seed-02	Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?
+seed-03	Why did NASA order Boeing's Starliner to return uncrewed from its first crewed flight, and what did the decision mean for the program?
+seed-04	Why did OpenAI release o3 and o4-mini in April 2025, and what did the launch signal about the direction of frontier reasoning models?
+seed-05	Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?
+seed-06	Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?
+seed-07	Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?
+seed-08	Why did a US court find Google's search business a monopoly, and what remedies were ordered?
+seed-09	Why did Anthropic release Claude 4 as two models in May 2025, and what did the launch signal about the agentic-coding market?
+seed-10	Why did OpenAI release GPT-5 in August 2025, and what did it change about how the company sells its models?
+seed-11	Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?
+seed-12	Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?
+v1	How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?
+=== loop: seed-01 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-01.console.log)
+=== loop: seed-02 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-02.console.log)
+=== loop: seed-03 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-03.console.log)
+=== loop: seed-04 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-04.console.log)
+=== loop: seed-05 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-05.console.log)
+=== loop: seed-06 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-06.console.log)
+=== loop: seed-07 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-07.console.log)
+=== loop: seed-08 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-08.console.log)
+=== loop: seed-09 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-09.console.log)
+=== loop: seed-10 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-10.console.log)
+=== loop: seed-11 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-11.console.log)
+=== loop: seed-12 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/seed-12.console.log)
+=== loop: v1 ===
+exit=0 (see /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs/loop/v1.console.log)
+=== one-shot arm: the comparator (production Deck + draft_round) ===
+Error: flatpak-spawn(1) not found
+one-shot exit=1
+=== arms complete: pairs.json + loop/ + oneshot/ under /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs ===

@@ -1,0 +1,81 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787083495",
+  "charter_hash": "9567e2e6800e0f02",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 8,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 8,
+      "gaps_after": 18,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-04",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787083495"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+    "The primary reason for the release was to defend the reasoning-model frontier against competitive pressures from DeepSeek's R1 cost shock and Anthropic's agentic-coding push [Source: ev-1].",
+    "With GPT-5 not yet shipping at the time of launch, OpenAI used this opportunity to reframe frontier capability as tool-using reasoning available at commodity prices [Source: ev-1].",
+    "The launch signaled that the direction of frontier reasoning models is moving toward native integration of capabilities directly into the model architecture rather than bolting them on externally. [Source: ev-1]",
+    "Specifically, o3 and o4-mini were OpenAI’s first reasoning models with vision built into the model itself and featuring native tool use (such as web search and code interpreter) trained into the model [Source: ev-1].",
+    "This shift emphasized a strategic focus on making advanced reasoning accessible through an API-first approach; both models were available to developers from day one, although o3 was not initially included in the ChatGPT app while o4-mini was [Source: ev-1].",
+    "Key technical details supporting this direction include the use of \"budget forcing,\" a technique involving a fixed maximum thought budget with task-adaptive dynamic compute that allows harder questions to trigger longer thinking times [Source: ev-1].",
+    "Additionally, the launch introduced OpenAI’s first private chain-of-thought policy, ensuring that reasoning tokens are not exposed to API callers [Source: ev-1].",
+    "Commercially, the release highlighted cost efficiency and high performance. [Source: ev-1]",
+    "Pricing for o3 is $10 per million input tokens and $40 per million output tokens, whereas o4-mini is priced at $1.10 per million input tokens and 4.40 dollars per million output tokens [Source: ev-1].",
+    "In terms of capability, o3 set a record on the ARC-AGI benchmark by achieving about 87.5% on ARC-AGI-1 at high compute, becoming the first model to reach or exceed the ~85% human baseline [Source: ev-1].",
+    "The launch signaled that the direction of frontier reasoning models is moving toward native integration of vision and tool use (such as web search and code interpreter) directly into the model architecture, rather than adding them externally [Source: ev-1].",
+    "Additionally, it indicated a strategic shift to \"defend the reasoning-model frontier\" against competitors like DeepSeek and Anthropic by reframing frontier capability as tool-using reasoning available at commodity prices [Source: ev-1].",
+    "Key technical and commercial details from this release include:\n*   **Architecture:** These were OpenAI's first reasoning models with built-in vision and native tool use trained into the model itself [Source: ev-1].",
+    "*   **Technique:** They utilized \"budget forcing,\" which employs a fixed maximum thought budget with task-adaptive (dynamic) compute, allowing harder questions to require longer thinking times [Source: ev-1].",
+    "*   **Privacy Policy:** The launch introduced OpenAI’s first private chain-of-thought policy, meaning reasoning tokens are not exposed to API callers [Source: ev-1].",
+    "*   **Pricing:** o3 is priced at $10 per million input tokens and $40 per million output tokens, while o4-mini is priced at $1.10 per million input tokens and 4.40 dollars per million output tokens [Source: ev-1].",
+    "*   **Performance:** o3 set a record on the ARC-AGI benchmark, achieving about 87.5% on ARC-AGI-1 at high compute, which met or exceeded the ~85% human baseline as the first model to do so [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787083495",
+    "acquired_at_unix": 1787083495,
+    "released_at_unix": 1787083718
+  }
+}

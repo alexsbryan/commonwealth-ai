@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787083495",
+  "charter_hash": "9567e2e6800e0f02",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1]. The primary reason for the release was to defend the reasoning-model frontier against competitive pressures from DeepSeek's R1 cost shock and Anthropic's agentic-coding push [Source: ev-1]. With GPT-5 not yet shipping at the time of launch, OpenAI used this opportunity to reframe frontier capability as tool-using reasoning available at commodity prices [Source: ev-1].\n\nThe launch signaled that the direction of frontier reasoning models is moving toward native integration of capabilities directly into the model architecture rather than bolting them on externally. Specifically, o3 and o4-mini were OpenAI’s first reasoning models with vision built into the model itself and featuring native tool use (such as web search and code interpreter) trained into the model [Source: ev-1]. This shift emphasized a strategic focus on making advanced reasoning accessible through an API-first approach; both models were available to developers from day one, although o3 was not initially included in the ChatGPT app while o4-mini was [Source: ev-1].\n\nKey technical details supporting this direction include the use of \"budget forcing,\" a technique involving a fixed maximum thought budget with task-adaptive dynamic compute that allows harder questions to trigger longer thinking times [Source: ev-1]. Additionally, the launch introduced OpenAI’s first private chain-of-thought policy, ensuring that reasoning tokens are not exposed to API callers [Source: ev-1]. Commercially, the release highlighted cost efficiency and high performance. Pricing for o3 is $10 per million input tokens and $40 per million output tokens, whereas o4-mini is priced at $1.10 per million input tokens and 4.40 dollars per million output tokens [Source: ev-1]. In terms of capability, o3 set a record on the ARC-AGI benchmark by achieving about 87.5% on ARC-AGI-1 at high compute, becoming the first model to reach or exceed the ~85% human baseline [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-04",
+      "custody": "public-web"
+    }
+  ]
+}

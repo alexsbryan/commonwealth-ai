@@ -1,0 +1,138 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787104463",
+  "charter_hash": "450b48015ceb6682",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "trillion on July becoming the first company in history to close above this threshold . (4, 2025)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "milestone driven several key factors related infrastructure spending demand Accelerator significant Blackwell rack systems specifically models",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Major Infrastructure Projects Stargate project contributed approximately billion plan",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "2025 Hyperscaler Capex Capital expenditure guidance major hyperscalers—including Microsoft Meta Google Amazon—was raised repeatedly throughout",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "Market Positioning Nvidia held dominant share AI-accelerator during period",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "shift reflects transition demand focus training inference CEO Jensen Huang describing efforts building factories sell compute commodity",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q7",
+      "text": "The rapid growth trajectory leading up to this point saw Nvidia reach $ trillion in mid- $ trillion in February and $ trillion in June . (4, 2025)",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Additionally company's share price crossed approximately during time",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 7.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

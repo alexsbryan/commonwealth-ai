@@ -1,0 +1,139 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787083103",
+  "charter_hash": "41aa12eeef37f11b",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did Google acquire cloud-security firm Wiz in March 2025, and what did the deal signal about the cloud-security market?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Google's acquisition price for Wiz in March 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Wiz's annual recurring revenue (ARR) as of early 2024 or late 2023",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Number of enterprise customers using Wiz before the acquisition",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Market share percentage of cloud security market held by top three vendors prior to 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Year-over-year growth rate of global cloud security spending from 2021 to 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "List of major strategic acquisitions made by Google Cloud in the last five years and their respective prices (2025)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Average deal size of cybersecurity acquisitions exceeding $1 billion between 2020 and 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q7",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 5.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 7.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

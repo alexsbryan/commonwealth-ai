@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787157156",
+  "charter_hash": "60a6651f96f1272d",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, here are the answers to your questions:\n\n**Why did NASA order Boeing's Starliner to return uncrewed?**\nNASA ordered Boeing’s Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach, and these issues could not be guaranteed safe for the deorbit burn [Source: ev-1]. The decision was made on 2024-08-24 after NASA determined that the thrusters could not be ground-tested in their flight condition to verify safety [Source: ev-1].\n\n**What did the decision mean for the program?**\nThis decision had significant implications for the program regarding crew duration and financial impact. Astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station until returning via a Crew-9 Dragon on 2025-03-18, spending roughly 9.5 months aloft compared to the planned ~8 days [Source: ev-1]. Regarding the financial impact, Boeing operates under a fixed-price contract from the 2014 Commercial Crew program (approx. $4.2B vs SpaceX's approx. $2.6B) [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-03",
+      "custody": "public-web"
+    }
+  ]
+}

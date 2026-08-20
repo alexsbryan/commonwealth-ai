@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787157156",
+  "charter_hash": "60a6651f96f1272d",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of helium tank leaks detected during the Starliner CFT-1 mission, 2024",
+      "Count of thruster malfunctions or anomalies reported on Boeing Starliner spacecraft, September to October 2024",
+      "Date and time NASA officially ordered Starliner to return uncrewed from ISS, October 2024",
+      "Duration of delay in SpaceX Crew Dragon launch schedule due to Starliner issues, Q3-Q4 2024",
+      "Percentage change in projected cost per seat for commercial crew missions following Starliner delays, 2023–2025",
+      "Status update on FAA certification requirements for Boeing Starliner after first flight anomaly report, November 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "mean"
+    ]
+  }
+}

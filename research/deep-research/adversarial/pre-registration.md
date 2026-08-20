@@ -4973,3 +4973,285 @@ preference is unchanged).
 
 _(further landings append here: red→green evidence, gate exits, battery
 re-measurement, commit ids.)_
+
+## T6d — the word-number class (fix-first revolution, survey-informed; order deep-research-t6d, operator-approved on the verbatim fix-first words, directive d99ef7f2) — DECLARATION
+
+Written BEFORE any code change or flight of this order (§18.6). The
+fix converges at the ONE choke point `figure_tokens`
+(deep_research/mod.rs:473); no new matcher anywhere.
+
+### 1. Forensics (evidence-cited, battery #4 = runs-t6c-r4)
+
+Battery #4's v1 flight (score-report-t6c-r4.json) measured the class:
+v1 loop_covered **5/16** (bar >= 12/16), 40/40 verdicts could-not-
+judge, loop_gap_trace **[1, 21, 26]** (grew). Root cause: the
+strict-shape re-draft spelled every figure as words ("twenty percent"
+x16 on the flight) while the loop's figure decider `figure_tokens`
+(mod.rs:473) is digit-only — a maximal run of digits plus adjacent
+`$ % . : / ,` punctuation. Every consumer reads the SAME decider, so
+all went blind together (verified by `grep`, cite-don't-recall):
+the witness (containment.rs:241/267/393), the fold identity
+(`gap_identity`, mod.rs:493), the figure inventory (synthesize.rs:45),
+the question specifiers (acquisition.rs:146) — hence the 40/40
+could-not-judge and the P4-v1 collapse (the v1 keys' figures — 58.1%,
+51.9%, 50.6%, 50%, 95/20, 325.78, 7.87:1, 172476, 22095 — never
+matched the word-form drafts).
+
+The codebase survey (§19, run for this order): NO word→digit parser
+exists anywhere in the workspace (no such crate in the root
+Cargo.lock; no such code in-tree) — reuse has been checked and
+cannot serve; the fix must be built, at the ONE choke point.
+
+### 2. The crate-vs-table evaluation (operator steer, decided by the parity rule)
+
+The steer's decision rule: whichever reaches parity on the frozen
+shapes FIRST; if the table reaches parity, prefer it (§19 — the
+lexicon already exists here). Evaluation:
+
+- **Crates**: `text2num` exists on crates.io (sparse index reachable
+  from this host — network verified); `word2number` does NOT exist
+  on crates.io (index 404). But NO word→digit crate maps the unit
+  words the frozen shapes require — "percent"→"%", "over"→"/",
+  "point"→"." — those are outside the word→number problem. Parity on
+  the six frozen shapes therefore REQUIRES an in-house unit-word
+  layer in the crate path too; the crate could only substitute the
+  pure cardinal parsing ("fifty-eight"→58, "seventeen"→17), which is
+  a fixed finite vocabulary (~40 words) already curated in-tree as
+  `NUMBER_WORDS`/`ORDINAL_WORDS` (sovereign-eval/src/flywheel/
+  generators/adversarial.rs:588) — the corpus's own shapes.
+- **DECISION: the in-house table, named.** It reaches parity by
+  construction — each frozen shape becomes a red-first test in this
+  declaration. A crate + in-house unit layer would be two moving
+  parts for zero parity gain on a fixed, finite vocabulary (the
+  steer's own "do not gold-plate"); zero new dependencies keeps the
+  lockfile, the layer map (ARCH_LAYERS.toml), and feature-unification
+  untouched on the core crate.
+
+### 3. The fix (mod.rs, figure_tokens only)
+
+`figure_tokens` gains a private `normalize_word_figures(s)` step —
+the word→digit table inverted from `NUMBER_WORDS`/`ORDINAL_WORDS`
+(every adversarial word maps to its digit), closed with the
+units/teens/tens ranges the generator's words imply (thirteen..
+nineteen, sixty..ninety, compound ordinals like "twenty-first") —
+the frozen shapes require "seventeen" and "ninety-five", which the
+generator's literal arrays do not contain. The digit-run extraction
+(`figure_runs`) is UNCHANGED — its byte spans keep pointing at the
+original text for `strip_disallowed_figures` (the anti-leak strip
+stays span-correct; its semantics — the QUESTION's own specifiers,
+digit-form — are untouched).
+
+Composition rules (all deterministic C-class, no model):
+- compounds: hyphenated or spaced tens+unit ("fifty-eight"→58,
+  "twenty one"→21, "twenty-first"→21), "and" connector allowed
+  ("one hundred and twenty"→120);
+- scale words: hundred=100, thousand=1000 ("one hundred twenty"→120,
+  "two thousand"→2000);
+- standalone ordinals: first..twentieth→1..20;
+- unit words, structurally guarded: "percent"/"per cent"→"%" when
+  preceded by a figure (word phrase or digit run — "8 percent"→"8%");
+  "point"→"." and "over"→"/" ONLY between two figure phrases
+  ("fifty-eight point one"→"58.1", "ninety-five over twenty"→
+  "95/20"; the prepositional "grew over twenty percent" is NOT
+  converted); "times" is NOT mapped (token equivalence already
+  holds: "17.5 times"→"17.5");
+- semantics declared: a spelled-out number word IS a figure —
+  word-form text tokenizes identically to its digit form ("the first
+  wave"→"1", symmetric with "the 1st wave").
+
+Inheritance, named (§18.3, never silent): `figure_specifiers` /
+`has_figure_specifier` (acquisition.rs), `figure_inventory`
+(synthesize.rs), the witness (containment.rs), the fold identity and
+fact query (mod.rs) all read `figure_tokens` and inherit word-form
+support — that is the order's contract ("no other surface changes").
+Two named consequences, both measured by the battery:
+(a) the R1 fold-in (`figure_hunt_frontier`): a sub-question carrying
+a word number now counts as carrying a figure specifier, so the
+question's era specifiers are not folded into it — the rule's
+declared intent ("already carries a specifier → stands as drafted")
+is preserved, the detection improved;
+(b) the fold identity: a number word now yields a figure token while
+remaining a content-word subject (subject extraction reads the
+original text) — a shared number word can only tighten the fold's
+intersection; R-12 measures the net.
+
+### 4. Item 2 — the strict-shape prompt clause (synthesize.rs:304)
+
+The `strict_shape` constraint block gains the figures-as-digits
+clause, verbatim from the order: spelled-out figures are forbidden
+in the re-draft; digits or nothing. The default (non-strict) prompt
+stays byte-shaped as before (pinned by the existing test).
+
+### 5. Item 3 — the numeric_audit convergence: evaluated, NAMED, not done
+
+The survey's flag B: `figure_tokens` and `numeric_audit::extract_figures`
+(runtime/numeric_audit.rs:112) are two incompatible digit tokenizers.
+They are two DIFFERENT deciders for two DIFFERENT jobs: the audit
+tokenizes `$<number><magnitude>` and `<number>%` — what the model
+QUOTED with currency/percent units (bare numbers deliberately
+skipped); the loop tokenizes every digit run — what carries fact
+identity in the loop. Different semantics, different callers, spans
+vs tokens; converging them is not cheap and is not needed for this
+order's gate. Named, not expanded (§18.3).
+
+### 6. Red-first tests (pure, deterministic — no daemon; fail at HEAD, pass after)
+
+Token equivalence, the frozen shapes — each asserts
+`figure_tokens(word_form) == figure_tokens(digit_form)`:
+
+1. "twenty percent" == "20%"
+2. "fifty-eight point one percent" == "58.1%"
+3. "seventeen point five times" == "17.5"
+4. "ninety-five over twenty" == "95/20"
+5. "eight point five" == "8.5"
+6. the in-tree fixture shape (synthesize.rs:730): "8 percent of all
+   reviewed neighborhoods" == "8%"
+
+Structural guards (no false conversions):
+7. the prepositional "over" is NOT converted: "increased by over 20%"
+   yields ["20%"] only — no "/20" token;
+8. "point" not between figures is NOT converted: "the point of the
+   study" yields no tokens;
+9. scales and compounds: "one hundred twenty"→["120"],
+   "twenty-first"→["21"], "per cent"→["%"], "two thousand"→["2000"].
+
+Inheritance:
+10. `figure_specifiers` sees word figures: a question carrying
+    "twenty percent" yields "20%" among its specifiers;
+11. inversion completeness: every word in the adversarial
+    `NUMBER_WORDS`/`ORDINAL_WORDS` arrays (sovereign-eval adversarial.rs:588)
+    tokenizes to a non-empty figure token (the lexicon inversion's
+    contract — the generator's vocabulary and the decider's
+    vocabulary are the same set, case-insensitive, embedded in the
+    test verbatim).
+
+synthesize.rs:
+12. the strict-shape retry prompt carries the figures-as-digits
+    clause; the default prompt does not (extended onto the existing
+    `shape_constraint_appears_only_on_retry_prompt`).
+
+### 7. Gate (battery #5, frozen banks, bars untouched)
+
+Battery protocol (the t6c-r4 pattern, reaper case law — NEVER a bare
+harness background task): fresh root
+`ARMS_RUN_ROOT=/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6d`
+(absolute — the rev-1 lesson; the env crosses via the host launcher),
+ONE `systemd-run --user` unit (dr-t6d), 13 loop flights (12 v0 + v1)
++ the one-shot comparator arm, budget 12/12, model pin unchanged
+(Qwen3.8-27B-UD-Q6_K_XL on 127.0.0.1:9741), daemon idle check before
+launch, no daemon restarts mid-battery. Scoring: score-arms.py
+(frozen — legs, bars, canon untouched).
+
+Legs (bars as frozen):
+- **P4-v1 >= 12/16** — recovery from battery #4's 5/16.
+- **v1 trajectory, stated plainly either way**: r3 vs r2 of the SAME
+  flight — converged (r3 <= r2) or flat; battery #4 grew 21 → 26.
+- **R-12-nongrow (v0, intent-form) >= 10/12** — battery #4 measured
+  8/12; the fold identity's word-form visibility is expected to help
+  the v0 seeds whose drafts re-expressed figures in words.
+- **P3 not worse than battery #4** (>= 9/13 passed).
+- **Honesty holds**: no new untraced/ungrounded class; the v1
+  40/40 could-not-judge blindness must not recur as word-form
+  blindness (the witness sees word figures now).
+
+This is the LAST revolution before the 122B judge window. Landing:
+ONE commit (pre-reg + reds + fix + prompt clause + execution record
++ journal), battery evidence untracked, local only, never pushed.
+
+---
+
+## T6d revolution journal (written after the fix landed, before the battery)
+
+### Red-first evidence — six tests watched failing at HEAD, green after
+
+All in sovereign/crates/sovereign-core/src/deep_research/:
+
+1. `word_figures_tokenize_like_their_digit_forms` — the 10 frozen
+   shapes: "twenty percent" ≡ "20%", "fifty-eight point one percent"
+   ≡ "58.1%", "seventeen point five times" ≡ "17.5 times",
+   "ninety-five over twenty" ≡ "95/20", "eight point five" ≡ "8.5",
+   plus the in-tree fixture ("8 percent of all reviewed
+   neighborhoods") and 4 more.
+2. `word_figure_guards_do_not_fabricate_tokens` — unit-word guards:
+   "percent" with no preceding figure stays prose; "point"/"over"
+   map only BETWEEN two figure phrases ("grew over twenty percent"
+   is not a ratio); "times" never mapped.
+3. `adversarial_number_words_invert_to_figures` — the FULL
+   NUMBER_WORDS/ORDINAL_WORDS inversion (adversarial.rs:588)
+   round-trips every word to its digit value.
+4. `word_figures_inherit_into_question_specifiers` — a question
+   carrying "twenty percent" yields "20%" among its specifiers.
+5. `word_figures_inherit_into_gap_identity` — word-form and
+   digit-form claims share one fold identity ("58.1%").
+6. `shape_constraint_appears_only_on_retry_prompt` — the
+   strict-shape re-draft's figures-as-digits clause lives ONLY in
+   the retry prompt (synthesize.rs), never in the default prompt.
+
+### The full gate caught a strip-side asymmetry (fixed in the same revolution)
+
+The 6 reds went green; the full test gate then failed THREE deep_research
+tests that my change legitimately touched — and one of them exposed a
+real regression, not an expectation:
+
+- **REGRESSION — the strip-3c anti-leak in word form.** The t2c strip
+  decider (`strip_disallowed_figures`) read `figure_runs` (digit runs
+  only): a word-figure claim's figure BYPASSED the strip, so (a) the
+  estate's spelled-out echo ("one hundred cities") leaked into the
+  query exactly like the measured t1h g2 digit leak, and (b) the t1e
+  fold-in guard (`has_figure_specifier`, which DOES see word figures)
+  found a specifier in the template and suppressed the fold-in — the
+  question's era years silently dropped out of the follow-up query,
+  the t1e numbers-drop-out failure mode re-opened in word form.
+  FIXED: `strip_disallowed_figures` normalizes word figures first,
+  then strips digit runs of the normalized text — "four" strips
+  exactly like "4". Word-form and digit-form claims now produce
+  IDENTICAL templates, queries, and carried figure sets (pinned by
+  the new red-first test `word_figures_strip_and_fold_like_digit_forms`).
+- **BUG — the phrase-run span.** The red run surfaced a second defect:
+  a multi-word phrase run ("one hundred") advanced the word cursor
+  only past its FIRST word and truncated its leading separator, so
+  "one hundred largest" normalized to "100 hundred largest" (the
+  absorbed words' separator re-emitted as prose) and "affected twenty
+  percent" glued to "affected20%". FIXED: the phrase run keeps its
+  leading separator (word forms glue to prose exactly like digit
+  forms) and advances the cursor past the run's LAST word.
+- **Two expectation updates, both direct consequences of the
+  pre-registered semantics ("a spelled-out number word IS a figure"):**
+  - `untraced_claim_figure_is_reported_absent`: the fixture claim
+    "changed across four decades (1980–2024)" carries figure "4"
+    (word), which the evidence does not carry — the witness now
+    reports ["4", "2024"] missing, not ["2024"].
+  - `gap_query_does_not_echo_estate_figures`: the question "across
+    four decades (1980-2024)" yields specifiers ["4", "1980", "2024"]
+    — "4" is the question's own figure and rides in its allowed set.
+
+### Gate exits (before the battery)
+
+- `sovereign-lint.sh --human --full`: exit 0 (0 errors; 470 warnings,
+  the pre-existing count).
+- `sovereign-test.sh --human` full: 9979 pass / 3 fail — exactly the
+  pre-existing sovereign-inference `embedded::gates` trio (failing at
+  clean HEAD, D2 domain, untouched; every landing record since t1a
+  documents it). deep_research module: 155/155 green.
+
+### Crate-vs-table resolution (steer, named here)
+
+In-house inversion of NUMBER_WORDS/ORDINAL_WORDS chosen over a
+text2num-family crate: the crate maps no unit words ("percent",
+"point", "over"), so the in-house unit layer is needed in BOTH paths;
+the table reaches parity with the frozen shapes by construction; zero
+new dependencies (§19 — the lexicon already exists in this repo).
+Named-not-done (item 3 of the order): figure_tokens and
+numeric_audit::extract_figures stay separate deciders — different
+jobs (figure tokens for identity/witness/anti-leak vs audit-side
+figure extraction with its own span/parse contract); converging them
+would couple the audit leg to the research loop's decoder for no
+measured gain.
+
+### Battery
+
+Battery #5 launched 2026-08-19 15:16 PT as ONE `systemd-run --user`
+unit (dr-t6d), fresh root runs-t6d, 13 loop flights + one-shot
+comparator, budget 12/12, model pin unchanged, daemon idle-checked
+before launch, no restarts. Evidence untracked; results + execution
+record land below at landing.

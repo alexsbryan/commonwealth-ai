@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787102238",
+  "charter_hash": "3a501f0bd02a966d",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI o3 and o4-mini model release date in April 2025",
+      "Official OpenAI announcement details for o3 and o4-mini launch timing",
+      "Comparison of reasoning benchmark scores between o1, o3, and o4-mini models",
+      "Change in inference cost per token from o1 to o3 and o4-mini releases",
+      "Latency metrics comparison between o3 and previous frontier reasoning models like o1",
+      "Market share or adoption rate data for OpenAI API usage post-April 2025",
+      "Competitor model releases by Anthropic and Google DeepMind in Q1-Q2 2025 relative to OpenAI's timeline",
+      "Number of enterprise customers adopting OpenAI reasoning models after the April 2025 update"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3",
+      "4",
+      "2025"
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787160320",
+  "charter_hash": "7e0bef2be9112eeb",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's single-day market capitalization loss in dollars and percentage on January 27, 2025",
+      "Historical comparison of Nvidia's largest previous single-day stock price drops by date and magnitude",
+      "DeepSeek R1 model training cost estimates reported by DeepSeek or third-party analysts in US dollars",
+      "Estimated GPU count required to train a frontier large language model comparable to GPT-4o as of late 2024",
+      "Average daily revenue per H100 GPU for major cloud providers like AWS, Azure, and Google Cloud in USD",
+      "Comparison of inference costs between DeepSeek R1 and OpenAI o1 models per million tokens in USD",
+      "Nvidia data center segment revenue growth rate year-over-year from fiscal year 2023 through Q3 FY2025",
+      "Share of global AI accelerator market held by Nvidia versus AMD and custom silicon (TPUs) in 2024",
+      "DeepSeek's reported total compute spending on the R1 project compared to typical frontier lab budgets",
+      "Percentage change in Nvidia stock price following previous major open-source model releases such as Llama 3 or Mistral"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1"
+    ]
+  }
+}

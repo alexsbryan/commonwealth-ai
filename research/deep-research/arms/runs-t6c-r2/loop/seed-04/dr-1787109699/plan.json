@@ -1,0 +1,31 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787109699",
+  "charter_hash": "f5c253da0659163f",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Release date and official announcement details for OpenAI o3 model",
+      "Release date and official announcement details for O4-mini model",
+      "List of key technical specifications (context window, max output tokens) announced for OpenAI o3",
+      "List of key technical specifications (thinking time tiers, latency metrics) announced for O4-mini",
+      "Benchmark performance scores (AIME 2025, GPQA Diamond, SWE-bench Verified) reported by OpenAI for o3",
+      "Benchmark performance scores compared to previous models (o1, GPT-4.1) in official OpenAI documentation",
+      "Pricing per million input tokens set by OpenAI for the o3 API tier",
+      "Pricing per million output tokens set by OpenAI for O4-mini API tier",
+      "Percentage change in inference cost between o1-preview and o3 based on published pricing sheets",
+      "Number of enterprise customers or partners named in initial press releases regarding o3 adoption",
+      "Count of third-party evaluations or independent benchmarks conducted within one month of April 2025 release",
+      "Median latency reduction percentage cited in technical reports comparing o4-mini to standard reasoning modes"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3",
+      "4",
+      "2025"
+    ]
+  }
+}

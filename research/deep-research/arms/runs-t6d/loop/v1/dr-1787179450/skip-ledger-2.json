@@ -1,0 +1,57 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787179450",
+  "charter_hash": "be18c8340b037f53",
+  "round": 2,
+  "entries": [
+    {
+      "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+      "title": "Cities With the Highest Home Price-to-Income Ratios [2025 Edition]",
+      "score": 2.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 2.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+      "title": "Gentrification by the numbers",
+      "score": 2.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 2.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 1.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+      "title": "Income inequality in the United States",
+      "score": 1.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

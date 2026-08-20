@@ -1,0 +1,20 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1787104463",
+  "charter_hash": "450b48015ceb6682",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+      "hits": []
+    }
+  ],
+  "estate_answer": "(No evidence was retrieved this round. Say so plainly.)"
+}

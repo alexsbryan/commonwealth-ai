@@ -1,0 +1,72 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787161530",
+  "charter_hash": "fcb0c2971e1f8fe0",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 6
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 7,
+      "fetched": 0,
+      "search_calls": 6
+    },
+    {
+      "round": 3,
+      "gaps_before": 7,
+      "gaps_after": 8,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-06",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787161530"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "The global IT outage in July 2024 was caused by a faulty CrowdStrike Falcon Sensor content update that contained an out-of-bounds memory read in the sensor's C++ code [Source: ev-1].",
+    "Specifically, this defect involved an untrusted pointer dereference triggered by a 21-byte input that bypassed a flawed content validator due to missing input validation and a memory-safety defect [Source: ev-1].",
+    "The scale of the disruption resulted from monoculture concentration; one security agent deployed at enterprise scale with fast-cadence updates became a single point of failure for approximately 8.5 million Windows devices worldwide [Source: ev-1].",
+    "The consequences included widespread disruptions across multiple sectors, including airlines, banks, hospitals, broadcasters, and 911 services [Source: ev-1].",
+    "Delta Air Lines cancelled roughly 7,000 flights and incurred about $500M in costs before suing CrowdStrike [Source: ev-1].",
+    "Financially, CrowdStrike shares fell by about 11% on July 22, 2024 [Source: ev-1].",
+    "In response to the incident, CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and implemented staged rollouts with canary testing and sensor-level validation, while the episode drove industry-wide discussions regarding chaos engineering and blast-radius limits for endpoint agents [Source: ev-1].",
+    "On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage because it contained an out-of-bounds memory read in the sensor's C++ code [Source: ev-1].",
+    "Specifically, an untrusted pointer dereference was triggered by a 21-byte input that bypassed a flawed content validator due to missing input validation and a memory-safety defect [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787161530",
+    "acquired_at_unix": 1787161530,
+    "released_at_unix": 1787161733
+  }
+}

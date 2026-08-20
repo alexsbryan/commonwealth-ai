@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787101991",
+  "charter_hash": "f39bf002524816ab",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Google's acquisition price for Wiz in March 2025",
+      "Wiz's annual recurring revenue (ARR) or valuation prior to the Google acquisition (2025)",
+      "Number of enterprise customers using Wiz cloud security platform before acquisition",
+      "Market share percentage of major cloud-native security vendors including Wiz, Palo Alto Networks, and CrowdStrike as of 2024",
+      "Year-over-year growth rate of the global cloud workload protection market from 2023 to 2025",
+      "Count of major tech acquisitions by Google involving cybersecurity firms between 2018 and 2025",
+      "Median deal value ratio (acquisition price relative to target company ARR) for top ten SaaS cybersecurity mergers in 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2025"
+    ]
+  }
+}

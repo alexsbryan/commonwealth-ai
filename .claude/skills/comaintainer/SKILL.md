@@ -278,6 +278,17 @@ bounds the work:
    document that quietly re-scopes a bar must land its `deferred` row
    in the same commit**: that is the exact move that hid the native-
    grounding latency bar for the whole program.
+8c. **Prune worker worktrees at landing** (operator direction
+   2026-08-13: "prune the worktrees when we're done — we don't want
+   60GB target dirs lingering until we run out of disk"). After the
+   branch merges to main: (1) `git worktree remove .claude/worktrees/agent-<id>`
+   (worktrees with commits do NOT auto-clean — only unchanged ones
+   do), (2) `git worktree prune`, (3) verify with `git worktree list`
+   + `df -h /home`. The branch ref stays (costs nothing, preserves
+   history); only the checkout + its target/ dir go. Safety rule
+   before ANY removal: tree clean + tip merged or patch-equivalent
+   (`git cherry main <tip>` shows `-`) — otherwise escalate, never
+   force.
 9. Day close: `scripts/co-closeout.py --open`. Never hand-assemble
    the page — log each drip decision as its own pending row
    (`--kind decision`) and the ledger builds itself.

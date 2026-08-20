@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787178938",
+  "charter_hash": "3b1b5a515efaa7dd",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Anthropic Claude 4 model names and release date",
+      "Count of distinct models in the Claude 4 family released by Anthropic",
+      "May 2025",
+      "Claude Opus 4 vs Claude Sonnet 4 pricing per million tokens (input/output)",
+      "Price difference between top-tier LLMs from OpenAI, Google, and Anthropic as of May 2025",
+      "Percentage change in agentic coding tool market size from Q1 to Q2 2025",
+      "Market share of AI-assisted code generation tools among developers in 2025",
+      "Median time-to-completion for complex software tasks using Claude 4 versus previous versions"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2",
+      "2025"
+    ]
+  }
+}

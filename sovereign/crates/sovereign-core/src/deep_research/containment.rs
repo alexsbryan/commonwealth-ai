@@ -691,7 +691,10 @@ mod tests {
     /// pre-registered): a claim figure the evidence does not carry is
     /// reported absent, extraction-independent. Citation spans are
     /// stripped before the check — a figure that appears only inside a
-    /// span is not present.
+    /// span is not present. The word-number class (order
+    /// deep-research-t6d — "a spelled-out number word IS a figure")
+    /// joined the set: "four" in the claim's "four decades" reads as
+    /// "4", and the evidence carries neither word nor digit.
     #[test]
     fn untraced_claim_figure_is_reported_absent() {
         let evidence = vec![
@@ -701,8 +704,8 @@ mod tests {
         let claim = "American cities changed across four decades (1980–2024), with gentrification accelerating after 2000.";
         assert_eq!(
             missing_claim_figures(claim, &evidence),
-            vec!["2024".to_string()],
-            "1980 and 2000 are traced; 2024 is the untraced figure"
+            vec!["4".to_string(), "2024".to_string()],
+            "1980 and 2000 are traced; 2024 and the word figure four are the untraced figures"
         );
         // A figure that appears only inside a citation span is not
         // present — spans are stripped before the check.

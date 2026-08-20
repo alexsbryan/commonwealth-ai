@@ -1,0 +1,12 @@
+Anthropic released the Claude 4 family in May 2025 as two distinct models—Claude Opus 4 and Claude Sonnet 4—to address different segments of the market with specific pricing and capability tiers [Source: ev-1]. The release occurred on May 8, 2025 [Source: ev-1].
+
+The rationale for this dual-model strategy was to position **Opus 4** as the flagship model ("Claude 4") while designating **Sonnet 4** as a "fast workhorse" that serves as the developer-default coding model [Source: ev-1]. This distinction is reflected in their pricing structures:
+*   **Opus 4:** $15 per million input tokens / $75 per million output tokens.
+*   **Sonnet 4:** $3 per million input tokens / $15 per million output tokens.
+
+This launch signaled several key trends regarding the agentic-coding market:
+1.  **Shift toward Agentic Coding and Computer Use:** The headline capability was not just text generation, but reliable agentic actions. Specifically, Claude 4 introduced "computer use 2.0" (browser control), which was roughly twice as reliable as the previous 3.x generation [Source: ev-1]. This highlighted a competitive focus on models that can perform tasks autonomously rather than just generating code snippets.
+2.  **Rise of Specialized Products:** The timing coincided with the rise of **Claude Code**, identified in the evidence as the defining agentic-coding product of 2025, suggesting that API providers were moving toward integrated coding agents [Source: ev-1].
+3.  **Intense Competition and Market Leadership:** The launch was positioned directly against OpenAI’s o-series amidst an "enterprise agentic-coding gold rush" [Source: ev-1]. Anthropic aimed to establish Claude 4 as the safest and most reliable coding agent, a strategy that contributed to record API usage and allowed Anthropic to raise significant funding later in September 2025 at a reported ~$183 billion valuation, cementing its position as a leader in this specific niche [Source: ev-1].
+
+Additionally, subsequent updates like version 4.1 (released June 18, 2025) further improved coding reliability without changing prices, reinforcing the focus on iterative improvement of these agentic capabilities rather than just raw model scale [Source: ev-1].

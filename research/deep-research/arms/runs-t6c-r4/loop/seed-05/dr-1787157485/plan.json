@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787157485",
+  "charter_hash": "50932cf846031766",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Date of entry into force of the EU AI Act in 2024",
+      "Prohibited AI practices deadline date under Article 5 of the EU AI Act",
+      "High-risk AI systems classification list and applicable deadlines for Chapter III requirements (2024, 2027)",
+      "General-purpose AI model provider obligations effective date August 2025",
+      "Transparency obligations for specific high-risk use cases effective date August 2"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2027"
+    ]
+  }
+}

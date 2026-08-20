@@ -1,0 +1,61 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787102358 — Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c/loop/seed-05/dr-1787102358
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-05 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787102358] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787102358] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1787102358] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787102358] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787102358] Building FTS content index (2/3)...
+[dr-estate-dr-1787102358] FTS content index done
+[dr-estate-dr-1787102358] Building FTS title index (3/3)...
+[dr-estate-dr-1787102358] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787102358 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c/loop/seed-05/dr-1787102358/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787102358", charter_hash: "e28cdb99509d53bd", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 6 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 8, fetched: 0, search_calls: 6 }, RoundRow { round: 3, gaps_before: 8, gaps_after: 8, fetched: 1, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://estate.example/seed-05", custody: "public-web", ingested_into: Some("dr-estate-dr-1787102358") }], failed: [] }, budget: BudgetTotals { spent: {"web-search:mock": 12, "web-fetch:pages": 1}, remaining: {"web-search:mock": 0, "web-fetch:pages": 11} }, not_covered: ["The EU AI Act entered into force in phases between 2024 and 2027 because the schedule was deliberately designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1].", "This phased approach also serves as a compliance roadmap for providers worldwide through the \"Brussels effect\" [Source: ev-1].", "The different deadlines require the following actions or applications of law:\n*   **2024-07-12**: The law was published in the EU Official Journal [Source: ev-1].", "*   **2024-08-01**: The law officially entered into force [Source: ev-1].", "*   **2025-02-02**: Prohibited practices, classified as \"unacceptable risk,\" apply. [Source: ev-1]", "These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].", "*   **2025-08-02**: General-purpose AI (GPAI) model obligations begin to apply [Source: ev-1].", "*   **2026-08-02**: High-risk system obligations generally apply [Source: ev-1].", "*   **2027-08-02**: A subset of high-risk system obligations applies [Source: ev-1].", "Additionally, the Act establishes fines reaching €35 million or 7% of global annual turnover for prohibited-practice violations, and €15 million or 3% for most other breaches [Source: ev-1].", "The duties associated with GPAI models are scaled by systemic-risk status, using a threshold of $10^{26}$ FLOPs [Source: ev-1].", "The EU AI Act entered into force in phases because the schedule was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1].", "The specific deadlines require the following:\n*   **2024-07-12**: The law was published in the EU Official Journal [Source: ev-1].", "These duties are scaled by systemic-risk status, using a threshold of 10^26 FLOPs [Source: ev-1]."], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1787102358", acquired_at_unix: 1787102358, released_at_unix: Some(1787102528) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t6c/loop/seed-05/dr-1787102358/report.md
+rounds: 3 | gaps after last round: 8 | searches: 12 | fetched sources: 1
+open questions (could-not-judge):
+  - The EU AI Act entered into force in phases between 2024 and 2027 because the schedule was deliberately designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1].
+  - This phased approach also serves as a compliance roadmap for providers worldwide through the "Brussels effect" [Source: ev-1].
+  - The different deadlines require the following actions or applications of law:
+*   **2024-07-12**: The law was published in the EU Official Journal [Source: ev-1].
+  - *   **2024-08-01**: The law officially entered into force [Source: ev-1].
+  - *   **2025-02-02**: Prohibited practices, classified as "unacceptable risk," apply. [Source: ev-1]
+  - These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].
+  - *   **2025-08-02**: General-purpose AI (GPAI) model obligations begin to apply [Source: ev-1].
+  - *   **2026-08-02**: High-risk system obligations generally apply [Source: ev-1].
+  - *   **2027-08-02**: A subset of high-risk system obligations applies [Source: ev-1].
+  - Additionally, the Act establishes fines reaching €35 million or 7% of global annual turnover for prohibited-practice violations, and €15 million or 3% for most other breaches [Source: ev-1].
+  - The duties associated with GPAI models are scaled by systemic-risk status, using a threshold of $10^{26}$ FLOPs [Source: ev-1].
+  - The EU AI Act entered into force in phases because the schedule was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1].
+  - The specific deadlines require the following:
+*   **2024-07-12**: The law was published in the EU Official Journal [Source: ev-1].
+  - These duties are scaled by systemic-risk status, using a threshold of 10^26 FLOPs [Source: ev-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  verdict-set.json
+  report.md
+  manifest.json

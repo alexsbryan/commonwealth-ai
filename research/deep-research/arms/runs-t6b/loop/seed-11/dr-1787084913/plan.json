@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787084913",
+  "charter_hash": "bb8f606fdd6eeb1f",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's market capitalization in July 2025",
+      "Global AI infrastructure spending forecast for 2025 and 2026",
+      "Year-over-year growth rate of data center capex by major hyperscalers (Microsoft, Amazon, Google, Meta) from 2023 to 2024",
+      "Share of total semiconductor revenue attributed to Nvidia in Q1 and Q2 2025",
+      "Average annualized return on equity for top-tier cloud service providers driven by GPU-intensive workloads between 2022 and 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

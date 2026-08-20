@@ -1,0 +1,68 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787162189",
+  "charter_hash": "69d568fdf7a5f7a0",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-09",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787162189"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "Anthropic released Claude 4 as two models, Claude Opus 4 and Claude Sonnet 4, on May 8, 2025 [Source: ev-1].",
+    "This dual-model strategy was designed to address different market segments with specific pricing structures: Opus 4 served as the flagship model priced at $15 per million input tokens and $75 per million output tokens, while Sonnet 4 acted as a \"fast workhorse\" developer-default coding model priced at $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+    "The launch signaled that agentic coding had become a defining product category for 2025, driven by the rise of Claude Code [Source: ev-1].",
+    "By positioning Claude 4 as the \"safest and most reliable coding agent,\" Anthropic highlighted its competitive advantage in reliability; specifically, the new \"computer use 2.0\" feature was roughly twice as reliable as the previous generation's capabilities [Source: ev-1].",
+    "Anthropic released the Claude 4 family, consisting of two models—Claude Opus 4 and Claude Sonnet 4—on May 8, 2025 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787162189",
+    "acquired_at_unix": 1787162189,
+    "released_at_unix": 1787162591
+  }
+}

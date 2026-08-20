@@ -1,0 +1,130 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787163421",
+  "charter_hash": "df07f368e1ba8d59",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Nvidia's market capitalization on the specific date it first exceeded $4 trillion in July 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Global AI infrastructure spending forecast for 2025 and 2026 by major research firms like IDC or Gartner",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Year-over-year percentage growth rate of Nvidia's data center segment revenue from Q1 2024 to Q2 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Share of global GPU shipments attributed to Nvidia vs. AMD in the HPC/AI sector for 2024-2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Total addressable market (TAM) estimate for generative AI hardware components in dollars for 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Average annual capital expenditure on IT infrastructure reported by hyperscalers such as Microsoft, Amazon, Meta, and Google for fiscal years 2023 through 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q7",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 11.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

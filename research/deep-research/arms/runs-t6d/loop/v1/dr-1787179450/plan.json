@@ -1,0 +1,29 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787179450",
+  "charter_hash": "be18c8340b037f53",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median home price in major US metros 1980 vs 2024",
+      "Share of households earning less than 30% Area Median Income (AMI) in US cities 1980-2024",
+      "Gini coefficient for income inequality in top 50 US metropolitan statistical areas by decade from 1980 to 2020",
+      "Percentage change in rent-to-income ratio for renters in New York City, Los Angeles, and Chicago between 1980 and 2023",
+      "Number of neighborhoods classified as gentrified according to the American Community Survey definition per metro area from 2000 to 2022",
+      "Median household income growth rate versus median home price appreciation rate in San Francisco from 1990 to 2023",
+      "Share of low-income households displaced due to housing costs in Washington DC, Boston, and Seattle between 2015 and 2024",
+      "Count of affordable rental units lost or converted to market-rate in Austin, Denver, and Phoenix from 2010 to 2024",
+      "Percentage point change in racial segregation index for Black residents in major US cities between 1980 census data and 2020 Census data",
+      "Ratio of median renter burden (housing cost as percentage of income) exceeding 50% by city tier (large metro vs small town) across decades 1980s through 2020s"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "1980",
+      "2024"
+    ]
+  }
+}

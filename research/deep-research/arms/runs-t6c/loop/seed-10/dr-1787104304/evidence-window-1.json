@@ -1,0 +1,28 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787104304",
+  "charter_hash": "e1472d5b31f84d39",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://estate.example/seed-10",
+      "source_url": "https://estate.example/seed-10",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "OpenAI released GPT-5 (with GPT-5 mini) on 2025-08-07, available to free users immediately — a deliberate shift to give-away-the-frontier pricing. GPT-5 retired the separate o-series products: o3, o4-mini, o3-mini and o3-pro were folded into GPT-5's internal \"reasoning modes\"; OpenAI's pitch was \"GPT-5 is not a 'reasoning model'; it's a model that thinks\" — one model, no model picker. The features: a 5-million-token context window, native image generation built in (no separate image model), deep research integrated, and file upload and web search out of the box. Pricing: free on the free tier; Plus $20/month (unlimited GPT-5); Pro $200/month; API pricing $1.25 / $10 per million tokens for GPT-5 and $0.25 / $2 for GPT-5 mini. GPT-5 scored about 78.6% on SWE-bench Verified, with GPT-5 mini close behind — both at a fraction of the o-series prices. The launch consolidated OpenAI's strategy around one unified model plus aggressive free-tier distribution: the reasoning-vs-non-reasoning split ended, price collapsed, and the competitive battleground moved from benchmark demos to default agency — models that act, not models that answer.\n",
+      "ingested_into": null,
+      "tags": [
+        "2025",
+        "gpt",
+        "openai"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-10"
+  ],
+  "derived_custody": "public-web"
+}

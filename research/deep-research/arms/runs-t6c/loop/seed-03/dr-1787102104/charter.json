@@ -1,0 +1,34 @@
+{
+  "icd": "charter",
+  "version": 1,
+  "run_id": "dr-1787102104",
+  "question": "Why did NASA order Boeing's Starliner to return uncrewed from its first crewed flight, and what did the decision mean for the program?",
+  "seed_id": null,
+  "created_at_unix": 1787102104,
+  "charter": {
+    "max_rounds": 3,
+    "evidence_window_max_chunks": 20,
+    "containment": {
+      "trigger": "judge-supported",
+      "extraction_max_tokens": 32,
+      "specifics_max": 4
+    },
+    "triage": {
+      "code_set_k": 3,
+      "eps_quota": 0.1
+    },
+    "budget": {
+      "web_search_queries": 12,
+      "web_fetch_pages": 12
+    },
+    "custody": {
+      "stamp_required": true,
+      "unknown_refuses": true
+    },
+    "url_constraint": {
+      "enabled": true,
+      "layer": "sovereign-inference:UrlAllowlistConstraint"
+    }
+  },
+  "frozen": true
+}

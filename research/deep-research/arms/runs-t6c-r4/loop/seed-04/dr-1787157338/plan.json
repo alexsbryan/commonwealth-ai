@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787157338",
+  "charter_hash": "a2ee3b642d33f51c",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Official OpenAI announcement date for the o3 and o4-mini models",
+      "List of key features, benchmarks, or pricing changes announced in the April 2025 release notes for o3 and o4-mini",
+      "Competitor model releases from Anthropic (Claude) or Google (Gemini) between January 1 and May 1, 2025",
+      "Change in API price per million tokens for frontier reasoning models before and after April 2025",
+      "Market share percentage of AI inference providers by month from Q1 2024 to Q2 2025",
+      "Number of enterprise customers adopting OpenAI's new reasoning tier as reported in earnings calls or press releases through June 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3",
+      "4",
+      "2025"
+    ]
+  }
+}

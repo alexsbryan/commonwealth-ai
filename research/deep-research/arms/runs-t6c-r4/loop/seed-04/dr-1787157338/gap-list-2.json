@@ -1,0 +1,232 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787157338",
+  "charter_hash": "a2ee3b642d33f51c",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3, 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The launch signaled a shift toward frontier reasoning models that integrate vision natively into the model architecture rather than bolting it on, while also featuring native tool use (such as web search and code interpreter) trained directly into the system [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Strategically, with GPT-5 not yet shipping, OpenAI used this release to defend its position at the reasoning-model frontier against DeepSeek's R1 cost shock and Anthropic’s push in agentic coding [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5, 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "This move reframed frontier capability as \"tool-using reasoning at commodity prices\" [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "To support this direction, o3 was priced at $10 per million input tokens and $40 per million output tokens, while o4-mini was priced more accessibly at $1.10 per million input tokens and 4.40 dollars per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3, 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "The launch also highlighted advancements in efficiency and performance through a technique called budget forcing, which uses a fixed maximum thought budget with task-adaptive compute to allow harder questions to think longer [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Additionally, it marked OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "In terms of capability, o3 set a record on the ARC-AGI benchmark, achieving approximately 87.5% on ARC-AGI-1 at high compute—reaching or exceeding the ~85% human baseline for the first time among models [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3, 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+      "actionable_query": "-mini on April . (3, 4, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The launch signaled a shift toward frontier reasoning models that integrate vision natively into the model architecture rather than bolting it on, while also featuring native tool use (such as web search and code interpreter) trained directly into the system [Source: ev-1].",
+      "actionable_query": "launch signaled shift toward frontier reasoning models integrate vision natively model architecture rather bolting featuring native tool use web search code interpreter trained directly system",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Strategically, with GPT-5 not yet shipping, OpenAI used this release to defend its position at the reasoning-model frontier against DeepSeek's R1 cost shock and Anthropic’s push in agentic coding [Source: ev-1].",
+      "actionable_query": "Strategically, with GPT- not yet shipping, OpenAI used this release to defend its position at the reasoning-model frontier against DeepSeek' (3, 4, 2025)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "To support this direction, o3 was priced at $10 per million input tokens and $40 per million output tokens, while o4-mini was priced more accessibly at $1.10 per million input tokens and 4.40 dollars per million output tokens [Source: ev-1].",
+      "actionable_query": "was priced at $ per million input tokens and $ -mini was priced more accessibly at $ per million input tokens and dollars per million output (3, 4, 2025)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "The launch also highlighted advancements in efficiency and performance through a technique called budget forcing, which uses a fixed maximum thought budget with task-adaptive compute to allow harder questions to think longer [Source: ev-1].",
+      "actionable_query": "launch highlighted advancements efficiency performance through technique called budget forcing uses fixed maximum thought task-adaptive compute allow harder questions think longer",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Additionally, it marked OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+      "actionable_query": "Additionally marked OpenAI’s first private chain-of-thought policy reasoning tokens exposed API callers",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "In terms of capability, o3 set a record on the ARC-AGI benchmark, achieving approximately 87.5% on ARC-AGI-1 at high compute—reaching or exceeding the ~85% human baseline for the first time among models [Source: ev-1].",
+      "actionable_query": "set a record on the ARC-AGI benchmark, achieving approximately on ARC-AGI- at high compute—reaching or exceeding the ~ human baseline for th (3, 4, 2025)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

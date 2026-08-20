@@ -1,0 +1,22 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787104010",
+  "charter_hash": "70dfa7953f2460a2",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Share of US general web search market held by Google in 2019–2023, measured as percentage of total query volume",
+      "Number and value of exclusive distribution agreements between Google and major mobile operating system vendors (Apple) for the default search engine slot from 2015 to 2024",
+      "Total annual payments made by Google to Apple for maintaining its status as the default search provider on iOS devices, reported in billions of USD",
+      "Percentage change in user traffic to competing search engines after users switched away from Google due to court-ordered unbundling remedies proposed or implemented post-2024",
+      "Count of distinct product lines found by US District Court Judge Amit Mehta to be part of a single \"general web search\" monopoly market in July 2023",
+      "Specific structural remedy ordered regarding the divestiture of Chrome browser and Android operating system, including timeline for separation if mandated",
+      "Monetary fine amount assessed against Google by the European Commission related to antitrust violations concerning search dominance between 2017 and 2021"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

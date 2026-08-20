@@ -1,0 +1,70 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787178512",
+  "charter_hash": "6bea2523a6f4df1e",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 6
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 7,
+      "fetched": 0,
+      "search_calls": 6
+    },
+    {
+      "round": 3,
+      "gaps_before": 7,
+      "gaps_after": 7,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-06",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787178512"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update crashed Windows machines worldwide in blue-screen loops [Source: ev-1].",
+    "The root cause was an out-of-bounds memory read in the sensor's C++ code, specifically triggered by an untrusted pointer dereference from a 21-byte input that passed a flawed content validator due to missing input validation and a memory-safety defect [Source: ev-1].",
+    "This incident affected roughly 8.5 million Windows devices globally because one security agent deployed at enterprise scale with fast-cadence updates became a global single point of failure [Source: ev-1].",
+    "The consequences were severe across multiple sectors, including grounded airlines (with Delta cancelling approximately 7,000 flights), disruptions to banks, hospitals, 911 services, and broadcasters [Source: ev-1].",
+    "Financially, Delta incurred about $500M in costs and later sued CrowdStrike while hiring David Boies [Source: ev-1].",
+    "In the stock market, CrowdStrike shares fell by about 11% on Monday, July 22, 2024 [Source: ev-1].",
+    "Additionally, CEO George Kurtz testified before Congress on September 24, 2024 after the company apologized and promised deployment-process changes [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787178512",
+    "acquired_at_unix": 1787178512,
+    "released_at_unix": 1787178648
+  }
+}

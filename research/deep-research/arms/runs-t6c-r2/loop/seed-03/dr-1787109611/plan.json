@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787109611",
+  "charter_hash": "17a154d237ec11a6",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of helium tank leaks detected on the Boeing Starliner spacecraft during its first crewed flight (BoeStar-1)",
+      "Date and time of the decision to return the Boeing Starliner uncrewed from orbit in 2024",
+      "Name of the NASA administrator who authorized the uncrewed return of the Boeing Starliner (mean)",
+      "Total cost incurred by NASA for the aborted Boeing Starliner mission compared to budget projections",
+      "Change in launch schedule dates for subsequent Boeing Starliner missions following the uncrewed return incident (mean)",
+      "Percentage change in public approval ratings or media sentiment regarding NASA's Commercial Crew Program after the Starliner abort",
+      "Count of technical anomalies identified in post-flight analyses of the Boeing CFT capsule",
+      "Number of astronauts assigned to backup crew roles during the extended stay on the International Space Station due to Starliner delay"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "mean"
+    ]
+  }
+}

@@ -1,0 +1,309 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787104463",
+  "charter_hash": "450b48015ceb6682",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, making it the first company in history to close above this threshold [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This milestone was driven by several key factors related to AI infrastructure spending and demand:\n\n*   **Accelerator Demand:** There was significant demand for Blackwell accelerator rack systems, specifically the GB200/GB300 models [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "*   **Major Infrastructure Projects:** The Stargate project contributed with an approximately $500 billion plan for AI infrastructure [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "*   **Hyperscaler Capex:** Capital expenditure guidance from major hyperscalers—including Microsoft, Meta, Google, and Amazon—was raised repeatedly throughout 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "Capital expenditure guidance"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "*   **Market Positioning:** Nvidia held a dominant share of the AI-accelerator market during this period [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "The rapid growth trajectory leading up to this point saw Nvidia reach $1 trillion in mid-2023, $2 trillion in February 2024, and $3 trillion in June 2024 before hitting $4 trillion in July 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1, 2, 3, 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "Additionally, the company's share price crossed approximately $160 during this time [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "CEO Jensen Huang framed the moment as a transition from training to inference demand, describing these efforts as building \"AI factories\" that sell compute as a commodity [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "The milestone measured the AI-capex supercycle, with the market pricing AI infrastructure as the largest new capital cycle since the internet [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, becoming the first company in history to close above this threshold [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "This shift reflects a transition in demand focus from training to inference, with CEO Jensen Huang describing these efforts as building \"AI factories\" that sell compute as a commodity [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, becoming the first company in history to close above this threshold [Source: ev-1].",
+      "actionable_query": "trillion on July becoming the first company in history to close above this threshold . (4, 2025)",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This milestone was driven by several key factors related to AI infrastructure spending and demand:\n\n*   **Accelerator Demand:** There was significant demand for Blackwell accelerator rack systems, specifically the GB200/GB300 models [Source: ev-1].",
+      "actionable_query": "milestone driven several key factors related infrastructure spending demand Accelerator significant Blackwell rack systems specifically models",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "*   **Major Infrastructure Projects:** The Stargate project contributed with an approximately $500 billion plan for AI infrastructure [Source: ev-1].",
+      "actionable_query": "Major Infrastructure Projects Stargate project contributed approximately billion plan",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "*   **Hyperscaler Capex:** Capital expenditure guidance from major hyperscalers—including Microsoft, Meta, Google, and Amazon—was raised repeatedly throughout 2025 [Source: ev-1].",
+      "actionable_query": "2025 Hyperscaler Capex Capital expenditure guidance major hyperscalers—including Microsoft Meta Google Amazon—was raised repeatedly throughout",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "*   **Market Positioning:** Nvidia held a dominant share of the AI-accelerator market during this period [Source: ev-1].",
+      "actionable_query": "Market Positioning Nvidia held dominant share AI-accelerator during period",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "This shift reflects a transition in demand focus from training to inference, with CEO Jensen Huang describing these efforts as building \"AI factories\" that sell compute as a commodity [Source: ev-1].",
+      "actionable_query": "shift reflects transition demand focus training inference CEO Jensen Huang describing efforts building factories sell compute commodity",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "The rapid growth trajectory leading up to this point saw Nvidia reach $1 trillion in mid-2023, $2 trillion in February 2024, and $3 trillion in June 2024 before hitting $4 trillion in July 2025 [Source: ev-1].",
+      "actionable_query": "The rapid growth trajectory leading up to this point saw Nvidia reach $ trillion in mid- $ trillion in February and $ trillion in June . (4, 2025)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "Additionally, the company's share price crossed approximately $160 during this time [Source: ev-1].",
+      "actionable_query": "Additionally company's share price crossed approximately during time",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}
