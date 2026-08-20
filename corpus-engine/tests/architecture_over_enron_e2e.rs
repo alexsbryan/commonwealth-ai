@@ -144,7 +144,10 @@ fn synthetic_three_origin_corpus_collapses_surface_forms() {
         "one oplog entry per merge cluster (Lay); Skilling is a singleton, no merge"
     );
     let merge_entry = &outcome.oplog_entries[0];
-    assert_eq!(merge_entry.inputs.len(), 3);
+    assert_eq!(merge_entry.kind.inputs.len(), 3);
+    // Every journal line is addressable and attributed since the three oplogs
+    // converged on `corpus_engine::oplog` (2026-08-20).
+    assert!(merge_entry.id.as_str().starts_with("recon-"));
 }
 
 // Note: the B³ pre-vs-tuned floor delta test lives in

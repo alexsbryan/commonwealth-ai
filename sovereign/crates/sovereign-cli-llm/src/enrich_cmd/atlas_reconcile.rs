@@ -23,7 +23,7 @@
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, ATLAS_DIRNAME};
 use corpus_engine::enrichment::reconciliation::{
-    reconcile, OplogWriter, ReconciledEntity, ReconciliationPolicy,
+    reconcile, ReconciliationAct, ReconciledEntity, ReconciliationPolicy,
 };
 use serde::Serialize;
 
@@ -133,7 +133,7 @@ pub async fn cmd_atlas_reconcile(args: &[String]) -> i32 {
 
     // Persist the audit trail (append-only) so the per-merge rationale
     // survives — the same writer the bench uses.
-    let oplog = OplogWriter::new(atlas_dir.clone());
+    let oplog = corpus_engine::oplog::Oplog::<ReconciliationAct>::new(atlas_dir.clone());
     let mut oplog_errs = 0usize;
     for entry in &outcome.oplog_entries {
         if oplog.append(entry).is_err() {

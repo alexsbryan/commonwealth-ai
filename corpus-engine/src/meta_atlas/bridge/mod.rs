@@ -36,7 +36,7 @@ pub use build::{
 };
 pub use edges::{
     default_bridge_edges_path, read_bridge_edges, write_bridge_edges, BridgeEdge, BridgeEdgesFile,
-    BridgeOp, BridgeOpKind, BridgeOplog, BridgeRelation, BridgeSignal, EdgeSource, TopicRef,
+    BridgeAct, BridgeOpKind, BridgeRelation, BridgeSignal, EdgeSource, TopicRef, ALIGNER,
 };
 pub use lookup::BridgeIndex;
 pub use signals::{

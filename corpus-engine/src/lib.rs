@@ -37,6 +37,10 @@ pub mod freshness;
 pub mod harness;
 pub mod index;
 pub mod meta_atlas;
+/// The one append-only journal — `Op` + `Oplog`, three tenants (governance,
+/// enrichment reconciliation, meta-atlas bridge) that each used to carry their
+/// own copy of the same envelope and the same file IO.
+pub mod oplog;
 pub mod pii;
 pub mod progress;
 pub mod recipe;
@@ -131,9 +135,15 @@ pub use index::raptor::{
 };
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
-    EnrichmentChunkRow, FilterOverride, InsertChunk, MaintenanceStats, NeighborWindow, ScopeMeta,
-    StoredChunk, StoredChunkWithMetadata,
+    EnrichmentChunkRow, Evidence, FilterOverride, InsertChunk, MaintenanceStats, NeighborWindow,
+    ScopeMeta, StoredChunk, StoredChunkWithMetadata,
 };
+// `Evidence`'s value types, from the crate consumers already depend on. A
+// caller cannot hold an `Evidence` without being able to read its `Origin` and
+// `Custody`, so re-exporting them here is what stops every consumer taking a
+// second direct dep on the kernel leaf (ARCH §8.3) — the same reasoning as the
+// `YieldHook` + `DeferralBudget` block above.
+pub use kernel_types::{ContentHash, CorpusId, Custody, Grain, Locator, Origin, Server, Source};
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
     SourceFileManifest, SourceFileRecord, SourceFileStatus,

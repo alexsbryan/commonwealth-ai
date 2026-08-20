@@ -34,15 +34,13 @@
 //! the module tests.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, OpenOptions};
-use std::io::{BufRead, BufReader, Write};
-use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use crate::enrichment::atlas::atoms::AtomId;
 use crate::enrichment::atlas::edges::EdgeId;
-use crate::error::{Error, Result};
+use crate::error::Result;
+use crate::oplog::{Journaled, Op, OpId, Oplog};
 
 /// Current oplog line format version. Bumped only when the reader must
 /// opt in to new semantics (the schema-back-compat convention: a reader
@@ -50,23 +48,21 @@ use crate::error::{Error, Result};
 /// silently misinterpreting them).
 pub const GOVERNANCE_OPLOG_VERSION: u32 = 1;
 
-// ── Op identity ──────────────────────────────────────────────
-
-/// Stable, content-addressed id for a governance op. Derived from the
-/// op's (kind, timestamp, actor) triple, so the id a [`GovernanceOpKind::Revert`]
-/// targets is reproducible from the log bytes alone — no positional or
-/// external counter to drift.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct OpId(String);
-
-impl OpId {
-    pub fn from_raw(s: impl Into<String>) -> Self {
-        Self(s.into())
-    }
-    pub fn as_str(&self) -> &str {
-        &self.0
-    }
+/// The governance tenancy of the shared journal ([`crate::oplog`]): one act
+/// per line in `<atlas_dir>/governance_oplog.jsonl`, ids prefixed `gov-`.
+///
+/// The envelope, the content-addressed id, the append and the version gate
+/// all live in [`crate::oplog`]. This module owns only the acts and the fold.
+/// Before 2026-08-20 it owned a private copy of all four, as did
+/// `reconciliation::oplog` and `meta_atlas::bridge`.
+impl Journaled for GovernanceOpKind {
+    const FILE: &'static str = "governance_oplog.jsonl";
+    const ID_PREFIX: &'static str = "gov";
+    const VERSION: u32 = GOVERNANCE_OPLOG_VERSION;
+    const LABEL: &'static str = "governance_oplog";
 }
+
+
 
 // ── The acts ─────────────────────────────────────────────────
 
@@ -153,61 +149,12 @@ pub enum GovernanceOpKind {
     },
 }
 
-/// One line in `governance_oplog.jsonl` — an act plus its provenance.
-///
-/// The `kind` is flattened, so a line reads
-/// `{"id":"gov-…","v":1,"ts_unix":…,"actor":"human:alex","op":"supersede",…}`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GovernanceOp {
-    /// Content-addressed op id (see [`OpId`]). Stable across replays.
-    pub id: OpId,
-    /// Line format version. Always written; read-side gate skips lines
-    /// declaring a higher version than this reader understands.
-    #[serde(default = "default_version")]
-    pub v: u32,
-    /// Op timestamp (Unix seconds).
-    pub ts_unix: i64,
-    /// Who performed the act. INV-2: every act except [`GovernanceOpKind::AssertRule`]
-    /// (which ingest may author as `actor = "ingest"`) MUST be attributed
-    /// to a `human:<name>`. The CLI verbs pass this; [`first_unattended_act`]
-    /// is the guard against an unattended write.
-    pub actor: String,
-    #[serde(flatten)]
-    pub kind: GovernanceOpKind,
-}
-
-fn default_version() -> u32 {
-    GOVERNANCE_OPLOG_VERSION
-}
-
-impl GovernanceOp {
-    /// Build an op, deriving its content-addressed [`OpId`] from the
-    /// (kind, ts, actor) triple. Two byte-identical acts at the same
-    /// second by the same actor would collide by design — callers append
-    /// in real time, so this does not arise in practice (the same
-    /// birthday-bound caveat the atom content-hash ids carry).
-    pub fn new(kind: GovernanceOpKind, ts_unix: i64, actor: impl Into<String>) -> Self {
-        let actor = actor.into();
-        // serde_json field order is the declaration order, so the body
-        // string — and therefore the id — is deterministic across runs.
-        let body = serde_json::to_string(&kind).unwrap_or_default();
-        let input = format!("gov|{ts_unix}|{actor}|{body}");
-        Self {
-            id: OpId(format!("gov-{}", short_hash(&input))),
-            v: GOVERNANCE_OPLOG_VERSION,
-            ts_unix,
-            actor,
-            kind,
-        }
-    }
-}
-
 /// INV-2 guard: the first op that is neither an `AssertRule` nor authored
 /// by a `human:<name>` actor — i.e. an adjudication a code path tried to
 /// write unattended. `None` means the log honours the attribution
 /// invariant. The CLI's human verbs always pass `human:<name>`; this
 /// catches a regression where some automated path forges a decision.
-pub fn first_unattended_act(ops: &[GovernanceOp]) -> Option<&GovernanceOp> {
+pub fn first_unattended_act(ops: &[Op<GovernanceOpKind>]) -> Option<&Op<GovernanceOpKind>> {
     ops.iter().find(|op| {
         !matches!(op.kind, GovernanceOpKind::AssertRule { .. }) && !op.actor.starts_with("human:")
     })
@@ -332,7 +279,7 @@ impl ActiveSet {
 /// ops overwrite earlier status for the same rule. Because the supersede
 /// of a reverted bundle is skipped in pass 2, the old rule's earlier
 /// `Active` status (from its ingest `AssertRule`) stands.
-pub fn derive_active(ops: &[GovernanceOp]) -> ActiveSet {
+pub fn derive_active(ops: &[Op<GovernanceOpKind>]) -> ActiveSet {
     let n = ops.len();
 
     // Pass 1: liveness.
@@ -419,96 +366,19 @@ pub fn derive_active(ops: &[GovernanceOp]) -> ActiveSet {
     set
 }
 
-// ── Persistence (mirrors reconciliation/oplog.rs conventions) ─
+// ── Persistence ──────────────────────────────────────────────
+//
+// The append, the read and the version gate moved to `crate::oplog` on
+// 2026-08-20 — they were the same twenty lines as `reconciliation::oplog` and
+// `meta_atlas::bridge`, as the section header here used to admit ("mirrors
+// reconciliation/oplog.rs conventions"). What is left is the one thing only
+// governance can do with its log: fold it.
 
-/// Append-only JSONL store at `<atlas_dir>/governance_oplog.jsonl`.
-/// One [`GovernanceOp`] per line; the file is the bytes-level record of
-/// every governance decision, and [`GovernanceOplog::derive`] replays it.
-pub struct GovernanceOplog {
-    pub path: PathBuf,
-}
-
-impl GovernanceOplog {
-    pub fn new(atlas_dir: impl Into<PathBuf>) -> Self {
-        Self {
-            path: atlas_dir.into().join("governance_oplog.jsonl"),
-        }
-    }
-
-    /// Append one op. Creates the atlas dir lazily on first write.
-    pub fn append(&self, op: &GovernanceOp) -> Result<()> {
-        if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).map_err(Error::Io)?;
-        }
-        let line = serde_json::to_string(op)
-            .map_err(|e| Error::Extraction(format!("governance_oplog: serialise: {e}")))?;
-        let mut f = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&self.path)
-            .map_err(Error::Io)?;
-        f.write_all(line.as_bytes()).map_err(Error::Io)?;
-        f.write_all(b"\n").map_err(Error::Io)?;
-        tracing::debug!(
-            id = %op.id.as_str(),
-            actor = %op.actor,
-            "governance_oplog: append"
-        );
-        Ok(())
-    }
-
-    /// Read every op in append order. Malformed lines and lines declaring
-    /// a future `v` are skipped with a warning (forward-compat: an older
-    /// reader must not crash on a newer log, nor silently misread it).
-    pub fn read_all(&self) -> Result<Vec<GovernanceOp>> {
-        if !self.path.exists() {
-            return Ok(Vec::new());
-        }
-        let file = fs::File::open(&self.path).map_err(Error::Io)?;
-        let reader = BufReader::new(file);
-        let mut out = Vec::new();
-        for (lineno, line) in reader.lines().enumerate() {
-            let line = line.map_err(Error::Io)?;
-            if line.trim().is_empty() {
-                continue;
-            }
-            match serde_json::from_str::<GovernanceOp>(&line) {
-                Ok(op) if op.v > GOVERNANCE_OPLOG_VERSION => {
-                    tracing::warn!(
-                        path = %self.path.display(),
-                        line = lineno + 1,
-                        v = op.v,
-                        "governance_oplog: skipping op from a newer format version"
-                    );
-                }
-                Ok(op) => out.push(op),
-                Err(err) => {
-                    tracing::warn!(
-                        path = %self.path.display(),
-                        line = lineno + 1,
-                        "governance_oplog: malformed line skipped ({err})"
-                    );
-                }
-            }
-        }
-        Ok(out)
-    }
-
+impl Oplog<GovernanceOpKind> {
     /// Read + fold in one step: the current active set for this corpus.
     pub fn derive(&self) -> Result<ActiveSet> {
         Ok(derive_active(&self.read_all()?))
     }
-
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-}
-
-/// 16-char prefix of a blake3 hex digest (64-bit truncation). Mirrors the
-/// atom-id `short_hash`; kept local so the governance module doesn't widen
-/// the atoms module's private API.
-fn short_hash(input: &str) -> String {
-    kernel_types::ContentHash::of_str(input).short()
 }
 
 pub use corpus_engine_yield::time::unix_now as now_secs;
@@ -516,6 +386,8 @@ pub use corpus_engine_yield::time::unix_now as now_secs;
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::OpenOptions;
+    use std::io::Write;
 
     fn rule(n: usize) -> AtomId {
         AtomId::claim(n)
@@ -526,8 +398,8 @@ mod tests {
 
     /// Build an op at a monotonic, explicit timestamp so ids are
     /// deterministic and distinct within a test.
-    fn op(kind: GovernanceOpKind, ts: i64, actor: &str) -> GovernanceOp {
-        GovernanceOp::new(kind, ts, actor)
+    fn op(kind: GovernanceOpKind, ts: i64, actor: &str) -> Op<GovernanceOpKind> {
+        Op::new(kind, ts, actor)
     }
 
     #[test]
@@ -898,11 +770,11 @@ mod tests {
             endpoints: None,
         };
         // Same (kind, ts, actor) → same id.
-        let a = GovernanceOp::new(kind.clone(), 5, "human:alex");
-        let b = GovernanceOp::new(kind.clone(), 5, "human:alex");
+        let a = Op::new(kind.clone(), 5, "human:alex");
+        let b = Op::new(kind.clone(), 5, "human:alex");
         assert_eq!(a.id, b.id);
         // Different ts → different id.
-        let c = GovernanceOp::new(kind, 6, "human:alex");
+        let c = Op::new(kind, 6, "human:alex");
         assert_ne!(a.id, c.id);
         // Id is a content-hash shape.
         assert!(a.id.as_str().starts_with("gov-"));
@@ -951,7 +823,7 @@ mod tests {
         // INV-1: write → read → fold reproduces the in-memory fold, and
         // the read-back ops equal what was written.
         let dir = tempfile::tempdir().unwrap();
-        let log = GovernanceOplog::new(dir.path());
+        let log = Oplog::<GovernanceOpKind>::new(dir.path());
 
         let old = rule(1);
         let new = rule(2);
@@ -1011,7 +883,7 @@ mod tests {
         // Forward-compat: a line declaring a newer `v` is skipped, not
         // misinterpreted (schema-back-compat rule).
         let dir = tempfile::tempdir().unwrap();
-        let log = GovernanceOplog::new(dir.path());
+        let log = Oplog::<GovernanceOpKind>::new(dir.path());
         let good = op(
             GovernanceOpKind::AssertRule {
                 rule: rule(1),
@@ -1038,7 +910,7 @@ mod tests {
     #[test]
     fn missing_log_folds_to_empty() {
         let dir = tempfile::tempdir().unwrap();
-        let set = GovernanceOplog::new(dir.path()).derive().unwrap();
+        let set = Oplog::<GovernanceOpKind>::new(dir.path()).derive().unwrap();
         assert!(set.rules.is_empty());
         assert!(set.tensions.is_empty());
     }

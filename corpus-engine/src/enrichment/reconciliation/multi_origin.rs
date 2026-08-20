@@ -7,14 +7,15 @@
 //! on each one.
 //!
 //! The merger is **non-destructive**: every merge writes an
-//! [`oplog::OplogEntry`] capturing inputs / output / signals so the
+//! [`crate::oplog::Op`] capturing inputs / output / signals so the
 //! operator can replay or reverse it via `split`.
 
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::oplog::OplogEntry;
+use super::oplog::ReconciliationAct;
+use crate::oplog::Op;
 use super::signals::{
     collect_emails, default_signals, fold_name, strip_org_suffixes, MergeSignal, MergeSignalCheck,
 };
@@ -100,11 +101,11 @@ pub struct ReconciledEntity {
 #[derive(Debug, Clone, Default)]
 pub struct ReconciliationOutcome {
     pub entities: Vec<ReconciledEntity>,
-    /// One [`OplogEntry`] per merge the primitive performed. The
+    /// One [`crate::oplog::Op`] per merge the primitive performed. The
     /// caller persists these into
     /// `<corpus_index>/atlas/reconciliation_oplog.jsonl` so the
     /// audit trail survives the process exiting.
-    pub oplog_entries: Vec<OplogEntry>,
+    pub oplog_entries: Vec<Op<ReconciliationAct>>,
 }
 
 /// Run the merger over `entities` with `policy`. The signal stack is
@@ -221,7 +222,7 @@ pub fn reconcile_with_signals(
         }
 
         if members.len() > 1 {
-            oplog_entries.push(OplogEntry::merge(
+            oplog_entries.push(Op::merge(
                 source_atom_ids.clone(),
                 canonical_id.clone(),
                 signals_fired.clone(),
@@ -253,13 +254,13 @@ pub fn reconcile_with_signals(
 }
 
 /// Reverse a prior merge by splitting `canonical_id` into the original
-/// atoms. Returns the [`OplogEntry`] the caller must persist.
+/// atoms. Returns the [`crate::oplog::Op`] the caller must persist.
 pub fn split_atom(
     canonical_id: AtomId,
     into: Vec<AtomId>,
     rationale: impl Into<String>,
-) -> OplogEntry {
-    OplogEntry::split(canonical_id, into, rationale)
+) -> Op<ReconciliationAct> {
+    Op::split(canonical_id, into, rationale)
 }
 
 // ── Union-find helpers ───────────────────────────────────────
@@ -472,8 +473,8 @@ mod tests {
             vec![AtomId::from_raw("entity-a"), AtomId::from_raw("entity-b")],
             "operator reversed",
         );
-        assert!(matches!(entry.op, super::super::oplog::OpKind::Split));
-        assert_eq!(entry.split_outputs.len(), 2);
+        assert!(matches!(entry.kind.op, super::super::oplog::OpKind::Split));
+        assert_eq!(entry.kind.split_outputs.len(), 2);
     }
 
     #[test]

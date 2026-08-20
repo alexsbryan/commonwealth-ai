@@ -427,8 +427,9 @@ async fn cmd_run(args: &[String]) -> Result<i32, String> {
             // Append the reconciler's oplog entries to the on-disk
             // oplog so the audit trail survives the process exiting.
             if !outcome.oplog_entries.is_empty() {
-                let oplog =
-                    corpus_engine::enrichment::reconciliation::OplogWriter::new(atlas_dir.clone());
+                let oplog = corpus_engine::oplog::Oplog::<
+                    corpus_engine::enrichment::reconciliation::ReconciliationAct,
+                >::new(atlas_dir.clone());
                 for entry in &outcome.oplog_entries {
                     let _ = oplog.append(entry);
                 }
