@@ -234,73 +234,13 @@ fn current_branch(repo_root: &std::path::Path) -> Option<String> {
 #[async_trait]
 impl Tool for BriefingTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "briefing".to_string(),
-            name: "Session Briefing".to_string(),
-            description: "Assemble the session-orientation brief for this repo: \
-                          working set (from git), live peer work-in-flight, drift \
-                          posture, area principles, active decision/invariant \
-                          notes, structural atoms, and recent activity — one \
-                          token-budgeted markdown document. Call at session start \
-                          (or after a long gap) instead of reading files to \
-                          orient. Same renderer as `svrn code brief`, so hook-\
-                          injected briefs and this tool never disagree."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "strategy": {
-                        "type": "string",
-                        "enum": ["recent", "branch", "explicit"],
-                        "default": "recent",
-                        "description": "Working-set detection: `recent` = files touched by commits in the last `hours` (best for orientation on a clean tree); `branch` = diff vs the default branch; `explicit` = use `files`."
-                    },
-                    "hours": {
-                        "type": "integer",
-                        "default": 48,
-                        "description": "Window for the `recent` strategy."
-                    },
-                    "files": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Repo-relative working-set files (for `explicit`)."
-                    },
-                    "budget_tokens": {
-                        "type": "integer",
-                        "default": 1500,
-                        "description": "Token budget for the rendered brief."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Optional ATOS feature id to scope notes."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation:
-                    "Session start — orient on what changed recently and who else is active.".into(),
-                call: json!({ "strategy": "recent", "hours": 48 }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "markdown": { "type": "string", "description": "The rendered brief." },
-                    "working_set_size": { "type": "integer" },
-                    "work_in_flight_count": { "type": "integer" },
-                    "strategy": { "type": "string" },
-                    "budget_tokens": { "type": "integer" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("briefing").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("briefing")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {

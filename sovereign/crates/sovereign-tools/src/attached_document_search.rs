@@ -59,45 +59,13 @@ impl AttachedDocumentSearchTool {
 #[async_trait]
 impl Tool for AttachedDocumentSearchTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "attached_doc_search".to_string(),
-            name: "Search attached document".to_string(),
-            description:
-                "Retrieve passages from the document the user has attached to this conversation. \
-                 Use this when the question is about the specific text the user shared (a book, \
-                 paper, report, etc.). Returns relevant excerpts with their location in the \
-                 document. Call repeatedly with different queries to triangulate across the \
-                 document; the corpus knowledge tool covers everything outside the attachment."
-                    .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "A precise natural-language query against the attached \
-                                        document. Examples: 'where Stevie's address label is \
-                                        described', 'Vladimir's speech about the Greenwich \
-                                        Observatory', 'every passage where Winnie is called \
-                                        incurious'."
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Concatenated passages with inline source labels. Empty / no-doc \
-                                response on conversations without an attached document."
-            })),
-        }
+        sovereign_core::tool_manifest::require("attached_doc_search").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // Reading the user's own attached document needs no gate.
+        sovereign_core::tool_manifest::require("attached_doc_search")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

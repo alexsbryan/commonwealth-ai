@@ -58,62 +58,13 @@ impl SymbolLookupTool {
 #[async_trait]
 impl Tool for SymbolLookupTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "symbols".to_string(),
-            name: "Symbol Lookup".to_string(),
-            description: "Exact lookup of a named symbol (function, struct, trait, type). \
-                          Use this when you know the name of what you are looking for. \
-                          Returns definition location, signature, and doc comments. \
-                          Faster and cheaper than grep or file search. \
-                          If you do not know the exact name, use code_search instead."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "name": {
-                        "type": "string",
-                        "description": "Exact symbol name (function, class, struct, trait, etc.)"
-                    },
-                    "kind": {
-                        "type": "string",
-                        "description": "Optional kind filter: function, method, class, struct, enum, trait, interface, impl, type, const, module",
-                        "default": ""
-                    }
-                },
-                "required": ["name"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to grep for a struct or read an entire file to check its fields before writing code that uses it. Don't — this returns the exact definition, fields, and doc comments in one call.".into(),
-                    call: serde_json::json!({ "name": "ToolRegistry" }),
-                },
-                ToolExample {
-                    situation: "You need a function's exact signature before calling it. Reading the whole file wastes context. This returns only the definition line and its docs.".into(),
-                    call: serde_json::json!({ "name": "record_call" }),
-                },
-                ToolExample {
-                    situation: "You want to find all trait impls for a type. Pass kind='impl' to filter to implementation blocks only.".into(),
-                    call: serde_json::json!({ "name": "InferenceProvider", "kind": "trait" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Fenced code blocks, one per match. Each block is prefixed \
-                                with `// <file>:<start>-<end>  [<kind>]  (<corpus>)` \
-                                so downstream steps can extract locations via regex \
-                                or pipe to reasoning."
-            })),
-        }
+        sovereign_core::tool_manifest::require("symbols").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        // Read-only query over the local SCIP DB plus on-disk source
-        // file reads. No shell, no network.
-        vec![]
+        sovereign_core::tool_manifest::require("symbols")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

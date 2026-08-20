@@ -59,69 +59,13 @@ impl WikipediaFetchTool {
 #[async_trait]
 impl Tool for WikipediaFetchTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "wikipedia_fetch".to_string(),
-            name: "Wikipedia: Fetch Article".to_string(),
-            description: concat!(
-                "Fetch a specific Wikipedia article on demand and ingest it into the user's ",
-                "Wikipedia corpus. Use this when the catalog (`wikipedia-catalog`) surfaces a ",
-                "title that matches the user's question but the full article hasn't been ",
-                "indexed yet — the next retrieval will return the article's content directly. ",
-                "Takes 15-60 seconds per article (download + chunk + embed); always inform the ",
-                "user before calling. The fetched article carries `parent_corpus_id = wikipedia` ",
-                "so it surfaces under the user's existing Wikipedia corpus and is shared across ",
-                "the mesh like any other Wikipedia content."
-            )
-            .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "title": {
-                        "type": "string",
-                        "description": "The exact article title from a catalog hit (e.g. \"Roman Empire\", \"Albert Einstein\"). Case-sensitive; pass the title verbatim from the CatalogHit metadata."
-                    },
-                    "enrich": {
-                        "type": "boolean",
-                        "description": "If true, also build the per-article atlas (~1-2 minutes additional). Default false — atlas grounding still works without per-article enrichment because the article's chunks land in the wikipedia corpus's atlas grounding bag.",
-                        "default": false
-                    },
-                    "expand_links": {
-                        "type": "boolean",
-                        "description": "If true, queue a one-hop link-expansion (\"minesweeper\") after the primary fetch — top-N articles linked from this one are pre-loaded into the same shared corpus. Default true. Set false for batch / seed flows (e.g. Tier-1.5 placeholder seeding) where the caller wants exactly the requested article and no automatic neighbours.",
-                        "default": true
-                    }
-                },
-                "required": ["title"]
-            }),
-            examples: vec![],
-            // External effect: hits the Wikipedia REST API and writes
-            // a new corpus to disk. Network + filesystem.
-            effect: Effect::ReadWrite,
-            // Repeated calls with the same title are idempotent —
-            // run_catalog_ingest's per-work corpus check
-            // short-circuits when `wikipedia-catalog-<title>` is
-            // already installed.
-            idempotency: Idempotency::Idempotent,
-            // 15-60s round trip. Don't block the chat thread; the
-            // chat-loop should expose this as a "fetching…" status.
-            latency: Latency::Slow,
-            // Persists across sessions — the fetched corpus stays
-            // installed, gets atlas-built by the post-install hook,
-            // and is mesh-shared.
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "new_corpus_id": {"type": "string"},
-                    "chunks_created": {"type": "integer"},
-                    "title": {"type": "string"}
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("wikipedia_fetch").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::FileWrite, Permission::Network]
+        sovereign_core::tool_manifest::require("wikipedia_fetch")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

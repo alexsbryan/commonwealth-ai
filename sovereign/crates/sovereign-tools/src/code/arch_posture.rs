@@ -72,46 +72,13 @@ impl ArchPostureTool {
 #[async_trait]
 impl Tool for ArchPostureTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "arch_posture".to_string(),
-            name: "Architecture Posture".to_string(),
-            description: "Fast headline read of the persisted architecture report: top \
-                god-crate, hub crates, cross-crate coupling count, declared↔observed deltas, \
-                observed layer violations, file cycles, hidden temporal coupling — plus a \
-                freshness verdict (the report fingerprints its inputs; stale means Cargo.toml/\
-                Cargo.lock/ARCH_LAYERS.toml or the SCIP index changed since it was written). \
-                Use at session start; run `sovereign code arch-report` to refresh."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus_id": {
-                        "type": "string",
-                        "description": "Code corpus id. Optional when exactly one persisted report exists."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "Session start on a shared codebase — you want the architectural \
-                    headlines (god-crates, coupling, violations) without paying for a full \
-                    graph recompute."
-                    .into(),
-                call: serde_json::json!({}),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown posture headline with freshness verdict."
-            })),
-        }
+        sovereign_core::tool_manifest::require("arch_posture").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("arch_posture")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

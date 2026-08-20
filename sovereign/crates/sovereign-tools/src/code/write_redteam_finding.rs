@@ -43,87 +43,13 @@ impl WriteRedteamFindingTool {
 #[async_trait]
 impl Tool for WriteRedteamFindingTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "write_redteam_finding".to_string(),
-            name: "Write Red-Team Finding".to_string(),
-            description: "Record a red-team review finding. Structured around §5.3 of the ATOS \
-                 design doc — {invariant, status, evidence, confidence}. The call must \
-                 be made from a `mode=redteam` driver session against a provisioned \
-                 feature_id; otherwise normal-mode `write_note` is the right tool."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Feature this finding applies to. Usually \
-                                        $SOVEREIGN_FEATURE_ID from the driver env."
-                    },
-                    "invariant": {
-                        "type": "string",
-                        "description": "The spec invariant being checked. Quote it from \
-                                        the charter verbatim."
-                    },
-                    "status": {
-                        "type": "string",
-                        "enum": ["violated", "potentially_violated", "not_found"],
-                        "description": "Whether the invariant is violated, possibly \
-                                        violated, or no evidence either way was found."
-                    },
-                    "evidence": {
-                        "type": "string",
-                        "description": "The specific symbol, file, or line that led to the \
-                                        finding. Empty string for `status=not_found`."
-                    },
-                    "confidence": {
-                        "type": "string",
-                        "enum": ["high", "medium", "low"],
-                        "description": "Reviewer confidence in the status verdict."
-                    },
-                    "files": {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "Optional: file paths the evidence points at. \
-                                        Drives report grouping."
-                    }
-                },
-                "required": ["feature_id", "invariant", "status", "confidence"]
-            }),
-            examples: vec![ToolExample {
-                situation: "You found that ZoteroLibrary's factory method relies on a \
-                            default for `scope=Local` when the charter said the field \
-                            must be set explicitly. Medium confidence — the default \
-                            currently happens to be correct but a refactor could \
-                            silently flip it."
-                    .into(),
-                call: serde_json::json!({
-                    "feature_id": "zotero-acquirer",
-                    "invariant": "LocalCorpusConfig::zotero_library MUST set scope=Local explicitly, not via default.",
-                    "status": "violated",
-                    "evidence": "corpus-engine/src/acquirers/zotero.rs::factory() line 42 omits the field.",
-                    "confidence": "medium",
-                    "files": ["corpus-engine/src/acquirers/zotero.rs"]
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "id":         { "type": "string" },
-                    "feature_id": { "type": "string" },
-                    "invariant":  { "type": "string" },
-                    "status":     { "type": "string" },
-                    "confidence": { "type": "string" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("write_redteam_finding").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("write_redteam_finding")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

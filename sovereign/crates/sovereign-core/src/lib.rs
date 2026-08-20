@@ -55,10 +55,10 @@ pub mod tool_loop;
 // The daemon↔package contract lives in `sovereign-contracts`; re-export every
 // item at its historical `sovereign_core::{error, traits, registry, types,
 // observer, health, skills, intent_policy, mcp_config, setup_config, rebrand,
-// tool_result_cache}` path so every existing importer is unaffected.
+// tool_manifest, tool_result_cache}` path so every existing importer is unaffected.
 pub use sovereign_contracts::{
     error, health, intent_policy, mcp_config, observer, rebrand, registry, setup_config, skills,
-    slot_policy, tool_result_cache, traits, types,
+    slot_policy, tool_manifest, tool_result_cache, traits, types,
 };
 
 // Re-export commonly used items at the crate root.

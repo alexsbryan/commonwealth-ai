@@ -37,43 +37,13 @@ impl ClaimSearchTool {
 #[async_trait]
 impl Tool for ClaimSearchTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "claim_search".to_string(),
-            name: "Claim Search".to_string(),
-            description: "Search for specific philosophical positions or claims \
-                          with their epistemic status and attribution. Use when \
-                          you need to know what positions exist on a topic and \
-                          who holds them — not just find text passages."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The topic or claim to search for"
-                    },
-                    "position": {
-                        "type": "string",
-                        "description": "Optional: filter by position name (e.g. 'Compatibilism')"
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown-formatted list of positions with epistemic \
-                                status and attribution."
-            })),
-        }
+        sovereign_core::tool_manifest::require("claim_search").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("claim_search")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
@@ -249,41 +219,13 @@ impl EpistemicLandscapeTool {
 #[async_trait]
 impl Tool for EpistemicLandscapeTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "epistemic_landscape".to_string(),
-            name: "Epistemic Landscape".to_string(),
-            description: "Map the landscape of positions, agreements, and \
-                          disagreements on a topic. Returns the dominant view, \
-                          contested positions, specific fault lines, and open \
-                          questions. Use for contested philosophical, scientific, \
-                          or policy questions."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "topic": {
-                        "type": "string",
-                        "description": "The topic or question to map"
-                    }
-                },
-                "required": ["topic"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown summary of the epistemic landscape — \
-                                dominant view, contested positions, fault lines, \
-                                open questions."
-            })),
-        }
+        sovereign_core::tool_manifest::require("epistemic_landscape").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("epistemic_landscape")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

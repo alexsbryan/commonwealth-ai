@@ -342,74 +342,13 @@ impl Default for DriftPostureTool {
 #[async_trait]
 impl Tool for DriftPostureTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "drift_posture".to_string(),
-            name: "Drift Posture".to_string(),
-            description:
-                "Return the freshness state of the architectural-drift report \
-                 (`sovereign drift detect` output) without re-running the LLM \
-                 pipeline. Sibling to `lint_status`: cheap, idempotent, no \
-                 cargo lock contention. Use to decide whether the drift digest \
-                 you're about to cite is current against the narrative docs \
-                 (SYSTEM_OVERVIEW.md + ARCH_PRINCIPLES.md by default). \
-                 Status: `fresh` (every narrative hash matches the recorded \
-                 fingerprint), `stale` (one or more narratives edited since \
-                 last run — re-run `sovereign drift detect`), `partial` \
-                 (fingerprint missing a requested narrative — new doc added \
-                 since last run), `never_run` (no fingerprint or report \
-                 exists yet). When fresh, the response carries the Act-on \
-                 count and top-3 critical findings extracted from the report's \
-                 JSON sidecar."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "narrative": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md resolved relative to the workspace root."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "Decide whether to cite the drift report in the session-start brief, or warn that it's stale.".into(),
-                    call: serde_json::json!({}),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": { "type": "string", "enum": ["fresh","stale","partial","never_run"] },
-                    "last_run_at_unix": { "type": ["integer","null"] },
-                    "age_seconds": { "type": ["integer","null"] },
-                    "act_on_count": { "type": ["integer","null"] },
-                    "top_critical": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "doc": { "type": "string" },
-                                "section": { "type": ["string","null"] },
-                                "claim": { "type": "string" }
-                            }
-                        }
-                    },
-                    "narrative_paths": { "type": "array", "items": { "type": "string" } },
-                    "stale_paths": { "type": "array", "items": { "type": "string" } },
-                    "output_path": { "type": ["string","null"] }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("drift_posture").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("drift_posture")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

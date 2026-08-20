@@ -26,32 +26,13 @@ pub struct AtlasGapsTool;
 #[async_trait]
 impl Tool for AtlasGapsTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_gaps".to_string(),
-            name: "atlas_gaps".to_string(),
-            description: "Literary-atlas Phase 7: detect structural gaps (transitions without a \
-                          trigger, ungrounded claims, open questions) in the resolved atlas. \
-                          Reads atoms.json + edges.json, writes gaps.json. Deterministic."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
-                },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+        sovereign_core::tool_manifest::require("atlas_gaps").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("atlas_gaps")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

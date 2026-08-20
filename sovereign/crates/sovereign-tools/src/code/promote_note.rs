@@ -34,72 +34,13 @@ impl PromoteNoteTool {
 #[async_trait]
 impl Tool for PromoteNoteTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "promote_note".to_string(),
-            name: "Promote Note".to_string(),
-            description:
-                "Copy a note to a higher scope (session/feature → feature/global). The source \
-                 row stays in place for audit; the new row has promoted_from=<source id>. Pass \
-                 new_content to rewrite the note with a more general framing suitable for the \
-                 destination scope (global notes should read as codebase-wide invariants, not \
-                 feature-local decisions)."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Source note id (any scope)."
-                    },
-                    "to_scope": {
-                        "type": "string",
-                        "enum": ["feature", "global"],
-                        "description": "Destination scope. 'global' is the common case at feature \
-                                        teardown; 'feature' is used to move a session-scoped \
-                                        scratch note into a feature's permanent record."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Required when to_scope='feature'. Ignored otherwise."
-                    },
-                    "new_content": {
-                        "type": "string",
-                        "description": "Optional rewrite. When omitted, the source content is \
-                                        copied verbatim."
-                    }
-                },
-                "required": ["id", "to_scope"]
-            }),
-            examples: vec![ToolExample {
-                situation: "At feature teardown, a decision about extending SourceKind turned out \
-                            to be the general pattern for all new source types. Promote it to \
-                            global with a codebase-wide framing."
-                    .into(),
-                call: serde_json::json!({
-                    "id": "note-abc-123",
-                    "to_scope": "global",
-                    "new_content": "New source types extend SourceKind in corpus-engine/src/recipe.rs \
-                                    and add a match arm in engine/ingest.rs — do not create plugin \
-                                    registries for source type dispatch."
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "promoted_id": { "type": "string" },
-                    "from_scope":  { "type": "string" },
-                    "to_scope":    { "type": "string" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("promote_note").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("promote_note")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

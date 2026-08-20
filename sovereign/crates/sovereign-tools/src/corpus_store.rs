@@ -31,41 +31,13 @@ pub struct CorpusStoreTool;
 #[async_trait]
 impl Tool for CorpusStoreTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "corpus_store".to_string(),
-            name: "corpus_store".to_string(),
-            description: "Write (chunk, embedding) pairs into a searchable corpus index. \
-                          Pairs the `chunks` and `embeddings` collections by position; \
-                          idempotent per `source_doc_id`."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "chunks": { "type": "string", "description": "JSON array of {text, index} (or strings) — e.g. {chunk.output}" },
-                    "embeddings": { "type": "string", "description": "JSON array of embedding vectors — e.g. {embed.output}" },
-                    "source_doc_id": { "type": "string", "description": "Document key; its prior rows are replaced (idempotency). Default: the corpus id." },
-                    "title": { "type": "string", "description": "Title stored on each chunk" },
-                    "embedding_model": { "type": "string", "description": "Embed model name recorded in corpus metadata (informational)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" },
-                    "build_indexes": { "type": "boolean", "description": "Build vector+FTS indices after write (default true)" }
-                },
-                "required": ["corpus", "chunks", "embeddings"]
-            }),
-            examples: vec![],
-            // A real external side effect (writes the LanceDB table), so the
-            // content cache must never skip it. The per-doc overwrite makes
-            // re-execution idempotent regardless.
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+        sovereign_core::tool_manifest::require("corpus_store").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("corpus_store")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

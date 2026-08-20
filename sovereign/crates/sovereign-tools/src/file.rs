@@ -41,44 +41,13 @@ impl FileTool {
 #[async_trait]
 impl Tool for FileTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "file".to_string(),
-            name: "File".to_string(),
-            description: "Read, write, list, and search files within allowed directories"
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "action": { "type": "string", "enum": ["read", "write", "list", "search"] },
-                    "path": { "type": "string" },
-                    "content": { "type": "string", "description": "For write action" },
-                    "pattern": { "type": "string", "description": "Glob pattern for search" }
-                },
-                "required": ["action", "path"]
-            }),
-            examples: vec![],
-            effect: Effect::ReadWrite,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            // Shape depends on action — read returns file contents,
-            // write returns a status string, list returns a newline
-            // list. Leave unschema'd rather than promise structure
-            // that doesn't hold across actions.
-            output_schema: None,
-        }
+        sovereign_core::tool_manifest::require("file").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        // The tool multiplexes read/write/list/search on `action`.
-        // The approval gate walks this vec per invocation and stores
-        // a (tool_id, scope) grant per permission — so the operator
-        // grants `FileRead` the first time a `read`/`list`/`search`
-        // fires, and `FileWrite` the first time a `write` fires.
-        // Returning both keeps the check correct regardless of
-        // action; the Effect::ReadWrite declaration on the
-        // descriptor matches.
-        vec![Permission::FileRead, Permission::FileWrite]
+        sovereign_core::tool_manifest::require("file")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

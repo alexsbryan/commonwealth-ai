@@ -1,0 +1,528 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+#
+# Knowledge / document / communication tool manifests — the DECLARED half of
+# every tool under `sovereign-tools/src/` outside `code/`.
+#
+# Adding a tool here is a DATA change. See `tool_manifest/mod.rs` for the
+# schema and `ToolManifest::to_descriptor` for how a row becomes the
+# `ToolDescriptor` the router, planner and MCP surface read.
+
+[[tool]]
+id = "atlas_gaps"
+name = "atlas_gaps"
+description = "Literary-atlas Phase 7: detect structural gaps (transitions without a trigger, ungrounded claims, open questions) in the resolved atlas. Reads atoms.json + edges.json, writes gaps.json. Deterministic."
+effect = "write"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["corpus"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus]
+type = "string"
+description = "Corpus id (directory under the index dir)"
+
+[tool.parameters.properties.index_dir]
+type = "string"
+description = "Index root. Default: ~/.svrnmesh/indexes"
+
+[[tool]]
+id = "atlas_tensions"
+name = "atlas_tensions"
+description = "Literary-atlas Phase 6 (deterministic): enumerate tension candidate pairs (claim↔claim / claim↔state sharing an entity) from the resolved atlas. Reads atoms.json, writes tension_candidates.json. Graph strategy (no model/embed)."
+effect = "write"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["corpus"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus]
+type = "string"
+description = "Corpus id (directory under the index dir)"
+
+[tool.parameters.properties.index_dir]
+type = "string"
+description = "Index root. Default: ~/.svrnmesh/indexes"
+
+[[tool]]
+id = "attached_doc_search"
+name = "Search attached document"
+description = "Retrieve passages from the document the user has attached to this conversation. Use this when the question is about the specific text the user shared (a book, paper, report, etc.). Returns relevant excerpts with their location in the document. Call repeatedly with different queries to triangulate across the document; the corpus knowledge tool covers everything outside the attachment."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "A precise natural-language query against the attached document. Examples: 'where Stevie's address label is described', 'Vladimir's speech about the Greenwich Observatory', 'every passage where Winnie is called incurious'."
+
+[tool.output_schema]
+type = "string"
+description = "Concatenated passages with inline source labels. Empty / no-doc response on conversations without an attached document."
+
+[[tool]]
+id = "calendar"
+name = "Calendar"
+description = "Read and create calendar events via CalDAV"
+effect = "write"
+idempotency = "nonidempotent"
+latency = "slow"
+scope = "external"
+permissions = ["CalendarRead"]
+
+[tool.parameters]
+type = "object"
+required = ["action"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.action]
+type = "string"
+enum = ["list", "create"]
+
+[tool.parameters.properties.summary]
+type = "string"
+description = "Event title (for create)"
+
+[tool.parameters.properties.start]
+type = "string"
+description = "Start time ISO 8601 (for create)"
+
+[tool.parameters.properties.end]
+type = "string"
+description = "End time ISO 8601 (for create)"
+
+[[tool]]
+id = "claim_search"
+name = "Claim Search"
+description = "Search for specific philosophical positions or claims with their epistemic status and attribution. Use when you need to know what positions exist on a topic and who holds them — not just find text passages."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "The topic or claim to search for"
+
+[tool.parameters.properties.position]
+type = "string"
+description = "Optional: filter by position name (e.g. 'Compatibilism')"
+
+[tool.output_schema]
+type = "string"
+description = "Markdown-formatted list of positions with epistemic status and attribution."
+
+[[tool]]
+id = "compute"
+name = "Compute"
+description = "Execute Python code in a sandboxed environment and return output"
+effect = "readwrite"
+idempotency = "nonidempotent"
+latency = "slow"
+scope = "session"
+permissions = ["Shell"]
+
+[tool.parameters]
+type = "object"
+required = ["code"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.code]
+type = "string"
+description = "Python code to execute"
+
+[[tool]]
+id = "corpus_search"
+name = "corpus_search"
+description = "Rank a corpus by similarity to a query vector. Returns the top-k hits as a collection of {source_doc_id, title, score, text} — the read side of `corpus_store`. Pre-embed the query with `embed:default`."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["corpus", "embedding"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus]
+type = "string"
+description = "Corpus id (directory under the index dir)"
+
+[tool.parameters.properties.embedding]
+type = "string"
+description = "Query vector — e.g. {seed_vec.output} from an embed: step"
+
+[tool.parameters.properties.query]
+type = "string"
+description = "Optional query text for hybrid lexical (FTS) recall on top of vector similarity"
+
+[tool.parameters.properties.top_k]
+type = "string"
+description = "How many hits to return (default 10)"
+
+[tool.parameters.properties.single]
+type = "boolean"
+description = "Return the single top hit as an object (or null) instead of an array — for resolution under for_each"
+
+[tool.parameters.properties.exclude]
+type = "string"
+description = "Array of source_doc_ids (or objects with source_doc_id) to drop from results — e.g. {resolved.output}"
+
+[tool.parameters.properties.index_dir]
+type = "string"
+description = "Index root. Default: ~/.svrnmesh/indexes"
+
+[tool.output_schema]
+type = "array"
+
+[tool.output_schema.items]
+type = "object"
+
+[tool.output_schema.items.properties]
+
+[tool.output_schema.items.properties.source_doc_id]
+type = "string"
+
+[tool.output_schema.items.properties.title]
+type = "string"
+
+[tool.output_schema.items.properties.score]
+type = "number"
+
+[tool.output_schema.items.properties.text]
+type = "string"
+
+[[tool]]
+id = "corpus_store"
+name = "corpus_store"
+description = "Write (chunk, embedding) pairs into a searchable corpus index. Pairs the `chunks` and `embeddings` collections by position; idempotent per `source_doc_id`."
+effect = "write"
+idempotency = "idempotent"
+latency = "slow"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["corpus", "chunks", "embeddings"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus]
+type = "string"
+description = "Corpus id (directory under the index dir)"
+
+[tool.parameters.properties.chunks]
+type = "string"
+description = "JSON array of {text, index} (or strings) — e.g. {chunk.output}"
+
+[tool.parameters.properties.embeddings]
+type = "string"
+description = "JSON array of embedding vectors — e.g. {embed.output}"
+
+[tool.parameters.properties.source_doc_id]
+type = "string"
+description = "Document key; its prior rows are replaced (idempotency). Default: the corpus id."
+
+[tool.parameters.properties.title]
+type = "string"
+description = "Title stored on each chunk"
+
+[tool.parameters.properties.embedding_model]
+type = "string"
+description = "Embed model name recorded in corpus metadata (informational)"
+
+[tool.parameters.properties.index_dir]
+type = "string"
+description = "Index root. Default: ~/.svrnmesh/indexes"
+
+[tool.parameters.properties.build_indexes]
+type = "boolean"
+description = "Build vector+FTS indices after write (default true)"
+
+[[tool]]
+id = "document"
+name = "Document"
+description = "Process an entire ingested document with a fixed operation (summarize | analyze). Reliable for those two common cases — smaller models call it correctly because the operation is constrained. For a custom operation described in natural language (e.g. \"extract character arcs\", \"find legal risks\"), use `document_operation` instead."
+effect = "read"
+idempotency = "idempotent"
+latency = "slow"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["source", "operation"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.source]
+type = "string"
+description = "The source path of the ingested document"
+
+[tool.parameters.properties.operation]
+type = "string"
+enum = ["summarize", "analyze"]
+description = "What to do with the document"
+
+[tool.output_schema]
+type = "string"
+description = "Synthesised summary or analysis prose. Shape depends on the `operation` param."
+
+[[tool]]
+id = "document_operation"
+name = "Document Operation"
+description = "Run a user-defined map-reduce operation across a document. The map_prompt and reduce_prompt are written by the planner based on the user's operation description. For the two common cases — summarize and analyze — prefer the simpler `document` tool, which fixes the operation and is easier for smaller models to invoke correctly."
+effect = "read"
+idempotency = "idempotent"
+latency = "slow"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["source", "operation", "map_prompt", "reduce_prompt"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.source]
+type = "string"
+description = "The source path of the ingested document"
+
+[tool.parameters.properties.operation]
+type = "string"
+description = "The user's operation request in natural language"
+
+[tool.parameters.properties.map_prompt]
+type = "string"
+description = "Prompt applied to each chunk batch to extract relevant information"
+
+[tool.parameters.properties.reduce_prompt]
+type = "string"
+description = "Prompt applied to merge extracted fragments into a final result"
+
+[tool.parameters.properties.conversation_id]
+type = "string"
+description = "Conversation ID for session persistence"
+
+[tool.parameters.properties.batch_size]
+type = "integer"
+description = "Chunks per map batch (default: 4)"
+
+[tool.output_schema]
+type = "string"
+description = "Reduce-phase output text — shape follows whatever the caller-supplied `reduce_prompt` asked the model to produce."
+
+[[tool.examples]]
+situation = "User wants to extract character arcs from a novel"
+call = { source = "manuscript.pdf", operation = "extract character arcs", map_prompt = "From this section, extract: character names, key actions they take, and how they change.", reduce_prompt = "Synthesize all character information into a comprehensive character map with arcs." }
+
+[[tool]]
+id = "email"
+name = "Email"
+description = "Read inbox and send emails via IMAP/SMTP"
+effect = "write"
+idempotency = "nonidempotent"
+latency = "slow"
+scope = "external"
+permissions = ["Network"]
+
+[tool.parameters]
+type = "object"
+required = ["action"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.action]
+type = "string"
+enum = ["read_inbox", "send"]
+
+[tool.parameters.properties.limit]
+type = "integer"
+description = "Number of messages to read (for read_inbox)"
+
+[tool.parameters.properties.to]
+type = "string"
+description = "Recipient email (for send)"
+
+[tool.parameters.properties.subject]
+type = "string"
+description = "Email subject (for send)"
+
+[tool.parameters.properties.body]
+type = "string"
+description = "Email body (for send)"
+
+[[tool]]
+id = "epistemic_landscape"
+name = "Epistemic Landscape"
+description = "Map the landscape of positions, agreements, and disagreements on a topic. Returns the dominant view, contested positions, specific fault lines, and open questions. Use for contested philosophical, scientific, or policy questions."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["topic"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.topic]
+type = "string"
+description = "The topic or question to map"
+
+[tool.output_schema]
+type = "string"
+description = "Markdown summary of the epistemic landscape — dominant view, contested positions, fault lines, open questions."
+
+[[tool]]
+id = "extract"
+name = "extract"
+description = "Extract a document's text by file type (PDF, Office, HTML, epub, Markdown, txt) and return it — e.g. params = { path = \"{item.path}\" }. Feed the output to tool:chunk."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["path"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.path]
+type = "string"
+description = "File to extract text from"
+
+[[tool]]
+id = "file"
+name = "File"
+description = "Read, write, list, and search files within allowed directories"
+effect = "readwrite"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "session"
+permissions = ["FileRead", "FileWrite"]
+
+[tool.parameters]
+type = "object"
+required = ["action", "path"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.action]
+type = "string"
+enum = ["read", "write", "list", "search"]
+
+[tool.parameters.properties.path]
+type = "string"
+
+[tool.parameters.properties.content]
+type = "string"
+description = "For write action"
+
+[tool.parameters.properties.pattern]
+type = "string"
+description = "Glob pattern for search"
+
+[[tool]]
+id = "knowledge"
+name = "Knowledge"
+description = "Search your ingested documents for relevant information"
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["query"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.query]
+type = "string"
+description = "The search query"
+
+[tool.output_schema]
+type = "string"
+description = "Prose synthesis over local knowledge corpora, with inline citations to source chunks."
+
+[[tool]]
+id = "wikipedia_fetch"
+name = "Wikipedia: Fetch Article"
+description = "Fetch a specific Wikipedia article on demand and ingest it into the user's Wikipedia corpus. Use this when the catalog (`wikipedia-catalog`) surfaces a title that matches the user's question but the full article hasn't been indexed yet — the next retrieval will return the article's content directly. Takes 15-60 seconds per article (download + chunk + embed); always inform the user before calling. The fetched article carries `parent_corpus_id = wikipedia` so it surfaces under the user's existing Wikipedia corpus and is shared across the mesh like any other Wikipedia content."
+effect = "readwrite"
+idempotency = "idempotent"
+latency = "slow"
+scope = "persistent"
+permissions = ["FileWrite", "Network"]
+
+[tool.parameters]
+type = "object"
+required = ["title"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.title]
+type = "string"
+description = "The exact article title from a catalog hit (e.g. \"Roman Empire\", \"Albert Einstein\"). Case-sensitive; pass the title verbatim from the CatalogHit metadata."
+
+[tool.parameters.properties.enrich]
+type = "boolean"
+description = "If true, also build the per-article atlas (~1-2 minutes additional). Default false — atlas grounding still works without per-article enrichment because the article's chunks land in the wikipedia corpus's atlas grounding bag."
+default = false
+
+[tool.parameters.properties.expand_links]
+type = "boolean"
+description = "If true, queue a one-hop link-expansion (\"minesweeper\") after the primary fetch — top-N articles linked from this one are pre-loaded into the same shared corpus. Default true. Set false for batch / seed flows (e.g. Tier-1.5 placeholder seeding) where the caller wants exactly the requested article and no automatic neighbours."
+default = true
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.new_corpus_id]
+type = "string"
+
+[tool.output_schema.properties.chunks_created]
+type = "integer"
+
+[tool.output_schema.properties.title]
+type = "string"

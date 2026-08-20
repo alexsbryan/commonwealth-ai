@@ -28,46 +28,13 @@ impl GetLintOutputTool {
 #[async_trait]
 impl Tool for GetLintOutputTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "get_lint_output".to_string(),
-            name: "Get Lint Output".to_string(),
-            description: "Retrieve the full raw output of a lint run by run_id. \
-                          Call when lint_status shows output_truncated: true on an error. \
-                          The run_id is in the lint_status summary."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "run_id": {
-                        "type": "integer",
-                        "description": "The run ID from lint_status summary."
-                    }
-                },
-                "required": ["run_id"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "lint_status returned errors but the message was cut off with output_truncated: true. Call this with the run_id from that response to get the full compiler output — file paths, line numbers, and the complete error text.".into(),
-                    call: serde_json::json!({ "run_id": 42 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "run_id":           { "type": "integer" },
-                    "output":           { "type": "string" },
-                    "output_truncated": { "type": "boolean" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("get_lint_output").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("get_lint_output")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

@@ -60,70 +60,13 @@ impl ReadNoteDigestTool {
 #[async_trait]
 impl Tool for ReadNoteDigestTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "read_note_digest".to_string(),
-            name: "Read Note Digest".to_string(),
-            description: "Return a markdown digest (≤2k tokens) summarizing notes that match the \
-                 scope/feature/kinds filter. Cached per notes_version — a fresh call right after \
-                 a write_note will regenerate. Use at session start or after a compaction event \
-                 to rebuild working context without rehydrating every raw note. Reference notes \
-                 by id via read_note_by_id when you need the full content."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "scope": {
-                        "type": "array",
-                        "items": {"type": "string", "enum": ["global", "feature", "session"]},
-                        "description": "Scope filter. Defaults to ['global','feature'] when \
-                                        feature_id is set, ['global'] otherwise."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Pairs with scope=['feature']. Narrows to one feature."
-                    },
-                    "kinds": {
-                        "type": "array",
-                        "items": {"type": "string",
-                                   "enum": ["decision","attempt","invariant","todo","reflection"]},
-                        "description": "Kind filter. Defaults to [decision,invariant,attempt]."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "default": 100,
-                        "description": "Max notes to consider (capped at 100)."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "You just came back from a compaction event and need to rebuild \
-                            context for the active feature without fetching every raw note. \
-                            Call this first, then expand any [note:...] reference you need."
-                    .into(),
-                call: serde_json::json!({
-                    "scope": ["global", "feature"],
-                    "feature_id": "atos-version-flag"
-                }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "markdown": { "type": "string" },
-                    "stale":    { "type": "boolean" },
-                    "hit":      { "type": "boolean",
-                                  "description": "True when the digest was served from cache" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("read_note_digest").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("read_note_digest")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

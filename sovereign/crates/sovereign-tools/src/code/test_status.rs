@@ -90,98 +90,13 @@ impl TestStatusTool {
 #[async_trait]
 impl Tool for TestStatusTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "test_status".to_string(),
-            name: "Test Status".to_string(),
-            description: "Return test suite status from the background watcher. \
-                          NEVER run `cargo test` via Bash — the watcher holds the Cargo \
-                          file lock continuously; running cargo test alongside it causes \
-                          BOTH processes to stall indefinitely waiting for the lock. \
-                          This call reads cached results in microseconds with zero contention. \
-                          Response fields to trust the result: \
-                          `age_seconds` — how old the result is (if 0-60s, the watcher \
-                          ran on your current changes); \
-                          `watched_scope` — the exact command the watcher runs (e.g. \
-                          'cargo test --workspace'), confirming which crates are covered; \
-                          `watcher` — the liveness object: `{live, reason, configured, \
-                          heartbeat_age_secs, hint}`. Read this FIRST. When `live` is \
-                          false the result below is orphaned (the watcher isn't running \
-                          to keep it current); `reason` says why (not_configured / \
-                          watcher_dead / unknown) and `hint` says what to do. \
-                          `watcher_active` mirrors `watcher.live` for back-compat. \
-                          Status: 'fresh_passing' (all pass — safe to proceed), \
-                          'fresh_failing' (failures in response), 'stale' (files changed \
-                          since last run — call run_tests then poll), 'running' (in \
-                          progress — check again in 30-60s), 'watcher_down' (a completed \
-                          run exists but NO live watcher — do not trust it as current; \
-                          fall back to scripts/sovereign-test.sh per `watcher.hint`), \
-                          'never_run' (no run yet — see `watcher.reason`)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You've made a change and want to know if tests pass. Do NOT run `cargo test` — it contends with the background watcher for the Cargo file lock. This reads the watcher's result instantly. If status is 'stale', call run_tests to force a fresh run, then poll back here in ~30s.".into(),
-                    call: serde_json::json!({}),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
-                    "age_seconds":     { "type": "integer" },
-                    "pass_count":      { "type": "integer" },
-                    "fail_count":      { "type": "integer" },
-                    "watcher_active":  { "type": "boolean" },
-                    "watcher": {
-                        "type": "object",
-                        "description": "Watcher liveness. Read before trusting `status`. When `live` is false the run below is orphaned.",
-                        "properties": {
-                            "live":               { "type": "boolean" },
-                            "reason":             { "type": "string", "enum": ["live","not_configured","watcher_dead","legacy_active","inferred_from_age","unknown"] },
-                            "configured":         { "type": "boolean" },
-                            "heartbeat_age_secs": { "type": ["integer","null"] },
-                            "hint":               { "type": ["string","null"] }
-                        }
-                    },
-                    "watched_scope":   { "type": "string" },
-                    "failures":        { "type": "array" },
-                    "run_id":          { "type": "integer" },
-                    "output_truncated":{ "type": "boolean" },
-                    // `previous_run` is populated whenever `status` is
-                    // `running` and a prior completed run exists. Lets
-                    // callers see "in flight, but the last completed
-                    // run failed with these errors" rather than polling
-                    // `null` indefinitely on a watcher wedged against
-                    // a stable compile error. Mirrors the prior_run
-                    // surface on `lint_status`.
-                    "previous_run":    {
-                        "type": "object",
-                        "properties": {
-                            "status":           { "type": "string", "enum": ["fresh_passing","fresh_failing"] },
-                            "run_id":           { "type": "integer" },
-                            "pass_count":       { "type": "integer" },
-                            "fail_count":       { "type": "integer" },
-                            "exit_code":        { "type": "integer" },
-                            "age_seconds":      { "type": "integer" },
-                            "looks_like_compile_failure": { "type": "boolean" },
-                            "failures":         { "type": "array" }
-                        }
-                    }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("test_status").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("test_status")
+            .permissions
+            .clone()
     }
 
     /// Signal: one-liner when the last test run failed. Silent on a

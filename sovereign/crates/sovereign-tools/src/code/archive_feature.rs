@@ -30,54 +30,13 @@ impl ArchiveFeatureTool {
 #[async_trait]
 impl Tool for ArchiveFeatureTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "archive_feature".to_string(),
-            name: "Archive Feature".to_string(),
-            description: "Mark an ATOS feature as archived. Notes tagged to the feature remain \
-                 queryable via read_notes with scope=['feature'] + feature_id but stop \
-                 being injected into fresh sessions. Use after the compliance review \
-                 passes and any promotable notes have been promoted to global scope."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Feature id (as returned by provision_feature)."
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "Why the feature is archived (e.g. 'shipped v0.5', \
-                                        'abandoned in favor of <other>')."
-                    }
-                },
-                "required": ["id", "reason"]
-            }),
-            examples: vec![ToolExample {
-                situation: "Milestone 1 of the atos-version-flag feature passed review and the \
-                            operator asked you to wrap it up. Archive it and move on."
-                    .into(),
-                call: serde_json::json!({
-                    "id": "atos-version-flag",
-                    "reason": "shipped; --version flag lives in atos_cmd.rs"
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "archived": { "type": "boolean" },
-                    "id":       { "type": "string" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("archive_feature").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("archive_feature")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

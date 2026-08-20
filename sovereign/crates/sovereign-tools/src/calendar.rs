@@ -27,33 +27,13 @@ impl CalendarTool {
 #[async_trait]
 impl Tool for CalendarTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "calendar".to_string(),
-            name: "Calendar".to_string(),
-            description: "Read and create calendar events via CalDAV".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "action": { "type": "string", "enum": ["list", "create"] },
-                    "summary": { "type": "string", "description": "Event title (for create)" },
-                    "start": { "type": "string", "description": "Start time ISO 8601 (for create)" },
-                    "end": { "type": "string", "description": "End time ISO 8601 (for create)" }
-                },
-                "required": ["action"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Slow,
-            scope: Scope::External,
-            // Shape varies with `action` — list returns events,
-            // create returns a confirmation blob.
-            output_schema: None,
-        }
+        sovereign_core::tool_manifest::require("calendar").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::CalendarRead]
+        sovereign_core::tool_manifest::require("calendar")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

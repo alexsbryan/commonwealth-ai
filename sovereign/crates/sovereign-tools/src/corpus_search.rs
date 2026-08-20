@@ -34,48 +34,13 @@ pub struct CorpusSearchTool;
 #[async_trait]
 impl Tool for CorpusSearchTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "corpus_search".to_string(),
-            name: "corpus_search".to_string(),
-            description: "Rank a corpus by similarity to a query vector. Returns the top-k \
-                          hits as a collection of {source_doc_id, title, score, text} — the \
-                          read side of `corpus_store`. Pre-embed the query with `embed:default`."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "embedding": { "type": "string", "description": "Query vector — e.g. {seed_vec.output} from an embed: step" },
-                    "query": { "type": "string", "description": "Optional query text for hybrid lexical (FTS) recall on top of vector similarity" },
-                    "top_k": { "type": "string", "description": "How many hits to return (default 10)" },
-                    "single": { "type": "boolean", "description": "Return the single top hit as an object (or null) instead of an array — for resolution under for_each" },
-                    "exclude": { "type": "string", "description": "Array of source_doc_ids (or objects with source_doc_id) to drop from results — e.g. {resolved.output}" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
-                },
-                "required": ["corpus", "embedding"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "source_doc_id": { "type": "string" },
-                        "title": { "type": "string" },
-                        "score": { "type": "number" },
-                        "text": { "type": "string" }
-                    }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("corpus_search").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // Reading your own corpus needs no special permission.
+        sovereign_core::tool_manifest::require("corpus_search")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

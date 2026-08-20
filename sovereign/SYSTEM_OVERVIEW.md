@@ -2377,6 +2377,37 @@ project + design context
 work-atlas coordination (`declare_scope`, `release_scope`,
 `work_in_flight` — see [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md)).
 
+**The declared half of a tool is data
+(`sovereign-contracts::tool_manifest`).** A tool's identity, behavioural
+properties (`effect` / `idempotency` / `latency` / `scope`), parameter
+schema, worked examples and required permissions are declared in
+`sovereign-contracts/tool-manifests/*.toml` — one `[[tool]]` block per
+tool, embedded with `include_str!` and parsed once into a catalog. 56 of
+`sovereign-tools`' impls read it: `descriptor()` is
+`tool_manifest::require("<id>").to_descriptor()` and
+`required_permissions()` reads the same row, so a tool's declared facts
+have ONE decider (ARCH §10.6) instead of a literal per call site. The
+conversion was verified lossless field-by-field against the Rust
+literals it replaced.
+
+Five tools deliberately keep a coded descriptor and are NOT in the
+catalog: `parcel_analytics` and `sec_facts` build theirs from the
+corpora actually installed; `session_state` and `suggest_note` derive
+their parameter schema from a const array (a closed set, already
+data); `knowledge_lookup` loads its description from
+`assets/tool_description.md`, which is the same idea in a better form.
+
+`ToolManifest` also carries work the author would otherwise redo:
+`validate_params` enforces `required` and `type` straight from the
+declaration, and `DeclaredTool` turns a manifest plus a handler into a
+registered tool with **no `impl Tool for` block of its own**. A manifest
+declaring `delegate = "<tool_id>"` plus `defaults` needs no Rust at all —
+`ToolRegistry::install_declared` binds it to an already-registered tool
+(skipping, with a warn naming the id, when the target is not registered
+on this host). Proof: `sovereign-contracts/tests/declared_tools.rs`.
+This does NOT retire the existing trait impls — a tool with genuinely new
+behaviour still writes its executable half.
+
 **Live graph freshness (`sovereign-mesh::reindexer`).** The daemon's
 tool graph and the reindexer share ONE merged `ScipGraph` handle
 (built once in `daemon_cmd/mod.rs`, passed to both `build_tool_registry`

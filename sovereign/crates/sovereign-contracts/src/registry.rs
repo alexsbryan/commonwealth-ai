@@ -11,7 +11,10 @@ use crate::types::{Idempotency, StepOutput, ToolContext, ToolDescriptor};
 /// Owns every registered `Tool`: lookup for dispatch, descriptor listing for
 /// prompts, per-tool call counters, and the optional Tier-4 result cache.
 pub struct ToolRegistry {
-    tools: Vec<Box<dyn Tool>>,
+    /// `Arc`, not `Box`, so a registered tool can be handed to another tool.
+    /// That is what lets a manifest declaring `delegate = "<id>"` become a
+    /// working tool with no Rust behind it (see [`Self::install_declared`]).
+    tools: Vec<Arc<dyn Tool>>,
     call_counts: Mutex<HashMap<String, u64>>,
     /// Tier 4 — optional per-conversation result cache. When
     /// wired, `call_cached` consults it before dispatching to
@@ -43,7 +46,75 @@ impl ToolRegistry {
 
     /// Add a tool. No dedupe — on duplicate ids the first registered wins at `get`.
     pub fn register(&mut self, tool: Box<dyn Tool>) {
+        self.tools.push(Arc::from(tool));
+    }
+
+    /// Add an already-shared tool.
+    pub fn register_arc(&mut self, tool: Arc<dyn Tool>) {
         self.tools.push(tool);
+    }
+
+    /// Register every manifest in the catalog that declares a `delegate` — the
+    /// tools that are pure data, with no Rust of their own.
+    ///
+    /// Call once, AFTER the tools they delegate to are registered. Returns the
+    /// ids installed.
+    ///
+    /// Two cases are deliberately skipped rather than failed, and both are
+    /// logged by id (ARCH §18.3 — absence is reported, never silently
+    /// defaulted):
+    ///
+    /// - The delegate target is not registered on THIS host. Hosts legitimately
+    ///   carry different subsets of the tool surface, so a missing target means
+    ///   "not available here", not "broken".
+    /// - An id is already registered by a coded tool. Code wins; a manifest
+    ///   never shadows a real implementation.
+    pub fn install_declared(&mut self) -> Vec<String> {
+        let mut installed = Vec::new();
+        for manifest in crate::tool_manifest::catalog().values() {
+            let Some(target_id) = manifest.delegate.as_deref() else {
+                continue;
+            };
+            if self.get(&manifest.id).is_ok() {
+                tracing::warn!(
+                    tool_id = %manifest.id,
+                    "declared tool skipped: a coded tool already owns this id"
+                );
+                continue;
+            }
+            let Some(target) = self.get_arc(target_id) else {
+                tracing::warn!(
+                    tool_id = %manifest.id,
+                    delegate = target_id,
+                    "declared tool skipped: its delegate target is not registered on this host"
+                );
+                continue;
+            };
+            let handler =
+                crate::tool_manifest::delegating_handler(target, manifest.defaults.clone());
+            match crate::tool_manifest::DeclaredTool::new(&manifest.id, handler) {
+                Ok(tool) => {
+                    self.tools.push(Arc::new(tool));
+                    installed.push(manifest.id.clone());
+                }
+                Err(e) => tracing::warn!(tool_id = %manifest.id, error = %e, "declared tool skipped"),
+            }
+        }
+        tracing::debug!(installed = installed.len(), "declared tools installed");
+        installed
+    }
+
+    /// Shared handle to a registered tool, for callers that need to hold it
+    /// beyond the borrow — notably a declared tool delegating to it.
+    pub fn get_arc(&self, tool_id: &str) -> Option<Arc<dyn Tool>> {
+        let lower = tool_id.to_lowercase();
+        self.tools
+            .iter()
+            .find(|t| {
+                let id = t.descriptor().id;
+                id == tool_id || id.to_lowercase() == lower
+            })
+            .map(Arc::clone)
     }
 
     /// Look up by id: exact match first, then case-insensitive (models sometimes

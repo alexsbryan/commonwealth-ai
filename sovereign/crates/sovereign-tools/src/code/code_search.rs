@@ -91,64 +91,13 @@ fn format_approximate_response(query: &str, rows: &[CodeRow]) -> String {
 #[async_trait]
 impl Tool for CodeSearchTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "code_search".to_string(),
-            name: "Code Search".to_string(),
-            description: "Semantic search over the indexed codebase. \
-                          PREFER THIS OVER READING FILES when you need to understand \
-                          how something is done, find implementations of a pattern, \
-                          or locate relevant code before making a change. Returns the \
-                          3-5 most relevant chunks — typically 30-50 tokens each — \
-                          versus reading an entire file which may cost 200-500 tokens \
-                          and contain mostly irrelevant content. Use read_file only \
-                          when you need a complete, authoritative view of a specific \
-                          file you have already located."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Description of what you're looking for"
-                    },
-                    "language": {
-                        "type": "string",
-                        "description": "Optional language filter: rust, typescript, javascript, go, python",
-                        "default": ""
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You need to find how a pattern is implemented before writing something similar. Don't read random files — search for the pattern semantically and get the 3-5 most relevant chunks.".into(),
-                    call: serde_json::json!({ "query": "streaming SSE response handler" }),
-                },
-                ToolExample {
-                    situation: "You're about to write a Python/shell script to grep for examples of a pattern across the codebase. This does it in one call and ranks results by relevance.".into(),
-                    call: serde_json::json!({ "query": "retry logic with exponential backoff" }),
-                },
-                ToolExample {
-                    situation: "You know the concept but not the exact symbol name. Use this to find it, then follow up with symbol_lookup for the precise definition.".into(),
-                    call: serde_json::json!({ "query": "tool permission validation before execute", "language": "rust" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Fenced code blocks ranked by relevance; same format \
-                                as symbol_lookup (`// file:start-end [kind] (corpus)`). \
-                                Lower relevance than symbol_lookup — results are \
-                                approximate."
-            })),
-        }
+        sovereign_core::tool_manifest::require("code_search").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("code_search")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

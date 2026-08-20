@@ -32,33 +32,13 @@ pub struct AtlasTensionsTool;
 #[async_trait]
 impl Tool for AtlasTensionsTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_tensions".to_string(),
-            name: "atlas_tensions".to_string(),
-            description: "Literary-atlas Phase 6 (deterministic): enumerate tension candidate \
-                          pairs (claim↔claim / claim↔state sharing an entity) from the resolved \
-                          atlas. Reads atoms.json, writes tension_candidates.json. Graph strategy \
-                          (no model/embed)."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
-                },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+        sovereign_core::tool_manifest::require("atlas_tensions").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("atlas_tensions")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

@@ -73,82 +73,13 @@ impl Default for DesignSignalsExtractTool {
 #[async_trait]
 impl Tool for DesignSignalsExtractTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "design_signals_extract".to_string(),
-            name: "Design Signals Extract".to_string(),
-            description: "Parse a DESIGN.md file and return the structural signals the \
-                 solo-mode fallback and agent-collaborative session both rely \
-                 on: the Anchors block's bullets, structural gaps (TBD \
-                 markers, empty/placeholder sections, open X-vs-Y choices, \
-                 literal question sentences), and keyword-bucket presence \
-                 flags (time / persistence / api / queue / concurrency / \
-                 secrets / consumers). Strictly structural — does NOT \
-                 interpret semantics. Run after each substantive edit to a \
-                 DESIGN.md to see which gaps the user should still resolve."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "design_path": {
-                        "type": "string",
-                        "description": "Path to the DESIGN.md file. Defaults \
-                                        to `DESIGN.md` at the project root \
-                                        (the canonical location). Absolute \
-                                        paths are used as-is."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "The user just edited DESIGN.md — check which \
-                         structural gaps remain before asking another \
-                         question."
-                        .into(),
-                    call: json!({ "design_path": "DESIGN.md" }),
-                },
-                ToolExample {
-                    situation: "Running from a subdirectory; verify the doc at \
-                         the known project root."
-                        .into(),
-                    call: json!({ "design_path": "/absolute/path/to/DESIGN.md" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "design_path": { "type": "string" },
-                    "anchors":     { "type": "array", "items": { "type": "string" } },
-                    "gap_count":   { "type": "integer" },
-                    "gaps":        { "type": "array", "items": {
-                        "type": "object",
-                        "properties": {
-                            "section": { "type": "string" },
-                            "reason":  { "type": "string" },
-                            "line":    { "type": "integer" },
-                            "snippet": { "type": "string" }
-                        }
-                    } },
-                    "keywords":    { "type": "object" },
-                    "sections":    { "type": "array", "items": {
-                        "type": "object",
-                        "properties": {
-                            "heading": { "type": "string" },
-                            "level":   { "type": "integer" },
-                            "line":    { "type": "integer" }
-                        }
-                    } }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("design_signals_extract").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("design_signals_extract")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, _params: &Value) -> Result<()> {

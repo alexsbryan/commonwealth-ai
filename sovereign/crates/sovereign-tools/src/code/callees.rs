@@ -51,51 +51,13 @@ impl FindCalleesTool {
 #[async_trait]
 impl Tool for FindCalleesTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "callees".to_string(),
-            name: "Find Callees".to_string(),
-            description: "Find all functions and methods that a given symbol calls, \
-                          using the SCIP symbol graph. More precise than parsing \
-                          function bodies — resolves trait dispatch and method calls \
-                          that body-parsing misses. Staleness is communicated in \
-                          the response when the graph is not fresh. Call \
-                          `sovereign corpus scip <corpus-id>` to refresh."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Exact symbol name"
-                    }
-                },
-                "required": ["symbol"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to read an entire function body to understand what it calls. Don't — this returns the exact outbound call graph, including trait dispatch that reading source would miss.".into(),
-                    call: serde_json::json!({ "symbol": "handle_tools_call" }),
-                },
-                ToolExample {
-                    situation: "You need to understand what a function depends on before refactoring it. Knowing its callees tells you what interfaces must remain stable.".into(),
-                    call: serde_json::json!({ "symbol": "run_embed_batch_sync" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown list of outbound call sites, one per line, \
-                                with `file:line` locations. Empty-result line when \
-                                the symbol has no outbound calls or is unknown."
-            })),
-        }
+        sovereign_core::tool_manifest::require("callees").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("callees")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

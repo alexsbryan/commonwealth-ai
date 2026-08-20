@@ -26,31 +26,13 @@ pub struct ExtractTool;
 #[async_trait]
 impl Tool for ExtractTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "extract".to_string(),
-            name: "extract".to_string(),
-            description: "Extract a document's text by file type (PDF, Office, HTML, epub, \
-                          Markdown, txt) and return it — e.g. params = { path = \"{item.path}\" }. \
-                          Feed the output to tool:chunk."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "File to extract text from" }
-                },
-                "required": ["path"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+        sovereign_core::tool_manifest::require("extract").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("extract")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

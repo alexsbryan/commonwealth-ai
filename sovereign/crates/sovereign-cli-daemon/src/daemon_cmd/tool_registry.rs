@@ -354,6 +354,15 @@ pub(super) async fn build_tool_registry(
     ))));
     tools.register(Box::new(super::solve_tools::SolveCancelTool(solve_jobs)));
 
+    // Tools that are pure data. Every manifest under
+    // `sovereign-contracts/tool-manifests/` declaring `delegate = "<id>"` is
+    // bound here to the tool it names — so adding one of those is a TOML edit
+    // and nothing else. LAST, because it can only bind targets already
+    // registered above. Installs nothing until a manifest declares a delegate;
+    // that empty case is the same shape as a recipe registry with no rows, not
+    // a dark switch.
+    tools.install_declared();
+
     tools
 }
 

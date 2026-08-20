@@ -30,48 +30,13 @@ impl ReadNoteByIdTool {
 #[async_trait]
 impl Tool for ReadNoteByIdTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "read_note_by_id".to_string(),
-            name: "Read Note By ID".to_string(),
-            description: "Return a single note row by its UUID. Use when a digest or compliance \
-                          report references a note by id and you want the full content without \
-                          re-running a filtered search."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Note id (as returned by write_note or present in \
-                                        read_notes results)."
-                    }
-                },
-                "required": ["id"]
-            }),
-            examples: vec![ToolExample {
-                situation: "A compaction digest said 'see note #abc-123'. Fetch the full row \
-                            before relying on it."
-                    .into(),
-                call: serde_json::json!({ "id": "abc-123" }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "note": {
-                        "type": ["object", "null"],
-                        "description": "The full note row, or null if id not found"
-                    }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("read_note_by_id").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("read_note_by_id")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

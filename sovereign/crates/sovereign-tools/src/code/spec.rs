@@ -82,63 +82,13 @@ impl Default for SpecTool {
 #[async_trait]
 impl Tool for SpecTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "spec".to_string(),
-            name: "Spec".to_string(),
-            description: "Return the active feature's spec.md, ARCHITECTURE.md, and \
-                          CHARTER.md in a single response so the agent can read the \
-                          contract it's working under without three separate file \
-                          reads. Pass `feature_id` to target a specific feature; \
-                          omit it when there's exactly one `.sovereign/features/*/` \
-                          directory and the spec is the obvious target. Each \
-                          document is markdown, truncated to 32 KB with a \
-                          `*_truncated` flag when larger. Use `spec()` BEFORE \
-                          modifying code in a feature directory, BEFORE deciding \
-                          whether your change matches the documented invariants, \
-                          and AFTER spec drift is reported by the daemon."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Feature id to read. Omit to auto-resolve when there's exactly one feature directory."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to modify code under a single-feature workspace and want to read the spec, architecture doc, and charter in one call.".into(),
-                    call: serde_json::json!({}),
-                },
-                ToolExample {
-                    situation: "Multiple features are active; pick the one you're working on.".into(),
-                    call: serde_json::json!({ "feature_id": "p0-payments" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "feature_id":            { "type": ["string", "null"] },
-                    "repo_root":             { "type": "string" },
-                    "spec":                  { "type": ["string", "null"] },
-                    "spec_truncated":        { "type": "boolean" },
-                    "architecture":          { "type": ["string", "null"] },
-                    "architecture_truncated":{ "type": "boolean" },
-                    "charter":               { "type": ["string", "null"] },
-                    "charter_truncated":     { "type": "boolean" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("spec").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::FileRead]
+        sovereign_core::tool_manifest::require("spec")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {

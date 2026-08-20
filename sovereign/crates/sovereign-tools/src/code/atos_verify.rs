@@ -50,68 +50,13 @@ impl Default for AtosVerifyTool {
 #[async_trait]
 impl Tool for AtosVerifyTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: TOOL_ID.to_string(),
-            name: "ATOS step verification".to_string(),
-            description: concat!(
-                "Run a step's verify command and check that the agent ",
-                "actually modified the files it claimed to. Three gates: ",
-                "(1) shell verify command exits zero, ",
-                "(2) touched files are not empty/near-empty (hollow), ",
-                "(3) at least one touched file was modified after ",
-                "`since_unix_ts` (untouched — gate is skipped unless the ",
-                "caller supplies a pre-iteration timestamp). ",
-                "Returns passed=true only when every applicable gate passes."
-            )
-            .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "workdir": {
-                        "type": "string",
-                        "description": "Absolute path to the project workdir"
-                    },
-                    "verify_cmd": {
-                        "type": "string",
-                        "description": "Shell command to run (e.g. 'cargo test --test test_foo -- bar')"
-                    },
-                    "files_touched": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Workdir-relative paths the step was supposed to modify"
-                    },
-                    "since_unix_ts": {
-                        "type": "number",
-                        "description": "Optional. Epoch seconds snapshotted before the agent ran. When set, the untouched gate fires if no file in files_touched has an mtime newer than this."
-                    }
-                },
-                "required": ["workdir", "verify_cmd"]
-            }),
-            // The tool runs an arbitrary shell command supplied by the
-            // caller — `cargo build` writes to `target/`, `pytest`
-            // can mutate fixtures, etc. Classifying as Read would
-            // bypass approval-gating per sovereign-core::types::Effect.
-            effect: Effect::ReadWrite,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Slow,
-            scope: Scope::Session,
-            output_schema: None,
-            examples: vec![ToolExample {
-                situation:
-                    "After implementing step-02 (define CapabilityHint enum), verify the step"
-                        .into(),
-                call: json!({
-                    "workdir": "/Users/user/dev/atos-experiment-oicp-types",
-                    "verify_cmd": "cargo test --test test_capability_hint -- roundtrip",
-                    "files_touched": ["src/lib.rs", "tests/test_capability_hint.rs"],
-                    "since_unix_ts": 1715000000
-                }),
-            }],
-        }
+        sovereign_core::tool_manifest::require("atos_verify").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::Shell]
+        sovereign_core::tool_manifest::require("atos_verify")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {

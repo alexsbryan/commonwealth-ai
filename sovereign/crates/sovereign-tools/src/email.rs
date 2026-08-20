@@ -47,34 +47,13 @@ impl EmailTool {
 #[async_trait]
 impl Tool for EmailTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "email".to_string(),
-            name: "Email".to_string(),
-            description: "Read inbox and send emails via IMAP/SMTP".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "action": { "type": "string", "enum": ["read_inbox", "send"] },
-                    "limit": { "type": "integer", "description": "Number of messages to read (for read_inbox)" },
-                    "to": { "type": "string", "description": "Recipient email (for send)" },
-                    "subject": { "type": "string", "description": "Email subject (for send)" },
-                    "body": { "type": "string", "description": "Email body (for send)" }
-                },
-                "required": ["action"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Slow,
-            scope: Scope::External,
-            // Shape varies with `action` — send returns confirmation
-            // text, read_inbox returns a list of message headers.
-            output_schema: None,
-        }
+        sovereign_core::tool_manifest::require("email").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::Network]
+        sovereign_core::tool_manifest::require("email")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

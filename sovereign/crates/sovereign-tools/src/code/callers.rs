@@ -44,60 +44,13 @@ impl FindCallersTool {
 #[async_trait]
 impl Tool for FindCallersTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "callers".to_string(),
-            name: "Find Callers".to_string(),
-            description: "Find all call sites of a given symbol in the codebase, \
-                          using the SCIP symbol graph. No false positives from \
-                          string matching — results are compiler-resolved. Use \
-                          depth=2 to find callers of callers (impact radius). \
-                          Staleness is communicated in the response when the graph \
-                          is not fresh."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Exact symbol name"
-                    },
-                    "depth": {
-                        "type": "integer",
-                        "description": "Traversal depth: 1 (direct callers only) or 2 (callers of callers). Default: 1.",
-                        "default": 1
-                    }
-                },
-                "required": ["symbol"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to change a function signature and want to know all callers first. Do NOT grep — grep misses trait dispatch and dynamic calls entirely, giving false confidence about blast radius.".into(),
-                    call: serde_json::json!({ "symbol": "execute_step" }),
-                },
-                ToolExample {
-                    situation: "You're removing a method and need to verify nothing calls it. grep would miss calls through trait objects. This is compiler-resolved — if it returns empty, the method is truly uncalled.".into(),
-                    call: serde_json::json!({ "symbol": "record_call" }),
-                },
-                ToolExample {
-                    situation: "You want to understand the full impact of changing a low-level utility. Use depth=2 to see callers of callers — the full blast radius two hops out.".into(),
-                    call: serde_json::json!({ "symbol": "embed", "depth": 2 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown list of inbound call sites, one per line, \
-                                with `file:line` locations. Use depth=2 to see \
-                                transitive callers; response groups by depth."
-            })),
-        }
+        sovereign_core::tool_manifest::require("callers").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("callers")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

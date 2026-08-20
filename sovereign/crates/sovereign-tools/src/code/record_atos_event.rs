@@ -36,84 +36,13 @@ impl RecordAtosEventTool {
 #[async_trait]
 impl Tool for RecordAtosEventTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "record_atos_event".to_string(),
-            name: "Record ATOS Event".to_string(),
-            description:
-                "Append a tool-execution event to the ATOS run ledger. Called by the opencode \
-                 plugin on tool.execute.before/after hooks. The `phase` discriminator \
-                 distinguishes pre-call (args captured) from post-call (outcome + duration). \
-                 Orphan events whose run_id is not in atos_runs are rejected."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "run_id": {
-                        "type": "string",
-                        "description": "$ATOS_RUN_ID exported by `sovereign atos start-milestone`."
-                    },
-                    "call_id": {
-                        "type": "string",
-                        "description": "Driver-scoped tool-call id (persists across before/after)."
-                    },
-                    "tool_name": {
-                        "type": "string",
-                        "description": "Name of the MCP tool that was invoked."
-                    },
-                    "phase": {
-                        "type": "string",
-                        "enum": ["before", "after", "parse_error"],
-                        "description": "before=args captured, after=outcome captured, \
-                                        parse_error=tool_call JSON failed to parse."
-                    },
-                    "args_json": {
-                        "type": "string",
-                        "description": "Serialized arguments on phase=before. Omit on after."
-                    },
-                    "outcome": {
-                        "type": "string",
-                        "description": "'success'|'error'|'empty_result'|'parse_error' on phase=after."
-                    },
-                    "duration_ms": {
-                        "type": "integer",
-                        "description": "Wall-clock duration in ms on phase=after."
-                    },
-                    "session_id": {
-                        "type": "string",
-                        "description": "Optional driver session id; sets atos_runs.session_id on \
-                                        first capture."
-                    }
-                },
-                "required": ["run_id", "call_id", "tool_name", "phase"]
-            }),
-            examples: vec![ToolExample {
-                situation: "opencode's tool.execute.after hook just fired after read_notes \
-                            returned success in ~18ms. Append the event."
-                    .into(),
-                call: serde_json::json!({
-                    "run_id": "run_abc123",
-                    "call_id": "call_42",
-                    "tool_name": "read_notes",
-                    "phase": "after",
-                    "outcome": "success",
-                    "duration_ms": 18
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "recorded": { "type": "boolean" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("record_atos_event").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("record_atos_event")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

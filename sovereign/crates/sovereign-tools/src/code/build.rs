@@ -101,72 +101,13 @@ impl BuildTool {
 #[async_trait]
 impl Tool for BuildTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "build".to_string(),
-            name: "Build".to_string(),
-            description: "Return the workspace's compile/lint status from the background \
-                          watcher: pass/fail summary, top 5 errors with their output, and \
-                          freshness markers. NEVER run `cargo check` or `cargo build` via \
-                          Bash — the watcher holds the Cargo file lock continuously; \
-                          running cargo alongside it stalls both processes indefinitely. \
-                          This tool reads the cached run in microseconds with zero \
-                          contention. \
-                          Pass `full: true` to receive untruncated output for each error \
-                          (use sparingly — long failures balloon the response). \
-                          Read the `watcher` object first: `{live, reason, configured, \
-                          heartbeat_age_secs, hint}`. When `live` is false the result is \
-                          orphaned — no watcher is running to keep it current. \
-                          Status: 'fresh_passing' (clean), 'fresh_failing' (errors in \
-                          response), 'stale' (files changed since last run — watcher will \
-                          rerun on next save), 'running' (in progress — check again in \
-                          ~15s), 'watcher_down' (a completed run exists but NO live \
-                          watcher — fall back per `watcher.hint`), 'never_run' (no run \
-                          yet — see `watcher.reason`)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "full": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Include untruncated output for every error in the response."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You've edited one or more files and want to know if the code still compiles.".into(),
-                    call: serde_json::json!({}),
-                },
-                ToolExample {
-                    situation: "The default response truncated an error you need to read in full.".into(),
-                    call: serde_json::json!({ "full": true }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "status":         { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
-                    "age_seconds":    { "type": "integer" },
-                    "summary":        { "type": "object" },
-                    "errors":         { "type": "array" },
-                    "warnings":       { "type": "array" },
-                    "stale_since":    { "type": "array" },
-                    "watcher_active": { "type": "boolean" },
-                    "watcher":        { "type": "object", "description": "Liveness {live, reason, configured, heartbeat_age_secs, hint}. Read before trusting status." },
-                    "watched_scope":  { "type": "string" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("build").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("build")
+            .permissions
+            .clone()
     }
 
     /// Signal mirrors `LintStatusTool::signal` — a one-liner

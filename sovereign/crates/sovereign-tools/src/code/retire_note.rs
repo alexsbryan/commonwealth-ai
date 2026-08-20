@@ -33,65 +33,13 @@ impl RetireNoteTool {
 #[async_trait]
 impl Tool for RetireNoteTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "retire_note".to_string(),
-            name: "Retire Note".to_string(),
-            description: "Retire a working note by its ID: hide it from read_notes without \
-                          deleting the row (its history and supersedes chain are kept). Use \
-                          when a note is no longer true but you want a durable record of why. \
-                          Prefer this over delete_note. The hide is PEER-CONVERGING: retire \
-                          also tombstones the note, which is the event peers gossip, so a \
-                          retired note disappears from other machines' reads too (UC-D1). \
-                          Note: write_note with 'supersedes' already retires the superseded \
-                          note automatically — call this only for a note that is stale with \
-                          no replacement."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "The note ID to retire (from write_note or read_notes)."
-                    },
-                    "reason": {
-                        "type": "string",
-                        "description": "Why the note is retired (e.g. 'fixed in PR #88', \
-                                        'the gate was removed'). Stored as retired_by and shown \
-                                        in history views."
-                    }
-                },
-                "required": ["id", "reason"]
-            }),
-            examples: vec![ToolExample {
-                situation: "A prior invariant note no longer holds because the constraint was \
-                            removed, and there's no single replacement note to supersede it with. \
-                            Retire it with the reason so future sessions see why it's gone."
-                    .into(),
-                call: serde_json::json!({
-                    "id": "note_abc123",
-                    "reason": "the native-grammar path was deleted; this no longer applies"
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "retired":   { "type": "boolean" },
-                    "tombstoned": {
-                        "type": "boolean",
-                        "description": "Always true on success — the peer-converging hide (UC-D1)."
-                    },
-                    "id":        { "type": "string" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("retire_note").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("retire_note")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

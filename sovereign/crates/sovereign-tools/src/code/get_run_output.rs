@@ -29,46 +29,13 @@ impl GetRunOutputTool {
 #[async_trait]
 impl Tool for GetRunOutputTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "get_run_output".to_string(),
-            name: "Get Run Output".to_string(),
-            description: "Retrieve the full raw output of a test run by run_id. \
-                          Call this when test_status shows output_truncated: true on a failure. \
-                          The run_id is in the test_status summary."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "run_id": {
-                        "type": "integer",
-                        "description": "The run ID from test_status summary."
-                    }
-                },
-                "required": ["run_id"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "test_status showed a failure but the output was truncated. Call this with the run_id from that response to get the full test output — panic message, assertion diff, and the exact line that failed.".into(),
-                    call: serde_json::json!({ "run_id": 7 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "run_id":           { "type": "integer" },
-                    "output":           { "type": "string" },
-                    "output_truncated": { "type": "boolean" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("get_run_output").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("get_run_output")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

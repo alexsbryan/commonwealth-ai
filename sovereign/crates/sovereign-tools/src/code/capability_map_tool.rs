@@ -63,59 +63,13 @@ impl CapabilityMapTool {
 #[async_trait]
 impl Tool for CapabilityMapTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "capability_map".to_string(),
-            name: "Capability Map".to_string(),
-            description: "Derive a map of what a codebase DOES — its capabilities — from \
-                the SCIP call graph. A capability is a cluster of entry points (CLI verbs, \
-                HTTP routes, tools, handlers) that share a reachable call spine. Returns a \
-                markdown inventory: multi-entry capabilities with their core functions and \
-                the shared services they lean on, plus a standalone-by-module histogram. \
-                Organized by what the system does, not by file. Deterministic, no model. \
-                Pass corpus_id to pick a code corpus; omit it when only one is indexed."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus_id": {
-                        "type": "string",
-                        "description": "Code corpus id (an indexed repo). Optional when exactly one code corpus is indexed."
-                    },
-                    "provider": {
-                        "type": "string",
-                        "enum": ["heuristic", "fallback"],
-                        "description": "Entry-point detection: framework-aware heuristic (default) or the universal in-degree/dispatcher fallback.",
-                        "default": "heuristic"
-                    },
-                    "jaccard": {
-                        "type": "number",
-                        "description": "Reach-set overlap threshold for clustering entry points into capabilities. Default 0.5.",
-                        "default": 0.5
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "You want a high-level map of what this codebase does, organized by \
-                    capability rather than by file — the entry points and the call spines behind \
-                    them. Do NOT read files one by one to reconstruct this; the call graph already \
-                    knows."
-                    .into(),
-                call: serde_json::json!({ "corpus_id": "commonwealth-ai" }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown capability inventory derived from the SCIP call graph."
-            })),
-        }
+        sovereign_core::tool_manifest::require("capability_map").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("capability_map")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

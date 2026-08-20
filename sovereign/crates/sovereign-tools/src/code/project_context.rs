@@ -45,77 +45,13 @@ impl ProjectContextTool {
 #[async_trait]
 impl Tool for ProjectContextTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "project_context".to_string(),
-            name: "Project Context".to_string(),
-            description: "Search indexed project documentation (*.md files, \
-                          .sovereign/conventions/) for relevant context. \
-                          Use to check architectural decisions, coding conventions, \
-                          API contracts, or onboarding guides before making changes. \
-                          Results are BM25 keyword-ranked — use specific terms from \
-                          your change context for best results. \
-                          If results seem incomplete, call \
-                          read_notes(kinds=[\"reflection\"], query=\"project_context\") \
-                          to check for known gaps recorded by previous sessions."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "What to look for in project docs"
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Optional ATOS feature id. When set, the feature's \
-                                        charter and SOVEREIGN.md are returned as the first \
-                                        result (relevance=1.0) before BM25 matches. Use when \
-                                        you're running inside a provisioned feature."
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to implement something and want to check whether the project has established conventions for it before you guess or invent your own. Do this before writing any code.".into(),
-                    call: serde_json::json!({ "query": "error handling conventions" }),
-                },
-                ToolExample {
-                    situation: "You're unsure about the architectural boundary between two subsystems. Pull the documented decisions rather than inferring from code.".into(),
-                    call: serde_json::json!({ "query": "corpus engine vs sovereign tools boundary" }),
-                },
-                ToolExample {
-                    situation: "You got empty or low-relevance results from a code search. Check here — the answer may be in conventions docs rather than source code.".into(),
-                    call: serde_json::json!({ "query": "testing strategy integration vs unit" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query":         { "type": "string" },
-                    "total_results": { "type": "integer" },
-                    "results":       {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string" },
-                                "snippet":   { "type": "string" },
-                                "score":     { "type": "number" }
-                            }
-                        }
-                    }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("project_context").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("project_context")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

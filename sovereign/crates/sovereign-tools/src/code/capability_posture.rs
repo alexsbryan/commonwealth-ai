@@ -134,64 +134,13 @@ impl Default for CapabilityPostureTool {
 #[async_trait]
 impl Tool for CapabilityPostureTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "capability_posture".to_string(),
-            name: "Capability Posture".to_string(),
-            description:
-                "Return the freshness state of the capability-reconciliation artifact \
-                 (`sovereign enrich capability-reconcile` output) without re-running the \
-                 LLM pipeline. Sibling to `drift_posture`: cheap, idempotent, no model \
-                 calls. Use to decide whether the corroborated/undocumented/drifted \
-                 findings you're about to cite are current against the architecture docs \
-                 (SYSTEM_OVERVIEW.md + ARCH_PRINCIPLES.md by default). Status: `fresh` \
-                 (every narrative hash matches the recorded fingerprint), `stale` (a \
-                 narrative was edited since the last reconcile — re-run it), `partial` \
-                 (fingerprint missing a requested narrative), `never_run` (no artifact \
-                 yet). When present, the response carries the \
-                 corroborated/undocumented/drifted counts."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "corpus": {
-                        "type": "string",
-                        "description": "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
-                    },
-                    "narrative": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Override the narrative-doc set. Defaults to sovereign/SYSTEM_OVERVIEW.md + sovereign/ARCH_PRINCIPLES.md relative to the workspace root."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "Decide whether to cite the capability findings or warn they're stale against the docs.".into(),
-                call: json!({}),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": { "type": "string", "enum": ["fresh","stale","partial","never_run"] },
-                    "corpus_id": { "type": "string" },
-                    "last_run_at_unix": { "type": ["integer","null"] },
-                    "age_seconds": { "type": ["integer","null"] },
-                    "corroborated": { "type": ["integer","null"] },
-                    "undocumented": { "type": ["integer","null"] },
-                    "drifted": { "type": ["integer","null"] },
-                    "stale_paths": { "type": "array", "items": { "type": "string" } },
-                    "output_path": { "type": ["string","null"] }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("capability_posture").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("capability_posture")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

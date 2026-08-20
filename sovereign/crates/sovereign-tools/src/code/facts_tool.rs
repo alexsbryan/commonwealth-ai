@@ -74,122 +74,13 @@ impl FactsTool {
 #[async_trait]
 impl Tool for FactsTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "facts".to_string(),
-            name: "Code Facts".to_string(),
-            description:
-                "Query the deterministic, tree-sitter code fact base: function \
-                 definitions, `Type { field: value }` construction-site config values, \
-                 and string literals — each cited to an exact file:line. The \
-                 embed-free structural companion to `symbols`/`callers` (call graph) \
-                 and `code_search` (semantic). \
-                 \
-                 Use it to answer, WITHOUT reading source: does function X exist and \
-                 where? What value does config field Y get constructed with? Where is \
-                 literal Z written? It reads the same fact base `sovereign code facts` \
-                 builds and `check-spec` audits. \
-                 \
-                 Reading facts NEVER touches the inference/embedding slots, so it is \
-                 safe to call freely mid-task. Every response is freshness-stamped \
-                 (`freshness`): when the facts were built, their age, and whether the \
-                 code graph has moved since — so you always know how much to trust \
-                 them. If `status` is `no_facts`, the fact base has not been built for \
-                 that corpus yet (`sovereign code facts <repo> --corpus-id <id>`)."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Name or substring to match. Matched (case-insensitive) against function names, construction struct/field/value, and literal content. Required."
-                    },
-                    "corpus_id": {
-                        "type": "string",
-                        "description": "Which corpus's facts to query. Omit to search every corpus that has a built fact base."
-                    },
-                    "kind": {
-                        "type": "string",
-                        "enum": ["function", "config", "literal", "all"],
-                        "description": "Restrict to one fact kind. Default `all`. `function` = definitions, `config` = construction-site field values, `literal` = string literals."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max results PER fact kind (default 30)."
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "Confirm `export_changed` exists and find where it's defined, without opening the file.".into(),
-                    call: json!({ "query": "export_changed", "kind": "function" }),
-                },
-                ToolExample {
-                    situation: "Find what value the `debounce` field is constructed with across the codebase (a config fact).".into(),
-                    call: json!({ "query": "debounce", "kind": "config" }),
-                },
-                ToolExample {
-                    situation: "Locate every place the string `never_run` is written, scoped to one corpus.".into(),
-                    call: json!({ "query": "never_run", "kind": "literal", "corpus_id": "commonwealth-ai" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "enum": ["ok", "no_facts", "no_matches"],
-                        "description": "`ok` = matches found. `no_facts` = no fact base built for the searched corpora. `no_matches` = fact base present but query matched nothing."
-                    },
-                    "query": { "type": "string" },
-                    "corpora_searched": { "type": "array", "items": { "type": "string" } },
-                    "match_count": { "type": "integer" },
-                    "freshness": {
-                        "type": "object",
-                        "description": "Per the OLDEST fact base searched — the worst case. `lags_graph` true means the SCIP graph was rebuilt after these facts were extracted, so a recent code change may not be reflected here.",
-                        "properties": {
-                            "built_at_unix": { "type": ["integer", "null"] },
-                            "age_hours": { "type": ["number", "null"] },
-                            "staleness": { "type": "string", "enum": ["fresh", "aging", "stale", "unknown"] },
-                            "lags_graph": { "type": "boolean" },
-                            "note": { "type": "string" }
-                        }
-                    },
-                    "functions": {
-                        "type": "array",
-                        "items": { "type": "object", "properties": {
-                            "name": { "type": "string" }, "file": { "type": "string" },
-                            "line": { "type": "integer" }, "corpus": { "type": "string" }
-                        }}
-                    },
-                    "config": {
-                        "type": "array",
-                        "items": { "type": "object", "properties": {
-                            "struct_type": { "type": "string" }, "field": { "type": "string" },
-                            "value": { "type": "string" }, "enclosing_fn": { "type": "string" },
-                            "file": { "type": "string" }, "line": { "type": "integer" },
-                            "corpus": { "type": "string" }
-                        }}
-                    },
-                    "literals": {
-                        "type": "array",
-                        "items": { "type": "object", "properties": {
-                            "content": { "type": "string" }, "enclosing_fn": { "type": "string" },
-                            "file": { "type": "string" }, "line": { "type": "integer" },
-                            "corpus": { "type": "string" }
-                        }}
-                    }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("facts").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("facts")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

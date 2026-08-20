@@ -38,35 +38,13 @@ impl KnowledgeTool {
 #[async_trait]
 impl Tool for KnowledgeTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "knowledge".to_string(),
-            name: "Knowledge".to_string(),
-            description: "Search your ingested documents for relevant information".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The search query"
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Prose synthesis over local knowledge corpora, with \
-                                inline citations to source chunks."
-            })),
-        }
+        sovereign_core::tool_manifest::require("knowledge").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // No special permissions needed to search own documents.
+        sovereign_core::tool_manifest::require("knowledge")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

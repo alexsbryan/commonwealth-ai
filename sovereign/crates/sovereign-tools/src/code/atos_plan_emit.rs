@@ -56,121 +56,13 @@ impl Default for AtosPlanEmitTool {
 #[async_trait]
 impl Tool for AtosPlanEmitTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atos_plan_emit".to_string(),
-            name: "ATOS plan emit (structured)".to_string(),
-            description:
-                "Emit a structured implementation plan for the ATOS Runner during PLAN or \
-                 REASSESS phases. Pass `workdir` (the absolute path the runner gave you in \
-                 the atos-context block) and `steps` (an array of step objects). The tool \
-                 validates the schema, auto-increments the revision against any prior \
-                 plan, and writes the canonical plan.json to <workdir>/.sovereign/. Use \
-                 this tool INSTEAD of writing a JSON code block in your reply — \
-                 free-form prose JSON is brittle for plan-shaped data and the runner's \
-                 parser will struggle with it. The tool is the deterministic path."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "workdir": {
-                        "type": "string",
-                        "description": "Absolute path to the workdir. Read from the \
-                                        atos-context block — it lists the canonical workdir \
-                                        path verbatim. Must be absolute (start with `/`)."
-                    },
-                    "steps": {
-                        "type": "array",
-                        "minItems": 1,
-                        "maxItems": 32,
-                        "description": "Plan steps in execution order. 3-12 steps for a \
-                                        normal feature; 32 is a hard cap.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {
-                                    "type": "string",
-                                    "description": "Stable id like `step-01`. The runner's merge \
-                                                    logic keys execution state on this — keep ids \
-                                                    consistent across REASSESS revisions."
-                                },
-                                "goal": {
-                                    "type": "string",
-                                    "description": "One sentence describing what this step delivers \
-                                                    in code terms."
-                                },
-                                "files_touched": {
-                                    "type": "array",
-                                    "items": { "type": "string" },
-                                    "description": "Workdir-relative paths the step will write or \
-                                                    edit. The hollow-file gate uses this to verify \
-                                                    real work happened."
-                                },
-                                "verify_cmd": {
-                                    "type": "string",
-                                    "description": "Shell command that exits 0 when the step is \
-                                                    complete. Runs from workdir root. Strict \
-                                                    verification: a step is not done until this \
-                                                    command passes."
-                                },
-                                "rationale": {
-                                    "type": "string",
-                                    "description": "Why this step before/after others. Optional but \
-                                                    surfaces in PLAN.md."
-                                }
-                            },
-                            "required": ["id", "goal", "verify_cmd"]
-                        }
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Optional. The runner carries it over from any prior \
-                                        plan; only set on first PLAN if you know the id."
-                    }
-                },
-                "required": ["workdir", "steps"]
-            }),
-            examples: vec![ToolExample {
-                situation: "PLAN phase: the agent has read DESIGN.md and decomposed the work \
-                            into 5 steps. Emit the plan as a tool call instead of prose JSON."
-                    .into(),
-                call: json!({
-                    "workdir": "/Users/me/dev/myproject",
-                    "steps": [
-                        {
-                            "id": "step-01",
-                            "goal": "Scaffold Cargo.toml + src/lib.rs",
-                            "files_touched": ["Cargo.toml", "src/lib.rs"],
-                            "verify_cmd": "cargo check",
-                            "rationale": "Phase 0 skeleton must build before any types"
-                        },
-                        {
-                            "id": "step-02",
-                            "goal": "Define core wire types with serde annotations",
-                            "files_touched": ["src/lib.rs"],
-                            "verify_cmd": "cargo check",
-                            "rationale": "Phase 1: types before behaviour"
-                        }
-                    ]
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "plan_path": { "type": "string" },
-                    "steps": { "type": "integer" },
-                    "revision": { "type": "integer" },
-                    "feature_id": { "type": "string" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("atos_plan_emit").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("atos_plan_emit")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &Value) -> Result<()> {

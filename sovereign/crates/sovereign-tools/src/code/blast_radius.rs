@@ -130,76 +130,13 @@ impl BlastRadiusTool {
 #[async_trait]
 impl Tool for BlastRadiusTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "blast".to_string(),
-            name: "Blast Radius".to_string(),
-            description: "Compute the transitive impact of changing a symbol: \
-                          all callers at every depth level up to max_depth. \
-                          Use before modifying a function signature, removing a method, \
-                          or changing a trait definition. Separates production callers \
-                          from test callers and groups by module. Backed by the SCIP \
-                          call graph — compiler-resolved, not grep. \
-                          IMPORTANT: Before using on a large refactor, call \
-                          read_notes(kinds=[\"reflection\"], query=\"blast_radius\") \
-                          to check for known limitations recorded by previous sessions \
-                          (e.g. macro-generated call sites not traversed by SCIP)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "symbol": {
-                        "type": "string",
-                        "description": "Symbol name to analyse (function, method, struct, trait)"
-                    },
-                    "max_depth": {
-                        "type": "integer",
-                        "default": 3,
-                        "description": "BFS depth (1=direct callers, 2=callers of callers, …). Capped at 5."
-                    },
-                    "max_symbols": {
-                        "type": "integer",
-                        "default": 100,
-                        "description": "Maximum total callers to return. Capped at 200."
-                    }
-                },
-                "required": ["symbol"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to modify a trait or widely-used function. Call this BEFORE touching any code — it tells you exactly how many things will break and whether a refactor is a 2-file change or a 20-file change.".into(),
-                    call: serde_json::json!({ "symbol": "InferenceProvider", "max_depth": 2 }),
-                },
-                ToolExample {
-                    situation: "You want to check if a function is safe to change. A total of 0 callers means it's safe; high counts mean you need a migration strategy.".into(),
-                    call: serde_json::json!({ "symbol": "execute_step_inner" }),
-                },
-                ToolExample {
-                    situation: "You're auditing a type for hidden macro usages (derive, register_tool!, etc.) that the call graph wouldn't capture. The macro_hints field in the response covers these.".into(),
-                    call: serde_json::json!({ "symbol": "ToolRegistry", "max_depth": 1 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "symbol":         { "type": "string" },
-                    "depth_reached":  { "type": "integer" },
-                    "total_callers":  { "type": "integer" },
-                    "levels":         { "type": "array", "items": { "type": "object" } },
-                    "macro_hints":    { "type": "array", "items": { "type": "string" } },
-                    "concurrent":     { "type": "array", "items": { "type": "object" },
-                                        "description": "Live work-atlas claims on this symbol (present-but-possibly-empty)." },
-                    "health":         { "type": "string", "enum": ["ok", "stale", "missing"] }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("blast").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("blast")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

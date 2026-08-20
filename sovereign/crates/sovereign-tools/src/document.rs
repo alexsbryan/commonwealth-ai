@@ -155,46 +155,13 @@ impl DocumentTool {
 #[async_trait]
 impl Tool for DocumentTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "document".to_string(),
-            name: "Document".to_string(),
-            description: "Process an entire ingested document with a fixed operation \
-                          (summarize | analyze). Reliable for those two common cases — \
-                          smaller models call it correctly because the operation is \
-                          constrained. For a custom operation described in natural \
-                          language (e.g. \"extract character arcs\", \"find legal \
-                          risks\"), use `document_operation` instead."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "The source path of the ingested document"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "enum": ["summarize", "analyze"],
-                        "description": "What to do with the document"
-                    }
-                },
-                "required": ["source", "operation"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Synthesised summary or analysis prose. Shape depends \
-                                on the `operation` param."
-            })),
-        }
+        sovereign_core::tool_manifest::require("document").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // Reading own documents doesn't need special permission.
+        sovereign_core::tool_manifest::require("document")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

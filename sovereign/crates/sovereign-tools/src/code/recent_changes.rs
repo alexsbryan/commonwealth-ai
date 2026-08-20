@@ -41,50 +41,13 @@ impl RecentChangesTool {
 #[async_trait]
 impl Tool for RecentChangesTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "recent_changes".to_string(),
-            name: "Recent Changes".to_string(),
-            description: "List symbols in files modified within the last N \
-                          hours. Exact — based on file mtime at index time. \
-                          Useful for orientation after a pull or reviewing \
-                          recent work."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "hours": {
-                        "type": "integer",
-                        "description": "How far back to look (hours).",
-                        "default": 24,
-                        "minimum": 1
-                    }
-                }
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're starting a session and want to understand what's been actively worked on before diving in. More useful than 'git log' because it shows the actual symbols changed, not just file names.".into(),
-                    call: serde_json::json!({ "hours": 24 }),
-                },
-                ToolExample {
-                    situation: "Something broke and you want to know what changed recently that could have caused it. Narrows the search to files actually modified in the last hour.".into(),
-                    call: serde_json::json!({ "hours": 2 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown, grouped by file, showing symbols modified \
-                                within the last N hours. Each symbol line includes \
-                                `name  [kind]  mtime_ago`."
-            })),
-        }
+        sovereign_core::tool_manifest::require("recent_changes").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("recent_changes")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

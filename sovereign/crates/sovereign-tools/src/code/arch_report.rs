@@ -639,54 +639,13 @@ impl ArchReportTool {
 #[async_trait]
 impl Tool for ArchReportTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "arch_report".to_string(),
-            name: "Architecture Report".to_string(),
-            description: "The architectural posture of a codebase, from the SCIP graph: \
-                god-crate fan-in/instability table, the heaviest cross-crate coupling edges \
-                WITH the symbols that carry them (the input for interface extraction), \
-                declared-vs-observed dependency deltas (removable Cargo edges; re-export-hidden \
-                coupling), SCIP-observed layer-map violations, file fan-in hotspots, intra-crate \
-                file cycles, file-size offenders, feature-axis spread, and (when git history is \
-                enabled) temporal coupling — file pairs that change together without any \
-                structural edge. Deterministic, no model. Use before refactors that move \
-                boundaries, and to answer 'where is the coupling actually?'."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus_id": {
-                        "type": "string",
-                        "description": "Code corpus id (an indexed repo). Optional when exactly one code corpus is indexed."
-                    },
-                    "include_git": {
-                        "type": "boolean",
-                        "description": "Compute the temporal-coupling section from git history (adds seconds).",
-                        "default": false
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation: "You're planning to split a hub crate or move a boundary and need \
-                    to know which symbols actually carry the coupling between crates — do NOT \
-                    grep imports one file at a time; the reference graph already knows."
-                    .into(),
-                call: serde_json::json!({ "corpus_id": "commonwealth-ai", "include_git": true }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown architecture report derived from the SCIP graph (+ cargo metadata + git when rooted)."
-            })),
-        }
+        sovereign_core::tool_manifest::require("arch_report").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("arch_report")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

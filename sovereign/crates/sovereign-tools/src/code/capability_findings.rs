@@ -87,85 +87,13 @@ impl Default for CapabilityFindingsTool {
 #[async_trait]
 impl Tool for CapabilityFindingsTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "capability_findings".to_string(),
-            name: "Capability Findings".to_string(),
-            description: "Query the capability-reconciliation findings without re-running the \
-                 pipeline. Sibling to `capability_posture` (freshness gate) and \
-                 `drift_findings`. Filter by `kind` (`drifted` — docs contradict the \
-                 code; `undocumented` — code does it, no doc describes it; \
-                 `corroborated` — docs and code agree; `any`) and/or a `query` \
-                 substring matched against the capability label + evidence. Returns \
-                 matches sorted drifted → undocumented → corroborated. Reads \
-                 `~/.svrnmesh/capabilities/<corpus>/capability_findings.json`; returns \
-                 `never_run` if no artifact exists — check `capability_posture` for \
-                 freshness before acting on results."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": ["drifted", "undocumented", "corroborated", "any"],
-                        "description": "Filter by finding kind. Default `any`."
-                    },
-                    "query": {
-                        "type": "string",
-                        "description": "Optional substring matched against the capability label + evidence."
-                    },
-                    "corpus": {
-                        "type": "string",
-                        "description": "Corpus id (subdir under ~/.svrnmesh/capabilities). Defaults to the only corpus when unambiguous."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Max findings to return (default 30), sorted drifted→undocumented→corroborated."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "List the capabilities the architecture docs don't describe.".into(),
-                    call: json!({ "kind": "undocumented" }),
-                },
-                ToolExample {
-                    situation: "Does the reconcile say anything about corpus_search?".into(),
-                    call: json!({ "query": "corpus_search", "kind": "any" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": { "type": "string", "enum": ["ok", "never_run", "no_matches"] },
-                    "corpus_id": { "type": "string" },
-                    "report_path": { "type": ["string", "null"] },
-                    "match_count": { "type": "integer" },
-                    "findings": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "kind": { "type": "string" },
-                                "label": { "type": "string" },
-                                "entries": { "type": "integer" },
-                                "core_fns": { "type": "integer" },
-                                "evidence": { "type": "string" },
-                                "docs": { "type": ["string", "null"] }
-                            }
-                        }
-                    }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("capability_findings").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("capability_findings")
+            .permissions
+            .clone()
     }
 
     async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {

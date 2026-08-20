@@ -66,60 +66,13 @@ impl Default for CheckDocPathsTool {
 #[async_trait]
 impl Tool for CheckDocPathsTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "check_doc_paths".to_string(),
-            name: "Check Doc Paths".to_string(),
-            description: "Scan a markdown document for inline-code path references \
-                          (backtick spans like `path/to/file`) and verify each one \
-                          exists on disk. Returns three buckets: `valid` (path exists), \
-                          `not_found` (path missing — likely stale after a rename or \
-                          deletion), and `skipped` (URL, Rust qualified name, or otherwise \
-                          unresolvable). Resolution tries project root first, then the \
-                          workspace root one level up (for cross-project refs), then the \
-                          document's own directory. \
-                          Use this to audit SYSTEM_OVERVIEW.md, SOVEREIGN.md, or any \
-                          architecture doc after a directory rename, module split, or \
-                          file removal."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "doc_path": {
-                        "type": "string",
-                        "description": "Path to the markdown file to check. \
-                                        Relative to project root, or absolute."
-                    }
-                },
-                "required": ["doc_path"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You just renamed a module, moved a file, or deleted dead code. Run this on SYSTEM_OVERVIEW.md to find any path references that are now stale — before someone else reads a doc that points at files that no longer exist.".into(),
-                    call: serde_json::json!({ "doc_path": "SYSTEM_OVERVIEW.md" }),
-                },
-                ToolExample {
-                    situation: "You're updating architecture docs and want to verify every path you wrote actually resolves. Catches typos and wrong relative paths before they land in the repo.".into(),
-                    call: serde_json::json!({ "doc_path": "sovereign/.opencode/skills/sovereign-code/SKILL.md" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "doc_path":  { "type": "string" },
-                    "valid":     { "type": "array", "items": { "type": "string" } },
-                    "not_found": { "type": "array", "items": { "type": "string" } },
-                    "skipped":   { "type": "array", "items": { "type": "string" } }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("check_doc_paths").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("check_doc_paths")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

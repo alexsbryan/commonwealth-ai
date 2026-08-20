@@ -33,72 +33,13 @@ impl ProvisionFeatureTool {
 #[async_trait]
 impl Tool for ProvisionFeatureTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "provision_feature".to_string(),
-            name: "Provision Feature".to_string(),
-            description: "Create an ATOS feature charter. The feature holds the human-approved \
-                 spec (charter_md), per-feature invariants (sovereign_md), and a \
-                 machine-checkable stop condition. Returns the feature id to pass \
-                 back to `start-milestone`. Fails if the id already exists."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Slug-style identifier, e.g. 'atos-version-flag'. Must be unique."
-                    },
-                    "title": {
-                        "type": "string",
-                        "description": "Human-readable title shown in status views."
-                    },
-                    "charter_md": {
-                        "type": "string",
-                        "description": "Approved specification in markdown. Includes the sections \
-                                        required by the ATOS spec gate: integration points, \
-                                        schema additions, files, invariants, test plan, milestones."
-                    },
-                    "sovereign_md": {
-                        "type": "string",
-                        "description": "Optional per-feature invariants and conventions surfaced \
-                                        via project_context when feature_id is set."
-                    },
-                    "stop_condition": {
-                        "type": "string",
-                        "description": "Shell command whose zero-exit status signals the feature \
-                                        is complete. Run by `sovereign atos end-milestone`."
-                    }
-                },
-                "required": ["id", "title", "charter_md"]
-            }),
-            examples: vec![ToolExample {
-                situation:
-                    "The operator has approved a spec and wants to kick off ATOS milestone 1. \
-                            Call this before any implementation tool to register the feature."
-                        .into(),
-                call: serde_json::json!({
-                    "id": "atos-version-flag",
-                    "title": "Add --version flag to `sovereign atos`",
-                    "charter_md": "# atos-version-flag\n\n## Invariants\n- Output must match regex ^atos [0-9]+\\.",
-                    "stop_condition": "cargo run -p sovereign-cli -- atos --version | grep -E '^atos [0-9]+\\.'"
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "id":    { "type": "string" },
-                    "title": { "type": "string" }
-                }
-            })),
-        }
+        sovereign_core::tool_manifest::require("provision_feature").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("provision_feature")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {

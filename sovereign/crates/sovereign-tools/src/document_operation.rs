@@ -322,70 +322,13 @@ impl DocumentOperationTool {
 #[async_trait]
 impl Tool for DocumentOperationTool {
     fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "document_operation".to_string(),
-            name: "Document Operation".to_string(),
-            description: "Run a user-defined map-reduce operation across a document. \
-                          The map_prompt and reduce_prompt are written by the planner \
-                          based on the user's operation description. \
-                          For the two common cases — summarize and analyze — prefer \
-                          the simpler `document` tool, which fixes the operation and \
-                          is easier for smaller models to invoke correctly."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "source": {
-                        "type": "string",
-                        "description": "The source path of the ingested document"
-                    },
-                    "operation": {
-                        "type": "string",
-                        "description": "The user's operation request in natural language"
-                    },
-                    "map_prompt": {
-                        "type": "string",
-                        "description": "Prompt applied to each chunk batch to extract relevant information"
-                    },
-                    "reduce_prompt": {
-                        "type": "string",
-                        "description": "Prompt applied to merge extracted fragments into a final result"
-                    },
-                    "conversation_id": {
-                        "type": "string",
-                        "description": "Conversation ID for session persistence"
-                    },
-                    "batch_size": {
-                        "type": "integer",
-                        "description": "Chunks per map batch (default: 4)"
-                    }
-                },
-                "required": ["source", "operation", "map_prompt", "reduce_prompt"]
-            }),
-            examples: vec![ToolExample {
-                situation: "User wants to extract character arcs from a novel".to_string(),
-                call: serde_json::json!({
-                    "source": "manuscript.pdf",
-                    "operation": "extract character arcs",
-                    "map_prompt": "From this section, extract: character names, key actions they take, and how they change.",
-                    "reduce_prompt": "Synthesize all character information into a comprehensive character map with arcs."
-                }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Reduce-phase output text — shape follows whatever the \
-                                caller-supplied `reduce_prompt` asked the model to \
-                                produce."
-            })),
-        }
+        sovereign_core::tool_manifest::require("document_operation").to_descriptor()
     }
 
     fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
+        sovereign_core::tool_manifest::require("document_operation")
+            .permissions
+            .clone()
     }
 
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
