@@ -53,7 +53,7 @@ pub use atoms::{
     Question, Relation, ResolutionStatus, SectionPosition, SectionRange, State,
 };
 pub use axis_catalog::{
-    all_axes, axes_for_mode, axis_by_key, AtomKind, GatingField, TypedAxis, AXIS_CATALOG,
+    all_axes, axes_for_mode, axis_by_key, AxisAtomShape, GatingField, TypedAxis, AXIS_CATALOG,
 };
 pub use citation::{apply_citation, SourceCitation};
 pub use cross_corpus::{

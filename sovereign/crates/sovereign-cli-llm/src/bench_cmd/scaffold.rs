@@ -18,7 +18,7 @@ use std::path::PathBuf;
 use corpus_engine::enrichment::atlas::atoms::{
     AtomEnvelope, Entity, Event, Opposition, Position, Question,
 };
-use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AtomKind, TypedAxis};
+use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AxisAtomShape, TypedAxis};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 
 use crate::enrich_cmd::paths::index_root;
@@ -246,8 +246,8 @@ fn scaffold_draft(corpus_id: &str, atoms: &[AtomEnvelope], per_axis: usize) -> D
 }
 
 fn sample_axis(atoms: &[AtomEnvelope], axis: &TypedAxis, n: usize) -> Vec<DraftAxisEntry> {
-    let candidates: Vec<DraftAxisEntry> = match axis.atom_kind {
-        AtomKind::EntityWithConceptKind(tag) => atoms
+    let candidates: Vec<DraftAxisEntry> = match axis.atom_shape {
+        AxisAtomShape::EntityWithConceptKind(tag) => atoms
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Entity(e) if e.concept_kind.as_deref() == Some(tag) => {
@@ -263,7 +263,7 @@ fn sample_axis(atoms: &[AtomEnvelope], axis: &TypedAxis, n: usize) -> Vec<DraftA
                 _ => None,
             })
             .collect(),
-        AtomKind::ClaimWithKind(tag) => atoms
+        AxisAtomShape::ClaimWithKind(tag) => atoms
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Claim(c) if c.claim_kind.as_deref() == Some(tag) => {
@@ -287,14 +287,14 @@ fn sample_axis(atoms: &[AtomEnvelope], axis: &TypedAxis, n: usize) -> Vec<DraftA
                 _ => None,
             })
             .collect(),
-        AtomKind::Position => atoms
+        AxisAtomShape::Position => atoms
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Position(p) => Some(position_to_entry(p)),
                 _ => None,
             })
             .collect(),
-        AtomKind::Opposition => atoms
+        AxisAtomShape::Opposition => atoms
             .iter()
             .filter_map(|a| match a {
                 AtomEnvelope::Opposition(o) => Some(opposition_to_entry(o)),
