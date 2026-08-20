@@ -143,7 +143,6 @@ status    = "active"
 
 [[bar]]
 id           = "nc-boundary"
-timeout_s    = 30
 one_line     = "Each domain publishes a small named surface instead of leaking its internals"
 derives_from = "the measurement above; TARGET_ARCHITECTURE.md §6"
 status       = "open"
@@ -166,12 +165,11 @@ status       = "open"
 today        = 478.0
 target       = 50.0
 direction    = "lower_is_better"
-instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"core_boundary_width\"])}))'"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"core_boundary_width\"]), \"commit\": d[\"indexed_head\"]}))'"
 kill         = "if narrowing a boundary forces a re-export shim that renames the leak rather than removing it, the boundary was drawn in the wrong place — stop and redraw, do not ship the shim"
 
 [[bar]]
 id           = "nc-no-violation"
-timeout_s    = 30
 one_line     = "No edge runs the wrong way, and nothing depends on the quality controls"
 derives_from = "the layer map above; the back-of-house one-way rule"
 status       = "open"
@@ -206,11 +204,10 @@ status       = "open"
 today        = 158.0
 target       = 0.0
 direction    = "lower_is_better"
-instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"violating_types\"])}))'"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"violating_types\"]), \"commit\": d[\"indexed_head\"]}))'"
 
 [[bar]]
 id           = "nc-kernel"
-timeout_s    = 30
 one_line     = "What every domain speaks is a CONTRACT, owned by none of them"
 derives_from = "the measurement above"
 status       = "open"
@@ -241,7 +238,7 @@ status       = "open"
 today        = 22.0
 target       = 10.0
 direction    = "lower_is_better"
-instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"kernel_size\"])}))'"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"kernel_size\"]), \"commit\": d[\"indexed_head\"]}))'"
 also_required = "`kernel_homes` must name a neutral crate, not a single product domain — nc-boundary.py prints it"
 
 [[bar]]

@@ -223,10 +223,36 @@ def load(db):
     return owner
 
 
+def index_provenance(db):
+    """Which tree do these numbers actually describe?
+
+    THIS TOOL DOES NOT READ THE WORKING TREE. It queries the daemon's SCIP
+    index, so its numbers describe `last_indexed_head` — NOT your HEAD, and not
+    your uncommitted work. Three consequences, all found the hard way by
+    nc-10's worker on 2026-08-20:
+
+      - a `git worktree` does NOT isolate this measurement; every session on
+        the machine reads the same index;
+      - the numbers MOVE when the daemon re-indexes a peer's commits, so a
+        delta across two runs is not necessarily attributable to your change;
+      - the index lags. Measured at the moment this was written: index at
+        `f4a85bad`, HEAD at `10aa9a28` — FIVE commits behind.
+
+    Emitting the indexed head is what lets `co-lineage` stamp a measurement row
+    with the commit the number DESCRIBES rather than the commit that happened to
+    be checked out when the row was written. Before this, the row said `ref=head`
+    and meant something else — a success-shaped stamp over an unverified claim
+    (ARCH §18.3).
+    """
+    meta = dict(db.execute("SELECT key, value FROM scip_meta"))
+    return meta.get("last_indexed_head"), meta.get("last_export_at")
+
+
 def main():
     if not os.path.exists(GRAPH):
         sys.exit(f"nc-boundary: no graph at {GRAPH} — svrn refresh")
     db = sqlite3.connect(f"file:{GRAPH}?mode=ro", uri=True)
+    indexed_head, indexed_at = index_provenance(db)
     owner = load(db)
 
     flow = collections.defaultdict(collections.Counter)   # (src,dst) -> types
@@ -271,10 +297,16 @@ def main():
             "violating_types": sum(e["width"] for e in edges if e["violation"]),
             "kernel_size": len(kernel),
             "kernel_homes": dict(kernel_homes),
+            # The tree these numbers describe — see index_provenance(). A
+            # consumer that stamps a row with anything else is guessing.
+            "indexed_head": indexed_head,
+            "indexed_at": indexed_at,
             "edges": edges}, indent=2))
         return 0
 
     print("DOMAIN BOUNDARY WIDTH — distinct types crossing each edge\n")
+    print(f"  index describes {(indexed_head or '(unknown)')[:12]} "
+          f"exported {indexed_at or '(unknown)'} — NOT your working tree\n")
     print(f"{'from':>14} -> {'to':<14}{'refs':>7}{'width':>7}   flag")
     print("-" * 62)
     for e in edges:
