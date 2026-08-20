@@ -285,6 +285,32 @@ proof        = "one commit per feature adding ONLY data files; full suite green;
 # ZERO off an emptied database on 2026-08-20 and would have been recorded as
 # total success. An instrument that cannot be silently emptied is worth more
 # here than a more precise one.
+#
+# SCOPE-CORRECTED 2026-08-20 by the seat, when the operator reweighted the
+# ladder onto this bar and intake asked whether its two rungs could actually
+# move it. THE TOOL AXIS WAS UNREACHABLE BY CONSTRUCTION: `axis_tool` counted
+# `impl Tool for` across the whole tree, but 30 of the 112 sites are in
+# `studio/` — the FIFTH system this campaign declares out of scope by name, and
+# which nc-13's Scope section does not touch. A perfect nc-13 converting every
+# in-scope impl would still have left the axis failing against a bar that
+# passes only at zero. `studio/` joins SKIP. Both halves, per §18.6:
+#   by RE-CLASSIFICATION (same tree, studio excluded):  tool 112 -> 82
+#   by CODE this session:                               0 — no Rust changed
+#   score:                                              1/3 -> 1/3, unchanged
+# Nothing passes for free; the threshold rule (DATA at zero, CODE above, no
+# partial credit) is untouched. This is the same class of fix as nc-boundary
+# v1 -> v2, where the instrument matched a type's OWNER and never its
+# REFERENCE SITE.
+#
+# THE INTENT AXIS IS STILL WRONG AND IS DELIBERATELY LEFT SO. It counts FILES
+# naming `Intent::` (37) and passes only at zero — i.e. no Rust anywhere may
+# name an intent variant. nc-14's order says the opposite and is right:
+# "matching on a CLOSED enum is what enums are FOR ... pattern matches stay."
+# Re-specifying it to count per-intent POLICY sites requires a discriminator
+# that does not exist yet; building it is nc-14's own first task, and §18.4
+# says validate the instrument before the result. The seat did not guess it
+# from outside. nc-14's first commit re-specs this axis and reports both
+# halves. Until then this axis reads a number no honest work can zero.
 instrument   = "scripts/nc-extends.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
 
 [[bar]]

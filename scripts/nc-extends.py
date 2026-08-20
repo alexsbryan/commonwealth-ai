@@ -27,7 +27,15 @@ import re
 import subprocess
 import sys
 
-SKIP = (".claude/worktrees/", "target/", "/tests/")
+# `studio/` is excluded because THE CAMPAIGN excludes it. noun-convergence.toml
+# names it "a FIFTH system this framing does not name ... Out of scope", and
+# nc-13's Scope section names only sovereign-tools / sovereign-core /
+# cli-contract.toml. Counting it made the tool axis unreachable BY
+# CONSTRUCTION: 30 of 112 `impl Tool for` sites are studio's, so converting
+# every in-scope impl still left the axis failing. An axis no funded work can
+# pass measures nothing. SCOPE correction, not a threshold change — the
+# zero-or-fail rule above is untouched.
+SKIP = (".claude/worktrees/", "target/", "/tests/", "studio/")
 
 
 def rg(pattern, glob="*.rs"):
