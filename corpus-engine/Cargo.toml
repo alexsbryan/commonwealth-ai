@@ -6,10 +6,31 @@ license.workspace = true
 description = "Shared corpus ingestion and index management for Sovereign and Commonwealth"
 
 [dependencies]
-# The pure section detectors (`recipe::sections`) live in the contract crate so
-# the workflow SectionTool and this crate's ingest path share one segmentation
-# implementation; re-exported at `chunkers::sectioned::*`. Leaf dep (contracts
-# depends only on oicp-types + serde), no cycle.
+# The pure section detectors (SectionDetector / DetectedSection /
+# ChapterRegexDetector / TocAnchoredDetector) — this crate's own segmentation
+# vocabulary, in a `regex`-only leaf so the studio SectionTool can share the ONE
+# implementation by reaching DOWN. Re-exported at `chunkers::sectioned::*`.
+# They lived in `sovereign-contracts` from 2026-07, which made the knowledge
+# layer name four types owned by the layer above it (noun-convergence rung 2,
+# 2026-08-20).
+corpus-engine-sections = { workspace = true }
+
+# What is LEFT of the sovereign edge after that move, and why it is left.
+# Census 2026-08-20 — three modules, no types, seven call sites:
+#   rebrand::svrnmesh_root              (registry.rs, meta_atlas/{builder,bridge/edges}.rs
+#                                        + 2 examples) — the workspace path SSOT.
+#                                        220 call sites over 15 crates; clippy's
+#                                        `disallowed_methods` deny makes
+#                                        hand-rolling the path a build error, so
+#                                        this must stay ONE accessor (ARCH §10.6).
+#                                        Relocating it is its own rung.
+#   recipe::url_template::render_template   (acquirers/http_api/template.rs)
+#   recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON  (recipe_schema.rs, re-exported)
+# Unlike the detectors, these are not corpus-engine vocabulary parked upstairs:
+# they are things the engine and the recipe package must agree on bit-for-bit,
+# with no natural home below. `nc-boundary.py` never saw them — it counts TYPES,
+# and a dependency carried entirely by free functions and consts is invisible to
+# it. Recorded in quality/ARCH_LAYERS.toml rather than left implicit.
 sovereign-contracts = { workspace = true }
 
 # YieldHook contract (Tier-0 leaf, zero deps). Extracted from

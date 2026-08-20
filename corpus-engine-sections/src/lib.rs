@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pluggable section detection over raw text.
 //!
-//! The *detector* half of what used to be `corpus_engine::chunkers::sectioned`:
-//! it locates section boundaries in a document (via a line-anchored regex or an
+//! The *detector* half of `corpus_engine::chunkers::sectioned`: it locates
+//! section boundaries in a document (via a line-anchored regex or an
 //! author-supplied Table of Contents) without any chunking, embedding, or
 //! storage machinery. The `SectionedChunker` that pairs a detector with a
-//! `ParagraphChunker` stays in `corpus-engine` (it depends on that crate's
-//! chunker internals); this crate owns only the pure, leaf-dependency detectors
-//! so the workflow `SectionTool` and the bespoke ingest path share one
-//! implementation.
+//! `ParagraphChunker` stays in `corpus-engine` — it depends on that crate's
+//! chunker internals; this crate owns only the pure, leaf-dependency
+//! detectors, so the workflow `SectionTool` (`sovereign-tools-base`) and the
+//! bespoke ingest path share one implementation.
 //!
 //! `corpus-engine` re-exports these at `corpus_engine::chunkers::sectioned::*`,
-//! so its existing callers are unaffected — this is a pure relocation.
+//! so its existing callers are unaffected.
 
 use std::collections::HashMap;
 

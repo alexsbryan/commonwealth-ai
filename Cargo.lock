@@ -2338,6 +2338,7 @@ dependencies = [
  "chrono",
  "corpus-engine-notes",
  "corpus-engine-scip",
+ "corpus-engine-sections",
  "corpus-engine-yield",
  "csv",
  "flate2",
@@ -2462,6 +2463,14 @@ dependencies = [
  "tokio",
  "tracing",
  "which",
+]
+
+[[package]]
+name = "corpus-engine-sections"
+version = "0.5.0"
+dependencies = [
+ "regex",
+ "tracing",
 ]
 
 [[package]]
@@ -12216,6 +12225,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sovereign-authoring-harness",
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
@@ -12727,6 +12737,7 @@ name = "sovereign-tools-base"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "corpus-engine-sections",
  "csv",
  "dirs 5.0.1",
  "futures",

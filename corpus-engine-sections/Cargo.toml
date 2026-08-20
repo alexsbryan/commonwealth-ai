@@ -1,0 +1,30 @@
+[package]
+name = "corpus-engine-sections"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Pluggable section detection over raw text — the pure detector half of corpus-engine's sectioned chunker. A leaf: one trait, two detectors, `regex` and nothing else."
+
+# Home of `SectionDetector` / `DetectedSection` / `ChapterRegexDetector` /
+# `TocAnchoredDetector`. These are corpus-engine's own segmentation vocabulary;
+# they lived in `sovereign-contracts` from 2026-07 so the studio `SectionTool`
+# and the bespoke ingest path could share ONE implementation, which made
+# corpus-engine (the knowledge layer) name a type owned by the layer above it —
+# the only reason corpus-engine depended on sovereign at all. Carving them into
+# a leaf both sides can reach DOWNWARD to keeps the single implementation and
+# deletes the back-edge. Consumers: `corpus-engine` (re-exports at the
+# historical `chunkers::sectioned::*` path) and `sovereign-tools-base`.
+#
+# `regex` is the entire dependency budget, so `sovereign-tools-base` can take
+# this without acquiring LanceDB/Tantivy — the thing its own budget comment
+# was written to keep out.
+
+[dependencies]
+regex = { workspace = true }
+# The detectors trace their own refusals (empty ToC block, phantom matches
+# dropped by `min_body_words`) — a decision invisible at debug is not finished.
+tracing = { workspace = true }
+
+[lints]
+workspace = true

@@ -6,8 +6,9 @@
 //! Where `tool:chunk` splits by size (700-char passages), `tool:section` splits
 //! by *structure* — the unit the real enrichment Phase 1 runs over (a chapter),
 //! not an arbitrary 700-char window. It reuses the corpus engine's own
-//! `ChapterRegexDetector` (the exact detector the v2 pipeline feeds into phase 1),
-//! so a workflow-authored section pass matches the bespoke path.
+//! `ChapterRegexDetector` from `corpus-engine-sections` (the exact detector the
+//! v2 pipeline feeds into phase 1 — one implementation, reached downward by
+//! both callers), so a workflow-authored section pass matches the bespoke path.
 //!
 //! **Flexible by config, not by source.** The `boundary` regex is the whole knob:
 //! the default recognises `Chapter`/`Part` forms, but there is nothing
@@ -29,7 +30,7 @@
 use async_trait::async_trait;
 
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::recipe::sections::{ChapterRegexDetector, SectionDetector};
+use corpus_engine_sections::{ChapterRegexDetector, SectionDetector};
 use sovereign_contracts::traits::Tool;
 use sovereign_contracts::types::*;
 
