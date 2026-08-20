@@ -781,14 +781,13 @@ async fn run_native_role_aware(
             .as_deref()
             .map(extract_referenced_names)
             .unwrap_or_default();
-        let user_msg =
-            format_initial_prompt_with_promoted(
-                workdir.path(),
-                &ctx.prompt,
-                &promoted_names,
-                anchor_budget,
-                listing_depth,
-            );
+        let user_msg = format_initial_prompt_with_promoted(
+            workdir.path(),
+            &ctx.prompt,
+            &promoted_names,
+            anchor_budget,
+            listing_depth,
+        );
         let role_messages = build_role_messages(
             active_role,
             &profile,
@@ -2410,7 +2409,10 @@ mod tests {
         );
         let without =
             super::render_workdir_anchors_with_promoted(tmp.path(), &Default::default(), 0);
-        assert!(with.contains("def f()"), "default budget should render source");
+        assert!(
+            with.contains("def f()"),
+            "default budget should render source"
+        );
         assert!(without.is_empty(), "zero budget must render nothing");
     }
 

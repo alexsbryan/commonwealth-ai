@@ -246,7 +246,10 @@ mod tests {
             kind("runtime/streaming/run_synthesis_stream()."),
             DescriptorKind::Function
         );
-        assert_eq!(kind("impl#[Runtime]handle_message()."), DescriptorKind::Method);
+        assert_eq!(
+            kind("impl#[Runtime]handle_message()."),
+            DescriptorKind::Method
+        );
         assert_eq!(
             kind("peer_inference/impl#[MeshInferenceProvider][InferenceProvider]complete_stream_with_id()."),
             DescriptorKind::TraitImplMethod
@@ -292,7 +295,10 @@ mod tests {
         // Validating the instrument before the result (ARCH §18.4): a first
         // pass left 25,374 of 313,741 rows (8.1%) unrecognized. Three real
         // shapes, all confirmed against the graph 2026-08-19.
-        assert_eq!(kind("registry/impl#[Registry][Default]"), DescriptorKind::ImplBlock);
+        assert_eq!(
+            kind("registry/impl#[Registry][Default]"),
+            DescriptorKind::ImplBlock
+        );
         assert_eq!(kind("adapter/pi/impl#[Adapter]"), DescriptorKind::ImplBlock);
         // scip-python emits these; the 5-token prefix parses the same way.
         assert_eq!(
@@ -307,7 +313,10 @@ mod tests {
 
     #[test]
     fn leaf_name_strips_the_terminator() {
-        assert_eq!(leaf_name(&format!("{PFX}types/ScoredChunk#")), "ScoredChunk");
+        assert_eq!(
+            leaf_name(&format!("{PFX}types/ScoredChunk#")),
+            "ScoredChunk"
+        );
         assert_eq!(leaf_name(&format!("{PFX}Verdict#")), "Verdict");
         assert_eq!(leaf_name(&format!("{PFX}m/run().")), "run()");
         assert_eq!(leaf_name(&format!("{PFX}ids/define_id!")), "define_id");

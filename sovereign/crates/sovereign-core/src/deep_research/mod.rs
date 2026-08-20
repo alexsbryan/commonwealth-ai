@@ -3130,9 +3130,9 @@ mod tests {
         );
         // The estate's spelled-out echo never leaks — the word form
         // strips to the digit form's template.
-        let estate = "researcher Martin analyzed data from the nation's one hundred largest cities.";
-        let estate_digit =
-            "researcher Martin analyzed data from the nation's 100 largest cities.";
+        let estate =
+            "researcher Martin analyzed data from the nation's one hundred largest cities.";
+        let estate_digit = "researcher Martin analyzed data from the nation's 100 largest cities.";
         let stripped = strip_disallowed_figures(estate, &["1980".to_string()]);
         assert_eq!(
             stripped,
@@ -3693,5 +3693,4 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
-
 }

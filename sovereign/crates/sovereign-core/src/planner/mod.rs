@@ -11,8 +11,8 @@ use crate::traits::{InferenceProvider, Planner};
 use crate::types::*;
 
 mod schema;
-pub use schema::plan_schema;
 use schema::parseable_kinds;
+pub use schema::plan_schema;
 
 /// LLM-based planner that uses the Primary inference slot to generate execution plans.
 ///

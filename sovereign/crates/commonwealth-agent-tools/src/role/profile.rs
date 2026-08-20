@@ -124,14 +124,16 @@ pub fn profile_for(role: Role, scale: WorkdirScale) -> RoleProfile {
     if scale == WorkdirScale::Repository {
         match role {
             Role::Planner => {
-                p.allowed_primitives.insert(0, PrimitiveKind::InspectWorkdir);
+                p.allowed_primitives
+                    .insert(0, PrimitiveKind::InspectWorkdir);
                 p.forced_first_tool = Some(PrimitiveKind::InspectWorkdir);
                 p.system_prompt.push_str(
                     " The workdir is a full repository and is NOT in your context. Use                      `inspect_workdir` to list directories and read files before you plan.                      Name the exact files and functions your plan touches.",
                 );
             }
             Role::Implementer => {
-                p.allowed_primitives.insert(0, PrimitiveKind::InspectWorkdir);
+                p.allowed_primitives
+                    .insert(0, PrimitiveKind::InspectWorkdir);
                 // Look before you write. The scaffold default forces
                 // WriteFile first, which at repository scale compels an
                 // edit the model has no basis to make.
@@ -264,7 +266,8 @@ mod repo_scale_tests {
         for role in [Role::Planner, Role::Implementer] {
             let p = profile_for(role, WorkdirScale::Repository);
             assert!(
-                p.allowed_primitives.contains(&PrimitiveKind::InspectWorkdir),
+                p.allowed_primitives
+                    .contains(&PrimitiveKind::InspectWorkdir),
                 "{role:?} must hold inspect_workdir at repository scale"
             );
             assert_ne!(
@@ -275,7 +278,8 @@ mod repo_scale_tests {
         }
         let imp = profile_for(Role::Implementer, WorkdirScale::Repository);
         assert!(
-            !imp.system_prompt.contains("You do not have `inspect_workdir`"),
+            !imp.system_prompt
+                .contains("You do not have `inspect_workdir`"),
             "the repository prompt must not deny a primitive the role now holds"
         );
     }
