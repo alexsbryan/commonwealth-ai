@@ -139,13 +139,79 @@ status    = "active"
 # Tokens on the wire are NOT an Answer. They are frames; the Answer is the
 # released whole. That distinction is what makes this cheap.
 
+# ── THE THREE WIDTH BARS ARE DEFERRED — 2026-08-20, operator ────────────────
+#
+# `nc-boundary`, `nc-no-violation` and `nc-kernel` move from `open` to
+# `deferred`. THEY ARE STILL MEASURED AND STILL CHECKABLE — `deferred` is a
+# label, not a mute: only `descoped` short-circuits the verdict
+# (co-lineage.py:386), so every one of them still runs its instrument, still
+# writes a machine-stamped row, and still renders. `co-lineage coverage
+# noun-convergence` shows them with a `[deferred]` tag beside a live number.
+# Nothing below is deleted and no target is moved.
+#
+# WHAT CHANGED IS THEIR STANDING, and only that: they are EVIDENCE, not
+# TARGETS. A rung is no longer expected to move them, and a landing verdict no
+# longer has to explain why it didn't.
+#
+# WHY, MEASURED, NOT ASSERTED. These three count distinct TYPES CROSSING CRATE
+# EDGES. Two independent measurements say those edges were already correct
+# before this campaign began:
+#   - `cargo xtask layer-gate` exits 0 — 54 members, 244 internal edges,
+#     "every crate assigned, every edge points down or sideways, fan-in within
+#     caps". Verified twice on 2026-08-20, on a clean worktree at HEAD.
+#   - NOUN_CONVERGENCE §10.2: 0 of 441 load-bearing types carry an upward edge;
+#     18 of 28,847 co-changing file pairs cross a crate boundary with no
+#     structural reference behind them; adapter tax is 26 `impl From`.
+# The defect is INSIDE crates, not between them: 42.9% of 4,998 first-party
+# production types are referenced by no other file (`nc-reach`, minted
+# 2026-08-20).
+#
+# THE EVIDENCE THAT FORCED IT. Three waves, ~30 commits: nc-boundary 478 -> 477,
+# nc-no-violation 158 -> 143, nc-kernel 22 -> 23 (BACKWARDS). The same waves
+# shipped a live HTML-truncation bug fix (every crawled page cut at the first
+# `</script>` on three ingest paths), three user-visible desktop panics, 1,405
+# deleted duplicate lines, a trust envelope that exposed ten bench banks being
+# scored as fine, tool descriptors 0 -> 68% data-sourced retiring 4,137 lines of
+# data spelled as code, `code index --help` exiting 1, and a config path that
+# lied to shipped-binary users. NONE of it is visible in these three numbers.
+#
+# THE COST OF LEAVING THEM OPEN was not cosmetic and is the operator's stated
+# reason: with the scoreboard pointed at a disproved hypothesis, every order and
+# every landing verdict had to negotiate between what the bars said and what the
+# work did. That is a standing invitation to doublespeak, paid at every turn.
+#
+# WHAT REPLACES THEM as the campaign's declared destination:
+#   "An agent extending this codebase reaches for what exists instead of
+#    re-deriving it, and what it reaches for tells the truth about its own
+#    confidence."
+#   -> `nc-reach`   can you reach it            42.9% -> 28%
+#   -> `nc-extends` is adding a thing DATA      1/3 -> 3/3
+#   -> `nc-thesis`  does a result carry its own trustworthiness  0.4 -> 1.0
+#
+# HOW TO REOPEN ONE, because a deferral with no reopen condition is just
+# abandonment: if a rung has a specific, named reason to expect a width move —
+# the clearest live candidate is DELETING commonwealth-api's four middlewares
+# that open `<repo>/.sovereign/notes.db` BY PATH, which is still the only
+# identified change that shrinks `nc-boundary` AND reverses `nc-kernel` — then
+# flip that one bar's `status` back to `open` in the same commit as the rung,
+# and say in the landing verdict what you expect it to move and by how much.
+# One line, and git history is the ledger.
+#
+# READ BEFORE TRUSTING A DELTA ON THESE: all three read the daemon's SCIP index
+# and NOT the working tree, so their rows stamp `ref_source: artifact` at
+# `indexed_head`, they move when the daemon re-indexes a PEER's commits, and a
+# `git worktree` does not isolate them (`nc-boundary.py:index_provenance`).
+
 # ── Bars ────────────────────────────────────────────────────────────────────
 
 [[bar]]
 id           = "nc-boundary"
 one_line     = "Each domain publishes a small named surface instead of leaking its internals"
 derives_from = "the measurement above; TARGET_ARCHITECTURE.md §6"
-status       = "open"
+# DEFERRED 2026-08-20 — evidence, not a target. Still measured, still checkable.
+# Full lineage in the "THE THREE WIDTH BARS ARE DEFERRED" section above,
+# including the reopen condition. Instrument and target below are UNCHANGED.
+status       = "deferred"
 # Distinct types crossing between the three product domains. Target derived,
 # not guessed: corpus-engine publishes Corpus/Evidence/Atom/Note/Record,
 # commonwealth publishes Peer/Capability, sovereign publishes
@@ -172,7 +238,12 @@ kill         = "if narrowing a boundary forces a re-export shim that renames the
 id           = "nc-no-violation"
 one_line     = "No edge runs the wrong way, and nothing depends on the quality controls"
 derives_from = "the layer map above; the back-of-house one-way rule"
-status       = "open"
+# DEFERRED 2026-08-20 — evidence, not a target. Still measured, still checkable.
+# Full lineage in the "THE THREE WIDTH BARS ARE DEFERRED" section above,
+# including the reopen condition. Instrument and target below are UNCHANGED.
+# Note this bar's own HONESTY CLAUSE was already answered: of the original 337,
+# the campaign moved FOUR by code and 175 by re-classification.
+status       = "deferred"
 # 337 types on edges that should not exist: BACKSTAGE 255 (product naming its
 # own instrument), BACKFLOW 82 (a lower layer naming a higher one).
 #
@@ -210,7 +281,14 @@ instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; d=j
 id           = "nc-kernel"
 one_line     = "What every domain speaks is a CONTRACT, owned by none of them"
 derives_from = "the measurement above"
-status       = "open"
+# DEFERRED 2026-08-20 — evidence, not a target. Still measured, still checkable.
+# Full lineage in the "THE THREE WIDTH BARS ARE DEFERRED" section above.
+# THIS IS THE ONE THAT MOVED BACKWARDS (22 -> 23) and the reason is structural:
+# a noun joins the kernel by acquiring cross-domain consumers, so every
+# PUBLISHING rung raises it and no funded rung reverses it. Its reopen condition
+# is therefore the sharpest of the three — see the notes.db middleware deletion
+# named in the section above. Instrument and target below are UNCHANGED.
+status       = "deferred"
 # Today 23 types, 22 owned by corpus-engine, two of them god objects. Target
 # <= 10 in a crate no domain owns. A kernel is judged by OWNERSHIP as much as
 # size: ten types still owned by one domain is the same disease.
