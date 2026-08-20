@@ -235,7 +235,8 @@ async fn run_pass(
     let prompt = config.synthesis_prompt.replace("{entries}", &entries);
 
     // SLOT_POLICY §3 Housekeep: memory-fold synthesis (advisory).
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+    let mut request = Workload::Housekeep
+        .request(prompt)
         .with_output_budget(config.max_summary_chars.div_ceil(2) as u32);
     request.temperature = Some(0.3);
     // Distilled Fast model narrates its plan without this; hard-off the

@@ -439,11 +439,9 @@ pub async fn cmd_raptor(args: &[String]) -> i32 {
                 sovereign_tools::raptor_atlas::EXTRACTIVE_SUMMARIZER.to_string(),
             )),
             sovereign_tools::raptor_atlas::SummaryMode::Abstractive => {
-                let mut probe = sovereign_core::types::CompletionRequest::for_workload(
-                    sovereign_core::slot_policy::Workload::EnrichBulk,
-                    "Reply with the single word: ok".to_string(),
-                )
-                .with_output_budget(8);
+                let mut probe = sovereign_core::slot_policy::Workload::EnrichBulk
+                    .request("Reply with the single word: ok".to_string())
+                    .with_output_budget(8);
                 probe.think_budget = Some(0);
                 match probe_inference.complete(&probe).await {
                     Ok(r) if !r.model_id.is_empty() => Some((

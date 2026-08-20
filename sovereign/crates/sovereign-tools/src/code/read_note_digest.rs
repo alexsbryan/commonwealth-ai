@@ -330,7 +330,8 @@ async fn summarize_via_fast_slot(provider: &dyn InferenceProvider, raw: &str) ->
     // turn-loop context (a compact digest the agent expands on demand),
     // not durable truth. Housekeep's Some(0) think budget matches this
     // site verbatim.
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, raw.to_string())
+    let mut request = Workload::Housekeep
+        .request(raw.to_string())
         .with_system(system)
         // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 800 > 512 forfeits the
         // batched FastShort claim; the 300–600-word digest target needs it.

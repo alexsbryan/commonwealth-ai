@@ -46,15 +46,13 @@ impl DocumentTool {
             // SLOT_POLICY §3 Housekeep: document map-phase section
             // summarize/analyze — advisory context feeding the reduce,
             // not durable truth.
-            let mut request = CompletionRequest::for_workload(
-                Workload::Housekeep,
-                format!("{map_prompt}\n\n---\n\n{batch_text}"),
-            )
-            .with_system(&format!(
-                "You are processing section {} of a larger document. {map_prompt}",
-                batch_idx + 1,
-            ))
-            .with_output_budget(512);
+            let mut request = Workload::Housekeep
+                .request(format!("{map_prompt}\n\n---\n\n{batch_text}"))
+                .with_system(&format!(
+                    "You are processing section {} of a larger document. {map_prompt}",
+                    batch_idx + 1,
+                ))
+                .with_output_budget(512);
             request.temperature = Some(0.3);
             // POLICY-DEBT(SLOT_POLICY §3 Housekeep): None preserved for P1
             // neutrality (bundle is Some(0)); P5 confirms.
@@ -109,13 +107,13 @@ impl DocumentTool {
 
                 // SLOT_POLICY §3 Synthesize: final reduce composing a
                 // coherent document summary/analysis for the user.
-                let mut request =
-                    CompletionRequest::for_workload(Workload::Synthesize, reduce_prompt)
-                        .with_system(
-                            "You are synthesizing a final summary from section summaries. \
+                let mut request = Workload::Synthesize
+                    .request(reduce_prompt)
+                    .with_system(
+                        "You are synthesizing a final summary from section summaries. \
                      Produce a coherent, comprehensive result.",
-                        )
-                        .with_output_budget(1024);
+                    )
+                    .with_output_budget(1024);
                 request.temperature = Some(0.5);
 
                 let response = self.inference.complete(&request).await?;
@@ -297,7 +295,8 @@ impl DocumentTool {
 
             // SLOT_POLICY §3 Synthesize: small-document direct
             // summary/analysis composed for the user (no map-reduce).
-            let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+            let mut request = Workload::Synthesize
+                .request(prompt)
                 .with_system(&format!(
                     "You are processing the document \"{source}\". Provide a thorough {operation}."
                 ))

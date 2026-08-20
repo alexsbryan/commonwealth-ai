@@ -23,40 +23,15 @@ pub type EntityInventory = std::collections::HashSet<String>;
 
 // ─── Inference Types ───────────────────────────────────────────
 
-/// The derived slot shadow of an OICP latency class (SLOT_POLICY §8).
-/// A request's true routing input is its `InferenceRequirements`
-/// envelope; `preferred_speed` is a legacy projection of that, written
-/// only by `slot_policy::latency_to_speed` (never a free-hand literal
-/// in new code).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub enum Speed {
-    /// Interactive tier: routed to the fast slot (the small, always-resident model). The serde default.
-    #[default]
-    Fast,
-    /// Retained ONLY for serde compatibility (stored `Plan`s embed the
-    /// PascalCase `"Medium"` string, and dropping the variant would
-    /// silently parse-fail them to empty) and for descriptive capability
-    /// metadata (`ProviderCapabilities::relative_speed`). It is NOT a
-    /// routing target: `latency_to_speed` never yields it, and
-    /// construction sites use `Fast` or `Slow` (SLOT_POLICY §8). At the
-    /// engine it is indistinguishable from `Slow` (both pick the primary
-    /// slot).
-    Medium,
-    /// Quality tier: routed to the primary slot; latency is secondary.
-    Slow,
-}
-
-/// Coarse reasoning-depth scale. Descriptive capability metadata
-/// (`ProviderCapabilities::relative_reasoning`), not a routing input.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum Depth {
-    /// Surface-level: recall and single-hop answers.
-    Shallow,
-    /// Bounded multi-step reasoning — the tier the built-in local slots advertise.
-    Moderate,
-    /// Extended multi-hop reasoning — the strongest tier a provider can claim.
-    Deep,
-}
+// The inference call vocabulary lives in `oicp-types` (layer 0) and is
+// re-exported here at its historical path. It moved down when `oicp-client` —
+// the crate whose job is to decouple the systems — turned out to depend on
+// sovereign for the very types it puts on the wire (noun-convergence rung 2b).
+// Sovereign's SLOT_POLICY did NOT move: see `crate::slot_policy`.
+pub use crate::oicp::{
+    CompletionRequest, CompletionResponse, Depth, FinishReason, PromptShape, ProviderCapabilities,
+    SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema,
+};
 
 /// User-configurable inference parameters, sourced from `DesktopConfig`.
 /// Passed to `Runtime::new()` and used when building every `CompletionRequest`.
@@ -119,11 +94,6 @@ impl Default for InferenceConfig {
 // in a submodule joins the `types::*` surface — and therefore the
 // sovereign-contracts and sovereign-core crate roots — only by being added
 // HERE, as a reviewable diff. api-gate snapshots the resulting surface.
-mod completion;
-pub use completion::{
-    CompletionRequest, CompletionResponse, FinishReason, PromptShape, ProviderCapabilities,
-    SamplingMode, StreamFrame, StreamUsage, ToolSchema,
-};
 mod edit_slot;
 pub use edit_slot::{EditSlotInfo, FimLane, FimStyle, NextEditFormat, NextEditLane};
 // Generic local-journal machinery (file layout, rotation, caps,

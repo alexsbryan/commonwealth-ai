@@ -597,7 +597,7 @@ pub fn present_request(
     // SLOT_POLICY §3 Synthesize: the Presenter is the user-visible
     // streaming surface. Bundle latency=Normal → shadow Speed::Slow
     // (Primary), unchanged from the prior explicit Slow.
-    let mut req = CompletionRequest::for_workload(Workload::Synthesize, prompt);
+    let mut req = Workload::Synthesize.request(prompt);
     req.system_message = Some(system.to_string());
     // iter2 hard cap retained: 320 tokens (~1000 chars) so a
     // Presenter failure can't run away. The cap is even more

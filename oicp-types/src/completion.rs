@@ -1,12 +1,69 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Split from the monolithic types.rs (ARCH §3.2); re-exported by types/mod.rs,
-//! so every sovereign_core::types::* import path is unchanged (behaviour-preserving).
-#[allow(unused_imports)]
-use super::*;
-#[allow(unused_imports)]
-use crate::oicp;
-#[allow(unused_imports)]
+//! The inference call vocabulary — request, response, stream framing, the
+//! coarse speed/depth tiers a provider advertises, and the `Speed` ↔
+//! `LatencyClass` derivation that joins them.
+//!
+//! # Why this is layer 0
+//!
+//! `oicp-client` is the OICP client, and every type here is what it puts on
+//! the wire. While they lived in `sovereign-contracts` the crate whose whole
+//! job is to DECOUPLE the systems depended on one of them — the last un-owned
+//! backflow edge in the workspace. Moving the definitions down removes the
+//! edge; `sovereign_contracts::types` re-exports every one of them at its
+//! historical path, so this was not a rename (noun-convergence rung 2b,
+//! 2026-08-20).
+//!
+//! # What deliberately did NOT come down
+//!
+//! Sovereign's SLOT_POLICY. `Workload`, its §3 requirement table, and the
+//! `for_workload*` / `yes_no` constructors that read it are POLICY: which
+//! workload class deserves which latency budget is sovereign's calibration,
+//! not the protocol's. They stay in `sovereign_contracts::slot_policy`, where
+//! they now hang off `Workload` — the noun that owns the decision — because an
+//! inherent constructor on a type this crate owns would have dragged the
+//! policy table down with it. The protocol defines what a latency class IS;
+//! the policy decides which one a judge pass deserves.
+
+use crate::LatencyClass;
 use serde::{Deserialize, Serialize};
+
+// ─── Coarse provider tiers ─────────────────────────────────────
+/// The derived slot shadow of an OICP latency class (SLOT_POLICY §8).
+/// A request's true routing input is its `InferenceRequirements`
+/// envelope; `preferred_speed` is a legacy projection of that, written
+/// only by `slot_policy::latency_to_speed` (never a free-hand literal
+/// in new code).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum Speed {
+    /// Interactive tier: routed to the fast slot (the small, always-resident model). The serde default.
+    #[default]
+    Fast,
+    /// Retained ONLY for serde compatibility (stored `Plan`s embed the
+    /// PascalCase `"Medium"` string, and dropping the variant would
+    /// silently parse-fail them to empty) and for descriptive capability
+    /// metadata (`ProviderCapabilities::relative_speed`). It is NOT a
+    /// routing target: `latency_to_speed` never yields it, and
+    /// construction sites use `Fast` or `Slow` (SLOT_POLICY §8). At the
+    /// engine it is indistinguishable from `Slow` (both pick the primary
+    /// slot).
+    Medium,
+    /// Quality tier: routed to the primary slot; latency is secondary.
+    Slow,
+}
+
+/// Coarse reasoning-depth scale. Descriptive capability metadata
+/// (`ProviderCapabilities::relative_reasoning`), not a routing input.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Depth {
+    /// Surface-level: recall and single-hop answers.
+    Shallow,
+    /// Bounded multi-step reasoning — the tier the built-in local slots advertise.
+    Moderate,
+    /// Extended multi-hop reasoning — the strongest tier a provider can claim.
+    Deep,
+}
+
+// ─── The call ──────────────────────────────────────────────────
 
 /// One inference call, provider-neutral: prompt + sampling knobs + the
 /// structural constraints (grammars, allowlists, tool schemas) the sampler
@@ -56,7 +113,7 @@ pub struct CompletionRequest {
     /// OICP capability requirements. Used by providers that support
     /// OICP to select the best model. Ignored by providers that don't.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub oicp: Option<oicp::InferenceRequirements>,
+    pub oicp: Option<crate::InferenceRequirements>,
     /// Tool schemas the model may call. Present only when the caller is
     /// an agent driver (opencode, Claude Code via MCP) using
     /// OpenAI-compatible function-calling.
@@ -354,51 +411,9 @@ impl CompletionRequest {
     }
 
     /// Attach an OICP requirements envelope — what makes the request scheduler-visible.
-    pub fn with_oicp(mut self, requirements: oicp::InferenceRequirements) -> Self {
+    pub fn with_oicp(mut self, requirements: crate::InferenceRequirements) -> Self {
         self.oicp = Some(requirements);
         self
-    }
-
-    /// Workload-resolver constructor (SLOT_POLICY §9.4). The call site
-    /// declares WHAT the call is ([`crate::slot_policy::Workload`]); the
-    /// scheduler resolves WHERE it runs. Attaches the OICP requirement
-    /// bundle, the derived `preferred_speed` shadow (§8 — via
-    /// `latency_to_speed`, never a literal), the class think budget, and
-    /// emits the glassbox `workload=` tracing event.
-    ///
-    /// Privacy: LocalOnly. Internal machinery uses this; it is provably
-    /// routing-neutral at the mesh privacy gate. Session-posture-aware
-    /// callers (grounding judges, EnrichBulk fan-out) use
-    /// [`Self::for_workload_shared`].
-    pub fn for_workload(workload: crate::slot_policy::Workload, prompt: impl Into<String>) -> Self {
-        Self::for_workload_shared(workload, prompt, oicp::ShardingPrivacy::LocalOnly)
-    }
-
-    /// [`Self::for_workload`] with an explicit privacy posture — the
-    /// only path by which internal work becomes mesh-offloadable.
-    /// Threading the session/operator posture (never hardcoding it) is
-    /// SLOT_POLICY §2.4.
-    pub fn for_workload_shared(
-        workload: crate::slot_policy::Workload,
-        prompt: impl Into<String>,
-        posture: oicp::ShardingPrivacy,
-    ) -> Self {
-        let bundle = workload.bundle();
-        let oicp = workload.requirements(posture);
-        tracing::debug!(
-            target: "slot_policy",
-            workload = workload.as_str(),
-            latency_class = ?bundle.latency,
-            privacy = ?posture,
-            request_id = oicp.request_id.as_deref().unwrap_or(""),
-            "workload request constructed"
-        );
-        let mut req = Self::new(&prompt.into());
-        // The ONE canonical shadow derivation (SLOT_POLICY §8).
-        req.preferred_speed = crate::slot_policy::latency_to_speed(bundle.latency);
-        req.think_budget = bundle.think_budget;
-        req.oicp = Some(oicp);
-        req
     }
 
     /// Honest output budget (SLOT_POLICY §2.3): sets `max_tokens` AND
@@ -427,48 +442,6 @@ impl CompletionRequest {
         self.model_id = Some(model_id.into());
         self
     }
-
-    /// Forced yes/no check on the fast slot: 5-token budget, temperature 0, no
-    /// thinking. Read the verdict with `CompletionResponse::as_bool`. Used by
-    /// `Branch` steps and other binary gates.
-    pub fn yes_no(condition: &str, context: &str) -> Self {
-        Self {
-            prompt: format!(
-                "Given the following context:\n{context}\n\n\
-                 Answer this yes/no question with only \"yes\" or \"no\":\n{condition}"
-            ),
-            system_message: None,
-            preferred_speed: Speed::Fast,
-            max_tokens: Some(5),
-            temperature: Some(0.0),
-            structured_output: None,
-            think_budget: Some(0), // No thinking needed for yes/no
-            top_k: None,
-            top_p: None,
-            // SLOT_POLICY §3 Route: a branch-condition check. One
-            // envelope here makes every `yes_no` call site
-            // scheduler-visible; the honest 5-token budget rides along
-            // as the FastShort hard gate. Speed stays Fast (the shadow
-            // Route would derive anyway).
-            oicp: Some(
-                crate::slot_policy::Workload::Route
-                    .requirements(oicp::ShardingPrivacy::LocalOnly)
-                    .with_max_output_tokens(5),
-            ),
-            tools: None,
-            tool_choice: None,
-            model_id: None,
-            enable_thinking: None,
-            sampling_mode: None,
-            assistant_prefix: None,
-            cmd_prefix: None,
-            url_allowlist: None,
-            evidence_id_allowlist: None,
-            lark_grammar: None,
-            prompt_shape: None,
-            stable_prefix_len: None,
-        }
-    }
 }
 
 /// A completed (non-streaming) inference result plus its telemetry.
@@ -493,7 +466,7 @@ pub struct CompletionResponse {
     pub latency_ms: u64,
     /// OICP metadata from the provider, if available.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub oicp_meta: Option<oicp::OicpResponseMeta>,
+    pub oicp_meta: Option<crate::OicpResponseMeta>,
     /// Why generation stopped — `Length` when the model hit
     /// `max_tokens`, `Stop` on EOS, etc. `None` from providers that
     /// don't track the distinction (older tests, stub providers).
@@ -676,60 +649,28 @@ pub enum StreamFrame {
     Error(String),
 }
 
-#[cfg(test)]
-mod workload_builder_tests {
-    use super::*;
-    use crate::oicp::{LatencyClass, ShardingPrivacy, OICP_VERSION};
-    use crate::slot_policy::Workload;
+// ─── SLOT_POLICY §8: the one canonical Speed <-> LatencyClass map ──
+//
+// Re-exported by `sovereign_contracts::slot_policy`, which is where the
+// module doc's "ONE canonical home" claim was made and where every call
+// site still spells it. The definition lives here because both types do.
 
-    #[test]
-    fn for_workload_always_sets_oicp_version() {
-        // Pins the structural-422 invariant: an envelope missing
-        // `oicp_version` is rejected at the daemon's Json extractor.
-        for w in Workload::ALL {
-            let req = CompletionRequest::for_workload(w, "p");
-            let oicp = req.oicp.expect("workload envelope");
-            assert_eq!(oicp.oicp_version, OICP_VERSION, "{}", w.as_str());
-        }
+/// §8 request-side derive. `Medium` is a deprecated alias of `Slow`
+/// (both mean "primary work"). NEVER produces `Extended` (rule 4.4 —
+/// only intent/skill declarations emit it).
+pub const fn speed_to_latency(speed: Speed) -> LatencyClass {
+    match speed {
+        Speed::Fast => LatencyClass::Fast,
+        Speed::Medium | Speed::Slow => LatencyClass::Normal,
     }
+}
 
-    #[test]
-    fn for_workload_defaults_to_local_only() {
-        let req = CompletionRequest::for_workload(Workload::Route, "p");
-        assert_eq!(req.oicp.unwrap().sharding(), ShardingPrivacy::LocalOnly);
-    }
-
-    #[test]
-    fn for_workload_shared_threads_posture() {
-        let req = CompletionRequest::for_workload_shared(
-            Workload::Judge,
-            "p",
-            ShardingPrivacy::MeshAllowed,
-        );
-        assert_eq!(req.oicp.unwrap().sharding(), ShardingPrivacy::MeshAllowed);
-    }
-
-    #[test]
-    fn for_workload_tags_request_id() {
-        let req = CompletionRequest::for_workload(Workload::Housekeep, "p");
-        let id = req.oicp.unwrap().request_id.expect("tag");
-        assert!(id.starts_with("wl-housekeep-"), "{id}");
-    }
-
-    #[test]
-    fn with_output_budget_sets_both_max_tokens_and_envelope() {
-        let req = CompletionRequest::for_workload(Workload::Route, "p").with_output_budget(5);
-        assert_eq!(req.max_tokens, Some(5));
-        assert_eq!(req.oicp.unwrap().max_output_tokens, Some(5));
-    }
-
-    #[test]
-    fn yes_no_carries_route_envelope_and_stays_fast() {
-        let yn = CompletionRequest::yes_no("is it?", "ctx");
-        assert_eq!(yn.preferred_speed, Speed::Fast);
-        let oicp = yn.oicp.expect("route envelope");
-        assert_eq!(oicp.effective_latency_class(), LatencyClass::Fast);
-        assert_eq!(oicp.max_output_tokens, Some(5));
-        assert_eq!(oicp.sharding(), ShardingPrivacy::LocalOnly);
+/// §8 resolve — serve side and shadow side. `Extended` collapses to
+/// the primary slot (there is no third chat slot). NEVER produces
+/// `Medium`.
+pub const fn latency_to_speed(class: LatencyClass) -> Speed {
+    match class {
+        LatencyClass::Fast => Speed::Fast,
+        LatencyClass::Normal | LatencyClass::Extended => Speed::Slow,
     }
 }

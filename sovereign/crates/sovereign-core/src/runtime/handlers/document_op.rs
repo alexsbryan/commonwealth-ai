@@ -106,7 +106,8 @@ impl Runtime {
         // primary slot — the 0.6B fast model can't reliably produce this
         // JSON, so it's a deliberate primary call. Schema-constrained, so
         // think stays suppressed.
-        let mut prompt_request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+        let mut prompt_request = Workload::Synthesize
+            .request(prompt)
             .with_system("You write analysis prompts. Output ONLY the JSON object, nothing else.")
             .with_output_budget(512);
         prompt_request.temperature = Some(0.0);

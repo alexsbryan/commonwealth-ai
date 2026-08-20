@@ -594,7 +594,8 @@ pub(crate) async fn draft_prompt_lesson(
     });
 
     // SLOT_POLICY §3 Housekeep: post-turn drafting.
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+    let mut request = Workload::Housekeep
+        .request(prompt)
         .with_system(
             "You turn user coaching into terse standing rules. Output only \
              the requested JSON object — no thinking, no preface.",

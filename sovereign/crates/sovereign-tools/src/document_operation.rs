@@ -130,12 +130,9 @@ impl DocumentOperationTool {
                     // SLOT_POLICY §3 Housekeep: document-op map phase —
                     // advisory extraction feeding the reduce, not durable
                     // truth. Housekeep's Some(0) think budget matches verbatim.
-                    let mut req = CompletionRequest::for_workload(
-                        Workload::Housekeep,
-                        format!(
+                    let mut req = Workload::Housekeep.request(format!(
                             "{map_prompt}\n\nPassage:\n{passage}\n\nExtract relevant info. If nothing relevant, respond: null",
-                        ),
-                    )
+                        ))
                     .with_output_budget(384);
                     req.temperature = Some(0.0);
                     req
@@ -284,7 +281,8 @@ impl DocumentOperationTool {
         // SLOT_POLICY §3 Housekeep: intermediate reduce pass — advisory
         // fan-in of extracted fragments, not the user-facing synthesis
         // (that is reduce_final). Housekeep's Some(0) think budget matches.
-        let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        let mut request = Workload::Housekeep
+            .request(prompt)
             // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 1024 > 512 forfeits the
             // batched FastShort claim; the merge pass genuinely needs the room.
             .with_output_budget(1024);
@@ -307,7 +305,8 @@ impl DocumentOperationTool {
         // SLOT_POLICY §3 Synthesize: final reduce — the user-facing
         // synthesis; quality matters more than speed. Synthesize leaves
         // think_budget None (thinking allowed for the final synthesis).
-        let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+        let mut request = Workload::Synthesize
+            .request(prompt)
             .with_system(
                 "You are producing the final synthesis of a document analysis. \
                  Be thorough, well-organized, and cite specific details.",
@@ -539,7 +538,8 @@ impl DocumentOperationTool {
 
             // SLOT_POLICY §3 Synthesize: small-document single-pass
             // synthesis composed for the user (no reduce needed).
-            let mut request = CompletionRequest::for_workload(Workload::Synthesize, prompt)
+            let mut request = Workload::Synthesize
+                .request(prompt)
                 .with_system(&format!(
                     "You are processing the document \"{source}\". \
                      Follow the extraction instructions precisely."

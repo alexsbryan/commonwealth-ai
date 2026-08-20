@@ -94,7 +94,8 @@ pub async fn generate_title_from_messages(
     // SLOT_POLICY §3 Housekeep: title generation is advisory turn-loop
     // hygiene. Bundle supplies latency=Fast + think=0; the honest
     // 80-token budget is the FastShort gate.
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+    let mut request = Workload::Housekeep
+        .request(prompt)
         .with_system(system_message)
         .with_output_budget(TITLE_MAX_TOKENS as u32);
     request.temperature = Some(0.3);

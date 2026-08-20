@@ -190,7 +190,8 @@ pub fn inference_to_inference_fn(
         // extraction where fast-class throughput is existential (the primary
         // model at ~1 min/chunk makes enrichment impractical on large
         // corpora) and quality is bench-validated per recipe.
-        let mut request = CompletionRequest::for_workload(Workload::EnrichBulk, prompt)
+        let mut request = Workload::EnrichBulk
+            .request(prompt)
             // POLICY-DEBT(SLOT_POLICY §4.5 EnrichBulk): 4096 > 512 forfeits
             // the batched FastShort claim; kept — dropped 2026-05-29
             // (evening): once grammar-constrained decoding lands via

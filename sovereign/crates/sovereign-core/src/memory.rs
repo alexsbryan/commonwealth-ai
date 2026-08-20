@@ -659,7 +659,8 @@ pub async fn compress_working_memory(
     // SLOT_POLICY §3 Housekeep: working-memory compression is advisory
     // context, not durable truth. Bundle supplies latency=Fast (shadow
     // Speed::Fast — pinned by `summarize_dropped_history_uses_fast_slot_only`).
-    let mut request = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+    let mut request = Workload::Housekeep
+        .request(prompt)
         .with_system(
             "Extract the user's goal and key facts from the conversation. Respond with JSON only.",
         )
@@ -1120,7 +1121,7 @@ Reply with a JSON array, one entry per memory, in the original order:\n\
     // deserves the stronger model. LocalOnly: internal machinery, never
     // offloaded. think_budget stays None (the bundle default), so the
     // only change is the slot, not the generation.
-    let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, &prompt);
+    let mut request = Workload::ExtractDurable.request(&prompt);
     request.structured_output = Some(schema);
     request.max_tokens = Some(512);
 
@@ -1233,7 +1234,7 @@ pub async fn detect_contradictions(
     // machinery, never offloaded. The ExtractDurable bundle's
     // think_budget is None, matching the prior value, so the flip
     // changes the slot, not the generation.
-    let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt);
+    let mut request = Workload::ExtractDurable.request(prompt);
     request.system_message =
         Some("Identify contradictions. Respond with a JSON array of numbers only.".to_string());
     request.max_tokens = Some(50);

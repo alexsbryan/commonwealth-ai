@@ -1232,10 +1232,10 @@ impl Runtime {
         );
         // SLOT_POLICY §3 Housekeep: schema-constrained planning consumed by
         // the pipeline. Structured output, not forced-choice.
-        let mut req =
-            CompletionRequest::for_workload(crate::slot_policy::Workload::Housekeep, prompt)
-                .with_system("You plan precise retrieval demands.")
-                .with_output_budget(160);
+        let mut req = crate::slot_policy::Workload::Housekeep
+            .request(prompt)
+            .with_system("You plan precise retrieval demands.")
+            .with_output_budget(160);
         req.temperature = Some(0.0);
         req.enable_thinking = Some(false);
         req.structured_output = Some(serde_json::json!({

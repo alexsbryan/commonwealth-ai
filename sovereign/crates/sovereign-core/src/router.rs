@@ -1085,7 +1085,8 @@ Reply with JSON only:
         // SLOT_POLICY §3 Route: single-letter classify consumed by
         // control flow. Bundle supplies latency=Fast + think=0; the
         // honest 5-token budget is the FastShort gate.
-        let mut request = CompletionRequest::for_workload(Workload::Route, prompt)
+        let mut request = Workload::Route
+            .request(prompt)
             .with_system("You are a message classifier. Respond with exactly one letter.")
             .with_output_budget(5);
         request.temperature = Some(0.0);
@@ -1134,7 +1135,8 @@ Reply with JSON only:
             "required": ["intent"],
         });
         // SLOT_POLICY §3 Route: schema-constrained intent classify.
-        let mut request = CompletionRequest::for_workload(Workload::Route, prompt)
+        let mut request = Workload::Route
+            .request(prompt)
             .with_system("You are a message classifier. Respond with valid JSON only.")
             .with_output_budget(max_tokens as u32);
         request.temperature = Some(0.0);
@@ -1159,7 +1161,8 @@ Reply with JSON only:
             "required": ["tool"],
         });
         // SLOT_POLICY §3 Route: schema-constrained tool selection.
-        let mut request = CompletionRequest::for_workload(Workload::Route, prompt)
+        let mut request = Workload::Route
+            .request(prompt)
             .with_system("You are a tool router. Respond with valid JSON only.")
             .with_output_budget(64);
         request.temperature = Some(0.0);

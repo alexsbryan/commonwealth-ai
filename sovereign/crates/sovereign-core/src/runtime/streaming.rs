@@ -957,10 +957,7 @@ impl Runtime {
         // evidence, or grammar. SLOT_POLICY §3 Passthrough — the model
         // the user chose to run naked; latency=Normal → shadow Speed::Slow
         // (Primary), unchanged from the prior explicit Slow.
-        let mut request = CompletionRequest::for_workload(
-            Workload::Passthrough,
-            format_history_as_prompt(&context, 24),
-        );
+        let mut request = Workload::Passthrough.request(format_history_as_prompt(&context, 24));
         request.system_message = Some(system);
 
         let message_id = uuid::Uuid::new_v4().to_string();

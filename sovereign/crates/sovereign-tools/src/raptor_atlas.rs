@@ -1057,8 +1057,7 @@ CAP_NAME: /[A-Z][A-Za-z'.]*( [A-Z][A-Za-z'.]*)*/
     // ride the FastShort batching lane instead of serializing on the
     // pinned chat slot. Durability is protected by the grammar (shape
     // cannot drift) and the 500-token budget fits the bundle's 512 cap.
-    let mut req =
-        CompletionRequest::for_workload(Workload::EnrichBulk, prompt).with_output_budget(500);
+    let mut req = Workload::EnrichBulk.request(prompt).with_output_budget(500);
     req.temperature = Some(0.2);
     // Grammar constraint preserved verbatim (see the lark_grammar above):
     // enforces the JSON shape AND forbids the `\"` byte inside the summary

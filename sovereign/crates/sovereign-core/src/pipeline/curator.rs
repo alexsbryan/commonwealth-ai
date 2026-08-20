@@ -131,7 +131,7 @@ pub fn curate_request(
     // forfeits FastShort (rule 4.5) — a CuratedPackage over many chunks
     // needs the room, and schema-constrained decode keeps it on the
     // Fast slot regardless (unchanged from the prior Speed::Fast).
-    let mut req = CompletionRequest::for_workload(Workload::Route, prompt).with_output_budget(2048);
+    let mut req = Workload::Route.request(prompt).with_output_budget(2048);
     // POLICY-DEBT(SLOT_POLICY §3 Route): the Route bundle sets
     // think_budget=0, but curator historically left it at the config
     // default (None). Schema-constrained decode makes the two

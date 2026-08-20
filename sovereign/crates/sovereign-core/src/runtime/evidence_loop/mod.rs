@@ -664,7 +664,8 @@ impl Runtime {
         );
         // SLOT_POLICY §3 Housekeep: alternative-query generation for
         // re-retrieval — schema-constrained, consumed by the loop.
-        let mut req = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        let mut req = Workload::Housekeep
+            .request(prompt)
             .with_system("You write precise search queries.")
             .with_output_budget(160);
         req.temperature = Some(0.0);
