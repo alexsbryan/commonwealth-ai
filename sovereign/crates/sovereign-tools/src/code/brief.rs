@@ -992,6 +992,15 @@ mod tests {
     }
 
     #[tokio::test]
+    // Gated to match the section it asserts on. `render_recent_activity` is
+    // `#[cfg(feature = "dev-tools")]`; without it the function returns an empty
+    // string, so this test could never pass under the crate's DEFAULT features
+    // — `./scripts/sovereign-test.sh --package sovereign-tools` failed on
+    // `brief.contains("Recent activity")` every time, while the full-workspace
+    // sweep (which turns `dev-tools` on via `sovereign-cli-dev`) stayed green
+    // and hid it. An ungated test on a gated section is a check with no
+    // configuration in which it is meaningful (§18.1).
+    #[cfg(feature = "dev-tools")]
     async fn recent_activity_shows_branch_commits_and_skips_old_ones() {
         let tmp = tempfile::tempdir().unwrap();
         let repo = tmp.path();
