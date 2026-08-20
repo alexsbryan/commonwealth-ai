@@ -36,7 +36,7 @@ use sovereign_core::slot_policy::Workload;
 use sovereign_core::traits::{InferenceProvider, Tool};
 use sovereign_core::types::*;
 
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
 
 pub struct ReadNoteDigestTool {
     notes: Arc<NoteStore>,
@@ -280,7 +280,7 @@ fn compute_scope_hash(
     format!("{:016x}", hasher.finish())
 }
 
-fn format_notes_for_prompt(notes: &[NoteRow]) -> String {
+fn format_notes_for_prompt(notes: &[Note]) -> String {
     let mut out = String::with_capacity(notes.len() * 160);
     for n in notes {
         let scope_tag = if n.scope == "global" {
@@ -299,7 +299,7 @@ fn format_notes_for_prompt(notes: &[NoteRow]) -> String {
     out
 }
 
-fn fallback_header_digest(notes: &[NoteRow]) -> String {
+fn fallback_header_digest(notes: &[Note]) -> String {
     let mut out = String::from(
         "> **Digest fallback.** The Fast inference slot is not available — \
          returning note headers without summarization. The operator should \
@@ -375,7 +375,7 @@ mod tests {
 
     #[test]
     fn fallback_header_digest_references_notes_by_id() {
-        let rows = vec![NoteRow {
+        let rows = vec![Note {
             id: "abc-1".into(),
             kind: "decision".into(),
             content: "use FTS5".into(),

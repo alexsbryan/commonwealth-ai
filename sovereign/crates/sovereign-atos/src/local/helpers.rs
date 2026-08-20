@@ -23,7 +23,7 @@
 //!
 //! Reference: ARCH_PRINCIPLES.md §3 (split a file by concern).
 
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
 
 use crate::{Error, Result};
 
@@ -164,7 +164,7 @@ pub(super) fn derive_milestone_title(brief_md: &str) -> String {
 /// `active_global_invariants` on [`super::orchestrator::LocalAtosOrchestrator`]
 /// is a thin wrapper around this; the split lets the inference helper
 /// below reuse the same query without going through the trait.
-pub(super) async fn global_invariants_rows(notes: &NoteStore) -> Result<Vec<NoteRow>> {
+pub(super) async fn global_invariants_rows(notes: &NoteStore) -> Result<Vec<Note>> {
     let filter = ScopeFilter {
         scopes: vec![NoteScope::Global],
         feature_id: None,

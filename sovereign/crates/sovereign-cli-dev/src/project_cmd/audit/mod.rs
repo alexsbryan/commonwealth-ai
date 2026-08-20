@@ -434,20 +434,20 @@ struct AuditNotes {
     /// `kind=decision` or `kind=invariant`, sorted by
     /// (source priority desc, created_at desc). Reversal lines
     /// follow their originals — see [`render_decisions`].
-    decisions: Vec<corpus_engine_notes::NoteRow>,
+    decisions: Vec<corpus_engine_notes::Note>,
     /// `kind=deviation`. Source-tagged in the renderer.
-    deviations: Vec<corpus_engine_notes::NoteRow>,
+    deviations: Vec<corpus_engine_notes::Note>,
     /// `kind=uncertainty`. The renderer de-emphasises
     /// `source=inferred` rows since they're the lowest-confidence
     /// stream.
-    open_questions: Vec<corpus_engine_notes::NoteRow>,
+    open_questions: Vec<corpus_engine_notes::Note>,
     /// `source=observed` (any kind). These are the audit's
     /// "the agent did X but didn't say so" stream from the Phase
     /// 7.1 ToolPatternMatcher.
-    observed: Vec<corpus_engine_notes::NoteRow>,
+    observed: Vec<corpus_engine_notes::Note>,
     /// All notes, indexed by id. Used by the renderer to look up
     /// the row a `supersedes` link points at.
-    by_id: std::collections::HashMap<String, corpus_engine_notes::NoteRow>,
+    by_id: std::collections::HashMap<String, corpus_engine_notes::Note>,
     /// Total count per kind across all sources. Powers the
     /// legacy "Notes by kind" table.
     counts: std::collections::BTreeMap<String, u32>,
@@ -533,7 +533,7 @@ fn source_priority(s: &str) -> u8 {
 /// bullet lists. First line of the body, truncated to a
 /// reasonable cap, with a `[<source>]` suffix the reviewer can
 /// scan to gauge confidence at a glance.
-fn render_audit_line(note: &corpus_engine_notes::NoteRow) -> String {
+fn render_audit_line(note: &corpus_engine_notes::Note) -> String {
     let first_line: String = note
         .content
         .lines()
@@ -563,7 +563,7 @@ fn render_decisions(notes: &AuditNotes) -> String {
         return out;
     }
     // Build the reverse map: original.id → list of supersedes rows.
-    let mut supers_of: std::collections::HashMap<String, Vec<&corpus_engine_notes::NoteRow>> =
+    let mut supers_of: std::collections::HashMap<String, Vec<&corpus_engine_notes::Note>> =
         std::collections::HashMap::new();
     for n in &notes.decisions {
         if let Some(orig_id) = n.supersedes.as_ref() {
@@ -683,7 +683,7 @@ fn render_observed_patterns(notes: &AuditNotes) -> String {
     out
 }
 
-/// Format a NoteRow's RFC-3339 created_at as `YYYY-MM-DD`. If the
+/// Format a Note's RFC-3339 created_at as `YYYY-MM-DD`. If the
 /// string isn't parseable as RFC-3339, returns the raw column
 /// truncated to 10 chars (the date prefix). Audit lines are
 /// terse — we don't render the full timestamp.

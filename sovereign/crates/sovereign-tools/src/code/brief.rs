@@ -52,7 +52,7 @@ use corpus_engine_archaeology::archaeology_eval::{
 };
 #[cfg(feature = "dev-tools")]
 use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, CommitRecord};
-use corpus_engine_notes::{NodeRoster, NoteRow, NoteStore};
+use corpus_engine_notes::{NodeRoster, Note, NoteStore};
 use serde::Deserialize;
 
 use crate::knowledge_view::tokens::estimate_tokens;
@@ -479,21 +479,12 @@ async fn render_notes(
     working_set: &[PathBuf],
     remaining: usize,
 ) -> Result<String, BriefError> {
-    use corpus_engine_notes::{NoteScope, ScopeFilter};
+    use corpus_engine_notes::ScopeFilter;
     // `reflection` joins decision + invariant so session-end captures
     // (written by `sovereign code reflect`) surface in the next
     // session's brief automatically — closing the feedback loop.
     let kinds: Vec<String> = vec!["decision".into(), "invariant".into(), "reflection".into()];
-    let scope_filter = match feature_id {
-        Some(f) => ScopeFilter {
-            scopes: vec![NoteScope::Global, NoteScope::Feature],
-            feature_id: Some(f.to_string()),
-        },
-        None => ScopeFilter {
-            scopes: vec![NoteScope::Global],
-            feature_id: None,
-        },
-    };
+    let scope_filter = ScopeFilter::for_feature(feature_id);
     let rows = notes
         .read_notes_scoped(None, &[], &[], &kinds, 30, false, &scope_filter)
         .await
@@ -509,7 +500,7 @@ async fn render_notes(
         .iter()
         .map(|p| p.to_string_lossy().to_string())
         .collect();
-    let mut kept: Vec<&NoteRow> = Vec::new();
+    let mut kept: Vec<&Note> = Vec::new();
     for row in &rows {
         if row.files.is_empty() || row.files.iter().any(|f| ws_set.contains(f)) {
             kept.push(row);

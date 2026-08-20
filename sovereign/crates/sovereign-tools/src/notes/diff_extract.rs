@@ -43,7 +43,7 @@
 
 use async_trait::async_trait;
 
-use corpus_engine_notes::NoteRow;
+use corpus_engine_notes::Note;
 
 /// Maximum diff text fed to the backend, in bytes. ~80 KB is
 /// roughly the upper limit of a useful single-session diff
@@ -99,7 +99,7 @@ pub struct ExtractionRequest {
     /// Notes already on file for the feature scope. Backend
     /// reads `id`, `kind`, and `content`; other columns are
     /// ignored.
-    pub existing_notes: Vec<NoteRow>,
+    pub existing_notes: Vec<Note>,
 }
 
 /// Trait for "I can read a diff and produce decisions." The
@@ -257,9 +257,9 @@ mod tests {
     use super::*;
     use corpus_engine_notes::{NoteScope, NoteSource};
 
-    /// Helper: a NoteRow stub with the fields `build_prompt` reads.
-    fn note(id: &str, kind: &str, body: &str) -> NoteRow {
-        NoteRow {
+    /// Helper: a Note stub with the fields `build_prompt` reads.
+    fn note(id: &str, kind: &str, body: &str) -> Note {
+        Note {
             id: id.into(),
             kind: kind.into(),
             content: body.into(),

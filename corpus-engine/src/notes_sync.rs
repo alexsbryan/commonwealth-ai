@@ -10,7 +10,7 @@
 //!
 //! Why a thin direct-SQL adapter rather than extending
 //! `NoteStore`'s API: the round-trip needs `updated_at` (the
-//! mutable-merge tiebreaker) which isn't on `NoteRow`, plus
+//! mutable-merge tiebreaker) which isn't on `Note`, plus
 //! `INSERT OR REPLACE` semantics that the existing INSERT-only
 //! writers don't provide. Keeping the adapter narrow avoids
 //! widening `NoteStore` for one consumer.

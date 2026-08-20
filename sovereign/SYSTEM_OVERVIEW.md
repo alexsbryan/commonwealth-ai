@@ -57,7 +57,7 @@ weights (created by `svrn setup`, gitignored).
 | `kernel-types`       | **The neutral kernel** — identity and provenance owned by no product domain: `ContentHash`, `CorpusId`, `NodeId`, `Origin` (+ its closed `Source` sum, `Server`, `Grain`, `Locator`), `Custody`, `Attribution`. Minted 2026-08-20 after measurement showed the 23 types all three domains speak were 22-owned by corpus-engine — three systems depending on one system's implementation, not a contract. The SECOND layer-0 membrane, deliberately separate from `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. It may name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
 | `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-engine-yield`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
 | `corpus-engine-scip` | SCIP call graph store + exporter dispatch     | —                                                     |
-| `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
+| `corpus-engine-notes`| `Note` + its value types (`note.rs`, plain data — the published surface), the `NoteStore` that persists them (`notes.rs`), project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
 | `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below | — |
@@ -161,8 +161,8 @@ Major modules under `corpus-engine/src/`:
 - `update/` — code/file watchers, delta updates, lint/test watchers
 - `meta_atlas/` — cross-corpus articulation classifier + index
 - `pii.rs`, `alignment_projector.rs` — operator-facing scanners
-- **Carved out into sibling crates** (see §1): NoteStore +
-  project-docs index → `corpus-engine-notes` (`notes.rs`,
+- **Carved out into sibling crates** (see §1): `Note` + NoteStore +
+  project-docs index → `corpus-engine-notes` (`note.rs`, `notes.rs`,
   `project_docs.rs`); ATOS FeatureStore + plan items + design
   signals → `corpus-engine-atos` (`features.rs`, `plan_items.rs`,
   `design_signals.rs`); git archaeology + rough-edges + provenance
@@ -4748,7 +4748,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | `recipe.rs` split | `corpus-engine/src/recipe.rs` (~4,200 lines) | Recipe TOML schema + loader + recipe-authoring tools + parameter resolution + `bundled_recipe_toml(id: &str)` dispatch. The §2-style enumify of `bundled_recipe_toml` (RecipeId enum) is a prerequisite. |
-| `notes.rs` split | `corpus-engine-notes/src/notes.rs` (~5634 lines) | NoteStore façade + persistence migrations + lifecycle + decision-log tools. **Carved out of `corpus-engine` into its own crate** (blast-radius control) — that isolation was the higher-priority move; the in-file split is still wanted. SQL schemas + migrations couple tightly. |
+| `notes.rs` split | `corpus-engine-notes/src/notes.rs` (~7,780 lines) | NoteStore façade + persistence migrations + lifecycle + decision-log tools. **Carved out of `corpus-engine` into its own crate** (blast-radius control), and the VOCABULARY left the file in noun-convergence rung 7 — `Note` / `NoteScope` / `NoteSource` / `ScopeFilter` now live in `note.rs` as plain data, so a consumer that wants the noun no longer reads past the SQL. What remains is the store, and it is still one file: SQL schemas + migrations couple tightly. |
 | `entity_extraction.rs` split | `corpus-engine/src/enrichment/entity_extraction.rs` (~2930 lines) | Phase-1b entity extraction for personal + conversational domains. Active surface (recent enrichment work); split along the per-domain extractor boundary once it settles. |
 | `atlas/resolution.rs` split | `corpus-engine/src/enrichment/atlas/resolution.rs` (~5,200 lines) | Atlas URI resolution + scoring. Hottest-iteration file; splitting churn-heavy code obscures git history while the algorithm is still settling. |
 | `pipeline/runner.rs` split | `corpus-engine/src/enrichment/pipeline/runner.rs` (~3100 lines) | v2 atlas orchestrator. Phase dispatch + ExemplarBank + PhaseCache + step retry all touch the same state. |

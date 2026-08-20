@@ -23,7 +23,7 @@
 use std::collections::{BTreeMap, HashSet};
 use std::path::PathBuf;
 
-use corpus_engine_notes::{is_ephemeral_kind, NoteRow, NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{is_ephemeral_kind, Note, NoteScope, NoteSource, NoteStore};
 
 // ── Daemon-first routing (order `commons-fluency` fix 5) ──────────────
 //
@@ -94,7 +94,7 @@ struct RenderedRow {
     content: String,
 }
 
-fn row_from_note(r: NoteRow) -> RenderedRow {
+fn row_from_note(r: Note) -> RenderedRow {
     RenderedRow {
         id: r.id,
         kind: r.kind,
@@ -1035,7 +1035,7 @@ enum MoveKind {
 /// symbol) has code churn since the reflection was written, so the limitation it
 /// flags MIGHT be resolved. Only the model rules resolved-vs-still-relevant.
 struct ReflectionFixCandidate<'a> {
-    note: &'a NoteRow,
+    note: &'a Note,
     anchor: String,
     /// Commit subjects touching the anchor since `note.created_at`.
     churn: Vec<String>,
@@ -1048,7 +1048,7 @@ struct LogGroup<'a> {
     kind: String,
     tool: String,
     month: String,
-    members: Vec<&'a NoteRow>,
+    members: Vec<&'a Note>,
     /// outcome → count, descending.
     outcomes: Vec<(String, usize)>,
 }
@@ -1180,8 +1180,8 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     // ---- CONSOLIDATE candidates ----
     // (a) Telemetry log: group by (kind, tool, month). One survivor per group,
     //     summarizing the outcome distribution (the useful-vs-gap signal).
-    let mut log_map: BTreeMap<(String, String, String), Vec<&NoteRow>> = BTreeMap::new();
-    let mut dup_buckets: BTreeMap<String, Vec<&NoteRow>> = BTreeMap::new();
+    let mut log_map: BTreeMap<(String, String, String), Vec<&Note>> = BTreeMap::new();
+    let mut dup_buckets: BTreeMap<String, Vec<&Note>> = BTreeMap::new();
     for n in &notes {
         if is_ephemeral_kind(&n.kind) {
             let tool = n
@@ -1225,7 +1225,7 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     log_groups.sort_by_key(|g| std::cmp::Reverse(g.members.len()));
     let log_row_total: usize = log_groups.iter().map(|g| g.members.len()).sum();
 
-    let mut dup_clusters: Vec<Vec<&NoteRow>> = dup_buckets
+    let mut dup_clusters: Vec<Vec<&Note>> = dup_buckets
         .into_values()
         .filter(|v| v.len() > 1)
         .map(|mut v| {
@@ -1239,7 +1239,7 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     // A shared anchor ALONE over-nominates: ten unrelated decisions can live in
     // one broad file path. A real supersede pair also shares topic vocabulary,
     // so we keep only pairs whose content token-overlap clears the threshold.
-    let mut by_anchor: BTreeMap<(String, String), Vec<&NoteRow>> = BTreeMap::new();
+    let mut by_anchor: BTreeMap<(String, String), Vec<&Note>> = BTreeMap::new();
     for n in &notes {
         if is_ephemeral_kind(&n.kind) {
             continue;
@@ -1259,11 +1259,11 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
     }
     // key = (newer_id, older_id) so a pair sharing two anchors is counted once,
     // keeping its best (highest-overlap) anchor as the witness.
-    type PairWitness<'a> = (f32, String, String, &'a NoteRow, &'a NoteRow);
+    type PairWitness<'a> = (f32, String, String, &'a Note, &'a Note);
     let mut pair_best: BTreeMap<(String, String), PairWitness> = BTreeMap::new();
     for ((anchor, kind), v) in &by_anchor {
         let mut seen = HashSet::new();
-        let mut distinct: Vec<&NoteRow> = v
+        let mut distinct: Vec<&Note> = v
             .iter()
             .copied()
             .filter(|n| seen.insert(n.id.clone()))
@@ -1294,7 +1294,7 @@ async fn cmd_rationalize(args: &[String]) -> i32 {
 
     // Prose claims a supersede/replacement but carries no link — retrieval can't
     // act on prose. Exactly what a text-only migration leaves behind.
-    let prose_supersede: Vec<&NoteRow> = notes
+    let prose_supersede: Vec<&Note> = notes
         .iter()
         .filter(|n| n.supersedes.is_none() && mentions_supersede(&n.content))
         .collect();
@@ -1731,7 +1731,7 @@ fn consolidate_prompt(g: &LogGroup, lo: &str, hi: &str) -> (String, String) {
 }
 
 /// System + user prompt to adjudicate whether `newer` supersedes `older`.
-fn supersede_prompt(newer: &NoteRow, older: &NoteRow) -> (String, String) {
+fn supersede_prompt(newer: &Note, older: &Note) -> (String, String) {
     let system = "You decide whether a newer engineering note OVERTAKES an older one (makes it \
                   stale / contradicts / fully replaces it) or whether they are COMPLEMENTARY \
                   (both still true, different facets). Answer with exactly one word — OVERTAKES \
@@ -1751,7 +1751,7 @@ fn supersede_prompt(newer: &NoteRow, older: &NoteRow) -> (String, String) {
 /// The anchor a reflection is "about" — the join key for the fix-check. Prefer
 /// the explicit `tool_name` (session_reflection sets it); fall back to the first
 /// symbol. `None` for anchorless general reflections, which can't be fix-checked.
-fn reflection_anchor(n: &NoteRow) -> Option<String> {
+fn reflection_anchor(n: &Note) -> Option<String> {
     // 1. The explicit column — the common, clean path.
     if let Some(t) = n
         .tool_name
@@ -1961,8 +1961,8 @@ fn jaccard(a: &HashSet<String>, b: &HashSet<String>) -> f32 {
 }
 
 /// The earliest and latest `created_at` date (YYYY-MM-DD) across a cluster.
-fn date_span(v: &[&NoteRow]) -> (String, String) {
-    let day = |n: &NoteRow| n.created_at.get(0..10).unwrap_or("?").to_string();
+fn date_span(v: &[&Note]) -> (String, String) {
+    let day = |n: &Note| n.created_at.get(0..10).unwrap_or("?").to_string();
     let mut lo = day(v[0]);
     let mut hi = lo.clone();
     for n in v {
@@ -2134,10 +2134,10 @@ mod rationalize_tests {
         assert!(git_churn_since("x", "1970-01-01").is_empty());
     }
 
-    /// Minimal `NoteRow` for anchor tests — only the three fields
+    /// Minimal `Note` for anchor tests — only the three fields
     /// `reflection_anchor` reads vary; the rest are inert placeholders.
-    fn anchor_row(tool_name: Option<&str>, symbols: &[&str], content: &str) -> NoteRow {
-        NoteRow {
+    fn anchor_row(tool_name: Option<&str>, symbols: &[&str], content: &str) -> Note {
+        Note {
             id: String::new(),
             kind: "reflection".to_string(),
             content: content.to_string(),

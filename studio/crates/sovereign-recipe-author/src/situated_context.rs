@@ -20,7 +20,7 @@
 //! renderer here stays the single source of truth for block shape.
 
 use sovereign_contracts::error::Result;
-use sovereign_contracts::recipe::notes::NoteRow;
+use sovereign_contracts::recipe::notes::Note;
 
 use super::decision_log::{DecisionAttribution, DecisionPayload};
 use super::project::{ProjectSummary, RecipeProject};
@@ -109,8 +109,8 @@ fn write_corpus_state(out: &mut String, summary: &ProjectSummary) {
     }
 }
 
-fn write_recent_decisions(out: &mut String, notes: &[NoteRow]) {
-    let decisions: Vec<&NoteRow> = notes
+fn write_recent_decisions(out: &mut String, notes: &[Note]) {
+    let decisions: Vec<&Note> = notes
         .iter()
         .filter(|n| n.kind == "decision")
         .take(RECENT_DECISIONS_LIMIT)
@@ -147,8 +147,8 @@ fn write_recent_decisions(out: &mut String, notes: &[NoteRow]) {
     }
 }
 
-fn write_outstanding_issues(out: &mut String, notes: &[NoteRow]) {
-    let issues: Vec<&NoteRow> = notes
+fn write_outstanding_issues(out: &mut String, notes: &[Note]) {
+    let issues: Vec<&Note> = notes
         .iter()
         .filter(|n| n.kind == "recipe_issue")
         .filter(|n| {
@@ -177,8 +177,8 @@ fn write_outstanding_issues(out: &mut String, notes: &[NoteRow]) {
     }
 }
 
-fn write_capability_requests(out: &mut String, notes: &[NoteRow]) {
-    let requests: Vec<&NoteRow> = notes
+fn write_capability_requests(out: &mut String, notes: &[Note]) {
+    let requests: Vec<&Note> = notes
         .iter()
         .filter(|n| n.kind == "capability_request")
         .collect();
