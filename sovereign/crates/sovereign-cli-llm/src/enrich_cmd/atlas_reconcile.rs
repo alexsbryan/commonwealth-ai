@@ -23,7 +23,7 @@
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, Entity};
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, ATLAS_DIRNAME};
 use corpus_engine::enrichment::reconciliation::{
-    reconcile, ReconciliationAct, ReconciledEntity, ReconciliationPolicy,
+    reconcile, ReconciledEntity, ReconciliationAct, ReconciliationPolicy,
 };
 use serde::Serialize;
 

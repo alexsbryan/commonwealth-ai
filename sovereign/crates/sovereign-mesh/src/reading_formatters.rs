@@ -1,14 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure formatters used by the glass-box reading surface.
 //!
-//! Why this lives outside `reading_http`: every function here is a
-//! per-variant match over `AtomEnvelope` (eight arms) or `EdgeType`
-//! (ten arms) with no I/O, no async, and no daemon state. Pulling
-//! the formatters out drops `reading_http.rs` under ARCH §3.1's
-//! "justify yourself" threshold and gives the type-label / surface
-//! / evidence helpers a stable seam to grow against.
+//! Why this lives outside `reading_http`: the projection here is a
+//! per-variant match over `AtomEnvelope` with no I/O, no async, and no
+//! daemon state, which keeps `reading_http.rs` under ARCH §3.1's
+//! "justify yourself" threshold.
+//!
+//! What used to live here and deliberately no longer does: the atom and
+//! edge type LABELS, and the evidence-anchor extraction. Each was
+//! duplicated into sovereign-desktop, and in both cases the two copies had
+//! DIVERGED — the desktop's answered `unreachable!` for kinds the resolver
+//! actually emits. They are accessors on the atom now (`AtomType::label`,
+//! `EdgeType::label`, `AtomEnvelope::evidence_anchors`), so there is one
+//! spelling per closed set. What is left is the one projection that is
+//! genuinely presentation rather than atom knowledge.
 
-use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeType};
+use corpus_engine::enrichment::atlas::AtomEnvelope;
 
 /// Pull the human-readable fields for any atom type. Not every
 /// type has every field — for atoms without a clean canonical name
