@@ -166,7 +166,7 @@ impl Source {
 ///
 /// The name is about provenance, not about HTTP — this is unrelated to the
 /// `sovereign-server` crate and to `ServerConfig`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(tag = "at", rename_all = "snake_case")]
 pub enum Server {
     /// This machine.

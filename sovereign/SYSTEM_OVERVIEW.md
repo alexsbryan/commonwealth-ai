@@ -26,6 +26,7 @@ dark without a ledger row is a contract violation.
 ```
 commonwealth-ai/
 ├── oicp-types/                # OICP wire types — no other deps
+├── kernel-types/              # The neutral kernel — identity + provenance (layer 0, no product domain owns it)
 ├── oicp-client/               # OICP pure-HTTP client (OpenAI-compat + manifest routing)
 ├── corpus-engine/             # Knowledge layer (LanceDB + Tantivy)
 ├── corpus-engine-scip/        # SCIP call graph + per-language exporter dispatch
@@ -53,7 +54,8 @@ weights (created by `svrn setup`, gitignored).
 | Project              | Role                                          | Depends on                                            |
 |----------------------|-----------------------------------------------|-------------------------------------------------------|
 | `oicp-types`         | OICP v0.3 wire types + scoring helpers        | —                                                     |
-| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `corpus-engine-yield`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
+| `kernel-types`       | **The neutral kernel** — identity and provenance owned by no product domain: `ContentHash`, `CorpusId`, `NodeId`, `Origin` (+ its closed `Source` sum, `Server`, `Grain`, `Locator`), `Custody`, `Attribution`. Minted 2026-08-20 after measurement showed the 23 types all three domains speak were 22-owned by corpus-engine — three systems depending on one system's implementation, not a contract. The SECOND layer-0 membrane, deliberately separate from `oicp-types`: oicp is what a node ADVERTISES, this is what content IS. It may name nothing above it | `serde`, `getrandom`, `hex`, `blake3` |
+| `corpus-engine`      | Acquire → extract → filter → chunk → embed → index | `oicp-types`, `kernel-types`, `corpus-engine-yield`, `corpus-engine-scip` (treesitter feature), `corpus-engine-notes`, `corpus-engine-atos` |
 | `corpus-engine-scip` | SCIP call graph store + exporter dispatch     | —                                                     |
 | `corpus-engine-notes`| NoteStore + project-docs index + notes↔alignment sync (carved out of corpus-engine for blast-radius control) | `rusqlite` |
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
@@ -61,8 +63,8 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below | — |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
-| `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`   |
-| `commonwealth`       | Symmetric mesh daemon                         | `corpus-engine`, `oicp-types`                         |
+| `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
+| `commonwealth`       | Symmetric mesh daemon                         | `corpus-engine`, `oicp-types`, `kernel-types`         |
 
 Dep direction is one-way. Sovereign optionally embeds cmnwlth
 in-process via `sovereign-mesh` — the only place the two upper

@@ -508,7 +508,7 @@ impl GovernanceOplog {
 /// atom-id `short_hash`; kept local so the governance module doesn't widen
 /// the atoms module's private API.
 fn short_hash(input: &str) -> String {
-    blake3::hash(input.as_bytes()).to_hex().to_string()[..16].to_string()
+    kernel_types::ContentHash::of_str(input).short()
 }
 
 pub use corpus_engine_yield::time::unix_now as now_secs;

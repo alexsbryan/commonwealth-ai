@@ -11,6 +11,11 @@ rust-version.workspace = true
 # the exact dependency budget a third-party implementation can lift.
 
 [dependencies]
+# The neutral kernel (layer 0). `Custody` and its join moved there in
+# noun-convergence rung nc-1-kernel — provenance is layer-0 business, and
+# while it lived here the knowledge layer could not name it without a
+# backflow edge. Re-exported from types::custody so callers are unchanged.
+kernel-types = { workspace = true }
 oicp-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

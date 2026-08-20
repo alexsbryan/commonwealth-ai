@@ -145,7 +145,7 @@ pub struct IncrementalReport {
 /// (`engine/reindex.rs`), so a symbol's key is stable and comparable across
 /// the pipeline.
 pub fn body_hash(body: &str) -> String {
-    blake3::hash(body.as_bytes()).to_hex().to_string()[..16].to_string()
+    kernel_types::ContentHash::of_str(body).short()
 }
 
 /// Extract a symbol's body from source text, starting at the 0-based `line_start`.

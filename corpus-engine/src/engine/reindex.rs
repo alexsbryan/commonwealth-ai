@@ -138,7 +138,7 @@ impl CorpusEngine {
             })
             .collect();
         let diff = crate::chunkers::chunk_delta(&committed, new_text_chunks, |s| {
-            blake3::hash(s.as_bytes()).to_hex().to_string()
+            kernel_types::ContentHash::of_str(s).to_hex()
         });
 
         if diff.is_noop() {
@@ -426,7 +426,7 @@ impl CorpusEngine {
             .into_iter()
             .zip(embeddings)
             .map(|((content, metadata, title, url), emb)| {
-                let content_hash = blake3::hash(content.as_bytes()).to_hex().to_string();
+                let content_hash = kernel_types::ContentHash::of_str(&content).to_hex();
                 let code = code_meta_from_json(metadata.as_ref());
                 let insert = InsertChunk {
                     content,

@@ -32,7 +32,7 @@ use std::path::Path;
 use chrono::{Datelike, NaiveDateTime, Timelike};
 use serde::{Deserialize, Serialize};
 
-use corpus_engine::chunkers::threaded_turns::{parse_turns, Attribution, ParsedTurn};
+use corpus_engine::chunkers::threaded_turns::{parse_turns, ParsedTurn, TurnAuthor};
 use corpus_engine::index::CorpusIndex;
 
 pub mod semantic;
@@ -300,7 +300,7 @@ pub struct Turn {
     /// text saw 19.9% of `conversations-anthropic` and reported the
     /// user:assistant ratio as 2.7x when it is 14.9x (measured
     /// 2026-07-26 over 16,404 chunks). [`build_conv_docs`] owns the
-    /// attribution walk that closes that gap.
+    /// author walk that closes that gap.
     pub words: u64,
     pub chunk_id: u64,
     /// First non-empty body line — the only quotable span a turn offers.
@@ -784,7 +784,7 @@ pub fn build_conv_docs(rows: &[corpus_engine::index::EnrichmentChunkRow]) -> Vec
             let body = turn_body(&t.block);
             doc.turns.push(Turn {
                 ts: t.timestamp.as_deref().and_then(parse_turn_ts),
-                is_user: t.attribution == Attribution::User,
+                is_user: t.author == TurnAuthor::User,
                 words: body.split_whitespace().count() as u64,
                 chunk_id: row.id,
                 first_line: first_nonempty_line(body),
@@ -1133,12 +1133,12 @@ pub fn collect_assistant_text(rows: &[corpus_engine::index::EnrichmentChunkRow])
             }
         }
         for t in &turns {
-            if t.attribution == Attribution::Assistant {
+            if t.author == TurnAuthor::Assistant {
                 out.push(turn_body(&t.block).to_string());
             }
         }
         if let Some(last) = turns.last() {
-            open_is_assistant = last.attribution == Attribution::Assistant;
+            open_is_assistant = last.author == TurnAuthor::Assistant;
         }
     }
     out

@@ -41,8 +41,8 @@
 //! | [`Server`] | ...served by which machine |
 //! | [`Grain`] | ...and may it ground a claim verbatim, or is it derived |
 //! | [`Locator`] | ...at which span inside its document |
-//! | `Custody` | where the content stands for sharing (arrives with the move) |
-//! | `Attribution` | which engine computed a piece of text |
+//! | [`Custody`] | where the content stands for sharing |
+//! | [`Attribution`] | which engine computed a piece of text |
 //!
 //! The spec (`quality/TARGET_ARCHITECTURE.md` §2.1) writes `Origin` in a form
 //! that implies sixteen types. Six of those are deliberately NOT minted here:
@@ -54,10 +54,14 @@
 //! `sovereign-time` without creating the exact backflow edge it exists to
 //! forbid.
 
+pub mod attribution;
+pub mod custody;
 pub mod hash;
 pub mod ids;
 pub mod origin;
 
+pub use attribution::Attribution;
+pub use custody::{join_custody, Custody};
 pub use hash::ContentHash;
 pub use ids::{CorpusId, NodeId};
 pub use origin::{Grain, Locator, Origin, Server, Source};

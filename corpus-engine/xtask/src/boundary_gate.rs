@@ -27,14 +27,24 @@ pub const PACKAGE_SET: &[&str] = &[
 
 /// The shared contract leaves the package depends on (each with its own tight
 /// budget, pinned in `allowed_leaf_deps`).
-pub const SHARED_LEAVES: &[&str] = &["sovereign-contracts", "oicp-client", "oicp-types"];
+pub const SHARED_LEAVES: &[&str] = &[
+    "sovereign-contracts",
+    "oicp-client",
+    "oicp-types",
+    "kernel-types",
+];
 
 /// The internal (in-repo) deps each SHARED_LEAF is allowed. `None` for a package
 /// crate — those get the union `PACKAGE_SET ∪ SHARED_LEAVES`, computed in the gate.
 fn allowed_leaf_deps(crate_name: &str) -> Option<&'static [&'static str]> {
     match crate_name {
         "oicp-types" => Some(&[]),
-        "sovereign-contracts" => Some(&["oicp-types"]),
+        // The neutral kernel — identity + provenance, layer 0 beside
+        // oicp-types. ZERO internal deps, and that is the contract, not an
+        // accident: a kernel that may name a product crate is not a kernel
+        // (noun-convergence rung nc-1-kernel).
+        "kernel-types" => Some(&[]),
+        "sovereign-contracts" => Some(&["oicp-types", "kernel-types"]),
         "oicp-client" => Some(&["sovereign-contracts", "oicp-types"]),
         _ => None,
     }
@@ -154,9 +164,13 @@ mod tests {
     #[test]
     fn leaf_budgets_are_pinned() {
         assert_eq!(allowed_leaf_deps("oicp-types"), Some(&[][..]));
+        // The kernel's budget is empty BY CONTRACT — if this ever gains an
+        // entry, the layer-0 promise has been broken and the failing test is
+        // the point.
+        assert_eq!(allowed_leaf_deps("kernel-types"), Some(&[][..]));
         assert_eq!(
             allowed_leaf_deps("sovereign-contracts"),
-            Some(&["oicp-types"][..])
+            Some(&["oicp-types", "kernel-types"][..])
         );
         assert_eq!(
             allowed_leaf_deps("oicp-client"),

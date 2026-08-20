@@ -234,8 +234,7 @@ impl AtomId {
 /// 16-char prefix of blake3 hex digest. 64-bit truncation; safe for
 /// <10M atoms per corpus by birthday bound.
 fn short_hash(input: &str) -> String {
-    let full = blake3::hash(input.as_bytes()).to_hex().to_string();
-    full[..16].to_string()
+    kernel_types::ContentHash::of_str(input).short()
 }
 
 /// Reference to a specific passage in the corpus. Step 3a fills

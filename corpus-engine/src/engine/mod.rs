@@ -2729,8 +2729,13 @@ fn read_parquet_row_count(path: &Path) -> crate::error::Result<u64> {
 }
 
 /// Compute the BLAKE3 hex digest of a string.
+///
+/// Delegates to `kernel_types::ContentHash`, the one content-hash
+/// implementation (ARCH §10.6). Byte-identical to the previous inline
+/// `blake3::hash(..).to_hex()` — pinned by a test in the kernel — so stored
+/// `content_hash` values are unaffected.
 pub(crate) fn blake3_hex(s: &str) -> String {
-    blake3::hash(s.as_bytes()).to_hex().to_string()
+    kernel_types::ContentHash::of_str(s).to_hex()
 }
 
 /// Strip model-generated artifacts from raw corpus text before chunking.

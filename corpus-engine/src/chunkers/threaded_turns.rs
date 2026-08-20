@@ -18,25 +18,19 @@
 //! leading `assistant` turn (no preceding user — rare in claude.ai
 //! exports) becomes a standalone chunk.
 //!
-//! ## Attribution
+//! ## Turn authorship
 //!
-//! Conversation history and inner-work journaling are corpora where
-//! "who wrote this span?" is load-bearing — searching for "what did
-//! *I* decide about X" must not return spans authored by the model,
-//! and vice versa. The chunker therefore emits a parallel
-//! `AttributedChunk` surface alongside the plain `TextChunk`:
+//! Each span carries a [`TurnAuthor`] — who produced this text.
 //!
-//! - `Chunker::chunk` returns `Vec<TextChunk>` for pipeline
-//!   compatibility (embedding, FTS index, default retrieval).
-//! - `chunk_attributed` returns `Vec<AttributedChunk>`, where each
-//!   chunk carries `spans: Vec<TurnSpan>` listing the byte ranges
-//!   inside the chunk content that came from each author.
+//! RENAMED 2026-08-20 (noun-convergence rung nc-1-kernel). This enum was
+//! called `Attribution`, and so is the kernel's noun for WHICH ENGINE computed
+//! a piece of text (model, build, quantization, host). Two concepts, one word:
+//! a speaker role in a transcript is not the provenance of a computation. The
+//! kernel keeps the bare name because it is the published cross-domain one;
+//! this became `TurnAuthor`, which is what it always meant. The field renamed
+//! with it, `attribution` -> `author`.
 //!
-//! Downstream code that cares about authorship (atlas extraction,
-//! filtered retrieval, bench scoring) consumes `chunk_attributed`;
-//! everything else stays on the plain surface.
-//!
-//! ### Attribution enum scope
+//! ### TurnAuthor enum scope
 //!
 //! Today the variants are `User` and `Assistant`. The enum reserves
 //! `Unattributed` and `Pasted` for the inner-work journaling ingest
@@ -44,7 +38,7 @@
 //! marker), and sometimes spans the user has pasted in from a model
 //! elsewhere — authorship is the user, underlying generation is the
 //! model, retrieval may want to weight that differently. Defining
-//! the variants here keeps a single `Attribution` type across both
+//! the variants here keeps a single `TurnAuthor` type across both
 //! corpora so retrieval and bench code does not branch on corpus
 //! type.
 
@@ -54,7 +48,7 @@ use std::sync::OnceLock;
 use super::{floor_char_boundary, Chunker, TextChunk};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Attribution {
+pub enum TurnAuthor {
     User,
     Assistant,
     /// Free-form prose with no explicit sender — reserved for the
@@ -66,20 +60,20 @@ pub enum Attribution {
     Pasted,
 }
 
-impl Attribution {
+impl TurnAuthor {
     pub fn slug(self) -> &'static str {
         match self {
-            Attribution::User => "user",
-            Attribution::Assistant => "assistant",
-            Attribution::Unattributed => "unattributed",
-            Attribution::Pasted => "pasted",
+            TurnAuthor::User => "user",
+            TurnAuthor::Assistant => "assistant",
+            TurnAuthor::Unattributed => "unattributed",
+            TurnAuthor::Pasted => "pasted",
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TurnSpan {
-    pub attribution: Attribution,
+    pub author: TurnAuthor,
     /// `YYYY-MM-DD HH:MM` shape if the source had a timestamp, else
     /// `None`. Inner-work journaling spans without timestamps will
     /// pass `None`.
@@ -129,7 +123,7 @@ const MAX_HARD_CHARS: usize = 2100;
 /// Inter-chunk overlap (in chars) for split sub-chunks. Bridges a
 /// fact that straddled the soft boundary — the same posture
 /// `ParagraphChunker` takes with its 100-char default. Sub-chunks
-/// derived from one turn pair carry the same `Attribution` spans,
+/// derived from one turn pair carry the same `TurnAuthor` spans,
 /// clipped to each sub-chunk's byte range.
 const SPLIT_OVERLAP_CHARS: usize = 80;
 
@@ -138,7 +132,7 @@ impl ThreadedTurnsChunker {
         Self
     }
 
-    /// Chunk with per-span attribution. Each returned chunk has a
+    /// Chunk with per-span author. Each returned chunk has a
     /// `spans` vector — typically two entries (user + assistant), or
     /// one for a dangling turn.
     pub fn chunk_attributed(&self, text: &str) -> Vec<AttributedChunk> {
@@ -148,7 +142,7 @@ impl ThreadedTurnsChunker {
             if trimmed.is_empty() {
                 return Vec::new();
             }
-            // Degrade: whole-text chunk with no attribution markers.
+            // Degrade: whole-text chunk with no author markers.
             // Caller using this chunker on non-conversation content
             // gets a single Unattributed span so authorship surfaces
             // are still type-coherent.
@@ -158,7 +152,7 @@ impl ThreadedTurnsChunker {
                 content,
                 index: 0,
                 spans: vec![TurnSpan {
-                    attribution: Attribution::Unattributed,
+                    author: TurnAuthor::Unattributed,
                     timestamp: None,
                     byte_range: (0, end),
                 }],
@@ -182,14 +176,14 @@ impl ThreadedTurnsChunker {
                 content.push_str(&t.block);
                 let end = content.len();
                 spans.push(TurnSpan {
-                    attribution: t.attribution,
+                    author: t.author,
                     timestamp: t.timestamp.clone(),
                     byte_range: (start, end),
                 });
             };
 
-            let step = if curr.attribution == Attribution::User
-                && next.map(|n| n.attribution) == Some(Attribution::Assistant)
+            let step = if curr.author == TurnAuthor::User
+                && next.map(|n| n.author) == Some(TurnAuthor::Assistant)
             {
                 append(&mut content, &mut spans, curr);
                 append(&mut content, &mut spans, next.unwrap());
@@ -204,7 +198,7 @@ impl ThreadedTurnsChunker {
             // because the slot tokenises the whole input before
             // truncating at `max_input_tokens`. Split into sub-chunks
             // bounded by `MAX_CHUNK_CHARS`, preserving per-span
-            // attribution by clipping each sub-chunk's spans to its
+            // author by clipping each sub-chunk's spans to its
             // byte range.
             for sub in split_oversized(content, spans) {
                 chunks.push(AttributedChunk {
@@ -328,7 +322,7 @@ fn clip_spans(parent_spans: &[TurnSpan], sub_start: usize, sub_end: usize) -> Ve
             continue;
         }
         out.push(TurnSpan {
-            attribution: s.attribution,
+            author: s.author,
             timestamp: s.timestamp.clone(),
             byte_range: (lo - sub_start, hi - sub_start),
         });
@@ -368,7 +362,7 @@ fn turn_header_regex() -> &'static Regex {
 /// duplicating the regex.
 #[derive(Debug)]
 pub struct ParsedTurn {
-    pub attribution: Attribution,
+    pub author: TurnAuthor,
     /// `YYYY-MM-DD HH:MM` (UTC, as rendered by the extractor), or
     /// `None` for `[unknown-time]` headers.
     pub timestamp: Option<String>,
@@ -407,9 +401,9 @@ pub fn parse_turns(text: &str) -> Vec<ParsedTurn> {
             .map(|(s, _, _)| *s)
             .unwrap_or(text.len());
         let block = text[*start..block_end].trim_end().to_string();
-        let attribution = match sender.as_str() {
-            "user" => Attribution::User,
-            "assistant" => Attribution::Assistant,
+        let author = match sender.as_str() {
+            "user" => TurnAuthor::User,
+            "assistant" => TurnAuthor::Assistant,
             _ => continue,
         };
         let timestamp = if ts_raw == "unknown-time" {
@@ -418,7 +412,7 @@ pub fn parse_turns(text: &str) -> Vec<ParsedTurn> {
             Some(ts_raw.clone())
         };
         turns.push(ParsedTurn {
-            attribution,
+            author,
             timestamp,
             block,
             byte_start: *start,
@@ -500,15 +494,15 @@ mod tests {
         }
     }
 
-    // ─── Attribution-surface tests ─────────────────────────────────
+    // ─── TurnAuthor-surface tests ─────────────────────────────────
 
     #[test]
     fn attributed_pair_has_two_spans_user_then_assistant() {
         let chunks = ThreadedTurnsChunker::new().chunk_attributed(SAMPLE);
         assert_eq!(chunks.len(), 2);
         assert_eq!(chunks[0].spans.len(), 2);
-        assert_eq!(chunks[0].spans[0].attribution, Attribution::User);
-        assert_eq!(chunks[0].spans[1].attribution, Attribution::Assistant);
+        assert_eq!(chunks[0].spans[0].author, TurnAuthor::User);
+        assert_eq!(chunks[0].spans[1].author, TurnAuthor::Assistant);
     }
 
     #[test]
@@ -560,7 +554,7 @@ mod tests {
         let input = "### [2025-09-04 18:01] user\n\nNo reply here.";
         let chunks = ThreadedTurnsChunker::new().chunk_attributed(input);
         assert_eq!(chunks[0].spans.len(), 1);
-        assert_eq!(chunks[0].spans[0].attribution, Attribution::User);
+        assert_eq!(chunks[0].spans[0].author, TurnAuthor::User);
     }
 
     #[test]
@@ -569,15 +563,15 @@ mod tests {
             ThreadedTurnsChunker::new().chunk_attributed("Free prose with no turn markers.");
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].spans.len(), 1);
-        assert_eq!(chunks[0].spans[0].attribution, Attribution::Unattributed);
+        assert_eq!(chunks[0].spans[0].author, TurnAuthor::Unattributed);
     }
 
     #[test]
     fn attribution_slug_round_trips() {
-        assert_eq!(Attribution::User.slug(), "user");
-        assert_eq!(Attribution::Assistant.slug(), "assistant");
-        assert_eq!(Attribution::Unattributed.slug(), "unattributed");
-        assert_eq!(Attribution::Pasted.slug(), "pasted");
+        assert_eq!(TurnAuthor::User.slug(), "user");
+        assert_eq!(TurnAuthor::Assistant.slug(), "assistant");
+        assert_eq!(TurnAuthor::Unattributed.slug(), "unattributed");
+        assert_eq!(TurnAuthor::Pasted.slug(), "pasted");
     }
 
     #[test]
@@ -608,8 +602,8 @@ mod tests {
         assert_eq!(chunks.len(), 2);
         for chunk in &chunks {
             assert_eq!(chunk.spans.len(), 2);
-            assert_eq!(chunk.spans[0].attribution, Attribution::User);
-            assert_eq!(chunk.spans[1].attribution, Attribution::Assistant);
+            assert_eq!(chunk.spans[0].author, TurnAuthor::User);
+            assert_eq!(chunk.spans[1].author, TurnAuthor::Assistant);
             assert!(chunk.spans[0].timestamp.is_some());
             assert!(chunk.spans[1].timestamp.is_some());
         }
@@ -621,7 +615,7 @@ mod tests {
     // export with one ~30K-byte user paste throttled embed batches
     // to 1.2 seqs/sec because every chunk was tokenised fully
     // before the slot truncated it. These tests guard the cap and
-    // its attribution-preserving span clipping.
+    // its author-preserving span clipping.
 
     #[test]
     fn oversized_paired_turn_splits_into_multiple_chunks() {
@@ -668,10 +662,10 @@ mod tests {
         for chunk in &chunks {
             // Each sub-chunk must carry at least one span — span
             // clipping is the load-bearing detail that keeps
-            // attribution coherent across the split.
+            // author coherent across the split.
             assert!(
                 !chunk.spans.is_empty(),
-                "sub-chunk lost all attribution spans: {:?}",
+                "sub-chunk lost all author spans: {:?}",
                 &chunk.content[..chunk.content.len().min(120)]
             );
             // Every span's byte range must be in-bounds of the
