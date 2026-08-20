@@ -412,6 +412,10 @@ fn observed_layer_violations(
                 from: from.clone(),
                 to: to.clone(),
                 kind: arch_layers::DepKind::Normal,
+                // SCIP sees references, not Cargo features: an observed edge
+                // is real in whatever build produced the index, so it is
+                // never claimed absent from the default one.
+                optional: false,
             })
         })
         .collect();

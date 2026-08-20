@@ -496,6 +496,8 @@ pub fn build_flow(
                 from: cargo_name(&e.from_crate)?,
                 to: cargo_name(&e.to_crate)?,
                 kind: arch_layers::DepKind::Normal,
+                // Observed reference — see arch_report.rs on why never true.
+                optional: false,
             })
         })
         .collect();

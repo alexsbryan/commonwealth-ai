@@ -80,10 +80,12 @@ pub fn parse_package_name(manifest: &str) -> Option<String> {
 
 /// Every internal (member → member) dependency edge in the workspace, with
 /// its section kind. Target-specific tables (`[target.'…'.dependencies]`)
-/// classify by their suffix. Optional deps count: an edge behind a feature
-/// is still a declared edge (the layer map governs the all-features union).
-/// Internal renames (`foo = { package = "bar", … }`) are not handled — none
-/// exist in this workspace.
+/// classify by their suffix. Optional deps count as edges: an edge behind a
+/// feature is still a declared edge, and the layer map governs the
+/// all-features union. They are also FLAGGED (`DepEdge::optional`), because
+/// the `backstage` rule — alone among the map's rules — asks a question only
+/// the default build can answer. Internal renames
+/// (`foo = { package = "bar", … }`) are not handled — none exist here.
 pub fn internal_dep_edges(root: &Path, members: &[MemberCrate]) -> Vec<DepEdge> {
     let names: BTreeSet<&str> = members.iter().map(|m| m.name.as_str()).collect();
     let mut edges = Vec::new();
@@ -92,10 +94,12 @@ pub fn internal_dep_edges(root: &Path, members: &[MemberCrate]) -> Vec<DepEdge> 
             Ok(t) => t,
             Err(_) => continue,
         };
+        let absent = deps_absent_from_default_build(&text);
         for (dep, kind) in deps_with_kinds(&text) {
             if names.contains(dep.as_str()) && dep != m.name {
                 edges.push(DepEdge {
                     from: m.name.clone(),
+                    optional: absent.contains(&dep),
                     to: dep,
                     kind,
                 });
@@ -103,6 +107,155 @@ pub fn internal_dep_edges(root: &Path, members: &[MemberCrate]) -> Vec<DepEdge> 
         }
     }
     edges
+}
+
+/// Dependency names this manifest declares `optional = true` AND does not
+/// switch on from `default` — i.e. the crate's default build does not carry
+/// them. This is the mechanical form of "does the product ship without it?".
+///
+/// Conservative by construction: anything it cannot resolve is reported as
+/// PRESENT in the default build, so an unparsed shape produces a gate failure
+/// to look at rather than a silent pass (ARCH §18.3).
+pub fn deps_absent_from_default_build(manifest: &str) -> BTreeSet<String> {
+    let optional = optional_dep_names(manifest);
+    if optional.is_empty() {
+        return BTreeSet::new();
+    }
+    let features = feature_table(manifest);
+
+    // Transitive closure of `default` over the feature table.
+    let mut enabled: BTreeSet<String> = BTreeSet::new();
+    let mut queue: Vec<String> = vec!["default".to_string()];
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    while let Some(f) = queue.pop() {
+        if !seen.insert(f.clone()) {
+            continue;
+        }
+        let Some(entries) = features.get(&f) else {
+            // Not a feature name. A bare entry matching an optional dep is
+            // Cargo's implicit feature for that dep.
+            if optional.contains(&f) {
+                enabled.insert(f);
+            }
+            continue;
+        };
+        for e in entries {
+            if let Some(dep) = e.strip_prefix("dep:") {
+                enabled.insert(dep.to_string());
+            } else if let Some((head, _)) = e.split_once('/') {
+                // `dep/feat` enables `dep`; `dep?/feat` explicitly does not.
+                if let Some(weak) = head.strip_suffix('?') {
+                    let _ = weak;
+                } else {
+                    enabled.insert(head.to_string());
+                }
+            } else {
+                queue.push(e.clone());
+            }
+        }
+    }
+    optional.difference(&enabled).cloned().collect()
+}
+
+/// Dep names declared `optional = true`, in either manifest style.
+fn optional_dep_names(manifest: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let mut table_dep: Option<String> = None;
+    let mut in_deps = false;
+    for line in manifest.lines() {
+        let t = line.trim();
+        if t.starts_with('[') {
+            table_dep = None;
+            in_deps = false;
+            if let Some((_, inline)) = header_dep_context(t) {
+                in_deps = true;
+                table_dep = inline;
+            }
+            continue;
+        }
+        if !in_deps || t.is_empty() || t.starts_with('#') {
+            continue;
+        }
+        // `[dependencies.foo]` table style: `optional = true` on its own line.
+        if let Some(name) = &table_dep {
+            if strip_comment(t).replace(' ', "") == "optional=true" {
+                out.insert(name.clone());
+            }
+            continue;
+        }
+        // Section style: `foo = { …, optional = true }` on one line.
+        let body = strip_comment(t);
+        let Some((name, rest)) = body.split_once('=') else {
+            continue;
+        };
+        if rest.replace(' ', "").contains("optional=true") {
+            let name = name.trim().trim_matches('"');
+            if !name.is_empty() {
+                out.insert(name.to_string());
+            }
+        }
+    }
+    out
+}
+
+/// The `[features]` table as `name -> entries`. Handles the single-line
+/// (`f = ["a", "b"]`) and multi-line array shapes this workspace uses.
+fn feature_table(manifest: &str) -> HashMap<String, Vec<String>> {
+    let mut out: HashMap<String, Vec<String>> = HashMap::new();
+    let mut in_features = false;
+    let mut open: Option<(String, Vec<String>)> = None;
+    for line in manifest.lines() {
+        let t = line.trim();
+        if open.is_none() && t.starts_with('[') {
+            in_features = t == "[features]";
+            continue;
+        }
+        if !in_features {
+            continue;
+        }
+        let body = strip_comment(t);
+        if let Some((name, items)) = open.as_mut() {
+            items.extend(quoted(&body));
+            if body.contains(']') {
+                out.insert(name.clone(), std::mem::take(items));
+                open = None;
+            }
+            continue;
+        }
+        if body.is_empty() {
+            continue;
+        }
+        let Some((name, rest)) = body.split_once('=') else {
+            continue;
+        };
+        let name = name.trim().trim_matches('"').to_string();
+        if name.is_empty() {
+            continue;
+        }
+        let items = quoted(rest);
+        if rest.contains(']') {
+            out.insert(name, items);
+        } else {
+            open = Some((name, items));
+        }
+    }
+    // An unterminated array still contributes what it had — dropping it would
+    // under-report enablement, which is the unsafe direction.
+    if let Some((name, items)) = open {
+        out.insert(name, items);
+    }
+    out
+}
+
+fn strip_comment(line: &str) -> String {
+    match line.find('#') {
+        Some(i) => line[..i].trim().to_string(),
+        None => line.trim().to_string(),
+    }
+}
+
+fn quoted(s: &str) -> Vec<String> {
+    s.split('"').skip(1).step_by(2).map(String::from).collect()
 }
 
 /// (dep name, section kind) for every entry in every dependencies table —
@@ -363,5 +516,133 @@ tempfile = { workspace = true }\n";
         assert!(deps.contains("sovereign-core"));
         assert!(!deps.contains("serde"));
         assert!(!deps.contains("tempfile"));
+    }
+
+    // ── "does the product ship without it?", read off the manifest ────────
+
+    #[test]
+    fn optional_dep_not_reachable_from_default_is_absent() {
+        let m = r#"
+[package]
+name = "host"
+
+[dependencies]
+sovereign-core = { workspace = true }
+sovereign-agent-bench = { workspace = true, optional = true }
+
+[features]
+default = []
+dev-tools = ["dep:sovereign-agent-bench"]
+"#;
+        let absent = deps_absent_from_default_build(m);
+        assert!(absent.contains("sovereign-agent-bench"));
+        assert!(!absent.contains("sovereign-core"), "non-optional is always present");
+    }
+
+    #[test]
+    fn optional_dep_switched_on_by_default_is_present() {
+        let m = r#"
+[package]
+name = "host"
+
+[dependencies]
+sovereign-eval = { workspace = true, optional = true }
+
+[features]
+default = ["bench"]
+bench = ["dep:sovereign-eval"]
+"#;
+        assert!(
+            deps_absent_from_default_build(m).is_empty(),
+            "default turns it on, so the product does NOT ship without it"
+        );
+    }
+
+    #[test]
+    fn default_closure_is_transitive_and_multiline() {
+        // The real sovereign-cli shape: a multi-line `default` array whose
+        // entries are themselves features.
+        let m = r#"
+[package]
+name = "host"
+
+[dependencies]
+a-crate = { workspace = true, optional = true }
+b-crate = { workspace = true, optional = true }
+
+[features]
+default = [
+    "mid",       # a comment mid-array
+    "b-crate/some-feat",
+]
+mid = ["deep"]
+deep = ["dep:a-crate"]
+"#;
+        let absent = deps_absent_from_default_build(m);
+        assert!(!absent.contains("a-crate"), "reached via default -> mid -> deep");
+        assert!(!absent.contains("b-crate"), "`b-crate/feat` enables b-crate");
+    }
+
+    #[test]
+    fn weak_dep_feature_does_not_enable_the_dep() {
+        let m = r#"
+[package]
+name = "host"
+
+[dependencies]
+a-crate = { workspace = true, optional = true }
+
+[features]
+default = ["a-crate?/some-feat"]
+"#;
+        assert!(
+            deps_absent_from_default_build(m).contains("a-crate"),
+            "`dep?/feat` is the weak form — it must not turn the dep on"
+        );
+    }
+
+    #[test]
+    fn bare_entry_naming_an_optional_dep_is_cargos_implicit_feature() {
+        let m = r#"
+[package]
+name = "host"
+
+[dependencies]
+a-crate = { workspace = true, optional = true }
+
+[features]
+default = ["a-crate"]
+"#;
+        assert!(deps_absent_from_default_build(m).is_empty());
+    }
+
+    #[test]
+    fn table_style_optional_is_seen_too() {
+        // Unused in this workspace, but a gate a `[dependencies.foo]` table
+        // slips past is trivially bypassable.
+        let m = r#"
+[package]
+name = "host"
+
+[dependencies.sovereign-eval]
+workspace = true
+optional = true
+
+[features]
+default = []
+"#;
+        assert!(deps_absent_from_default_build(m).contains("sovereign-eval"));
+    }
+
+    #[test]
+    fn a_crate_with_no_optional_deps_reports_nothing_absent() {
+        let m = r#"
+[package]
+name = "host"
+
+[dependencies]
+sovereign-core = { workspace = true }
+"#;
+        assert!(deps_absent_from_default_build(m).is_empty());
     }
 }
