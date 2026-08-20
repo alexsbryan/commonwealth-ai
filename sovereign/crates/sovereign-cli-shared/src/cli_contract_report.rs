@@ -26,7 +26,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use crate::cli_contract::{Contract, Evidence, Journey};
+use crate::cli_contract::{AssertionStrength, Contract, Journey};
 
 /// The evidence census, rendered. The numbers are computed by
 /// [`Contract::assertion_census`] — this only lays them out.
@@ -109,7 +109,7 @@ pub fn render_experience_map(contract: &Contract) -> String {
         let asserts: usize = serving
             .iter()
             .flat_map(|j| j.steps.iter())
-            .filter(|st| st.evidence() == Evidence::Output)
+            .filter(|st| st.evidence() == AssertionStrength::Output)
             .count();
         steps_total += steps;
         asserts_total += asserts;

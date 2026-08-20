@@ -170,11 +170,15 @@ impl SessionAudit {
 /// the serialized `input` of every tool call. Tool *results* are deliberately
 /// excluded — they are the environment's output, and counting them would let a
 /// `Read` echoing a file match the very note that named it, inflating usage.
-struct Evidence {
+/// Renamed apart from `Evidence` 2026-08-20 (noun-convergence rung
+/// nc-4-evidence). Not the retrieval noun and not evidence at all in the
+/// product sense: it is the HAYSTACK — one lowercased blob of the agent's
+/// own actions that note usage is searched against.
+struct ActionBlob {
     blob: String,
 }
 
-impl Evidence {
+impl ActionBlob {
     fn contains(&self, needle: &str) -> bool {
         let n = needle.trim().to_lowercase();
         if n.len() < MIN_MATCH_LEN {
@@ -191,7 +195,7 @@ impl Evidence {
     }
 }
 
-fn build_evidence(transcript_path: &Path) -> Option<Evidence> {
+fn build_evidence(transcript_path: &Path) -> Option<ActionBlob> {
     let text = std::fs::read_to_string(transcript_path).ok()?;
     let mut blob = String::new();
     for line in text.lines() {
@@ -243,7 +247,7 @@ fn build_evidence(transcript_path: &Path) -> Option<Evidence> {
         }
     }
     blob.make_ascii_lowercase();
-    Some(Evidence { blob })
+    Some(ActionBlob { blob })
 }
 
 // ── Join ───────────────────────────────────────────────────────────────────
@@ -265,7 +269,7 @@ fn load_injections(log_path: &Path) -> Vec<InjectionRecord> {
 fn audit_session(
     session_id: &str,
     records: &[InjectionRecord],
-    evidence: Option<&Evidence>,
+    evidence: Option<&ActionBlob>,
 ) -> SessionAudit {
     /// Per-note accumulator across every injection in the session.
     #[derive(Default)]
@@ -710,8 +714,8 @@ mod tests {
         f.write_all(body.as_bytes()).unwrap();
     }
 
-    fn evidence_from(blob: &str) -> Evidence {
-        Evidence {
+    fn evidence_from(blob: &str) -> ActionBlob {
+        ActionBlob {
             blob: blob.to_lowercase(),
         }
     }

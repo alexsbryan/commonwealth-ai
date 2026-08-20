@@ -53,7 +53,7 @@ pub fn stamp_edge_counts(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::investigation::graph::{Entity, Evidence, Relationship};
+    use crate::enrichment::investigation::graph::{Entity, ExtractionExcerpt, Relationship};
 
     fn ent(id: &str, ty: &str) -> Entity {
         Entity {
@@ -72,7 +72,7 @@ mod tests {
             to_entity_id: to.into(),
             relationship_type: rtype.into(),
             attributes: Default::default(),
-            evidence: Evidence {
+            evidence: ExtractionExcerpt {
                 chunk_id: "c".into(),
                 excerpt: "x".into(),
             },

@@ -211,7 +211,7 @@ pub fn recoalesce_graph(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::investigation::graph::Evidence;
+    use crate::enrichment::investigation::graph::ExtractionExcerpt;
 
     fn inst(id: &str, name: &str, sighting_count: Option<u64>) -> Entity {
         let mut attributes = serde_json::Map::new();
@@ -244,7 +244,7 @@ mod tests {
             to_entity_id: to.into(),
             relationship_type: "occurred_near".into(),
             attributes: Default::default(),
-            evidence: Evidence {
+            evidence: ExtractionExcerpt {
                 chunk_id: "c".into(),
                 excerpt: format!("{from}->{to}"),
             },

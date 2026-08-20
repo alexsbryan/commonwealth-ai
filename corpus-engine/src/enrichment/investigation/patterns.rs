@@ -519,7 +519,7 @@ fn comparison_matches(value: f64, threshold: f64, op: Comparison) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::enrichment::investigation::graph::Evidence;
+    use crate::enrichment::investigation::graph::ExtractionExcerpt;
 
     fn ent(id: &str, ty: &str, name: &str) -> Entity {
         Entity {
@@ -544,7 +544,7 @@ mod tests {
             to_entity_id: to.into(),
             relationship_type: ty.into(),
             attributes: attrs,
-            evidence: Evidence {
+            evidence: ExtractionExcerpt {
                 chunk_id: "chunk-1".into(),
                 excerpt: "evidence".into(),
             },
