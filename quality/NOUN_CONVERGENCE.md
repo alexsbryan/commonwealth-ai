@@ -785,11 +785,18 @@ Measured at HEAD `66ef25bf` against the SCIP graph re-exported 19:20:53Z
 (1,631,325 refs, all with spans, `last_indexed_head` = HEAD) plus `git log`
 and `cargo metadata`.
 
-**These figures are hand-measured and therefore NOT YET MINTED**, which by
-this document's own rule (§1, "the numbers are minted, not typed") makes them
-week-old fish on arrival. Each subsection names the tool that should own its
-number. Treat the shape as load-bearing and every digit as a dated snapshot
-awaiting an instrument.
+**These figures were hand-measured and therefore NOT MINTED**, which by this
+document's own rule (§1, "the numbers are minted, not typed") made them week-old
+fish on arrival. Each subsection named the tool that should own its number.
+
+**§10.1, §10.2 and §10.3 now have theirs**, landed 2026-08-20:
+`svrn code converge roles` (population and adoption per role) and
+`arch_metrics::type_spreads` (the per-crate share, rendered by `arch-report`).
+Every figure in those three subsections below is re-derived from the SCIP graph
+at `6a6b1317` and carries that stamp. Where the instrument disagreed with the
+hand figure the instrument won, and the correction is stated in place rather
+than quietly applied — three of them are large. The remaining subsections are
+still hand-measured.
 
 ### 10.1 The census keys on names, and the larger half has none
 
@@ -801,16 +808,37 @@ half.
 Three concept families, measured as distinct first-party production type
 definitions with `reach` = distinct referencing crates:
 
+Minted by `svrn code converge roles` at graph `6a6b1317`. Membership is the
+family's head nouns — for the first row, the campaign ladder's own published
+`*Result *Outcome *Verdict *Status` — matched against the last CamelCase
+segment of every type name. No list of member types exists or is maintained.
+
 | family | types | crates | reach ≥ 3 | best |
 |---|---:|---:|---:|---|
-| verdict / judgement | 198 | 26 | **1%** | `RepairOutcome`, reach 4 |
-| citation / provenance | 112 | 23 | 4% | `NoteSource`, reach 8 |
-| freshness / staleness | 41 | 15 | **0%** | nothing above reach 1 |
+| verdict / judgement | 334 | 39 | 10% | `Result`, reach 20 |
+| citation / provenance | 79 | 23 | 10% | `NoteSource`, reach 9 |
+| freshness / staleness | 3 | 3 | **0%** | `Freshness`, reach 2 |
 
-351 types at roughly 2% adoption, all answering one question — *how much
-should you trust this result?* — and sharing no name, so `converge census`
-is silent on every one of them. `AuditReport` and `DriftReport` are not the
-same name; neither are `StalenessSummary` and `lags_graph`.
+416 types at 10% adoption by NAME. The hand figures were 198 / 112 / 41 at
+roughly 2%, and all three moved: the verdict family is 69% larger than the hand
+count, citation 29% smaller, and freshness collapses from 41 to **3** — because
+almost nothing in that family is NAMED for it, which is the section's own
+thesis arriving as a number.
+
+The name half is not the whole population. Counting instead by FIELD — a type
+declaring `generated_at` is answering a freshness question whatever it is
+called — the same run reports:
+
+| family | carriers | named for some OTHER role |
+|---|---:|---:|
+| verdict / judgement | 89 | 63 (71%) |
+| citation / provenance | 78 | 75 (96%) |
+| freshness / staleness | 22 | **22 (100%)** |
+
+That last column is the size of the blind spot, measured rather than asserted.
+Every single freshness carrier in the workspace is called something else, so no
+name-keyed census can ever reach one. `AuditReport` and `DriftReport` are not
+the same name; neither are `StalenessSummary` and `lags_graph`.
 
 Four exhibits that this is one concern and not three:
 
@@ -819,11 +847,21 @@ Four exhibits that this is one concern and not three:
   `present (gaps)`) and **seven age formats** (`12d`, `1h`, `16d`, `7d ago`,
   `-`, `6d`, `9d..95d`). It is an aggregator over a concept with no type, so
   each subsystem it aggregates invented its own.
-- **172 hand-written freshness fields in 13 spellings**: `age_secs` 41,
-  `stale` 23, `generated_at` 22, `built_at` 20, `age_days` 15, `age_hours`
-  14, `freshness` 12, `indexed_at` 7, `as_of` 7, `staleness` 5, then
-  `lags_graph`, `computed_at`, `commits_behind`. Three concepts — when was it
-  made, how old is that, is it too old — thirteen ways.
+- **26 hand-written freshness fields in 10 spellings** (graph `6a6b1317`):
+  `generated_at` 5, `age_hours` 4, `stale` 3, `built_at` 3, `as_of` 3,
+  `staleness` 3, `age_secs` 2, `indexed_at` 2, `computed_at` 1; `age_days`,
+  `freshness`, `lags_graph` and `commits_behind` are declared on no type at
+  all. Three concepts — when was it made, how old is that, is it too old —
+  ten ways.
+
+  **This row read "172 fields in 13 spellings" until 2026-08-20**, and 172 was
+  a count of something else: a bare substring grep over every `.rs` file, which
+  returns 175 today and is mostly struct-literal initializers, JSON keys and
+  comments rather than field declarations. The graph's field rows were checked
+  against `RegistrySnapshot` by hand — four fields declared, four rows — before
+  the correction was accepted. The spellings were right and the shape of the
+  finding survives; the magnitude was 6.6x too big, and four of the thirteen
+  spellings name no field anywhere.
 - ARCH §18.2's four verdicts appear in **17 files**, against 198
   verdict-shaped types. The most-cited principle in the house is the
   least-typed concern in the codebase.
@@ -831,8 +869,9 @@ Four exhibits that this is one concern and not three:
   `freshness` field — added after observing the failure live on 2026-08-20.
   It wants the envelope badly enough to hand-check for it.
 
-**Owner:** a `converge roles` verb — the role tier beneath `census` (names)
-and `dry-report` (behaviour). It does not exist.
+**Owner:** `svrn code converge roles` — the role tier beneath `census` (names)
+and `dry-report` (behaviour). Landed 2026-08-20; `corpus-engine-scip/src/roles.rs`.
+A mirror, not a gate: no threshold, no exit code, nothing to ratchet.
 
 ### 10.2 The sprawl is inside crates, not between them
 
@@ -847,23 +886,41 @@ change patterns. There is also a real downtown — `sovereign-contracts` +
 `oicp-types` + `kernel-types` are 22k lines, 2.6% of the code, carrying 57%
 of cross-crate type traffic at 773–1,266 refs per kloc.
 
-The defect is one number: **46% of all 8,882 first-party production types are
+The defect is one number: **44% of all 5,139 first-party production types are
 referenced by no other file at all.** Used only in the file that declares
-them. 29% are exported; 18% are used in 2+ files of their own crate.
+them. 28% are exported; 28% are used in 2+ files of their own crate.
 
-| crate | types | private | exported | prod lines |
+Minted by `arch_metrics::type_spreads` at graph `6a6b1317`, rendered by
+`svrn code arch-report`. A type is bucketed by the WIDEST reference to it, so
+the three buckets partition the population exactly — which the hand figures did
+not (46 + 29 + 18 = 93).
+
+| crate | types | private | crate-local | exported |
 |---|---:|---:|---:|---:|
-| sovereign-contracts | 663 | **15%** | 84% | 16,886 |
-| corpus-engine | 1,574 | 29% | 38% | 136,929 |
-| sovereign-tools | 742 | 42% | 33% | 78,394 |
-| sovereign-core | 614 | 43% | 22% | 100,949 |
-| sovereign-mesh | 594 | 66% | 9% | 53,314 |
-| **sovereign-cli-llm** | 847 | **75%** | **0%** | **122,268** |
-| sovereign-desktop | 295 | 79% | 0% | 29,861 |
+| sovereign-contracts | 284 | **13%** | 2% | 85% |
+| oicp-types | 70 | **0%** | 4% | 96% |
+| corpus-engine | 887 | 28% | 38% | 34% |
+| sovereign-tools | 454 | 37% | 26% | 36% |
+| sovereign-core | 367 | 39% | 32% | 28% |
+| sovereign-mesh | 343 | 59% | 27% | 14% |
+| **sovereign-cli-llm** | 608 | **75%** | 25% | **0%** |
+| sovereign-cli-dev | 135 | 76% | 24% | 0% |
+| sovereign-desktop | 213 | 78% | 22% | 0% |
+| sovereign-server | 84 | 80% | 20% | 0% |
+| sovereign-cli | 93 | **85%** | 15% | 0% |
 
-Same authorship, same five months, 15% to 79%. Some of that spread is correct
-Rust — a one-endpoint DTO should be private — but a fivefold spread is not
-idiom, it is the absence of anything to reach for.
+Same authorship, same five months, 0% to 85% private. Some of that spread is
+correct Rust — a one-endpoint DTO should be private — but it is not idiom that
+five crates export literally nothing; it is the absence of anything to reach
+for.
+
+**Two corrections, and the hand figures held up better than §10.1's.** Every
+private and exported SHARE above lands within 6 points of the hand-measured
+one, on all seven crates it named — the shape of this section was right. What
+was wrong is the denominator: **8,882 counted enum variants as types.** Types
+plus variants at this commit is 8,764; top-level type definitions, the
+population `converge census` and `converge roles` both use, is 5,139. The
+crate-local figure moves with it, 18% to 28%.
 
 `sovereign-cli-llm` is the extreme and it is not a CLI: `enrich_cmd` is 32,813
 lines and `bench_cmd` is 29,460, whole subsystems inside a leaf binary that
@@ -875,32 +932,65 @@ not depending on `sovereign-cli-shared` at all, yet carries
 `recipe_commands.rs`, `governance_commands.rs`. Two hosts implementing the
 same subject areas, sharing nothing.
 
-**Owner:** per-crate private/exported share belongs in `arch_metrics.rs`
-beside `instability`, rendered by the one `render_markdown` at :545.
+**Owner:** `arch_metrics::type_spreads`, landed 2026-08-20 beside
+`instability` as `CrateMetrics::types` and rendered by the one
+`render_markdown` — as this row specified. `None` there means the census did
+not run, which is not the same as a crate whose types are all private.
 
 ### 10.3 Adoption is predicted by work carried, not by shape
 
 Why did some concepts converge without any program telling them to?
 
+Minted by `svrn code converge roles` at graph `6a6b1317`. A role is the last
+CamelCase segment of a type's name, so `AuditReport`, `DriftReport` and
+`FieldglassReport` are one role and nobody maintains a list saying so.
+Adoption is the share of a role's types reaching 3+ distinct crates — the same
+cut §10.1's table uses, computed once.
+
 | role | what the abstraction does for you | population | adoption |
 |---|---|---:|---:|
-| Recipe | the whole acquire→index pipeline | 46 TOMLs | **~100%** |
-| Store | persistence + query | 43 | 35% |
-| Tool | dispatch + execution | 119 | 29% |
-| Registry / Scope | dispatch / admission | 29 / 35 | 17% |
-| Error | ~nothing (`thiserror` makes minting free) | 102 | 8% |
-| Config | nothing | 137 | 7% |
-| Summary / Response / Entry / Report | nothing | 65 / 140 / 83 / 105 | 1–2% |
-| **Args** | nothing, **and no shared type exists** | 58 | **0%** |
+| Scope | admission | 11 | **55%** |
+| Tool | dispatch + execution | 110 | 53% |
+| Store | persistence + query | 39 | 44% |
+| Registry | dispatch | 27 | 30% |
+| Config | nothing | 130 | 15% |
+| Error | ~nothing (`thiserror` makes minting free) | 86 | 10% |
+| Entry / Args | nothing | 83 / 55 | 5% |
+| Summary / Report | nothing | 63 / 102 | 3% |
+| **Response** | nothing | 134 | **2%** |
 
-Monotone in work carried and in nothing else. This is the design criterion
-the program has been missing:
+Still monotone in work carried and in nothing else — the ordering the hand
+table asserted is the ordering the instrument returns, which is the part of
+this section that mattered. Three details changed:
+
+- **Every adoption share is higher than the hand figure**, and the high-work
+  end moved most: Tool 29% → 53%, Store 35% → 44%, Config 7% → 15%. The gap
+  between "carries work" and "carries none" is wider than §10.3 claimed, not
+  narrower.
+- **`Registry` and `Scope` should never have shared a row.** Hand-grouped at
+  17%, they measure 30% and 55% — Scope is the single best-adopted role in the
+  workspace, and burying it in a slash-pair hid that.
+- **`Args` is not 0%.** Three of 55 reach three crates. The claim "no shared
+  type exists" still holds; the adoption figure was too clean.
+
+`Report` at 3 of 102 remains the control experiment, and it still reads the
+same way: the most obvious "shared vocabulary" candidate in the codebase, and
+it never spread.
+
+**One row of the hand table has no instrument and is left as measured:**
+`Recipe`, at "46 TOMLs, ~100%". Those are recipe DATA files, not Rust types, so
+a type-graph census cannot see them — it reports the `Recipe` type role at 2
+types / 50%, which is a different fact about a different population. A
+data-file census is a different instrument and this one does not substitute for
+it (§18.3).
+
+This is the design criterion the program has been missing:
 
 > **Extract work, not shape.** A shared struct saves an author nothing and
 > loses to bespoke every time, gate or no gate. A shared thing that renders,
 > persists, dispatches or admits wins on cost with no enforcement at all.
 
-`Report` at 1 of 105 is the control experiment, already run. It is the most
+`Report` at 3 of 102 is the control experiment, already run. It is the most
 obvious "shared vocabulary" candidate in the codebase and it never spread,
 because a report is data and data-shaped abstractions do not pay.
 
@@ -1074,12 +1164,12 @@ silently collapses five months into two quarters.
 
 | Failure | Tell it is happening | Guard |
 |---|---|---|
-| The envelope is data-shaped and does not pay | it lands at 1–2% like `Report` | it must carry rendering, age computation, staleness banding and the footer, or it is not worth building |
+| The envelope is data-shaped and does not pay | it lands at 2–3% like `Report` or `Response` | it must carry rendering, age computation, staleness banding and the footer, or it is not worth building |
 | `sovereign-contracts` becomes the megablock | already absorbs 38.9% of inbound type traffic | the envelope goes to `kernel-types`, not contracts; `Report`/`Args` go to `cli-shared` at L4 |
 | Premature convergence — everything crammed into one mediocre type | adoption rises only where mandated | adoption is measured, never required; the delete branch is real |
 | Acting on an instrument that overstates | `dry-report` at 7× | scope every instrument before quoting it; §10.6 |
-| A gate teaches the workaround | rename-apart is free and unmeasured | `converge roles` counts it from the other end |
-| Numbers in this section rot | they already are | every row above names its owning tool; none is minted yet |
+| A gate teaches the workaround | rename-apart is free and unmeasured | `converge roles` counts it from the other end — shipped 2026-08-20, and it sees `AuditReport`/`DriftReport`/`ArchReport` as one role however they are spelled |
+| Numbers in this section rot | they already are | every row above names its owning tool; §10.1, §10.2 and §10.3 are minted and re-runnable, the rest are not yet |
 
 ### 10.9 Sequence
 

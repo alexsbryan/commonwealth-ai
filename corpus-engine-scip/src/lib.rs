@@ -42,6 +42,9 @@ pub mod converge;
 /// the unusable `symbols.kind` and never-written `refs.ref_kind` columns.
 pub mod descriptor;
 pub mod error;
+/// Duplicated concept ROLE over the graph — the third feed, seeing what
+/// neither a name census nor a behaviour report can. See the module docs.
+pub mod roles;
 pub mod scip_export;
 pub mod scip_graph;
 mod scip_proto;
@@ -54,7 +57,10 @@ mod scip_proto;
 pub mod tool_path;
 pub mod trace;
 
-pub use arch_metrics::{compute as compute_arch_metrics, ArchMetrics, ArchOptions, DeclaredDeps};
+pub use arch_metrics::{
+    compute as compute_arch_metrics, type_spreads, ArchMetrics, ArchOptions, DeclaredDeps,
+    TypeSpread,
+};
 pub use capability_map::{
     build as build_capability_map, Capability, CapabilityMap, EntryPointProvider, MapOptions,
     ProviderKind,
@@ -65,6 +71,10 @@ pub use converge::{
 };
 pub use descriptor::{descriptor_kind, descriptor_of, dispatch_hint, DescriptorKind, DispatchHint};
 pub use error::{Error, Result};
+pub use roles::{
+    head_noun, reach_index, render_roles, roles, type_fields, Family, RoleBest, RoleCensus,
+    RoleRow, ADOPTION_REACH, FAMILIES,
+};
 pub use scip_graph::{
     BlastEntry, BlastRadiusResult, LiveExport, OpenError, RebuildLock, ScipGraph, ScipGraphStats,
     ScipRefRecord, ScipSymbolRecord, SymbolRow, REBUILD_COALESCED, SCHEMA_VERSION,

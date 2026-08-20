@@ -18,10 +18,11 @@ use corpus_engine_scip::converge::{
     census, crate_dag, dossier, duplicate_count, render_census, render_dossier, type_defs,
     SourceScope,
 };
+use corpus_engine_scip::roles::{reach_index, render_roles, roles, type_fields};
 use corpus_engine_scip::ScipGraph;
 
 const HELP: &str = "\
-svrn code converge <census|noun|status> [options]
+svrn code converge <census|roles|noun|status> [options]
 
 Duplicated concept IDENTITY over the SCIP graph — names defined as a type in
 more than one crate. Read-only; no daemon, no model, no build.
@@ -29,6 +30,13 @@ more than one crate. Read-only; no daemon, no model, no build.
   census                  what is duplicated, ranked
     --kin                 also count morphological family (over-collects)
     --limit N             rows to print (0 = all; default 40)
+
+  roles                   what each ROLE costs and who reuses it — population
+                          and adoption share per role, plus the three concept
+                          families. A MIRROR, not a gate: no threshold, no
+                          exit code, nothing to ratchet.
+    --limit N             roles to print (0 = all; default 40)
+    --min-population N    drop the one-off tail (default 3)
 
   noun <Name>             one noun's dossier: definitions, users, the crate
                           that could own it, and the users that cannot reach it
@@ -45,7 +53,9 @@ Common:
   --include <prefix>      restrict to a path prefix (repeatable)
   --json                  machine output, carrying the scope that produced it
 
-Adjacent verbs, deliberately not duplicated here:
+Three discovery feeds, and they do not overlap:
+  converge census           duplicated NAME      (six `ChatMessage` structs)
+  converge roles            duplicated ROLE      (`AuditReport`+`DriftReport`)
   svrn code dry-report      duplicated BEHAVIOUR (clone + near-clone bodies)
   svrn code suggest-seams   split proposals for an oversized FILE
   svrn code arch-report     crate coupling and the carrier symbols
@@ -62,6 +72,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let mut baseline = PathBuf::from("quality/baselines/concepts.txt");
     let mut includes: Vec<String> = Vec::new();
     let mut noun: Option<String> = None;
+    let mut min_population: usize = 3;
     let mut limit: usize = 40;
     let mut kin = false;
     let mut json = false;
@@ -105,6 +116,16 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                     Some(n) => limit = n,
                     None => {
                         eprintln!("error: --limit requires an integer");
+                        return 1;
+                    }
+                }
+            }
+            "--min-population" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<usize>().ok()) {
+                    Some(n) => min_population = n.max(1),
+                    None => {
+                        eprintln!("error: --min-population needs a number");
                         return 1;
                     }
                 }
@@ -179,6 +200,32 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 println!("{}", serde_json::to_string_pretty(&c).unwrap_or_default());
             } else {
                 print!("{}", render_census(&c, limit, kin));
+            }
+            0
+        }
+        "roles" => {
+            // Reach needs the ref table; the role tier is the only converge
+            // verb besides `noun` that reads it.
+            let refs = match graph.iter_all_refs().await {
+                Ok(r) => r,
+                Err(e) => {
+                    eprintln!("error: reading refs: {e}");
+                    return 1;
+                }
+            };
+            let fields = type_fields(&symbols, &scope);
+            let reach = reach_index(&defs, &refs, &scope);
+            let c = roles(&defs, &fields, &reach, &scope, min_population);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&c).unwrap_or_default());
+            } else {
+                // The graph, not the working tree, is what these numbers are
+                // about — say which commit before saying the number.
+                match graph.last_indexed_head().await {
+                    Some(h) => println!("graph: {corpus_id} @ {h}\n"),
+                    None => println!("graph: {corpus_id} @ unknown commit\n"),
+                }
+                print!("{}", render_roles(&c, limit));
             }
             0
         }
