@@ -2408,6 +2408,15 @@ on this host). Proof: `sovereign-contracts/tests/declared_tools.rs`.
 This does NOT retire the existing trait impls — a tool with genuinely new
 behaviour still writes its executable half.
 
+Authoring goes through `tool-manifests/_TEMPLATE.toml` — two blocks to
+copy (new behaviour; pure-data delegate), the enum spellings, and the
+field reference. It is NOT in `FAMILIES` and nothing loads it; the
+`sovereign-recipes/_templates/` precedent, for the reason
+NOUN_CONVERGENCE §10.4 gives — a paragraph does not change the cost of
+reaching for a shared surface, a block you paste already wired to it
+does. `the_authoring_template_still_matches_the_schema` parses it every
+run so the scaffold cannot rot into a wrong example.
+
 **Live graph freshness (`sovereign-mesh::reindexer`).** The daemon's
 tool graph and the reindexer share ONE merged `ScipGraph` handle
 (built once in `daemon_cmd/mod.rs`, passed to both `build_tool_registry`

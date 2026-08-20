@@ -6,7 +6,7 @@
 //!
 //! `Recipe` is 46 TOML files declaring acquire → extract → filter → chunk →
 //! embed → index, and adding a corpus touches no Rust. `Tool` was the
-//! opposite: a hand-written `impl Tool for` block whose `descriptor()` body
+//! opposite: a hand-written `Tool` trait impl whose `descriptor()` body
 //! was, in 80 of 82 measured cases, a literal that never reads `self` — 4,137
 //! lines of data spelled as code. This module is the other half of that
 //! asymmetry closed: the literal moves to `tool-manifests/*.toml` and the
@@ -24,7 +24,7 @@
 //!    so `required` and `type` are enforced from the declaration rather than
 //!    restated by hand in a `validate()` body.
 //! 3. [`DeclaredTool`] — a tool that has a manifest and a named handler needs
-//!    no `impl Tool for` block of its own.
+//!    no `Tool` trait impl of its own.
 //!
 //! # Adding a tool
 //!
@@ -330,7 +330,7 @@ pub type ToolHandler = Arc<
         + Sync,
 >;
 
-/// A tool assembled from a manifest and a handler — the one `impl Tool for`
+/// A tool assembled from a manifest and a handler — the one `Tool` trait impl
 /// that every declared tool shares.
 pub struct DeclaredTool {
     manifest: ToolManifest,
@@ -415,6 +415,37 @@ pub fn delegating_handler(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The authoring template. Deliberately NOT in [`FAMILIES`] — nothing loads
+    /// it at runtime. Embedded here only so the test below can parse it.
+    const TEMPLATE_TOML: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tool-manifests/_TEMPLATE.toml"
+    ));
+
+    /// The scaffold is the intervention that makes reaching for the shared
+    /// surface cheaper than minting bespoke (NOUN_CONVERGENCE §10.4), and a
+    /// scaffold that has drifted from the schema teaches the wrong thing. This
+    /// is its closure loop: the template must always still parse.
+    #[test]
+    fn the_authoring_template_still_matches_the_schema() {
+        let parsed = parse_family(TEMPLATE_TOML).expect("_TEMPLATE.toml parses");
+        assert_eq!(
+            parsed.len(),
+            1,
+            "the template should carry exactly one live block; the delegate \
+             variant is commented out on purpose"
+        );
+        let m = &parsed[0];
+        assert!(m.parameters.is_object());
+        assert!(!m.examples.is_empty(), "the template must model an example");
+        m.validate_params(&serde_json::json!({ "subject": "x", "limit": 5 }))
+            .expect("the template's own example must satisfy its own schema");
+        assert!(
+            !catalog().contains_key(&m.id),
+            "the template's placeholder id leaked into a loaded family file"
+        );
+    }
 
     /// The catalog parses and every row is well-formed. This test is what
     /// makes [`require`]'s panic unreachable in practice — ARCH §18.4,
