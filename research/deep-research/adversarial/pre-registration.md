@@ -5255,3 +5255,124 @@ unit (dr-t6d), fresh root runs-t6d, 13 loop flights + one-shot
 comparator, budget 12/12, model pin unchanged, daemon idle-checked
 before launch, no restarts. Evidence untracked; results + execution
 record land below at landing.
+
+## T6b re-measure — one-shot LANDING (2026-08-19; re-score on the frozen bank, baseline-era scorer)
+
+The t6b re-measure battery (runs-t6b-re; pairs.json byte-identical to
+the frozen runs-t6b; decks frozen 2026-08-14, untouched) is now
+COMPLETE: loop arm 13/13 flights exit 0 (landed 9667dbb88), one-shot
+arm 13/13 pairs with a PASSING test run (this landing).
+
+### The four one-shot attempts (the story the markers tell)
+
+- **A1 (~11:37)** — cwd trap: `systemd-run --user` without
+  `--working-directory` inherited the caller's HOME; `toolbox run …
+  cargo test` found no Cargo.toml there → exit 101, wrote NOTHING; the
+  wrapper's trailing `echo "exit=$?"` masked it as exit=0. Console log
+  is ground truth; the wrapper's final echo is not.
+- **A2 (~11:40, unit t6b-oneshot-re, --working-directory added)** —
+  12/13 pairs wrote; seed-01 shed-died (`local_queue_full`,
+  retry_after 30s) while the t6a corpus-scale thin bank held the slot
+  (its seed-11 1083s and v1 2088s flights overlapped). The frozen
+  comparator (`sovereign/crates/sovereign-core/tests/oneshot_rag.rs`)
+  has NO shed retry — item 7 wrapped only the CLI complete call sites
+  in `deep_research_cmd.rs`, NOT the test's draft-ask path — so any
+  daemon shed kills the pair.
+- **A3 (~14:28, same unit)** — all 13 pairs wrote but exit=101: panic
+  at oneshot_rag.rs:268 — seed-05 MTP inference deadline exceeded after
+  300s (the baseline seed-05 death shape), seed-06/07 local_queue_full
+  retry_after 91s. The daemon was contended AGAIN.
+- **A4 (17:50:04 PDT, same unit t6b-oneshot-re)** — the seat identified
+  and cleared the contention source (the t6a corpus-scale thin bank
+  COMPLETE; no battery units running; 122B not loaded) and the other
+  workers held inference. Result: **exit=0, "test result: ok. 1
+  passed; 0 failed", finished in 731.94s, 13/13 pairs verified** —
+  every oneshot-<id>.md pairs with its -window.json, no empty files,
+  ids seed-01..12 + v1 exactly. One-shot arm VALID: 13/13 pairs under a
+  passing test run.
+
+### Scorer artifact + the dr-root correction
+
+`score-arms.py` at daf3baeb hardcodes `"scored_at": "2026-08-14"`
+(frozen instrument artifact — the filename distinguishes the report;
+the real scoring date is 2026-08-19). Fixtures verified green.
+CORRECTION journaled: the parked handoff's invocation
+(`--dr-root …/arms`) FAILS — the scorer resolves `bank/seeds.md` under
+`--dr-root`, and the bank lives at `research/deep-research/bank/` (one
+level up). Correct invocation used:
+`--dr-root /home/alexbryan/dev/commonwealth-ai/research/deep-research`
+with absolute --pairs/--loop/--oneshot/--out. Pooled densities over
+13/13 pairs — comparable with the baseline's 13/13.
+
+### Per-leg numbers (baseline 2026-08-14 → re-measure 2026-08-19)
+
+- P4-v0: 70/72 → **63/72** (>=58/72, **passed** — measured drop, verdict held)
+- P4-v1 (loop): 13/16 → **9/16** (>=12/16, **FAILED** — verdict flip)
+- P3: 12/13 → **9/13** passed (+0 could-not-judge) (>=10/13, **FAILED** — verdict flip)
+- R-12: 0/12 v0 seeds → **0/12** (>=10/12, **failed** — unchanged; engine gap-growth, not this order's items)
+- T1.7 plan presence: 12/12 → **12/12** (passed, unchanged)
+- two-arm lift (pooled): 1.0 vs 0.979 → **1.0 vs 0.847** (+0.10 bar, **passed** — verdict flip; NOTE: the flip is the mirror of the one-shot's density FALL, not a loop improvement — loop density unchanged at 1.0)
+- two-arm lift (v1): 1.0 vs 1.0 → **1.0 vs 0.972** (+0.15 bar, failed, unchanged)
+- honesty not worse: loop 0.0 vs one-shot 0.021 → **loop 0.0 vs one-shot 0.153** (loop <= one-shot, **passed**, unchanged — the loop's [passed] position carries ZERO untraced numbers; floor and witness intact)
+- pooled: loop_density 1.0 (unchanged); one-shot_density 0.979 → **0.847**; lift 0.021 → **0.153**
+
+### Why the flipped legs flipped — mechanism (glassbox, not recalled)
+
+The P4-v1/P3 flips are DRAFT-CONTENT events on single flights, the
+same class as the untouched control's own movement in this epoch:
+
+- **The untouched one-shot arm moved 0.979 → 0.847.** The seed-02
+  one-shot draft is a DEGENERATE 3063-token self-correction spiral
+  (8893 chars vs the frozen 1788-char baseline draft — read: "Let me
+  re-read the text carefully…", placeholder `?`/`**[DATE]**` loops,
+  inventory re-echoes). Its density fell 0.857 → 0.5. Nothing changed
+  on that arm: same frozen comparator, same deck, same pin, temp 0.4.
+- **The re v1 loop final report (dr-1787164242) has an EMPTY Findings
+  section** — every claim dumped into Open questions stamped "not
+  judgeable from the evidence" (the draft carried no citation handles
+  for the splitter; the baseline draft tagged every claim with
+  [Source: ev-N]). Coverage 13/16 → 9/16.
+- **seed-03/07/08 P3 flips**: fetch discipline was FINE in both epochs
+  (round-2 fetched 0 < 20% of round-1's 1 — the ratio arm passed); the
+  flip is the coverage arm — the re flights' FINAL reports covered
+  fewer keys than their own round-1-evidence drafts (7→5, 6→5, 4→3).
+- **Item 2 (refused-URL dedup) is INERT on this battery**: the mock
+  serves every deck URL (no refusals; triage shows no refused entries
+  in the re v1 flight), so the battery cannot exercise it. Item 5
+  (render-race) does not touch report.md (the scorer's input). Item 7
+  (shed retry) only completes runs that would otherwise die.
+
+Disposition: the measured numbers stand as recorded above; the
+ATTRIBUTION of the flipped legs is **could-not-judge** — single-run
+deltas inside the demonstrated noise class (§18.5: the control arm
+moved 0.13 pooled with nothing changed; per-question coverage moves
+±2-4 keys between any two flights). DEBT filed: an n=3 loop re-run on
+a quiet slot to settle P4-v1/P3 attribution (needs the 27B slot; t6d
+and t6a-successor flights were in flight at landing time). No item
+weakened the floor or the witness — honesty leg 0.0 ungrounded in the
+loop, unchanged.
+
+### Gates
+
+- One-shot arm: exit=0 marker (console log ground truth: "test result:
+  ok. 1 passed; 0 failed", finished in 731.94s) + 13/13 pairs
+  md↔window.json matched, no empty files.
+- Loop arm: 13/13 flights exit 0 (journal-verified per flight, landed
+  9667dbb88).
+- Shed-retry live proof (item 7): 8 shed events across seed-01/03/10/
+  11/v1 consoles ("inference shed (503) — honoring Retry-After",
+  backoffs 30/45/52s from Retry-After hints), "inference recovered
+  after a shed" lines present, ZERO exhaustion, 13/13 exit 0.
+- render-race verification (item 5): 13/13 loop flights carry
+  render-race.md; typed citations hold (every claim ends with a typed
+  reason: extracted-specifics-absent / single-origin-support /
+  not-judgeable); no bare model tails in [passed] position.
+
+### Sequencing note
+
+The seat's scoring hold (until `dr-t6d-oneshot-re` cleared) was
+honored; the seat then released it on my verification that the
+baseline-era scorer is C-class deterministic — zero daemon calls
+(verified by grep: no reqwest/ureq/http in score-arms.py; header
+"C-class only: no LLM judge anywhere"). Scoring ran without any daemon
+traffic.
