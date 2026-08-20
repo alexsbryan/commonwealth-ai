@@ -489,7 +489,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             .or_else(|_| commonwealth_state::MeshStore::in_memory())
             .expect("work atlas mesh store"),
     );
-    let atlas_node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let atlas_node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
         Arc::clone(&atlas_mesh_store),
         atlas_node_id,

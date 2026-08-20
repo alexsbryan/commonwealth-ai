@@ -2228,8 +2228,7 @@ fn local_brief_overlaps(
     let Ok(mesh_store) = commonwealth_state::MeshStore::open(&mesh_db) else {
         return Vec::new();
     };
-    let data_dir = default_data_dir().unwrap_or_else(|| PathBuf::from("."));
-    let node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let node_id = crate::atlas_identity::atlas_node_id();
     let store = sovereign_work_atlas::WorkAtlasStore::new(Arc::new(mesh_store), node_id);
     sovereign_tools::overlaps_for_working_set(&store, repo_root, working_set, None)
 }

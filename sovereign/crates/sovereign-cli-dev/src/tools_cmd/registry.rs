@@ -206,9 +206,7 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // against `data_dir` (= <root>/indexes) minted a SECOND node id for
     // this workstation, which broke work-atlas self-filtering
     // (2026-07-31).
-    let node_id = sovereign_mesh::persist::resolve_self_node_id(
-        &sovereign_cli_shared::dirs::sovereign_root(),
-    );
+    let node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
         Arc::clone(&mesh_store),
         node_id,

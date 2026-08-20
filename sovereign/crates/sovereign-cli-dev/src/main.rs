@@ -18,6 +18,7 @@
 
 mod amend;
 mod arch_report_cmd;
+mod atlas_identity;
 mod atos_cmd;
 mod atos_plugin;
 mod audit_extract;
