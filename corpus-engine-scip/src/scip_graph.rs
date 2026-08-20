@@ -1429,7 +1429,19 @@ impl ScipGraph {
             for r in &refs {
                 conn.execute(
                     REFS_INSERT_SQL,
-                    params![corpus, r.caller_symbol, r.callee_symbol, r.caller_qualified, r.callee_qualified, r.file_path, r.line, r.start_col, r.end_line, r.end_col, r.ref_kind],
+                    params![
+                        corpus,
+                        r.caller_symbol,
+                        r.callee_symbol,
+                        r.caller_qualified,
+                        r.callee_qualified,
+                        r.file_path,
+                        r.line,
+                        r.start_col,
+                        r.end_line,
+                        r.end_col,
+                        r.ref_kind
+                    ],
                 )?;
             }
             Ok(())
@@ -1500,7 +1512,19 @@ impl ScipGraph {
                 for r in &refs {
                     conn.execute(
                         REFS_INSERT_SQL,
-                        params![corpus, r.caller_symbol, r.callee_symbol, r.caller_qualified, r.callee_qualified, r.file_path, r.line, r.start_col, r.end_line, r.end_col, r.ref_kind],
+                        params![
+                            corpus,
+                            r.caller_symbol,
+                            r.callee_symbol,
+                            r.caller_qualified,
+                            r.callee_qualified,
+                            r.file_path,
+                            r.line,
+                            r.start_col,
+                            r.end_line,
+                            r.end_col,
+                            r.ref_kind
+                        ],
                     )?;
                 }
                 Ok(())
@@ -1801,9 +1825,21 @@ impl ScipGraph {
                         file_path: row.get(4)?,
                         line: row.get(5)?,
                         ref_kind: row.get(6)?,
-                        start_col: if has_spans { row.get(7).unwrap_or(-1) } else { -1 },
-                        end_line: if has_spans { row.get(8).unwrap_or(-1) } else { -1 },
-                        end_col: if has_spans { row.get(9).unwrap_or(-1) } else { -1 },
+                        start_col: if has_spans {
+                            row.get(7).unwrap_or(-1)
+                        } else {
+                            -1
+                        },
+                        end_line: if has_spans {
+                            row.get(8).unwrap_or(-1)
+                        } else {
+                            -1
+                        },
+                        end_col: if has_spans {
+                            row.get(9).unwrap_or(-1)
+                        } else {
+                            -1
+                        },
                     })
                 })
                 .map_err(|e| Error::Database(format!("import query refs: {e}")))?;
@@ -2686,7 +2722,10 @@ mod integrity_tests {
         let refs = g.iter_all_refs().await.unwrap();
         assert_eq!(refs.len(), 1);
         let r = &refs[0];
-        assert_eq!((r.line, r.start_col, r.end_line, r.end_col), (12, 8, 12, 18));
+        assert_eq!(
+            (r.line, r.start_col, r.end_line, r.end_col),
+            (12, 8, 12, 18)
+        );
         assert!(r.has_span(), "a full span must report has_span()");
     }
 

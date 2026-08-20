@@ -291,7 +291,10 @@ pub async fn run(args: &[String]) -> i32 {
             "skipped_multiline": skipped.multiline,
             "freshness": lag.verdict_word(),
         });
-        println!("{}", serde_json::to_string_pretty(&payload).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&payload).unwrap_or_default()
+        );
     } else {
         println!(
             "{} `{symbol}` -> `{to}` in corpus `{corpus_id}`",
@@ -303,7 +306,9 @@ pub async fn run(args: &[String]) -> i32 {
         }
         report_skips(&skipped, &corpus_id);
         if !apply && rewritten > 0 {
-            println!("\n  nothing written. Re-run with --apply to write these {rewritten} edit(s).");
+            println!(
+                "\n  nothing written. Re-run with --apply to write these {rewritten} edit(s)."
+            );
         }
     }
 
@@ -541,8 +546,7 @@ mod tests {
         let (dir, f) = fixture("let x = strip_html(input);\n");
         // `strip_html` starts at char 8, ends at 18.
         let refs = vec![r(&f, "strip_html", 0, 8, 18)];
-        let (sites, skipped, considered) =
-            collect_sites(&refs, "strip_html", None, dir.path());
+        let (sites, skipped, considered) = collect_sites(&refs, "strip_html", None, dir.path());
         assert_eq!(considered, 1);
         assert_eq!(sites.len(), 1);
         assert_eq!(skipped.mismatch.len(), 0);
@@ -554,8 +558,7 @@ mod tests {
     fn refuses_a_span_whose_text_moved() {
         let (dir, f) = fixture("let x = something_else(input);\n");
         let refs = vec![r(&f, "strip_html", 0, 8, 18)];
-        let (sites, skipped, considered) =
-            collect_sites(&refs, "strip_html", None, dir.path());
+        let (sites, skipped, considered) = collect_sites(&refs, "strip_html", None, dir.path());
         assert_eq!(considered, 1, "the reference was counted");
         assert!(sites.is_empty(), "but it must not be rewritten");
         assert_eq!(skipped.mismatch.len(), 1);
@@ -567,8 +570,7 @@ mod tests {
         let (dir, f) = fixture("let x = strip_html(input);\n");
         let mut rec = r(&f, "strip_html", 0, -1, -1);
         rec.end_line = -1;
-        let (sites, skipped, considered) =
-            collect_sites(&[rec], "strip_html", None, dir.path());
+        let (sites, skipped, considered) = collect_sites(&[rec], "strip_html", None, dir.path());
         assert_eq!(considered, 1);
         assert!(sites.is_empty());
         assert_eq!(skipped.no_span, 1);
@@ -586,8 +588,7 @@ mod tests {
     fn scope_prefix_limits_the_sweep() {
         let (dir, _) = fixture("let x = strip_html(input);\n");
         let refs = vec![r("src.rs", "strip_html", 0, 8, 18)];
-        let (_, _, considered) =
-            collect_sites(&refs, "strip_html", Some("other/"), dir.path());
+        let (_, _, considered) = collect_sites(&refs, "strip_html", Some("other/"), dir.path());
         assert_eq!(considered, 0);
     }
 
