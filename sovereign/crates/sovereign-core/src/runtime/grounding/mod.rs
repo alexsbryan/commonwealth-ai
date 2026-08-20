@@ -105,6 +105,13 @@ pub(crate) use search::{
 use std::collections::HashSet;
 use std::sync::Arc;
 
+// The kernel's grain, reached through the crate that publishes `Evidence`
+// rather than by a second direct dep on the kernel leaf (ARCH §8.3) — the
+// same door this file already takes `ScoredChunk` through. Replaced the
+// local `EvidenceSource` enum 2026-08-20 (rung nc-4-evidence): two
+// variants, identical meaning, one of them a copy.
+use corpus_engine::Grain;
+
 use crate::traits::InferenceProvider;
 use crate::types::CitationTarget;
 use crate::types::CompletionRequest;
@@ -309,7 +316,7 @@ pub(crate) struct EvidenceContext {
     /// row and default to `Leaf` via [`EvidenceContext::source_of`].
     /// EMPTY = provenance unknown → the gate behaves exactly as before
     /// this field existed (additive, mesh-safe).
-    pub chunk_sources: Vec<EvidenceSource>,
+    pub chunk_sources: Vec<Grain>,
     /// Per-chunk custody aligned with `chunks` by index (custody.md
     /// §1-§2, reds R-2/R-3). May be SHORTER than `chunks`: entries
     /// appended after the builder ran (sealed conversation evidence,
@@ -345,34 +352,19 @@ pub(crate) struct EvidenceContext {
     pub native_verdict: Option<crate::types::GroundingVerdict>,
 }
 
-/// Where an evidence chunk's text came from (T1 P1.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum EvidenceSource {
-    /// A real retrieved source chunk — verbatim corpus text.
-    Leaf,
-    /// A derived RAPTOR summary node — LLM prose ABOUT source text.
-    /// May support thematic/structural claims; never factual ones.
-    Summary,
-}
-
 impl EvidenceContext {
     /// Provenance of chunk `idx`. Indices past `chunk_sources` (late
     /// appends, or an empty vec entirely) read as `Leaf` — the
     /// conservative pre-P1.4 degradation.
-    pub(crate) fn source_of(&self, idx: usize) -> EvidenceSource {
-        self.chunk_sources
-            .get(idx)
-            .copied()
-            .unwrap_or(EvidenceSource::Leaf)
+    pub(crate) fn source_of(&self, idx: usize) -> Grain {
+        self.chunk_sources.get(idx).copied().unwrap_or(Grain::Leaf)
     }
 
     /// True when any chunk is Summary-class — i.e. the P1.4 policy has
     /// something to decide. False short-circuits the claim loop to the
     /// exact pre-P1.4 code path.
     pub(crate) fn has_summary_evidence(&self) -> bool {
-        self.chunk_sources
-            .iter()
-            .any(|s| *s == EvidenceSource::Summary)
+        self.chunk_sources.iter().any(|s| *s == Grain::Summary)
     }
 }
 
@@ -389,7 +381,7 @@ impl EvidenceContext {
 /// baselines.
 pub(crate) struct GateEvidenceParts {
     pub chunks: Vec<String>,
-    pub chunk_sources: Vec<EvidenceSource>,
+    pub chunk_sources: Vec<Grain>,
     pub chunk_labels: Vec<Vec<String>>,
     /// Human section locators, built HERE rather than at the call sites so
     /// they pass through the same summary filter and Leaf-first reordering as
@@ -468,7 +460,7 @@ pub(crate) fn gate_evidence_with_sources(
         // Historical pre-Fix-B baseline: summaries are source-equivalent.
         return GateEvidenceParts {
             chunks: chunks.iter().map(|c| c.content.clone()).collect(),
-            chunk_sources: vec![EvidenceSource::Leaf; chunks.len()],
+            chunk_sources: vec![Grain::Leaf; chunks.len()],
             chunk_labels: chunks.iter().map(labels_of).collect(),
             chunk_locators: gate_evidence_locators(chunks),
             chunk_targets: gate_evidence_targets(chunks),
@@ -505,7 +497,7 @@ pub(crate) fn gate_evidence_with_sources(
     };
     for (i, c) in chunks.iter().enumerate().filter(|(_, c)| !is_summary(c)) {
         parts.chunks.push(c.content.clone());
-        parts.chunk_sources.push(EvidenceSource::Leaf);
+        parts.chunk_sources.push(Grain::Leaf);
         parts.chunk_labels.push(labels_of(c));
         parts.chunk_locators.push(locator_at(i));
         parts.chunk_targets.push(target_at(i));
@@ -515,7 +507,7 @@ pub(crate) fn gate_evidence_with_sources(
     if summary_evidence {
         for (i, c) in chunks.iter().enumerate().filter(|(_, c)| is_summary(c)) {
             parts.chunks.push(c.content.clone());
-            parts.chunk_sources.push(EvidenceSource::Summary);
+            parts.chunk_sources.push(Grain::Summary);
             parts.chunk_labels.push(labels_of(c));
             parts.chunk_locators.push(locator_at(i));
             parts.chunk_targets.push(target_at(i));
@@ -1295,7 +1287,7 @@ async fn gate_answer_inner(
         &[Option<String>],
     ) = if evidence.has_summary_evidence() {
         let keep: Vec<usize> = (0..evidence.chunks.len())
-            .filter(|i| evidence.source_of(*i) == EvidenceSource::Leaf)
+            .filter(|i| evidence.source_of(*i).may_be_quoted())
             .collect();
         leaf_owned = keep.iter().map(|i| evidence.chunks[*i].clone()).collect();
         leaf_locators = keep
@@ -2803,13 +2795,13 @@ async fn gate_longform(
     let leaf_chunks: Vec<String> = chunks
         .iter()
         .enumerate()
-        .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Leaf)
+        .filter(|(i, _)| evidence.source_of(*i).may_be_quoted())
         .map(|(_, c)| c.clone())
         .collect();
     let summary_chunks: Vec<String> = chunks
         .iter()
         .enumerate()
-        .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Summary)
+        .filter(|(i, _)| !evidence.source_of(*i).may_be_quoted())
         .map(|(_, c)| c.clone())
         .collect();
     // THE AUDITOR IS SHOWN WHAT THE DRAFTER WAS SHOWN. This was a constant
