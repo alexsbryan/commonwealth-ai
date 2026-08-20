@@ -143,6 +143,7 @@ status    = "active"
 
 [[bar]]
 id           = "nc-boundary"
+timeout_s    = 30
 one_line     = "Each domain publishes a small named surface instead of leaking its internals"
 derives_from = "the measurement above; TARGET_ARCHITECTURE.md §6"
 status       = "open"
@@ -170,6 +171,7 @@ kill         = "if narrowing a boundary forces a re-export shim that renames the
 
 [[bar]]
 id           = "nc-no-violation"
+timeout_s    = 30
 one_line     = "No edge runs the wrong way, and nothing depends on the quality controls"
 derives_from = "the layer map above; the back-of-house one-way rule"
 status       = "open"
@@ -208,6 +210,7 @@ instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; pri
 
 [[bar]]
 id           = "nc-kernel"
+timeout_s    = 30
 one_line     = "What every domain speaks is a CONTRACT, owned by none of them"
 derives_from = "the measurement above"
 status       = "open"
@@ -243,6 +246,7 @@ also_required = "`kernel_homes` must name a neutral crate, not a single product 
 
 [[bar]]
 id           = "nc-thesis"
+timeout_s    = 30
 one_line     = "The product claim is a TYPE, not a runtime gate"
 derives_from = "TARGET_ARCHITECTURE.md §1, §7 rows 1-4"
 status       = "open"
@@ -285,6 +289,7 @@ instrument   = "scripts/nc-thesis.py --json | python3 -c 'import json,sys; print
 
 [[bar]]
 id           = "nc-extends"
+timeout_s    = 30
 one_line     = "Adding a thing is a DATA change, not a code change"
 derives_from = "TARGET_ARCHITECTURE.md §2.1 — Recipe is the reference implementation of the whole architecture"
 status       = "open"
