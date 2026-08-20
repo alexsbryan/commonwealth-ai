@@ -18,35 +18,21 @@ use std::collections::HashMap;
 pub const ICD_VERSION: u32 = 1;
 
 /// The four gate verdicts (§18.1) — never defaulted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Verdict {
-    Passed,
-    Failed,
-    CouldNotJudge,
-    NeverRan,
-}
-
-impl Verdict {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Verdict::Passed => "passed",
-            Verdict::Failed => "failed",
-            Verdict::CouldNotJudge => "could-not-judge",
-            Verdict::NeverRan => "never-ran",
-        }
-    }
-
-    pub fn parse_wire(s: &str) -> Option<Verdict> {
-        match s {
-            "passed" => Some(Verdict::Passed),
-            "failed" => Some(Verdict::Failed),
-            "could-not-judge" => Some(Verdict::CouldNotJudge),
-            "never-ran" => Some(Verdict::NeverRan),
-            _ => None,
-        }
-    }
-}
+///
+/// CONVERGED 2026-08-20 onto [`kernel_types::Verdict`] (noun-convergence rung
+/// nc-10-judgement). The definition here was byte-for-byte the kernel's —
+/// same four variants, same kebab-case wire form, same `as_str` and
+/// `parse_wire` — so this was one of ten `Verdict` definitions that genuinely
+/// WAS the same concept rather than a namesake. It is now a re-export, which
+/// is a statement and not a shim: the ICD's verdict IS the kernel's verdict,
+/// there is one definition rather than two, and the artifacts on disk are
+/// unchanged.
+///
+/// The other nine are adjudicated in the rung's landing verdict; most are
+/// correctly distinct (`facts_check::Verdict` carries a receipt,
+/// `mesh_measurements::Verdict` is valid/invalid-with-problems,
+/// `flywheel::verify::Verdict` is a probe row).
+pub use kernel_types::Verdict;
 
 /// The gate action family from the custody reds: a claim resting on
 /// unknown-provenance evidence must take a `refused_*` action (R-3).

@@ -28,6 +28,13 @@ sovereign-store = { workspace = true }
 # (sovereign-tools) must compute the carried-item advisory identically, and
 # sovereign-cli cannot see sovereign-tools in a gated build.
 sovereign-contracts = { workspace = true }
+# The neutral kernel — `posture` renders every row as a `Judgement`, so the
+# verdict vocabulary, the age format and the staleness band are one decider
+# rather than seven (noun-convergence rung nc-10-judgement). Layer 0, so this
+# edge points DOWN; it is not routed through sovereign-contracts because
+# kernel-types is a membrane meant to be named directly (ARCH §8.3 is about
+# re-exported types, not about the membrane itself).
+kernel-types = { workspace = true }
 sovereign-agent-bench = { workspace = true, optional = true }
 # `awareness_cmd` (the `awareness` feature only) needs the heavy
 # `knowledge_view` surface from sovereign-tools. Default + `dev-tools`

@@ -14,27 +14,41 @@
 //! wrote; nothing here computes, refreshes, or mutates. Sources register in
 //! [`sources`] — a new posture-bearing subsystem adds a row there rather
 //! than being forgotten (the registry-over-memory pattern, ARCH §4).
+//!
+//! # A row is a [`Judgement`], and that is the point
+//!
+//! This verb was `NOUN_CONVERGENCE.md` §10.1's first exhibit: seven rows
+//! printed in **seven status vocabularies** (`fresh`, `stale`, `fail (stale)`,
+//! `off (by design)`, `present`, `present (gaps)`) and **seven age formats**
+//! (`12d`, `1h`, `16d`, `7d ago`, `-`, `6d`, `9d..95d`). An aggregator over a
+//! concept with no type, so every subsystem it aggregates invented its own.
+//!
+//! Each row is now a `kernel_types::Judgement`: one of four verdicts (ARCH
+//! §18.2), a reason it cannot omit, and — where an artifact backs it — a date
+//! and a horizon. Three rows got MORE honest in the conversion, not merely
+//! more uniform:
+//!
+//! - `bench-baselines` printed `present (gaps)` while its own comment argued
+//!   that a bank with no baseline "can only ever report first-run, which is a
+//!   could-not-judge, not a pass". It now says could-not-judge.
+//! - `contract-nightly` printed the lane's raw verdict string, so a `fail`
+//!   was a word no aggregation could count. It is now `Verdict::Failed` and
+//!   the footer counts it.
+//! - `no repo context` was a seventh vocabulary for "I could not judge this".
+//!
+//! `STALE_AFTER_DAYS` was also compared at two sites in this file — one
+//! threshold, two implementations (ARCH §10.6). It is now a horizon set once
+//! and banded by the type.
 
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
 
-/// One subsystem's posture line.
-struct PostureRow {
-    /// Subsystem name (stable, greppable).
-    name: &'static str,
-    /// Honest one-word-ish verdict: `fresh`/`present`/`stale`/`never_run`/
-    /// `off (by design)`/`no repo context`/…
-    verdict: String,
-    /// Age of the newest artifact, when one exists.
-    age: Option<String>,
-    /// One line of detail + the refresh command where it isn't obvious.
-    detail: String,
-}
+use kernel_types::{honesty_footer, render_rows, Judgement, Reason};
 
 /// The registry: every posture-bearing subsystem, in display order.
 /// `repo` is the enclosing source checkout, when the CWD is inside one —
-/// repo-scoped sources degrade to an honest "no repo context" without it.
-fn sources(repo: Option<&Path>) -> Vec<PostureRow> {
+/// repo-scoped sources degrade to an honest could-not-judge without it.
+fn sources(repo: Option<&Path>) -> Vec<Judgement> {
     vec![
         drift_row(),
         arch_row(),
@@ -54,23 +68,14 @@ pub async fn run(args: &[String]) -> i32 {
     let repo = find_repo_root();
     // Payload to stdout — this is a report, not narration.
     println!("── posture — artifact age per quality subsystem (read-only) ──");
-    let mut stale = 0usize;
-    for row in sources(repo.as_deref()) {
-        let age = row.age.as_deref().unwrap_or("-");
-        if row.verdict.contains("stale") || row.verdict == "never_run" {
-            stale += 1;
-        }
-        println!(
-            "  {:<18} {:<16} {:<12} {}",
-            row.name, row.verdict, age, row.detail
-        );
-    }
+    let rows = sources(repo.as_deref());
+    print!("{}", render_rows(&rows));
     match &repo {
         Some(r) => println!("  repo context: {}", r.display()),
         None => println!("  repo context: none (repo-scoped rows degrade; run from a checkout)"),
     }
-    if stale > 0 {
-        println!("  {stale} subsystem(s) stale or never run — each row names its refresh command");
+    if let Some(footer) = honesty_footer(&rows) {
+        println!("  {footer} — each row names its refresh command");
     }
     0
 }
@@ -80,9 +85,13 @@ pub async fn run(args: &[String]) -> i32 {
 /// Staleness horizon for report-shaped artifacts: older than this and the
 /// row SAYS stale. Two weeks — generous against the observed rot mode
 /// (reports going a month unnoticed), tight enough to prompt a refresh.
-const STALE_AFTER_DAYS: u64 = 14;
+///
+/// One threshold, one decider (ARCH §10.6). It used to be compared by hand in
+/// `aged_artifact_row` AND `per_corpus_newest`; it is now handed to
+/// `Judgement::stale_after` and the banding happens in one place.
+const REPORT_HORIZON: Duration = Duration::from_secs(14 * 86_400);
 
-fn drift_row() -> PostureRow {
+fn drift_row() -> Judgement {
     let path = sovereign_contracts::rebrand::drift_dir().join("latest.md.json");
     aged_artifact_row(
         "drift",
@@ -91,7 +100,7 @@ fn drift_row() -> PostureRow {
     )
 }
 
-fn arch_row() -> PostureRow {
+fn arch_row() -> Judgement {
     per_corpus_newest(
         "arch",
         &sovereign_contracts::rebrand::data_dir().join("arch"),
@@ -100,7 +109,7 @@ fn arch_row() -> PostureRow {
     )
 }
 
-fn capability_row() -> PostureRow {
+fn capability_row() -> Judgement {
     per_corpus_newest(
         "capability",
         &sovereign_contracts::rebrand::data_dir().join("capabilities"),
@@ -109,40 +118,30 @@ fn capability_row() -> PostureRow {
     )
 }
 
-fn contract_nightly_row() -> PostureRow {
+fn contract_nightly_row() -> Judgement {
     // The trigger comes from the same decider `svrn contract nightly` uses, so
     // the two surfaces cannot disagree about what schedules this lane. Naming
     // it in the row is the fix for a row that implied a daily cadence on a
     // host where nothing scheduled the lane at all.
     let trigger = sovereign_cli_shared::cli_contract_report::nightly_trigger();
     match sovereign_cli_shared::cli_contract_report::nightly_posture() {
-        Some(n) => PostureRow {
-            name: "contract-nightly",
-            verdict: if n.is_stale() {
-                format!("{} (stale)", n.verdict)
-            } else {
-                n.verdict.clone()
-            },
-            age: Some(n.age_human()),
-            detail: format!(
-                "{} — trigger: {} — detail: svrn contract nightly",
-                n.summary,
-                trigger.label()
-            ),
-        },
-        None => PostureRow {
-            name: "contract-nightly",
-            verdict: "never_run".into(),
-            age: None,
-            detail: format!(
+        // The lane's word -> one of the four is decided ONCE, by the module
+        // that owns the lane's vocabulary. This row used to map it here as
+        // well, which is how `svrn posture` and `svrn contract nightly` came
+        // to render the same lane two different ways.
+        Some(n) => n.judgement(),
+        None => Judgement::never_ran(
+            "contract-nightly",
+            Reason::new(format!(
                 "no journey-lane verdict on this host (trigger: {}) — run: scripts/cli-journey-nightly.sh",
                 trigger.label()
-            ),
-        },
+            ))
+            .expect("a trigger label and a run command is never a placeholder"),
+        ),
     }
 }
 
-fn watcher_row(repo: Option<&Path>) -> PostureRow {
+fn watcher_row(repo: Option<&Path>) -> Judgement {
     // Honor the off-by-design posture FIRST: a repo that declares
     // `[watchers] enabled = false` has a healthy absence, not a fault.
     if let Some(repo) = repo {
@@ -153,14 +152,18 @@ fn watcher_row(repo: Option<&Path>) -> PostureRow {
                     .and_then(|e| e.as_bool())
                     == Some(false)
                 {
-                    return PostureRow {
-                        name: "watchers",
-                        verdict: "off (by design)".into(),
-                        age: None,
-                        detail: "this repo opts out ([watchers] enabled = false); \
-                                 gate = the two toolbox scripts"
-                            .into(),
-                    };
+                    // A declared opt-out is a healthy absence, and `doctor`
+                    // already reports it as Passed. Same answer here, so the
+                    // two surfaces cannot disagree about what the opt-out
+                    // MEANS — which is what a seventh vocabulary word
+                    // ("off (by design)") left open.
+                    return Judgement::passed(
+                        "watchers",
+                        Reason::literal(
+                            "this repo opts out ([watchers] enabled = false); \
+                             gate = the two toolbox scripts",
+                        ),
+                    );
                 }
             }
         }
@@ -174,7 +177,7 @@ fn watcher_row(repo: Option<&Path>) -> PostureRow {
 
 // ─── Repo-scoped rows ───────────────────────────────────────────────
 
-fn env_gate_row(repo: Option<&Path>) -> PostureRow {
+fn env_gate_row(repo: Option<&Path>) -> Judgement {
     let Some(repo) = repo else {
         return no_repo_row("env-gate");
     };
@@ -185,26 +188,30 @@ fn env_gate_row(repo: Option<&Path>) -> PostureRow {
                 .lines()
                 .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with('#'))
                 .count();
-            PostureRow {
-                name: "env-gate",
-                verdict: "present".into(),
-                age: mtime_age(&path).map(human_age),
-                detail: format!(
+            let j = Judgement::passed(
+                "env-gate",
+                Reason::new(format!(
                     "{count} legacy env vars riding the shrink-only baseline — \
                      burn down via quality/env-flags.toml + `env-gate --tighten`"
-                ),
+                ))
+                .expect("a count and a burn-down command is never a placeholder"),
+            );
+            // The baseline is a checked-in ratchet, not a report: it does not
+            // rot on a two-week clock, so it is dated without a horizon and
+            // reads `passed` at any age.
+            match mtime(&path) {
+                Some(at) => j.as_of(at),
+                None => j,
             }
         }
-        Err(_) => PostureRow {
-            name: "env-gate",
-            verdict: "not yet present".into(),
-            age: None,
-            detail: "no baseline — run: cargo run -p xtask -- env-gate --update-baseline".into(),
-        },
+        Err(_) => Judgement::never_ran(
+            "env-gate",
+            Reason::literal("no baseline — run: cargo run -p xtask -- env-gate --update-baseline"),
+        ),
     }
 }
 
-fn bench_baselines_row(repo: Option<&Path>) -> PostureRow {
+fn bench_baselines_row(repo: Option<&Path>) -> Judgement {
     let Some(repo) = repo else {
         return no_repo_row("bench-baselines");
     };
@@ -217,12 +224,11 @@ fn bench_baselines_row(repo: Option<&Path>) -> PostureRow {
         }
     }
     if latest.is_empty() {
-        return PostureRow {
-            name: "bench-baselines",
-            verdict: "never_run".into(),
-            age: None,
-            detail: format!("no latest.json under {}", bench_root.display()),
-        };
+        return Judgement::never_ran(
+            "bench-baselines",
+            Reason::new(format!("no latest.json under {}", bench_root.display()))
+                .expect("a path is never a placeholder"),
+        );
     }
     let oldest = latest.iter().map(|(_, t)| *t).min().expect("non-empty");
     let newest = latest.iter().map(|(_, t)| *t).max().expect("non-empty");
@@ -242,7 +248,12 @@ fn bench_baselines_row(repo: Option<&Path>) -> PostureRow {
     let committed = latest.len() - local_only;
     let unmeasured = banks_without_baselines(&bench_root);
 
-    let mut detail = format!("{committed} committed baseline(s)");
+    let mut detail = format!(
+        "{committed} committed baseline(s), newest {}",
+        kernel_types::Judgement::passed("newest", Reason::literal("age probe"))
+            .as_of(newest)
+            .age_label()
+    );
     if local_only > 0 {
         detail.push_str(&format!(
             ", {local_only} LOCAL-ONLY (gitignored — gates nothing for peers)"
@@ -272,20 +283,23 @@ fn bench_baselines_row(repo: Option<&Path>) -> PostureRow {
     }
     detail.push_str("; recapture via `svrn bench gate <lane> --update-baseline`");
 
-    PostureRow {
-        name: "bench-baselines",
-        verdict: if local_only > 0 || !unmeasured.is_empty() {
-            "present (gaps)".into()
-        } else {
-            "present".into()
-        },
-        age: Some(format!(
-            "{}..{}",
-            human_age(age_of(newest)),
-            human_age(age_of(oldest))
-        )),
-        detail,
-    }
+    let reason = Reason::new(detail)
+        .expect("a baseline count and a recapture command is never a placeholder");
+    // `present (gaps)` was the seventh vocabulary word and it understated the
+    // finding. The comment above already reasons that a bank with no baseline
+    // "can only ever report `first-run`, which is a could-not-judge, not a
+    // pass" — the row simply had no way to SAY could-not-judge. It does now,
+    // and the footer counts it.
+    let j = if local_only > 0 || !unmeasured.is_empty() {
+        Judgement::could_not_judge("bench-baselines", reason)
+    } else {
+        Judgement::passed("bench-baselines", reason)
+    };
+    // Dated to the OLDEST baseline, never the newest: an aggregate is not
+    // fresher than its stalest input. `newest` still rides the reason so the
+    // range the row used to print is not lost.
+    let _ = newest;
+    j.as_of(oldest).stale_after(REPORT_HORIZON)
 }
 
 /// Which of `paths` git ignores, as one batched `git check-ignore
@@ -383,96 +397,76 @@ fn collect_latest_json(dir: &Path, out: &mut Vec<(PathBuf, SystemTime)>) {
 
 // ─── Shared row builders ────────────────────────────────────────────
 
-fn aged_artifact_row(name: &'static str, path: &Path, what: &str) -> PostureRow {
-    match mtime_age(path) {
-        Some(age) => PostureRow {
+fn aged_artifact_row(name: &'static str, path: &Path, what: &str) -> Judgement {
+    match mtime(path) {
+        // The artifact exists, so the check ran. Whether it is still worth
+        // quoting is the FRESHNESS band, not a second verdict word — which is
+        // what `fresh`/`stale` conflated: `stale` erased the fact that the
+        // report is there, `fresh` erased what it is.
+        Some(at) => Judgement::passed(
             name,
-            verdict: if age.as_secs() > STALE_AFTER_DAYS * 86_400 {
-                "stale".into()
-            } else {
-                "fresh".into()
-            },
-            age: Some(human_age(age)),
-            detail: what.to_string(),
-        },
-        None => PostureRow {
+            Reason::new(what).expect("a row description is never a placeholder"),
+        )
+        .as_of(at)
+        .stale_after(REPORT_HORIZON),
+        None => Judgement::never_ran(
             name,
-            verdict: "never_run".into(),
-            age: None,
-            detail: format!("{what} — expected at {}", path.display()),
-        },
+            Reason::new(format!("{what} — expected at {}", path.display()))
+                .expect("a row description and a path is never a placeholder"),
+        ),
     }
 }
 
 /// Newest `<root>/<corpus>/<artifact>` across corpora subdirs.
-fn per_corpus_newest(name: &'static str, root: &Path, artifact: &str, what: &str) -> PostureRow {
-    let mut newest: Option<(String, std::time::Duration)> = None;
+fn per_corpus_newest(name: &'static str, root: &Path, artifact: &str, what: &str) -> Judgement {
+    let mut newest: Option<(String, SystemTime)> = None;
     let mut corpora = 0usize;
     if let Ok(entries) = std::fs::read_dir(root) {
         for e in entries.flatten() {
             let p = e.path().join(artifact);
-            if let Some(age) = mtime_age(&p) {
+            if let Some(at) = mtime(&p) {
                 corpora += 1;
                 let corpus = e.file_name().to_string_lossy().into_owned();
-                if newest.as_ref().map_or(true, |(_, a)| age < *a) {
-                    newest = Some((corpus, age));
+                if newest.as_ref().map_or(true, |(_, t)| at > *t) {
+                    newest = Some((corpus, at));
                 }
             }
         }
     }
     match newest {
-        Some((corpus, age)) => PostureRow {
+        Some((corpus, at)) => Judgement::passed(
             name,
-            verdict: if age.as_secs() > STALE_AFTER_DAYS * 86_400 {
-                "stale".into()
-            } else {
-                "fresh".into()
-            },
-            age: Some(human_age(age)),
-            detail: format!("{what} (newest of {corpora} corpus dir(s): {corpus})"),
-        },
-        None => PostureRow {
+            Reason::new(format!(
+                "{what} (newest of {corpora} corpus dir(s): {corpus})"
+            ))
+            .expect("a row description is never a placeholder"),
+        )
+        .as_of(at)
+        .stale_after(REPORT_HORIZON),
+        None => Judgement::never_ran(
             name,
-            verdict: "never_run".into(),
-            age: None,
-            detail: format!("{what} — expected under {}", root.display()),
-        },
+            Reason::new(format!("{what} — expected under {}", root.display()))
+                .expect("a row description and a path is never a placeholder"),
+        ),
     }
 }
 
-fn no_repo_row(name: &'static str) -> PostureRow {
-    PostureRow {
+/// A repo-scoped row with no checkout under the CWD. This is a
+/// could-not-judge and always was — "no repo context" was a seventh
+/// vocabulary word for exactly that, which no footer could count.
+fn no_repo_row(name: &'static str) -> Judgement {
+    Judgement::could_not_judge(
         name,
-        verdict: "no repo context".into(),
-        age: None,
-        detail: "repo-scoped artifact; run from a source checkout".into(),
-    }
+        Reason::literal("repo-scoped artifact; run from a source checkout"),
+    )
 }
 
 // ─── Small helpers ──────────────────────────────────────────────────
 
-fn mtime_age(path: &Path) -> Option<std::time::Duration> {
-    std::fs::metadata(path)
-        .ok()
-        .and_then(|m| m.modified().ok())
-        .map(age_of)
-}
-
-fn age_of(t: SystemTime) -> std::time::Duration {
-    SystemTime::now()
-        .duration_since(t)
-        .unwrap_or(std::time::Duration::ZERO)
-}
-
-fn human_age(d: std::time::Duration) -> String {
-    let s = d.as_secs();
-    if s < 3_600 {
-        format!("{}m", s / 60)
-    } else if s < 86_400 {
-        format!("{}h", s / 3_600)
-    } else {
-        format!("{}d", s / 86_400)
-    }
+/// When the artifact was last written. Age computation and formatting are
+/// [`Judgement`]'s job now — this file reads a date and hands it over.
+fn mtime(path: &Path) -> Option<SystemTime> {
+    std::fs::metadata(path).ok().and_then(|m| m.modified().ok())
 }
 
 /// Walk up from the CWD to the enclosing checkout: the dir holding both

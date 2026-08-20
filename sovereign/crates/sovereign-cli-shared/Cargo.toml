@@ -30,6 +30,11 @@ dirs = "5"
 # The rebrand-aware path SSOT — `dirs.rs` delegates to it instead of
 # mirroring `resolve_branded_dir` by hand (the mirror drifted risk).
 sovereign-contracts = { workspace = true }
+# The neutral kernel — `NightlyPosture::judgement` maps the lane's word onto
+# the four verdicts and hands off age, formatting and the staleness band, so
+# `svrn contract nightly` and `svrn posture` cannot disagree about what a lane
+# verdict means (noun-convergence rung nc-10-judgement). Layer 0: down.
+kernel-types = { workspace = true }
 serde = { workspace = true }
 # Only for reading the journey nightly's `latest.json` in `cli_contract_report`
 # — a report the CLI must be able to quote without shelling out to jq.

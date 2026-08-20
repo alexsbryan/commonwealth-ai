@@ -10,6 +10,10 @@ oicp-types = { path = "../../../oicp-types" }
 # setup_config, types) was carved out here; sovereign-core re-exports every
 # item at its historical path so importers are unaffected.
 sovereign-contracts = { workspace = true }
+# The neutral kernel — `deep_research::icd` re-exports `Verdict` from here
+# rather than re-declaring the same four variants and the same wire form
+# (noun-convergence rung nc-10-judgement). Layer 0: this edge points DOWN.
+kernel-types = { workspace = true }
 # `treesitter` feature dropped 2026-05-22: sovereign-core's
 # corpus-engine usages (FeatureStore, NoteStore, EmbedFn, etc) are
 # not treesitter-gated. The only "ScipGraph" / "symbol_lookup"
