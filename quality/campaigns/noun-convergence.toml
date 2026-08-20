@@ -270,6 +270,22 @@ today        = 1.0
 target       = 3.0
 direction    = "higher_is_better"
 proof        = "one commit per feature adding ONLY data files; full suite green; no new `impl` block"
+# INSTRUMENTED 2026-08-20 by the seat (operator-approved). Until today this bar
+# — the one that carries the campaign's actual goal — was UNMEASURED, while the
+# three type-counting bars were fully instrumented. That asymmetry is the
+# failure mode it exists to prevent: `nc-boundary` can be driven 485 -> 50 by
+# publishing fifty CONCRETE types and would score as success without making
+# anything extensible. Reads 1/3 on an unchanged tree, agreeing axis-for-axis
+# with the hand-scored `today` above — that agreement is the instrument's
+# validation (§18.4), not a coincidence to be explained away.
+#   corpus 0 rust sites   DATA   217 recipe TOMLs; no Rust names a corpus
+#   tool   112 sites      CODE   every tool is a hand-written `impl Tool for`
+#   intent 43 files       CODE   525 `Intent::` sites fan out across them
+# Grep-shaped and deliberately NOT graph-backed: the three graph bars all read
+# ZERO off an emptied database on 2026-08-20 and would have been recorded as
+# total success. An instrument that cannot be silently emptied is worth more
+# here than a more precise one.
+instrument   = "scripts/nc-extends.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
 
 [[bar]]
 id           = "nc-god-objects"
