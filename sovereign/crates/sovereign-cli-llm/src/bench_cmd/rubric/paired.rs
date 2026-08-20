@@ -447,7 +447,7 @@ pub fn print_paired<R: RubricRun>(baseline: &R, current: &R) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bench_cmd::rubric::judge::Judgement;
+    use crate::bench_cmd::rubric::judge::Ballot;
     use crate::bench_cmd::rubric::test_support::{item, outcome};
 
     /// Reference values from R's `binom.test(k, n, 0.5)` / the textbook exact
@@ -484,12 +484,12 @@ mod tests {
             &[item(
                 "p1",
                 "g",
-                vec![outcome("c1", "d", 2, Some(Judgement::No))],
+                vec![outcome("c1", "d", 2, Some(Ballot::No))],
             )],
             &[item(
                 "p1",
                 "g",
-                vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+                vec![outcome("c1", "d", 2, Some(Ballot::Yes))],
             )],
         );
         assert_eq!(few.overall.better, 1);
@@ -505,12 +505,12 @@ mod tests {
         let base = [item(
             "p1",
             "g",
-            vec![outcome("c1", "restraint", -2, Some(Judgement::Yes))],
+            vec![outcome("c1", "restraint", -2, Some(Ballot::Yes))],
         )];
         let cur = [item(
             "p1",
             "g",
-            vec![outcome("c1", "restraint", -2, Some(Judgement::No))],
+            vec![outcome("c1", "restraint", -2, Some(Ballot::No))],
         )];
         let cmp = compare(&base, &cur);
         assert_eq!(
@@ -525,7 +525,7 @@ mod tests {
         let base = [item(
             "p1",
             "g",
-            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+            vec![outcome("c1", "d", 2, Some(Ballot::Yes))],
         )];
         let cur = [item("p1", "g", vec![outcome("c1", "d", 2, None)])];
         let cmp = compare(&base, &cur);
@@ -541,12 +541,12 @@ mod tests {
         let base = [item(
             "p1",
             "g",
-            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+            vec![outcome("c1", "d", 2, Some(Ballot::Yes))],
         )];
         let cur = [item(
             "p1",
             "g",
-            vec![outcome("c1", "d", 3, Some(Judgement::Yes))],
+            vec![outcome("c1", "d", 3, Some(Ballot::Yes))],
         )];
         let cmp = compare(&base, &cur);
         assert_eq!(cmp.overall.unpairable, 1);
@@ -556,13 +556,13 @@ mod tests {
     #[test]
     fn an_item_missing_from_one_arm_is_unpairable() {
         let base = [
-            item("p1", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))]),
-            item("p2", "g", vec![outcome("c1", "d", 2, Some(Judgement::Yes))]),
+            item("p1", "g", vec![outcome("c1", "d", 2, Some(Ballot::Yes))]),
+            item("p2", "g", vec![outcome("c1", "d", 2, Some(Ballot::Yes))]),
         ];
         let cur = [item(
             "p1",
             "g",
-            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+            vec![outcome("c1", "d", 2, Some(Ballot::Yes))],
         )];
         let cmp = compare(&base, &cur);
         assert_eq!(cmp.overall.concordant, 1);
@@ -609,12 +609,12 @@ mod tests {
         let base = [item(
             "p1",
             "g",
-            vec![outcome("c1", "d", 2, Some(Judgement::Yes))],
+            vec![outcome("c1", "d", 2, Some(Ballot::Yes))],
         )];
         let cur = [item(
             "p1",
             "g",
-            vec![outcome("c1", "d", 2, Some(Judgement::No))],
+            vec![outcome("c1", "d", 2, Some(Ballot::No))],
         )];
         assert!(compare(&base, &cur).score_delta.is_none());
     }
