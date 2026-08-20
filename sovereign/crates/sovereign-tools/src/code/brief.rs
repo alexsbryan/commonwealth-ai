@@ -687,26 +687,10 @@ fn render_recent_activity(
 // ── Helpers ───────────────────────────────────────────────────
 
 fn atom_label(atom: &AtomEnvelope) -> (&'static str, String) {
-    match atom {
-        AtomEnvelope::Entity(e) => ("entity", e.canonical_name.clone()),
-        AtomEnvelope::Event(e) => ("event", truncate_to_chars(&e.description, 60)),
-        AtomEnvelope::State(s) => ("state", s.label.clone()),
-        AtomEnvelope::Relation(r) => ("relation", r.label.clone()),
-        AtomEnvelope::Claim(c) => ("claim", truncate_to_chars(&c.content, 60)),
-        AtomEnvelope::Question(q) => ("question", truncate_to_chars(&q.content, 60)),
-        AtomEnvelope::Configuration(c) => ("configuration", c.label.clone()),
-        AtomEnvelope::ArgumentReconstruction(a) => ("argument", a.name.clone()),
-        AtomEnvelope::Position(p) => ("position", p.canonical_name.clone()),
-        AtomEnvelope::Opposition(o) => ("opposition", o.canonical_label.clone()),
-        AtomEnvelope::Asset(a) => (
-            "asset",
-            if a.original_filename.is_empty() {
-                format!("asset:{}", &a.sha256[..12.min(a.sha256.len())])
-            } else {
-                a.original_filename.clone()
-            },
-        ),
-    }
+    // Was an eleventh copy of the kind-label + display-name fan-out. The Asset
+    // arm previously read `asset:<sha12>`; it now matches every other surface
+    // (`<kind> asset <sha12>`), which is the point of having one decider.
+    (atom.atom_type().label(), atom.display_name(Some(60)))
 }
 
 fn truncate_to_chars(s: &str, max: usize) -> String {
