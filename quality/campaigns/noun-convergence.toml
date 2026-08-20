@@ -322,6 +322,60 @@ one_line = "Delete the 82 wrong-way types; the layer map becomes one-way for the
 id = "nc-2b-inference-vocabulary"
 moves = ["nc-no-violation", "nc-boundary"]
 one_line = "The wire contract stops naming the runtime — 10 inference types move down to oicp-types, and the forbid rule loses its escape"
+# PARTIAL, 2026-08-20. The vocabulary moved; the CONTRACT did not, and the
+# `except = ["sovereign-contracts"]` on the oicp-client forbid rule STAYS. The
+# rung's Done-When is not met and this records why, with prices, so the
+# successor does not re-derive it.
+#
+# MEASURED after the move, `scripts/nc-boundary.py --edge oicp:sovereign`:
+#   oicp -> sovereign   12 types / 103 refs  ->  1 type / 3 refs
+#   and the 1 is `InferenceProvider` itself — the blocker named below.
+# Bars on the same reindex (nc-5 handed over 477 / 158 / 22):
+#   nc-boundary      477 -> 476
+#   nc-no-violation  158 -> 146
+#   nc-kernel         22 ->  23   THE WRONG WAY, and correctly so — the same
+#     effect nc-5 recorded: a type all three domains legitimately speak counts
+#     as kernel growth, because the bar cannot tell a published noun from a
+#     leaked god object. `kernel_homes` is still {corpus-engine}, so
+#     `also_required` remains UNMET regardless.
+#
+# LANDED: the 10 value types + the §8 Speed<->LatencyClass map now live in
+# `oicp-types` (definitions, not copies — nc-boundary.py resolves ownership
+# from the definition's file). Sovereign's SLOT_POLICY deliberately did not
+# follow; that split forced `for_workload*` / `yes_no` off `CompletionRequest`
+# and onto `Workload`, which is the noun that owns the decision. Also minted
+# `oicp_types::InferenceError` and converged `sovereign-compute`'s two
+# hand-written wire maps onto it.
+#
+# THE ORDER'S HARD-HALF QUESTION IS ANSWERED, and the answer is yes. Measured
+# across all 72 `impl InferenceProvider for` blocks: the variants those bodies
+# actually construct are NotImplemented 57, Inference 55, Routing 7, QueueShed
+# 1, InvalidInput 1 — and Storage 1, the lone runtime leak. The protocol/
+# runtime split of `Error` is real, not a hoped-for one.
+#
+# THE BLOCKER IS SOMEWHERE ELSE, and the order did not anticipate it.
+# `InferenceProvider` cannot move to `oicp-types` because ONE of its ~40
+# methods, `edit_slot_info()`, returns `EditSlotInfo` -> FimLane / FimStyle /
+# NextEditLane / NextEditFormat — and `NextEditFormat` names sovereign's OWN
+# prompt strategies (`region_instruct`, `zeta2`, `sweep`). That is product
+# vocabulary; moving it down would put sovereign's prompt taxonomy inside the
+# protocol crate, which is the "publish concrete types to move the metric"
+# failure `nc-boundary` warns about. Two exits, both priced on this tree:
+#   - supertrait split (`SovereignProvider: InferenceProvider`): 488
+#     `dyn InferenceProvider` sites, since every `Arc<dyn InferenceProvider>`
+#     in sovereign would have to change.
+#   - move `EditSlotInfo` down: 201 lines, and drags the prompt taxonomy.
+# Neither is this rung's business. Pick one before re-opening 2b.
+#
+# AND ONE THING WAS TRIED AND REVERTED, deliberately. Switching the trait's
+# error type to `InferenceError` WITHOUT moving the trait was carried far
+# enough for the compiler to price it: sovereign-core and oicp-client both went
+# green, but the tail propagates into the engine's internal streaming plumbing
+# (`StreamSink`, `generate_stream_dispatch`) — the daemon's hot generation
+# path — and it buys 2 types on an edge that still cannot reach zero while
+# `edit_slot_info` stands. Reverted rather than half-landed. The successor
+# should do trait-move and error-switch as ONE change, after EditSlotInfo has
+# a home.
 
 [[rung]]
 id = "nc-3-backstage"

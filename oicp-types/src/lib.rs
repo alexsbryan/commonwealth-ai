@@ -26,6 +26,7 @@
 
 pub mod capability;
 pub mod completion;
+pub mod error;
 pub mod ingest;
 pub mod knowledge;
 pub mod manifest;
@@ -40,6 +41,7 @@ pub use completion::{
     latency_to_speed, speed_to_latency, CompletionRequest, CompletionResponse, Depth, FinishReason,
     PromptShape, ProviderCapabilities, SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema,
 };
+pub use error::{InferenceError, InferenceResult};
 pub use slot::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
 
 pub use capability::{
