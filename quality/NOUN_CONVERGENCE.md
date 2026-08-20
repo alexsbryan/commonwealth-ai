@@ -734,7 +734,7 @@ recall.
 
 | Metric | Today (snapshot) | Target |
 |---|---:|---:|
-| Census names with no disposition | 272 (2026-08-17, first-party production) | 0 |
+| Census names with no disposition | 279 (2026-08-20, first-party production, segment-scoped) — was 272 on 2026-08-17, when the scope filter still hid `deep_research/` | 0 |
 | Register rows converged | 0 | all `in_program` rows |
 | God-object score (`Runtime`, methods × files) | 133 × 32 (2026-08-17) | < 40 × 5 |
 | Reconciliation machinery | ~21,500 first-party lines (2026-08-17, incl. the v1 table's own exclusions) | ≤ ⅓ of the minted baseline |

@@ -31,6 +31,16 @@
 #   day later the same query read 292 raw / 272 first-party-production. That
 #   drift is a design input, not an embarrassment: prose carries methods and
 #   dates, tools carry numbers.
+#   2026-08-20 (nc-0-reach, the instrument-validation rung): 272 -> 279. Not
+#   drift and not new duplication — a defect in the census's OWN scope filter.
+#   `SourceScope`'s exclusions were SUBSTRING matches, so `"research/"`,
+#   written for the top-level spike tree, also hid
+#   `sovereign-core/src/deep_research/` — the module this program cites as the
+#   reason it exists. Repaired as whole-SEGMENT matching (six of the ten
+#   patterns had the same shape; `research` was the only one whose behaviour
+#   changed on today's tree). 86 type definitions in 12 files entered scope and
+#   seven names became visibly duplicated: BudgetEntry, ClaimVerdict, Draft,
+#   Event, MockBackendImpl, TriageConfig, TriageOutcome.
 #
 # Fields
 #   name        REQUIRED. the concept, as it appears in the census.
@@ -85,7 +95,9 @@
 schema_version = 2
 graph = "~/.svrnmesh/indexes/commonwealth-ai/scip_graph.db"
 # baseline: minted by nc-t0b — see THE METRIC above. Discovery snapshots:
-# 278 (2026-08-16, unfiltered), 272 (2026-08-17, first-party production).
+# 278 (2026-08-16, unfiltered), 272 (2026-08-17, first-party production),
+# 279 (2026-08-20, first-party production with the scope filter corrected to
+# whole-segment matching — see THE METRIC above for the attribution).
 
 # ─────────────────────────────────────────────────────────────────────
 # PHASE 1 — the instrument. Nothing downstream is trustworthy until this

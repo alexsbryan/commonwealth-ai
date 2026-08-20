@@ -74,35 +74,49 @@ use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 /// [`Census::scope`] and [`Dossier::scope`] carry them into the output: a
 /// count that travels without its method is the brittleness the convergence
 /// program exists to end (`ARCH_PRINCIPLES` §18.4).
+///
+/// Exclusions match whole path SEGMENTS. They were substrings until
+/// 2026-08-20, when the campaign's own instrument-validation rung found that
+/// `"research/"` — written for the top-level spike tree — also swallowed
+/// `sovereign-core/src/deep_research/`, the module the noun-convergence
+/// program cites as the reason it exists. Six of the ten patterns had that
+/// same shape (a bare token a longer segment can end with), so the repair is
+/// the matching rule, not the one string.
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceScope {
     /// Path prefixes that count. Empty = everything not excluded.
     pub include_prefixes: Vec<String>,
-    /// Substrings that disqualify a path.
-    pub exclude_contains: Vec<String>,
+    /// Whole `/`-separated path segments that disqualify a path. A pattern
+    /// never matches a substring of a longer segment.
+    pub exclude_segments: Vec<String>,
 }
 
 impl Default for SourceScope {
     fn default() -> Self {
         Self {
             include_prefixes: Vec::new(),
-            exclude_contains: [
+            // Segment names, so no leading or trailing slash: the slashes in
+            // the old spelling were doing the anchoring by hand, and doing
+            // only half of it (`research/` anchored the right side, never the
+            // left; `/tests/` anchored both, which is why that entry never
+            // misfired).
+            exclude_segments: [
                 // Not ours.
-                "vendor/",
-                "node_modules/",
-                ".cargo-container/",
-                "research/",
+                "vendor",
+                "node_modules",
+                ".cargo-container",
+                "research",
                 // Build output and agent worktree shadows. The worktree clause
                 // is load-bearing: `.claude/worktrees/agent-*/` carries full
                 // copies of first-party crates and will otherwise be counted
                 // as additional definitions of every name in them.
-                "target/",
-                ".claude/",
+                "target",
+                ".claude",
                 // Not production.
-                "/tests/",
-                "/benches/",
-                "/examples/",
-                "/build.rs",
+                "tests",
+                "benches",
+                "examples",
+                "build.rs",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -113,10 +127,9 @@ impl Default for SourceScope {
 
 impl SourceScope {
     pub fn admits(&self, path: &str) -> bool {
-        if self
-            .exclude_contains
-            .iter()
-            .any(|e| path.contains(e.as_str()))
+        if path
+            .split('/')
+            .any(|seg| self.exclude_segments.iter().any(|e| e == seg))
         {
             return false;
         }
@@ -430,8 +443,8 @@ fn render_scope(scope: &SourceScope, out: &mut String) {
     } else {
         out.push_str(&scope.include_prefixes.join(", "));
     }
-    out.push_str(" minus ");
-    out.push_str(&scope.exclude_contains.join(" "));
+    out.push_str(" minus segments ");
+    out.push_str(&scope.exclude_segments.join(" "));
     out.push('\n');
 }
 
@@ -627,6 +640,58 @@ mod tests {
         assert!(!s.admits("research/spike/src/lib.rs"));
     }
 
+    /// The campaign's motivating file must be visible to the campaign's own
+    /// instrument. `sovereign-core/src/deep_research/icd.rs` is the specimen
+    /// the noun-convergence program cites — five register nouns re-derived
+    /// privately there — and until 2026-08-20 the census could not see it,
+    /// because the exclusion list matched `"research/"` as a SUBSTRING and
+    /// `deep_research/` ends in it. `converge noun <X>` inherits this scope, so
+    /// the blind spot made the pre-flight oracle answer "no such concept" in
+    /// the one direction that is unsafe (§18.3 — absence is never defaulted).
+    #[test]
+    fn deep_research_is_not_the_research_spike_tree() {
+        let s = SourceScope::default();
+        assert!(s.admits("sovereign/crates/sovereign-core/src/deep_research/icd.rs"));
+        // …while the top-level spike tree the pattern was actually written for
+        // stays excluded. It is repo-relative with no leading slash, which is
+        // why the fix cannot simply be to anchor the pattern as `/research/`.
+        assert!(!s.admits("research/spike/src/lib.rs"));
+        assert!(!s.admits("research/enrichment-spikes/x/y.rs"));
+    }
+
+    /// The whole list, both arms. `deep_research` was the entry that bit, but
+    /// six of the ten patterns had the identical shape — a bare token that a
+    /// LONGER segment can end with. Fixed as semantics (segment equality), not
+    /// as a patch to one string.
+    #[test]
+    fn every_exclusion_matches_a_whole_segment_not_a_substring() {
+        let s = SourceScope::default();
+        // Longer segments that merely END with an excluded token are source.
+        for admitted in [
+            "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            "sovereign/crates/a/src/xvendor/x.rs",
+            "sovereign/crates/a/src/my_target/x.rs",
+            "sovereign/crates/a/src/prebuild.rs",
+        ] {
+            assert!(s.admits(admitted), "must be counted: {admitted}");
+        }
+        // …and the trees the patterns were written for still go.
+        for excluded in [
+            "research/spike/src/lib.rs",
+            "vendor/foo/src/lib.rs",
+            "node_modules/x/y.rs",
+            ".cargo-container/x.rs",
+            "target/debug/build/x.rs",
+            ".claude/worktrees/agent-a/sovereign/crates/x/src/lib.rs",
+            "sovereign/crates/a/tests/e2e.rs",
+            "sovereign/crates/a/benches/b.rs",
+            "sovereign/crates/a/examples/e.rs",
+            "sovereign/crates/a/build.rs",
+        ] {
+            assert!(!s.admits(excluded), "must be excluded: {excluded}");
+        }
+    }
+
     #[test]
     fn colocated_mod_tests_types_are_out_of_scope() {
         // The FILE is production; the descriptor says `mod tests`. A test
@@ -668,6 +733,50 @@ mod tests {
         assert_eq!(c.rows.len(), 1);
         assert_eq!(c.rows[0].name, "Verdict");
         assert_eq!(duplicate_count(&defs), 1);
+    }
+
+    /// The ratchet's two arms, side by side — the pair that decides whether
+    /// `converge status` goes red. The gate is armed against ADDITIONS, so
+    /// what must be shown is the DELTA, not the absolute count: a production
+    /// twin in a second crate moves it by exactly one, and a `#[cfg(test)]`
+    /// twin of the same name moves it by zero. Watched red 2026-08-19 live
+    /// (272 -> 273); pinned here so it stays that way (§18.1: a check with no
+    /// failing input you can name is not a check).
+    #[test]
+    fn a_production_twin_raises_the_ratchet_and_a_test_only_twin_does_not() {
+        let scope = SourceScope::default();
+        let baseline = vec![
+            sym("crate_a", "m/Register#", "a/src/m.rs", 10),
+            sym("crate_a", "m/Solo#", "a/src/m.rs", 20),
+        ];
+        let before = duplicate_count(&type_defs(&baseline, &scope));
+        assert_eq!(before, 0, "one crate, no twins");
+
+        // RED: the same noun minted a second time, in another crate.
+        let mut added = baseline.clone();
+        added.push(sym("crate_b", "n/Register#", "b/src/n.rs", 30));
+        assert_eq!(
+            duplicate_count(&type_defs(&added, &scope)),
+            before + 1,
+            "a cross-crate twin is exactly the +1 the ratchet fires on"
+        );
+
+        // GREEN: same name, same second crate, but under `#[cfg(test)] mod
+        // tests` — a test helper is not a concept the register owns, and a
+        // ratchet that fired on one would be disabled inside a week.
+        let mut test_only = baseline.clone();
+        test_only.push(sym("crate_b", "n/tests/Register#", "b/src/n.rs", 30));
+        assert_eq!(
+            duplicate_count(&type_defs(&test_only, &scope)),
+            before,
+            "a #[cfg(test)] twin must not move the ratchet"
+        );
+
+        // …and neither does a twin under `tests/`, `benches/` or `examples/`,
+        // which the scope drops by path rather than by descriptor.
+        let mut out_of_tree = baseline;
+        out_of_tree.push(sym("crate_b", "n/Register#", "b/tests/e2e.rs", 30));
+        assert_eq!(duplicate_count(&type_defs(&out_of_tree, &scope)), before);
     }
 
     #[test]

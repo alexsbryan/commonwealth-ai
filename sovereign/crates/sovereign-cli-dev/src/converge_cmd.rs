@@ -657,6 +657,18 @@ mod tests {
             &exts,
             &scope
         ));
+
+        // The campaign's motivating file, and the reason the exclusion list
+        // became segment-matched (2026-08-20): `"research/"` used to swallow
+        // `deep_research/` as a substring, so `converge noun <X>` — the
+        // pre-flight AGENTS.md now sends every agent to — answered "no such
+        // concept" for the 166 type definitions in the very module whose five
+        // privately re-derived nouns are why this program exists.
+        assert!(counts_path(
+            "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            &exts,
+            &scope
+        ));
         // Same extension, but out of the counted scope by construction — these
         // are the paths `type_defs` never counted in the first place.
         assert!(!counts_path(
