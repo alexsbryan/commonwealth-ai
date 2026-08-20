@@ -12,7 +12,8 @@
 use std::collections::HashSet;
 
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope, AtomId};
-use corpus_engine::enrichment::{GovernanceOp, GovernanceOpKind, GovernanceOplog};
+use corpus_engine::enrichment::GovernanceOpKind;
+use corpus_engine::oplog::{Op, Oplog};
 
 use super::{atlas_dir, now_unix};
 
@@ -30,7 +31,7 @@ pub fn cmd_seed(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let oplog = GovernanceOplog::new(&dir);
+    let oplog = Oplog::<GovernanceOpKind>::new(&dir);
     // Idempotency: never re-assert a rule the oplog already governs.
     let already: HashSet<AtomId> = match oplog.read_all() {
         Ok(ops) => ops
@@ -52,7 +53,7 @@ pub fn cmd_seed(args: &[String]) -> i32 {
             if already.contains(&c.id) {
                 continue;
             }
-            let op = GovernanceOp::new(
+            let op = Op::new(
                 GovernanceOpKind::AssertRule {
                     rule: c.id.clone(),
                     source_doc: None,

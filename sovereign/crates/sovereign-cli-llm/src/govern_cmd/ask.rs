@@ -18,7 +18,8 @@
 
 use std::io::Write;
 
-use corpus_engine::enrichment::{GovernanceOpKind, GovernanceOplog, RuleStatus};
+use corpus_engine::enrichment::{GovernanceOpKind, RuleStatus};
+use corpus_engine::oplog::Oplog;
 use futures::StreamExt as _;
 
 use sovereign_core::types::Intent;
@@ -243,7 +244,7 @@ fn render_supersession_provenance(corpus_id: &str, answer: &str) {
     let Ok(view) = load_view(corpus_id) else {
         return;
     };
-    let ops = match GovernanceOplog::new(atlas_dir(corpus_id)).read_all() {
+    let ops = match Oplog::<GovernanceOpKind>::new(atlas_dir(corpus_id)).read_all() {
         Ok(o) => o,
         Err(_) => return,
     };

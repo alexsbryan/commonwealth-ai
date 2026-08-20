@@ -3,7 +3,7 @@
 //! event-sourced common law (Governance Atlas / FR-9).
 //!
 //! Model-free verbs (no daemon) read the [`GovernanceView`] read-model or
-//! append to the `GovernanceOplog`:
+//! append to the governance `Oplog` (`corpus_engine::oplog`):
 //!   - `seed`     — `AssertRule` every extracted rule-claim, establishing
 //!                  the governed baseline (the rule set is *defined* by
 //!                  the oplog, and nothing else populates it today).
