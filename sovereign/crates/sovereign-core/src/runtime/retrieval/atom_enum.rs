@@ -308,7 +308,7 @@ impl Runtime {
             let Some(graph) = provider.graph(id) else {
                 continue;
             };
-            for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Entity) {
+            for view in graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Entity) {
                 if view.subtype() != target_type {
                     continue;
                 }
@@ -417,7 +417,9 @@ impl Runtime {
             // Keyed by display string so identical relations dedup without
             // colliding with entity names.
             if include_relations {
-                for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Relation) {
+                for view in
+                    graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Relation)
+                {
                     let label = view.label().trim();
                     // First evidence ref grounds the relationship; skip
                     // relations with no label or no evidence (same guard as
@@ -431,7 +433,7 @@ impl Runtime {
                     let parts: Vec<String> = view
                         .participants()
                         .filter_map(|pid| graph.atom(pid))
-                        .filter(|a| a.kind() == crate::atlas_context::AtomKindTag::Entity)
+                        .filter(|a| a.kind() == corpus_engine::enrichment::atlas::AtomType::Entity)
                         .filter_map(|a| {
                             let n = a.name().trim();
                             (!n.is_empty()).then(|| n.to_string())
@@ -808,7 +810,7 @@ impl Runtime {
             let Some(graph) = provider.graph(id) else {
                 continue;
             };
-            for view in graph.atoms_of_kind(crate::atlas_context::AtomKindTag::Claim) {
+            for view in graph.atoms_of_kind(corpus_engine::enrichment::atlas::AtomType::Claim) {
                 let content = view.content().trim();
                 if content.is_empty() {
                     continue;

@@ -30,8 +30,8 @@ use lancedb::query::ExecutableQuery;
 use memmap2::Mmap;
 
 use super::edges::{Edge, EdgeProvenance, EdgeType};
-use super::projection::{arch_edge_type, project, ArchEdgeType, AtomKindTag, AtomRecord};
-use super::AtomEnvelope;
+use super::projection::{project, AtomRecord};
+use super::{AtomEnvelope, AtomType};
 
 /// v2 store schema version. Bump on any on-disk layout change (atoms.lance
 /// columns or the edges.csr binary format).
@@ -105,41 +105,46 @@ impl AtomRow {
     }
 }
 
-/// Stable u8 discriminant for the atom kind. Order matches [`AtomKindTag`], so
-/// the `kind` column round-trips losslessly.
-fn kind_u8(k: AtomKindTag) -> u8 {
+/// Stable u8 discriminant for the atom kind — the `atoms.lance` `kind` column.
+/// The byte values are an ON-DISK FORMAT: they are pinned here, never derived
+/// from declaration order, so adding an [`AtomType`] variant cannot silently
+/// renumber an existing atlas. Exhaustive by construction — a new variant
+/// fails to compile until it is given a byte.
+fn kind_u8(k: AtomType) -> u8 {
     match k {
-        AtomKindTag::Entity => 0,
-        AtomKindTag::Event => 1,
-        AtomKindTag::State => 2,
-        AtomKindTag::Relation => 3,
-        AtomKindTag::Claim => 4,
-        AtomKindTag::Question => 5,
-        AtomKindTag::Configuration => 6,
-        AtomKindTag::ArgumentReconstruction => 7,
-        AtomKindTag::Position => 8,
-        AtomKindTag::Opposition => 9,
-        AtomKindTag::Asset => 10,
+        AtomType::Entity => 0,
+        AtomType::Event => 1,
+        AtomType::State => 2,
+        AtomType::Relation => 3,
+        AtomType::Claim => 4,
+        AtomType::Question => 5,
+        AtomType::Configuration => 6,
+        AtomType::ArgumentReconstruction => 7,
+        AtomType::Position => 8,
+        AtomType::Opposition => 9,
+        AtomType::Asset => 10,
     }
 }
 
-/// Stable u8 discriminant for the edge type (mirrors [`ArchEdgeType`]).
-fn edge_type_u8(t: ArchEdgeType) -> u8 {
+/// Stable u8 discriminant for the edge type — the `edges.csr` type byte, and
+/// the exact inverse of [`u8_to_edge_type`]. Same on-disk-format discipline as
+/// [`kind_u8`].
+fn edge_type_u8(t: EdgeType) -> u8 {
     match t {
-        ArchEdgeType::Transition => 0,
-        ArchEdgeType::Causes => 1,
-        ArchEdgeType::Grounds => 2,
-        ArchEdgeType::Tension => 3,
-        ArchEdgeType::Involves => 4,
-        ArchEdgeType::Composes => 5,
-        ArchEdgeType::Configures => 6,
-        ArchEdgeType::Grounding => 7,
-        ArchEdgeType::Framing => 8,
-        ArchEdgeType::Provenance => 9,
-        ArchEdgeType::EvidenceFor => 10,
-        ArchEdgeType::Concedes => 11,
-        ArchEdgeType::OpposesIn => 12,
-        ArchEdgeType::Attaches => 13,
+        EdgeType::Transition => 0,
+        EdgeType::Causes => 1,
+        EdgeType::Grounds => 2,
+        EdgeType::Tension => 3,
+        EdgeType::Involves => 4,
+        EdgeType::Composes => 5,
+        EdgeType::Configures => 6,
+        EdgeType::Grounding => 7,
+        EdgeType::Framing => 8,
+        EdgeType::Provenance => 9,
+        EdgeType::EvidenceFor => 10,
+        EdgeType::Concedes => 11,
+        EdgeType::OpposesIn => 12,
+        EdgeType::Attaches => 13,
     }
 }
 
@@ -349,7 +354,7 @@ fn write_edges_csr(
         valid.push((
             s,
             t,
-            edge_type_u8(arch_edge_type(e.edge_type)),
+            edge_type_u8(e.edge_type),
             e.confidence,
             prov_u8(e.provenance),
         ));
@@ -1046,7 +1051,7 @@ mod tests {
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].0, 0);
         assert_eq!(out[0].1, 2);
-        assert_eq!(out[0].2, edge_type_u8(ArchEdgeType::Involves));
+        assert_eq!(out[0].2, edge_type_u8(EdgeType::Involves));
         assert!((out[0].3 - 0.9).abs() < 1e-6);
         // v2: the provenance byte round-trips (Derived here).
         assert_eq!(out[0].4, prov_u8(EdgeProvenance::Derived));
@@ -1109,7 +1114,7 @@ mod tests {
         let o0 = csr.out_edges(0);
         assert_eq!(o0.len(), 1);
         assert_eq!(o0[0].0, 2);
-        assert_eq!(o0[0].1, edge_type_u8(ArchEdgeType::Involves));
+        assert_eq!(o0[0].1, edge_type_u8(EdgeType::Involves));
         assert!((o0[0].2 - 0.9).abs() < 1e-6);
         assert_eq!(o0[0].3, prov_u8(EdgeProvenance::ScipStructural));
         assert_eq!(csr.out_edges(2).len(), 0);

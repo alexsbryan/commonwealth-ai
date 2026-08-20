@@ -16,13 +16,12 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
 
-use corpus_engine::enrichment::atlas::projection::{ArchChunkRef, AtomRecord};
-// Re-exported so retrieval consumers (`runtime/retrieval.rs`) can name the
-// atom-kind discriminant the typed-enumeration filter selects on.
 use corpus_engine::enrichment::atlas::ann_store::AnnSeedTable;
-pub use corpus_engine::enrichment::atlas::projection::AtomKindTag;
+use corpus_engine::enrichment::atlas::projection::AtomRecord;
 use corpus_engine::enrichment::atlas::store::LancePreload;
-use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeProvenance, EdgeType};
+use corpus_engine::enrichment::atlas::{
+    AtomEnvelope, AtomType, ChunkRef, EdgeProvenance, EdgeType,
+};
 use corpus_engine::enrichment::pipeline::atlas::EpistemicStatus;
 use corpus_engine::ScoredChunk;
 
@@ -208,12 +207,13 @@ impl AtlasGraph {
     /// Atoms of one kind — the typed-enumeration filter. Reads only the
     /// projected type tag per atom (no payload parse), so a full scan of
     /// the 1.67M-atom wikipedia atlas is ~2ms (Phase 0).
-    pub fn atoms_of_kind(&self, kind: AtomKindTag) -> impl Iterator<Item = AtomView<'_>> + '_ {
+    pub fn atoms_of_kind(&self, kind: AtomType) -> impl Iterator<Item = AtomView<'_>> + '_ {
         self.atoms().filter(move |v| v.kind() == kind)
     }
 
-    /// Evidence ChunkRefs for an atom-id, normalised across atom types
-    /// (the archive builder mirrored the per-variant `evidence_refs`).
+    /// Evidence ChunkRefs for an atom-id, normalised across atom types by
+    /// `AtomEnvelope::evidence`, the canonical per-variant accessor the v2
+    /// store projection also uses.
     pub fn atom_evidence(&self, atom_id: &str) -> Vec<EvidenceRef<'_>> {
         match self.atom(atom_id) {
             Some(v) => v.evidence().collect(),
@@ -651,7 +651,7 @@ impl<'a> AtomView<'a> {
     pub fn id(&self) -> &'a str {
         self.0.id.as_str()
     }
-    pub fn kind(&self) -> AtomKindTag {
+    pub fn kind(&self) -> AtomType {
         self.0.kind
     }
     /// `Entity.canonical_name` (else `""`).
@@ -709,19 +709,27 @@ impl<'a> AtomView<'a> {
     }
 }
 
-/// Borrowing view over one evidence ref (the v2 resident `&ArchChunkRef`). The
-/// `Option` fields of the source `ChunkRef` were collapsed to `""` at projection.
-pub struct EvidenceRef<'a>(&'a ArchChunkRef);
+/// Borrowing view over one evidence ref — the v2 resident `&ChunkRef`. The
+/// accessors collapse the source `Option`s to `""` for the callers that only
+/// ever wanted a string; `raw()` hands back the `ChunkRef` for a caller that
+/// needs to tell "absent" from "empty". Until 2026-08-20 the collapse happened
+/// at projection time into a mirror struct (`projection::ArchChunkRef`), so the
+/// distinction was destroyed before any caller could ask for it.
+pub struct EvidenceRef<'a>(&'a ChunkRef);
 
 impl<'a> EvidenceRef<'a> {
     pub fn chunk_id(&self) -> &'a str {
         self.0.chunk_id.as_str()
     }
     pub fn passage_preview(&self) -> &'a str {
-        self.0.passage_preview.as_str()
+        self.0.passage_preview.as_deref().unwrap_or("")
     }
     pub fn source_doc_id(&self) -> &'a str {
-        self.0.source_doc_id.as_str()
+        self.0.source_doc_id.as_deref().unwrap_or("")
+    }
+    /// The underlying evidence ref, `Option`s intact.
+    pub fn raw(&self) -> &'a ChunkRef {
+        self.0
     }
 }
 
@@ -888,7 +896,7 @@ pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String
             // Resolve proponent to canonical name when possible.
             if let Some(prop_id) = a.proponent.as_ref() {
                 if let Some(prop) = graph.atom(prop_id.as_str()) {
-                    if prop.kind() == AtomKindTag::Entity {
+                    if prop.kind() == AtomType::Entity {
                         s.push_str(&format!(" ({})", prop.name()));
                     }
                 }
@@ -942,7 +950,7 @@ pub fn atom_verbatim_excerpt(graph: &AtlasGraph, atom_id: &str) -> Option<String
             let attribution = c.attributed_to.as_ref().and_then(|aid| {
                 graph
                     .atom(aid.as_str())
-                    .filter(|a| a.kind() == AtomKindTag::Entity)
+                    .filter(|a| a.kind() == AtomType::Entity)
                     .map(|a| a.name().to_string())
             });
             // Tag contested-status claims so the essay-judge sees them
@@ -1778,7 +1786,7 @@ mod store_io_tests {
         assert_eq!(graph.edge_count(), 1);
 
         let a = graph.atom(&id1).expect("lookup id1");
-        assert_eq!(a.kind(), AtomKindTag::Entity);
+        assert_eq!(a.kind(), AtomType::Entity);
         assert_eq!(a.name(), "Alice");
         assert_eq!(a.subtype(), EntityType::Person.as_str_repr());
         assert_eq!(a.description(), "desc of Alice");
@@ -1790,8 +1798,8 @@ mod store_io_tests {
         assert_eq!(ev[0].passage_preview(), "preview text");
 
         // Typed enumeration touches only the projected kind tag.
-        assert_eq!(graph.atoms_of_kind(AtomKindTag::Entity).count(), 2);
-        assert_eq!(graph.atoms_of_kind(AtomKindTag::Claim).count(), 0);
+        assert_eq!(graph.atoms_of_kind(AtomType::Entity).count(), 2);
+        assert_eq!(graph.atoms_of_kind(AtomType::Claim).count(), 0);
 
         // Edge adjacency + degree.
         assert_eq!(graph.edge_degree(&id1), 1);
