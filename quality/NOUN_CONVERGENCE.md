@@ -219,15 +219,48 @@ It ranks **concepts, not files.** That is the entire change.
 
 #### Instrument defects — validate before the result (§18.4)
 
-1. **`symbols.kind` is unusable.** 192,309 of 227,327 are `unknown`, and
-   wrong where populated — `Intent`, an enum, is tagged `constructor`.
-2. **`refs.ref_kind` is 100% `"direct"`.** The `"dynamic"` constant exists
-   and is never written, so dispatch kind cannot be filtered. Whether
-   trait-dispatch *edges* are present is a separate, unverified question —
-   but `CLAUDE.md`'s claim that `callers` "catches trait dispatch" is not
-   checkable from this graph, and that tool gates the mandatory pre-flight
-   blast-radius check.
-3. Some spans are negative (`Failed` at `supervisor_setup.rs:433`: −415).
+**Defects 1-3 are FIXED, 2026-08-19.** Each was re-measured against the live
+graph first (313,741 symbols / 1,564,645 refs — the 227,327/1,265,301 snapshot
+above was three days stale and 38% low), and two of the three descriptions
+were wrong in ways that changed the fix.
+
+1. **`symbols.kind` is unusable — CONFIRMED, worse than stated, FIXED.**
+   278,233 of 313,741 (88.7%) are `unknown`. Where populated it is
+   anti-correlated with the truth: of the 8,759 top-level type descriptors
+   **not one** is labelled a type — 7,682 `unknown`, 946 `constructor`, 131
+   `method`. `Intent` reproduces exactly as cited. Of 19,691 rows tagged
+   `enum`, only 1,560 carry a variant descriptor.
+   *Fix:* `corpus_engine_scip::descriptor` — `symbol_kind()` derives the
+   kind from the descriptor. Derived, not stored; no re-index required.
+2. **`refs.ref_kind` is 100% `"direct"` — CONFIRMED (1,564,645/1,564,645),
+   but the stated CONSEQUENCE was wrong.** The open question ("whether
+   trait-dispatch edges are present") is settled: **they are.** The measured
+   `Arc<dyn InferenceProvider>` call at `runtime/streaming.rs:208` is
+   recorded as an edge into `traits/InferenceProvider#…().`, the trait's own
+   declaration, while concrete implementations carry the distinct
+   `impl#[Concrete][Trait]…().` shape. So `CLAUDE.md`'s claim that `callers`
+   "catches trait dispatch" is **true**, and the pre-flight blast check is
+   not compromised. What is missing is only the ability to *filter* on it.
+   *Fix:* `descriptor::dispatch_hint()`. Named `ThroughTrait`, not
+   `Dynamic` — a generic `impl Trait` bound lands on the same declaration
+   and is monomorphized, and the descriptor cannot separate the two.
+3. **Negative spans — CONFIRMED but MIS-LOCALIZED, FIXED.** Not "some":
+   175,489 of 313,741 rows (56%) had `line_end < line_start`. But split by
+   class it is benign exactly where the census reads and catastrophic where
+   it does not: top-level types 96.1% sane, functions 98.3% sane, enum
+   variants 11.5% sane, **locals 83.6% inverted** (and locals are 62% of the
+   table). The cited `StartupOutcome#Failed#` case is an enum variant:
+   start 433, "end" 18 — a column.
+   *Root cause:* SCIP encodes a range as `[start_line, start_char, end_line,
+   end_char]` OR, when it begins and ends on one line, the 3-element
+   `[line, start_char, end_char]`. The 2026-06-25 `enclosing_range` fix
+   guarded on `len() >= 3`, so it corrected the 4-element case and left the
+   3-element one reading an end COLUMN — which is the common shape for a
+   single-line name occurrence. The second site (`def_scopes`) was never
+   fixed at all, and it is not cosmetic: the scope end decides which
+   definition a reference is attributed to.
+   *Fix:* `scip_proto::range_lines()` owns the discrimination, both sites
+   call it, and no decoded span is ever inverted.
 4. **D1's own semantics need validation, not just its inputs** (added
    2026-08-17 — §18.4 applied to the program's own instrument). Three
    defects, each with a fix: *(a) contamination* — the raw query counts

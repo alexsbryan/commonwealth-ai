@@ -59,6 +59,38 @@ assert set(ARG_SHAPE) == set(ARG_OF.values()), (
     f"{sorted(set(ARG_SHAPE) ^ set(ARG_OF.values()))}"
 )
 
+# The five anchor forms contract.txt declares, as a decode-time grammar.
+#
+# WHY THIS IS A PATTERN AND NOT A PROMPT LINE. contract.txt has always
+# said what an anchor looks like, and `BasisResolver.exists` has always
+# known how to resolve one — but the schema said `items: {type: string}`,
+# so ANY string was legal at decode time. Measured 2026-08-19, first live
+# R4 run through co-role.py: the model put a full sentence of prose in
+# `basis` ("The diff correctly propagates fact.period_basis() into the
+# Answer struct…"). Well-formed JSON, contract violated, and once G1
+# resolves citations that reply demotes to could-not-judge — so R4 would
+# have been unusable in the live path for a reason that has nothing to do
+# with its judgment. Commit the constraint at decode time rather than
+# requesting it (ARCH §7.6).
+#
+# This does NOT force an anchor. `basis` stays required as a key with no
+# minItems, so a model with nothing real to cite still emits `[]` — the
+# concern verdict_schema's own docstring raises, preserved deliberately.
+# What is now unreachable is an anchor-SHAPED slot holding prose.
+#
+# The gym is unaffected: score.call_daemon passes schema=None for
+# measurement runs on purpose, so the malformed column keeps measuring
+# what a charter buys without a grammar holding the pen.
+ANCHOR_PATTERN = (
+    r"^(ARCH §\d+(\.\d+)?"
+    r"|ledger:[a-z0-9-]+"
+    r"|note [0-9a-f]{8}"
+    r"|commit [0-9a-f]{7,40}"
+    r"|transcript:[0-9a-f]{8}:[0-9]+"
+    r"|field:(offender|tollbooth|bridge|dup|tax|layer-violation):[A-Za-z0-9_./-]+"
+    r")$"
+)
+
 
 def verdict_schema() -> dict:
     """contract.txt as a JSON Schema, one branch per verdict.
@@ -101,7 +133,9 @@ def verdict_schema() -> dict:
             "properties": {
                 "verdict": {"type": "string", "const": verdict},
                 arg: arg_schema,
-                "basis": {"type": "array", "items": {"type": "string"}},
+                "basis": {"type": "array",
+                          "items": {"type": "string",
+                                    "pattern": ANCHOR_PATTERN}},
                 "rationale": {"type": "string", "minLength": 1},
             },
             "required": ["verdict", arg, "basis", "rationale"],
@@ -158,6 +192,17 @@ def verdict_schema_problems() -> list[str]:
         if spec.get("minItems", 0) < 1 and spec.get("minLength", 0) < 1:
             problems.append(f"{where}: {arg!r} may be empty — this is the "
                             f"malformed_missing_arg shape")
+        # basis must stay anchor-SHAPED. Dropping the pattern is the
+        # permissive drift that let a full sentence of prose into `basis`
+        # on the first live R4 run (2026-08-19), which G1 then correctly
+        # demoted — a schema hole wearing the costume of a bad verdict.
+        bspec = props.get("basis", {}).get("items", {})
+        if bspec.get("pattern") != ANCHOR_PATTERN:
+            problems.append(f"{where}: basis items are not constrained to "
+                            f"ANCHOR_PATTERN — prose is legal in a citation")
+        if props.get("basis", {}).get("minItems"):
+            problems.append(f"{where}: basis has a minItems — a grammar that "
+                            f"forces an anchor forces the model to invent one")
         # And the direct test: would the recorded failure pass this branch?
         recorded = RECORDED_MISSING_ARG_REPLY
         extra = set(recorded) - set(props)
@@ -449,6 +494,26 @@ def secret_hits(text: str) -> list[str]:
 # the primary to a Qwen 35B and a full dev run scored on the wrong
 # judge before anyone noticed (§18.3: never silently substitute).
 ENGINE_OF_RECORD = "Darwin-36B"   # substring of the served model id
+
+# The SEAT is not the gym, and this is the constant that says so.
+# `ENGINE_OF_RECORD` above is the pedigree of the committed README
+# numbers and does not move. The seat's live roles run on whatever the
+# operator keeps in the primary slot, which since 2026-08-11 is the 27B
+# (config.toml [models].primary; Darwin was demoted for squatting 28GB
+# while swap hit 97%). Two populations, two constants — but ONE drift
+# check, in score.call_daemon, which takes the pin as an argument
+# (§10.6: one implementation, not one constant).
+#
+# This is the ROUTABLE model id, not a substring: `call_daemon` SENDS it
+# as the OpenAI `model` field, and the daemon refuses a name no node
+# advertises ("no node in this mesh advertises model 'X'") before it
+# spends a token. Verified against the live daemon 2026-08-19 —
+# /v1/models advertises it, and a plain call is served by exactly this
+# id. Pinning the `primary` ALIAS instead would re-open the hole this
+# closes: `primary` follows config.toml, so the edit that swaps the
+# seat's engine would still go unnoticed. An alias also trips the
+# post-hoc check below, because the reply names the concrete model.
+SEAT_ENGINE_OF_RECORD = "Qwen3.8-27B-UD-Q6_K_XL"
 
 # ---- caps and floors (validator enforces; harvester targets) ---------
 

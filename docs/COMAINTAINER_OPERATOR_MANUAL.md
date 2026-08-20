@@ -12,7 +12,7 @@ CLI note: `svrn` is the prod symlink. Hosts that predate it carry the
 legacy `sovereign` symlink instead — every `svrn` command below works
 with `sovereign` substituted.
 
-## The three pages
+## The four pages — three that show, one that acts
 
 | I want to see | Run | What renders |
 |---|---|---|
@@ -23,6 +23,138 @@ with `sovereign` substituted.
 Rendered copies persist at `~/.sovereign/comaintainer/{closeout,backlog}.html`
 and `~/.sovereign/arch/<corpus>/fieldglass.html` — re-openable without
 re-rendering.
+
+**Those three pages are read-only** — they show you what is waiting. The
+fourth one acts.
+
+## The console — the page that actuates
+
+```
+scripts/co-console.py              # serve, open a browser, Ctrl-C to stop
+scripts/co-console.py --port 8731  # a fixed port instead of an ephemeral one
+scripts/co-console.py --no-open    # print the URL, do not launch a browser
+```
+
+Four panes. **What do you want to do?** is an open box — say it plainly
+and R0 reads the intent and proposes which roles do it, in order, with
+each one's input already filled in. Press `/` to jump there, Ctrl+Enter
+to submit. It **proposes and never dispatches**: you get runnable steps
+you can edit, and nothing happens until you press run. If it cannot tell
+what you mean, or you asked for something needing an id it was not given,
+it says so and returns no steps — that is the answer, not a failure.
+
+**Starting a campaign is two steps and R0 knows it**: R2 drafts the bars
+the campaign is judged by, then R1 drafts the order that serves them. An
+order written before the bars will not name what it moves.
+
+**Waiting on you** is every pending directive with its draft
+verbatim — `a` approves it as written, `e` opens it for editing
+(Ctrl+Enter submits), `r` rejects it with a reason. `j`/`k` move between
+cards. **Actuate** runs any of the six roles: press `1`-`6` to jump to a
+role, type its input, run it. R4 takes 1-2 minutes and its canary doubles
+that, so a run is a job the page polls — you get the real output in
+place. **Standing** is open orders and recent verdicts, rendered by
+`co-closeout.py`'s own functions rather than a second copy of them.
+
+**It serves rather than exporting.** This is a foreground process that
+lives as long as you are working and dies on Ctrl-C — not a daemon, and
+nothing keeps running afterwards. A `file://` page cannot write to disk,
+so the alternative was a Blob download or a clipboard round trip; and
+actuation needs a round trip that export-then-apply cannot give you in
+one sitting.
+
+**The URL it prints contains a session token, and that token is the
+credential.** Binding to 127.0.0.1 does not stop another page in your
+browser from POSTing here, and these endpoints resolve directives and run
+roles — so every request is token-checked and cross-site POSTs are
+refused. Do not paste the URL anywhere.
+
+**Nothing here is a second path.** Every action shells out through the
+same argv `co-apply.py` builds, so a directive you approve on the page is
+indistinguishable in `directives.jsonl` from one you resolved by hand.
+Each action is also appended to `seat-actions.jsonl`, in the shape
+`co-apply.py` consumes — so the log of a session is also a replayable
+script.
+
+**How a decision is recorded.** `approve` is `unedited`. `edit` is
+`edited`/`content`. **`reject` is also `edited`/`content`** — you changed
+the substance from "do this" to "do not", and `no-decision` means no
+decision was taken on the row at all. The page says so on screen rather
+than choosing quietly, because the edit rate is the statistic the M0 loop
+is measured by.
+
+`--self-test` runs the lane: token and cross-site refusals, the decision
+mapping, and the job lifecycle. No socket left open, no store touched.
+
+**What the console does not reach.** It closes the loop between you and
+the record; it cannot deliver an approved steer back to a parked worker,
+and it does not show what the pool banked. Both seams are named with
+their fixes in `docs/COMAINTAINER_CHANNELS.md`.
+
+## Driving a role yourself
+
+The six seat roles run on the local open-weight model, one card each in
+`gym/comaintainer/roles/` (data — a card change needs no code change).
+
+| I want | Run |
+|---|---|
+| Say what I want and be told which roles do it | `scripts/co-role.py R0 --input "start a campaign on X"` |
+| Draft an order from typed intent | `scripts/co-role.py R1 --input intent.txt` |
+| Draft campaign bars for an initiative | `scripts/co-role.py R2 --input initiative.txt` |
+| See coverage against a campaign's bars | `scripts/co-role.py R3 --input financial-corpora` |
+| Verify a landing | `scripts/co-role.py R4 --input bundle.txt` |
+| File an out-of-scope finding as a backlog item | `scripts/co-role.py R5 --input finding.txt` |
+| Propose retirements, bounded to named items | `scripts/co-role.py R6 --input "6f4928b8 45455f0e"` |
+| Check every card parses and fits the budget | `scripts/co-role.py --lint` |
+| Confirm R4's planted-defect canary can still fire | `scripts/co-role.py R4 --canary-only` |
+
+`--input` takes a file path or a literal string. Each run appends one row
+to `~/.sovereign/comaintainer/role-runs.jsonl`.
+
+**What the gate class means for you.** `R0` is `propose` — it reads
+intent and returns steps, queueing nothing, so asking it a question never
+puts a row in the directive log. `R1`, `R2` and `R6` are `draft`:
+they do not land anything, they queue a pending directive that shows up
+in the closeout page for you to approve, edit or reject. `R3` and `R5`
+are `auto` — consumer-validated, and a wrong item costs one heap row.
+`R4` uses the charter's existing landing gate, unchanged; `--draft` and
+`--auto` are refused on it, because that gate is ratified and is not a
+command-line flag.
+
+**Exit codes**, so a script can gate on it: `0` accepted or queued · `1`
+the consumer rejected the output · `2` could-not-judge (engine
+unreachable, malformed reply, an unbounded R6) · `3` engine drift — the
+reply came from a model nobody pinned · `4` the canary halted the run.
+
+**R6 must be bounded.** `--all` timed out at 900s over ~282 items, and a
+sweep that times out reports nothing, which reads as "no dead items".
+
+## Applying decisions in a batch
+
+The console is the interactive path; this is the scripted one, and both
+build the same commands. Use it to replay a `seat-actions.jsonl` the
+console wrote, or to drive the seat from a script with no browser.
+
+`scripts/co-apply.py <file.jsonl>` replays a list of decisions by driving
+the real scripts — `co-directive-log.sh --resolve` with the explicit
+`--edited`/`--unedited`/`--no-decision` flag you chose, `co-role.py` for
+an actuation, `co-order.sh close` for a closure. Nothing writes to a
+store directly, so a directive resolved this way is indistinguishable in
+`directives.jsonl` from one you resolved by hand.
+
+```
+{"action":"resolve","id":"001b40b6","final":"Approved as drafted.","verdict":"unedited","edit_class":"none"}
+{"action":"actuate","role":"R3","input":"financial-corpora"}
+{"action":"close","order":"sec-filings-close","state":"landed"}
+```
+
+`--dry-run` prints what would run and touches nothing. A bad line is
+reported with its line number and does not stop the others, but the exit
+code is non-zero if any line failed. `--self-test` runs the lane.
+
+An omitted or unrecognized `verdict` is REFUSED, never guessed — the edit
+verdict is the statistic the M0 loop is measured by, and a fabricated one
+would look exactly like a real one.
 
 ## The backlog
 

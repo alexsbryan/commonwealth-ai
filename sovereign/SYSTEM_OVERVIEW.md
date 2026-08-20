@@ -524,7 +524,7 @@ refusals rather than `Err`: measured n=3, failing a bad parameter as an
 error made the executor replan, drop `period`, fail again, and answer
 from pretraining with no tool output at all — a dead tool step does not
 degrade the honesty machinery, it deletes it. The planner SEES this
-vocabulary: `planner.rs` `format_param_hint` renders a declared `enum`
+vocabulary: `planner/mod.rs` `format_param_hint` renders a declared `enum`
 into the plan prompt's `Params:` line as `concept* (string: revenue|…)`,
 in FULL and never truncated — a partial list biases the planner to the
 head of it while the tool still rejects everything below the cut. Until
@@ -532,7 +532,27 @@ that change the hint rendered only `name (type)`, so no tool's declared
 enum reached the prompt and `mode`'s enum had never bound either; the
 schema asymmetry the order was raised against was real and inert.
 `description` is still discarded — the enum is the closed set, the prose
-is not. The enum closed the in-vocabulary hole and SHARPENED an
+is not. Since F3 the planner is also MASKED to that shape, not merely
+shown it: `planner/schema.rs` `plan_schema` sets `structured_output` on
+both `plan` and `replan`, with one `oneOf` branch PER TOOL — `tool_id`
+pinned to a `const` and that branch's `params` bound to the tool's own
+`parameters` schema, verbatim. So this `concept` enum is now masked at
+logit level, not merely rendered: a non-member id is unreachable rather
+than discouraged, which is what the hand-fought version of this section
+was working around. Verbatim is load-bearing — copying the schema would
+be a second decider that drifts from what the tool accepts (§10.6). A
+tool whose `parameters` is not a typed object is REFUSED, never widened
+back to an open `params`: that shape compiles and masks nothing, so
+accepting it would leave a plan looking constrained while the tool's
+arguments stayed free. Watched live 2026-08-19, same model and prompt
+both ways: told to use a nonexistent `bloomberg_terminal`, the
+unconstrained planner emitted it; the masked planner could not. The
+SAME substitution hazard this section names for concepts applies to
+tool ids and is NOT closed — the masked planner picked the nearest
+legal id (`knowledge_lookup`) while its `description` still said "Query
+the Bloomberg terminal", so a plan step can read as one thing and
+dispatch another. The mask makes fabrication impossible, not honesty
+automatic. The enum closed the in-vocabulary hole and SHARPENED an
 out-of-vocabulary one, so a second guard sits beside it: asked for a
 figure scoped BELOW the consolidated entity, the planner substitutes the
 nearest LEGAL concept (`revenue` for "Mac segment revenue"), the store
@@ -4459,6 +4479,8 @@ Default ports:
 | Write a skill                                    | `sovereign/modes/<id>/skill.toml`                                   |
 | Tune model selection per hardware                | `sovereign/models.toml`                                             |
 | Understand the SCIP call graph                   | `corpus-engine-scip/` (`scip_graph.rs`, `scip_export.rs`)           |
+| Classify a symbol / detect trait dispatch        | `corpus-engine-scip/src/descriptor.rs` — the ONE decider. Derives kind + dispatch from the descriptor, which is 100% populated. Do NOT read `symbols.kind` (88.7% `unknown`, and every top-level type descriptor is mislabelled) or `refs.ref_kind` (100% `direct`, the `dynamic` constant is never written) |
+| Find duplicated concept IDENTITY (a name typed in >1 crate) | `svrn code converge census` / `noun <Name>` / `status`, over `corpus-engine-scip/src/converge.rs`. Also computes the canonical owner from the observed crate DAG and names the users that cannot reach it. Duplicated BEHAVIOUR is a different verb — `svrn code dry-report`; oversized FILES are `svrn code suggest-seams` |
 | See the code-intelligence MCP server             | `sovereign/crates/sovereign-cli-dev/src/project_cmd/serve.rs` (`cmd_serve`); long-running variant at `sovereign-cli-daemon/src/daemon_cmd/`(`run_daemon`) |
 | See the Sovereign HTTP MCP route                 | `sovereign/crates/sovereign-server/src/routes_mcp.rs`               |
 | **Deploy to a shared, air-gapped box (the on-prem pilot)** | `sovereign/deploy/onprem/` — `PLAN.md` (why each choice), `README.md` (the IT-facing brief), `EGRESS.md` (line-by-line audit of every outbound call + its kill switch), both hand-written config files, two systemd units, the nginx route allowlist, `package.sh` (our side) / `install.sh` + `acceptance.sh` (theirs). **Read `EGRESS.md` before claiming this system makes no outbound connections:** three agent tools (`search`'s web fallback, `web_fetch`, `wikipedia_fetch`) reached the internet on ordinary chat turns with no config switch until the `net-tools` feature was added 2026-08-03 |

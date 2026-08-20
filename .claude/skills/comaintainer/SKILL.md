@@ -189,6 +189,13 @@ OVERDUE rendering carries the review pressure.
    (frame banked, claims released), operator acks, successor boots with
    the next engine.
 
+   **The two clauses below are the worker's only channels out, and the
+   seams between them and the operator's console are mapped in
+   `docs/COMAINTAINER_CHANNELS.md` — read it before changing either.**
+   The asymmetry that matters: banking is a SCRIPT (works in any harness,
+   no session alive), escalation is a MESSAGE (harness-level, and only
+   deliverable by a live seat session).
+
    **Banking clause (verbatim in every spawn prompt; 2026-08-16).** The
    escalation clause says what MUST reach the seat; this says what must
    not. Without it, a worker's only channel for a finding is the

@@ -725,6 +725,10 @@ def propose_closures(sha: str, items: list, repo: Path = REPO,
                      timeout: float = 300.0) -> list:
     """-> [record]. PROPOSALS ONLY — nothing here retires anything."""
     bundle, files, scan = _commit_bundle(repo, sha)
+    # The whole dirty set, same input `verify` gives the gate: a claim
+    # citing a file with uncommitted changes may be citing a fix that has
+    # not landed.
+    dirty = sorted(dirty_files(repo))
     out = []
     for score, short, body in prefilter(items, files, scan):
         prompt = CANDIDATE_PROMPT.format(item=body.strip()[:6000],
@@ -740,6 +744,22 @@ def propose_closures(sha: str, items: list, repo: Path = REPO,
             continue
         if not isinstance(parsed, dict) or not parsed.get("closes"):
             continue
+        # G3 — the accelerator path takes the SAME closure gate as the
+        # level-triggered pass. This branch used to copy `citation`
+        # through unchecked into the very verdicts.jsonl the seat reads,
+        # which is precisely the absence-of-evidence shape
+        # `gate_closure_claim` exists to reject: on the first full pass,
+        # 21 of 46 `dead` verdicts rested on a probe that found NOTHING.
+        # A cheaper path is not a lower bar.
+        #
+        # A gated-out claim is still RECORDED, not dropped. It was a
+        # real model output and the seat should see that something
+        # looked like a closure and did not clear the gate — silently
+        # skipping it would report absence as nothing having happened
+        # (§18.3).
+        gated, reason = gate_closure_claim(
+            "dead", parsed.get("citation", ""), dirty)
+        passed = gated == "dead"
         out.append({
             "ts": dt.datetime.now(dt.timezone.utc).isoformat(),
             "kind": CANDIDATE_KIND,
@@ -749,7 +769,10 @@ def propose_closures(sha: str, items: list, repo: Path = REPO,
             "citation": parsed.get("citation", ""),
             "rationale": parsed.get("rationale", ""),
             "engine": model,
-            "disposition": "proposed — the seat decides; nothing auto-retires",
+            "closure_gate": "passed" if passed else reason,
+            "disposition": (
+                "proposed — the seat decides; nothing auto-retires" if passed
+                else "NOT proposed — the claim did not clear the closure gate"),
         })
     return out
 

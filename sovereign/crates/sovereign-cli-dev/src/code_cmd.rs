@@ -64,6 +64,7 @@ pub async fn run_code(args: &[String]) -> i32 {
         "arch-report" => crate::arch_report_cmd::run(&args[1..]).await,
         "suggest-seams" => crate::suggest_seams_cmd::run(&args[1..]).await,
         "dry-report" => crate::dry_report_cmd::run(&args[1..]).await,
+        "converge" => crate::converge_cmd::run(&args[1..]).await,
         "capability-graph" => crate::code_capability_graph::cmd_capability_graph(&args[1..]).await,
         "fieldglass" => crate::code_fieldglass::run(&args[1..]).await,
         "map" => crate::code_map::cmd_map(&args[1..]).await,
@@ -1380,6 +1381,12 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "Architecture posture: god-crate fan-in, coupling carriers, declared↔observed \
                  deltas, layer-map violations, temporal coupling; persists for arch_posture \
                  (--no-git skips history; --root <path> overrides the workspace root)",
+            ),
+            (
+                "converge <census|noun|status>",
+                "Duplicated concept IDENTITY: names defined as a type in >1 crate, the crate \
+                 that could own each, and a ratchet. Read-only, no model. Duplicated BEHAVIOUR \
+                 is `dry-report`; oversized files are `suggest-seams`",
             ),
             (
                 "capability-graph <corpus-id>",
