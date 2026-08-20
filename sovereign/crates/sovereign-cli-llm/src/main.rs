@@ -166,3 +166,83 @@ async fn async_main() {
 
     std::process::exit(code);
 }
+
+#[cfg(test)]
+mod backstage_boundary {
+    //! The MODULE-level half of the back-of-house rule.
+    //!
+    //! `quality/ARCH_LAYERS.toml` declares `sovereign-eval` back-of-house and
+    //! forbids product crates from carrying it in the default build. This
+    //! crate carries it anyway, and has an `[[exception]]` saying so, because
+    //! `bench_cmd` (51 files, ~31k lines) shares the crate with `chat_cmd`,
+    //! `corpus_cmd` and `mesh_cmd`. Splitting it out needs a `[lib]` target
+    //! over ~130k lines and pub-visibility churn through the three heaviest
+    //! modules here — priced, and not paid for.
+    //!
+    //! What IS enforceable meanwhile is containment: exactly one module may
+    //! name the instrument. That keeps the eventual crate split a move rather
+    //! than an excavation, and turns "we meant to keep this in bench_cmd" from
+    //! a thing someone remembers into a thing that fails (ARCH §7 — structural,
+    //! not remembered).
+    //!
+    //! This is strictly weaker than a crate boundary: Cargo still LINKS the
+    //! harness crate into the shipped binary. The test cannot fix that and does
+    //! not claim to.
+
+    /// The one module allowed to name the back-of-house instrument.
+    const ALLOWED: &str = "bench_cmd";
+
+    #[test]
+    fn bench_cmd_is_the_only_module_naming_the_eval_harness() {
+        // Assembled at runtime, never written as a literal. THIS FILE IS INSIDE
+        // THE TREE BEING SCANNED, so a literal here would make the guard match
+        // itself and fail on its own source — which is exactly what happened on
+        // the first cut. Keep the token out of this file, including test names
+        // and assertion text.
+        let needle = ["sovereign", "eval"].join("_");
+
+        let src = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut offenders = Vec::new();
+        let mut scanned = 0usize;
+        let mut stack = vec![src.clone()];
+        while let Some(dir) = stack.pop() {
+            let entries = std::fs::read_dir(&dir)
+                .unwrap_or_else(|e| panic!("cannot read {}: {e}", dir.display()));
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                let rel = path.strip_prefix(&src).unwrap_or(&path).to_path_buf();
+                scanned += 1;
+                let text = std::fs::read_to_string(&path).unwrap_or_default();
+                if text.contains(&needle)
+                    && !rel.starts_with(ALLOWED)
+                    && rel.file_stem().is_none_or(|s| s != ALLOWED)
+                {
+                    offenders.push(rel.display().to_string());
+                }
+            }
+        }
+
+        // An empty walk would pass while proving nothing — the classic
+        // zero-case false green (ARCH §18.1).
+        assert!(
+            scanned > 100,
+            "only {scanned} files scanned — the walk is broken, not the code"
+        );
+        assert!(
+            offenders.is_empty(),
+            "`{needle}` is back-of-house (quality/ARCH_LAYERS.toml `backstage`) and only \
+             `{ALLOWED}` may name it. These product modules do: {offenders:?}.\n\
+             If you need an authoring-harness verdict, depend on \
+             `sovereign-authoring-harness` DIRECTLY — the `::authoring_harness` path on the \
+             eval crate is only a compatibility alias, and routing a product verb through \
+             it is how this crate acquired the dependency in the first place."
+        );
+    }
+}

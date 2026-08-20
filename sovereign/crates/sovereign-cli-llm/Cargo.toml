@@ -38,6 +38,17 @@ sovereign-workflow-host = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
+# `recipe test` renders the deterministic authoring ladder. It reaches the
+# harness DIRECTLY rather than through `sovereign_eval::authoring_harness`,
+# which is only a compatibility alias: the crate was carved out of
+# sovereign-eval precisely so a product surface could use it without the
+# rusqlite/reqwest/clap weight, and going through the alias put a product verb
+# on a back-of-house crate for nothing.
+sovereign-authoring-harness = { workspace = true }
+# Back-of-house (quality/ARCH_LAYERS.toml `backstage`). Reached ONLY by
+# `bench_cmd`, pinned by `bench_cmd_is_the_only_module_naming_the_eval_harness`
+# in src/main.rs. Carried by the default build because bench_cmd shares this
+# crate with `chat`/`corpus`/`mesh` — see the [[exception]] in ARCH_LAYERS.toml.
 sovereign-eval = { workspace = true }
 # `meshapp dev` serves a bundle + proxies the explorer ops to this shared lib.
 sovereign-meshapp = { workspace = true }
