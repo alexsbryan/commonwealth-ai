@@ -205,7 +205,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         }
         "status" => {
             // The lag is computed HERE, from the same graph handle and the same
-            // scope that produced `defs`, so the freshness line and the number
+            // scope that produced `defs`, so the graph_lag line and the number
             // can never be about different things.
             let lag = assess_lag(graph.last_indexed_head().await, &defs, &scope);
             cmd_status(&defs, &baseline, mint, json, &lag, &corpus_id)
@@ -250,7 +250,7 @@ fn resolve_corpus(explicit: Option<String>, indexes_dir: &std::path::Path) -> Re
     }
 }
 
-// ── Freshness: what the number is ABOUT ───────────────────────────────────────
+// ── GraphLag: what the number is ABOUT ───────────────────────────────────────
 //
 // `converge status` counts type definitions in the SCIP graph, and the graph is
 // rebuilt on a git-poll cadence — so it lags the working tree. A count printed
@@ -275,7 +275,17 @@ fn resolve_corpus(explicit: Option<String>, indexes_dir: &std::path::Path) -> Re
 // caveat and do not move the verdict.
 
 /// What the graph's number is about, relative to the commit being gated.
-pub(crate) enum Freshness {
+///
+/// RENAMED APART from `Freshness` on 2026-08-20, when nc-10-judgement minted
+/// `kernel_types::Freshness` and the two collided. They are not the same
+/// question and neither can serve the other: the kernel's is *is this dated
+/// artifact past its caller's horizon*, three variants, no git; this one is
+/// *is the SCIP graph's head the commit being gated, and if not does the gap
+/// touch the files this count reads*, four variants carrying commit hashes
+/// and changed-file lists. A prefix would have been the cosmetic dodge
+/// §10.8 warns about ("a gate teaches the workaround"); `GraphLag` says what
+/// it measures, and the enclosing `Lag` keeps the uncommitted-caveat half.
+pub(crate) enum GraphLag {
     /// The graph's head is this repo's HEAD.
     Current,
     /// The graph is behind HEAD, but nothing in the gap feeds this count.
@@ -296,7 +306,7 @@ pub(crate) enum Freshness {
 
 /// The graph's lag, in the two forms that read differently.
 pub(crate) struct Lag {
-    pub(crate) freshness: Freshness,
+    pub(crate) graph_lag: GraphLag,
     /// Working-tree paths (tracked edits + untracked files) that carry the
     /// extensions this count reads. Caveat only — never a verdict.
     uncommitted: Vec<String>,
@@ -308,28 +318,28 @@ impl Lag {
     /// True when the printed number can be said to be about THIS commit.
     pub(crate) fn can_judge(&self) -> bool {
         matches!(
-            self.freshness,
-            Freshness::Current | Freshness::BehindIrrelevant { .. }
+            self.graph_lag,
+            GraphLag::Current | GraphLag::BehindIrrelevant { .. }
         )
     }
 
     pub(crate) fn verdict_word(&self) -> &'static str {
-        match self.freshness {
-            Freshness::Current => "current",
-            Freshness::BehindIrrelevant { .. } => "behind-irrelevant",
-            Freshness::Stale { .. } => "stale",
-            Freshness::Unknown { .. } => "unknown",
+        match self.graph_lag {
+            GraphLag::Current => "current",
+            GraphLag::BehindIrrelevant { .. } => "behind-irrelevant",
+            GraphLag::Stale { .. } => "stale",
+            GraphLag::Unknown { .. } => "unknown",
         }
     }
 
     /// The one line (or three) that says what the number is about.
     pub(crate) fn render(&self, corpus_id: &str) -> String {
         let mut s = String::new();
-        match &self.freshness {
-            Freshness::Current => {
+        match &self.graph_lag {
+            GraphLag::Current => {
                 s.push_str("graph: at HEAD — the number is about this commit\n");
             }
-            Freshness::BehindIrrelevant {
+            GraphLag::BehindIrrelevant {
                 indexed,
                 head,
                 gap_files,
@@ -342,7 +352,7 @@ impl Lag {
                     self.exts.join("/"),
                 ));
             }
-            Freshness::Stale {
+            GraphLag::Stale {
                 indexed,
                 head,
                 changed,
@@ -365,7 +375,7 @@ impl Lag {
                     "  re-index: svrn project refresh --name {corpus_id} --local\n"
                 ));
             }
-            Freshness::Unknown { why } => {
+            GraphLag::Unknown { why } => {
                 s.push_str(&format!(
                     "graph: cannot tell what this number is about — {why}\n"
                 ));
@@ -445,18 +455,18 @@ pub(crate) fn assess_lag(
         .collect();
 
     let head = git_stdout(&["rev-parse", "HEAD"]).map(|s| s.trim().to_string());
-    let freshness = match (indexed_head, head) {
-        (None, _) => Freshness::Unknown {
+    let graph_lag = match (indexed_head, head) {
+        (None, _) => GraphLag::Unknown {
             why: "the graph records no last_indexed_head (legacy DB) — re-index to get one"
                 .to_string(),
         },
-        (_, None) => Freshness::Unknown {
+        (_, None) => GraphLag::Unknown {
             why: "`git rev-parse HEAD` failed here — not a git checkout?".to_string(),
         },
-        (Some(idx), Some(head)) if idx == head => Freshness::Current,
+        (Some(idx), Some(head)) if idx == head => GraphLag::Current,
         (Some(idx), Some(head)) => {
             match git_stdout(&["diff", "--name-only", &format!("{idx}..{head}")]) {
-                None => Freshness::Unknown {
+                None => GraphLag::Unknown {
                     why: format!(
                         "the graph's indexed head {} is not an object in this checkout, so what \
                          changed since it cannot be resolved",
@@ -471,13 +481,13 @@ pub(crate) fn assess_lag(
                         .map(|p| (*p).to_string())
                         .collect();
                     if changed.is_empty() {
-                        Freshness::BehindIrrelevant {
+                        GraphLag::BehindIrrelevant {
                             indexed: idx,
                             head,
                             gap_files: gap.len(),
                         }
                     } else {
-                        Freshness::Stale {
+                        GraphLag::Stale {
                             indexed: idx,
                             head,
                             changed,
@@ -489,7 +499,7 @@ pub(crate) fn assess_lag(
     };
 
     Lag {
-        freshness,
+        graph_lag,
         uncommitted,
         exts,
     }
@@ -542,7 +552,7 @@ fn cmd_status(
             ),
             // What the number is ABOUT travels with it — a count that travels
             // without its method is the brittleness this program exists to end.
-            ("freshness", serde_json::json!(lag.verdict_word())),
+            ("graph_lag", serde_json::json!(lag.verdict_word())),
             ("freshness_note", serde_json::json!(lag.render(corpus_id))),
             ("counted_extensions", serde_json::json!(lag.exts)),
             ("uncommitted_counted", serde_json::json!(lag.uncommitted)),
@@ -687,24 +697,24 @@ mod tests {
     #[test]
     fn only_current_and_irrelevant_gaps_may_render_a_verdict() {
         let lag = |f| Lag {
-            freshness: f,
+            graph_lag: f,
             uncommitted: Vec::new(),
             exts: vec!["rs".to_string()],
         };
-        assert!(lag(Freshness::Current).can_judge());
-        assert!(lag(Freshness::BehindIrrelevant {
+        assert!(lag(GraphLag::Current).can_judge());
+        assert!(lag(GraphLag::BehindIrrelevant {
             indexed: "a".repeat(40),
             head: "b".repeat(40),
             gap_files: 2,
         })
         .can_judge());
-        assert!(!lag(Freshness::Stale {
+        assert!(!lag(GraphLag::Stale {
             indexed: "a".repeat(40),
             head: "b".repeat(40),
             changed: vec!["x.rs".to_string()],
         })
         .can_judge());
-        assert!(!lag(Freshness::Unknown {
+        assert!(!lag(GraphLag::Unknown {
             why: "no git".to_string()
         })
         .can_judge());
@@ -714,7 +724,7 @@ mod tests {
     #[test]
     fn the_stale_line_names_the_reindex_command() {
         let lag = Lag {
-            freshness: Freshness::Stale {
+            graph_lag: GraphLag::Stale {
                 indexed: "a".repeat(40),
                 head: "b".repeat(40),
                 changed: vec!["sovereign/crates/a/src/x.rs".to_string()],
