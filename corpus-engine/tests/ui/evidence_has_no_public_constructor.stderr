@@ -1,0 +1,43 @@
+error[E0599]: no function or associated item named `new` found for struct `corpus_engine::Evidence` in the current scope
+ --> tests/ui/evidence_has_no_public_constructor.rs:6:23
+  |
+6 |     let _ = Evidence::new("the text", Custody::Personal, 0.9);
+  |                       ^^^ function or associated item not found in `corpus_engine::Evidence`
+  |
+help: there is a method `ne` with a similar name, but with different arguments
+ --> $RUST/core/src/cmp.rs
+  |
+  |     fn ne(&self, other: &Rhs) -> bool {
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+error[E0624]: associated function `acquired` is private
+ --> tests/ui/evidence_has_no_public_constructor.rs:7:23
+  |
+7 |       let _ = Evidence::acquired("the text", Custody::Personal, 0.9);
+  |                         ^^^^^^^^ private associated function
+  |
+ ::: src/index/evidence.rs
+  |
+  | /     pub(crate) fn acquired(
+  | |         content: impl Into<String>,
+  | |         origin: Origin,
+  | |         custody: Custody,
+  | |         score: f32,
+  | |     ) -> Self {
+  | |_____________- private associated function defined here
+
+error[E0061]: this function takes 4 arguments but 3 arguments were supplied
+ --> tests/ui/evidence_has_no_public_constructor.rs:7:13
+  |
+7 |     let _ = Evidence::acquired("the text", Custody::Personal, 0.9);
+  |             ^^^^^^^^^^^^^^^^^^             ----------------- argument #2 of type `Origin` is missing
+  |
+note: associated function defined here
+ --> src/index/evidence.rs
+  |
+  |     pub(crate) fn acquired(
+  |                   ^^^^^^^^
+help: provide the argument
+  |
+7 |     let _ = Evidence::acquired("the text", /* Origin */, Custody::Personal, 0.9);
+  |                                            +++++++++++++
