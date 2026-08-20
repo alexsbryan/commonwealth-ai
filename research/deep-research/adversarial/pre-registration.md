@@ -5376,3 +5376,113 @@ baseline-era scorer is C-class deterministic — zero daemon calls
 (verified by grep: no reqwest/ureq/http in score-arms.py; header
 "C-class only: no LLM judge anywhere"). Scoring ran without any daemon
 traffic.
+
+---
+
+## T6d battery #5 — EXECUTION RECORD AND LANDING (2026-08-19; re-score on the frozen bank, baseline-era scorer)
+
+**Execution.** Battery #5 ran to terminal under ONE systemd-run --user
+unit (dr-t6d, 15:16 → 16:49 PT, 1h33m wall): 13 loop flights
+(seed-01..12, v1) ALL exit=0 — v1's round-3 call was queued ~45 min
+behind a PEER's mesh-routed wl-judge stream on the shared daemon
+(coordinator-confirmed peer-owned, drain-unknown, ACCEPT-DELAY); it
+drained and the flight resumed automatically, checkpoint intact. The
+ONE-SHOT comparator arm FAILED on its first attempt at 16:49:49
+(exit=101, 862s): the aggregate panic at oneshot_rag.rs:268 names
+seed-02 — `draft ask: Inference error: Remote API returned 503
+Service Unavailable: {"error":{"message":"local inference failed:
+Inference error: MTP inference deadline exceeded after 300s (3696
+tokens)"...}}`. That is a daemon-side queue deadline (host busy), NOT
+an assertion encoding pre-t6d expectations and NOT a code regression —
+the park note's diagnose-first fork resolves to neither, and the
+instrument needed no change. The arm was re-run alone (unit
+`dr-t6d-oneshot-re`, same DR_ARM_PAIRS/DR_ARM_OUT, quiet 27B slot
+sequenced after the t6b worker's re-run cleared): exit=0, 13/13
+drafts written, 558.77s. Scored with the frozen score-arms.py (legs,
+bars, canon untouched) — score-report-t6d.json.
+
+**Legs (battery #4 → battery #5, frozen bars):**
+
+| leg | #4 | #5 | bar | verdict |
+|---|---|---|---|---|
+| P4-v0 | 62/72 | 59/72 | >=58/72 | PASS |
+| P4-v1 (loop) | 5/16 | 10/16 | >=12/16 | FAIL |
+| v1 gap trajectory | [1,21,26] grew | [1,25,15] | r3 <= r2 | PASS, stated plainly |
+| R-12-nongrow (v0, intent-form) | 8/12 | 12/12 | >=10/12 | PASS |
+| P3 | 9/13 | 6/13 | not worse than #4 (>=9/13) | FAIL — worse |
+| T1.7 plan presence | 12/12 | 12/12 | all scoped carry | PASS |
+| two-arm lift (pooled) | cnj | 1.0 vs 0.978 | loop >= one-shot + 0.10 | FAIL |
+| two-arm lift (v1) | failed | 1.0 vs 1.0 | loop >= one-shot + 0.15 | FAIL (single-question) |
+| honesty not worse | cnj | loop 0.0 vs one-shot 0.022 | loop <= one-shot | PASS |
+
+**The word-number class is fixed and measured — the battery
+demonstrates it end-to-end.** v1's 40/40 could-not-judge blindness did
+NOT recur as word-form blindness: every figure surviving to the final
+report is now extracted whatever its form (K1 58.1/51.9/50.6/50,
+K2 0.5469, K6 177/92, K8 2000/20, K10 1979, K11 7/2000/53,
+K12 80/1980, K16 35/31/19 all covered; the report's Findings carry
+passed-verdict claims where #4's carried none). The fold identity,
+figure inventory, witness and specifiers see word figures
+(unit-pinned); the gap trajectory converged instead of growing
+([1,25,15] vs #4's [1,21,26]). P4-v1 recovered 5/16 → 10/16.
+
+**The flips question (three runs, same frozen scorer — t6b-first
+13/16·12/13, t6b-re 9/16·9/13, t6d-b5 10/16·6/13).** The t6b 13→9 /
+12→9 drop was draft-class single-run variance: no code changed between
+their runs; the SAME 4 v1 keys flipped off (K8, K10, K12, K16) and the
+SAME 3 P3 seeds flipped off (03, 07, 08 — all passed in t6b-first).
+The fix's recovery lands on the exact flipped set: t6d-b5 re-covered
+ALL FOUR keys t6b-re lost (K8/K10/K12/K16 back ON), but lost 3
+DIFFERENT keys (K5, K7, K15) to the same truncation variance — net
+10/16 vs their 9/16. K3/K9/K13 have never covered in ANY of the three
+runs (K9 arbiter-journaled never-clear; K3/K13 figures absent or
+evidence-unsupported). R-12 recovered hard: 12/12 vs t6b-re's 8/12
+(the fold identity's word-form visibility — pre-registered
+expectation). P3 NOT recovered: 6/13 vs t6b-re's 9/13 — the 3 seeds
+t6b-re lost also fail under the fix, plus 3 more (04, 09, 11).
+
+**P4-v1 10/16 — recovered from the collapse, stalled below the 12/16
+target.** The six uncovered keys decompose (per-key reasons in the
+score report): K9 never-coverable (frozen arbiter journal); K13 fails
+evidence support (0.7pp in answer, not supported); K7 fails on one
+figure (report says 4.7, key's arbiter form 4.6); K3
+(7.87/7.81/172476/22095), K5 (325.78/225) and K15 (100) have their
+figures absent from the final report in ANY form — dropped by the
+strict-shape re-draft. None are word-form blindness; the residual
+constraint is the re-draft's content compression, not the class this
+order fixed.
+
+**P3 6/13 — WORSE than battery #4's 9/13; below the order's floor.
+Mechanism, verified by reading the three flipped seeds' final reports
+(seed-04, seed-09, seed-11): the strict-shape re-drafts DROPPED the
+figures outright — 87.5/85 (seed-04 K5), 183 and 2.0 (seed-09 K6/K3),
+1/2/3/2023/2024 (seed-11 K2) are absent in ANY form (digit or word)
+from the final reports while the round-1-evidence drafts carried them.
+NOT word-form leakage — the figures-as-digits clause held on every
+surviving figure (1.10/4.40/15/75/3/500/4/2025 all digit-form in the
+same reports). NOT an instrument change — the scorer is frozen; the
+same extraction scored all three runs; the r1-evidence-draft side
+moved both directions (seed-04 6→6, seed-09 5→4, seed-11 5→6) and the
+final-side drops drove the flips. It is the strict-shape re-draft's
+truncation — a DIFFERENT class from the word-number class this order
+fixed, and the same mechanism that has kept P3 under its bar since
+t6c-r3 (9/13 → 9/13 → 6/13). With n=1, whether the "digits or nothing"
+clause nudged truncation probability upward is not distinguishable
+from the deck's demonstrated ±3-4 seed swing (t6b-first passed 12/13
+on the same seeds) — stated plainly, not claimed.
+
+**Near-miss disposition.** P4-v1: above battery #4's floor (5/16),
+below the 12/16 target → step-1 terminal: met-floor, stalled-at-target
+(the curve is the table above); no tuning attempted — the LAST
+revolution before the 122B judge window; the order has no tune item.
+P3: below the order's floor (>=9/13) → near-miss step 2: escalated
+with the curve in the landing message. Honesty and two-arm legs:
+measured post re-run (columns above).
+
+**Gate stated plainly, per leg:** P4-v1 FAIL (10/16 < 12/16 —
+recovered from 5/16 and from t6b-re's 9/16, stalled at the
+strict-shape re-draft's compression); v1 trajectory PASS (converged
+[1,25,15], stated plainly — no word-form-induced growth); R-12 PASS
+(12/12, up from 8/12); P3 FAIL (6/13, worse than #4's 9/13 and t6b-re's
+9/13 — re-draft truncation, not the word-number class); honesty PASS
+(loop 0.0 vs one-shot 0.022).
