@@ -38,6 +38,12 @@ blake3 = "1"
 [dev-dependencies]
 # Wire-form assertions only. Not a runtime dep of the kernel.
 serde_json = { workspace = true }
+# The compile-fail harness for `judgement_reds` — the structural half of the
+# `Judgement` invariant is a claim about what a caller OUTSIDE this crate
+# cannot write, and trybuild is the only thing that can assert it. Same
+# version as `corpus-engine`'s `evidence_reds` suite (ARCH §8.2 — one version
+# per third-party crate across the workspace).
+trybuild = "1"
 
 [lints]
 workspace = true

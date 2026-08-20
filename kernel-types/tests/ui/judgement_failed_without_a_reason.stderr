@@ -1,0 +1,15 @@
+error[E0061]: this function takes 2 arguments but 1 argument was supplied
+ --> tests/ui/judgement_failed_without_a_reason.rs:6:13
+  |
+6 |     let _ = Judgement::failed("drift");
+  |             ^^^^^^^^^^^^^^^^^--------- argument #2 of type `Reason` is missing
+  |
+note: associated function defined here
+ --> src/judgement.rs
+  |
+  |     pub fn failed(subject: impl Into<String>, reason: Reason) -> Judgement {
+  |            ^^^^^^
+help: provide the argument
+  |
+6 |     let _ = Judgement::failed("drift", /* Reason */);
+  |                                      ++++++++++++++

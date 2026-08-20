@@ -28,8 +28,8 @@
 //!
 //! # What is here
 //!
-//! Ten types, which is the campaign's hard cap, and the cap is the design
-//! constraint rather than an accident of what fitted:
+//! Two families. **Identity and provenance** — what a piece of content is and
+//! where it came from:
 //!
 //! | Type | Answers |
 //! |---|---|
@@ -43,6 +43,31 @@
 //! | [`Locator`] | ...at which span inside its document |
 //! | [`Custody`] | where the content stands for sharing |
 //! | [`Attribution`] | which engine computed a piece of text |
+//!
+//! **Trust and freshness** — how much a result is worth, and how old it is
+//! (minted 2026-08-20, rung nc-10-judgement; see [`judgement`] for why it is
+//! here and not in `sovereign-contracts`):
+//!
+//! | Type | Answers |
+//! |---|---|
+//! | [`Verdict`] | passed, failed, could-not-judge, never-ran — four, not two |
+//! | [`Reason`] | why it reads that way, with the placeholders refused |
+//! | [`Freshness`] | is the artifact behind it still worth quoting |
+//! | [`Judgement`] | all of the above about one named subject, and it renders |
+//!
+//! # The "ten types" cap, and what the bar actually measures
+//!
+//! The rung-1 header of this file read *"Ten types, which is the campaign's
+//! hard cap"* and this crate stood at exactly ten. That conflated two
+//! different numbers and the conflation would have blocked the rung that
+//! completes the crate. The `nc-kernel` bar's instrument is
+//! `nc-boundary.py --json | .kernel_size`, and `kernel_size` counts **types
+//! that all three product domains speak** — 22 today, every one of them owned
+//! by `corpus-engine`, target ≤ 10 *in a crate no domain owns*. It does not
+//! count this crate's public surface, and adding a type here can only lower
+//! it, never raise it. The cap is on shared vocabulary owned by a product
+//! domain, which is the disease; a neutral crate holding fourteen types is
+//! the cure wearing a larger number.
 //!
 //! The spec (`quality/TARGET_ARCHITECTURE.md` §2.1) writes `Origin` in a form
 //! that implies sixteen types. Six of those are deliberately NOT minted here:
@@ -58,10 +83,12 @@ pub mod attribution;
 pub mod custody;
 pub mod hash;
 pub mod ids;
+pub mod judgement;
 pub mod origin;
 
 pub use attribution::Attribution;
 pub use custody::{join_custody, Custody};
 pub use hash::ContentHash;
 pub use ids::{CorpusId, NodeId};
+pub use judgement::{honesty_footer, render_rows, Freshness, Judgement, Reason, Verdict};
 pub use origin::{Grain, Locator, Origin, Server, Source};

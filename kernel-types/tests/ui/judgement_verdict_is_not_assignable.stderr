@@ -1,0 +1,5 @@
+error[E0616]: field `verdict` of struct `Judgement` is private
+ --> tests/ui/judgement_verdict_is_not_assignable.rs:7:7
+  |
+7 |     j.verdict = Verdict::Passed;
+  |       ^^^^^^^ private field

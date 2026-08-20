@@ -1,0 +1,11 @@
+error[E0425]: cannot find type `NoSuchTypeAnywhere` in this scope
+ --> tests/ui/harness_positive_control.rs:9:12
+  |
+9 |     let _: NoSuchTypeAnywhere = there_is_no_such_function();
+  |            ^^^^^^^^^^^^^^^^^^ not found in this scope
+
+error[E0425]: cannot find function `there_is_no_such_function` in this scope
+ --> tests/ui/harness_positive_control.rs:9:33
+  |
+9 |     let _: NoSuchTypeAnywhere = there_is_no_such_function();
+  |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^ not found in this scope

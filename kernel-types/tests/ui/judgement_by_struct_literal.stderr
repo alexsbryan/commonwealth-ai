@@ -1,0 +1,15 @@
+error[E0451]: fields `subject`, `verdict`, `reason`, `as_of` and `horizon` of struct `Judgement` are private
+  --> tests/ui/judgement_by_struct_literal.rs:8:9
+   |
+ 7 |     let _ = Judgement {
+   |             --------- in this type
+ 8 |         subject: "drift".to_string(),
+   |         ^^^^^^^ private field
+ 9 |         verdict: Verdict::Failed,
+   |         ^^^^^^^ private field
+10 |         reason: Reason::literal("two claims contradicted"),
+   |         ^^^^^^ private field
+11 |         as_of: None,
+   |         ^^^^^ private field
+12 |         horizon: None,
+   |         ^^^^^^^ private field
