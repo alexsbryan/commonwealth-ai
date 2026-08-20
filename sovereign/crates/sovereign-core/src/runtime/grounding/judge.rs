@@ -1,8 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! The gate's judges. Prompts are byte-identical to the bench critic
-//! (`bench_cmd/live_runner.rs`) so the bench-calibrated threshold
-//! transfers; divergence between the two is a bug in whichever
-//! changed (same contract as sovereign-lint vs sovereign-test).
+//! The gate's judges. Both registers the bench critic
+//! (`bench_cmd/live_runner.rs`) runs are rendered HERE and called from
+//! there, so the bench-calibrated threshold transfers by construction
+//! rather than by convention:
+//!
+//!   step 1  [`claim_extraction_prompt`] + [`CLAIM_EXTRACTION_SYSTEM`]
+//!   step 2  [`chunk_judge_prompt`] + [`CHUNK_JUDGE_SYSTEM`]
+//!
+//! Step 2 was unified 2026-08-13. Step 1 was left as a duplicate literal
+//! in two crates and had DIVERGED by the time anyone checked: production
+//! grew the `entity_anchored` branch while the bench copy kept the
+//! unanchored rule, so tau was calibrated on a prompt production does not
+//! send for entity-anchored turns (measured 2026-08-19). Unified now —
+//! the compiler enforces it, so this comment cannot go stale the way the
+//! last one did.
 
 use std::sync::Arc;
 
@@ -19,9 +30,38 @@ use sovereign_contracts::types::GateCallMechanism;
 /// Outcome of one gate pass, carried into message metadata so the
 /// desktop can render provenance ("verified" / "regenerated" /
 /// "abstained") and the bench can read what happened.
+/// Why this verdict has the `violation_prob` it has.
+///
+/// `violation_prob = 0.0` is returned by three structurally different
+/// paths, and collapsing them is how a turn the gate NEVER RAN ON was
+/// reported to the UI as `Supported` (measured 2026-08-19: 44.3% of
+/// banked gate rows sit at exactly 0.0, of which the long-form
+/// short-circuit alone is 15.6%). Absence is reported, never defaulted
+/// — ARCH §18.3, and §18.1's "four verdicts, not two".
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ClaimCheckOutcome {
+    /// Gate did not run: no answer text, or no evidence to check against.
+    NotEvaluatedNoInput,
+    /// Gate did not run: long-form answer, outside the single-claim
+    /// gate's scope. `violation_prob` is a placeholder, NOT a measurement.
+    NotEvaluatedLongForm,
+    /// Nothing to check: the assistant declined, or asserted no
+    /// world-claim. An HONESTY SUCCESS — not a clean bill of health on
+    /// a claim that was examined.
+    NoClaim,
+    /// A claim was extracted and checked. `violation_prob` is a real
+    /// measurement and `tau` applies to it.
+    Measured,
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 pub(crate) struct GateVerdict {
     pub violation_prob: f64,
+    /// Why `violation_prob` is what it is. Read this before comparing
+    /// `violation_prob` to `tau` — on a non-`Measured` outcome the
+    /// comparison is meaningless.
+    pub outcome: ClaimCheckOutcome,
     /// The extracted claim the verdict is about (None = NO_CLAIM).
     pub claim: Option<String>,
     /// Claim-conditioned passages the sealed search returned for this
@@ -113,6 +153,7 @@ pub(crate) async fn verify_grounding(
     if answer.trim().is_empty() || chunks.is_empty() {
         return Some(GateVerdict {
             violation_prob: 0.0,
+            outcome: ClaimCheckOutcome::NotEvaluatedNoInput,
             claim: None,
             claim_evidence: Vec::new(),
         });
@@ -125,6 +166,7 @@ pub(crate) async fn verify_grounding(
         );
         return Some(GateVerdict {
             violation_prob: 0.0,
+            outcome: ClaimCheckOutcome::NotEvaluatedLongForm,
             claim: None,
             claim_evidence: Vec::new(),
         });
@@ -138,29 +180,10 @@ pub(crate) async fn verify_grounding(
     // still be extracted and verified (measured: a gated retry
     // re-asserted the same invented first name wearing the caveat and
     // slipped through the exemption).
-    let no_claim_rule = if entity_anchored {
-        "Reply with exactly NO_CLAIM if the assistant declined or said the \
-         information is not in its sources. If the assistant asserted a fact \
-         while attributing it to general knowledge, still state that claim."
-    } else {
-        "Reply with exactly NO_CLAIM if the assistant declined, said the information \
-         is not in its sources, or explicitly attributed the fact to general \
-         knowledge rather than the sources."
-    };
-    let claim_prompt = format!(
-        "A user asked: {}\n\nAn assistant answered:\n\"\"\"\n{}\n\"\"\"\n\n\
-         State the single central factual claim the assistant asserts as its answer, \
-         as one short standalone sentence that names BOTH sides of the relation \
-         (who/what is claimed to be/do what). Do not add qualifiers or sources.\n\
-         {no_claim_rule}",
-        question.chars().take(400).collect::<String>(),
-        answer.chars().take(2000).collect::<String>(),
-    );
+    let claim_prompt = claim_extraction_prompt(question, answer, entity_anchored);
     let claim_req = CompletionRequest {
         prompt: claim_prompt,
-        system_message: Some(
-            "You extract claims precisely. Reply with one sentence or NO_CLAIM.".into(),
-        ),
+        system_message: Some(CLAIM_EXTRACTION_SYSTEM.into()),
         preferred_speed: Speed::Slow,
         // SLOT_POLICY §7: route the Critic through the privacy-gated OICP
         // path instead of pinning `model_id: "primary"`. The pin was a
@@ -185,6 +208,7 @@ pub(crate) async fn verify_grounding(
                 dbg("claim=NO_CLAIM → vp=0");
                 return Some(GateVerdict {
                     violation_prob: 0.0,
+                    outcome: ClaimCheckOutcome::NoClaim,
                     claim: None,
                     claim_evidence: Vec::new(),
                 });
@@ -217,6 +241,7 @@ pub(crate) async fn verify_grounding(
         dbg("claim is a decline meta-rider → NO_CLAIM → vp=0");
         return Some(GateVerdict {
             violation_prob: 0.0,
+            outcome: ClaimCheckOutcome::NoClaim,
             claim: None,
             claim_evidence: Vec::new(),
         });
@@ -257,6 +282,7 @@ pub(crate) async fn verify_grounding(
                 ));
                 return Some(GateVerdict {
                     violation_prob: 0.0,
+                    outcome: ClaimCheckOutcome::Measured,
                     claim: Some(claim),
                     claim_evidence: Vec::new(),
                 });
@@ -273,6 +299,7 @@ pub(crate) async fn verify_grounding(
                 ));
                 return Some(GateVerdict {
                     violation_prob: 1.0,
+                    outcome: ClaimCheckOutcome::Measured,
                     claim: Some(claim),
                     claim_evidence: Vec::new(),
                 });
@@ -361,9 +388,51 @@ pub(crate) async fn verify_grounding(
     ));
     Some(GateVerdict {
         violation_prob: vp,
+        outcome: ClaimCheckOutcome::Measured,
         claim: Some(claim),
         claim_evidence: extra,
     })
+}
+
+/// System turn for claim extraction — step 1 of the two-step gate.
+pub const CLAIM_EXTRACTION_SYSTEM: &str =
+    "You extract claims precisely. Reply with one sentence or NO_CLAIM.";
+
+/// Render step 1's prompt — the claim the gate will then verify.
+///
+/// **The one renderer, for the gate and for the bench critic alike.**
+/// Step 2 (`chunk_judge_prompt`) was unified for exactly this reason: a
+/// duplicate literal in two crates is a claim that holds only while
+/// nobody edits one side. Step 1 was left duplicated and duly diverged —
+/// production grew the `entity_anchored` branch below while the bench
+/// critic kept the unanchored rule, so `tau` was calibrated on a prompt
+/// production does not send for entity-anchored turns (measured
+/// 2026-08-19). Callers pass their own `entity_anchored`; the STRING is
+/// no longer forkable.
+///
+/// `entity_anchored` turns keep the GK-attribution exemption narrow:
+/// outside knowledge cannot establish a fact about the corpus's own
+/// world, so a general-knowledge-caveated in-world assertion must still
+/// be extracted and verified.
+pub fn claim_extraction_prompt(question: &str, answer: &str, entity_anchored: bool) -> String {
+    let no_claim_rule = if entity_anchored {
+        "Reply with exactly NO_CLAIM if the assistant declined or said the \
+         information is not in its sources. If the assistant asserted a fact \
+         while attributing it to general knowledge, still state that claim."
+    } else {
+        "Reply with exactly NO_CLAIM if the assistant declined, said the information \
+         is not in its sources, or explicitly attributed the fact to general \
+         knowledge rather than the sources."
+    };
+    format!(
+        "A user asked: {}\n\nAn assistant answered:\n\"\"\"\n{}\n\"\"\"\n\n\
+         State the single central factual claim the assistant asserts as its answer, \
+         as one short standalone sentence that names BOTH sides of the relation \
+         (who/what is claimed to be/do what). Do not add qualifiers or sources.\n\
+         {no_claim_rule}",
+        question.chars().take(400).collect::<String>(),
+        answer.chars().take(2000).collect::<String>(),
+    )
 }
 
 /// One per-chunk support probe — the exact register `verify_grounding`'s

@@ -38,10 +38,15 @@ impl StubJudge {
 
 #[async_trait]
 impl JudgeClient for StubJudge {
+    fn model_name(&self) -> &str {
+        "stub"
+    }
+
     async fn judge(&self, req: &JudgeRequest) -> Result<JudgeTrialOutcome, JudgeError> {
         let mut q = self.queue.lock().unwrap();
         let anchor = q.remove(0);
         Ok(JudgeTrialOutcome {
+            raw: String::new(),
             anchor,
             rationale: format!(
                 "stub-rationale-for-{}-anchor-{}",

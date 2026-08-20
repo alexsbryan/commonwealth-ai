@@ -27,6 +27,15 @@ use crate::runner::AgentRunArtifact;
 pub struct JudgeTrialOutcome {
     pub anchor: u8, // 0..=3
     pub rationale: String,
+    /// The model's reply verbatim, before parsing.
+    ///
+    /// Persisted so the lenient-parser question is answerable from
+    /// banked artifacts. It was not, and the census had to be run by
+    /// replaying every prompt against a live daemon to find out whether
+    /// `parse_judge_response`'s fallback paths ever fire (2026-08-19:
+    /// 0/49 on `primary` — but that is one model, and without this
+    /// field no OTHER model's rate is recoverable after the fact).
+    pub raw: String,
 }
 
 /// Per-dimension judge inputs.
@@ -57,6 +66,13 @@ pub enum JudgeError {
 #[async_trait]
 pub trait JudgeClient: Send + Sync {
     async fn judge(&self, req: &JudgeRequest) -> Result<JudgeTrialOutcome, JudgeError>;
+
+    /// Which model produced these verdicts. Stamped into every banked
+    /// trial so a result is attributable to its instrument — an anchor
+    /// difference between two runs is otherwise indistinguishable from
+    /// sampling variance. No default: a judge that will not name itself
+    /// is the defect this exists to prevent.
+    fn model_name(&self) -> &str;
 }
 
 /// Real HTTP judge — posts to `<base_url>/chat/completions`.
@@ -88,6 +104,10 @@ impl HttpJudgeClient {
 
 #[async_trait]
 impl JudgeClient for HttpJudgeClient {
+    fn model_name(&self) -> &str {
+        &self.model
+    }
+
     async fn judge(&self, req: &JudgeRequest) -> Result<JudgeTrialOutcome, JudgeError> {
         let prompt = build_judge_prompt(req);
         let body = serde_json::json!({
@@ -130,7 +150,10 @@ impl JudgeClient for HttpJudgeClient {
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        parse_judge_response(&content)
+        parse_judge_response(&content).map(|mut o| {
+            o.raw = content;
+            o
+        })
     }
 }
 
@@ -182,6 +205,8 @@ pub fn parse_judge_response(raw: &str) -> Result<JudgeTrialOutcome, JudgeError> 
     Ok(JudgeTrialOutcome {
         anchor: anchor_raw as u8,
         rationale,
+        // Filled by the caller, which holds the untruncated reply.
+        raw: String::new(),
     })
 }
 

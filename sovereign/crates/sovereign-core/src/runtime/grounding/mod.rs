@@ -88,6 +88,7 @@ pub(crate) use judge::{verify_grounding, GateVerdict};
 // structural (ARCH §10.6) — and it means a future change to the register
 // moves BOTH sides, instead of leaving the calibration instrument behind.
 pub use judge::{chunk_judge_prompt, CHUNK_JUDGE_PASSAGE_CHARS, CHUNK_JUDGE_SYSTEM};
+pub use judge::{claim_extraction_prompt, CLAIM_EXTRACTION_SYSTEM};
 // The FR-6 decorrelation driver (order deep-research-t0b, `tests/fr6_decorrelation.rs`)
 // measures these two strings against the labeled bank as a genuine out-of-crate
 // consumer; visibility per directives 13efc5dc + e39f87b2. Import-block addition only.
@@ -1001,6 +1002,42 @@ pub(crate) async fn gate_answer_with_progress(
 /// blocking task and swallows IO errors into a `tracing::warn!`, so
 /// journaling can neither delay nor fail a turn (the next-edit journal's
 /// contract, note 43770c85 rule 4).
+/// Project a gate decision onto the journal's four-valued verdict.
+///
+/// Pure so it can be watched fail. `claim_check_measured` is the guard
+/// that the ladder's `violation_prob` is a MEASUREMENT rather than a
+/// placeholder: `verify_grounding` returns `violation_prob: 0.0` from
+/// three paths that never ran a check — no input, a long-form answer
+/// outside the single-claim gate's scope, and NO_CLAIM (the assistant
+/// declined, which is an honesty SUCCESS, not an audited claim that
+/// passed). Until 2026-08-19 all three landed in the `Supported` arm, so
+/// a turn the gate never evaluated was rendered to the user as verified.
+/// Four verdicts, not two (ARCH §18.1); absence reported, never
+/// defaulted (§18.3).
+///
+/// `claims_all_supported` is `Some(all_supported)` when the per-claim
+/// ladder produced verdicts, `None` when it produced none.
+fn project_verdict(
+    violation_prob: Option<f64>,
+    claim_check_measured: bool,
+    tau: f64,
+    claims_all_supported: Option<bool>,
+) -> sovereign_contracts::types::GateJudgeVerdict {
+    use sovereign_contracts::types::GateJudgeVerdict;
+    match violation_prob {
+        // A vp from a path that never judged is a fact about the
+        // instrument, not a verdict about the answer.
+        Some(_) if !claim_check_measured => GateJudgeVerdict::CouldNotJudge,
+        Some(vp) if vp >= tau => GateJudgeVerdict::Unsupported,
+        Some(_) => GateJudgeVerdict::Supported,
+        None => match claims_all_supported {
+            Some(true) => GateJudgeVerdict::Supported,
+            Some(false) => GateJudgeVerdict::Unsupported,
+            None => GateJudgeVerdict::CouldNotJudge,
+        },
+    }
+}
+
 fn record_gate_decision(
     outcome: &mut GateOutcome,
     evidence: &EvidenceContext,
@@ -1090,18 +1127,27 @@ fn record_gate_decision(
     // vp (citation-grounded) speak through their claim verdicts; a path
     // with neither judged nothing — could-not-judge, never a pass
     // (ARCH §18.1).
-    d.verdict = match d.violation_prob {
-        Some(vp) if vp >= profile.tau => GateJudgeVerdict::Unsupported,
-        Some(_) => GateJudgeVerdict::Supported,
-        None if !outcome.claims.is_empty() => {
-            if outcome.claims.iter().all(|c| c.supported) {
-                GateJudgeVerdict::Supported
-            } else {
-                GateJudgeVerdict::Unsupported
-            }
-        }
-        None => GateJudgeVerdict::CouldNotJudge,
-    };
+    // Did the gate actually judge, or is this a placeholder? Three paths
+    // return `violation_prob: 0.0` WITHOUT running a check — no input,
+    // long-form out-of-scope, and NO_CLAIM (a decline, i.e. an honesty
+    // success). Before 2026-08-19 all three fell into the `Some(_) =>
+    // Supported` arm below, so a turn the gate never evaluated was
+    // rendered to the user as `Supported` — the exact overclaim the
+    // comment above forbids. `gate_outcome` is written beside
+    // `violation_prob` by every meta site; absent (older rows, or a path
+    // that predates it) is treated as measured, preserving prior
+    // behaviour rather than silently reclassifying history.
+    let claim_check_measured = meta
+        .and_then(|m| m.get("claim_check_outcome"))
+        .and_then(|v| v.as_str())
+        .map(|s| s == "measured")
+        .unwrap_or(true);
+    d.verdict = project_verdict(
+        d.violation_prob,
+        claim_check_measured,
+        profile.tau,
+        (!outcome.claims.is_empty()).then(|| outcome.claims.iter().all(|c| c.supported)),
+    );
     d.chunks = evidence.chunks.len();
     d.evidence = evidence
         .chunk_targets
@@ -1594,6 +1640,10 @@ async fn gate_answer_inner(
     let mut action = "released";
     let mut retried = false;
     let mut final_vp: Option<f64> = None;
+    // Why `final_vp` is what it is. A vp of 0.0 from a path the gate
+    // never ran (long-form out-of-scope, no input) is NOT a pass —
+    // without this the UI rendered it as `Supported` (ARCH §18.1).
+    let mut final_outcome: Option<judge::ClaimCheckOutcome> = None;
     // Whether the short path actually extracted and judged a claim —
     // gates the ClaimCheckComplete frame (a NO_CLAIM release audited
     // nothing, so reporting "1 claim confirmed" would be a lie).
@@ -1651,6 +1701,7 @@ async fn gate_answer_inner(
     match verify_outcome {
         Some(v) => {
             final_vp = Some(v.violation_prob);
+            final_outcome = Some(v.outcome);
             dbg(&format!(
                 "  verify: vp={:.3} tau={tau} claim={:?}",
                 v.violation_prob,
@@ -1706,14 +1757,15 @@ async fn gate_answer_inner(
                             text,
                             meta: with_native_verdict(
                                 serde_json::json!({
-                                    "surface": profile.surface.id(),
-                                    "action": action,
-                                    "retried": false,
-                                    "violation_prob": final_vp,
-                                    "threshold": tau,
-                                    "mode": "single_claim",
-                                    "draft": draft_for_meta,
-                                }),
+                                                "surface": profile.surface.id(),
+                                                "action": action,
+                                                "retried": false,
+                                                "violation_prob": final_vp,
+                                "claim_check_outcome": final_outcome,
+                                                "threshold": tau,
+                                                "mode": "single_claim",
+                                                "draft": draft_for_meta,
+                                            }),
                                 native,
                             ),
                             claims: gate_claims,
@@ -1752,16 +1804,17 @@ async fn gate_answer_inner(
                                 text,
                                 meta: with_native_verdict(
                                     serde_json::json!({
-                                        "surface": profile.surface.id(),
-                                        "action": action,
-                                        "retried": false,
-                                        "violation_prob": final_vp,
-                                        "threshold": tau,
-                                        "top_similarity": sim,
-                                        "retry_floor": floor,
-                                        "mode": "single_claim",
-                                        "draft": draft_for_meta,
-                                    }),
+                                                        "surface": profile.surface.id(),
+                                                        "action": action,
+                                                        "retried": false,
+                                                        "violation_prob": final_vp,
+                                    "claim_check_outcome": final_outcome,
+                                                        "threshold": tau,
+                                                        "top_similarity": sim,
+                                                        "retry_floor": floor,
+                                                        "mode": "single_claim",
+                                                        "draft": draft_for_meta,
+                                                    }),
                                     native,
                                 ),
                                 claims: gate_claims,
@@ -1842,6 +1895,7 @@ async fn gate_answer_inner(
                             match reverify_outcome {
                                 Some(v2) if v2.violation_prob < tau => {
                                     final_vp = Some(v2.violation_prob);
+                                    final_outcome = Some(v2.outcome);
                                     if v2.claim.is_none() && released_pure_decline(&second) {
                                         // The retry asserted NOTHING — a pure
                                         // decline extracted as NO_CLAIM (vp=0).
@@ -1881,6 +1935,7 @@ async fn gate_answer_inner(
                                 }
                                 Some(v2) => {
                                     final_vp = Some(v2.violation_prob);
+                                    final_outcome = Some(v2.outcome);
                                     text = grounded_abstention(&claim, chunks.len().min(12));
                                     action = "abstained";
                                     if let Some(rec) = gate_claims.first_mut() {
@@ -1985,6 +2040,7 @@ async fn gate_answer_inner(
                     "action": "abstained_fragment",
                     "retried": retried,
                     "violation_prob": final_vp,
+                    "claim_check_outcome": final_outcome,
                     "threshold": tau,
                     "mode": "single_claim",
                     "draft": draft_for_meta,
@@ -2031,6 +2087,7 @@ async fn gate_answer_inner(
                     "action": reclassified,
                     "retried": retried,
                     "violation_prob": final_vp,
+                    "claim_check_outcome": final_outcome,
                     "threshold": tau,
                     "mode": "single_claim",
                     "draft": draft_for_meta,
@@ -2073,6 +2130,7 @@ async fn gate_answer_inner(
                 "action": action,
                 "retried": retried,
                 "violation_prob": final_vp,
+                    "claim_check_outcome": final_outcome,
                 "threshold": tau,
                 "mode": "single_claim",
                 "draft": draft_for_meta,
@@ -3906,6 +3964,69 @@ async fn gate_longform(
 
 #[cfg(test)]
 mod tests {
+
+    // ---- project_verdict: the four-valued projection (ARCH §18.1) ----
+
+    #[test]
+    fn a_gate_that_never_ran_is_could_not_judge_not_supported() {
+        // The regression this function exists for. `verify_grounding`
+        // returns vp=0.0 from three paths that never checked anything;
+        // before 2026-08-19 every one of them rendered as `Supported`.
+        for vp in [0.0, 0.5, 1.0] {
+            assert_eq!(
+                super::project_verdict(Some(vp), false, 0.9, None),
+                sovereign_contracts::types::GateJudgeVerdict::CouldNotJudge,
+                "vp={vp} from an unmeasured path must never be a verdict about the answer"
+            );
+        }
+    }
+
+    #[test]
+    fn a_measured_vp_still_reads_against_tau() {
+        assert_eq!(
+            super::project_verdict(Some(0.0), true, 0.9, None),
+            sovereign_contracts::types::GateJudgeVerdict::Supported
+        );
+        assert_eq!(
+            super::project_verdict(Some(0.89), true, 0.9, None),
+            sovereign_contracts::types::GateJudgeVerdict::Supported
+        );
+        assert_eq!(
+            super::project_verdict(Some(0.9), true, 0.9, None),
+            sovereign_contracts::types::GateJudgeVerdict::Unsupported
+        );
+        assert_eq!(
+            super::project_verdict(Some(1.0), true, 0.9, None),
+            sovereign_contracts::types::GateJudgeVerdict::Unsupported
+        );
+    }
+
+    #[test]
+    fn without_a_vp_the_per_claim_ladder_speaks() {
+        assert_eq!(
+            super::project_verdict(None, true, 0.9, Some(true)),
+            sovereign_contracts::types::GateJudgeVerdict::Supported
+        );
+        assert_eq!(
+            super::project_verdict(None, true, 0.9, Some(false)),
+            sovereign_contracts::types::GateJudgeVerdict::Unsupported
+        );
+        // Neither a vp nor a claim verdict: nothing judged anything.
+        assert_eq!(
+            super::project_verdict(None, true, 0.9, None),
+            sovereign_contracts::types::GateJudgeVerdict::CouldNotJudge
+        );
+    }
+
+    #[test]
+    fn an_absent_outcome_field_preserves_prior_behaviour() {
+        // Rows written before `claim_check_outcome` existed default to
+        // measured, so history is not silently reclassified.
+        assert_eq!(
+            super::project_verdict(Some(0.0), true, 0.9, None),
+            sovereign_contracts::types::GateJudgeVerdict::Supported
+        );
+    }
     use super::*;
 
     use crate::error::{Error, Result};
