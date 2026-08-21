@@ -487,6 +487,55 @@ today        = 4160.0
 direction    = "lower_is_better"
 review_by    = "when rung 8 lands — re-scope as its own campaign"
 
+# ── PRE-REGISTRATION 2026-08-20: the fan-in ratchet vs. this campaign ───────
+#
+# Written BEFORE the re-baseline data exists, so the verdict cannot be
+# rationalised afterwards. Seat decision, steer c82d5b92.
+#
+# THE STATE. `quality/baselines/fan_in.tsv` was last touched at 1c9e7af4 dated
+# 2026-08-10 — NINE DAYS before this campaign was declared. At HEAD 4c42e191,
+# clean manifest set, `cargo xtask layer-gate` is ALREADY RED on 2 of its 3
+# relevant rows: rungs landed since (kernel-types, the `code index` move,
+# corpus-engine-sections) grew fan-in and nobody re-baselined. The ratchet has
+# been failing in the open for ~10 days with nobody watching it, which is
+# §18.1 exactly: a gate nobody has watched fail is not a gate.
+#
+# THE TENSION. nc-16 mints `sovereign-enrichment-catalog` because the
+# enrichment store's schema was implemented THREE TIMES — sovereign-cli-llm,
+# sovereign-tools, sovereign-desktop — for want of a library. That is this
+# campaign working as designed. It also adds +1 fan-in to each of
+# corpus-engine, sovereign-core and sovereign-contracts, because inserting a
+# legitimate intermediary IS a fan-in event. Measured on nc-16's manifest
+# diffs: THREE ADDS, ZERO REMOVES. So on this instrument a successful
+# convergence rung is INDISTINGUISHABLE from coupling growth.
+#
+# THE PREDICTION, falsifiable, and the reason this block exists:
+#   The +1/+1/+1 is a TRANSIENT of a deliberately narrow first rung. The -1s
+#   arrive when the same family's rungs 2-5 delete the desktop's other four
+#   re-derived surfaces (atlas, mesh, recipe, governance — 3,135 lines) and
+#   its direct manifest edges can finally go.
+#   PREDICT: across nc-16 plus its four successor rungs, fan-in on
+#   corpus-engine / sovereign-core / sovereign-contracts NETS DOWN, or at
+#   worst returns to the 2026-08-10 baseline of 16 / 15 / 19.
+#   KILL BAR: if the family completes and fan-in has only RISEN, the
+#   extraction is adding intermediaries without removing edges — coupling
+#   growth wearing a convergence costume — and the rung family STOPS. It is
+#   not continued and the baseline is not re-minted to accommodate it.
+#
+# INSTRUMENT CAVEAT (§18.4). Manifest edges are the COARSE instrument; the
+# real one is code-level import sites, because the desktop keeps its
+# corpus-engine manifest edge for the four surfaces it has not yet shed. nc-16
+# is required to report imports SHED, and to name the rung at which the direct
+# edge could actually go — or to say plainly that it never can. "Never"
+# falsifies the prediction immediately and reprices the family.
+#
+# PROCEDURE. `--update-baseline` is a SEAT action, run ONCE at wave close, not
+# per-worker, so the accepted diff is attributable to the wave; its commit
+# cites this block and records the pre-wave HEAD value. Workers do not run it
+# and do not hand-edit rows. (Enforced the hard way on 2026-08-20: a worker
+# re-baselined to 18/20/17 at 00:00:24Z; the seat reverted it to HEAD and
+# froze the file. The overwritten copy is kept for the wave-close diff.)
+
 # ── The ladder ──────────────────────────────────────────────────────────────
 
 [[rung]]
