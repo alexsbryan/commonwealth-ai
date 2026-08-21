@@ -785,44 +785,33 @@ enum StreamSend {
     DeadlineExceeded,
 }
 
-/// Deliver one stream token, bounded by the inference deadline.
+/// The half-open consumer abort: clear the KV cache, free the slot, and
+/// say why. ONE spelling of it — the single-token loop and the MTP loop
+/// both reach for this rather than re-deriving the message
+/// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2).
 ///
-/// WHY THIS IS NOT `blocking_send`. The generation loop checks its
-/// wall-clock deadline at the TOP of each iteration, so the check
-/// cannot run while the loop is parked inside a send. `blocking_send`
-/// on a bounded channel parks until the receiver reads — and a
-/// half-open SSE client (browser tab suspended, TCP window closed,
-/// connection alive) never reads and never drops. The 300s deadline was
-/// therefore unenforceable on exactly the case it was written for: the
-/// slot's `Mutex<SlotContext>` stayed held **indefinitely**, and since
-/// this daemon serves roughly one concurrent turn, one such client took
-/// the node out (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2: "the
-/// stalled-SSE pin is *indefinite*, not 300s").
-///
-/// `try_send` + poll converts that indefinite hold into a bounded one.
-/// It is a poll rather than `send_timeout` because this runs inside
-/// `spawn_blocking`, where there is no runtime to await on.
-fn send_stream_piece(
-    tx: &tokio::sync::mpsc::Sender<Result<String>>,
-    mut item: Result<String>,
-    deadline: Instant,
-) -> StreamSend {
-    loop {
-        match tx.try_send(item) {
-            Ok(()) => return StreamSend::Sent,
-            Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
-                return StreamSend::ReceiverGone
-            }
-            Err(tokio::sync::mpsc::error::TrySendError::Full(returned)) => {
-                if Instant::now() >= deadline {
-                    return StreamSend::DeadlineExceeded;
-                }
-                // `try_send` hands the item back on failure; retry with it.
-                item = returned;
-                std::thread::sleep(std::time::Duration::from_millis(STREAM_SEND_POLL_MS));
-            }
-        }
-    }
+/// A stalled consumer is NOT a cancel: the client never disconnected, so
+/// treating it as `ReceiverGone` would hide a node-level pin behind a
+/// routine cancellation. It is an error, and it must free the slot.
+fn stalled_consumer_abort(
+    model_id: &str,
+    ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
+    n_generated: usize,
+) -> Error {
+    let deadline_secs = inference_deadline_secs();
+    tracing::warn!(
+        model = %model_id,
+        deadline_s = deadline_secs,
+        n_generated,
+        "inference:stream consumer stopped reading — deadline reached while blocked \
+         delivering a token; clearing KV cache and freeing the slot"
+    );
+    ctx.clear_kv_cache(); // kv-phase: ErrorAbort
+    Error::Inference(format!(
+        "stream consumer stopped reading ({n_generated} tokens delivered; \
+         deadline={deadline_secs}s) — the slot was released rather than held for \
+         a client that stopped consuming without disconnecting."
+    ))
 }
 
 // RPC distribution / sharding / worker-serving moved to
@@ -3336,11 +3325,21 @@ impl ModelSlot {
         // stream_generate_loop). `receiver_gone` latches a failed send:
         // stop decoding, and never send a terminal frame afterwards.
         let mut receiver_gone = false;
+        // A half-open consumer is not a cancel — it aborts with an error
+        // after the loop so the slot is freed rather than pinned.
+        let mut consumer_stalled = false;
         let mut finish_reason = FinishReason::Length;
         if let Ok(piece) = model.token_to_piece(last_token, &mut decoder, true, None) {
             output.push_str(&piece);
             if let Some(s) = sink {
-                receiver_gone = !s.send_piece(&piece);
+                match s.send_piece(&piece) {
+                    StreamSend::Sent => {}
+                    StreamSend::ReceiverGone => receiver_gone = true,
+                    StreamSend::DeadlineExceeded => {
+                        receiver_gone = true;
+                        consumer_stalled = true;
+                    }
+                }
             }
         }
 
@@ -3468,9 +3467,17 @@ impl ModelSlot {
                     forced_run.push(ftok);
                     n_generated += 1;
                     if let Some(s) = sink {
-                        if !s.send_piece(&piece) {
-                            receiver_gone = true;
-                            break;
+                        match s.send_piece(&piece) {
+                            StreamSend::Sent => {}
+                            StreamSend::ReceiverGone => {
+                                receiver_gone = true;
+                                break;
+                            }
+                            StreamSend::DeadlineExceeded => {
+                                receiver_gone = true;
+                                consumer_stalled = true;
+                                break;
+                            }
                         }
                     }
                     if n_generated >= max_tokens {
@@ -3552,7 +3559,14 @@ impl ModelSlot {
                         .unwrap_or_default();
                     output.push_str(&piece);
                     if let Some(s) = sink {
-                        receiver_gone = !s.send_piece(&piece);
+                        match s.send_piece(&piece) {
+                            StreamSend::Sent => {}
+                            StreamSend::ReceiverGone => receiver_gone = true,
+                            StreamSend::DeadlineExceeded => {
+                                receiver_gone = true;
+                                consumer_stalled = true;
+                            }
+                        }
                     }
                 }
                 n_generated += 1;
@@ -3696,9 +3710,17 @@ impl ModelSlot {
                 output.push_str(&piece);
                 n_generated += 1;
                 if let Some(s) = sink {
-                    if !s.send_piece(&piece) {
-                        receiver_gone = true;
-                        break;
+                    match s.send_piece(&piece) {
+                        StreamSend::Sent => {}
+                        StreamSend::ReceiverGone => {
+                            receiver_gone = true;
+                            break;
+                        }
+                        StreamSend::DeadlineExceeded => {
+                            receiver_gone = true;
+                            consumer_stalled = true;
+                            break;
+                        }
                     }
                 }
                 if model.is_eog_token(tok) {
@@ -3718,9 +3740,17 @@ impl ModelSlot {
             output.push_str(&piece);
             n_generated += 1;
             if let Some(s) = sink {
-                if !s.send_piece(&piece) {
-                    receiver_gone = true;
-                    break;
+                match s.send_piece(&piece) {
+                    StreamSend::Sent => {}
+                    StreamSend::ReceiverGone => {
+                        receiver_gone = true;
+                        break;
+                    }
+                    StreamSend::DeadlineExceeded => {
+                        receiver_gone = true;
+                        consumer_stalled = true;
+                        break;
+                    }
                 }
             }
             // Grammar accept — the MTP path's copy of the stop the
@@ -3812,8 +3842,26 @@ impl ModelSlot {
             jump_fwd_ratio = format!("{jump_fwd_ratio:.3}"),
             streamed = sink.is_some(),
             receiver_gone,
+            consumer_stalled,
             "mtp: end-of-generation"
         );
+
+        if consumer_stalled {
+            session.target_context_mut().clear_kv_cache(); // kv-phase: ErrorAbort
+            session.draft_context_mut().clear_kv_cache(); // kv-phase: ErrorAbort
+            let deadline_secs = inference_deadline_secs();
+            tracing::warn!(
+                model = %model_id,
+                deadline_s = deadline_secs,
+                n_generated,
+                "mtp:stream consumer stopped reading — freeing the slot"
+            );
+            return Err(Error::Inference(format!(
+                "stream consumer stopped reading ({n_generated} tokens delivered; \
+                 deadline={deadline_secs}s) — the slot was released rather than held \
+                 for a client that stopped consuming without disconnecting."
+            )));
+        }
 
         if let Some(s) = sink {
             if !receiver_gone {
@@ -4065,276 +4113,20 @@ impl ModelSlot {
         Ok(results)
     }
 
-    pub(crate) fn generate_stream_sync(
-        model: &LlamaModel,
-        model_id: &str,
-        ctx: &mut crate::llama::cpp::context::LlamaContext<'_>,
-        request: &CompletionRequest,
-        tx: &tokio::sync::mpsc::Sender<Result<String>>,
-        quirks: &ModelQuirks,
-        cancel: Option<&tokio_util::sync::CancellationToken>,
-    ) -> Result<()> {
-        // Pre-clear for the same reason as generate_sync: a prior failed decode
-        // leaves the cache dirty, causing M-RoPE position errors on the next call.
-        ctx.clear_kv_cache(); // kv-phase: RequestStartReset
-
-        let full_prompt = format_prompt(model, model_id, request, quirks)?;
-
-        let tokens = model
-            .str_to_token(&full_prompt, add_bos_for(request))
-            .map_err(|e| Error::Inference(format!("Tokenization failed: {e}")))?;
-
-        let n_ctx = ctx.n_ctx() as usize;
-        let max_tokens = clamp_max_tokens(request.max_tokens, tokens.len(), n_ctx)?;
-
-        let mut batch = LlamaBatch::new(tokens.len().max(512), 1);
-        let last_idx = tokens.len() - 1;
-        for (i, &token) in tokens.iter().enumerate() {
-            batch
-                .add(token, i as i32, &[0], i == last_idx)
-                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-        }
-
-        ctx.decode(&mut batch)
-            .map_err(|e| Error::Inference(format!("Prompt decode failed: {e}")))?;
-
-        let mut sampler = build_sampler(model, request, quirks)?;
-        let mut n_generated = 0usize;
-        let mut decoder = encoding_rs::UTF_8.new_decoder();
-
-        // Wall-clock deadline mirrors generate_sync — a stuck
-        // mask-sample step can starve the slot regardless of whether
-        // streaming is on. Cancellation checks below still take
-        // priority for clean shutdowns; the deadline is the backstop
-        // for the case where the sample step itself is slow enough
-        // that cancel-checks fire too rarely to help.
-        let deadline_secs = inference_deadline_secs();
-        let deadline = Instant::now() + std::time::Duration::from_secs(deadline_secs);
-        let started_at = Instant::now();
-
-        let mut tail = String::with_capacity(32);
-        let mut in_think = false;
-        let mut think_tokens = 0usize;
-        let mut think_budget_fired = false;
-        // Stray-close tracking: see plan §1.3. We can't rewrap once
-        // pieces have flushed to the receiver, but we log so the
-        // operator can see this happen.
-        let mut saw_open_tag = false;
-        let mut saw_close_tag = false;
-
-        // See generate_sync: stop on `</tool_call>` (marker) or
-        // balanced JSON envelope when tools were requested. The
-        // shape-B state machine + gates live in `gates::ToolStopTracker`.
-        let tools_present = request.tools.as_ref().is_some_and(|t| !t.is_empty());
-        let mut tool_stop =
-            ToolStopTracker::new(tools_present, request.structured_output.is_some());
-
-        while n_generated < max_tokens {
-            if Instant::now() > deadline {
-                let elapsed = started_at.elapsed().as_secs();
-                tracing::warn!(
-                    model = %model_id,
-                    elapsed_s = elapsed,
-                    deadline_s = deadline_secs,
-                    n_generated,
-                    schema = request.structured_output.is_some(),
-                    "inference:deadline exceeded (stream) — clearing KV cache and returning"
-                );
-                ctx.clear_kv_cache(); // kv-phase: ErrorAbort
-                return Err(Error::Inference(format!(
-                    "inference deadline exceeded after {elapsed}s ({n_generated} tokens generated; \
-                     deadline={deadline_secs}s) — likely pathological JSON-Schema mask state. \
-                     Set SOVEREIGN_INFERENCE_TIMEOUT_SECS to override."
-                )));
-            }
-
-            // Constraint-engine failure abort — see generate_sync for
-            // rationale. Stream variant: the receiver gets the Err as
-            // an error frame instead of a silent garbage tail.
-            if let Some(cause) = sampler.constraint_failure() {
-                ctx.clear_kv_cache(); // kv-phase: ErrorAbort
-                return Err(Error::Inference(format!(
-                    "llguidance constraint failed after {n_generated} tokens (stream): {cause}"
-                )));
-            }
-
-            // Antifragile-routing cancel check: redirect-induced
-            // cancellation on the session-level CancellationToken stops
-            // the sampler without waiting for the receiver to drop.
-            // Receiver-drop (below) remains the de-facto cancel path when
-            // no token is threaded; both converge on `break`.
-            if let Some(t) = cancel {
-                if t.is_cancelled() {
-                    tracing::warn!(
-                        tokens_emitted = n_generated,
-                        "inference:cancelled via CancellationToken"
-                    );
-                    break;
-                }
-            }
-
-            let role = if tools_present && tool_stop.in_json_string() {
-                SamplerRole::Content
-            } else {
-                SamplerRole::Explore
-            };
-            let token = sampler.sample(ctx, -1, role);
-            sampler.accept(token);
-
-            if model.is_eog_token(token) {
-                break;
-            }
-
-            if let Ok(piece) = model.token_to_piece(token, &mut decoder, true, None) {
-                push_sliding_tail(&mut tail, &piece);
-                if !in_think && tail.contains("<think>") {
-                    in_think = true;
-                    saw_open_tag = true;
-                } else if in_think && tail.contains("</think>") {
-                    in_think = false;
-                    saw_close_tag = true;
-                } else if !in_think && tail.contains("</think>") {
-                    saw_close_tag = true;
-                }
-                if in_think {
-                    think_tokens += 1;
-                }
-
-                // Tool-emission JSON-balance bookkeeping — done BEFORE
-                // the send so we don't need to re-borrow piece bytes
-                // after the move into the channel. Gates live inside
-                // `ToolStopTracker`.
-                let json_envelope_complete = tool_stop.observe(&piece, in_think);
-
-                match send_stream_piece(tx, Ok(piece), deadline) {
-                    StreamSend::Sent => {}
-                    StreamSend::ReceiverGone => {
-                        tracing::warn!(
-                            tokens_emitted = n_generated,
-                            "inference:cancelled via receiver-drop"
-                        );
-                        break;
-                    }
-                    StreamSend::DeadlineExceeded => {
-                        // A consumer that stopped reading but never
-                        // dropped — the half-open client. Treat it
-                        // exactly like the wall-clock deadline above:
-                        // clear the cache and free the slot.
-                        let elapsed = started_at.elapsed().as_secs();
-                        tracing::warn!(
-                            model = %model_id,
-                            elapsed_s = elapsed,
-                            deadline_s = deadline_secs,
-                            n_generated,
-                            "inference:stream consumer stopped reading — deadline reached while \
-                             blocked delivering a token; clearing KV cache and freeing the slot"
-                        );
-                        ctx.clear_kv_cache(); // kv-phase: ErrorAbort
-                        return Err(Error::Inference(format!(
-                            "stream consumer stopped reading after {elapsed}s \
-                             ({n_generated} tokens delivered; deadline={deadline_secs}s) — \
-                             the slot was released rather than held for a client that \
-                             stopped consuming without disconnecting."
-                        )));
-                    }
-                }
-
-                // Grammar accept — ungated, see generate_sync. Self-gating:
-                // false when no llguidance constraint is active.
-                if sampler.grammar_is_stopped() {
-                    tracing::info!(
-                        model = %model_id,
-                        n_generated,
-                        tools_present,
-                        "inference: stopping on llguidance grammar accept (stream)"
-                    );
-                    break;
-                }
-                // Tool-emission stop — see generate_sync for rationale.
-                if tools_present {
-                    if tail.contains("</tool_call>") {
-                        tracing::info!(
-                            model = %model_id,
-                            n_generated,
-                            tail = %tail,
-                            "inference: stopping on </tool_call> marker (stream)"
-                        );
-                        break;
-                    }
-                    if json_envelope_complete {
-                        tracing::info!(
-                            model = %model_id,
-                            n_generated,
-                            "inference: stopping on balanced JSON envelope (stream)"
-                        );
-                        break;
-                    }
-                }
-            }
-
-            n_generated += 1;
-
-            batch.clear();
-            batch
-                .add(token, (tokens.len() + n_generated - 1) as i32, &[0], true)
-                .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-
-            ctx.decode(&mut batch)
-                .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
-
-            if in_think
-                && think_tokens >= request.think_budget.unwrap_or(THINK_BUDGET)
-                && !think_budget_fired
-            {
-                think_budget_fired = true;
-                let force = "\n</think>\n\n";
-                if let Ok(close_tokens) = model.str_to_token(force, AddBos::Never) {
-                    for &ct in &close_tokens {
-                        let fp = model
-                            .token_to_piece(ct, &mut decoder, true, None)
-                            .unwrap_or_default();
-                        sampler.accept(ct);
-                        batch.clear();
-                        batch
-                            .add(ct, (tokens.len() + n_generated) as i32, &[0], true)
-                            .map_err(|e| Error::Inference(format!("Batch add failed: {e}")))?;
-                        ctx.decode(&mut batch)
-                            .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
-                        n_generated += 1;
-                        if tx.blocking_send(Ok(fp)).is_err() {
-                            break;
-                        }
-                    }
-                }
-                in_think = false;
-            }
-        }
-
-        ctx.clear_kv_cache(); // kv-phase: EndOfGenerationNoPrefixCache
-
-        if saw_close_tag && !saw_open_tag {
-            tracing::warn!(
-                model = model_id,
-                "thinking-tag stray close (legacy stream): model emitted \
-                 </think> without a preceding <think> — desktop will repair \
-                 the rendering but tokens already flushed; cause is usually \
-                 enable_thinking:false on a thinking model"
-            );
-        }
-
-        Ok(())
-    }
-
     /// Streaming generator that yields typed [`StreamFrame`]s and
     /// always terminates the channel with [`StreamFrame::Finish`]
     /// carrying the real [`FinishReason`] (`Stop` on EOS, `Length`
     /// on `max_tokens`, `Cancelled` on receiver-drop /
     /// CancellationToken, `Error(_)` on decode/batch faults).
     ///
-    /// Mirrors [`Self::generate_stream_sync`] but for the new
-    /// [`InferenceProvider::complete_stream_with_finish`] surface.
-    /// The legacy helper keeps working for callers still on the
-    /// `Result<String>` shape.
+    /// THE embedded streaming generator. Its legacy `Result<String>`
+    /// twin `generate_stream_sync` was a ~260-line mirror of this body
+    /// and was deleted by noun-convergence rung nc-17 once
+    /// `complete_stream` stopped having its own routing copy to feed
+    /// it. The twin took `&mut LlamaContext` rather than `&mut
+    /// SlotContext`, so it could not see the prefix cache at all — the
+    /// defect recorded below, which survived in the legacy half for as
+    /// long as the legacy half existed.
     /// Prefill `tokens` into `ctx`, reusing whatever of the prompt is
     /// already resident. THE one implementation of that protocol.
     ///
@@ -4634,12 +4426,13 @@ impl ModelSlot {
             prefix_state,
         )?;
 
+        let sink = StreamSink::new(tx);
         stream_generate_loop(StreamLoopParams {
             model,
             model_id,
             ctx,
             request,
-            tx,
+            sink: &sink,
             quirks,
             cancel,
             prompt_len: prompt_tokens,
@@ -4757,12 +4550,13 @@ impl ModelSlot {
         // excluded (see generate_sync's rationale).
         *cached_tokens = tokens.clone();
 
+        let sink = StreamSink::new(tx);
         stream_generate_loop(StreamLoopParams {
             model,
             model_id,
             ctx,
             request,
-            tx,
+            sink: &sink,
             quirks,
             cancel,
             prompt_len: prompt_tokens,
@@ -4795,13 +4589,14 @@ impl ModelSlot {
         model_id: &str,
         slot_ctx: &mut SlotContext,
         request: &CompletionRequest,
-        sink: StreamSink<'_>,
+        tx: &tokio::sync::mpsc::Sender<StreamFrame>,
         quirks: &ModelQuirks,
         cancel: Option<&tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
         if mtp_dispatch_eligible(request, slot_ctx.is_speculative(), |k| {
             std::env::var(k).ok()
         }) {
+            let sink = StreamSink::new(tx);
             match Self::generate_stream_sync_mtp(
                 model, model_id, slot_ctx, request, quirks, &sink, cancel,
             ) {
@@ -4831,64 +4626,121 @@ impl ModelSlot {
                 }
             }
         }
-        match sink {
-            // `slot_ctx`, NOT `slot_ctx.ctx_mut()` — the downgrade to a raw
-            // context is what kept the chat path from reaching the prefix cache.
-            StreamSink::Typed(tx) => Self::generate_stream_sync_with_finish(
-                model, model_id, slot_ctx, request, tx, quirks, cancel,
-            ),
-            StreamSink::Legacy(tx) => Self::generate_stream_sync(
-                model,
-                model_id,
-                slot_ctx.ctx_mut(),
-                request,
-                tx,
-                quirks,
-                cancel,
-            ),
-        }
+        // `slot_ctx`, NOT `slot_ctx.ctx_mut()` — the downgrade to a raw
+        // context is what kept the chat path from reaching the prefix cache,
+        // and it was exactly what the deleted `StreamSink::Legacy` arm did.
+        Self::generate_stream_sync_with_finish(
+            model, model_id, slot_ctx, request, tx, quirks, cancel,
+        )
     }
 }
 
-/// Channel adapter over the two streaming surfaces, so the MTP loop is
-/// written once against both. The legacy `Result<String>` channel has
-/// no terminal-frame vocabulary (consumers treat channel-close as
-/// end-of-stream), so `send_finish` is a typed-only concern.
-pub(crate) enum StreamSink<'a> {
-    /// `StreamFrame` channel — the `complete_stream_with_finish` path.
-    Typed(&'a tokio::sync::mpsc::Sender<StreamFrame>),
-    /// Legacy `Result<String>` channel — the `complete_stream` path.
-    Legacy(&'a tokio::sync::mpsc::Sender<Result<String>>),
+/// THE way a decode loop delivers one token. Both streaming loops (MTP
+/// and single-token) and the terminal `Finish` frame go through it.
+///
+/// It was an enum with a `Legacy(&Sender<Result<String>>)` arm until
+/// noun-convergence rung nc-17: the second arm existed only because
+/// `complete_stream` carried its own copy of the engine's slot-routing
+/// dance and fed a `Result<String>` channel. There is one routing body
+/// now, so there is one sink — and the legacy arm's raw-`LlamaContext`
+/// downgrade, which cost the whole legacy path its prefix cache, has no
+/// way back in.
+///
+/// **The deadline lives here for a reason, and it is the bug nc-17
+/// found.** Three implementations of "deliver one stream token" existed
+/// in this file: the legacy `send_stream_piece`, which was bounded by
+/// the inference deadline; `StreamSink::send_piece`, which was a bare
+/// `blocking_send`; and two more bare `blocking_send`s inline in
+/// `stream_generate_loop`. Only the LEGACY one was hardened — and the
+/// legacy path was the one nothing streamed on any more. Every typed
+/// chat completion, which is every streaming chat completion, took an
+/// unbounded `blocking_send`. Folding the policy into the one sink is
+/// what makes it unforgettable (ARCH §7, §10.6).
+pub(crate) struct StreamSink<'a> {
+    tx: &'a tokio::sync::mpsc::Sender<StreamFrame>,
+    /// Wall-clock bound on a blocked send, from sink construction.
+    deadline: Instant,
+}
+
+impl<'a> StreamSink<'a> {
+    /// Bind a sink to `tx` with a fresh inference deadline. Constructed
+    /// at each decode-loop entry, so the budget is per generation. THE
+    /// one place the streaming deadline is derived — the three decode
+    /// entries call this rather than each spelling the arithmetic.
+    pub(crate) fn new(tx: &'a tokio::sync::mpsc::Sender<StreamFrame>) -> Self {
+        Self::with_deadline(
+            tx,
+            Instant::now() + std::time::Duration::from_secs(inference_deadline_secs()),
+        )
+    }
+
+    /// Explicit-deadline constructor. Production goes through
+    /// [`Self::new`]; this exists so the liveness tests can assert the
+    /// bound on a budget measured in milliseconds instead of the 300s
+    /// production one.
+    pub(crate) fn with_deadline(
+        tx: &'a tokio::sync::mpsc::Sender<StreamFrame>,
+        deadline: Instant,
+    ) -> Self {
+        Self { tx, deadline }
+    }
 }
 
 impl StreamSink<'_> {
-    /// Forward one decoded piece. Returns false when the receiver is
-    /// gone (consumer dropped the stream) — the generation loop must
-    /// stop decoding and must NOT send a terminal frame afterwards.
+    /// Forward one decoded piece, bounded by the inference deadline.
+    /// Any outcome other than [`StreamSend::Sent`] means the generation
+    /// loop must stop decoding and must NOT send a terminal frame.
     /// Empty pieces are skipped: the incremental UTF-8 decoder yields
     /// "" mid-codepoint, and both client-side parsers drop empty
     /// deltas anyway.
-    fn send_piece(&self, piece: &str) -> bool {
+    ///
+    /// WHY THIS IS NOT `blocking_send`. The generation loop checks its
+    /// wall-clock deadline at the TOP of each iteration, so the check
+    /// cannot run while the loop is parked inside a send.
+    /// `blocking_send` on a bounded channel parks until the receiver
+    /// reads — and a half-open SSE client (browser tab suspended, TCP
+    /// window closed, connection alive) never reads and never drops.
+    /// The 300s deadline was therefore unenforceable on exactly the
+    /// case it was written for: the slot's `Mutex<SlotContext>` stayed
+    /// held **indefinitely**, and since this daemon serves roughly one
+    /// concurrent turn, one such client took the node out
+    /// (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2: "the stalled-SSE
+    /// pin is *indefinite*, not 300s").
+    ///
+    /// `try_send` + poll converts that indefinite hold into a bounded
+    /// one. It is a poll rather than `send_timeout` because this runs
+    /// inside `spawn_blocking`, where there is no runtime to await on.
+    fn send_piece(&self, piece: &str) -> StreamSend {
         if piece.is_empty() {
-            return true;
+            return StreamSend::Sent;
         }
-        match self {
-            Self::Typed(tx) => tx
-                .blocking_send(StreamFrame::Token(piece.to_string()))
-                .is_ok(),
-            Self::Legacy(tx) => tx.blocking_send(Ok(piece.to_string())).is_ok(),
+        let mut frame = StreamFrame::Token(piece.to_string());
+        loop {
+            match self.tx.try_send(frame) {
+                Ok(()) => return StreamSend::Sent,
+                Err(tokio::sync::mpsc::error::TrySendError::Closed(_)) => {
+                    return StreamSend::ReceiverGone
+                }
+                Err(tokio::sync::mpsc::error::TrySendError::Full(returned)) => {
+                    if Instant::now() >= self.deadline {
+                        return StreamSend::DeadlineExceeded;
+                    }
+                    // `try_send` hands the frame back on failure; retry with it.
+                    frame = returned;
+                    std::thread::sleep(std::time::Duration::from_millis(STREAM_SEND_POLL_MS));
+                }
+            }
         }
     }
 
-    /// Terminal frame with the real finish reason + usage. No-op on
-    /// the legacy channel.
+    /// Terminal frame with the real finish reason + usage. Best-effort:
+    /// a consumer that is gone or stalled gets no frame, which is why
+    /// every caller must skip it after a non-`Sent` `send_piece`.
     fn send_finish(&self, reason: FinishReason, usage: StreamUsage) {
-        if let Self::Typed(tx) = self {
-            let _ = tx.blocking_send(StreamFrame::Finish {
-                reason,
-                usage: Some(usage),
-            });
-        }
+        let _ = self.tx.blocking_send(StreamFrame::Finish {
+            reason,
+            usage: Some(usage),
+        });
     }
 }
 
@@ -4900,7 +4752,7 @@ struct StreamLoopParams<'a, 'ctx> {
     model_id: &'a str,
     ctx: &'a mut crate::llama::cpp::context::LlamaContext<'ctx>,
     request: &'a CompletionRequest,
-    tx: &'a tokio::sync::mpsc::Sender<StreamFrame>,
+    sink: &'a StreamSink<'a>,
     quirks: &'a ModelQuirks,
     cancel: Option<&'a tokio_util::sync::CancellationToken>,
     /// Full prompt length in tokens — the position base for generated
@@ -4923,7 +4775,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
         model_id,
         ctx,
         request,
-        tx,
+        sink,
         quirks,
         cancel,
         prompt_len,
@@ -5016,14 +4868,20 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
                 // live inside `ToolStopTracker`.
                 let json_envelope_complete = tool_stop.observe(&piece, in_think);
 
-                if tx.blocking_send(StreamFrame::Token(piece)).is_err() {
-                    tracing::warn!(
-                        tokens_emitted = n_generated,
-                        "inference:cancelled via receiver-drop"
-                    );
-                    // Receiver is gone — don't try to send a Finish
-                    // frame either. Caller already knows.
-                    return Ok(());
+                match sink.send_piece(&piece) {
+                    StreamSend::Sent => {}
+                    StreamSend::ReceiverGone => {
+                        tracing::warn!(
+                            tokens_emitted = n_generated,
+                            "inference:cancelled via receiver-drop"
+                        );
+                        // Receiver is gone — don't try to send a Finish
+                        // frame either. Caller already knows.
+                        return Ok(());
+                    }
+                    StreamSend::DeadlineExceeded => {
+                        return Err(stalled_consumer_abort(model_id, ctx, n_generated))
+                    }
                 }
 
                 // Grammar accept — ungated, see generate_sync. Self-gating:
@@ -5091,8 +4949,12 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
                         ctx.decode(&mut batch)
                             .map_err(|e| Error::Inference(format!("Decode failed: {e}")))?;
                         n_generated += 1;
-                        if tx.blocking_send(StreamFrame::Token(fp)).is_err() {
-                            return Ok(());
+                        match sink.send_piece(&fp) {
+                            StreamSend::Sent => {}
+                            StreamSend::ReceiverGone => return Ok(()),
+                            StreamSend::DeadlineExceeded => {
+                                return Err(stalled_consumer_abort(model_id, ctx, n_generated))
+                            }
                         }
                     }
                 }
@@ -5121,10 +4983,7 @@ fn stream_generate_loop(p: StreamLoopParams<'_, '_>) -> Result<()> {
             completion_tokens: n_generated as u32,
             total_tokens: (prompt_tokens + n_generated) as u32,
         };
-        let _ = tx.blocking_send(StreamFrame::Finish {
-            reason,
-            usage: Some(usage),
-        });
+        sink.send_finish(reason, usage);
 
         Ok(())
     }
@@ -5566,7 +5425,15 @@ mod stream_consumer_liveness_tests {
     //! at the TOP of the loop — never gets to run. The slot's context
     //! mutex stays held indefinitely, and on a daemon serving roughly
     //! one concurrent turn that is the whole node.
-    use super::{send_stream_piece, Result, StreamSend};
+    //!
+    //! RETARGETED by noun-convergence rung nc-17. These tests used to
+    //! watch `send_stream_piece`, the legacy `Result<String>` sender —
+    //! which by then nothing streamed on, because `complete_stream` had
+    //! become a copy of the typed routing path and the typed path used a
+    //! bare `blocking_send`. The hardening was guarding the dead half.
+    //! They now watch [`StreamSink`], which every streaming completion
+    //! goes through.
+    use super::{StreamFrame, StreamSend, StreamSink};
     use std::time::{Duration, Instant};
 
     /// RED-FIRST (order mesh-scale-t0, item 5). Runs the send on its own
@@ -5581,8 +5448,9 @@ mod stream_consumer_liveness_tests {
         // Capacity 1, filled and never read — and the receiver is HELD,
         // so the channel is full rather than closed. A closed channel
         // would return `ReceiverGone` and pass for the wrong reason.
-        let (tx, _rx_held_open) = tokio::sync::mpsc::channel::<Result<String>>(1);
-        tx.try_send(Ok("first".into())).expect("prime the buffer");
+        let (tx, _rx_held_open) = tokio::sync::mpsc::channel::<StreamFrame>(1);
+        tx.try_send(StreamFrame::Token("first".into()))
+            .expect("prime the buffer");
 
         let budget = Duration::from_millis(300);
         let deadline = Instant::now() + budget;
@@ -5590,7 +5458,8 @@ mod stream_consumer_liveness_tests {
         let (report_tx, report_rx) = std::sync::mpsc::channel();
         let started = Instant::now();
         std::thread::spawn(move || {
-            let outcome = send_stream_piece(&tx, Ok("second".into()), deadline);
+            let sink = StreamSink::with_deadline(&tx, deadline);
+            let outcome = sink.send_piece("second");
             let _ = report_tx.send((outcome, started.elapsed()));
         });
 
@@ -5623,18 +5492,15 @@ mod stream_consumer_liveness_tests {
     /// must not turn a healthy stream into a stuttering one.
     #[test]
     fn a_reading_consumer_is_delivered_immediately() {
-        let (tx, mut rx) = tokio::sync::mpsc::channel::<Result<String>>(4);
-        let deadline = Instant::now() + Duration::from_secs(30);
+        let (tx, mut rx) = tokio::sync::mpsc::channel::<StreamFrame>(4);
+        let sink = StreamSink::with_deadline(&tx, Instant::now() + Duration::from_secs(30));
         let started = Instant::now();
-        assert_eq!(
-            send_stream_piece(&tx, Ok("tok".into()), deadline),
-            StreamSend::Sent
-        );
+        assert_eq!(sink.send_piece("tok"), StreamSend::Sent);
         assert!(
             started.elapsed() < Duration::from_millis(50),
             "an unblocked send must not pay the poll interval"
         );
-        assert!(matches!(rx.try_recv(), Ok(Ok(s)) if s == "tok"));
+        assert!(matches!(rx.try_recv(), Ok(StreamFrame::Token(s)) if s == "tok"));
     }
 
     /// A dropped receiver stays a clean cancel, distinct from a stalled
@@ -5642,15 +5508,31 @@ mod stream_consumer_liveness_tests {
     /// look like a client fault.
     #[test]
     fn a_dropped_receiver_is_still_reported_as_cancellation() {
-        let (tx, rx) = tokio::sync::mpsc::channel::<Result<String>>(1);
+        let (tx, rx) = tokio::sync::mpsc::channel::<StreamFrame>(1);
         drop(rx);
-        assert_eq!(
-            send_stream_piece(
-                &tx,
-                Ok("tok".into()),
-                Instant::now() + Duration::from_secs(30)
-            ),
-            StreamSend::ReceiverGone
+        let sink = StreamSink::with_deadline(&tx, Instant::now() + Duration::from_secs(30));
+        assert_eq!(sink.send_piece("tok"), StreamSend::ReceiverGone);
+    }
+
+    /// The terminal frame must never be sent after a non-`Sent` piece —
+    /// it would block on the same full channel the piece just gave up
+    /// on. Structural in both loops; asserted here so a future edit that
+    /// drops the guard has something to fail against.
+    #[test]
+    fn a_stalled_send_leaves_room_for_no_terminal_frame() {
+        let (tx, _rx_held_open) = tokio::sync::mpsc::channel::<StreamFrame>(1);
+        tx.try_send(StreamFrame::Token("first".into()))
+            .expect("prime the buffer");
+        let sink = StreamSink::with_deadline(&tx, Instant::now() + Duration::from_millis(50));
+        assert_eq!(sink.send_piece("second"), StreamSend::DeadlineExceeded);
+        assert!(
+            tx.try_send(StreamFrame::Finish {
+                reason: super::FinishReason::Stop,
+                usage: None,
+            })
+            .is_err(),
+            "the channel is still full — a Finish frame here would park the \
+             decode loop exactly as the token send just did"
         );
     }
 }

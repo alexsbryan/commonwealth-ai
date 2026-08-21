@@ -1096,10 +1096,53 @@ Named targets, deletable with `code redirect` today:
   `corpus-engine` / `sovereign-tools`. The `strip_html` pair has DRIFTED —
   one copy lacks a `</script>` fix and silently truncates crawled HTML. A
   live correctness bug living in a clone pair.
-- `complete_stream` — 12 copies across `sovereign-core` ×5, `sovereign-mesh`
-  ×5, `sovereign-inference`, `sovereign-server`, plus three further pairs
-  inside `sovereign-inference` at 120, 110 and 101 lines. The vocabulary
-  reached `oicp-types`; the behaviour did not follow it down.
+- `complete_stream` — **LANDED, rung `nc-17`, 2026-08-21. "12 copies" was a
+  clone-detector artifact and the real shape is better.** The 12 are mostly
+  12-14 line `#[cfg(test)]` `unimplemented!()` stubs, which rhyme without
+  sharing a concept. What the report was actually pointing at is a
+  **with-finish / without-finish SPLIT**: one streaming decider written twice
+  per call shape, because someone needed a finish-reason out-parameter and
+  copied the body rather than adapting it.
+
+  - `sovereign-inference/src/embedded/engine.rs` — `complete_stream` was a
+    285-line mirror of `complete_stream_with_finish`, and its own doc comment
+    said so ("Mirrors `complete_stream`'s slot-routing dance"). Cosines
+    0.952-0.965 across three sub-region pairs at 120 / 110 / 101 lines.
+  - `sovereign-mesh/src/peer_inference.rs` — the same split one level up:
+    `complete_stream_with_id` was a 197-line mirror of
+    `complete_stream_with_id_and_finish`, cosine 0.969.
+
+  **All four copies had DRIFTED, and the drift was the prize (§10.6's
+  `strip_html` shape, four more times):**
+
+  1. The typed twin grew the Raw/FIM `generate_stream_sync_fim` fork
+     (`INLINE_COMPLETION.md` §4/D8); the legacy copy never did, so inline
+     completion arriving on `complete_stream` re-prefilled the whole window
+     on every keystroke instead of the typing delta.
+  2. `generate_stream_dispatch`'s legacy arm passed `slot_ctx.ctx_mut()`
+     rather than `slot_ctx` — the raw-context downgrade that costs the
+     prefix cache, on a comment that already flagged it.
+  3. `sovereign-core/src/pipeline/runner.rs`'s inline frames→text adapter
+     matched `Finish { .. }` and dropped it, but `EmbeddedLlamaCpp` reports a
+     mid-stream failure ONLY as `Finish { reason: FinishReason::Error(_) }`,
+     never as `StreamFrame::Error`. **Every engine-side stream failure on the
+     presenter path arrived as a clean end of stream.** The user saw a short
+     answer, not an error.
+  4. **The worst one.** `send_stream_piece` — the deadline-bounded send that
+     converts a half-open SSE client's *indefinite* slot pin into a bounded
+     one (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2; one such client takes
+     the node out) — existed ONLY on the legacy `Result<String>` path. The
+     typed path, which is every streaming chat completion, used a bare
+     `blocking_send`. The hardening, and the RED-FIRST test that proved it,
+     were guarding the half nothing streamed on.
+
+  Converged to one body per shape: `complete_stream` delegates to
+  `complete_stream_with_finish` through `frames_to_text_stream`
+  (`sovereign-contracts/src/traits.rs`), the ONE frames→text adapter, which
+  had been hand-written three times. `StreamSink` stopped being an enum,
+  `generate_stream_sync` (260 lines) went with the arm that reached it, and
+  the send policy now lives in the one sink every decode loop goes through.
+  The liveness tests were retargeted onto it and watched to fail first.
 - `ctx` construction — 24 copies across two clusters.
 
 Note the complement: verdict, freshness and render are near the BOTTOM of

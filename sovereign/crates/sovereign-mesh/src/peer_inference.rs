@@ -3082,219 +3082,45 @@ impl InferenceProvider for MeshInferenceProvider {
         Ok(self.complete_stream_with_id(request).await?.0)
     }
 
-    /// Streaming + attribution in one call. Cascade-driven via
-    /// `select_route` (shared with `complete_stream_with_id_and_finish`),
-    /// keeping the routing logic in one place. Each `RouteDecision`
-    /// step constructs the appropriate stream via
-    /// `self.local.complete_stream` / `rp.complete_stream`; the typed
-    /// sibling method swaps in `complete_stream_with_finish` at the
-    /// same step boundaries.
+    /// Streaming + attribution in one call, on the legacy
+    /// `Result<String>` shape.
+    ///
+    /// The cascade itself lives in
+    /// [`complete_stream_with_id_and_finish`][Self::complete_stream_with_id_and_finish].
+    /// Until noun-convergence rung nc-17 this method carried a second
+    /// copy of it — ~197 lines, identical step for step, differing only
+    /// in the stream item type and in two log strings that had already
+    /// drifted apart. Delegating keeps one cascade, so a routing change
+    /// can no longer land on one shape and not the other.
+    ///
+    /// Adapting typed frames back down is lossless here: every terminus
+    /// the typed cascade reaches is the same one this shape reached,
+    /// because no remote provider overrides
+    /// `complete_stream_with_finish` — they inherit the trait default,
+    /// which is `complete_stream` plus a synthesised terminal frame.
     async fn complete_stream_with_id(
         &self,
         request: &CompletionRequest,
     ) -> Result<(Pin<Box<dyn Stream<Item = Result<String>> + Send>>, String)> {
-        let RoutePlan {
-            steps,
-            decision_id,
-            oicp_request_id,
-        } = self.select_route(request).await?;
-        let mut last_err: Option<sovereign_core::error::Error> = None;
-        let mut failovers: Vec<decision_log::FailoverAttempt> = Vec::new();
-        for (attempt_index, step) in steps.into_iter().enumerate() {
-            let attempt_index = attempt_index as u32;
-            match step {
-                RouteDecision::LocalNamed { attribution, guard } => {
-                    let stream = self.local.complete_stream(request).await?;
-                    let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
-                        Box::pin(InflightGuardedStream::new(
-                            ThroughputObservedStream::new(
-                                stream,
-                                ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                            )
-                            .with_outcome(self.outcome_ctx(
-                                &decision_id,
-                                &oicp_request_id,
-                                ServedBy::Local {
-                                    model_id: attribution.clone(),
-                                },
-                                attempt_index,
-                                &failovers,
-                            )),
-                            guard,
-                        ));
-                    return Ok((observed, attribution));
-                }
-                RouteDecision::Peer {
-                    peer,
-                    peer_cand,
-                    ledger,
-                    disposition,
-                    pinned_model_id,
-                } => {
-                    let serve_request = pinned_request(request, pinned_model_id.as_deref());
-                    let serve_request = serve_request.as_ref();
-                    let mut last_transport_err: Option<String> = None;
-                    let node_id_hex = self.local_node_id_hex().await;
-                    for url in &peer.base_urls {
-                        let rp = provider_for_peer(&peer, url, node_id_hex.as_deref());
-                        match rp.complete_stream(serve_request).await {
-                            Ok(stream) => {
-                                let attribution =
-                                    format!("{} @ peer {}", peer_cand.model_id, peer.name);
-                                let mut wrapper = ThroughputObservedStream::new(
-                                    stream,
-                                    ThroughputTarget::Peer {
-                                        name: peer.name.clone(),
-                                        map: Arc::clone(&self.peer_observations),
-                                    },
-                                )
-                                .with_outcome(self.outcome_ctx(
-                                    &decision_id,
-                                    &oicp_request_id,
-                                    ServedBy::Peer {
-                                        name: peer.name.clone(),
-                                        node_id: Some(peer.node_id.to_hex()),
-                                        model_id: peer_cand.model_id.clone(),
-                                    },
-                                    attempt_index,
-                                    &failovers,
-                                ));
-                                if let Some(em) = ledger.clone() {
-                                    wrapper = wrapper.with_ledger_emission(em);
-                                }
-                                let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
-                                    Box::pin(wrapper);
-                                self.peer_health.record_success(&peer.name);
-                                // INVARIANT (no double-emit): once we return the
-                                // peer's LIVE stream here, the routing cascade is
-                                // over. A failure that surfaces *mid-stream* (the
-                                // peer dies after ≥1 token) must NOT re-enter the
-                                // cascade or restart locally — the client would
-                                // then see duplicated / garbled output. The
-                                // ranked failover below only retries from the
-                                // pre-`Ok` `Err` arm (connect / headers / 503),
-                                // never from a stream already handed out. Pinned
-                                // by `peer_dies_mid_stream_does_not_duplicate`.
-                                return Ok((observed, attribution));
-                            }
-                            Err(e) => {
-                                tracing::info!(
-                                    peer = %peer.name,
-                                    url = %url,
-                                    error = %e,
-                                    "mesh-inference: peer transport error, trying next address"
-                                );
-                                last_transport_err = Some(format!("{e}"));
-                            }
-                        }
-                    }
-                    let step_err = last_transport_err
-                        .clone()
-                        .unwrap_or_else(|| "unreachable".into());
-                    let shed = decision_log::looks_shed(&step_err);
-                    self.book_peer_failure(&peer.name, &step_err, shed);
-                    failovers.push(decision_log::FailoverAttempt {
-                        peer: peer.name.clone(),
-                        error: step_err.clone(),
-                        shed,
-                        yield_retry_after_secs: decision_log::parse_yield_refusal(&step_err),
-                    });
-                    match disposition {
-                        PeerFailureDisposition::Hard { model_id } => {
-                            // Terminal: no further step will serve, so
-                            // this is where the join closes.
-                            self.outcome_ctx(
-                                &decision_id,
-                                &oicp_request_id,
-                                ServedBy::Failed,
-                                attempt_index,
-                                &failovers,
-                            )
-                            .failed(step_err, shed);
-                            return Err(sovereign_core::error::Error::Routing(format!(
-                                "model '{}' is advertised by peer '{}' but all peer \
-                                 addresses failed: {}",
-                                model_id,
-                                peer.name,
-                                last_transport_err.unwrap_or_else(|| "unreachable".into())
-                            )));
-                        }
-                        PeerFailureDisposition::Soft => {
-                            tracing::info!(
-                                peer = %peer.name,
-                                "mesh-inference: all peer addresses failed, falling through to next route"
-                            );
-                            // Record err for diagnostic if even the
-                            // local fallback subsequently fails; not
-                            // surfaced unless cascade exhausts.
-                            last_err =
-                                last_transport_err.map(sovereign_core::error::Error::Inference);
-                            continue;
-                        }
-                    }
-                }
-                RouteDecision::LocalFallback { total } => {
-                    let stream = self.local.complete_stream(request).await?;
-                    let model_id = self.local.model_id_for(request.preferred_speed);
-                    let observed: Pin<Box<dyn Stream<Item = Result<String>> + Send>> =
-                        Box::pin(TotalGuardedStream::new(
-                            ThroughputObservedStream::new(
-                                stream,
-                                ThroughputTarget::Local(Arc::clone(&self.local_observations)),
-                            )
-                            .with_outcome(self.outcome_ctx(
-                                &decision_id,
-                                &oicp_request_id,
-                                ServedBy::LocalFallback {
-                                    model_id: model_id.clone(),
-                                },
-                                attempt_index,
-                                &failovers,
-                            )),
-                            total,
-                        ));
-                    return Ok((observed, model_id));
-                }
-            }
-        }
-        tracing::error!(
-            target: "mesh.health",
-            last_err = ?last_err,
-            "mesh-inference: route cascade exhausted — every candidate peer and the local fallback failed for this request"
-        );
-        // Nothing served. Close the join anyway: a decision with no
-        // outcome is indistinguishable from a lost record, and the
-        // calibration contract needs "the mesh could not serve this"
-        // to be a *measurable* result rather than a gap.
-        {
-            let err_text = last_err
-                .as_ref()
-                .map(|e| e.to_string())
-                .unwrap_or_else(|| "cascade exhausted".to_string());
-            let shed = decision_log::looks_shed(&err_text);
-            self.outcome_ctx(
-                &decision_id,
-                &oicp_request_id,
-                ServedBy::Failed,
-                failovers.len() as u32,
-                &failovers,
-            )
-            .failed(err_text, shed);
-        }
-        Err(last_err.unwrap_or_else(|| {
-            sovereign_core::error::Error::Routing(
-                "mesh-inference: route cascade exhausted with no success".into(),
-            )
-        }))
+        let (frames, model_id) = self.complete_stream_with_id_and_finish(request).await?;
+        Ok((
+            sovereign_core::traits::frames_to_text_stream(frames),
+            model_id,
+        ))
     }
 
-    /// Typed-Finish sibling of `complete_stream_with_id`. Cascade
-    /// shape comes from `select_route` (shared); the per-terminus
-    /// stream construction uses `complete_stream_with_finish`
-    /// instead of `complete_stream`, propagating typed
+    /// THE mesh route cascade. Cascade shape comes from
+    /// `select_route`; each `RouteDecision` step constructs its stream
+    /// via `self.local.complete_stream_with_finish` /
+    /// `rp.complete_stream_with_finish`, propagating typed
     /// `StreamFrame::Finish { reason, usage }` all the way to the
     /// runtime so cutoff truncation lights up the desktop chip with
     /// the real reason (not the prior chars-per-token heuristic).
+    ///
+    /// Every other streaming entry on this provider is a thin adapter
+    /// over this one: `complete_stream_with_id` drops to the legacy
+    /// item type, `complete_stream_with_finish` drops the attribution
+    /// string, and `complete_stream` drops both.
     async fn complete_stream_with_id_and_finish(
         &self,
         request: &CompletionRequest,
@@ -3490,7 +3316,7 @@ impl InferenceProvider for MeshInferenceProvider {
         }
         Err(last_err.unwrap_or_else(|| {
             sovereign_core::error::Error::Routing(
-                "mesh-inference: typed route cascade exhausted with no success".into(),
+                "mesh-inference: route cascade exhausted with no success".into(),
             )
         }))
     }

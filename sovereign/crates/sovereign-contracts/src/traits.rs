@@ -668,6 +668,53 @@ pub trait InferenceProvider: Send + Sync {
     }
 }
 
+/// Adapt a typed [`StreamFrame`] stream down to the legacy
+/// `Result<String>` surface — the exact inverse of
+/// [`InferenceProvider::complete_stream_with_finish`]'s default, and
+/// the ONE implementation of that direction (ARCH §10.6, §7.5).
+///
+/// It lives here rather than at a call site because it had been
+/// hand-written three times and the copies had DRIFTED on the question
+/// that matters: **which frame carries a mid-stream failure.** There
+/// are two terminal error shapes on this surface and a provider emits
+/// only one of them —
+///
+/// - `StreamFrame::Error(msg)` is the WIRE shape. Only the compute
+///   child client (`sovereign-compute/src/client.rs`) and the mesh
+///   `inference_adapter` produce it.
+/// - `Finish { reason: FinishReason::Error(msg), .. }` is the
+///   IN-PROCESS shape. `EmbeddedLlamaCpp` and this trait's own default
+///   `complete_stream_with_finish` produce only this one, never the
+///   other.
+///
+/// Adapters written against the wire shape alone therefore compile,
+/// pass, and silently truncate every embedded-engine stream that fails
+/// mid-generation: the terminal frame matches `Finish { .. }`, gets
+/// dropped, and the consumer sees a clean end of stream instead of an
+/// error. That is what `sovereign-core`'s presenter path did until
+/// this function replaced its inline copy. **Handle both, or an error
+/// becomes a short answer.**
+///
+/// Non-error `Finish` frames close the stream and yield nothing —
+/// end-of-stream on the legacy surface has no representation other
+/// than the stream ending.
+pub fn frames_to_text_stream(
+    frames: Pin<Box<dyn Stream<Item = StreamFrame> + Send>>,
+) -> Pin<Box<dyn Stream<Item = Result<String>> + Send>> {
+    use futures::StreamExt;
+    Box::pin(frames.filter_map(|frame| async move {
+        match frame {
+            StreamFrame::Token(text) => Some(Ok(text)),
+            StreamFrame::Error(msg) => Some(Err(Error::Inference(msg))),
+            StreamFrame::Finish {
+                reason: FinishReason::Error(msg),
+                ..
+            } => Some(Err(Error::Inference(msg))),
+            StreamFrame::Finish { .. } => None,
+        }
+    }))
+}
+
 // ─── 2. Routing ────────────────────────────────────────────────
 
 /// Intent classification: turns a user message (plus conversation context and
