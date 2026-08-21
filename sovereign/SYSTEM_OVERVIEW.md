@@ -1942,7 +1942,23 @@ bench critic so the bench-calibrated τ=0.9 transfers. Module layout:
 (`SealedEvidenceSearch` trait — claim-conditioned widening that can never
 widen corpus scope), `mod.rs` (the ladder: `gate_answer` over an
 `EvidenceContext`), plus `citation.rs` / `citation_attribution.rs` /
-`value_presence.rs` (citation forcing + numeric-presence checks).
+`value_presence.rs` (citation forcing + numeric-presence checks), and
+`sealed.rs` (the leaf evidence view as a `kernel_types::Seal`).
+**The citation-grounded release is kernel-typed as of 2026-08-21** (rung
+`nc-20-turn-adoption`). On that arm the gate no longer hand-fills a
+`ReleasedCitation`: it seals the leaf view, mints each released quote through
+`kernel_types::Citation::pointing_into` — the one door, which refuses a quote
+the member does not hold verbatim and one whose grain may not be quoted — and
+releases the composed text as a `kernel_types::Draft` → `Answer`, which cannot
+be built without a `Judgement`. The wire rows are then PROJECTED from that
+answer by `EpistemicState::citations_of`, so "what did this turn cite" has one
+decider instead of two lists that agreed by hand. The released STRING and the
+set of emitted rows are unchanged — seal membership is the same
+`(corpus, chunk)` predicate the old fold applied, and WHICH member a quote
+came from is still decided upstream by `locate_quote_in_chunks` (the seal is
+narrowed to that member before the kernel door sees it). What is new is that a
+drop is a named `Refused` value on `grounding.seal` rather than a `None`
+vanishing inside a `filter_map`.
 **Per-turn STACK ATTRIBUTION — the strip that says which system spent the
 turn (G4, 2026-08-12).** `NATIVE_GROUNDING_ECONOMY.md` §3.4 named G4 ("the
 system can tell what it decided and why") as a function no stage owned, on

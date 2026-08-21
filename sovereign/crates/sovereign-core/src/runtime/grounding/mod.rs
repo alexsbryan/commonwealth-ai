@@ -45,6 +45,7 @@ mod config;
 mod judge;
 pub mod native_grounding;
 mod pipeline;
+mod sealed;
 mod search;
 mod surgical;
 mod value_presence;
@@ -1276,15 +1277,23 @@ async fn gate_answer_inner(
     // the wrong passage (or worse, read a stamped chunk as unstamped).
     let leaf_custodies: Vec<Option<crate::types::Custody>>;
     let leaf_urls: Vec<Option<String>>;
+    // Grain travels through the SAME filter, for the reason above and one
+    // more: it is what the released citation's [`kernel_types::Origin`]
+    // carries, so a grain read off the unfiltered list would stamp a quote
+    // with another chunk's provenance. Binding it here rather than assuming
+    // `Leaf` keeps the seal honest if this filter ever changes (rung
+    // nc-20-turn-adoption).
+    let leaf_grains: Vec<Grain>;
     // `_urls`: the leaf view's URLs exist for the ledger's locator
     // fallback, which the funnel derives from the FULL evidence; nothing
     // in the ladder reads the filtered view, so it is not bound.
-    let (chunks, locators, targets, custodies, _urls): (
+    let (chunks, locators, targets, custodies, _urls, grains): (
         &[String],
         &[Option<String>],
         &[Option<CitationTarget>],
         &[Option<crate::types::Custody>],
         &[Option<String>],
+        &[Grain],
     ) = if evidence.has_summary_evidence() {
         let keep: Vec<usize> = (0..evidence.chunks.len())
             .filter(|i| evidence.source_of(*i).may_be_quoted())
@@ -1306,20 +1315,26 @@ async fn gate_answer_inner(
             .iter()
             .map(|i| evidence.chunk_urls.get(*i).cloned().flatten())
             .collect();
+        leaf_grains = keep.iter().map(|i| evidence.source_of(*i)).collect();
         (
             &leaf_owned,
             &leaf_locators,
             &leaf_targets,
             &leaf_custodies,
             &leaf_urls,
+            &leaf_grains,
         )
     } else {
+        leaf_grains = (0..evidence.chunks.len())
+            .map(|i| evidence.source_of(i))
+            .collect();
         (
             &evidence.chunks,
             &evidence.chunk_locators,
             &evidence.chunk_targets,
             &evidence.chunk_custodies,
             &evidence.chunk_urls,
+            &leaf_grains,
         )
     };
     let entity_anchored = evidence.entity_anchored;
@@ -1470,17 +1485,60 @@ async fn gate_answer_inner(
             // than no row (§18.3 — absence is reported, never defaulted). The
             // prose rendering below is unchanged and still shows every quote,
             // so nothing disappears from what the reader can READ.
-            let released_citations: Vec<crate::types::ReleasedCitation> = quotes
-                .iter()
-                .filter_map(|q| {
-                    Some(crate::types::ReleasedCitation {
-                        text: q.text.clone(),
-                        locator: q.locator.clone(),
-                        target: q.target.clone()?,
-                    })
-                })
-                .collect();
-            let openable = released_citations.len();
+            // The turn, in kernel vocabulary (rung nc-20-turn-adoption).
+            //
+            // The seal is the leaf view — what this ladder is allowed to quote.
+            // Each released quote is minted through
+            // `kernel_types::Citation::pointing_into`, the ONE door: it refuses
+            // a quote the seal does not hold verbatim, and refuses one landing
+            // in material that may not be quoted. Both rules held here before,
+            // as an upstream guarantee stated in three doc comments; they are
+            // now a constructor, so no future quote path can skip either.
+            //
+            // BEHAVIOUR IS UNCHANGED, and that was checked rather than assumed:
+            // a `GroundedQuote` carrying `Some(target)` is already one
+            // contiguous run of ONE chunk (`QuoteMatch::Exact`), and seal
+            // membership is exactly "has a `(corpus, chunk)` handle" — the same
+            // predicate the old `target.clone()?` fold applied. What is new is
+            // that a drop is a NAMED value carrying the quote and the seal size
+            // instead of a `None` vanishing inside a `filter_map`.
+            let seal = sealed::SealedEvidence::over(chunks, targets, custodies, grains);
+            let mut turn_citations: Vec<kernel_types::Citation> = Vec::new();
+            // Human section headings, index-parallel to `turn_citations` — the
+            // display half of a citation, which the kernel `Origin` deliberately
+            // does not carry (its `Locator` is the machine handle).
+            let mut headings: Vec<Option<String>> = Vec::new();
+            let mut refusals: Vec<kernel_types::Refused> = Vec::new();
+            for q in &quotes {
+                // No handle => no seal member => no row, exactly as the
+                // `target.clone()?` fold decided before. Counted as a refusal
+                // so the trace below distinguishes it from a quote the member
+                // did not hold.
+                let Some(target) = q.target.as_ref() else {
+                    refusals.push(kernel_types::Refused::NotInSeal {
+                        quote: q.text.clone(),
+                        sealed_len: 0,
+                    });
+                    continue;
+                };
+                match seal.cite(target, q.text.as_str()) {
+                    Ok(c) => {
+                        turn_citations.push(c);
+                        headings.push(q.locator.clone());
+                    }
+                    Err(r) => refusals.push(r),
+                }
+            }
+            tracing::debug!(
+                target: "grounding.seal",
+                sealed = seal.len(),
+                unhandled = seal.unhandled(),
+                quotes = quotes.len(),
+                cited = turn_citations.len(),
+                refused = refusals.len(),
+                why = ?refusals.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "citation release: quotes checked against the sealed leaf view"
+            );
             dbg(&format!(
                 "citation: GROUNDED → release (answer={:?} quotes={} located={located}/{} \
                  quote_chars={quote_chars})",
@@ -1562,8 +1620,52 @@ async fn gate_answer_inner(
             {
                 return guarded;
             }
+            // ── Release (rung nc-20-turn-adoption) ───────────────────────────
+            //
+            // The composed text becomes a `Draft`, whose text CANNOT BE READ,
+            // and the only exit from a `Draft` is a release that says what is
+            // known about it. This turn's verdict is a pass and it is one the
+            // gate genuinely established: every released quote was re-checked
+            // verbatim against the seal three lines up. The fold is
+            // `Judgement::roll_up` inside `Draft::release` — one reducer, not a
+            // second one written here (ARCH §10.6).
+            //
+            // Nothing about the released STRING changes: `Answer::text` is the
+            // `cited` value that used to be assigned to `GateOutcome::text`
+            // directly. What changes is that it can no longer be assigned
+            // WITHOUT a judgement, because there is no other door.
+            let verdict_reason = kernel_types::Reason::new(format!(
+                "{} of {} released quote(s) verified verbatim against {} sealed chunk(s)",
+                turn_citations.len(),
+                quotes.len(),
+                seal.len()
+            ))
+            .unwrap_or_else(|| kernel_types::Reason::literal("quotes verified against the seal"));
+            let released: kernel_types::Answer =
+                kernel_types::Draft::composed(cited, turn_citations).release(
+                    sealed::engine_attribution(&**inference, base_request.preferred_speed),
+                    &[kernel_types::Judgement::passed(
+                        kernel_types::TURN_SUBJECT,
+                        verdict_reason,
+                    )],
+                );
+            // The wire rows are PROJECTED from the released answer rather than
+            // assembled beside it: one decider for "what did this turn cite"
+            // (ARCH §10.6). Before this, `meta["citations"]` and the answer's
+            // own citations were two hand-built lists that happened to agree.
+            let released_citations =
+                crate::types::EpistemicState::citations_of(&released, &headings);
+            let openable = released_citations.len();
+            tracing::debug!(
+                target: "grounding.seal",
+                verdict = %released.judgement().verdict(),
+                citations = released.citations().len(),
+                openable,
+                custody = ?released.evidence_custody().map(|c| c.as_str()),
+                "citation release: answer sealed with its judgement"
+            );
             return GateOutcome {
-                text: cited,
+                text: released.text().to_string(),
                 meta: with_native_verdict(
                     serde_json::json!({
                     "surface": profile.surface.id(),
