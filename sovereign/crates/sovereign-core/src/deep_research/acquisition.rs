@@ -561,8 +561,11 @@ mod tests {
         }];
         let fl = form_queries("run", "hash", 2, &gaps, &[]);
         assert_eq!(fl.queries.len(), 1);
-        // t6f rung 2: gap text is now used as the query (gap phrasing is search-shaped)
-        assert_eq!(fl.queries[0].text, "The Meridian Bridge was completed in 1873.");
+        // drb1-r2c: re-pinned to the committed form_queries (t6f rung 2)
+        // — the query is the gap's actionable_query, the search-shaped
+        // keyword form, not the declarative text. The sibling
+        // gap_derived_queries_use_actionable_form pins the same shape.
+        assert_eq!(fl.queries[0].text, "Meridian Bridge completion date 1873");
         assert_eq!(fl.queries[0].formed_by, "gap-template");
         assert_eq!(fl.queries[0].from_gap_id.as_deref(), Some("g1"));
     }

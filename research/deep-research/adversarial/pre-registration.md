@@ -7215,3 +7215,82 @@ changed-scope crates. Zero API, zero daemon calls, zero inference.
 The gap round keeps its ammunition; battery #2 (runs-r2b) is the
 seat's checkpoint — R-12 back into >=10/12 is the gate, stated either
 way by the seat.
+
+## R2c — declaration (order drb1-r2c, drafted 2026-08-21 before spawn)
+
+Order drb1-r2c (campaign drb1-race, autonomy directive 80784024) — the
+landing debts R2b's verification held out of the backlog (producer 503'd
+while the judge probe ran; evidence held at /tmp/r2b-bank{1,2}.txt).
+Pre-registered bars, quoted from the order:
+
+- Item 1 (F4 continue, FLIGHT-BLOCKING, red-first): the red test
+  `gym_deck::unsearchable_estate_refuses_the_web_leg` must go green "by
+  fixing the state sequencing (the F4 continue path must pass through
+  the states the machine actually defines — GapCycle or equivalent —
+  before the next RoundStarted), never by weakening the test or the
+  refusal journaling. The web-refused run must end done-partial with
+  the refusal in the ledger, gaps recorded, honesty intact."
+- Item 2 (stale pin): re-pin
+  `deep_research::acquisition::tests::queries_come_from_gaps_deterministically`
+  to the committed `form_queries` (actionable_query); the sibling
+  `gap_derived_queries_use_actionable_form` stays untouched.
+
+Park condition: a fix that requires changing audit verdict semantics or
+the transition table's shape beyond the F4 path. Lane §18.6 red-first,
+mock fixtures only, zero API, zero daemon calls, zero inference.
+
+## R2c — execution record
+
+**Item 1 — the fix is one enumerated transition plus the branch's
+missing sequencing.** Root confirmed at HEAD by own run: the drb1-r1 F4
+branch's bare `continue` left the machine at Auditing (the round had
+audited; the acquisition leg is unreachable when `!continue_to_web`),
+and the next loop iteration fired `Event::RoundStarted` — a pair absent
+from the table. The machine defines no acquisition-free Auditing→
+Rounding path, so the fix adds exactly that, scoped to the F4 path:
+`Event::AcquisitionSkipped` + the row `(Auditing, AcquisitionSkipped)
+=> Rounding` (state.rs), fired by the F4 branch (mod.rs) before its
+`continue`. Rejected alternatives, measured against the order's
+constraints: calling `acquire_round` after `Event::GapCycle` would
+SEARCH under the refusal (`acquire_round` has no `web_refused` guard —
+`search_calls += 1` per allowed query; the test pins zero searches);
+firing the leg events (QueriesFormed…EnrichComplete) without the leg
+would make the trace assert work that never happened. The F4 branch now
+also pushes its consumed round's `RoundRow` (searched 0, fetched 0 —
+the reframe branch's row shape) and writes the resume checkpoint, so
+`written_after_round == rounds.len()` holds at the third round-push
+site. Verdict semantics, audit, render, banks, scorer: untouched. The
+one state.rs enumerated test
+(`f4_continue_transition_is_enumerated`) pins the new pair and its
+Auditing-only guard.
+
+**Red, watched at HEAD (own runs, before the fix):**
+
+- `cargo test -p sovereign-core --test gym_deck unsearchable_estate` —
+  FAILED: "state machine: no transition for (auditing, RoundStarted)".
+- `cargo test -p sovereign-core --lib deep_research::acquisition::tests::
+  queries_come_from_gaps_deterministically` — FAILED: left
+  "Meridian Bridge completion date 1873", right "The Meridian Bridge
+  was completed in 1873." (acquisition.rs:565).
+
+**Green at the landing tree (own runs):** both named tests ok; full
+gym_deck file 8/8 (p5 trace identity unchanged — the F4 path is
+unreachable while the web leg can run); state tests 8/8; full package
+`sovereign-test.sh --package sovereign-core`: 1357 pass / 0 fail
+(R2b's landing baseline: 1354 pass / 2 fail — these two; +1 is the new
+enumerated test). Scoped `sovereign-lint.sh`: 0 errors.
+
+**The refused run's manifest** (drill fixture, unsearchable estate,
+max_rounds 3): `terminal_state: "done-partial"`, `truncation_declared:
+true`; rounds `[{1, gaps 0→1, searched 0, fetched 0}, {2, gaps 1→1,
+searched 0, fetched 0}]` — round 1 is the F4 continue (gaps growing,
+round consumed without acquisition), round 2 lands flat and finishes;
+`not_covered` carries the gap text AND "estate precondition failed
+(F16): the estate is not searchable; the web leg was refused"; budget
+spent {} / remaining 8+8 — the run never opened the network.
+
+**Item 2:** acquisition.rs:565 re-pinned to
+`"Meridian Bridge completion date 1873"` (the fixture's
+actionable_query); the stale line-564 comment ("gap text is now used as
+the query") — which contradicted the committed code — corrected. No
+production change in acquisition.rs; the sibling test untouched.

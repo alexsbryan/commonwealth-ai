@@ -170,9 +170,10 @@ pub async fn run(
 
 /// The resume checkpoint (order deep-research-t3a) — the run's state
 /// persisted after every completed round, the restore surface for
-/// `--resume <run-id>`. Written by the controller at the two round
-/// push sites (drive's main body and the GAP-4 reframe branch), always
-/// with the machine at `Rounding` — the invariant: `written_after_round
+/// `--resume <run-id>`. Written by the controller at every round-push
+/// site (drive's main body, the GAP-4 reframe branch, and the F4
+/// acquisition-free continue), always with the machine at `Rounding` —
+/// the invariant: `written_after_round
 /// == rounds.len()`, checked at read. The envelope binds the checkpoint
 /// to the run: run_id + charter_hash + the full config (the charter
 /// hash recomputed from `config` at restore is the tamper check — a
@@ -1824,8 +1825,31 @@ impl Controller {
                         max_rounds,
                         "drb1-r1 F4: gaps growing with round budget remaining — continuing to next round"
                     );
-                    // Don't call finish — let the loop continue to next round naturally
-                    // The for loop will increment round and continue the iteration
+                    // drb1-r2c: the continue must SEQUENCE the machine —
+                    // the round audited (the machine is at Auditing) and
+                    // the acquisition leg cannot run here, so the
+                    // enumerated skip returns it to Rounding for the next
+                    // RoundStarted. The bare `continue` of drb1-r1 left
+                    // the machine at Auditing and the next round errored
+                    // ("no transition for (auditing, RoundStarted)") —
+                    // watched red in gym_deck::
+                    // unsearchable_estate_refuses_the_web_leg.
+                    self.step(Event::AcquisitionSkipped)?; // → Rounding
+                    // The consumed round is a real round in the ledger —
+                    // it drafted and audited, searched nothing, fetched
+                    // nothing (the reframe branch's row shape).
+                    self.rounds.push(RoundRow {
+                        round,
+                        gaps_before,
+                        gaps_after,
+                        fetched: 0,
+                        search_calls: 0,
+                    });
+                    // T3a: the resume checkpoint lands at EVERY
+                    // round-push site — the machine is at Rounding,
+                    // written_after_round == rounds.len(). A SIGKILL from
+                    // here forward resumes at round + 1.
+                    self.write_checkpoint()?;
                     continue;
                 }
 
@@ -1853,8 +1877,9 @@ impl Controller {
                 fetched,
                 search_calls: self.search_calls - search_before,
             });
-            // T3a: the resume checkpoint lands at BOTH round-push sites
-            // (here + the reframe branch) — the machine is at Rounding,
+            // T3a: the resume checkpoint lands at EVERY round-push site
+            // (here + the reframe branch + the F4 acquisition-free
+            // continue) — the machine is at Rounding,
             // written_after_round == rounds.len(), and the round's
             // artifacts (evidence-window-N.json etc.) are on disk. A
             // SIGKILL from here forward resumes at round + 1.
