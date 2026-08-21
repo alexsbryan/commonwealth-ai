@@ -6991,3 +6991,80 @@ orphan and triggers the WARN path.
 2. Orphan citations trigger a WARN log and are omitted from the rendered output.
 3. The WARN includes: claim_index, orphan_count, total_referenced.
 
+## R3b flag-graded render — declaration (order drb1-r3b, drafted 2026-08-21 before spawn)
+
+*Timestamped pre-registration: the order file at
+`.sovereign/features/drb1-r3b/order.md`. The order's pre-registered expectation,
+VERBATIM from its objective:*
+
+> THE LEVER IS RECORDED: every could-not-judge claim carries its reason in
+> `flag`, and the flight's distribution is **72/137 "open question: single-origin
+> support (corroboration floor)"** — substance present, uncorroborated — vs 54
+> "extracted specifics absent from the evidence" (the honest wall) and 11 other
+> (7 refuted, 3 passed, 1 no-citation-handle). Grading the render BY THE
+> RECORDED FLAG moves the marker fraction 0.927 → ~0.40 (the ceiling on this
+> bank: 55 claims honestly abstain). This order implements that grading:
+> single-origin-capped claims render as Findings with the `[single-origin]`
+> support-tier label (the tier R3a built, now fed by the flag); witness-abstain
+> and no-citation-handle stay Open questions, honestly. Verdicts, floor, and
+> audit semantics untouched — render.rs and its contract only.
+
+*Measured before the match was written (item 1's requirement — one grep over
+every `runs-*/**/verdict-set.json` on disk, 168 files): the taxonomy IS a
+closed set — five distinct flags, 1108 single-origin / 727 specifics-absent /
+124 refuted / 107 not-judgeable / 69 no-citation-handle — each an enumerated
+arm of `final_claims`'s producer match. No seventh flag; nothing unstable; the
+"not worth continuing" exit condition did not fire.*
+
+## R3b flag-graded render — execution record
+
+*Executed 2026-08-21 (order drb1-r3b; goldens watched RED before the render
+change landed — 4 failing, 1 stability guard green at HEAD, then 5/5 green).*
+
+**The grading (render.rs only; verdicts, floor, audit semantics untouched):**
+flag strings became consts (producer `final_claims` and grader share one name
+per string); ONE match site `grade_recorded_flag` grades a could-not-judge
+claim by its RECORDED flag — `FLAG_SINGLE_ORIGIN` → Findings `[single-origin]`
+(never `[passed]`), the four walled vocabulary arms stay walled, unknown flags
+default WALLED with a glassbox WARN; ONE tier decider `render_tier` feeds both
+`render_report` and `render_race`. Graded rows name the single origin from the
+floor record when present. A no-cap verdict set renders byte-identically to
+the pre-R3b page (reframe/align goldens untouched, verified).
+
+**Golden re-pin (seat-amended allowlist, ruling 2026-08-21):**
+`tests/golden/report.md` — the diff is ONLY the intended movement: the 4
+single-origin-capped claims move to Findings stamped `[single-origin]` with
+named origins; the specifics-absent claim stays walled; no other byte drifted.
+`golden_fixtures.rs` verdict-set assertions untouched.
+
+**Re-measure (the rescan harness, now landed, `--graded` mode; all 9
+`runs-t7a/std` runs = the pre-registration's 137-claim bank; before = each
+run's original flight render under the same counters, which reproduces the
+recorded 0.927 exactly — 127/137, race and report agreeing):**
+
+| run | claims | before marker | after marker | graded rows | Findings B (before→after) | Open-questions B (before→after) |
+|-----|--------|---------------|--------------|-------------|---------------------------|--------------------------------|
+| dr-1787259122 | 5 | 3/5 = 0.600 | 1/5 = 0.200 | 2 | 14 → 1037 | 859 → 305 |
+| dr-1787259198 | 14 | 13/14 = 0.929 | 3/14 = 0.214 | 10 | 465 → 4129 | 3353 → 962 |
+| dr-1787259769 | 8 | 8/8 = 1.000 | 1/8 = 0.125 | 7 | 14 → 2664 | 1922 → 236 |
+| dr-1787260135 | 22 | 21/22 = 0.955 | 5/22 = 0.227 | 16 | 421 → 7191 | 5840 → 1301 |
+| dr-1787260359 | 7 | 6/7 = 0.857 | 6/7 = 0.857 | 0 | 14 → 14 | 1590 → 1604 |
+| dr-1787260761 (drb-69) | 28 | 28/28 = 1.000 | 20/28 = 0.714 | 8 | 14 → 2764 | 6628 → 4982 |
+| dr-1787262042 | 8 | 8/8 = 1.000 | 2/8 = 0.250 | 6 | 14 → 2194 | 1809 → 498 |
+| dr-1787262188 (drb-83) | 10 | 7/10 = 0.700 | 3/10 = 0.300 | 4 | 14 → 1886 | 2048 → 1003 |
+| dr-1787262340 (drb-90) | 35 | 33/35 = 0.943 | 14/35 = 0.400 | 19 | 407 → 7359 | 7261 → 2723 |
+| **pooled** | **137** | **127/137 = 0.9270** | **55/137 = 0.4015** | **72** | **1377 → 29238** | **31310 → 13614** |
+
+- **Marker fraction 0.9270 → 0.4015 pooled** — on the pre-registered
+  expectation (~0.40, the ceiling: 55 honest abstains = 54 specifics-absent +
+  1 no-citation-handle). MET.
+- 72/72 single-origin-capped claims graded into Findings (race and report
+  agree); race and report marker fractions identical on every run.
+- Glassbox: 0 unknown-flag WARNs on the bank (closed vocabulary confirmed in
+  flight data); 0 orphan-citation WARNs; the registry's re-derived citations
+  match the recorded channel on all 9 runs.
+- The order named "the 3 t7a runs" (drb-69/83/90, rows dr-1787260761/2188/2340);
+  the 137-claim denominator the ~0.40 expectation is stated over is all 9
+  `runs-t7a/std` runs, so the re-measure covered all 9 (the 3 named included)
+  — named substitution, not silent.
+

@@ -6,9 +6,13 @@
 //! audits used (one splitter, two consumers) and re-audited against the
 //! merged window. The report is verdict-stamped with chunk-level
 //! citations; the four verdicts are distinct sections; could-not-judge
-//! claims land in Open questions; never-ran claims land in Not
-//! evaluated. Always flag, never remove: a failed claim is shown with
-//! its flag, never deleted.
+//! claims land in Open questions — EXCEPT the drb1-r3b graded tier: a
+//! could-not-judge claim whose RECORDED flag names single-origin
+//! support (corroboration floor) renders under Findings stamped
+//! `[single-origin]`, never `[passed]` (the verdict stands; the page
+//! presents the claim, floor-capped, instead of walling it). Never-ran
+//! claims land in Not evaluated. Always flag, never remove: a failed
+//! claim is shown with its flag, never deleted.
 
 use super::audit::ClaimAudit;
 use super::containment::strip_citation_spans;
@@ -17,6 +21,28 @@ use super::icd::{
     FinalClaim, GateAction, LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow,
     SourceLedger, Verdict, VerdictSet,
 };
+
+// ---------------------------------------------------------------------
+// drb1-r3b — the recorded-flag vocabulary. `final_claims` (below) is
+// the single PRODUCER of these strings; `grade_recorded_flag` (further
+// below) is the single CONSUMER that grades a render tier by them.
+// Consts, not inline literals, so producer and grader share one name
+// per string (§10.6: one implementation per key). Measured vocabulary
+// 2026-08-21 across every verdict-set.json on disk (168 files): five
+// distinct flags — 1108 single-origin, 727 specifics-absent, 124
+// refuted, 107 not-judgeable, 69 no-citation-handle — a closed set,
+// each an enumerated arm of the producer's match.
+// ---------------------------------------------------------------------
+
+const FLAG_REFUTED: &str = "refuted by the evidence";
+const FLAG_NO_CITATION_HANDLE: &str =
+    "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)";
+const FLAG_UNRESOLVABLE_HANDLE: &str =
+    "open question: the citation handle does not name a window chunk (ref-required)";
+const FLAG_SINGLE_ORIGIN: &str = "open question: single-origin support (corroboration floor)";
+const FLAG_SPECIFICS_ABSENT: &str = "open question: extracted specifics absent from the evidence";
+const FLAG_NOT_JUDGEABLE: &str = "open question: not judgeable from the evidence";
+const FLAG_NOT_EVALUATED: &str = "not evaluated: no evidence window was retrieved";
 
 /// Map the final audits to verdict-set rows, with C-class citations
 /// resolved against the merged window.
@@ -56,22 +82,16 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
             }
             let status = a.verdict.as_str().to_string();
             let flag = match a.verdict {
-                Verdict::Failed => Some("refuted by the evidence".to_string()),
+                Verdict::Failed => Some(FLAG_REFUTED.to_string()),
                 // REF-REQUIRED (order deep-research-t4a): the refusal
                 // classes name the cause — the reader sees the draft's
                 // selection failed the gate, not a generic
                 // could-not-judge.
-                Verdict::CouldNotJudge if a.action == GateAction::RefusedNoCitationHandle => Some(
-                    "open question: no citation handle (ref-required — the draft must cite \
-                          the chunks it asserts against)"
-                        .to_string(),
-                ),
+                Verdict::CouldNotJudge if a.action == GateAction::RefusedNoCitationHandle => {
+                    Some(FLAG_NO_CITATION_HANDLE.to_string())
+                }
                 Verdict::CouldNotJudge if a.action == GateAction::RefusedUnresolvableHandle => {
-                    Some(
-                        "open question: the citation handle does not name a window chunk \
-                          (ref-required)"
-                            .to_string(),
-                    )
+                    Some(FLAG_UNRESOLVABLE_HANDLE.to_string())
                 }
                 // GAP-2: a floor-capped claim names the cause — the
                 // reader sees WHY the claim is open (single origin),
@@ -79,17 +99,13 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
                 Verdict::CouldNotJudge
                     if a.corroboration.as_ref().is_some_and(|r| !r.passes_floor) =>
                 {
-                    Some("open question: single-origin support (corroboration floor)".to_string())
+                    Some(FLAG_SINGLE_ORIGIN.to_string())
                 }
                 Verdict::CouldNotJudge if a.witness.all_absent => {
-                    Some("open question: extracted specifics absent from the evidence".to_string())
+                    Some(FLAG_SPECIFICS_ABSENT.to_string())
                 }
-                Verdict::CouldNotJudge => {
-                    Some("open question: not judgeable from the evidence".to_string())
-                }
-                Verdict::NeverRan => {
-                    Some("not evaluated: no evidence window was retrieved".to_string())
-                }
+                Verdict::CouldNotJudge => Some(FLAG_NOT_JUDGEABLE.to_string()),
+                Verdict::NeverRan => Some(FLAG_NOT_EVALUATED.to_string()),
                 Verdict::Passed => None,
             };
             FinalClaim {
@@ -105,6 +121,122 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
         })
         .collect()
 }
+
+// ---------------------------------------------------------------------
+// drb1-r3b — flag→tier grading (the measured lever).
+// ---------------------------------------------------------------------
+
+/// The render grade of a could-not-judge claim's RECORDED flag.
+///
+/// The R3a scan (2026-08-21) measured the wall: the `[single-origin]`
+/// tier R3a built was EMPTY on flight data because the walled mass is
+/// could-not-judge verdicts stamped at audit time — and the flight's
+/// recorded flags decompose 72/137 single-origin-capped (substance
+/// present, one origin, floor unmet) vs 54 specifics-absent (the
+/// honest wall) vs 11 other. The flag is the recorded REASON after the
+/// producer's precedence — so the grader follows the record, never
+/// re-derives from the structured fields (a no-handle claim with a
+/// failing floor record records the no-handle flag, and stays walled).
+enum FlagGrade {
+    /// Substance present, single origin, corroboration floor unmet —
+    /// renders in Findings under the `[single-origin]` tier, stamped
+    /// `[single-origin]` and NEVER `[passed]`.
+    SingleOrigin,
+    /// The wall holds — renders in Open questions.
+    Walled,
+}
+
+/// THE match site that maps a recorded could-not-judge flag to its
+/// render grade (§2.1: a match on string ids, kept consciously small —
+/// one graded arm, four walled arms from the measured closed set,
+/// unknown + absent arms both walled). Unknown flags default WALLED
+/// with a glassbox WARN — never silently graded up (§18.3).
+fn grade_recorded_flag(flag: Option<&str>, claim_id: &str) -> FlagGrade {
+    match flag {
+        Some(FLAG_SINGLE_ORIGIN) => FlagGrade::SingleOrigin,
+        Some(
+            FLAG_SPECIFICS_ABSENT
+            | FLAG_NO_CITATION_HANDLE
+            | FLAG_UNRESOLVABLE_HANDLE
+            | FLAG_NOT_JUDGEABLE,
+        ) => FlagGrade::Walled,
+        Some(unknown) => {
+            tracing::warn!(
+                target: "deep_research",
+                claim = claim_id,
+                flag = unknown,
+                "flag-graded render: unknown flag defaults WALLED (never silently graded up)"
+            );
+            FlagGrade::Walled
+        }
+        None => FlagGrade::Walled,
+    }
+}
+
+/// The render tier — ONE decider, one name (§10.6): `render_report`
+/// and `render_race` classify through this enum, never their own
+/// copies of the split. Verdicts, the floor, and audit semantics are
+/// untouched — this is presentation tiering only.
+enum RenderTier {
+    /// Passed with the floor met — an anchor, no tier label.
+    Corroborated,
+    /// Passed on a single origin — `[passed] [single-origin]`.
+    PassedSingleOrigin,
+    /// Could-not-judge at the corroboration floor, graded by its
+    /// recorded flag — `[single-origin]`, never `[passed]`.
+    FlagGradedSingleOrigin,
+    Refuted,
+    OpenQuestion,
+    NotEvaluated,
+}
+
+fn render_tier(c: &FinalClaim) -> RenderTier {
+    match c.verdict {
+        Verdict::Passed if c.corroboration.as_ref().is_some_and(|r| r.passes_floor) => {
+            RenderTier::Corroborated
+        }
+        Verdict::Passed => RenderTier::PassedSingleOrigin,
+        Verdict::CouldNotJudge => match grade_recorded_flag(c.flag.as_deref(), &c.id) {
+            FlagGrade::SingleOrigin => RenderTier::FlagGradedSingleOrigin,
+            FlagGrade::Walled => RenderTier::OpenQuestion,
+        },
+        Verdict::Failed => RenderTier::Refuted,
+        Verdict::NeverRan => RenderTier::NotEvaluated,
+    }
+}
+
+/// The tail a Findings row carries after its text: typed citations
+/// first; absent those, the floor record's named origins (the single
+/// origin, named — better than an absence note when the record has
+/// it); absent both, the honest-absence note named by the caller
+/// (passed rows and graded rows word it differently).
+fn findings_tail(c: &FinalClaim, no_citation_note: &str) -> String {
+    if !c.citations.is_empty() {
+        let sources: Vec<String> = c
+            .citations
+            .iter()
+            .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
+            .collect();
+        format!(" — {}", sources.join(", "))
+    } else if let Some(origins) = c
+        .corroboration
+        .as_ref()
+        .filter(|r| !r.origins.is_empty())
+        .map(|r| &r.origins)
+    {
+        let named: Vec<String> = origins.iter().map(|u| format!("[{u}]({u})")).collect();
+        format!(" — origin: {}", named.join(", "))
+    } else {
+        format!(" — *{no_citation_note}*")
+    }
+}
+
+const NOTE_JUDGE_SUPPORTED: &str = "judge-supported; no witnessable specifics — see verdict set";
+const NOTE_SINGLE_ORIGIN_UNCITED: &str = "single origin; no witnessable citation — see verdict set";
+const FINDINGS_GRADED_NOTE: &str = "*Rows stamped [single-origin] without [passed] are \
+     could-not-judge at the corroboration floor: one origin supports the claim's substance, \
+     the floor requires two. The verdict stands in the verdict set; the page presents the \
+     claim, floor-capped, instead of walling it.*";
 
 /// The report — the product-shaped artifact. Verdict-stamped, four
 /// verdicts as distinct sections, chunk-level citations, flags never
@@ -172,64 +304,68 @@ pub fn render_report(
     }
     out.push('\n');
     out.push_str("## Findings\n\n");
-    // R3a provenance-graded render: split Passed into corroborated
-    // (two-origin) and single-origin tiers. Corroborated claims render
-    // without a tier label; single-origin claims carry a [single-origin]
-    // support-tier marker (honest, visible, never passed-as-corroborated).
+    // drb1-r3b flag-graded render: one decider (`render_tier`) feeds
+    // both renderers. Passed splits corroborated / single-origin (the
+    // R3a tiers); could-not-judge claims grade by their RECORDED flag —
+    // single-origin-capped substance renders here, floor-capped, every
+    // other recorded flag stays walled.
     let mut corroborated = Vec::new();
-    let mut single_origin = Vec::new();
+    let mut passed_single_origin = Vec::new();
+    let mut graded_single_origin = Vec::new();
     let mut failed = Vec::new();
     let mut open = Vec::new();
     let mut not_evaluated = Vec::new();
     for c in claims {
-        match c.verdict {
-            Verdict::Passed => {
-                // Split by corroboration floor: passes_floor=true means
-                // two+ distinct origins (corroborated); false or None means
-                // single-origin (support-tier presentation).
-                if c.corroboration.as_ref().is_some_and(|r| r.passes_floor) {
-                    corroborated.push(c);
-                } else {
-                    single_origin.push(c);
-                }
-            }
-            Verdict::Failed => failed.push(c),
-            Verdict::CouldNotJudge => open.push(c),
-            Verdict::NeverRan => not_evaluated.push(c),
+        match render_tier(&c) {
+            RenderTier::Corroborated => corroborated.push(c),
+            RenderTier::PassedSingleOrigin => passed_single_origin.push(c),
+            RenderTier::FlagGradedSingleOrigin => graded_single_origin.push(c),
+            RenderTier::Refuted => failed.push(c),
+            RenderTier::OpenQuestion => open.push(c),
+            RenderTier::NotEvaluated => not_evaluated.push(c),
         }
     }
-    // Render corroborated findings first (no tier label — these are
-    // anchors, two-origin passed).
+    // The graded-tier note renders ONLY when graded rows exist — a
+    // verdict set with none renders byte-identically to the pre-r3b
+    // page (the reframe/align goldens and no-cap flights stay pinned).
+    if !graded_single_origin.is_empty() {
+        out.push_str(FINDINGS_GRADED_NOTE);
+        out.push_str("\n\n");
+    }
+    // Corroborated findings first (no tier label — anchors,
+    // two-origin passed).
     for c in corroborated {
-        out.push_str(&format!("- **[passed]** {}", c.text));
-        if !c.citations.is_empty() {
-            out.push_str(" — ");
-            let sources: Vec<String> = c
-                .citations
-                .iter()
-                .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
-                .collect();
-            out.push_str(&sources.join(", "));
-        } else {
-            out.push_str(" — *(judge-supported; no witnessable specifics — see verdict set)*");
-        }
-        out.push('\n');
+        out.push_str(&format!(
+            "- **[passed]** {}{}\n",
+            c.text,
+            findings_tail(&c, NOTE_JUDGE_SUPPORTED)
+        ));
     }
-    // Render single-origin findings with a support-tier marker.
-    for c in single_origin {
-        out.push_str(&format!("- **[passed] [single-origin]** {}", c.text));
-        if !c.citations.is_empty() {
-            out.push_str(" — ");
-            let sources: Vec<String> = c
-                .citations
-                .iter()
-                .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
-                .collect();
-            out.push_str(&sources.join(", "));
-        } else {
-            out.push_str(" — *(judge-supported; no witnessable specifics — see verdict set)*");
-        }
-        out.push('\n');
+    // Passed on a single origin — tier-labeled.
+    for c in passed_single_origin {
+        out.push_str(&format!(
+            "- **[passed] [single-origin]** {}{}\n",
+            c.text,
+            findings_tail(&c, NOTE_JUDGE_SUPPORTED)
+        ));
+    }
+    // drb1-r3b: could-not-judge at the floor, graded by its recorded
+    // flag — `[single-origin]`, never `[passed]` (the verdict stands;
+    // the page names the tier and the floor, §18.3).
+    for c in graded_single_origin {
+        let note = format!(
+            "{}; verdict stands could-not-judge",
+            flag_without_class_prefix(
+                c.flag.as_deref().unwrap_or(FLAG_SINGLE_ORIGIN),
+                "open question"
+            )
+        );
+        let row = format!(
+            "- **[single-origin]** {} — *{note}*{}\n",
+            c.text,
+            findings_tail(&c, NOTE_SINGLE_ORIGIN_UNCITED)
+        );
+        out.push_str(&row);
     }
     out.push('\n');
     if !failed.is_empty() {
@@ -345,68 +481,83 @@ pub fn render_race(question: &str, claims: &[FinalClaim], run_id: &str) -> Strin
         .iter()
         .filter(|c| c.verdict == Verdict::Passed)
         .count();
-    let open = claims.len() - established;
+    // drb1-r3b: the flag-graded mass is counted and named separately —
+    // a floor-capped row is not a passed finding and must not inflate
+    // the established count, nor hide inside the open count.
+    let graded = claims
+        .iter()
+        .filter(|c| matches!(render_tier(c), RenderTier::FlagGradedSingleOrigin))
+        .count();
+    let open = claims.len() - established - graded;
     let mut out = String::new();
     out.push_str(&format!("# {question}\n\n"));
     out.push_str(&format!(
-        "_run: `{run_id}` — {established} finding{} established; {open} claim{} open. \
+        "_run: `{run_id}` — {established} finding{} established; {}{open} claim{} open. \
          Citations are chunk-level (evidence id + source URL)._\n\n",
         if established == 1 { "" } else { "s" },
+        if graded > 0 {
+            format!(
+                "{graded} single-origin floor-capped (could-not-judge at the corroboration \
+                 floor); "
+            )
+        } else {
+            String::new()
+        },
         if open == 1 { "" } else { "s" },
     ));
-    // R3a provenance-graded render: split Passed into corroborated
-    // (two-origin) and single-origin tiers.
+    // drb1-r3b flag-graded render: the same decider as render_report.
     let mut corroborated = Vec::new();
-    let mut single_origin = Vec::new();
+    let mut passed_single_origin = Vec::new();
+    let mut graded_single_origin = Vec::new();
     let mut failed = Vec::new();
     let mut open_q = Vec::new();
     let mut not_evaluated = Vec::new();
     for c in claims {
-        match c.verdict {
-            Verdict::Passed => {
-                if c.corroboration.as_ref().is_some_and(|r| r.passes_floor) {
-                    corroborated.push(c);
-                } else {
-                    single_origin.push(c);
-                }
-            }
-            Verdict::Failed => failed.push(c),
-            Verdict::CouldNotJudge => open_q.push(c),
-            Verdict::NeverRan => not_evaluated.push(c),
+        match render_tier(&c) {
+            RenderTier::Corroborated => corroborated.push(c),
+            RenderTier::PassedSingleOrigin => passed_single_origin.push(c),
+            RenderTier::FlagGradedSingleOrigin => graded_single_origin.push(c),
+            RenderTier::Refuted => failed.push(c),
+            RenderTier::OpenQuestion => open_q.push(c),
+            RenderTier::NotEvaluated => not_evaluated.push(c),
         }
     }
     out.push_str("## Findings\n\n");
-    // Render corroborated findings first (no tier label).
-    for c in corroborated {
-        out.push_str(&format!("- **[passed]** {}", c.text));
-        if !c.citations.is_empty() {
-            out.push_str(" — ");
-            let sources: Vec<String> = c
-                .citations
-                .iter()
-                .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
-                .collect();
-            out.push_str(&sources.join(", "));
-        } else {
-            out.push_str(" — *(judge-supported; no witnessable specifics — see verdict set)*");
-        }
-        out.push('\n');
+    if !graded_single_origin.is_empty() {
+        out.push_str(FINDINGS_GRADED_NOTE);
+        out.push_str("\n\n");
     }
-    // Render single-origin findings with a support-tier marker.
-    for c in single_origin {
-        out.push_str(&format!("- **[passed] [single-origin]** {}", c.text));
-        if !c.citations.is_empty() {
-            out.push_str(" — ");
-            let sources: Vec<String> = c
-                .citations
-                .iter()
-                .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
-                .collect();
-            out.push_str(&sources.join(", "));
-        } else {
-            out.push_str(" — *(judge-supported; no witnessable specifics — see verdict set)*");
-        }
-        out.push('\n');
+    // Corroborated findings first (no tier label).
+    for c in corroborated {
+        out.push_str(&format!(
+            "- **[passed]** {}{}\n",
+            c.text,
+            findings_tail(&c, NOTE_JUDGE_SUPPORTED)
+        ));
+    }
+    // Passed on a single origin — tier-labeled.
+    for c in passed_single_origin {
+        out.push_str(&format!(
+            "- **[passed] [single-origin]** {}{}\n",
+            c.text,
+            findings_tail(&c, NOTE_JUDGE_SUPPORTED)
+        ));
+    }
+    // drb1-r3b: the graded tier, same row shape as the report page.
+    for c in graded_single_origin {
+        let note = format!(
+            "{}; verdict stands could-not-judge",
+            flag_without_class_prefix(
+                c.flag.as_deref().unwrap_or(FLAG_SINGLE_ORIGIN),
+                "open question"
+            )
+        );
+        let row = format!(
+            "- **[single-origin]** {} — *{note}*{}\n",
+            c.text,
+            findings_tail(&c, NOTE_SINGLE_ORIGIN_UNCITED)
+        );
+        out.push_str(&row);
     }
     out.push('\n');
     if !failed.is_empty() {
