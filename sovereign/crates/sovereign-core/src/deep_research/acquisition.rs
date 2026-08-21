@@ -51,10 +51,12 @@ pub fn form_queries(
         .enumerate()
         .map(|(i, g)| FormedQuery {
             id: format!("q{}", i + 1),
-            // t6f rung 2: gap-derived acquisition — use the gap text itself
-            // as the search query. The gap phrasing is already search-shaped
-            // by design (order deep-research-t6f).
-            text: g.text.clone(),
+            // t6f rung 2: gap-derived acquisition — use actionable_query which
+            // is the search-shaped form of the gap. MICRO-PROBE VALIDATED:
+            // gap.text sentence form ("Meridian Bridge completed") doesn't
+            // match keyword tokens like "completion"; actionable_query keyword
+            // form ("Meridian Bridge completion date 1873") does match.
+            text: g.actionable_query.clone(),
             from_gap_id: Some(g.id.clone()),
             formed_by: "gap-template".to_string(),
             provider: "deterministic".to_string(),
@@ -566,11 +568,11 @@ mod tests {
     }
 
     /// t6f rung 2: gap-derived acquisition — round N+1's search queries
-    /// are composed from the gap ledger's open texts (the gap text itself,
-    /// not the actionable_query template). The gap phrasing is already
-    /// search-shaped by design (order: deep-research-t6f).
+    /// use the actionable_query field (the search-shaped keyword form),
+    /// not the declarative gap text. Micro-probe validated: gap.text sentence
+    /// form doesn't match keyword tokens; actionable_query does.
     #[test]
-    fn gap_derived_queries_use_gap_text() {
+    fn gap_derived_queries_use_actionable_form() {
         let gaps = vec![Gap {
             id: "g1".to_string(),
             text: "What year did the Meridian Bridge open?".to_string(),
@@ -580,8 +582,8 @@ mod tests {
         }];
         let fl = form_queries("run", "hash", 2, &gaps, &[]);
         assert_eq!(fl.queries.len(), 1);
-        // The gap text itself is the query (search-shaped by design)
-        assert_eq!(fl.queries[0].text, "What year did the Meridian Bridge open?");
+        // Query uses actionable_query (search-shaped), not text (declarative)
+        assert_eq!(fl.queries[0].text, "Meridian Bridge completion year");
         assert_eq!(fl.queries[0].formed_by, "gap-template");
         assert_eq!(fl.queries[0].from_gap_id.as_deref(), Some("g1"));
     }
