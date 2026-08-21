@@ -6,7 +6,7 @@ Run: python3 test_score.py
 """
 from score import (
     DEFAULT_TAX, OFFICIAL_TAX, accuracy, break_even_confidence,
-    hallucination_rate, omniscience_index,
+    hallucination_rate, omniscience_index, oracle_ceiling,
 )
 
 # Claude 4.1 Opus at the AA snapshot: index 4.8, accuracy 36% (arXiv 2511.13029).
@@ -64,6 +64,27 @@ def test_empty_bank_is_could_not_judge_not_zero():
 def test_hallucination_rate_is_share_of_the_unknown():
     close(hallucination_rate(OPUS), 312 / (312 + 328))
     assert hallucination_rate(RIGHT_ALL) is None
+
+def test_oracle_ceiling_is_110_times_accuracy_minus_10():
+    """PLAN.md's route table is arithmetic, so it lives here rather than only in
+    a markdown table where it can drift."""
+    for acc in (0.182, 0.20, 0.25, 0.30, 0.36):
+        c = round(acc * 600)
+        hist = {"CORRECT": c, "INCORRECT": 250, "NOT_ATTEMPTED": 350 - c, "PARTIAL_ANSWER": 0}
+        close(oracle_ceiling(hist, DEFAULT_TAX), 110 * (c / 600) - 10, eps=1e-6)
+
+def test_oracle_ceiling_bounds_every_achievable_score():
+    """The invariant that makes G1 a real gate: no abstention policy can beat it."""
+    for c, i in ((360, 312), (120, 13), (137, 34), (0, 600), (600, 0)):
+        hist = {"CORRECT": c, "INCORRECT": i, "NOT_ATTEMPTED": 600 - c - i, "PARTIAL_ANSWER": 0}
+        assert oracle_ceiling(hist, DEFAULT_TAX) >= omniscience_index(hist, DEFAULT_TAX) - 1e-9
+
+def test_reachability_floor_for_the_ten_target():
+    """Below 18.2% accuracy, OI_taxed 10 is unreachable by calibration alone."""
+    below = {"CORRECT": 108, "INCORRECT": 0, "NOT_ATTEMPTED": 492, "PARTIAL_ANSWER": 0}
+    at    = {"CORRECT": 110, "INCORRECT": 0, "NOT_ATTEMPTED": 490, "PARTIAL_ANSWER": 0}
+    assert oracle_ceiling(below, DEFAULT_TAX) < 10.0
+    assert oracle_ceiling(at, DEFAULT_TAX) >= 10.0
 
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]

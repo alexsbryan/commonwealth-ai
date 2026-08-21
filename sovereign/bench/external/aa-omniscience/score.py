@@ -67,6 +67,22 @@ def break_even_confidence(tax=OFFICIAL_TAX):
     return (1.0 - tax) / 2.0
 
 
+def oracle_ceiling(counts, tax=DEFAULT_TAX):
+    """The best OI ANY abstention policy could reach on this run: keep every
+    CORRECT, abstain on everything else. Nothing a calibration harness does can
+    exceed this, so it bounds the whole line of work before a gate is built.
+
+    Gate G1 in PLAN.md. At tax=0.1 it reduces to 110*accuracy - 10, which is why
+    accuracy below 18.2% makes OI_taxed 10 unreachable by calibration alone.
+    """
+    n = sum(counts.get(g, 0) for g in GRADES)
+    if n == 0:
+        return None
+    c = counts.get("CORRECT", 0)
+    return omniscience_index(
+        {"CORRECT": c, "INCORRECT": 0, "NOT_ATTEMPTED": n - c, "PARTIAL_ANSWER": 0}, tax)
+
+
 def summarize(counts, tax=DEFAULT_TAX):
     """Every number this lane is allowed to report, in one dict."""
     return {
@@ -76,6 +92,7 @@ def summarize(counts, tax=DEFAULT_TAX):
         "hallucination_rate": hallucination_rate(counts),
         "oi_official": omniscience_index(counts, OFFICIAL_TAX),
         "oi_taxed": omniscience_index(counts, tax),
+        "oi_oracle_ceiling": oracle_ceiling(counts, tax),
         "abstention_tax": tax,
         "break_even_confidence": break_even_confidence(tax),
     }
