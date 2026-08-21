@@ -345,7 +345,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             // scope that produced `defs`, so the graph_lag line and the number
             // can never be about different things.
             let lag = assess_lag(graph.last_indexed_head().await, &defs, &scope);
-            cmd_status(&defs, &reached, &scope, &baseline, mint, json, &lag, &corpus_id)
+            cmd_status(
+                &defs, &reached, &scope, &baseline, mint, json, &lag, &corpus_id,
+            )
         }
         other => {
             eprintln!("error: unknown converge subcommand `{other}`");
@@ -719,8 +721,10 @@ fn cmd_status(
     match prior {
         None => {
             if !json {
-                println!("duplicated names: {n} of {colliding} colliding (the rest are \
-                          unreachable from any other crate)");
+                println!(
+                    "duplicated names: {n} of {colliding} colliding (the rest are \
+                          unreachable from any other crate)"
+                );
                 print!("{}", lag.render(corpus_id));
                 println!(
                     "baseline: none — mint one with `svrn code converge status --mint`\n\
@@ -733,8 +737,10 @@ fn cmd_status(
         Some(p) => {
             let delta = n as i64 - p as i64;
             if !json {
-                println!("duplicated names: {n} of {colliding} colliding (the rest are \
-                          unreachable from any other crate)");
+                println!(
+                    "duplicated names: {n} of {colliding} colliding (the rest are \
+                          unreachable from any other crate)"
+                );
                 println!("baseline: {p}   delta: {delta:+}");
                 print!("{}", lag.render(corpus_id));
             }

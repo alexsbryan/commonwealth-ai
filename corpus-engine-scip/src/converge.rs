@@ -514,11 +514,7 @@ pub fn census(
 /// loops over the same defs; once the narrowing landed that would have been
 /// two implementations of one threshold (§10.6), and the gate and the feed
 /// could have disagreed silently.
-pub fn duplicate_count(
-    defs: &[TypeDef],
-    reached: &BTreeSet<String>,
-    scope: &SourceScope,
-) -> usize {
+pub fn duplicate_count(defs: &[TypeDef], reached: &BTreeSet<String>, scope: &SourceScope) -> usize {
     census(defs, reached, scope, false).reachable_names
 }
 
@@ -967,7 +963,13 @@ mod tests {
 
     /// One in-scope reference from `user` to `pkg`'s definition of `desc`.
     fn used_by(user: &str, pkg: &str, desc: &str) -> ScipRefRecord {
-        rf(user, "f().", pkg, desc, &format!("sovereign/crates/{user}/src/u.rs"))
+        rf(
+            user,
+            "f().",
+            pkg,
+            desc,
+            &format!("sovereign/crates/{user}/src/u.rs"),
+        )
     }
 
     #[test]
@@ -1009,7 +1011,12 @@ mod tests {
     fn a_collision_no_other_crate_reaches_is_not_counted() {
         let scope = SourceScope::default();
         let syms = vec![
-            sym("core", "title/Phase#", "sovereign/crates/core/src/t.rs", 482),
+            sym(
+                "core",
+                "title/Phase#",
+                "sovereign/crates/core/src/t.rs",
+                482,
+            ),
             sym("dev", "fsm/Phase#", "sovereign/crates/dev/src/f.rs", 40),
             sym("core", "m/Verdict#", "sovereign/crates/core/src/m.rs", 10),
             sym("mesh", "n/Verdict#", "sovereign/crates/mesh/src/n.rs", 20),
@@ -1099,7 +1106,12 @@ mod tests {
 
         // RED: the same noun minted a second time, in another crate, and used.
         let mut added = syms.clone();
-        added.push(sym("crate_b", "n/Register#", "sovereign/crates/b/src/n.rs", 30));
+        added.push(sym(
+            "crate_b",
+            "n/Register#",
+            "sovereign/crates/b/src/n.rs",
+            30,
+        ));
         let mut added_refs = base_refs.clone();
         added_refs.push(used_by("cli", "crate_b", "n/Register#"));
         assert_eq!(
@@ -1137,7 +1149,12 @@ mod tests {
     #[test]
     fn only_an_in_scope_cross_crate_reference_counts_as_reach() {
         let scope = SourceScope::default();
-        let syms = vec![sym("core", "m/Verdict#", "sovereign/crates/core/src/m.rs", 10)];
+        let syms = vec![sym(
+            "core",
+            "m/Verdict#",
+            "sovereign/crates/core/src/m.rs",
+            10,
+        )];
         let defs = type_defs(&syms, &scope);
 
         let same_crate = vec![rf(

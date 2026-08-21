@@ -141,7 +141,11 @@ impl FieldKey {
     /// `name: Vec<String>` — the one rendering, so a report and a JSON
     /// consumer never disagree about what a key is (§10.6).
     pub fn render(&self) -> String {
-        format!("{}: {}", self.name, if self.ty.is_empty() { "?" } else { &self.ty })
+        format!(
+            "{}: {}",
+            self.name,
+            if self.ty.is_empty() { "?" } else { &self.ty }
+        )
     }
 }
 
@@ -485,7 +489,10 @@ fn group(matches: Vec<ShapeMatch>) -> Vec<ShapeGroup> {
     fn find(parent: &mut BTreeMap<String, String>, x: &str) -> String {
         let mut cur = x.to_string();
         loop {
-            let p = parent.entry(cur.clone()).or_insert_with(|| cur.clone()).clone();
+            let p = parent
+                .entry(cur.clone())
+                .or_insert_with(|| cur.clone())
+                .clone();
             if p == cur {
                 return cur;
             }
@@ -660,13 +667,31 @@ mod tests {
     /// live specimen this verb exists for, reduced.
     fn citation_fixture() -> (Vec<ScipSymbolRecord>, Vec<ScipRefRecord>) {
         let mut syms = vec![
-            sym("core", "icd/ClaimCitation#", "sovereign/crates/core/src/icd.rs", 665),
-            sym("desktop", "cmds/DrCitation#", "sovereign/crates/desktop/src/cmds.rs", 779),
+            sym(
+                "core",
+                "icd/ClaimCitation#",
+                "sovereign/crates/core/src/icd.rs",
+                665,
+            ),
+            sym(
+                "desktop",
+                "cmds/DrCitation#",
+                "sovereign/crates/desktop/src/cmds.rs",
+                779,
+            ),
         ];
         let mut refs = Vec::new();
         for (pkg, owner, file) in [
-            ("core", "icd/ClaimCitation#", "sovereign/crates/core/src/icd.rs"),
-            ("desktop", "cmds/DrCitation#", "sovereign/crates/desktop/src/cmds.rs"),
+            (
+                "core",
+                "icd/ClaimCitation#",
+                "sovereign/crates/core/src/icd.rs",
+            ),
+            (
+                "desktop",
+                "cmds/DrCitation#",
+                "sovereign/crates/desktop/src/cmds.rs",
+            ),
         ] {
             for f in ["evidence_id", "url", "chunk_id"] {
                 let fd = format!("{owner}{f}.");
@@ -699,7 +724,10 @@ mod tests {
 
         assert_eq!(c.groups.len(), 1, "the 40 scaffolding rows must not group");
         let g = &c.groups[0];
-        assert_eq!(g.members, vec!["core::ClaimCitation", "desktop::DrCitation"]);
+        assert_eq!(
+            g.members,
+            vec!["core::ClaimCitation", "desktop::DrCitation"]
+        );
         assert!(
             (g.top_score - 1.0).abs() < 1e-9,
             "an identical signature is 1.000, got {}",
@@ -754,11 +782,11 @@ mod tests {
         let mut refs = Vec::new();
         background(&mut syms, &mut refs);
         let add = |syms: &mut Vec<ScipSymbolRecord>,
-                       refs: &mut Vec<ScipRefRecord>,
-                       pkg: &str,
-                       owner: &str,
-                       file: &str,
-                       fields: &[&str]| {
+                   refs: &mut Vec<ScipRefRecord>,
+                   pkg: &str,
+                   owner: &str,
+                   file: &str,
+                   fields: &[&str]| {
             for f in fields {
                 let fd = format!("{owner}{f}.");
                 syms.push(sym(pkg, &fd, file, 1));
@@ -766,11 +794,25 @@ mod tests {
             }
         };
         let rare = ["alpha_id", "beta_id", "gamma_id"];
-        add(&mut syms, &mut refs, "a", "m/Small#", "sovereign/crates/a/src/m.rs", &rare);
+        add(
+            &mut syms,
+            &mut refs,
+            "a",
+            "m/Small#",
+            "sovereign/crates/a/src/m.rs",
+            &rare,
+        );
         let big: Vec<String> = (0..12).map(|i| format!("extra{i}")).collect();
         let mut large: Vec<&str> = rare.to_vec();
         large.extend(big.iter().map(String::as_str));
-        add(&mut syms, &mut refs, "b", "n/Large#", "sovereign/crates/b/src/n.rs", &large);
+        add(
+            &mut syms,
+            &mut refs,
+            "b",
+            "n/Large#",
+            "sovereign/crates/b/src/n.rs",
+            &large,
+        );
 
         let sigs = field_signatures(&syms, &refs, &scope);
         let opts = ShapeOptions {
@@ -840,7 +882,12 @@ mod tests {
             }
         }
         let opts = ShapeOptions::default();
-        let typed = shape_census(&syms, &field_signatures(&syms, &refs, &scope), &scope, &opts);
+        let typed = shape_census(
+            &syms,
+            &field_signatures(&syms, &refs, &scope),
+            &scope,
+            &opts,
+        );
         assert_eq!(typed.matched_pairs, 0, "same names, different types");
         let named = shape_census(&syms, &field_signatures(&syms, &[], &scope), &scope, &opts);
         assert_eq!(named.matched_pairs, 1, "names alone cannot tell them apart");

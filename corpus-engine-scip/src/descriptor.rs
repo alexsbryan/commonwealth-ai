@@ -374,7 +374,11 @@ mod tests {
             "crate/",
         ] {
             let q = format!("{PFX}{not_a_field}");
-            assert_eq!(field_owner_and_name(&q), None, "must decline: {not_a_field}");
+            assert_eq!(
+                field_owner_and_name(&q),
+                None,
+                "must decline: {not_a_field}"
+            );
         }
     }
 
