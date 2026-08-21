@@ -81,7 +81,7 @@ use serde::Serialize;
 
 use crate::capability_map::pkg_and_desc;
 use crate::converge::{SourceScope, TypeDef};
-use crate::descriptor::{descriptor_kind, DescriptorKind};
+use crate::descriptor::field_owner_and_name;
 use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 
 /// Distinct referencing crates at which a type counts as ADOPTED rather than
@@ -274,22 +274,18 @@ pub fn type_fields(
         if !scope.admits(&s.file_path) {
             continue;
         }
-        if descriptor_kind(&s.qualified_name) != DescriptorKind::Field {
-            continue;
-        }
         // Colocated `mod tests` sits under a `/tests/` descriptor segment even
         // when the FILE is production — the same clause `type_defs` carries.
         if s.qualified_name.contains("/tests/") {
             continue;
         }
-        let Some(hash) = s.qualified_name.rfind('#') else {
+        // The split is `descriptor::field_owner_and_name`, not a local
+        // `rfind('#')`: `crate::shape::field_signatures` needs the same parse
+        // and two implementations of it is the §10.6 smell this crate exists
+        // to measure.
+        let Some((owner, field)) = field_owner_and_name(&s.qualified_name) else {
             continue;
         };
-        let owner = &s.qualified_name[..=hash];
-        let field = s.qualified_name[hash + 1..].trim_end_matches('.');
-        if field.is_empty() {
-            continue;
-        }
         out.entry(owner.to_string())
             .or_default()
             .insert(field.to_string());

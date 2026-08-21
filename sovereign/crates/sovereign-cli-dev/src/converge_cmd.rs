@@ -15,21 +15,44 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use corpus_engine_scip::converge::{
-    census, crate_dag, dossier, duplicate_count, render_census, render_dossier, type_defs,
-    SourceScope,
+    census, crate_dag, cross_crate_reached, dossier, duplicate_count, render_census,
+    render_dossier, type_defs, SourceScope,
 };
 use corpus_engine_scip::roles::{reach_index, render_roles, roles, type_fields};
+use corpus_engine_scip::shape::{field_signatures, render_shape, shape_census, ShapeOptions};
 use corpus_engine_scip::ScipGraph;
 
 const HELP: &str = "\
-svrn code converge <census|roles|noun|status> [options]
+svrn code converge <census|roles|shape|noun|status> [options]
 
-Duplicated concept IDENTITY over the SCIP graph — names defined as a type in
-more than one crate. Read-only; no daemon, no model, no build.
+Duplicated concept IDENTITY over the SCIP graph. Read-only; no daemon, no
+model, no build.
 
-  census                  what is duplicated, ranked
+  census                  what NAME is duplicated, ranked
+                          Counts a name only when >=2 crates each hold a
+                          definition another crate ALREADY references — a
+                          collision nothing outside the defining crate can
+                          reach has nothing to import and adoption cannot
+                          retire it. Both numbers are always printed.
+    --local               list the rows the reachability filter set aside
     --kin                 also count morphological family (over-collects)
     --limit N             rows to print (0 = all; default 40)
+
+  shape                   what SHAPE is duplicated — the renamed fork a name
+                          census structurally cannot see (`ClaimCitation` and
+                          `DrCitation` are one concept and share no name).
+                          Matches on (field name, field type) sets, IDF-
+                          weighted. NO type name is ever compared.
+    --threshold F         report matches at/above this score (default 0.50)
+    --min-shared N        shared keys a pair needs to be scored (default 3)
+    --rare-df N           a shared key held by <=N types counts as rare; a
+                          match with no rare key is not evidence (default 20)
+    --min-fields N        types with fewer named fields are skipped (default 2)
+    --names-only          drop field types from the key. Measured on this
+                          workspace at 4f64bdb2: 947 pairs past the gates
+                          instead of 669 — 42% MORE to adjudicate, same
+                          recall on the positive control.
+    --limit N             groups to print (0 = all; default 40)
 
   roles                   what each ROLE costs and who reuses it — population
                           and adoption share per role, plus the three concept
@@ -53,9 +76,10 @@ Common:
   --include <prefix>      restrict to a path prefix (repeatable)
   --json                  machine output, carrying the scope that produced it
 
-Three discovery feeds, and they do not overlap:
+Four discovery feeds, and they do not overlap:
   converge census           duplicated NAME      (six `ChatMessage` structs)
   converge roles            duplicated ROLE      (`AuditReport`+`DriftReport`)
+  converge shape            duplicated SHAPE     (`ClaimCitation`==`DrCitation`)
   svrn code dry-report      duplicated BEHAVIOUR (clone + near-clone bodies)
   svrn code suggest-seams   split proposals for an oversized FILE
   svrn code arch-report     crate coupling and the carrier symbols
@@ -77,6 +101,9 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     let mut kin = false;
     let mut json = false;
     let mut mint = false;
+    let mut local = false;
+    let mut names_only = false;
+    let mut shape_opts = ShapeOptions::default();
 
     let mut i = 1;
     while i < args.len() {
@@ -130,6 +157,48 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                     }
                 }
             }
+            "--threshold" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<f64>().ok()) {
+                    Some(v) => shape_opts.threshold = v,
+                    None => {
+                        eprintln!("error: --threshold requires a number");
+                        return 1;
+                    }
+                }
+            }
+            "--min-shared" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<usize>().ok()) {
+                    Some(v) => shape_opts.min_shared = v.max(1),
+                    None => {
+                        eprintln!("error: --min-shared requires a number");
+                        return 1;
+                    }
+                }
+            }
+            "--rare-df" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<usize>().ok()) {
+                    Some(v) => shape_opts.rare_df = v,
+                    None => {
+                        eprintln!("error: --rare-df requires a number");
+                        return 1;
+                    }
+                }
+            }
+            "--min-fields" => {
+                i += 1;
+                match args.get(i).and_then(|s| s.parse::<usize>().ok()) {
+                    Some(v) => shape_opts.min_fields = v.max(1),
+                    None => {
+                        eprintln!("error: --min-fields requires a number");
+                        return 1;
+                    }
+                }
+            }
+            "--names-only" => names_only = true,
+            "--local" => local = true,
             "--kin" => kin = true,
             "--json" => json = true,
             "--mint" => mint = true,
@@ -193,26 +262,54 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         return 1;
     }
 
+    // Every verb reads the ref table now. `census` and `status` joined `roles`
+    // and `noun` on 2026-08-21, when the ratchet started counting only
+    // collisions another crate can actually reach — that predicate IS a query
+    // over references, so there is no version of the narrowing that does not
+    // read them. Measured cost on this workspace: `census` 0.8s -> 5.0s. That
+    // is one more table scan, not a second index pass, and a discovery feed
+    // that answers in five seconds is still a discovery feed.
+    let refs = match graph.iter_all_refs().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("error: reading refs: {e}");
+            return 1;
+        }
+    };
+    let reached = cross_crate_reached(&defs, &refs, &scope);
+
     match sub.as_str() {
         "census" => {
-            let c = census(&defs, &scope, kin);
+            let c = census(&defs, &reached, &scope, kin);
             if json {
                 println!("{}", serde_json::to_string_pretty(&c).unwrap_or_default());
             } else {
-                print!("{}", render_census(&c, limit, kin));
+                print!("{}", render_census(&c, limit, kin, local));
+            }
+            0
+        }
+        "shape" => {
+            // `--names-only` is the arm that made carrying field types worth
+            // it, so it stays reachable rather than being an argument in a
+            // commit message: pass no refs and the signature is names alone.
+            let sigs = if names_only {
+                field_signatures(&symbols, &[], &scope)
+            } else {
+                field_signatures(&symbols, &refs, &scope)
+            };
+            let c = shape_census(&symbols, &sigs, &scope, &shape_opts);
+            if json {
+                println!("{}", serde_json::to_string_pretty(&c).unwrap_or_default());
+            } else {
+                match graph.last_indexed_head().await {
+                    Some(h) => println!("graph: {corpus_id} @ {h}\n"),
+                    None => println!("graph: {corpus_id} @ unknown commit\n"),
+                }
+                print!("{}", render_shape(&c, limit));
             }
             0
         }
         "roles" => {
-            // Reach needs the ref table; the role tier is the only converge
-            // verb besides `noun` that reads it.
-            let refs = match graph.iter_all_refs().await {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: reading refs: {e}");
-                    return 1;
-                }
-            };
             let fields = type_fields(&symbols, &scope);
             let reach = reach_index(&defs, &refs, &scope);
             let c = roles(&defs, &fields, &reach, &scope, min_population);
@@ -234,13 +331,6 @@ pub(crate) async fn run(args: &[String]) -> i32 {
                 eprintln!("error: `converge noun` requires a name, e.g. `converge noun Verdict`");
                 return 1;
             };
-            let refs = match graph.iter_all_refs().await {
-                Ok(r) => r,
-                Err(e) => {
-                    eprintln!("error: reading refs: {e}");
-                    return 1;
-                }
-            };
             let dag = crate_dag(&refs, &scope);
             let d = dossier(&name, &defs, &refs, &dag, &scope);
             if json {
@@ -255,7 +345,7 @@ pub(crate) async fn run(args: &[String]) -> i32 {
             // scope that produced `defs`, so the graph_lag line and the number
             // can never be about different things.
             let lag = assess_lag(graph.last_indexed_head().await, &defs, &scope);
-            cmd_status(&defs, &baseline, mint, json, &lag, &corpus_id)
+            cmd_status(&defs, &reached, &scope, &baseline, mint, json, &lag, &corpus_id)
         }
         other => {
             eprintln!("error: unknown converge subcommand `{other}`");
@@ -554,15 +644,22 @@ pub(crate) fn assess_lag(
 
 /// The ratchet. Exits 1 when the count rises — a duplicate was ADDED, which is
 /// the failure the line-count arch-gate cannot catch.
+#[allow(clippy::too_many_arguments)]
 fn cmd_status(
     defs: &[corpus_engine_scip::converge::TypeDef],
+    reached: &BTreeSet<String>,
+    scope: &SourceScope,
     baseline: &std::path::Path,
     mint: bool,
     json: bool,
     lag: &Lag,
     corpus_id: &str,
 ) -> i32 {
-    let n = duplicate_count(defs);
+    let n = duplicate_count(defs, reached, scope);
+    // The wider number travels with the narrow one, always. The ratchet counts
+    // only collisions another crate can reach; a reader who sees `34` without
+    // `265` beside it cannot tell a narrowing from an improvement (§18.6).
+    let colliding = census(defs, reached, scope, false).colliding_names;
     let prior: Option<usize> = std::fs::read_to_string(baseline)
         .ok()
         .and_then(|s| s.split_whitespace().next()?.parse().ok());
@@ -585,13 +682,20 @@ fn cmd_status(
             eprintln!("error: writing {}: {e}", baseline.display());
             return 1;
         }
-        println!("minted {n} -> {}", baseline.display());
+        println!(
+            "minted {n} -> {}   ({colliding} names collide; {n} of them are reachable \
+             from another crate and countable)",
+            baseline.display()
+        );
         return 0;
     }
 
     if json {
         let body: BTreeMap<&str, serde_json::Value> = [
             ("duplicated_names", serde_json::json!(n)),
+            // Every colliding name, reachable or not — the population the
+            // ratchet number is drawn from.
+            ("colliding_names", serde_json::json!(colliding)),
             ("baseline", serde_json::json!(prior)),
             (
                 "delta",
@@ -615,7 +719,8 @@ fn cmd_status(
     match prior {
         None => {
             if !json {
-                println!("duplicated names: {n}");
+                println!("duplicated names: {n} of {colliding} colliding (the rest are \
+                          unreachable from any other crate)");
                 print!("{}", lag.render(corpus_id));
                 println!(
                     "baseline: none — mint one with `svrn code converge status --mint`\n\
@@ -628,7 +733,8 @@ fn cmd_status(
         Some(p) => {
             let delta = n as i64 - p as i64;
             if !json {
-                println!("duplicated names: {n}");
+                println!("duplicated names: {n} of {colliding} colliding (the rest are \
+                          unreachable from any other crate)");
                 println!("baseline: {p}   delta: {delta:+}");
                 print!("{}", lag.render(corpus_id));
             }

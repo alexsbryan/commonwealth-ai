@@ -2,10 +2,20 @@
 //! `cargo xtask concept-gate` — the concept-duplication ratchet, relayed.
 //!
 //! One noun, one owner. The ratchet number is "how many names are defined as a
-//! type in more than one first-party crate", frozen in
+//! type in more than one first-party crate, WHERE at least two of those crates'
+//! definitions are already referenced across a crate boundary", frozen in
 //! `quality/baselines/concepts.txt`; the gate is red when that number RISES,
 //! which is a duplicate ADDED. It fires on additions by construction and never
 //! on pre-existing code — the whole register is already inside the baseline.
+//!
+//! The reachability clause landed 2026-08-21 and re-minted the baseline in the
+//! same commit. Before it, 87% of the rows named a collision between two local
+//! helpers that no amount of adoption could retire; see
+//! `corpus_engine_scip::converge::cross_crate_reached`. A baseline stamped
+//! before that commit is not comparable to one stamped after it (279 -> 33). The relayed
+//! `--json` body carries `colliding_names` (every collision) beside
+//! `duplicated_names` (the countable ones), so the narrowing is visible here
+//! rather than only in the tool that applies it.
 //!
 //! This gate does NOT recount. `svrn code converge status` owns the number and
 //! this is a relay (§10.6, one decider): the count comes from the SCIP graph
