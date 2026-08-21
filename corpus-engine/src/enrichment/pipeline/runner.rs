@@ -1896,10 +1896,10 @@ impl PhaseRunner {
         let response = (self.chat)(&prompt).await?;
         let parsed = self.pipeline.parse_phase7(&response)?;
 
-        let gaps: Vec<Gap> = parsed
+        let gaps: Vec<ExtractedGap> = parsed
             .into_iter()
             .enumerate()
-            .map(|(i, p)| Gap {
+            .map(|(i, p)| ExtractedGap {
                 id: format!("gap_{:04}", i + 1),
                 gap_text: p.gap_text,
                 evidence: p.evidence,
