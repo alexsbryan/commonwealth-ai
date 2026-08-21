@@ -51,7 +51,10 @@ pub fn form_queries(
         .enumerate()
         .map(|(i, g)| FormedQuery {
             id: format!("q{}", i + 1),
-            text: g.actionable_query.clone(),
+            // t6f rung 2: gap-derived acquisition — use the gap text itself
+            // as the search query. The gap phrasing is already search-shaped
+            // by design (order deep-research-t6f).
+            text: g.text.clone(),
             from_gap_id: Some(g.id.clone()),
             formed_by: "gap-template".to_string(),
             provider: "deterministic".to_string(),
@@ -556,7 +559,29 @@ mod tests {
         }];
         let fl = form_queries("run", "hash", 2, &gaps, &[]);
         assert_eq!(fl.queries.len(), 1);
-        assert_eq!(fl.queries[0].text, "Meridian Bridge completion date 1873");
+        // t6f rung 2: gap text is now used as the query (gap phrasing is search-shaped)
+        assert_eq!(fl.queries[0].text, "The Meridian Bridge was completed in 1873.");
+        assert_eq!(fl.queries[0].formed_by, "gap-template");
+        assert_eq!(fl.queries[0].from_gap_id.as_deref(), Some("g1"));
+    }
+
+    /// t6f rung 2: gap-derived acquisition — round N+1's search queries
+    /// are composed from the gap ledger's open texts (the gap text itself,
+    /// not the actionable_query template). The gap phrasing is already
+    /// search-shaped by design (order: deep-research-t6f).
+    #[test]
+    fn gap_derived_queries_use_gap_text() {
+        let gaps = vec![Gap {
+            id: "g1".to_string(),
+            text: "What year did the Meridian Bridge open?".to_string(),
+            actionable_query: "Meridian Bridge completion year".to_string(),
+            from_claim_id: Some("c2".to_string()),
+            corroboration: None,
+        }];
+        let fl = form_queries("run", "hash", 2, &gaps, &[]);
+        assert_eq!(fl.queries.len(), 1);
+        // The gap text itself is the query (search-shaped by design)
+        assert_eq!(fl.queries[0].text, "What year did the Meridian Bridge open?");
         assert_eq!(fl.queries[0].formed_by, "gap-template");
         assert_eq!(fl.queries[0].from_gap_id.as_deref(), Some("g1"));
     }
