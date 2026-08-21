@@ -72,6 +72,7 @@ pub async fn fetch_round(
                     .unwrap_or_else(|| id.clone()),
                 error: format!("terminal-poll-failed: {e}"),
                 absent: true,
+                retries: 0,
             })
             .collect();
         return Ok(EvidenceWindow {
@@ -99,6 +100,7 @@ pub async fn fetch_round(
                 url: id.clone(),
                 error: "hit-missing-from-round".to_string(),
                 absent: true,
+                retries: 0,
             });
             continue;
         };
@@ -124,21 +126,58 @@ pub async fn fetch_round(
             }
             continue;
         }
-        // The ONE decider gate — no Allow, no fetch.
-        let verdict = decider
-            .allow(FAMILY_WEB_FETCH, KEY_FETCH_PAGES, 1, at_unix)
-            .await?;
-        if !verdict.allowed() {
-            failures.push(FetchFailure {
-                url: hit.url.clone(),
-                error: "budget-refused".to_string(),
-                absent: true,
-            });
-            continue;
+        // drb1-r1 Item 2: fetch retry with exponential backoff.
+        // Retry up to 2 times (3 total attempts) before recording failure.
+        // Each retry attempt consumes budget via decider.allow().
+        let mut body = None;
+        let mut last_error = None;
+        let mut retry_count_used = 0u32;
+        const MAX_RETRIES: u32 = 2;
+
+        for retry_count in 0..=MAX_RETRIES {
+            // The ONE decider gate — no Allow, no fetch. Each retry attempt
+            // must consume budget separately.
+            let verdict = decider
+                .allow(FAMILY_WEB_FETCH, KEY_FETCH_PAGES, 1, at_unix)
+                .await?;
+            if !verdict.allowed() {
+                failures.push(FetchFailure {
+                    url: hit.url.clone(),
+                    error: "budget-refused".to_string(),
+                    absent: true,
+                    retries: retry_count_used,
+                });
+                break;
+            }
+
+            match port.web_fetch(&hit.url).await {
+                Ok(b) => {
+                    body = Some(b);
+                    break;
+                }
+                Err(e) => {
+                    last_error = Some(e);
+                    retry_count_used = retry_count;
+                    if retry_count < MAX_RETRIES {
+                        let backoff_ms = 1000 * 2_u64.pow(retry_count);
+                        tracing::debug!(
+                            target: "deep_research",
+                            url = %hit.url,
+                            retry_count,
+                            next_backoff_ms = backoff_ms,
+                            "fetch failed, retrying with backoff"
+                        );
+                        tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                    }
+                }
+            }
         }
-        let body = match port.web_fetch(&hit.url).await {
-            Ok(b) => b,
-            Err(e) => {
+
+        let body = match body {
+            Some(b) => b,
+            None => {
+                // All retries exhausted — record as failure and mark URL dead.
+                let error = last_error.unwrap();
                 // The URL is dead for the rest of the run: a later
                 // round's fetch list re-admitting it is refused with
                 // no decider call and no re-spend (the task-56 shape).
@@ -154,8 +193,9 @@ pub async fn fetch_round(
                 }
                 failures.push(FetchFailure {
                     url: hit.url.clone(),
-                    error: e,
+                    error: error.clone(),
                     absent: true,
+                    retries: retry_count_used,
                 });
                 continue;
             }
@@ -502,10 +542,17 @@ mod tests {
             )
             .await
             .unwrap();
-            assert_eq!(port.calls.lock().unwrap().len(), 4, "round 1 fetches all 4");
+            // drb1-r1 Item 2: with retry logic, each failed URL is now retried twice
+            // before being marked dead, so we expect 12 port calls (4 URLs * 3 attempts each)
+            assert_eq!(
+                port.calls.lock().unwrap().len(),
+                12,
+                "with retry logic, each failed URL is attempted 3 times (1 initial + 2 retries)"
+            );
             assert_eq!(round1.fetch_failures.len(), 4);
             assert!(round1.dedup_refused.is_empty(), "round 1 refusals are none");
-            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
+            // Each URL was attempted 3 times, spending 3 from allowance
+            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 0);
 
             for round in 2..=3 {
                 let w = fetch_round(
@@ -531,12 +578,12 @@ mod tests {
                     "round {round} refuses every dead URL, recorded on the window"
                 );
             }
-            // No re-spend: the allowance paid for exactly 4 fetches.
-            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
-            assert_eq!(
-                port.calls.lock().unwrap().len(),
-                4,
-                "the port is called exactly 4 times across 3 rounds"
+            // drb1-r1 Item 2: With retry logic, all 12 spends happened in round 1
+            // (4 URLs × 3 attempts each), so remaining is 0.
+            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 0);
+            assert!(
+                port.calls.lock().unwrap().len() == 12,
+                "with retry logic, port called 12 times total (4 URLs × 3 attempts)"
             );
             assert!(
                 urls.iter().all(|u| decider.is_fetch_dead(u)),
@@ -548,13 +595,15 @@ mod tests {
             assert_eq!(ledger.refused_urls, urls);
 
             // A resume replays the dead set: the same 4 URLs are refused
-            // without any spend.
+            // without any spend. With retry logic, round 1 spent all 12 (4 URLs × 3
+            // attempts), so the restored state has 0 remaining.
             let mut restored = SpendDecider::restore("r-dead", "h", &allowance, &journal).unwrap();
             assert!(
                 urls.iter().all(|u| restored.is_fetch_dead(u)),
                 "restore replays the dead set"
             );
-            assert_eq!(restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
+            // drb1-r1 Item 2: All 12 budget spent in round 1 (4 URLs × 3 retries)
+            assert_eq!(restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 0);
             let w = fetch_round(
                 &port,
                 &mut restored,
@@ -570,10 +619,12 @@ mod tests {
             .unwrap();
             assert!(w.chunks.is_empty() && w.fetch_failures.is_empty());
             assert_eq!(w.dedup_refused, urls);
+            // drb1-r1 Item 2: With retry logic, round 1 spent all 12, remaining is 0.
+            // The resumed round refuses dead URLs without spending, so remaining stays 0.
             assert_eq!(
                 restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES),
-                8,
-                "the resumed run spends nothing on dead URLs"
+                0,
+                "the resumed run spends nothing on dead URLs (remaining stays 0)"
             );
         });
     }

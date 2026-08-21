@@ -1082,6 +1082,9 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         web_fetch_allowance: fetch_allowance,
         posture: ShardingPrivacy::LocalOnly,
         consent,
+        max_rounds_override: None,
+        max_search_override: None,
+        max_fetch_override: None,
     };
 
     // The launch sidecar (order deep-research-t3a): the run's backend

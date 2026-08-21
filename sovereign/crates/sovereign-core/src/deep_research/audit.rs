@@ -205,21 +205,29 @@ pub fn split_claims(draft: &str) -> Vec<String> {
 /// The ONE decider over the round window's own fields (order
 /// deep-research-t7b, pre-registered — §10.6: one implementation per
 /// threshold; §2: closed sets are enums). A window that ADDED evidence
-/// is None; the four empty shapes are the closed enum. The round's own
+/// is None; the five empty shapes are the closed enum. The round's own
 /// window is per-round (NEW chunks only), so "refused everything"
 /// reads as empty-chunks + empty-failures + non-empty dedup_refused —
 /// the t6c pinned shape.
+///
+/// drb1-r1 Item 2: Distinguishes `RetriesExhausted` (fetch failures
+/// after retries) from `Failed` (immediate failures).
 pub fn empty_round_reason(window: &EvidenceWindow) -> Option<EmptyRoundReason> {
     if !window.chunks.is_empty() {
         return None;
     }
     let failed = !window.fetch_failures.is_empty();
     let refused = !window.dedup_refused.is_empty();
-    match (failed, refused) {
-        (true, true) => Some(EmptyRoundReason::Mixed),
-        (true, false) => Some(EmptyRoundReason::Failed),
-        (false, true) => Some(EmptyRoundReason::Refused),
-        (false, false) => Some(EmptyRoundReason::NoAdmits),
+
+    // drb1-r1 Item 2: Check if any failure exhausted retries
+    let retries_exhausted = window.fetch_failures.iter().any(|f| f.retries > 0);
+
+    match (failed, refused, retries_exhausted) {
+        (true, true, _) => Some(EmptyRoundReason::Mixed),
+        (true, false, true) => Some(EmptyRoundReason::RetriesExhausted),
+        (true, false, false) => Some(EmptyRoundReason::Failed),
+        (false, true, _) => Some(EmptyRoundReason::Refused),
+        (false, false, _) => Some(EmptyRoundReason::NoAdmits),
     }
 }
 
@@ -1702,10 +1710,27 @@ mod tests {
                 url: "https://example.com/a".to_string(),
                 error: "fetch failed".to_string(),
                 absent: false,
+                retries: 0,
             }],
             Vec::new(),
         );
         assert_eq!(empty_round_reason(&failed), Some(EmptyRoundReason::Failed));
+
+        // RetriesExhausted: fetch failed after exhausting retries.
+        let retries_exhausted = empty_window(
+            2,
+            vec![FetchFailure {
+                url: "https://example.com/b".to_string(),
+                error: "fetch failed after retries".to_string(),
+                absent: false,
+                retries: 2,
+            }],
+            Vec::new(),
+        );
+        assert_eq!(
+            empty_round_reason(&retries_exhausted),
+            Some(EmptyRoundReason::RetriesExhausted)
+        );
 
         // Mixed: some refused, some failed.
         let mixed = empty_window(
@@ -1714,6 +1739,7 @@ mod tests {
                 url: "https://example.com/b".to_string(),
                 error: "fetch failed".to_string(),
                 absent: false,
+                retries: 0,
             }],
             vec!["https://estate.example/seed-02".to_string()],
         );

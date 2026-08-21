@@ -442,6 +442,9 @@ pub enum EmptyRoundReason {
     Refused,
     /// Every admitted fetch failed (dead URLs, fetch errors).
     Failed,
+    /// Every admitted fetch was retried the maximum times (2 retries)
+    /// and still failed (drb1-r1 Item 2).
+    RetriesExhausted,
     /// Some refused, some failed.
     Mixed,
     /// Nothing was admitted to fetch this round (no hits).
@@ -453,6 +456,7 @@ impl EmptyRoundReason {
         match self {
             Self::Refused => "all-admitted-fetches-refused",
             Self::Failed => "all-admitted-fetches-failed",
+            Self::RetriesExhausted => "all-admitted-fetches-retries-exhausted",
             Self::Mixed => "mixed-refused-and-failed",
             Self::NoAdmits => "no-admitted-hits",
         }
@@ -658,6 +662,10 @@ pub struct FetchFailure {
     pub url: String,
     pub error: String,
     pub absent: bool,
+    /// drb1-r1 Item 2: number of retries attempted for this fetch.
+    /// 0 = immediate failure, 1 = failed after 1 retry, 2 = failed after 2 retries.
+    #[serde(default)]
+    pub retries: u32,
 }
 
 // ---------------------------------------------------------------------------

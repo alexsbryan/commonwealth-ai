@@ -132,6 +132,15 @@ pub struct RunConfig {
     /// egress boundary, and recorded in the run manifest. `None` is
     /// default-deny: non-public-web egress refuses.
     pub consent: Option<crate::egress::ConsentGrant>,
+    /// drb1-r1 Item 3: Optional caller overrides that can only tighten
+    /// the charter's ceilings downward. Callers may specify lower values
+    /// to constrain resource usage; higher values are clamped to the charter.
+    #[serde(default)]
+    pub max_rounds_override: Option<u32>,
+    #[serde(default)]
+    pub max_search_override: Option<u32>,
+    #[serde(default)]
+    pub max_fetch_override: Option<u32>,
 }
 
 /// The run's terminal report card.
@@ -1800,6 +1809,26 @@ impl Controller {
                 ) > 0
                 && self.decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES) > 0;
             if !continue_to_web {
+                // drb1-r1 Item 1 (F4 stop rule): If gaps are growing AND round budget
+                // remains, consume one more round instead of stopping early.
+                let gaps_growing = gaps_after > gaps_before;
+                let round_budget_remains = round < max_rounds;
+
+                if gaps_growing && round_budget_remains {
+                    tracing::debug!(
+                        target: "deep_research",
+                        run_id = %self.config.run_id,
+                        round,
+                        gaps_before,
+                        gaps_after,
+                        max_rounds,
+                        "drb1-r1 F4: gaps growing with round budget remaining — continuing to next round"
+                    );
+                    // Don't call finish — let the loop continue to next round naturally
+                    // The for loop will increment round and continue the iteration
+                    continue;
+                }
+
                 // BudgetExhausted (or the F16 refusal): done-partial.
                 return self
                     .finish(&draft, round, gaps_before, gaps_after, true)
@@ -2144,7 +2173,59 @@ impl Controller {
 /// The charter, derived from the config alone (FR-3: thresholds frozen
 /// at launch). A free function so the controller can be born with its
 /// real identity — see [`Controller::start`].
+///
+/// drb1-r1 Item 3: Applies caller overrides with downward-only clamping.
 fn build_charter(config: &RunConfig) -> Charter {
+    // Apply overrides with downward-only clamping (callers can only tighten,
+    // never raise above the charter's configured ceilings).
+    let max_rounds = if let Some(override_val) = config.max_rounds_override {
+        let clamped = override_val.min(config.max_rounds);
+        if clamped != config.max_rounds {
+            tracing::debug!(
+                target: "deep_research",
+                from = override_val,
+                to = clamped,
+                charter_max = config.max_rounds,
+                "caller tightened max_rounds (clamped to charter ceiling)"
+            );
+        }
+        clamped
+    } else {
+        config.max_rounds
+    };
+
+    let web_search_queries = if let Some(override_val) = config.max_search_override {
+        let clamped = override_val.min(config.web_search_allowance);
+        if clamped != config.web_search_allowance {
+            tracing::debug!(
+                target: "deep_research",
+                from = override_val,
+                to = clamped,
+                charter_max = config.web_search_allowance,
+                "caller tightened max_search (clamped to charter ceiling)"
+            );
+        }
+        clamped
+    } else {
+        config.web_search_allowance
+    };
+
+    let web_fetch_pages = if let Some(override_val) = config.max_fetch_override {
+        let clamped = override_val.min(config.web_fetch_allowance);
+        if clamped != config.web_fetch_allowance {
+            tracing::debug!(
+                target: "deep_research",
+                from = override_val,
+                to = clamped,
+                charter_max = config.web_fetch_allowance,
+                "caller tightened max_fetch (clamped to charter ceiling)"
+            );
+        }
+        clamped
+    } else {
+        config.web_fetch_allowance
+    };
+
     Charter {
         icd: "charter".to_string(),
         version: icd::ICD_VERSION,
@@ -2153,7 +2234,7 @@ fn build_charter(config: &RunConfig) -> Charter {
         seed_id: config.seed_id.clone(),
         created_at_unix: now_unix(),
         charter: CharterValues {
-            max_rounds: config.max_rounds,
+            max_rounds,
             evidence_window_max_chunks: config.evidence_window_max_chunks,
             containment: icd::ContainmentConfig {
                 trigger: "judge-supported".to_string(),
@@ -2165,8 +2246,8 @@ fn build_charter(config: &RunConfig) -> Charter {
                 eps_quota: config.eps_quota,
             },
             budget: icd::BudgetAllowance {
-                web_search_queries: config.web_search_allowance,
-                web_fetch_pages: config.web_fetch_allowance,
+                web_search_queries,
+                web_fetch_pages,
             },
             custody: CustodyPolicy {
                 stamp_required: true,
@@ -2316,6 +2397,9 @@ mod tests {
             web_fetch_allowance: 4,
             posture: ShardingPrivacy::LocalOnly,
             consent: None,
+            max_rounds_override: None,
+            max_search_override: None,
+            max_fetch_override: None,
         }
     }
 

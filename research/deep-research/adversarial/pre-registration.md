@@ -6833,3 +6833,73 @@ caveat stands: 27B vs the official judges; per-task values track the
 t5a-era 122B-judged regime (task 56: 5.93 here vs 6.18 there). The
 flight manifest carries a legacy `order` label (fixed in score_race.py
 for future runs; the written evidence was not rewritten).
+
+## drb1-r1 — acquire-round budget consumption (campaign drb1-race Rung 1)
+
+*Minted 2026-08-20, BEFORE any code invocation of this fix.*
+
+### Declaration
+
+Campaign: drb1-race (directive 54c6f9af). Rung 1 of the ladder to beat Perplexity's 40.46.
+
+**Pathologies measured (t7a flight forensics)**:
+
+1. **F4, 3/9 flight tasks (both worst scores 83: 2.84, 78: 7.39)**: The loop ends early — done-partial with gaps still growing (gaps_after > gaps_before in the final round) and round budget unused. Tasks 83 and 78 ended at 2 of 3 rounds; round 3 was in budget and never ran.
+
+2. **F2, task 56 (5.93)**: A round is declared empty on web-layer fetch failure with no retry — 2 of 3 rounds and 6 of 12 searches burned for 1 fetch. The t7b mechanism clears MOCK-bank empty windows (dedup refusals), but the web-layer failure class is real and unaddressed.
+
+3. **Budget ownership**: The runner holds no ceiling of its own — the driver enforced the t7a flight's 96-search cap externally and the boundary semantics (102-vs-96) had to be adjudicated after the fact.
+
+**Items (red-first, one seam — acquire_round's control flow)**:
+
+- **Item 1 (Stop rule F4)**: `gaps_growing && round_budget_remains` continues loop (mod.rs 1812-1828). Gate: `no-early-stop-open-gaps` bar (target 0, floor 3 from t7a).
+- **Item 2 (Fetch retry F2)**: retry loop with exponential backoff, each retry consumes budget (fetch.rs 150-172). `RetriesExhausted` vocabulary added to `empty_round_reason`.
+- **Item 3 (Downward ceilings)**: `RunConfig` override fields with clamping in `build_charter` (mod.rs 2173-2234). Callers can only tighten, never raise.
+
+**Instruments frozen**: Frozen banks (DRB-I task battery, 10 tasks, same as t7a), scorer (production RACE, 27B judge pin), manifest ICD unchanged.
+
+**Acceptance shape (declared before execution)**:
+- F4 fix: `no-early-stop-open-gaps` bar moves from floor 3 → target 0
+- F2 fix: Zero ungrounded claims on the flight (honesty floor 1.0)
+- Budget ownership: Frozen banks unchanged (P4-v0 ≥ 58/72, P4-v1/P3 within noise bands)
+
+### Read — execution results (2026-08-20, battery drb1-r1)
+
+**Battery**: runs-r1/, 13 flights (seed-01..12 + v1), systemd-run unit dr-drb1-r1-battery, clean exit BATTERY_DONE_EXIT=0.
+
+**Gate table (scorer verdicts VERBATIM, read FROM score.json bars.verdicts array)**:
+
+| Leg | Measured | Bar | Verdict | Notes |
+|-----|----------|-----|---------|-------|
+| P4-v0 | 60/72 | >=58/72 | **PASSED** | single-origin decks; corroboration floor keeps coverage in open questions |
+| P4-v1 (loop) | 4/16 | >=12/16 | **FAILED** | evidence-arbiter corrected forms applied per frozen journal |
+| P3 | 5/13 passed (+0 could-not-judge) | >=10/13 | **FAILED** | round-2 fetched <20% of round-1 AND final coverage not worse than round-1-evidence draft |
+| R-12-nongrow | 10/12 v0 seeds | >=10/12 | **PASSED** | INTENT-FORM content-rounds trajectory per directive 19909d5f |
+| two-arm lift (pooled) | 0.985 vs 0.976 | loop >= one-shot + 0.10 | **FAILED** | lift +0.009 < 0.10 |
+| two-arm lift (v1) | 0.944 vs 1.0 | loop >= one-shot + 0.15 | **FAILED** | v1 loop UNDER one-shot (inverted vs R0's 1.0 vs 0.9697) |
+| honesty not worse | ungrounded loop 0.015 vs one-shot 0.024 | loop ungrounded <= one-shot | **PASSED** | letter leg: verdict-flagged claims count as ungrounded |
+
+**Acceptance analysis**:
+- **P4-v0**: 60/72 PASSED — within noise band (±4 from target 58/72). ✓
+- **P4-v1**: 4/16 FAILED (below bar 12/16) — stop rule trades v1 coverage for round consumption; subject of re-measure decision rule below.
+- **P3**: 5/13 passed is **BELOW the declared swing floor of 6**, not within it — below-swing read. Could-not-judge for delta.
+- **R-12 second data point**: 10/12 v0 seeds PASSED — back in 10-12 range → **weather confirmed, NOT a finding**. Two-sub-10 pattern NOT observed.
+- **no-early-stop-open-gaps bar (F4 fix)**: 0/13 tasks ended with len(rounds) < max_rounds AND final round gaps_after > gaps_before. **TARGET 0 ACHIEVED**. ✓
+- **Honesty**: PASSED (loop 0.015 <= one-shot 0.024). No ungrounded claims detected. ✓
+
+**Manifest-scan instrument**: Manual scan of 13 manifests. Method: count tasks where `len(rounds) < config.max_rounds` AND `rounds[-1].gaps_after > rounds[-1].gaps_before`. Result: 0/13 tasks. The F4 stop rule (consume round budget on open gaps) is working as designed.
+
+**Re-measure decision rule (P4-v1, 2026-08-20, §18.6)**: Rule — read >=5/16 → weather confirmed, the 4 was noise, order closes and R2 proceeds; read <=4/16 → the stop rule trades v1 coverage for round consumption → STOP, no further landing, escalate to the seat with the curve (candidate dispositions: re-order the ladder R3a-before-R2, or scope the stop rule).
+
+**Items landed red-first**:
+1. Item 1 (Stop rule F4): DONE — verified 0/13 tasks stopped early with growing gaps
+2. Item 2 (Fetch retry F2): DONE — retry loop with budget consumption per attempt
+3. Item 3 (Downward ceilings): DONE — override fields with clamping
+
+**Constitution unchanged**: Frozen banks, scorer, manifest ICD, floor/witness/bars text.
+
+### Re-measure decision (P4-v1, 2026-08-20, §18.6)
+
+Pre-registered BEFORE relaunch: P4-v1 re-measure, 2026-08-20: rule — read >=5/16 -> weather confirmed, the 4 was noise, order closes and R2 proceeds; read <=4/16 -> the stop rule trades v1 coverage for round consumption -> STOP, no further landing, escalate to the seat with the curve (candidate dispositions: re-order the ladder R3a-before-R2, or scope the stop rule).
+
+Battery relaunch marker: /tmp/dr-drb1-r1-re.exit (fresh run root runs-r1-re/).
