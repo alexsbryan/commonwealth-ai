@@ -43,7 +43,6 @@ use tracing::debug;
 
 use crate::types::{Custody, SearchPrivacy};
 
-
 /// A run-scoped typed consent grant: the operator's release of a
 /// custody floor for ONE run. Default-deny — the absence of a grant
 /// releases nothing but public-web material. Recorded in the run

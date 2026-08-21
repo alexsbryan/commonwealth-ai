@@ -56,7 +56,7 @@
 //! [`Grain::may_be_quoted`] on the [`Origin`]. Neither can be misspelled, and
 //! neither can be absent.
 
-use kernel_types::{ContentHash, Custody, CorpusId, Grain, Locator, Origin, Seal, Server, Source};
+use kernel_types::{ContentHash, CorpusId, Custody, Grain, Locator, Origin, Seal, Server, Source};
 use serde::Serialize;
 
 use crate::error::Result;
