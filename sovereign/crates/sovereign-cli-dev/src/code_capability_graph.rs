@@ -64,6 +64,10 @@ struct FindingsFile {
 /// One code-vs-docs verdict. Joined to a capability on the composite key
 /// `(label, n_entries, n_core)` — see [`finding_key`] — because `label` alone
 /// collides across distinct clusters.
+///
+/// NOT `sovereign_mesh::source_content_validator::Finding` (a tool-output
+/// validation finding); this is a Deserialize-only row of the
+/// capability-graph report file.
 #[derive(Deserialize)]
 struct Finding {
     /// "corroborated" | "undocumented" | "drifted".
@@ -79,6 +83,9 @@ struct Finding {
 
 // ─── output shapes (inlined into the HTML as JSON) ─────────────────────────
 
+/// NOT `sovereign_tools::code::suggest_seams::Member`, which carries SCIP
+/// spans for a seam proposal; this is the render shape inlined into the
+/// HTML as JSON.
 #[derive(Serialize)]
 struct Member {
     name: String,

@@ -225,6 +225,9 @@ pub(super) async fn cmd_entities(args: &[String]) -> i32 {
     0
 }
 
+/// NOT `sovereign_contracts::types::document::EntityKind` (eight
+/// document-analysis variants) and not `corpus_engine::pii`'s; this is the
+/// three-way coarsening the awareness command reports.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum EntityKind {
     Person,

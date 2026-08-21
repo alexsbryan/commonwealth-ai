@@ -301,6 +301,10 @@ fn resolve_artifacts(cfg: &RunCfg) -> Result<ResolvedArtifacts, String> {
 /// One step in the agent-authored plan. Each step is a discrete unit
 /// of work bounded by an executable `verify_cmd`. The runner refuses
 /// to mark a step `Done` until the verify command exits zero.
+///
+/// NOT `sovereign_contracts::types::Step`, which is a DAG node with a
+/// `StepKind` executor; this is one `plan.json` step bounded by a shell
+/// `verify_cmd`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Step {
     id: String,
@@ -350,6 +354,10 @@ enum StepState {
 /// for what work remains. The runner mutates `state` / `attempts`
 /// in place after each EXECUTE phase; the agent rewrites the plan
 /// (with `revision` bumped) during REASSESS.
+///
+/// NOT `sovereign_contracts::types::Plan`, which is a planner DAG (`TaskId`
+/// + `edges`); this is the on-disk `plan.json` an external agent rewrites,
+/// versioned by `schema_version`/`revision`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Plan {
     #[serde(default = "default_schema_version")]
@@ -488,6 +496,9 @@ impl Plan {
 
 /// Phase the FSM picks for the next iteration. Decided from the
 /// (plan, last_rejection, steps_since_reassess) tuple.
+///
+/// NOT `sovereign_core::title`'s `Phase`, which is a fn-local
+/// streaming-buffer state; this is the ATOS runner's FSM phase.
 #[derive(Debug, Clone)]
 enum Phase {
     Plan,
@@ -1768,6 +1779,8 @@ fn compose_agent_prompt(
 
 // ─── Reviewer call ───────────────────────────────────────────────────────────
 
+/// NOT `sovereign_eval::diff::ReviewerVerdict`, which is a scored-axes
+/// report file; this is the reviewer model's raw JSON reply.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct ReviewerVerdict {
     verdict: String, // "accept" | "reject"
@@ -1777,6 +1790,9 @@ struct ReviewerVerdict {
     gaps: Vec<Gap>,
 }
 
+/// The reviewer model's JSON shape, not `honesty::Gap` and not
+/// `sovereign_contracts::types::epistemic::Gap` — three fields the model
+/// fills, with no id and no demand index.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct Gap {
     #[serde(default)]

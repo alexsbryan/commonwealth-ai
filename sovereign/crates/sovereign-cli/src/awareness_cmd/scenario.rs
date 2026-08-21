@@ -268,6 +268,9 @@ struct ScenarioScript {
     assertions: Vec<Assertion>,
 }
 
+/// An awareness-scenario manifest — unrelated to
+/// `sovereign_mesh::mesh_sim::scenario::Scenario` (a simulated mesh
+/// topology) or the voice/moral bench scenarios.
 #[derive(Debug, Deserialize)]
 struct Scenario {
     name: String,
@@ -281,6 +284,9 @@ struct Scenario {
     sandbox: Option<String>,
 }
 
+/// NOT `corpus_engine::sovereign_config::RunnerConfig`, which configures a
+/// watcher SUBPROCESS (command, cwd, timeout, debounce); this is the two
+/// knobs a scenario run takes.
 #[derive(Debug, Deserialize, Clone)]
 struct RunnerConfig {
     /// "mock" | "dry_run" | "real". Default "mock".
@@ -341,6 +347,10 @@ struct AssertionResult {
     detail: String,
 }
 
+/// A local {Pass, Fail} for one assertion — not
+/// `sovereign_pipeline::adaptive::Outcome` or
+/// `sovereign_eval::cognitive::scorer::Outcome`, which score work, not
+/// assertions.
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {
     Pass,

@@ -1021,6 +1021,9 @@ enum Mode {
     Apply,
 }
 
+/// NOT `sovereign_contracts::types::narration::MoveKind` ({Commit, Propose,
+/// Ask}, the synthesis move); this is which distillation move retires a
+/// note.
 #[derive(Clone, Copy, PartialEq)]
 enum MoveKind {
     Consolidate,

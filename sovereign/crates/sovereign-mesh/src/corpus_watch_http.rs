@@ -146,14 +146,23 @@ pub struct RegisterRequest {
     pub sync_initial: bool,
 }
 
-#[derive(Debug, Serialize)]
+// ─── Response types ──────────────────────────────────────────────
+//
+// `Deserialize` is not dead weight: sovereign-desktop imports these as its
+// HTTP CLIENT types (`watched_folder_commands`), so this module is the one
+// definition of the `/internal/corpus/watch/*` contract for both ends. It
+// derived `Serialize` alone until 2026-08-21, which is why the desktop
+// carried seven hand-copied mirrors that had silently drifted. Do not drop
+// it, and add fields here rather than in a client.
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct RegisterResponse {
     pub corpus_id: String,
     pub display_name: String,
     pub initial_sweep: InitialSweepStatus,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum InitialSweepStatus {
     Skipped,
@@ -166,30 +175,39 @@ pub enum InitialSweepStatus {
     },
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ListResponse {
     pub corpora: Vec<ListEntry>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ListEntry {
     pub corpus_id: String,
     pub display_name: String,
     pub root_path: PathBuf,
     pub status: WatchedFolderStatus,
     /// Folder-ingest v1 §3.5. `"continuous"` or `"manual"`.
+    ///
+    /// `serde(default)` on this and the two fields below is for the CLIENT
+    /// direction only: in Attach mode the desktop may be talking to an older
+    /// `sovereign daemon` that predates folder-ingest v1 and omits them.
+    /// Without it the whole watched-folder list fails to parse rather than
+    /// degrading to the pre-v1 defaults.
+    #[serde(default)]
     pub sync_mode: sovereign_tools::local_corpus::config::SyncMode,
     /// Folder-ingest v1 §3.4. When `true`, the folder is excluded
     /// from ambient situated-context assembly. UI surfaces a badge.
+    #[serde(default)]
     pub sensitive: bool,
     /// Folder-ingest v1 §3.1. Number of additional roots layered
     /// on top of the primary; the card UI surfaces "+N folders"
     /// when non-zero so a multi-root corpus is identifiable
     /// without opening the detail panel.
+    #[serde(default)]
     pub additional_roots_count: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StatusResponse {
     pub corpus_id: String,
     pub status: WatchedFolderStatus,
@@ -200,7 +218,7 @@ pub struct StatusResponse {
 /// `/state/{corpus_id}` route. Kept separate from `StatusResponse`
 /// so a polling caller doesn't pay for the larger payload on every
 /// tick.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StateResponse {
     pub corpus_id: String,
     pub status: WatchedFolderStatus,
@@ -210,7 +228,7 @@ pub struct StateResponse {
     pub live_entries: usize,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IncompleteJobsResponse {
     pub jobs: Vec<WatchedIncompleteJob>,
 }
@@ -397,7 +415,7 @@ pub struct EnrichJobAck {
     pub ok: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct AckResponse {
     pub corpus_id: String,
     pub ok: bool,
@@ -1511,5 +1529,65 @@ mod tests {
     fn pause_request_accepts_empty_body() {
         let req: PauseRequest = serde_json::from_str("{}").unwrap();
         assert!(req.reason.is_none());
+    }
+
+    /// The desktop imports these as its HTTP CLIENT types
+    /// (`sovereign-desktop::watched_folder_commands`), so `Deserialize` is
+    /// load-bearing, not decoration. This test fails if someone trims the
+    /// derive back to `Serialize` alone — which is the state that let seven
+    /// hand-copied mirrors drift in the desktop until 2026-08-21 (nc-21).
+    #[test]
+    fn response_types_round_trip_for_the_desktop_client() {
+        let wire = serde_json::to_string(&ListResponse {
+            corpora: vec![ListEntry {
+                corpus_id: "c1".into(),
+                display_name: "Notes".into(),
+                root_path: std::path::PathBuf::from("/tmp/notes"),
+                status: WatchedFolderStatus::Idle {
+                    last_sweep_unix: 7,
+                    live_docs: 3,
+                    tombstones: 1,
+                },
+                sync_mode: sovereign_tools::local_corpus::config::SyncMode::Manual,
+                sensitive: true,
+                additional_roots_count: 2,
+            }],
+        })
+        .unwrap();
+
+        let back: ListResponse = serde_json::from_str(&wire).unwrap();
+        let e = &back.corpora[0];
+        assert_eq!(e.corpus_id, "c1");
+        // The three fields the desktop's hand-copy was missing.
+        assert!(e.sensitive);
+        assert_eq!(e.additional_roots_count, 2);
+        assert_eq!(
+            e.sync_mode,
+            sovereign_tools::local_corpus::config::SyncMode::Manual
+        );
+        assert_eq!(
+            serde_json::from_str::<AckResponse>(r#"{"corpus_id":"c1","ok":true}"#)
+                .unwrap()
+                .ok,
+            true
+        );
+    }
+
+    /// Attach mode can point the desktop at an older `sovereign daemon` that
+    /// predates folder-ingest v1 and omits the three fields below. Before
+    /// nc-21 the desktop's hand-copy didn't have them at all, so skew was
+    /// invisible; now they are real fields and must degrade, not fail.
+    #[test]
+    fn list_entry_parses_a_pre_folder_ingest_v1_payload() {
+        let old = r#"{"corpus_id":"c1","display_name":"Notes","root_path":"/tmp/notes",
+                      "status":{"kind":"idle","last_sweep_unix":7,"live_docs":3,"tombstones":0}}"#;
+        let e: ListEntry =
+            serde_json::from_str(old).expect("older daemon payload must still parse");
+        assert!(!e.sensitive);
+        assert_eq!(e.additional_roots_count, 0);
+        assert_eq!(
+            e.sync_mode,
+            sovereign_tools::local_corpus::config::SyncMode::Continuous
+        );
     }
 }

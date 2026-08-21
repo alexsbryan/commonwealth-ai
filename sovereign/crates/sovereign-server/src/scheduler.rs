@@ -78,6 +78,9 @@ impl SchedState {
     }
 }
 
+/// The `Arc<Inner>` shared-state idiom, not a domain noun — every
+/// same-named type elsewhere in the workspace is another crate's private
+/// twin of this pattern.
 struct Inner {
     state: Mutex<SchedState>,
     /// Per-origin concurrency allowance handed to the core on each admission.

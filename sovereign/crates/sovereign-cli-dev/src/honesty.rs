@@ -77,6 +77,11 @@ use std::path::PathBuf;
 /// name the *resource*, not the *moment*: `polygon.ws.reconnect`,
 /// not `found.session.q3`. The memory layer stores resolutions
 /// keyed on this id.
+///
+/// NOT `sovereign_contracts::types::epistemic::Gap`, which indexes into
+/// `EpistemicState::demands` and carries acquisition routes; this is a
+/// missing SOURCE with a best-guess location. nc-12 adjudicated the same
+/// split.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Gap {
     pub id: String,
@@ -100,6 +105,9 @@ pub enum Guess {
 
 /// Outcome of confronting a gap. Persisted via [`GapMemory`] so
 /// repeats are idempotent.
+///
+/// NOT `sovereign_tools::sec_facts_render::Resolution` (a resolved SEC fact
+/// or a refusal); this is what happened when a `Gap` was put to the user.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Resolution {
     /// The source was fetched and indexed. `source` is the effective

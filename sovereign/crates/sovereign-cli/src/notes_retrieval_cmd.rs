@@ -272,6 +272,9 @@ fn audit_session(
     evidence: Option<&ActionBlob>,
 ) -> SessionAudit {
     /// Per-note accumulator across every injection in the session.
+    ///
+    /// A fn-local fold accumulator, not a domain noun — the same-named
+    /// types elsewhere are other crates' fn-local accumulators.
     #[derive(Default)]
     struct Acc {
         kind: String,

@@ -167,6 +167,9 @@ pub struct AdversarialQuestion {
     pub why: String,
 }
 
+/// The amend-pass twin of `found::CatalogEntry` — same role, different
+/// question set and key shape (`section_id` + `question_id`), so the two
+/// tables stay apart.
 struct CatalogEntry {
     section_id: &'static str,
     question_id: &'static str,

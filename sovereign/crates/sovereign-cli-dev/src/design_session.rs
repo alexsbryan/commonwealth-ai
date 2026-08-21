@@ -168,6 +168,9 @@ fn resolve_design_doc(req: &SessionRequest) -> OnboardOutcome {
 
 // ─── Preflight ─────────────────────────────────────────────────────
 
+/// NOT `sovereign_mesh::daemon::DaemonState`, which is the daemon's own
+/// lifecycle FSM holding live mDNS/gossip handles; this is one preflight
+/// REACHABILITY verdict.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum DaemonState {
     Up,

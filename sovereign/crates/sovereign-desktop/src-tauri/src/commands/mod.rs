@@ -62,6 +62,8 @@ pub struct CreateConversationResponse {
     pub created_at: i64,
 }
 
+/// NOT `sovereign_tools_base::web::search::SearchResult` (a WEB result);
+/// this is a conversation-search hit.
 #[derive(Serialize)]
 pub struct SearchResult {
     pub content: String,
@@ -77,6 +79,9 @@ pub struct SkillEntry {
     pub trust_level: String,
 }
 
+/// NOT `sovereign_contracts::setup_config::SetupConfig`, which is the
+/// `config.toml` structure; this is the setup WIZARD's inbound payload from
+/// the frontend and is Deserialize-only.
 #[derive(Deserialize)]
 pub struct SetupConfig {
     pub model_path: String,
@@ -111,6 +116,9 @@ pub struct SetupConfig {
     pub auto_escalate_to_web: Option<bool>,
 }
 
+/// NOT `sovereign_core::deep_research::icd::CorpusEntry` (an estate row:
+/// `{corpus_id, kind, chunks_count, searchable, custody}`); this is the
+/// catalog-browser card the UI renders.
 #[derive(Serialize)]
 pub struct CorpusEntry {
     pub id: String,

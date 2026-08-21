@@ -32,6 +32,10 @@ use serde_json::Value;
 /// footer renders. Richer desktop-only fields (token budgets, finish
 /// reason, context window) are intentionally dropped here — the desktop
 /// reads the raw blob directly; the mobile contract is this subset.
+///
+/// NOT `sovereign_contracts::types::epistemic::Provenance`, which is the
+/// evidence-BASIS enum (Corpus/Memory/…); this is the mobile projection of
+/// `ResponseProvenance` described above.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct Provenance {
     /// Model + serving node, e.g. `"Qwen3.5-9B.Q8_0 @ peer mac-peer"`.

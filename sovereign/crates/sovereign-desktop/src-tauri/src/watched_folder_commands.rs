@@ -101,52 +101,20 @@ impl Default for DeletionGuardConfigWire {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize)]
-pub struct RegisterResponse {
-    pub corpus_id: String,
-    pub display_name: String,
-    pub initial_sweep: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ListResponse {
-    pub corpora: Vec<ListEntry>,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct ListEntry {
-    pub corpus_id: String,
-    pub display_name: String,
-    pub root_path: PathBuf,
-    pub status: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct StatusResponse {
-    pub corpus_id: String,
-    pub status: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct StateResponse {
-    pub corpus_id: String,
-    pub status: serde_json::Value,
-    pub skipped_by_extension: std::collections::HashMap<String, usize>,
-    pub failed_files: Vec<serde_json::Value>,
-    pub tombstones: usize,
-    pub live_entries: usize,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct AckResponse {
-    pub corpus_id: String,
-    pub ok: bool,
-}
-
-#[derive(Debug, Deserialize, Serialize)]
-pub struct IncompleteJobsResponse {
-    pub jobs: Vec<serde_json::Value>,
-}
+// ─── Wire types ──────────────────────────────────────────────────
+//
+// Imported, not re-declared: these ARE the daemon's response types from
+// `/internal/corpus/watch/*`, so a field rename on the server side is now a
+// compile error here instead of a runtime deserialization failure. Until
+// 2026-08-21 (nc-21) this file carried seven hand-copied mirrors that had
+// already drifted — `ListEntry` was missing `sync_mode`, `sensitive` and
+// `additional_roots_count`, and typed the nested payloads as
+// `serde_json::Value`. The commands below only pass these through to the
+// frontend; nothing here reads a field.
+pub use sovereign_mesh::corpus_watch_http::{
+    AckResponse, IncompleteJobsResponse, ListEntry, ListResponse, RegisterResponse, StateResponse,
+    StatusResponse,
+};
 
 // ─── Commands ────────────────────────────────────────────────────
 

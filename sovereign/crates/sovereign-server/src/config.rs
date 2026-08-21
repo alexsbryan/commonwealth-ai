@@ -34,6 +34,12 @@ pub struct ServerConfig {
 /// fallback) and forwards accepted streams to the local HTTP
 /// listener — a phone can then reach this host with no VPN. Off by
 /// default; the tailnet path is unaffected either way.
+///
+/// NOT `sovereign_contracts::setup_config::IrohSection`: that one is the
+/// daemon's tri-state AUTO (`Option<bool>`, on iff the node joined a mesh)
+/// with per-class `transport` routing and no `key_path`. This server has no
+/// mesh-participation marker, so its `[iroh]` is a plain on/off plus its
+/// own identity path.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct IrohSection {
     #[serde(default)]

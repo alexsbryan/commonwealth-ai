@@ -119,6 +119,10 @@ pub struct HealthCheck {
 }
 
 /// The whole picture, as of one moment.
+///
+/// NOT `sovereign_contracts::health::HealthReport`, which is per-COMPONENT
+/// with typed `HealthIssue`s; this is the whole-app roll-up of
+/// user-readable checks a screenshot has to carry.
 #[derive(Debug, Clone, Serialize)]
 pub struct HealthReport {
     pub captured_at_unix: u64,
