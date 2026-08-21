@@ -51,16 +51,20 @@ canon tensions                   # where your commitments conflict
 canon accept <a> <b> -m "<reason>"   # carry it knowingly; reason required
 canon dismiss <a> <b>            # not actually a conflict
 canon undo <act-id>              # revert; itself revertible
+canon question "<text>"          # record what the canon does not cover
+canon open                       # the open questions
 canon log                        # raw acts
 canon share                      # pasteable snapshot
 canon adopt <url>[@gen] | --paste
 canon diff --upstream            # how you have diverged from your seed
 canon upgrade <gen> | canon rebase --onto <url>@<gen>
+canon merge-driver %O %A %B      # git merge driver; run it bare for setup
 canon mcp                        # agent surface
 ```
 
-**Only `check`, `tensions` and `draft` need a model.** Everything else is
-the fold. `canon` is useful on a plane.
+**Only `check`, `tensions`, `draft` and `rebase` need a model.**
+Everything else is the fold — including `diff --upstream` and the merge
+driver, which are arithmetic. `canon` is useful on a plane.
 
 ```
 canon config set endpoint http://localhost:8080/v1    # any llama.cpp
@@ -85,9 +89,18 @@ CONFLICT
 exit 1
 ```
 
-**`house`** — alignment against demand. Conflicting-and-wanted means
-amend a rule; unaddressed-and-wanted means write one. The output is an
-agenda, not a ruling.
+**`house`** — the output is an agenda, not a ruling: a conflicting
+proposal names the rule to amend, an unaddressed one says to write a new
+rule, and a covered one says no act is needed.
+
+The alignment-against-demand grid this section originally described —
+plotting how wanted a proposal is against how well it sits with the
+rules — **is not built and is out of scope for the CLI.** Demand is not
+in the log. Knowing that six of nine housemates want a thing requires
+collecting six answers, which means a survey mechanism, a roster, and
+somewhere to put the responses; a canon holds commitments and what was
+decided about them, and none of those three are it. The single-proposal
+framing above is what a file can honestly answer.
 
 **`personal`** — **never a verdict.**
 
@@ -254,8 +267,20 @@ canon mcp          # stdio MCP server
 |---|---|---|
 | `canon_list` | free | orient at task start |
 | `canon_why(id)` | free | explain a rule and its history |
-| `canon_open` | free | what the canon does not cover |
+| `canon_open` | free | what the canon does not cover — see below |
 | `canon_check(p)` | one call | adjudicate a consequential choice |
+
+**`canon_open` reads recorded questions, not inferred gaps.** The first
+draft of this document implied the tool could report what the canon does
+not cover for free. It cannot: "what is missing" is not derivable from a
+log of what is present. What ships is a `question` act — a person, or an
+agent that says so in chat, records the gap in one line, and `canon_open`
+lists the ones nobody has answered. `check` returning UNADDRESSED prints
+the `canon question` command rather than recording it, because the MCP
+surface writes nothing and an agent's judgement that something is missing
+is a proposal like any other. A question is answered by superseding it
+with a commitment and withdrawn by retracting it; both acts already
+existed and already meant the right thing.
 
 **The surface is read-only, and that is structural.** There is no MCP
 tool that writes an act — not permission-gated, absent. Amending requires
