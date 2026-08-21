@@ -74,6 +74,17 @@
 #   totality    REQUIRED. what must ALWAYS be true of it — the thing that
 #               makes an illegal state unrepresentable. This is the design
 #               decision; everything else is bookkeeping.
+#   gloss       REQUIRED. one line: what the noun IS, for a reader who has
+#               never seen it. Moved here 2026-08-20 (nc-15-generate) from
+#               TARGET_ARCHITECTURE.md §2, where 27 of them were hand-typed
+#               beside a status marker this file already owned — and where one
+#               noun (`Question`) was described for a register row that does
+#               not exist. The document renders this field; it no longer
+#               restates it.
+#   shape       OPTIONAL. the type sketch, as Rust, for rows whose totality is
+#               easier read as a declaration than as a sentence. Nine rows
+#               carry one. Same move, same reason: the sketch was in the
+#               document and the document was hand-maintained.
 #   status      holds | partial | target
 #   in_program  true if the program does work on it. false = architectural
 #               completeness only.
@@ -119,6 +130,23 @@ every gate at once; the re-arm is an explicit baseline re-mint (RUNBOOK §6),
 not a green tick nobody earned. (v1 said 'first run, pass' — that shape lets
 any refactor of the bench green-light itself, which contradicts the
 four-verdict rule this row exists to serve.)"""
+gloss      = '''one comparable observation.'''
+shape      = '''
+pub struct Measurement {
+    pub fingerprint: Fingerprint,   // THE KEY, not metadata
+    pub metrics:     BTreeMap<MetricName, f64>,
+    pub artifact:    ArtifactRef,
+}
+
+pub struct Fingerprint {            // every field required
+    pub lane:           LaneId,
+    pub corpus:         CorpusId,
+    pub model:          ModelAttribution,
+    pub prompt_version: PromptVersion,
+    pub sample_cap:     SampleCap,     // absent entirely from today's baseline
+    pub scorer_version: ScorerVersion,
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 1
@@ -131,6 +159,7 @@ name        = "Baseline"
 canonical   = "sovereign_eval::measurement::Baseline"
 disposition = "converge"
 totality    = "Stored under its fingerprint. A changed condition changes the key, so a stale baseline cannot silently false-fire; a missing key yields NoBaseline, surfaced in posture with the fingerprint that has no prior."
+gloss      = '''the committed prior for one fingerprint.'''
 status      = "partial"
 in_program  = true
 phase       = 1
@@ -149,6 +178,7 @@ register names it; Answer.provenance carries it; the OICP manifest
 advertises it. Four shapes today describe the same fact — which is the
 disease inside the cure, and why this row is phase 1: the Measurement
 fingerprint cannot be total over a concept that has no name."""
+gloss      = '''which engine computed this text.'''
 status      = "target"
 in_program  = true
 phase       = 1
@@ -173,6 +203,15 @@ Four states, one definition, workspace-wide: Passed | Failed(Reason) |
 CouldNotJudge(Reason) | NeverRan(Reason). ARCH_PRINCIPLES §18.2 becomes a
 type instead of a rule people remember. NeverRan is distinct from
 CouldNotJudge — a gate that did not execute is not a gate that abstained."""
+gloss      = '''the outcome of any check.'''
+shape      = '''
+pub enum Verdict {
+    Passed,
+    Failed(Reason),
+    CouldNotJudge(Reason),
+    NeverRan(Reason),
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 2
@@ -204,6 +243,17 @@ no quote by construction. Carries the register fingerprint (which judge,
 which build, which prompt — an Attribution). Lanes bind as tenants; none
 owns a private copy (ARCH §10.6). Canonical is Tier-1 contracts because
 Answer embeds it; sovereign-eval owns the machinery that PRODUCES it."""
+gloss      = '''a verdict with its evidence and calibration.'''
+shape      = '''
+pub enum Judgement {
+    Judged {
+        verdict:  JudgedVerdict,      // Passed | Failed(Reason) | CouldNotJudge(Reason)
+        quote:    EvidenceQuote,      // inside the variant — not Option-with-a-comment
+        register: Attribution,        // which judge, which build, which prompt
+    },
+    NeverRan(Reason),                 // carries no quote BY CONSTRUCTION
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 2
@@ -239,6 +289,7 @@ name        = "WireMessage"
 canonical   = "sovereign_wire"
 disposition = "external-mirror (OpenAI family) + converge (true protocol DTOs) + distinct (same-name different protocols)"
 totality    = "One definition per daemon-boundary message. The typed client is generated; `json!` and `Value::get` are clippy-banned at surface call sites, the way path accessors already are. A foreign schema (OpenAI) is mirrored ONCE and re-exported — a mirror is a quote, and you do not paraphrase a quote seven times."
+gloss      = '''one definition per daemon-boundary message.'''
 status      = "target"
 in_program  = true
 phase       = 3
@@ -271,6 +322,7 @@ name        = "SurfaceError"
 canonical   = "sovereign_desktop::error::DesktopError"
 disposition = "converge"
 totality    = "A command returns a structured error, never a String. The frontend mirror is typed through invokeChecked."
+gloss      = '''a structured error returned by a command, never a String.'''
 status      = "partial"
 in_program  = true
 phase       = 3
@@ -283,6 +335,7 @@ name        = "BootstrapMode"
 canonical   = "sovereign_desktop::bootstrap::BootstrapMode"
 disposition = "converge"
 totality    = "The sum type survives into AppState. Attach and Local are distinguishable by the compiler, and Local's ConfigSource payload is not discarded."
+gloss      = '''how this install was brought up — Attach or Local, distinguishable by the compiler.'''
 status      = "partial"
 in_program  = true
 phase       = 3
@@ -311,6 +364,21 @@ false on day one: web search, attached documents and tool output already
 reach the model. Without the grain, what a chunk may GROUND stays a string
 compare. NodeId's home must be Tier 0/1 — contracts cannot import the mesh
 crate."""
+gloss      = '''where a piece of knowledge came from.'''
+shape      = '''
+pub struct Origin {
+    pub source:    Source,    // the CLOSED sum — see below
+    pub served_by: Server,    // Local | Peer(NodeId, PeerName)
+    pub grain:     Grain,     // Leaf | Summary — what this may ground
+}
+
+pub enum Source {
+    Corpus     { corpus: CorpusId, document: DocumentId, locator: Locator },
+    Web        { url: Url, fetched_at: Timestamp },
+    Attachment { asset: AssetId, locator: Locator },
+    ToolOutput { tool: ToolId, call_hash: ContentHash },
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 4
@@ -330,6 +398,7 @@ already carried; the work is promotion: from a string under CUSTODY_META_KEY
 to a field the compiler sees. Stamped-at-retrieval means a policy change
 applies to future seals, not in-flight values — revocation is a property of
 the next retrieve, by design."""
+gloss      = '''where a piece of content stands, carried by the chunk.'''
 status      = "partial"
 in_program  = true
 phase       = 4
@@ -350,6 +419,13 @@ Evidence exists, so this noun stays a corpus property — the v1 register's
 147→1 framing aimed the carried-custody cure at the wrong axis. Illegal
 states unrepresentable: Local | Mesh{queryable, replicable}, not two bools
 whose Local+queryable combination the type admits."""
+gloss      = '''what a *corpus* permits the mesh.'''
+shape      = '''
+pub enum SharingPolicy {
+    Local,                                        // never leaves
+    Mesh { queryable: bool, replicable: bool },   // snippets / index bytes
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 4
@@ -384,6 +460,15 @@ the seven is a corpus. What survives, and is implementable, is the invariant
 above: one door per acquisition family, all of them inside the owning crate.
 `retrieve` is the corpus door and the only one built at this rung; the other
 six are rungs 9-12."""
+gloss      = '''the retrieval unit, and the only thing a model may read.'''
+shape      = '''
+pub struct Evidence {
+    pub content: Text,
+    pub origin:  Origin,
+    pub custody: Custody,
+    pub score:   Relevance,
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 4
@@ -418,6 +503,7 @@ value; it may not widen the scope. (v1 claimed the runtime already honours
 a same-value seal as convention; 2026-08-17 verification refuted that —
 see today — so this row is target, and the totality encodes the asymmetry
 the gate actually needs rather than banning the re-search it depends on.)"""
+gloss      = '''a sealed body of evidence for one turn.'''
 status      = "target"
 in_program  = true
 phase       = 4
@@ -451,6 +537,7 @@ canonical   = "kernel_types::answer::Draft"
 # vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge (the turn concept); distinct (two squatters rename)"
 totality    = "A Draft cannot be returned to a surface. It becomes an Answer only through verify and release, which makes 'forgot to run the gate' unrepresentable."
+gloss      = '''generated text, not yet released.'''
 status      = "target"
 in_program  = true
 phase       = 4
@@ -491,6 +578,15 @@ Provenance is a field. release() folds Vec<Judgement> into the Answer's
 judgement by ONE NAMED POLICY (worst-verdict-wins unless the policy says
 otherwise) — that fold is a decider, and a decider gets one name and one
 implementation (§10.6), not an ad-hoc reduce at each call site."""
+gloss      = '''what the user sees.'''
+shape      = '''
+pub struct Answer {
+    pub text:       Text,
+    pub citations:  Vec<Citation>,   // each points into the sealed EvidenceSet
+    pub provenance: Provenance,      // a field, not metadata["provenance"]
+    pub judgement:  Judgement,
+}
+'''
 status      = "partial"
 in_program  = true
 phase       = 4
@@ -527,6 +623,7 @@ canonical   = "kernel_types::answer::Citation"
 # vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge"
 totality    = "A Citation points INTO the sealed EvidenceSet — it cannot cite what the seal does not contain. The audited invariant sovereign-meshapp already states (the quoted text appears in the cited chunk) becomes construction, not audit."
+gloss      = '''a pointer into the sealed `EvidenceSet`.'''
 status      = "target"
 in_program  = true
 phase       = 4
@@ -560,6 +657,15 @@ A declared, validated profile. Consumers receive a NARROWED view carrying
 only what they need. Capability<T> is Available(T) | Unavailable(reason) —
 absence is a value the caller must handle, never an empty collection.
 (ARCH_PRINCIPLES §18.3)"""
+gloss      = '''what this install can actually do.'''
+shape      = '''
+pub struct Capabilities { /* validated at construction */ }
+
+pub enum Capability<T> {
+    Available(T),
+    Unavailable(UnavailableReason),
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 5
@@ -584,6 +690,7 @@ name        = "Step"
 canonical   = "sovereign_workflow::steps::Step"
 disposition = "converge (the dataflow substrate); distinct (plan-step and build-stage squatters)"
 totality    = "One dataflow substrate. compose(), the corpus pipeline, enrichment, and the bench lanes are tenants; none carries a private engine."
+gloss      = '''one typed unit of the single dataflow substrate.'''
 status      = "partial"
 in_program  = true
 phase       = 5
@@ -608,6 +715,7 @@ name        = "Artifact"
 canonical   = "sovereign_workflow::model::Artifact"
 disposition = "converge (substrate + DR tenancy); distinct (bench output record renames)"
 totality    = "The substrate's typed step output — content-addressed, cacheable. A subsystem that produces typed run artifacts (deep-research's ICD family first) is a TENANT of this type, not an author of a private enum."
+gloss      = '''the substrate's typed step output — content-addressed, cacheable.'''
 status      = "partial"
 in_program  = true
 phase       = 5
@@ -626,6 +734,7 @@ name        = "Intent"
 canonical   = "sovereign_contracts::types::routing::Intent"
 disposition = "converge"
 totality    = "The enum plus a data table — one row per intent declaring handler, slot, retrieval policy, gate surface, budget, labels. The table is a STATIC RUST CONST over the closed enum (closed sets are enums, §2) so a missing attribute is a compile error — a TOML table would make it a load error, which is the wrong failure time for a closed set. Adding an intent is one row."
+gloss      = '''what kind of ask it is.'''
 status      = "partial"
 in_program  = true
 phase       = 6
@@ -638,6 +747,7 @@ name        = "Command"
 canonical   = "sovereign/docs/cli-contract.toml"
 disposition = "converge"
 totality    = "The contract is GENERATIVE. Parser, dispatch, help text and reference docs are produced from it. A command not in the contract does not exist; a contract row nothing implements does not compile. (Non-type canonical: the concept-gate treats the contract file as the owner; type-level gating does not apply.)"
+gloss      = '''one CLI promise.'''
 status      = "partial"
 in_program  = true
 phase       = 6
@@ -650,6 +760,15 @@ name        = "Record"
 canonical   = "sovereign_record::Record"
 disposition = "converge"
 totality    = "Append-only; identity is a content hash, never a counter, sequence number, or address (ARCH_PRINCIPLES §7.5). Mutable views are projections, derived and rebuildable."
+gloss      = '''an immutable fact with provenance.'''
+shape      = '''
+pub struct Record<T> {
+    pub id:         ContentHash,  // identity from essence, never a counter
+    pub written_at: Timestamp,
+    pub author:     Author,
+    pub body:       T,
+}
+'''
 status      = "target"
 in_program  = true
 phase       = 6
@@ -662,6 +781,7 @@ name        = "Endpoint"
 canonical   = "sovereign_mesh::endpoint::Endpoint"
 disposition = "converge"
 totality    = "Declaring an endpoint declares its exposure class (loopback | mesh-internal | private-lan | token-authenticated). The guard is attached by the registry, not mounted by hand."
+gloss      = '''a network surface with a declared exposure.'''
 status      = "target"
 in_program  = true
 phase       = 6
@@ -674,6 +794,7 @@ name        = "Gap"
 canonical   = "sovereign_contracts::evidence::Gap"
 disposition = "converge (the knowledge-gap family); distinct (design/ignorance gaps rename)"
 totality    = "A Gap is a demand for evidence the current corpus cannot meet — statement, what would answer it, and the trail from claim to demand. The deep-research loop consumes Gaps and produces acquisition; the atlas detects them; the epistemic ledger records them. One noun, three producers, zero private copies."
+gloss      = '''a demand for evidence the current corpus cannot meet.'''
 status      = "target"
 in_program  = true
 phase       = 6
@@ -691,6 +812,7 @@ name       = "Recipe"
 canonical  = "corpus_engine::recipe::Recipe"
 disposition = "distinct"
 totality   = "Pure TOML declaring acquire → extract → filter → chunk → embed → index, plus custody. Schema generated to SCHEMA.md and gated."
+gloss      = '''how a corpus is made.'''
 status     = "holds"
 in_program = false
 measure    = "D1 count for name Recipe"
@@ -701,6 +823,7 @@ name       = "Corpus"
 canonical  = "corpus_engine::Corpus"
 disposition = "converge"
 totality   = "An index plus its sharing policy, produced by a Recipe."
+gloss      = '''an index plus its custody, produced by a `Recipe`.'''
 status     = "holds"
 in_program = false
 measure    = "D1 count for name Corpus"
@@ -710,6 +833,7 @@ name       = "Claim"
 canonical  = "sovereign_core::runtime::grounding::Claim"
 disposition = "converge (the spec-intel mirror pair); the atlas Claim atom is a distinct, correctly-named concept"
 totality   = "One assertion extracted from a Draft — the unit the gate judges."
+gloss      = '''one assertion extracted from a `Draft`; the unit the gate judges.'''
 status     = "holds"
 in_program = false
 measure    = "D1 count for name Claim"
@@ -720,6 +844,7 @@ name       = "Atom"
 canonical  = "corpus_engine::enrichment::atlas::atoms::AtomEnvelope"
 disposition = "converge"
 totality   = "The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips."
+gloss      = '''the enrichment ontology's unit (`AtomEnvelope`).'''
 status     = "holds"
 in_program = false
 measure    = "definitions of atom-kind vocabularies outside atoms.rs"
@@ -730,6 +855,7 @@ name       = "Tool"
 canonical  = "sovereign_tools::ToolRegistry"
 disposition = "converge"
 totality   = "One manifest of tool identity, effect and scope; a tool exists iff the registry lists it. Tool OUTPUT that reaches a model enters the evidence system as Origin::ToolOutput — see the Origin row."
+gloss      = '''one manifest of tool identity, effect and scope (`ToolRegistry`).'''
 status     = "holds"
 in_program = false
 measure    = "tool-definition surfaces outside the registry"
@@ -739,6 +865,7 @@ name       = "Peer"
 canonical  = "commonwealth_core::mesh::Peer"
 disposition = "converge"
 totality   = "Identity, transport, advertised capabilities. Founded by a join key plus an Ed25519 proof-of-possession."
+gloss      = '''another node in the trust ring.'''
 status     = "holds"
 in_program = false
 measure    = "D1 count for name Peer"
@@ -748,6 +875,7 @@ name       = "NodeCapability"
 canonical  = "oicp_types::Capability"
 disposition = "converge"
 totality   = "The OICP manifest — what a node advertises. Has a standalone conformance tester."
+gloss      = '''what a peer advertises (OICP).'''
 status     = "holds"
 in_program = false
 measure    = "D1 count for name Capability across the OICP surface"

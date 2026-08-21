@@ -385,10 +385,6 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
                 .with_features(Arc::clone(&features_store)),
         ));
     }
-    tools.register(Box::new(
-        sovereign_tools::CheckDocPathsTool::new().with_project_root(repo_root.clone()),
-    ));
-
     // `spec` — single-call active-spec + ARCHITECTURE.md +
     // CHARTER.md reader. Wraps the same docs store as
     // `project_context` so future Phase 5 polish can fold in

@@ -1096,7 +1096,6 @@ pub async fn bootstrap_with_progress(
                 mcp_tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
                     Arc::clone(&notes),
                 )));
-                mcp_tools.register(Box::new(sovereign_tools::CheckDocPathsTool::new()));
                 let session_id = format!("desktop-{}", uuid::Uuid::new_v4());
                 tracing::info!(tools = mcp_tools.count(), "desktop daemon: wiring /mcp");
                 daemon_arc

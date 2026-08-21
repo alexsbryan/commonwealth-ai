@@ -98,7 +98,6 @@ pub use code::BuildTool;
 #[cfg(feature = "treesitter")]
 pub use code::CapabilityMapTool;
 #[cfg(feature = "treesitter")]
-pub use code::CheckDocPathsTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::DesignSignalsExtractTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]

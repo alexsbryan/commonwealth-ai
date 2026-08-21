@@ -172,8 +172,6 @@ pub mod session_reflection;
 
 // Doc path validity checker.
 #[cfg(feature = "treesitter")]
-pub mod check_doc_paths;
-
 // ATOS feature management.
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub mod archive_feature;
@@ -253,7 +251,6 @@ pub use atos_verify::AtosVerifyTool;
 #[cfg(feature = "treesitter")]
 pub use blast_radius::BlastRadiusTool;
 #[cfg(feature = "treesitter")]
-pub use check_doc_paths::CheckDocPathsTool;
 #[cfg(feature = "treesitter")]
 pub use delete_note::DeleteNoteTool;
 #[cfg(all(feature = "treesitter", feature = "atos"))]

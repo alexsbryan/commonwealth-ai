@@ -702,60 +702,6 @@ situation = "Decide whether to cite the capability findings or warn they're stal
 call = {  }
 
 [[tool]]
-id = "check_doc_paths"
-name = "Check Doc Paths"
-description = "Scan a markdown document for inline-code path references (backtick spans like `path/to/file`) and verify each one exists on disk. Returns three buckets: `valid` (path exists), `not_found` (path missing — likely stale after a rename or deletion), and `skipped` (URL, Rust qualified name, or otherwise unresolvable). Resolution tries project root first, then the workspace root one level up (for cross-project refs), then the document's own directory. Use this to audit SYSTEM_OVERVIEW.md, SOVEREIGN.md, or any architecture doc after a directory rename, module split, or file removal."
-effect = "read"
-idempotency = "idempotent"
-latency = "instant"
-scope = "session"
-permissions = []
-
-[tool.parameters]
-type = "object"
-required = ["doc_path"]
-
-[tool.parameters.properties]
-
-[tool.parameters.properties.doc_path]
-type = "string"
-description = "Path to the markdown file to check. Relative to project root, or absolute."
-
-[tool.output_schema]
-type = "object"
-
-[tool.output_schema.properties]
-
-[tool.output_schema.properties.doc_path]
-type = "string"
-
-[tool.output_schema.properties.valid]
-type = "array"
-
-[tool.output_schema.properties.valid.items]
-type = "string"
-
-[tool.output_schema.properties.not_found]
-type = "array"
-
-[tool.output_schema.properties.not_found.items]
-type = "string"
-
-[tool.output_schema.properties.skipped]
-type = "array"
-
-[tool.output_schema.properties.skipped.items]
-type = "string"
-
-[[tool.examples]]
-situation = "You just renamed a module, moved a file, or deleted dead code. Run this on SYSTEM_OVERVIEW.md to find any path references that are now stale — before someone else reads a doc that points at files that no longer exist."
-call = { doc_path = "SYSTEM_OVERVIEW.md" }
-
-[[tool.examples]]
-situation = "You're updating architecture docs and want to verify every path you wrote actually resolves. Catches typos and wrong relative paths before they land in the repo."
-call = { doc_path = "sovereign/.opencode/skills/sovereign-code/SKILL.md" }
-
-[[tool]]
 id = "code_search"
 name = "Code Search"
 description = "Semantic search over the indexed codebase. PREFER THIS OVER READING FILES when you need to understand how something is done, find implementations of a pattern, or locate relevant code before making a change. Returns the 3-5 most relevant chunks — typically 30-50 tokens each — versus reading an entire file which may cost 200-500 tokens and contain mostly irrelevant content. Use read_file only when you need a complete, authoritative view of a specific file you have already located."

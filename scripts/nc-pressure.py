@@ -56,6 +56,12 @@ def main():
         rows.append({"noun": noun, "defs": defs, "kin": kin,
                      "pressure": defs + kin, "sites": d["reference_sites"],
                      "has_canonical": defs >= 1,
+                     # WHERE the definitions are, not just how many. Additive
+                     # 2026-08-20 (nc-15-generate) so the register's declared
+                     # `canonical` can be checked against the graph rather than
+                     # trusted. Render only — no number above changes.
+                     "def_sites": [{"krate": t["krate"], "file": t["file"],
+                                    "line": t["line"]} for t in d["defs"]],
                      "move": "collapse" if defs >= 2 else ("mint" if defs == 0 else "confirm")})
     total = sum(r["pressure"] for r in rows)
     reach = sum(1 for r in rows if r["has_canonical"])

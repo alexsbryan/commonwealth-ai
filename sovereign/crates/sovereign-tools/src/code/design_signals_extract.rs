@@ -49,7 +49,7 @@ use sovereign_core::types::*;
 pub struct DesignSignalsExtractTool {
     /// Optional project root. When set, relative `design_path`
     /// arguments resolve under it; absolute paths are used as-is.
-    /// Mirrors the CheckDocPathsTool convention for consistency.
+    /// The same convention every path-taking tool in this module uses.
     project_root: Option<PathBuf>,
 }
 

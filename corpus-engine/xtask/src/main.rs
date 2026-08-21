@@ -10,6 +10,7 @@
 //!   cargo xtask layer-gate [--update-baseline|--tighten]  Cargo-declared deps obey quality/ARCH_LAYERS.toml + fan-in ratchet
 //!   cargo xtask lock-gate  [--update-baseline|--tighten]  No NEW duplicate crate versions in Cargo.lock
 //!   cargo xtask env-gate   [--update-baseline|--tighten|--update-doc]  Observed env vars obey quality/env-flags.toml
+//!   cargo xtask target-arch [--update-doc|--measure]  quality/TARGET_ARCHITECTURE.md renders from CONCEPTS.toml + ARCH_LAYERS.toml + the graph
 //!
 //! Ratchet contract (uniform across gates): baselines live in
 //! `quality/baselines/`, are machine-written only (`--update-baseline`
@@ -30,6 +31,7 @@ mod lint_gate;
 mod lock_gate;
 mod manifests;
 mod quality_cmd;
+mod target_arch;
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -47,6 +49,7 @@ fn main() {
         "layout-gate" => layout_gate::run(&args[1..]),
         "lint-gate" => lint_gate::run(&args[1..]),
         "lock-gate" => lock_gate::run(&args[1..]),
+        "target-arch" => target_arch::run(&args[1..]),
         "help" | "--help" | "-h" => {
             print_usage();
             0
@@ -95,5 +98,8 @@ fn print_usage() {
     );
     eprintln!(
         "  api-gate [--update-baseline]   Diff hub-crate public APIs vs committed snapshots (pinned nightly)"
+    );
+    eprintln!(
+        "  target-arch [--update-doc|--measure]  Render quality/TARGET_ARCHITECTURE.md's register, layer map, graph evidence and boundary table"
     );
 }

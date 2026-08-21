@@ -208,8 +208,8 @@ async fn check_server_tools() -> CheckResult {
                     .unwrap_or(0);
                 // Canonical daemon registry is 12 tools (symbol/code
                 // search, recent_changes, callers, callees, blast_radius,
-                // 3× notes, session_reflection, project_context,
-                // check_doc_paths). `svrn project serve` adds the
+                // 3× notes, session_reflection, project_context).
+                // `svrn project serve` adds the
                 // watcher-backed set (test_status, lint_status,
                 // run_tests, get_run_output, get_lint_output) for 17.
                 if count >= 12 {

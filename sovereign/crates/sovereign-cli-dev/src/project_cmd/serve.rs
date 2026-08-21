@@ -594,11 +594,6 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         Arc::clone(&notes_store),
     )));
 
-    // ── Doc path checker ────────────────────────────────────────────────
-    tools.register(Box::new(
-        sovereign_tools::CheckDocPathsTool::new().with_project_root(repo_root.clone()),
-    ));
-
     // ── DESIGN.md structural signals ────────────────────────────────────
     //
     // Project-scoped: bound to this repo's DESIGN.md by default, so the

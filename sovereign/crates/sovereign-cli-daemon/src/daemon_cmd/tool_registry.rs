@@ -312,7 +312,6 @@ pub(super) async fn build_tool_registry(
     }
 
     // Doc-path checker — no state dependency.
-    tools.register(Box::new(sovereign_tools::CheckDocPathsTool::new()));
 
     // Wikipedia on-demand fetch — operates against the catalog corpus
     // installed on this daemon. Wired here so `svrn tools call
