@@ -615,6 +615,24 @@ direction    = "lower_is_better"
 # takes minutes, not seconds; the read-tier default of 10s cannot hold it and
 # the first sweep timed out against it. 420s measured with headroom.
 timeout_s    = 420
+#
+# MEASUREMENT PROTOCOL — THE SEAT RE-INDEXES BEFORE MEASURING THIS BAR.
+# Amended 2026-08-21, hours after registering it, because nc-17's worker caught
+# the defect before doing the work rather than after: `dry-report` reads the
+# SCIP index at `last_indexed_head`, NOT the working tree. `nc-boundary` and
+# `nc-reach` share that property and have always been fine with it because they
+# move slowly. THIS BAR IS EXPECTED TO MOVE PER RUNG, so an un-refreshed index
+# returns the rung's own BEFORE number as its AFTER and the rung reads as
+# unmoved when it is merely unseen.
+#   - `code index` is a COMMONS WRITE and stays seat-owned; two concurrent runs
+#     collided on 2026-08-20. Workers must NOT run it and must not work around it.
+#   - The seat re-indexes at WAVE CLOSE, then measures. Until that happens an
+#     unchanged AFTER is `could-not-judge` ON THE INSTRUMENT, never `unmoved` on
+#     the work (ARCH §18.3 — absence is reported, never defaulted).
+#   - A worker's working-tree-truthful evidence in the meantime is the scoped
+#     `dry-report --scope <crate>/` delta (~2s per crate, still index-bound) plus
+#     raw deleted-line counts from `git show --stat` (not index-bound). Both go
+#     in the verdict, each labelled for which it is.
 instrument   = "scripts/nc-redundant.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"value\"]), \"commit\": d[\"commit\"]}))'"
 kill         = "if the count falls while the number of DISTINCT CONCERNS in the report does not, the bar is being moved by merging code that merely looks alike rather than by converging a decider — a clone pair that has DRIFTED is the signal to look for, because drift proves the copies were one decision (§10.6's `strip_html` pair, where one copy silently truncated every crawled page)"
 
