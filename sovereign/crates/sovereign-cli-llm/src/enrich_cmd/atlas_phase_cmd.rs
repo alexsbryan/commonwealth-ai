@@ -10,7 +10,11 @@
 
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::{atlas::SectionExtraction, AtlasCluster, ExemplarBank, Facet, NamedCluster, Phase1Output, Phase2AtlasOutput, Phase3AtlasOutput, PhaseFailure, PhaseFailureKind, PhaseRunner, PipelinePhase, PipelineRegistry, RunOutputWriter, SketchExcerpt};
+use corpus_engine::enrichment::pipeline::{
+    atlas::SectionExtraction, AtlasCluster, ExemplarBank, Facet, NamedCluster, Phase1Output,
+    Phase2AtlasOutput, Phase3AtlasOutput, PhaseFailure, PhaseFailureKind, PhaseRunner,
+    PipelinePhase, PipelineRegistry, RunOutputWriter, SketchExcerpt,
+};
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;

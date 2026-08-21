@@ -14,7 +14,10 @@ use sovereign_workflow::Workflow;
 // The registry assembly, in-process runner, and workflow catalog now live in
 // `sovereign-workflow-host` (so the daemon can run workflows too); the CLI is a
 // thin presenter on top.
-use sovereign_workflow_host::{first_comment_line, resolve_workflow_source, run_workflow_in_process, workflows_dir, SHIPPED_WORKFLOWS};
+use sovereign_workflow_host::{
+    first_comment_line, resolve_workflow_source, run_workflow_in_process, workflows_dir,
+    SHIPPED_WORKFLOWS,
+};
 
 // Inc3 surface unification: `workflow run <recipe-id>` delegates to the *same*
 // install client `corpus install` uses, and shapes its `--param` values the same
@@ -692,8 +695,11 @@ mod tests {
     use futures::Stream;
     use sovereign_core::error::Result as CoreResult;
     use sovereign_core::registry::ToolRegistry;
-    use sovereign_core::traits::{InferenceProvider};
-    use sovereign_core::types::{CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed, StepOutput, ToolContext};
+    use sovereign_core::traits::InferenceProvider;
+    use sovereign_core::types::{
+        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed, StepOutput,
+        ToolContext,
+    };
     use sovereign_tools::mcp::config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
     use sovereign_tools::mcp::McpServerManager;
     use sovereign_workflow::{Runner, StepRegistry, Workflow};

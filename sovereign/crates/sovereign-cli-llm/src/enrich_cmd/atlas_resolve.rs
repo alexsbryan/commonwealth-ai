@@ -19,8 +19,12 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::{resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME};
-use corpus_engine::enrichment::pipeline::{ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction};
+use corpus_engine::enrichment::atlas::{
+    resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME,
+};
+use corpus_engine::enrichment::pipeline::{
+    ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction,
+};
 use corpus_engine::types::EmbedFn;
 
 use super::config::EnrichConfig;
