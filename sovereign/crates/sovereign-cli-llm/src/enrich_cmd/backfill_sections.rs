@@ -489,20 +489,14 @@ fn infer_parent_under(corpora_root: &Path, source_path: &Path) -> Option<String>
 /// Every corpus that has an enrichment config AND a chapter manifest. A
 /// corpus with no manifest has no sections to join and is not a candidate.
 fn resolve_all() -> Result<Vec<Target>, String> {
-    let root = sovereign_root().join("enrichment");
-    let entries =
-        std::fs::read_dir(&root).map_err(|e| format!("reading {}: {e}", root.display()))?;
-    let mut ids: Vec<String> = Vec::new();
-    for e in entries.flatten() {
-        if !e.path().is_dir() {
-            continue;
-        }
-        let id = e.file_name().to_string_lossy().into_owned();
-        if paths::chapters_manifest_path(&id).exists() {
-            ids.push(id);
-        }
-    }
-    ids.sort();
+    // One decider for "which corpora are in the enrichment store"
+    // (`sovereign_enrichment_catalog::catalog`); the manifest filter is this
+    // command's own predicate and stays here.
+    let ids: Vec<String> = super::catalog::enriched_corpus_ids()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .filter(|id| paths::chapters_manifest_path(id).exists())
+        .collect();
     let total = ids.len();
     let mut targets = Vec::new();
     let mut unresolved = 0usize;

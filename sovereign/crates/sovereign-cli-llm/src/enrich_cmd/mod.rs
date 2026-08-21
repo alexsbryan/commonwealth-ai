@@ -13,6 +13,15 @@
 //! or `report` so they're fast enough to run in a tight edit
 //! loop.
 
+// The enrichment store's layout and its `config.json` schema moved DOWN to
+// `sovereign-enrichment-catalog` (capabilities layer) on 2026-08-20, because
+// two other hosts need them and nothing may depend on a binary: the daemon's
+// watched-folder driver mirrored the schema by hand in `sovereign-tools` and
+// the desktop hand-parsed the same file. Re-exported here under the names the
+// ~185 call sites in this crate already use — the definitions are gone, not
+// wrapped.
+pub use sovereign_enrichment_catalog::{catalog, config, paths};
+
 pub mod atlas_configuration;
 pub mod atlas_cross_corpus;
 pub mod atlas_drift_report;
@@ -32,7 +41,6 @@ pub mod capability_reconcile;
 pub mod cascade;
 pub mod classify;
 pub mod code_intel;
-pub mod config;
 pub mod corpus_io;
 pub mod delta_cmd;
 pub mod diagnose;
@@ -47,7 +55,6 @@ pub mod inference_client;
 pub mod ingest;
 pub mod init;
 pub mod investigation;
-pub mod paths;
 pub mod phase_cmd;
 pub mod pipeline_resolve;
 pub mod promote;

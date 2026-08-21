@@ -12233,6 +12233,7 @@ dependencies = [
  "sovereign-cli-shared",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-catalog",
  "sovereign-eval",
  "sovereign-gliner",
  "sovereign-inference",
@@ -12379,6 +12380,7 @@ dependencies = [
  "sovereign-compute",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-catalog",
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
@@ -12404,6 +12406,19 @@ dependencies = [
  "uuid",
  "walkdir",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "sovereign-enrichment-catalog"
+version = "0.5.0"
+dependencies = [
+ "corpus-engine",
+ "serde",
+ "serde_json",
+ "sovereign-contracts",
+ "sovereign-core",
+ "tempfile",
+ "tracing",
 ]
 
 [[package]]
@@ -12726,6 +12741,7 @@ dependencies = [
  "sovereign-atos",
  "sovereign-contracts",
  "sovereign-core",
+ "sovereign-enrichment-catalog",
  "sovereign-recipe-author",
  "sovereign-store",
  "sovereign-tools-base",

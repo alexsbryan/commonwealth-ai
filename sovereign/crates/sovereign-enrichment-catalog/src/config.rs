@@ -1,6 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `~/.svrnmesh/enrichment/<corpus>/config.json` — the pinned-at-init
-//! configuration every other enrich subcommand reads.
+//! `<data-root>/enrichment/<corpus>/config.json` — the pinned-at-init
+//! configuration every enrichment host reads.
+//!
+//! ONE schema (ARCH_PRINCIPLES §10.6). It had three implementations until
+//! 2026-08-20 — see the crate docs — and the copy in `sovereign-tools` that
+//! claimed to mirror this one "field-for-field" was missing `toc_markers`,
+//! `phase1b_max_output_tokens`, `phase_overrides` and `ontology`.
 //!
 //! Everything that would otherwise be a CLI flag on every subcommand
 //! (source file path, chat model id, regex pattern, etc.) gets pinned
@@ -10,13 +15,13 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use corpus_engine::error::{Error, Result};
 
-use super::paths;
+use crate::paths;
 
 pub const CONFIG_SCHEMA_VERSION: u32 = 1;
 
@@ -36,7 +41,7 @@ pub struct EnrichConfig {
     /// id is missing from this map (or this whole map is `None`),
     /// the request falls back to `chat_model`.
     ///
-    /// Hand-edit this in `~/.svrnmesh/enrichment/<corpus>/config.json`
+    /// Hand-edit this in `<data-root>/enrichment/<corpus>/config.json`
     /// to recruit a small/fast model for bulk extraction phases and
     /// reserve the heavy reasoning model for synthesis phases — see
     /// `project_qwopus_size_ab.md` for the bench that motivates this.
@@ -176,7 +181,20 @@ impl EnrichConfig {
             return Ok(None);
         }
         let raw = fs::read_to_string(&path)?;
-        let cfg: Self = serde_json::from_str(&raw).map_err(|e| {
+        Ok(Some(Self::parse_checked(&raw, &path)?))
+    }
+
+    /// Parse a config that is already in hand, applying the schema-version
+    /// guard.
+    ///
+    /// ONE decider for "is this config loadable" (ARCH_PRINCIPLES §10.6).
+    /// [`Self::load`] resolves the path from a corpus id; the catalog's
+    /// inventory already holds the path it enumerated and must not re-resolve
+    /// it. Both land here, so the desktop cannot list a workspace that
+    /// `svrn enrich build` would then refuse — which is the reader/writer
+    /// disagreement this crate exists to remove.
+    pub(crate) fn parse_checked(raw: &str, path: &Path) -> Result<Self> {
+        let cfg: Self = serde_json::from_str(raw).map_err(|e| {
             Error::Serialization(format!(
                 "enrich config {} is malformed: {}",
                 path.display(),
@@ -191,7 +209,7 @@ impl EnrichConfig {
                 CONFIG_SCHEMA_VERSION
             )));
         }
-        Ok(Some(cfg))
+        Ok(cfg)
     }
 
     pub fn require(corpus_id: &str) -> Result<Self> {

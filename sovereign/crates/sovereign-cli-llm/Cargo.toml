@@ -25,6 +25,9 @@ path = "src/main.rs"
 
 [dependencies]
 sovereign-core = { workspace = true }
+# The enrichment store below every host that reads it — `enrich_cmd::{config,
+# paths, catalog}` are re-exports of this crate (rung nc-16-shared-capability).
+sovereign-enrichment-catalog = { workspace = true }
 sovereign-contracts = { workspace = true }
 sovereign-inference = { workspace = true }
 # OICP feature-string constants (constraint:json_schema/json_object) for

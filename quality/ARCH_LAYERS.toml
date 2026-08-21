@@ -147,6 +147,13 @@ crates = [
 name = "capabilities"
 crates = [
     "sovereign-tools",
+    # The enrichment store's layout + `config.json` schema + inventory. Sits
+    # here and not with the CLI because THREE hosts read that file (the CLI,
+    # the daemon's watched-folder driver via sovereign-tools, and the desktop)
+    # and hosts are terminal — while the schema lived in `sovereign-cli-llm`
+    # the other two could only re-derive it, and both had (rung
+    # nc-16-shared-capability, 2026-08-20).
+    "sovereign-enrichment-catalog",
     "sovereign-work-atlas",
     "sovereign-workflow-host",
     "sovereign-atos",

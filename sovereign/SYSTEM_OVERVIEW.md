@@ -180,6 +180,7 @@ crates/
 ├── sovereign-gliner         # GLiNER (ONNX) per-chunk entity extraction — own crate to keep the ONNX dep off the shared sovereign-tools. Two backends (v1 gline-rs, GLiNER2 bare-ort) behind `LabeledEntityExtractor`; `load_labeled_extractor` is the one selector
 ├── sovereign-atos           # ATOS lib (charter, approval, report, session, local orchestrator) — opt-in experiment behind `--features atos`; no product crate depends on it by default
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
+├── sovereign-enrichment-catalog # The enrichment store below every host that reads it: the `<data-root>/enrichment/<corpus>/` layout, the `config.json` schema (`EnrichConfig`) and the inventory. Minted 2026-08-20 (rung nc-16-shared-capability) — the schema lived in `sovereign-cli-llm`, a BINARY, so the daemon's watched-folder driver mirrored it by hand in `sovereign-tools` (four fields behind) and the desktop hand-parsed the same file. All three now read one definition; the CLI's `enrich_cmd::{config,paths}` are re-exports
 ├── sovereign-mesh           # In-process cmnwlth embed
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
@@ -4681,7 +4682,9 @@ platform-native so the desktop app and CLI share it.
   a model swap forces recomputation rather than silently mixing outputs
   (OICP v0.4 §6; keyed on `chat_model`, fingerprint deferred). Built via
   the single `EnrichConfig::phase_cache()` helper so all pipeline reads
-  and writes carry the same identity.
+  and writes carry the same identity. `EnrichConfig` itself lives in
+  `sovereign-enrichment-catalog` since 2026-08-20 — see the workspace map;
+  `enrich_cmd::config` is a re-export of it, not a second definition.
 - **SCIP** — Source Code Intelligence Protocol. `scip_graph.rs`
   stores SCIP data in SQLite; `scip_export.rs` dispatches to
   language-specific analyzers.

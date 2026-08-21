@@ -54,6 +54,11 @@ members = [
     # four binaries that need it, not an optional feature on a shared crate
     # (which Cargo unification compiled two ways, breaking -p builds).
     "sovereign/crates/sovereign-gliner",
+    # The enrichment catalog — the on-disk store's layout, its `config.json`
+    # schema and its inventory, below every host that touches it. Minted
+    # 2026-08-20 (noun-convergence rung nc-16-shared-capability) after the
+    # schema was found implemented three times because it lived in a binary.
+    "sovereign/crates/sovereign-enrichment-catalog",
     "studio/crates/sovereign-tools-base",
     "studio/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
@@ -204,6 +209,7 @@ sovereign-store = { path = "sovereign/crates/sovereign-store" }
 sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
+sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }

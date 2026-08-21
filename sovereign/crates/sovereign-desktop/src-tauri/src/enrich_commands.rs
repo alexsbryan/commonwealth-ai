@@ -12,7 +12,7 @@
 //! builds.
 //!
 //! What remains here needs no subprocess:
-//!   - `enrich_list_corpora` — inventory from `~/.svrnmesh/enrichment`.
+//!   - `enrich_list_corpora` — inventory of the shared enrichment store.
 //!   - `install_starter_corpus` — restore the Federalist starter snapshot.
 //!   - `enrich_get_starter_questions` — mine starter chips from atoms.json.
 //!   - `is_first_run` / `mark_first_run_complete` — onboarding marker.
@@ -22,83 +22,29 @@ use std::path::PathBuf;
 
 use corpus_engine::enrichment::atlas::{read_atlas_atoms, AtomEnvelope};
 use serde::Serialize;
+// The enrichment store, shared with the CLI and the daemon's watched-folder
+// driver (rung nc-16-shared-capability). This file used to carry its own
+// inventory loop, its own `config.json` field names and its own path
+// derivation; all three are gone.
+use sovereign_enrichment_catalog::{catalog, paths, EnrichedCorpusSummary};
 use tauri::AppHandle;
 
 // ─── Command: enrich_list_corpora ────────────────────────────────────
 
-/// Inventory of enrichment corpora on disk. Reads
-/// `~/.svrnmesh/enrichment/*/config.json` directly — no CLI
-/// call needed for this (faster + no PATH dep).
-#[derive(Debug, Serialize, Clone)]
-pub struct EnrichedCorpusSummary {
-    pub corpus_id: String,
-    pub pipeline_id: String,
-    pub source_path: String,
-    pub created_at: String,
-}
-
+/// Inventory of enrichment corpora on disk.
+///
+/// The listing, the config schema and the path layout all live in
+/// `sovereign-enrichment-catalog`, below this host and below the CLI and the
+/// daemon that write the same tree. Until 2026-08-20 this command walked
+/// `read_dir` itself and pulled `pipeline_id` / `source_path` / `created_at`
+/// out of an untyped JSON value by name — a fourth reader of a file it did not
+/// own, rooted on an accessor the CLI disagreed with.
+///
+/// Errors flatten to a String for the Tauri boundary; an absent store is
+/// `Ok(vec![])`, not an error, because the UI branches on length.
 #[tauri::command]
 pub async fn enrich_list_corpora() -> Result<Vec<EnrichedCorpusSummary>, String> {
-    let root = enrichment_root();
-    if !root.exists() {
-        return Ok(Vec::new());
-    }
-    let mut out = Vec::new();
-    let entries =
-        std::fs::read_dir(&root).map_err(|e| format!("reading {}: {e}", root.display()))?;
-    for entry in entries.flatten() {
-        if !entry.path().is_dir() {
-            continue;
-        }
-        let corpus_id = match entry.file_name().to_str() {
-            Some(s) => s.to_string(),
-            None => continue,
-        };
-        let config_path = entry.path().join("config.json");
-        if !config_path.exists() {
-            continue;
-        }
-        let raw = match std::fs::read_to_string(&config_path) {
-            Ok(s) => s,
-            Err(_) => continue,
-        };
-        let v: serde_json::Value = match serde_json::from_str(&raw) {
-            Ok(v) => v,
-            Err(_) => continue,
-        };
-        out.push(EnrichedCorpusSummary {
-            corpus_id,
-            pipeline_id: v
-                .get("pipeline_id")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string(),
-            source_path: v
-                .get("source_path")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string(),
-            created_at: v
-                .get("created_at")
-                .and_then(|s| s.as_str())
-                .unwrap_or("")
-                .to_string(),
-        });
-    }
-    out.sort_by(|a, b| b.created_at.cmp(&a.created_at));
-    Ok(out)
-}
-
-fn enrichment_root() -> PathBuf {
-    sovereign_root().join("enrichment")
-}
-
-fn sovereign_root() -> PathBuf {
-    sovereign_contracts::rebrand::data_dir()
-}
-
-fn index_root_for(corpus_id: &str) -> PathBuf {
-    sovereign_root().join("indexes").join(corpus_id)
+    catalog::list_enriched_corpora().map_err(|e| e.to_string())
 }
 
 /// Result of [`install_starter_corpus`].
@@ -118,10 +64,10 @@ pub struct StarterInstallResult {
 /// `qwen-embedding-0.6b` (the app's embed model), fetched via the shared
 /// `BulkDownloader` and restored into `~/.svrnmesh/indexes` via the shared
 /// snapshot-restore primitive — the SAME root the daemon + desktop read corpora
-/// from. NO hardcoded paths: the data root resolves via `sovereign_root()`
-/// (`dirs::home_dir()`). The restore gates on the snapshot's sha256 and refuses
-/// on an embedding-dimension mismatch. Idempotent — returns early if the corpus
-/// is already present.
+/// from. NO hardcoded paths: the data root resolves via the shared
+/// `sovereign_enrichment_catalog::paths` accessors. The restore gates on the
+/// snapshot's sha256 and refuses on an embedding-dimension mismatch.
+/// Idempotent — returns early if the corpus is already present.
 ///
 /// HF-only as of 2026-06-19: the snapshot is no longer bundled into the app. It
 /// used to ship as a Tauri resource, but `tauri.release.conf.json`'s `resources`
@@ -146,7 +92,7 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
     const STARTER_SHA256: &str = "dc189da612b9b01d412e7e0aca93cd0d550184cbb339fc85bbc76d3a1d57031f";
 
     // Idempotent: a resolved atoms.json ⇒ already restored + enriched.
-    if index_root_for(STARTER_ID)
+    if paths::index_root(STARTER_ID)
         .join("atlas")
         .join("atoms.json")
         .exists()
@@ -180,7 +126,7 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
                 "https://huggingface.co/datasets/{STARTER_HF_REPO}/resolve/main/{STARTER_HF_FILENAME}"
             );
             // Conventional download cache, mirroring CorpusEngine::try_restore_prebuilt.
-            let download_dir = sovereign_root().join("indexes").join("_downloads");
+            let download_dir = paths::indexes_dir().join("_downloads");
             std::fs::create_dir_all(&download_dir).map_err(|e| {
                 format!(
                     "create starter download dir {}: {e}",
@@ -197,7 +143,7 @@ pub async fn install_starter_corpus(app: AppHandle) -> Result<StarterInstallResu
 
     // restore_snapshot_archive is blocking (tar extract + streaming sha) — run it
     // off the async runtime. ~162 KB ⇒ milliseconds, but keep the hot path clean.
-    let data_dir = sovereign_root();
+    let data_dir = paths::data_root();
     let archive_for_task = archive.clone();
     let outcome = tokio::task::spawn_blocking(move || {
         corpus_engine::restore_snapshot_archive(
@@ -262,7 +208,7 @@ pub async fn enrich_get_starter_questions(
     corpus_id: String,
     limit: usize,
 ) -> Result<Vec<StarterQuestion>, String> {
-    let atlas_dir = index_root_for(&corpus_id).join("atlas");
+    let atlas_dir = paths::index_root(&corpus_id).join("atlas");
     if !atlas_dir.exists() {
         return Ok(Vec::new());
     }
@@ -371,7 +317,7 @@ fn rank_starter_questions(atoms: &[AtomEnvelope], limit: usize) -> Vec<StarterQu
 /// about when onboarding completed (e.g. re-onboarding after a major
 /// schema change).
 fn first_run_marker_path() -> PathBuf {
-    sovereign_root().join("first_run_complete")
+    paths::data_root().join("first_run_complete")
 }
 
 #[tauri::command]
@@ -399,33 +345,6 @@ pub async fn mark_first_run_complete() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn enrichment_root_nests_under_branded_data_root() {
-        // Both sides of the assert below call `data_dir()`, so this can only
-        // fail if HOME moves BETWEEN the two calls — which is exactly what
-        // `crash_report`/`smoketest` do concurrently in this same test binary.
-        // Without this guard the test is an unreproducible flake (it passes
-        // in isolation and fails ~1 run in 3 under load).
-        let _home_guard = crate::test_support::HOME_ENV_LOCK
-            .lock()
-            .unwrap_or_else(|p| p.into_inner());
-        let root = enrichment_root();
-        assert!(
-            root.ends_with("enrichment"),
-            "enrichment root should end with `enrichment`, got {}",
-            root.display()
-        );
-        // Since 2026-07-30 the root comes from the rebrand-aware SSOT
-        // (`rebrand::data_dir()`): `~/.svrnmesh` preferred, populated legacy
-        // `~/.sovereign` honored, SVRNMESH_DATA_DIR override respected —
-        // so pin the derivation, not one brand spelling.
-        assert_eq!(
-            root,
-            sovereign_contracts::rebrand::data_dir().join("enrichment"),
-            "enrichment root must derive from the shared data root"
-        );
-    }
 
     #[test]
     fn starter_question_ranker_prefers_thematic_then_interpretive() {
