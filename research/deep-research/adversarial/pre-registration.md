@@ -6903,3 +6903,24 @@ Campaign: drb1-race (directive 54c6f9af). Rung 1 of the ladder to beat Perplexit
 Pre-registered BEFORE relaunch: P4-v1 re-measure, 2026-08-20: rule — read >=5/16 -> weather confirmed, the 4 was noise, order closes and R2 proceeds; read <=4/16 -> the stop rule trades v1 coverage for round consumption -> STOP, no further landing, escalate to the seat with the curve (candidate dispositions: re-order the ladder R3a-before-R2, or scope the stop rule).
 
 Battery relaunch marker: /tmp/dr-drb1-r1-re.exit (fresh run root runs-r1-re/).
+
+### Re-measure read (2026-08-21, battery drb1-r1-re)
+
+**Battery**: runs-r1-re/, 13 flights (seed-01..12 + v1), systemd-run unit dr-drb1-r1-re, clean exit BATTERY_DONE_EXIT=0.
+
+**P4-v1 re-measure (pre-registered rule, §18.6)**: 7/16 measured (bar >=12/16, FAILED). Rule applied: 7/16 >= 5/16 threshold → **weather confirmed, the 4 was noise**. The stop rule does NOT trade v1 coverage for round consumption; the first read was noise. Order closes, R2 proceeds.
+
+**Re-measure gate table (scorer verdicts VERBATIM, read FROM score.json bars.verdicts array)**:
+
+| Leg | Measured | Bar | Verdict |
+|-----|----------|-----|---------|
+| P4-v0 | 62/72 | >=58/72 | **PASSED** |
+| P4-v1 (loop) | 7/16 | >=12/16 | **FAILED** |
+| P3 | 7/13 passed (+0 could-not-judge) | >=10/13 | **FAILED** |
+| R-12-nongrow | 11/12 v0 seeds | >=10/12 | **PASSED** |
+| T1.7 plan presence | 12/12 scoped flights | all scoped flights carry | **PASSED** |
+| two-arm lift (pooled) | 1.0 vs 0.953 | loop >= one-shot + 0.10 | **FAILED** |
+| two-arm lift (v1) | 1.0 vs 0.969 | loop >= one-shot + 0.15 | **FAILED** |
+| honesty not worse | ungrounded loop 0.0 vs one-shot 0.047 | loop ungrounded <= one-shot | **PASSED** |
+
+**R-12 re-measure**: 11/12 v0 seeds PASSED (vs 10/12 in r1). Weather confirmed — both reads in 10-12 range.

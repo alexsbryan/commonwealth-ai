@@ -195,3 +195,56 @@ for v in ((d.get("bars") or {}).get("verdicts") or d["verdicts"]):
         sys.exit(0)
 sys.exit(3)
 PY'''
+
+[[bar]]
+id           = "findings-not-walled"
+one_line     = "Substantive claims render as provenance-labeled findings, not open questions — the floor taxes corroboration, never presentation"
+derives_from = "aiq-teardown.md §6.3 (writer contract tiering); flight finding 2026-08-20: 127/137 claims render could-not-judge, Findings empty on 8/9 tasks"
+status       = "open"
+target       = 0.30
+floor        = 0.927
+floor_basis  = "race-20260820T151943: 127/137 report markers are could-not-judge (0.927); section sizes — task 90 Findings 392b vs Open-questions 7801b, task 62 406b vs 6176b"
+direction    = "lower_is_better"
+kill         = "the corroboration floor is NEVER the knob: single-origin content renders AS single-origin-labeled findings (honest), never as corroborated and never as resolved; only the render contract moves this bar — a floor change to move it is a kill, not a tune"
+instrument   = '''python3 - <<'PY'
+import glob, json, re, sys
+mans = sorted(glob.glob("research/deep-research/drb/overall-derivation/flights/*/manifest.json"))
+if not mans:
+    sys.exit(3)
+dirs = json.load(open(mans[-1])).get("landed_dirs") or {}
+if not dirs:
+    sys.exit(3)
+tot = cnj = 0
+for d in dirs.values():
+    txt = open(f"{d}/report.md").read()
+    marks = re.findall(r"\[(passed|failed|refuted|could-not-judge|single-origin[a-z-]*)\]", txt)
+    tot += len(marks)
+    cnj += marks.count("could-not-judge")
+if not tot:
+    sys.exit(3)
+print(json.dumps({"value": round(cnj / tot, 4), "markers": tot,
+                  "cnj": cnj, "flight": mans[-1].split("/")[-2]}))
+PY'''
+
+[[bar]]
+id           = "no-render-truncation"
+one_line     = "The deliverable is never the truncated artifact — its budget exceeds the working stages' (the AIQ 32K-writer precedent)"
+derives_from = "aiq-teardown.md §6.1 (writer max_tokens 32768 = 2x every other stage); t7a flight truncation_declared 9/9"
+status       = "open"
+target       = 0
+floor        = 9
+floor_basis  = "race-20260820T151943: truncation_declared=true on 9/9 manifests (the strict-shape re-draft cap; t6d's measured P4-v1 loss)"
+direction    = "lower_is_better"
+kill         = "if un-truncating regresses the strict-shape contract's readers (scorer/goldens), the cap mechanism is redesigned, not the contract silently loosened"
+instrument   = '''python3 - <<'PY'
+import glob, json, sys
+mans = sorted(glob.glob("research/deep-research/drb/overall-derivation/flights/*/manifest.json"))
+if not mans:
+    sys.exit(3)
+dirs = json.load(open(mans[-1])).get("landed_dirs") or {}
+if not dirs:
+    sys.exit(3)
+n = sum(1 for d in dirs.values()
+        if (json.load(open(f"{d}/manifest.json")) or {}).get("truncation_declared"))
+print(json.dumps({"value": n, "tasks": len(dirs), "flight": mans[-1].split("/")[-2]}))
+PY'''
