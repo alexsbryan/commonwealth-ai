@@ -44,8 +44,8 @@ use super::store_open::{atlas_dir_for, sovereign_root};
 use crate::enrich_cmd::inference_client::{
     probe_daemon, resolve_default_models, DaemonInferenceClient,
 };
-use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 use sovereign_cli_shared::args::Parsed;
+use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
