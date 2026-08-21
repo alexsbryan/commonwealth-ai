@@ -120,8 +120,8 @@ pub use grounding_journal::{
 };
 mod routing;
 pub use routing::{
-    compute_trust_level, AuthorityClaim, Effort, Intent, Operation, Permission, ToolContext,
-    TrustLevel,
+    compute_trust_level, AuthorityClaim, Effort, Intent, IntentRow, Operation, Permission,
+    ToolAccess, ToolContext, TrustLevel,
 };
 
 // ─── Tool Vocabulary ───────────────────────────────────────────

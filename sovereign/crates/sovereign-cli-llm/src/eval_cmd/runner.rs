@@ -450,25 +450,15 @@ async fn run_question_routing(session: &ChatSession, q: &Question) -> RoutingRes
     }
 }
 
-/// Lowercase wire form of an Intent — matches the strings used in
-/// the bank's `expected_intent` field and the category-default map.
+/// Lowercase wire form of an Intent — matches the strings used in the bank's
+/// `expected_intent` field and the category-default map.
+///
+/// The `slug` column of the intent table. It was a thirteen-arm `match` here
+/// until 2026-08-20, one of THREE independent implementations of this one wire
+/// key (the others in `sovereign_core::router_embed::intent_label` and
+/// `runtime::intent_helpers::intent_hint`). One key, one decider.
 fn intent_wire_label(intent: &sovereign_core::types::Intent) -> String {
-    use sovereign_core::types::Intent;
-    match intent {
-        Intent::SimpleQuery => "simple_query".into(),
-        Intent::KnowledgeQuery => "knowledge_query".into(),
-        Intent::DeepQuery => "deep_query".into(),
-        Intent::ComparisonQuery => "comparison_query".into(),
-        Intent::CodeQuery => "code_query".into(),
-        Intent::MetalingualQuery => "metalingual_query".into(),
-        Intent::ConationQuery => "conation_query".into(),
-        Intent::CommissiveQuery => "commissive_query".into(),
-        Intent::ExpressiveQuery => "expressive_query".into(),
-        Intent::GenerativeQuery => "generative_query".into(),
-        Intent::ComplexTask => "complex_task".into(),
-        Intent::SimpleAction { .. } => "simple_action".into(),
-        Intent::Continuation { .. } => "continuation".into(),
-    }
+    intent.row().slug.to_string()
 }
 
 /// Resolve `chunk_id` (format `sec_NNNN`) to the corresponding

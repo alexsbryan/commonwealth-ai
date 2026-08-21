@@ -1266,6 +1266,23 @@ User message
   → Memory extraction at conversation end
 ```
 
+Every PER-INTENT ATTRIBUTE is a column of `IntentRow`, returned by
+`Intent::row()` in `sovereign-contracts/src/types/routing.rs`: the recorded
+name, the snake_case wire slug (one vocabulary for the exemplar TOML, eval
+banks, and the desktop redirect payload), the banner/chip/clarifier phrasings,
+the handler trace label, the OICP `(capability hint, latency class)` default,
+the retrieval slot with and without evidence, the output-budget depth floor,
+the referential `Operation` with and without an atom-enum pin, and `ToolAccess`
+— the catalog filter. **Adding an intent is a variant, a row, and exemplars in
+`sovereign/router/exemplars.toml`.** `IntentRow` has no `Default`, so a row
+that omits a column does not compile. Until 2026-08-20 these lived in ten
+`match`es across four crates, three ending in a `_ =>` catch-all — a
+fourteenth intent compiled clean and silently inherited `Speed::Slow`, a
+700-token budget and no `Operation` (noun-convergence rung nc-14). What did NOT
+move: handler DISPATCH in `runtime/turn.rs` and `runtime/streaming.rs` (control
+flow over a closed set is what enums are for), payload guards, and
+`authority_guard::guard_story`, whose values name runtime seams by file.
+
 `Plan` is a flat JSON DAG (`steps`, `edges`). `StepKind`: `Reason`,
 `Tool`, `UserInput`, `Branch`, `ReasonWithTools`, `AwaitUserInfo`,
 `Delegate`. `Step.sampling`/`Step.evaluation` are typed fields (the
@@ -2373,7 +2390,7 @@ feature lifecycle (`provision_feature`, `archive_feature`,
 `drift_posture`, `drift_findings`), capability docs
 (`capability_map`, `capability_posture`, `capability_findings`),
 project + design context
-(`project_context`, `design_signals_extract`, `check_doc_paths`,
+(`project_context`, `design_signals_extract`,
 `index_health`), session reflection (`session_reflection`), and
 work-atlas coordination (`declare_scope`, `release_scope`,
 `work_in_flight` — see [`docs/WORK_ATLAS.md`](./docs/WORK_ATLAS.md)).
@@ -4613,7 +4630,8 @@ of them shadow `SetupConfig` fields — declared debt via the registry's
 | `quality/ARCH_LAYERS.toml` | crate layer map + exceptions | humans | `cargo xtask layer-gate`, `arch_report` |
 | `quality/env-flags.toml` | the env-knob registry (cluster/default/status/`alias_of`/`shadows`) | humans | `cargo xtask env-gate` + pin-tests in the two in-code flags tables |
 | `quality/baselines/` | shrink-only ratchet baselines | **machine only** (`--update-baseline` / `--tighten`) | every count-based xtask gate |
-| `quality/CONCEPTS.toml` | the concept register — one canonical owner per noun; the noun-convergence program's source of truth | humans | `cargo xtask concept-gate` (the ratchet, over `quality/baselines/concepts.txt`) + `svrn code converge status` |
+| `quality/CONCEPTS.toml` | the concept register — one canonical owner per noun; the noun-convergence program's source of truth. Also carries each noun's `gloss` and (9 rows) its `shape`, moved here 2026-08-20 from `TARGET_ARCHITECTURE.md` §2 so the document can render them | humans | `cargo xtask concept-gate` (the ratchet, over `quality/baselines/concepts.txt`) + `svrn code converge status` + `cargo xtask target-arch` (renders §2 of `quality/TARGET_ARCHITECTURE.md`) |
+| `quality/TARGET_ARCHITECTURE.md` | the noun-convergence destination. Four regions are GENERATED — §2 register and §6 layer map from `CONCEPTS.toml` + `ARCH_LAYERS.toml` (declared, diffed every check); §2.1 graph evidence and §6.1 boundary table from `scripts/nc-pressure.py` and `scripts/nc-boundary.py` (measured, stamped with the graph commit and the register digest they were taken against). §1, §3-§5 and §7 remain hand-written prose | `cargo xtask target-arch --update-doc` / `--measure` for the blocks; humans for the prose | `cargo xtask target-arch` — four verdicts: passed / stale / could-not-judge / never-ran |
 | `quality/source-tree.toml` | the residual "not our source" dirs a gate walk must skip — only what git's ignore rules cannot express (`vendor/` is tracked but not authored here) | humans | `common::SourceTree::discover` → arch-gate, docs-gate, env-gate |
 | `docs/cli-contract.toml` | CLI verbs, journeys, experiences | humans | `cli_contract_journeys`, `svrn contract` |
 | `models.toml` | model selection per hardware | humans | daemon model selection |

@@ -744,17 +744,12 @@ impl Runtime {
         // upstream FTS retrieval (`context.memories`) + any
         // temporal tensions so the witness contract can execute
         // its contradiction-across-time moves.
-        let dispatch = match intent {
-            Intent::ComplexTask => "handle_complex_task",
-            Intent::KnowledgeQuery | Intent::ComparisonQuery => "handle_knowledge_query",
-            Intent::CodeQuery => "handle_code_query",
-            Intent::MetalingualQuery => "handle_metalingual_query",
-            Intent::ConationQuery => "handle_conation_query",
-            Intent::CommissiveQuery => "handle_commissive_query",
-            Intent::ExpressiveQuery => "handle_expressive_query",
-            Intent::GenerativeQuery => "handle_generative_query",
-            _ => "handle_simple",
-        };
+        // The glassbox label is the `dispatch` column of the intent table, so a
+        // new intent cannot reach this line with no label — the row would not
+        // compile. The column is pinned to the closed set of runtime handler
+        // names by `dispatch_column_names_a_runtime_handler`; that a given row
+        // names the arm actually taken below is still a reading, not a test.
+        let dispatch = intent.row().dispatch;
         tracing::info!(dispatch, "runtime: dispatching");
 
         let result = match intent {

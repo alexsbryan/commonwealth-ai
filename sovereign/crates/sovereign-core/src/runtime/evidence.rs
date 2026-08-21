@@ -231,24 +231,11 @@ pub(crate) fn speed_for_retrieval_intent(
     intent: &crate::types::Intent,
     has_evidence: bool,
 ) -> crate::types::Speed {
-    use crate::types::{Intent, Speed};
-    match intent {
-        // Knowledge found for a simple question upgrades to the
-        // primary model; without evidence the fast slot answers
-        // from general knowledge.
-        Intent::SimpleQuery => {
-            if has_evidence {
-                Speed::Slow
-            } else {
-                Speed::Fast
-            }
-        }
-        Intent::DeepQuery => Speed::Slow,
-        // Bounded contrast — Fast slot is enough; the constrained
-        // synthesis prompt does the structuring work the primary
-        // model would otherwise do.
-        Intent::ComparisonQuery => Speed::Fast,
-        _ => Speed::Slow,
+    let row = intent.row();
+    if has_evidence {
+        row.speed_with_evidence
+    } else {
+        row.speed_without_evidence
     }
 }
 
@@ -631,15 +618,10 @@ fn output_hard_ceiling() -> usize {
 /// the MTP model reports `finish=Stop` even when it stops at the cap, so the
 /// Length-keyed telemetry/retry never saw it.
 pub(crate) fn resolve_output_budget(intent: &Intent, shape: &EvidenceShape) -> OutputBudget {
-    // Depth floor by intent — how thorough an answer the ask implies.
-    let base = match intent {
-        Intent::SimpleQuery => 400,
-        Intent::ComparisonQuery => 700,
-        Intent::DeepQuery => 1200,
-        Intent::CodeQuery => 900,
-        // KnowledgeQuery and anything else routed through synthesis.
-        _ => 700,
-    };
+    // Depth floor by intent — how thorough an answer the ask implies. One
+    // column of the intent table, so a new intent cannot silently inherit
+    // someone else's floor.
+    let base = intent.row().output_floor;
     // Breadth — each additional distinct source is more ground to cover.
     // Capped so a noisy retrieval can't inflate the target without bound.
     let breadth = shape.distinct_sources.saturating_sub(1).min(6) * 130;
@@ -807,24 +789,16 @@ mod route_resolver_tests {
 /// nothing routes on it yet (Step 2 wires effort → tier). See
 /// `sovereign/docs/QUERY_TAXONOMY_MECE.md`.
 pub(crate) fn operation_of(intent: &Intent, has_atom_enum: bool) -> Option<Operation> {
-    match intent {
-        // Comparison is its own operation and is checked first (mirrors the
-        // legacy ladder: Comparison pinned before the atom-enum pin).
-        Intent::ComparisonQuery => Some(Operation::Compare),
-        // Within the referential Answer family, the atom-enum flag promotes
-        // the turn to Enumerate (a set/roster). The flag is only meaningful
-        // here — it is set during corpus retrieval for set-questions — so it
-        // never reaches the non-referential arm below.
-        Intent::SimpleQuery | Intent::KnowledgeQuery | Intent::DeepQuery | Intent::CodeQuery => {
-            if has_atom_enum {
-                Some(Operation::Enumerate)
-            } else {
-                Some(Operation::Answer)
-            }
-        }
-        // Non-referential intents (Jakobson/speech-act + actions) have no
-        // referential Operation, regardless of any flag.
-        _ => None,
+    // Two columns rather than one plus a rule: the atom-enum flag is set during
+    // corpus retrieval for set-questions, and it promotes `Answer` to
+    // `Enumerate` on the referential rows only. `ComparisonQuery` reads
+    // `Compare` in both columns — comparison is its own operation and outranks
+    // the pin — and the non-referential rows read `None` in both.
+    let row = intent.row();
+    if has_atom_enum {
+        row.operation_with_atom_enum
+    } else {
+        row.operation
     }
 }
 
