@@ -163,7 +163,10 @@ fn a_manifest_and_a_handler_make_a_registered_tool() {
         &ToolContext::default(),
     ))
     .expect("declared tool executes");
-    assert!(matches!(out, StepOutput::Text(ref s) if s == "hi hi"), "{out:?}");
+    assert!(
+        matches!(out, StepOutput::Text(ref s) if s == "hi hi"),
+        "{out:?}"
+    );
 }
 
 /// The declaration carries the parameter check: `required` and `type` are
@@ -173,10 +176,7 @@ fn the_declaration_validates_parameters() {
     let tool = declared(DECLARED_ONLY, echo_handler());
 
     let missing = tool.validate(&serde_json::json!({})).unwrap_err();
-    assert!(
-        missing.to_string().contains("requires `text`"),
-        "{missing}"
-    );
+    assert!(missing.to_string().contains("requires `text`"), "{missing}");
 
     let wrong_type = tool
         .validate(&serde_json::json!({ "text": "ok", "times": "three" }))
@@ -207,9 +207,15 @@ fn a_manifest_alone_makes_a_working_tool() {
     assert_eq!(shout.descriptor().id, "shout");
 
     // The default applied: `times` was never passed by the caller.
-    let out = block_on(shout.execute(&serde_json::json!({ "text": "go" }), &ToolContext::default()))
-        .expect("delegating tool executes");
-    assert!(matches!(out, StepOutput::Text(ref s) if s == "go go go"), "{out:?}");
+    let out = block_on(shout.execute(
+        &serde_json::json!({ "text": "go" }),
+        &ToolContext::default(),
+    ))
+    .expect("delegating tool executes");
+    assert!(
+        matches!(out, StepOutput::Text(ref s) if s == "go go go"),
+        "{out:?}"
+    );
 }
 
 /// A default is a default, not a pin — a caller-supplied key wins.
@@ -227,7 +233,10 @@ fn caller_parameters_win_over_declared_defaults() {
         &ToolContext::default(),
     ))
     .expect("executes");
-    assert!(matches!(out, StepOutput::Text(ref s) if s == "x"), "{out:?}");
+    assert!(
+        matches!(out, StepOutput::Text(ref s) if s == "x"),
+        "{out:?}"
+    );
 }
 
 /// A delegate whose target is not registered on THIS host is skipped, not

@@ -97,7 +97,9 @@ impl ToolRegistry {
                     self.tools.push(Arc::new(tool));
                     installed.push(manifest.id.clone());
                 }
-                Err(e) => tracing::warn!(tool_id = %manifest.id, error = %e, "declared tool skipped"),
+                Err(e) => {
+                    tracing::warn!(tool_id = %manifest.id, error = %e, "declared tool skipped")
+                }
             }
         }
         tracing::debug!(installed = installed.len(), "declared tools installed");
