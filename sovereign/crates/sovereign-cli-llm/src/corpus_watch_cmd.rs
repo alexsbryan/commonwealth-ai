@@ -14,10 +14,26 @@
 
 use std::path::PathBuf;
 
-use serde::Deserialize;
 use serde_json::json;
 
 use sovereign_core::setup_config::SetupConfig;
+
+// ─── Wire types ──────────────────────────────────────────────────
+//
+// Imported, not re-declared. Until 2026-08-21 this file carried ELEVEN
+// hand-copied mirrors of the `/internal/corpus/watch/*` contract, and
+// `ListEntry` had already drifted short of the daemon's by the same three
+// fields (`sync_mode`, `sensitive`, `additional_roots_count`) that nc-21
+// restored for the desktop. A field rename on the daemon side is now a
+// compile error here rather than a runtime parse failure.
+//
+// `RegisterRequest`'s config is the OTHER direction and is where the live bug
+// was: see `build_watch_config`.
+use sovereign_mesh::corpus_watch_http::{
+    AckResponse, ListResponse, RegisterResponse, StateResponse, StatusResponse,
+};
+use sovereign_tools::local_corpus::config::{SyncMode, WatchedFolderConfig};
+use sovereign_tools::local_corpus::watched::status::WatchedFolderStatus;
 
 const DEFAULT_CLIENT_PORT: u16 = 9741;
 
@@ -90,17 +106,8 @@ pub async fn run_register(args: &[String]) -> i32 {
 
     let mut path: Option<PathBuf> = None;
     let mut display_name: Option<String> = None;
-    let mut sweep_secs: Option<u64> = None;
-    let mut grace_secs: Option<u64> = None;
-    let mut abs_threshold: Option<usize> = None;
-    let mut frac_threshold: Option<f32> = None;
-    let mut exclude_globs: Vec<String> = Vec::new();
-    let mut follow_symlinks = false;
-    let mut no_guard = false;
+    let mut flags = RegisterFlags::default();
     let mut sync_initial = false;
-    let mut with_ocr = false;
-    let mut manual = false;
-    let mut sensitive = false;
     let mut on_change: Option<String> = None;
     let mut allow_trigger = false;
 
@@ -108,21 +115,21 @@ pub async fn run_register(args: &[String]) -> i32 {
     while let Some(arg) = iter.next() {
         match arg.as_str() {
             "--name" => display_name = iter.next().cloned(),
-            "--sweep-secs" => sweep_secs = iter.next().and_then(|s| s.parse().ok()),
-            "--grace-secs" => grace_secs = iter.next().and_then(|s| s.parse().ok()),
-            "--abs-threshold" => abs_threshold = iter.next().and_then(|s| s.parse().ok()),
-            "--frac-threshold" => frac_threshold = iter.next().and_then(|s| s.parse().ok()),
+            "--sweep-secs" => flags.sweep_secs = iter.next().and_then(|s| s.parse().ok()),
+            "--grace-secs" => flags.grace_secs = iter.next().and_then(|s| s.parse().ok()),
+            "--abs-threshold" => flags.abs_threshold = iter.next().and_then(|s| s.parse().ok()),
+            "--frac-threshold" => flags.frac_threshold = iter.next().and_then(|s| s.parse().ok()),
             "--exclude" => {
                 if let Some(g) = iter.next() {
-                    exclude_globs.push(g.clone());
+                    flags.exclude_globs.push(g.clone());
                 }
             }
-            "--follow-symlinks" => follow_symlinks = true,
-            "--no-deletion-guard" => no_guard = true,
+            "--follow-symlinks" => flags.follow_symlinks = true,
+            "--no-deletion-guard" => flags.no_guard = true,
             "--sync-initial" => sync_initial = true,
-            "--ocr" => with_ocr = true,
-            "--manual" => manual = true,
-            "--sensitive" => sensitive = true,
+            "--ocr" => flags.with_ocr = true,
+            "--manual" => flags.manual = true,
+            "--sensitive" => flags.sensitive = true,
             // Living trigger: a workflow (name or .toml path) to run automatically
             // whenever a sweep changes files. `--allow` skips the consent prompt
             // (for scripting). See `attach_consent`.
@@ -159,65 +166,12 @@ pub async fn run_register(args: &[String]) -> i32 {
         return 1;
     }
 
-    // Build the request body — only include knobs the user
-    // explicitly set. Fields the user omitted fall through to
-    // WatchedFolderConfig::default in the daemon (which itself
-    // honours `[watched_folders]` defaults from the daemon's
-    // SetupConfig).
-    let mut config = json!({});
-    if let Some(s) = sweep_secs {
-        config["sweep_interval_secs"] = json!(s);
-    }
-    if let Some(s) = grace_secs {
-        config["soft_delete_grace_secs"] = json!(s);
-    }
-    if !exclude_globs.is_empty() {
-        config["exclude_globs"] = json!(exclude_globs);
-    }
-    if follow_symlinks {
-        config["follow_symlinks"] = json!(true);
-    }
-    if with_ocr {
-        // Mirrors WatchedFolderConfig.with_ocr — projected onto
-        // LocalCorpusConfig.ocr_pdfs by the factory. Requires the
-        // daemon to have an OcrCtx installed; without one, scanned
-        // PDFs land in failed_files with a "OCR enabled but ctx not
-        // installed" reason.
-        config["with_ocr"] = json!(true);
-    }
-    if manual {
-        // Folder-ingest v1 §3.5: opt out of periodic sweeps. The
-        // corpus only sweeps when `svrn corpus watch-sync-now`
-        // is called.
-        config["sync_mode"] = json!("manual");
-    }
-    if sensitive {
-        // Folder-ingest v1 §3.4: structurally exclude this folder
-        // from the agent's ambient situated-context assembly. The
-        // folder remains searchable on explicit query and via Inner
-        // Work mode.
-        config["sensitive"] = json!(true);
-    }
-    if abs_threshold.is_some() || frac_threshold.is_some() || no_guard {
-        let mut guard = json!({});
-        if let Some(t) = abs_threshold {
-            guard["absolute_threshold"] = json!(t);
-        }
-        if let Some(t) = frac_threshold {
-            guard["fractional_threshold"] = json!(t);
-        }
-        if no_guard {
-            guard["enabled"] = json!(false);
-        }
-        config["deletion_guard"] = guard;
-    }
-
     // Living trigger: attach a workflow to run on every change. Because it runs
     // unattended (shell / network / writes are possible), surface what it can do
     // and require explicit consent before arming it.
     if let Some(workflow) = &on_change {
         match attach_consent(workflow, allow_trigger).await {
-            Ok(true) => config["run_on_changes"] = json!(workflow),
+            Ok(true) => flags.run_on_changes = Some(workflow.clone()),
             Ok(false) => {
                 eprintln!("Not arming the trigger; the folder will still be watched.");
             }
@@ -231,7 +185,7 @@ pub async fn run_register(args: &[String]) -> i32 {
     let body = json!({
         "path": abs_path,
         "display_name": display_name,
-        "config": config,
+        "config": build_watch_config(&flags),
         "sync_initial": sync_initial,
     });
 
@@ -278,6 +232,76 @@ pub async fn run_register(args: &[String]) -> i32 {
         parsed.corpus_id
     );
     0
+}
+
+/// Every `corpus watch` register flag that projects onto the daemon's
+/// per-corpus config. Split out of `run_register` so the flag -> wire
+/// projection is a pure function a test can assert on.
+#[derive(Debug, Default)]
+struct RegisterFlags {
+    sweep_secs: Option<u64>,
+    grace_secs: Option<u64>,
+    abs_threshold: Option<usize>,
+    frac_threshold: Option<f32>,
+    exclude_globs: Vec<String>,
+    follow_symlinks: bool,
+    no_guard: bool,
+    with_ocr: bool,
+    manual: bool,
+    sensitive: bool,
+    run_on_changes: Option<String>,
+}
+
+/// Project the register flags onto the daemon's OWN per-corpus config type.
+///
+/// Every field the user did not set keeps `WatchedFolderConfig::default()`,
+/// which is the same value the daemon's per-field `#[serde(default)]` would
+/// have supplied — so the full struct on the wire is equivalent to the partial
+/// object this used to emit, minus the failure mode.
+///
+/// It used to build a `serde_json::Value` by hand, and `--abs-threshold`,
+/// `--frac-threshold` and `--no-deletion-guard` each emitted a `deletion_guard`
+/// object with ONE member. `DeletionGuardConfig` declares no serde defaults, so
+/// the daemon's `Json<RegisterRequest>` extractor (`corpus_watch_http.rs:456`)
+/// rejected the whole register call with 422 unless all three flags were passed
+/// together. Typing the projection is what makes that unrepresentable.
+fn build_watch_config(f: &RegisterFlags) -> WatchedFolderConfig {
+    let mut cfg = WatchedFolderConfig::default();
+    if let Some(s) = f.sweep_secs {
+        cfg.sweep_interval_secs = s;
+    }
+    if let Some(s) = f.grace_secs {
+        cfg.soft_delete_grace_secs = s;
+    }
+    if !f.exclude_globs.is_empty() {
+        cfg.exclude_globs.clone_from(&f.exclude_globs);
+    }
+    cfg.follow_symlinks = f.follow_symlinks;
+    // Mirrors WatchedFolderConfig.with_ocr — projected onto
+    // LocalCorpusConfig.ocr_pdfs by the factory. Requires the daemon to have an
+    // OcrCtx installed; without one, scanned PDFs land in failed_files with a
+    // "OCR enabled but ctx not installed" reason.
+    cfg.with_ocr = f.with_ocr;
+    // Folder-ingest v1 §3.5: opt out of periodic sweeps. The corpus only sweeps
+    // when `svrn corpus watch-sync-now` is called.
+    if f.manual {
+        cfg.sync_mode = SyncMode::Manual;
+    }
+    // Folder-ingest v1 §3.4: structurally exclude this folder from the agent's
+    // ambient situated-context assembly. The folder remains searchable on
+    // explicit query and via Inner Work mode.
+    cfg.sensitive = f.sensitive;
+    if let Some(t) = f.abs_threshold {
+        cfg.deletion_guard.absolute_threshold = t;
+    }
+    if let Some(t) = f.frac_threshold {
+        cfg.deletion_guard.fractional_threshold = t;
+    }
+    if f.no_guard {
+        cfg.deletion_guard.enabled = false;
+    }
+    cfg.run_on_changes.clone_from(&f.run_on_changes);
+    cfg
 }
 
 fn print_register_help() {
@@ -392,6 +416,24 @@ pub async fn run_list(args: &[String]) -> i32 {
             status_summary(&entry.status)
         );
         println!("    path: {}", entry.root_path.display());
+        // Folder-ingest v1 §3.4/§3.5/§3.1. The daemon has reported these three
+        // since v1; the CLI's hand-copied `ListEntry` did not declare them, so
+        // `--sensitive` and `--manual` were set here and then invisible from
+        // here. Printed only when they differ from the default so the common
+        // single-root continuous folder stays a two-line entry.
+        let mut marks: Vec<String> = Vec::new();
+        if entry.sensitive {
+            marks.push("sensitive (excluded from ambient context)".to_string());
+        }
+        if entry.sync_mode == SyncMode::Manual {
+            marks.push("manual sync".to_string());
+        }
+        if entry.additional_roots_count > 0 {
+            marks.push(format!("+{} folders", entry.additional_roots_count));
+        }
+        if !marks.is_empty() {
+            println!("    {}", marks.join("  ·  "));
+        }
     }
     0
 }
@@ -697,8 +739,8 @@ fn require_corpus_id(args: &[String], cmd: &str) -> Option<String> {
     Some(args[0].clone())
 }
 
-fn status_summary(s: &StatusEnum) -> String {
-    use StatusEnum::*;
+fn status_summary(s: &WatchedFolderStatus) -> String {
+    use WatchedFolderStatus::*;
     match s {
         Idle {
             last_sweep_unix,
@@ -749,118 +791,6 @@ fn format_relative(unix_secs: u64) -> String {
     } else {
         format!("{}d ago", delta / 86_400)
     }
-}
-
-// ─── Wire-type mirrors (Deserialize-only on the CLI side) ────
-
-#[derive(Debug, Deserialize)]
-struct RegisterResponse {
-    corpus_id: String,
-    display_name: String,
-    initial_sweep: serde_json::Value,
-}
-
-#[derive(Debug, Deserialize)]
-struct ListResponse {
-    corpora: Vec<ListEntry>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ListEntry {
-    corpus_id: String,
-    display_name: String,
-    root_path: PathBuf,
-    status: StatusEnum,
-}
-
-#[derive(Debug, Deserialize)]
-struct StatusResponse {
-    corpus_id: String,
-    status: StatusEnum,
-}
-
-#[derive(Debug, Deserialize)]
-struct StateResponse {
-    corpus_id: String,
-    status: StatusEnum,
-    skipped_by_extension: std::collections::HashMap<String, usize>,
-    failed_files: Vec<FailedFileWire>,
-    tombstones: usize,
-    live_entries: usize,
-}
-
-#[derive(Debug, Deserialize)]
-struct FailedFileWire {
-    doc_id: String,
-    #[allow(dead_code)]
-    // path printed only via doc_id today; absolute_path reserved for future drill-down
-    absolute_path: PathBuf,
-    kind: String,
-    reason: String,
-    first_seen_unix: u64,
-}
-
-#[derive(Debug, Deserialize)]
-struct AckResponse {
-    corpus_id: String,
-    ok: bool,
-}
-
-// Mirror of WatchedFolderStatus — kept here so the CLI doesn't drag
-// the full `sovereign-tools` surface across module boundaries it
-// doesn't otherwise need.
-#[derive(Debug, Deserialize, serde::Serialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
-enum StatusEnum {
-    Idle {
-        last_sweep_unix: u64,
-        live_docs: usize,
-        tombstones: usize,
-    },
-    Sweeping {
-        phase: SweepPhase,
-        current: usize,
-        total: usize,
-    },
-    PausedAwaitingConfirmation {
-        diff_summary: DiffSummary,
-        tripped_rule: TrippedRule,
-        sweep_started_unix: u64,
-    },
-    PausedManual {
-        since_unix: u64,
-        reason: String,
-    },
-    Errored {
-        message: String,
-        errored_unix: u64,
-    },
-}
-
-#[derive(Debug, Deserialize, serde::Serialize)]
-#[serde(rename_all = "snake_case")]
-enum SweepPhase {
-    Walking,
-    Diffing,
-    Deleting,
-    Updating,
-    Adding,
-    GcSoftDeletes,
-}
-
-#[derive(Debug, Deserialize, serde::Serialize)]
-struct DiffSummary {
-    added: usize,
-    modified: usize,
-    removed: usize,
-    live_before: usize,
-}
-
-#[derive(Debug, Deserialize, serde::Serialize)]
-#[serde(tag = "rule", rename_all = "snake_case")]
-enum TrippedRule {
-    Absolute { threshold: usize, observed: usize },
-    Fractional { threshold: f32, observed: f32 },
 }
 
 #[cfg(test)]
@@ -925,5 +855,110 @@ mod tests {
             !msg.contains("timed out"),
             "connect refusal must not be reported as a timeout: {msg}"
         );
+    }
+
+    /// Every register flag must survive the daemon's `Json<RegisterRequest>`
+    /// extractor. This is the CLI-side twin of the bug `ece0721a` fixed for the
+    /// desktop: a client hand-builds the config body, and a field the user
+    /// explicitly set never reaches the daemon.
+    ///
+    /// `--abs-threshold`, `--frac-threshold` and `--no-deletion-guard` were the
+    /// live case here. `DeletionGuardConfig` carries no serde defaults on any of
+    /// its three fields, so the partial `{"deletion_guard":{"absolute_threshold":N}}`
+    /// object the CLI used to emit failed to deserialize and axum rejected the
+    /// whole register call with 422 — unless the user happened to pass all three
+    /// flags together.
+    #[test]
+    fn every_register_flag_survives_the_daemon_extractor() {
+        use sovereign_mesh::corpus_watch_http::RegisterRequest;
+
+        let flags = RegisterFlags {
+            sweep_secs: Some(300),
+            grace_secs: Some(3600),
+            abs_threshold: Some(50),
+            frac_threshold: Some(0.5),
+            exclude_globs: vec!["*.tmp".to_string()],
+            follow_symlinks: true,
+            no_guard: false,
+            with_ocr: true,
+            manual: true,
+            sensitive: true,
+            run_on_changes: Some("reindex".to_string()),
+        };
+        let body = json!({
+            "path": "/tmp/watched",
+            "display_name": "Watched",
+            "config": build_watch_config(&flags),
+            "sync_initial": false,
+        });
+        let req: RegisterRequest = serde_json::from_value(body)
+            .expect("the register body must deserialize as the daemon's own RegisterRequest");
+        let cfg = &req.config;
+        assert_eq!(cfg.sweep_interval_secs, 300);
+        assert_eq!(cfg.soft_delete_grace_secs, 3600);
+        assert_eq!(cfg.exclude_globs, vec!["*.tmp".to_string()]);
+        assert!(cfg.follow_symlinks);
+        assert!(cfg.with_ocr, "--ocr must reach the daemon");
+        assert!(cfg.sensitive, "--sensitive must reach the daemon");
+        assert_eq!(
+            cfg.sync_mode,
+            sovereign_tools::local_corpus::config::SyncMode::Manual,
+            "--manual must reach the daemon"
+        );
+        assert_eq!(cfg.run_on_changes.as_deref(), Some("reindex"));
+        assert_eq!(cfg.deletion_guard.absolute_threshold, 50);
+        assert!((cfg.deletion_guard.fractional_threshold - 0.5).abs() < f32::EPSILON);
+        assert!(cfg.deletion_guard.enabled);
+    }
+
+    /// One threshold flag on its own is the common invocation and was the
+    /// broken one: it emits a `deletion_guard` object with a single member.
+    #[test]
+    fn a_lone_threshold_flag_still_registers() {
+        use sovereign_mesh::corpus_watch_http::RegisterRequest;
+
+        for flags in [
+            RegisterFlags {
+                abs_threshold: Some(50),
+                ..Default::default()
+            },
+            RegisterFlags {
+                frac_threshold: Some(0.9),
+                ..Default::default()
+            },
+            RegisterFlags {
+                no_guard: true,
+                ..Default::default()
+            },
+        ] {
+            let body = json!({
+                "path": "/tmp/watched",
+                "display_name": null,
+                "config": build_watch_config(&flags),
+                "sync_initial": false,
+            });
+            let req: RegisterRequest = serde_json::from_value(body).unwrap_or_else(|e| {
+                panic!("register body rejected by the daemon extractor for {flags:?}: {e}")
+            });
+            let g = &req.config.deletion_guard;
+            match (flags.abs_threshold, flags.frac_threshold, flags.no_guard) {
+                (Some(t), _, _) => {
+                    assert_eq!(g.absolute_threshold, t);
+                    // Untouched knobs keep the daemon's defaults.
+                    assert!((g.fractional_threshold - 0.25).abs() < f32::EPSILON);
+                    assert!(g.enabled);
+                }
+                (_, Some(t), _) => {
+                    assert!((g.fractional_threshold - t).abs() < f32::EPSILON);
+                    assert_eq!(g.absolute_threshold, 100);
+                    assert!(g.enabled);
+                }
+                (_, _, true) => {
+                    assert!(!g.enabled, "--no-deletion-guard must disable the guard");
+                    assert_eq!(g.absolute_threshold, 100);
+                }
+                _ => unreachable!(),
+            }
+        }
     }
 }

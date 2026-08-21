@@ -28,6 +28,7 @@ pub mod capability;
 pub mod completion;
 pub mod error;
 pub mod ingest;
+pub mod jsonrpc;
 pub mod knowledge;
 pub mod manifest;
 pub mod registry;
@@ -43,6 +44,7 @@ pub use completion::{
     PromptShape, ProviderCapabilities, SamplingMode, Speed, StreamFrame, StreamUsage, ToolSchema,
 };
 pub use error::{InferenceError, InferenceResult};
+pub use jsonrpc::{JsonRpcError, JsonRpcRequest, JsonRpcResponse, JSONRPC_VERSION};
 pub use slot::{ComputeChildStatus, ResidentSlot, SlotPlacement, WorkerPlacement};
 pub use tool::{Effect, Idempotency, Latency, Scope, ToolDescriptor, ToolExample};
 

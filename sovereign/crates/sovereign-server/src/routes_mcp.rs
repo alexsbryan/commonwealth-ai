@@ -32,81 +32,25 @@ use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
 use futures::stream::{self, Stream};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::types::{StepOutput, ToolContext};
 
-// ─── JSON-RPC 2.0 envelope types ──────────────────────────────
-
-/// Inbound JSON-RPC request. `params` is opaque JSON — each method is
-/// responsible for parsing its own shape. We deserialize `jsonrpc` so
-/// the envelope round-trips cleanly but don't validate its value (the
-/// spec says "2.0"; we accept anything for forward-compat with 3.0
-/// discussions and clients that omit it).
-#[derive(Debug, Deserialize)]
-pub struct JsonRpcRequest {
-    #[allow(dead_code)]
-    #[serde(default)]
-    pub jsonrpc: String,
-    /// Absent (→ `Null`) for JSON-RPC notifications, which get no reply.
-    #[serde(default)]
-    pub id: Value,
-    pub method: String,
-    #[serde(default)]
-    pub params: Option<Value>,
-}
-
-/// Outbound JSON-RPC response. Either `result` or `error` is set.
-#[derive(Debug, Serialize)]
-pub struct JsonRpcResponse {
-    pub jsonrpc: &'static str,
-    pub id: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
-}
-
-/// JSON-RPC error object. Spec codes: -32700 parse, -32600 invalid
-/// request, -32601 method not found, -32602 invalid params, -32603
-/// internal error. Tool-call failures that the agent should *see* (not
-/// break on) use `CallToolResult { isError: true }` inside a successful
-/// `result` envelope instead — MCP's distinction between "transport
-/// failed" and "tool said no".
-#[derive(Debug, Serialize)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<Value>,
-}
-
-impl JsonRpcResponse {
-    fn result(id: Value, value: Value) -> Self {
-        Self {
-            jsonrpc: "2.0",
-            id,
-            result: Some(value),
-            error: None,
-        }
-    }
-
-    fn error(id: Value, code: i32, message: impl Into<String>) -> Self {
-        Self {
-            jsonrpc: "2.0",
-            id,
-            result: None,
-            error: Some(JsonRpcError {
-                code,
-                message: message.into(),
-                data: None,
-            }),
-        }
-    }
-}
+// ─── JSON-RPC 2.0 envelope ────────────────────────────────────
+//
+// Imported, not re-declared. The envelope is a wire contract, so it lives at
+// layer 0 in `oicp-types` (reached here through `sovereign_core`'s re-export,
+// per ARCH §8.3) and `sovereign_mesh::mcp_router` imports the same one.
+//
+// Until 2026-08-21 this file and the daemon's router each declared their own
+// and had drifted. `id` is `Option<Value>` here now instead of a `Value`
+// defaulted to `Null`, which is a change of SHAPE and not of behaviour — see
+// `oicp_types::jsonrpc::JsonRpcRequest::id` for what the two can and cannot
+// tell apart, and why the Option still wins. The error object also gains the
+// spec's optional `data` member, which serializes to nothing while it is None.
+use sovereign_core::oicp::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
 // ─── Router ───────────────────────────────────────────────────
 
@@ -209,11 +153,13 @@ async fn dispatch_one(
     runtime: &Arc<Runtime>,
     tdd: &crate::routes_tdd::TddState,
 ) -> Option<JsonRpcResponse> {
-    if req.id.is_null() {
+    // JSON-RPC 2.0 §4.1: a notification is a request with NO id, and it gets no
+    // reply. `None` also covers an explicit `"id": null`, which serde folds
+    // into the same value — §4 discourages that form and nothing here sends it.
+    let Some(id) = req.id.clone() else {
         tracing::debug!(method = %req.method, "mcp: notification received");
         return None;
-    }
-    let id = req.id.clone();
+    };
     Some(match req.method.as_str() {
         "initialize" => {
             let session_id = generate_session_id(&req.params);
@@ -790,17 +736,29 @@ mod tests {
 
     // ─── JSON-RPC envelope tests ─────────────────────────────
 
+    /// The envelope's own shape is asserted by its owner
+    /// (`oicp_types::jsonrpc`). What is this router's to prove is that it
+    /// dispatches on the absence of an id and answers everything else.
+    ///
+    /// Until 2026-08-21 this file declared its own envelope with the id as a
+    /// bare `Value` defaulted to `Null` and branched on `req.id.is_null()` —
+    /// a rule that lived in a comment. On the shared type the branch is
+    /// `let Some(id) = … else`, so replying to a notification (which §4.1
+    /// forbids) is no longer something a caller can forget to prevent.
     #[test]
-    fn json_rpc_response_elides_absent_field() {
-        let ok = JsonRpcResponse::result(Value::from(1), Value::Null);
-        let s = serde_json::to_string(&ok).unwrap();
-        assert!(s.contains("\"result\""));
-        assert!(!s.contains("\"error\""));
+    fn dispatch_answers_every_request_that_carries_an_id() {
+        let notification: JsonRpcRequest =
+            serde_json::from_str(r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#)
+                .unwrap();
+        assert!(notification.id.is_none(), "no id member -> no reply");
 
-        let err = JsonRpcResponse::error(Value::from(2), -32601, "method not found");
-        let s = serde_json::to_string(&err).unwrap();
-        assert!(s.contains("\"error\""));
-        assert!(!s.contains("\"result\""));
+        for raw in [
+            r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#,
+            r#"{"jsonrpc":"2.0","id":"abc","method":"ping"}"#,
+        ] {
+            let call: JsonRpcRequest = serde_json::from_str(raw).unwrap();
+            assert!(call.id.is_some(), "a request with an id must be answered");
+        }
     }
 
     #[test]
