@@ -14,8 +14,8 @@ use super::audit::ClaimAudit;
 use super::containment::strip_citation_spans;
 use super::icd::{
     AlignmentRecord, BudgetTotals, ClaimCitation, EmptyRound, EmptyRoundReason, EvidenceWindow,
-    FinalClaim, GateAction, LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow, SourceLedger,
-    Verdict, VerdictSet,
+    FinalClaim, GateAction, LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow,
+    SourceLedger, Verdict, VerdictSet,
 };
 
 /// Map the final audits to verdict-set rows, with C-class citations
@@ -25,6 +25,10 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
         .iter()
         .enumerate()
         .map(|(i, a)| {
+            // R3a citation registry: citations render only from captured
+            // evidence ids. Orphan citations (chunk ids not in the window)
+            // are glassbox WARN + omitted, never silently kept.
+            let mut orphan_count = 0;
             let citations: Vec<ClaimCitation> = a
                 .supporting_chunk_ids
                 .iter()
@@ -40,6 +44,16 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
                         })
                 })
                 .collect();
+            orphan_count = a.supporting_chunk_ids.len() - citations.len();
+            if orphan_count > 0 {
+                tracing::warn!(
+                    target: "deep_research",
+                    claim_index = i,
+                    orphan_count,
+                    total_referenced = a.supporting_chunk_ids.len(),
+                    "citation registry: {orphan_count} orphan citation(s) omitted (chunk id not in evidence window)"
+                );
+            }
             let status = a.verdict.as_str().to_string();
             let flag = match a.verdict {
                 Verdict::Failed => Some("refuted by the evidence".to_string()),
@@ -158,20 +172,52 @@ pub fn render_report(
     }
     out.push('\n');
     out.push_str("## Findings\n\n");
-    let mut passed = Vec::new();
+    // R3a provenance-graded render: split Passed into corroborated
+    // (two-origin) and single-origin tiers. Corroborated claims render
+    // without a tier label; single-origin claims carry a [single-origin]
+    // support-tier marker (honest, visible, never passed-as-corroborated).
+    let mut corroborated = Vec::new();
+    let mut single_origin = Vec::new();
     let mut failed = Vec::new();
     let mut open = Vec::new();
     let mut not_evaluated = Vec::new();
     for c in claims {
         match c.verdict {
-            Verdict::Passed => passed.push(c),
+            Verdict::Passed => {
+                // Split by corroboration floor: passes_floor=true means
+                // two+ distinct origins (corroborated); false or None means
+                // single-origin (support-tier presentation).
+                if c.corroboration.as_ref().is_some_and(|r| r.passes_floor) {
+                    corroborated.push(c);
+                } else {
+                    single_origin.push(c);
+                }
+            }
             Verdict::Failed => failed.push(c),
             Verdict::CouldNotJudge => open.push(c),
             Verdict::NeverRan => not_evaluated.push(c),
         }
     }
-    for c in passed {
+    // Render corroborated findings first (no tier label — these are
+    // anchors, two-origin passed).
+    for c in corroborated {
         out.push_str(&format!("- **[passed]** {}", c.text));
+        if !c.citations.is_empty() {
+            out.push_str(" — ");
+            let sources: Vec<String> = c
+                .citations
+                .iter()
+                .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
+                .collect();
+            out.push_str(&sources.join(", "));
+        } else {
+            out.push_str(" — *(judge-supported; no witnessable specifics — see verdict set)*");
+        }
+        out.push('\n');
+    }
+    // Render single-origin findings with a support-tier marker.
+    for c in single_origin {
+        out.push_str(&format!("- **[passed] [single-origin]** {}", c.text));
         if !c.citations.is_empty() {
             out.push_str(" — ");
             let sources: Vec<String> = c
@@ -256,7 +302,8 @@ pub fn render_report(
         for er in empty_rounds {
             out.push_str(&format!(
                 "- round {}: no evidence was added this round — {}\n",
-                er.round, er.reason.as_str()
+                er.round,
+                er.reason.as_str()
             ));
         }
         out.push('\n');
@@ -307,21 +354,47 @@ pub fn render_race(question: &str, claims: &[FinalClaim], run_id: &str) -> Strin
         if established == 1 { "" } else { "s" },
         if open == 1 { "" } else { "s" },
     ));
-    let mut passed = Vec::new();
+    // R3a provenance-graded render: split Passed into corroborated
+    // (two-origin) and single-origin tiers.
+    let mut corroborated = Vec::new();
+    let mut single_origin = Vec::new();
     let mut failed = Vec::new();
     let mut open_q = Vec::new();
     let mut not_evaluated = Vec::new();
     for c in claims {
         match c.verdict {
-            Verdict::Passed => passed.push(c),
+            Verdict::Passed => {
+                if c.corroboration.as_ref().is_some_and(|r| r.passes_floor) {
+                    corroborated.push(c);
+                } else {
+                    single_origin.push(c);
+                }
+            }
             Verdict::Failed => failed.push(c),
             Verdict::CouldNotJudge => open_q.push(c),
             Verdict::NeverRan => not_evaluated.push(c),
         }
     }
     out.push_str("## Findings\n\n");
-    for c in passed {
+    // Render corroborated findings first (no tier label).
+    for c in corroborated {
         out.push_str(&format!("- **[passed]** {}", c.text));
+        if !c.citations.is_empty() {
+            out.push_str(" — ");
+            let sources: Vec<String> = c
+                .citations
+                .iter()
+                .map(|cit| format!("`{}` [{}]({})", cit.evidence_id, cit.url, cit.url))
+                .collect();
+            out.push_str(&sources.join(", "));
+        } else {
+            out.push_str(" — *(judge-supported; no witnessable specifics — see verdict set)*");
+        }
+        out.push('\n');
+    }
+    // Render single-origin findings with a support-tier marker.
+    for c in single_origin {
+        out.push_str(&format!("- **[passed] [single-origin]** {}", c.text));
         if !c.citations.is_empty() {
             out.push_str(" — ");
             let sources: Vec<String> = c
@@ -486,7 +559,15 @@ mod tests {
             },
         ];
         let claims = final_claims(&audits, &window());
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[], &[]);
+        let report = render_report(
+            "Meridian Bridge history",
+            &claims,
+            "run-1",
+            None,
+            None,
+            &[],
+            &[],
+        );
         assert!(report.contains("[passed]"));
         assert!(report.contains("https://example.com/a"));
         assert!(report.contains("Open questions"));
@@ -517,7 +598,15 @@ mod tests {
             corroboration: None,
         }];
         let claims = final_claims(&audits, &window());
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[], &[]);
+        let report = render_report(
+            "Meridian Bridge history",
+            &claims,
+            "run-1",
+            None,
+            None,
+            &[],
+            &[],
+        );
         assert!(
             !report.contains("[Source:"),
             "model-written tails never ship on the page"
@@ -840,7 +929,15 @@ mod tests {
         );
         // The transcript function is untouched — it still renders its
         // own stamps.
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[], &[]);
+        let report = render_report(
+            "Meridian Bridge history",
+            &claims,
+            "run-1",
+            None,
+            None,
+            &[],
+            &[],
+        );
         assert!(report.contains("[could-not-judge]"), "{report}");
     }
 }

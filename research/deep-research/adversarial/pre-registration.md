@@ -6924,3 +6924,70 @@ Battery relaunch marker: /tmp/dr-drb1-r1-re.exit (fresh run root runs-r1-re/).
 | honesty not worse | ungrounded loop 0.0 vs one-shot 0.047 | loop ungrounded <= one-shot | **PASSED** |
 
 **R-12 re-measure**: 11/12 v0 seeds PASSED (vs 10/12 in r1). Weather confirmed — both reads in 10-12 range.
+## R3a provenance-graded render — declaration
+
+*Declared 2026-08-21, BEFORE the provenance-graded render ships (order drb1-r3a,
+Rung 3a of campaign drb1-race). The change = `render_report()` and `render_race()`
+split `Passed` claims into two tiers based on the `corroboration.passes_floor`
+field:*
+
+- **Corroborated (two-origin passed)**: `verdict == Passed` AND
+  `corroboration.passes_floor == true` → renders in Findings without a tier
+  label (anchors, two-origin passed)
+- **Single-origin unrefuted**: `verdict == Passed` AND
+  `corroboration.passes_floor == false` → renders in Findings with a
+  `[single-origin]` support-tier marker (honest, visible, never passed-as-corroborated)
+
+The verdicts THEMSELVES never change — this is a render-layer contract
+change, not an audit change. The other three verdicts (Failed, CouldNotJudge,
+NeverRan) render unchanged: Failed → "Refuted claims"; CouldNotJudge → "Open
+questions"; NeverRan → "Not evaluated".
+
+**Pre-flight assertions (glassbox — the frozen set has no mixed-tier
+fixtures):**
+
+1. A claim with `verdict == Passed` and `corroboration.passes_floor == true`
+   renders in Findings with NO tier label.
+2. A claim with `verdict == Passed` and `corroboration.is_none()` OR
+   `corroboration.as_ref().is_some_and(|r| !r.passes_floor)` renders in
+   Findings with `[single-origin]` marker.
+3. The `render_report()` and `render_race()` output byte-changes are
+   deterministic and reproducible on the same verdict set.
+4. The contract change is open: the golden fixtures update in the same commit,
+   never silently loosened (ARCH_PRINCIPLES §1).
+
+**The frozen set:** unchanged from the GAP-2 read — 34 claims (12 negative + 8
+positive + 13 longform-negative claims). The frozen-instrument run executes
+AFTER this pre-registration is recorded.
+
+**Acceptance shape (declared):**
+- The existing fixture renders (proceed, redirect, reframe) stay valid with
+  tiered output — no regressions, byte-pinned where possible.
+- A mixed-tier mock fixture (corroborated + single-origin claims) renders
+  with both tiers visible and Findings non-empty.
+- The gate marks (findings-not-walled, no-render-truncation, honesty-floor)
+  measured on the mock run show the tiered render unwalls the findings while
+  preserving honesty 1.0.
+
+## R3a citation registry — declaration
+
+*Declared 2026-08-21, BEFORE the citation registry validation ships (order
+drb1-r3a, item 3). The change = `final_claims()` in `render.rs` validates that
+every citation in `FinalClaim.citations` maps to a chunk in the evidence window.
+Orphan citations (chunk ids referenced by the audit but not present in the
+window) are:*
+
+1. **Glassbox WARN** — traced as "citation registry: {orphan_count} orphan
+   citation(s) omitted" with claim_index and total_referenced.
+2. **Omitted** — never included in the FinalClaim.citations that ship.
+3. **Never silently kept** — the render surface carries only verified citations.
+
+The validation is deterministic: citations are built by filtering
+`supporting_chunk_ids` against `window.chunks`; any chunk_id not found is an
+orphan and triggers the WARN path.
+
+**Pre-flight assertions:**
+1. Citations present in the window render unchanged.
+2. Orphan citations trigger a WARN log and are omitted from the rendered output.
+3. The WARN includes: claim_index, orphan_count, total_referenced.
+
