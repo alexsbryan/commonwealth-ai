@@ -611,6 +611,27 @@ status       = "open"
 today        = 14162.0
 target       = 10000.0
 direction    = "lower_is_better"
+# NOISE BAND, added 2026-08-21 the same day the bar was registered, because
+# nc-17's worker measured what the seat should have measured before trusting a
+# single run (principle 7 — one run is not a measurement; the seat ran it ONCE
+# and wrote the floor). FOUR consecutive runs at a FIXED `indexed_head`
+# 61a16a7e / `indexed_at` 07:15:32Z returned 14,088 · 14,088 · 14,165 · 14,157.
+# TWO defects, both real, note c5534030:
+#   1. THE STAMP IS NOT SUFFICIENT. `exact` moved 196 -> 202 with provenance
+#      UNCHANGED, so two runs carrying the same stamp are not comparable. This
+#      also explains the bar's own 14,162 against a same-stamp 14,156.
+#   2. THE NEAR PASS IS NONDETERMINISTIC. Runs with identical group counts
+#      differ by 8 lines, so `unit_lines` depends on thread completion order.
+# Bands measured: +/-8 at identical index content, +/-77 across silent rewrites.
+# A delta inside this band is `could-not-judge`, re-run n=3 (§18.5) — it is NOT
+# a result and must never be reported as one.
+#
+# THE DURABLE WORKAROUND, and it is better than the headline: derive a rung's
+# CONTRIBUTION from the cluster list, `(members-1) x unit_lines` summed over the
+# clusters that disappear. That is exact and index-independent. nc-17 used it to
+# pre-register -383 (predicted AFTER 13,774 +/-8) when the headline could not be
+# trusted. Prefer it for attributing a rung; the headline is for the trend.
+noise_band   = 80.0
 # RUN-TIER. `dry-report` walks every symbol embedding in the corpus index and
 # takes minutes, not seconds; the read-tier default of 10s cannot hold it and
 # the first sweep timed out against it. 420s measured with headroom.
