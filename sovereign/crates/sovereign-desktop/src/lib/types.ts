@@ -2833,7 +2833,14 @@ export interface EvidenceExcerpt {
 export interface RelatedAtom {
   atom_id: string;
   atom_type: AtomType;
-  display_name: string;
+  /** The neighbour's canonical name. This is the wire field —
+   *  `sovereign_mesh::RelatedAtom` and the desktop's `RelatedAtomDto`
+   *  both emit `canonical_name`. It said `display_name` here until
+   *  2026-08-21, which is `AtomDetail`'s field for the FOCAL atom, not
+   *  a related one; the related-name chip rendered `undefined`. The
+   *  second declaration of this shape in
+   *  `stores/readingSession.svelte.ts` always had it right. */
+  canonical_name: string;
   edge_type: string;
   role: string;
   confidence: number;
