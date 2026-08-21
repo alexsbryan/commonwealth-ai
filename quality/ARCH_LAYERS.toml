@@ -366,7 +366,7 @@ reason = "cross-family reach — harness should simulate against the OICP/contra
 [[exception]]
 from = "sovereign-cli-llm"
 to = "sovereign-eval"
-reason = "bench_cmd (51 files, ~31k lines) shares this bin-only crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs a [lib] over ~130k lines plus pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/main.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the sovereign_eval::authoring_harness alias) was repointed at sovereign-authoring-harness directly and no longer does."
+reason = "bench_cmd (51 files, ~31k lines) shares this crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/lib.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the harness alias on the eval crate) was repointed at sovereign-authoring-harness directly and no longer does. UPDATE 2026-08-21 (nc-26): the crate is no longer bin-only — it gained a [lib] target so awareness_cmd could move to the crate whose enrich_cmd it was importing. Half of the declined price is therefore already paid; what remains is the pub-visibility churn, not the lib target."
 tracking = "nc-3-backstage"
 
 [[exception]]

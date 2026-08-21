@@ -44,7 +44,7 @@ use super::store_open::{atlas_dir_for, sovereign_root};
 use crate::enrich_cmd::inference_client::{
     probe_daemon, resolve_default_models, DaemonInferenceClient,
 };
-use crate::util::urls::{v1_url, DEFAULT_CLIENT_PORT};
+use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 use sovereign_cli_shared::args::Parsed;
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
@@ -635,6 +635,7 @@ mod tests {
             provenance: Default::default(),
             attributes: serde_json::Map::new(),
             concept_kind: None,
+            defining_quote: None,
         };
         let mut counts = HashMap::new();
         counts.insert(entity.id.clone(), 5);

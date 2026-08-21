@@ -357,9 +357,14 @@ struct AssertionResult {
 }
 
 /// A local {Pass, Fail} for one assertion — not
-/// `sovereign_pipeline::adaptive::Outcome` or
-/// `sovereign_eval::cognitive::scorer::Outcome`, which score work, not
-/// assertions.
+/// `sovereign_pipeline::adaptive::Outcome`, nor the `cognitive::scorer`
+/// `Outcome` in the `sovereign-eval` crate, which score work, not assertions.
+///
+/// That second crate is named in prose, hyphenated as Cargo spells it, rather
+/// than as a Rust path: `backstage_boundary` in `lib.rs` fails the build if
+/// any module outside `bench_cmd` spells the underscore form, and a doc
+/// comment counts. The rule is containment of the back-of-house instrument
+/// (`quality/ARCH_LAYERS.toml`), and it is textual by design.
 #[derive(Debug, PartialEq, Eq)]
 enum Outcome {
     Pass,

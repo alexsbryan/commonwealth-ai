@@ -388,7 +388,7 @@ async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
     use crate::enrich_cmd::inference_client::{
         probe_daemon, resolve_default_models, DaemonInferenceClient,
     };
-    use crate::util::urls::{v1_url, DEFAULT_CLIENT_PORT};
+    use sovereign_cli_shared::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
     let base_url = flags
         .value("daemon-url")
@@ -476,21 +476,19 @@ async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
 mod tests {
     use super::*;
 
-    fn s(v: &[&str]) -> Vec<(String, String)> {
-        v.iter()
-            .map(|f| (f.trim_start_matches("--").to_string(), String::new()))
-            .collect()
+    fn s(v: &[&str]) -> Parsed {
+        parse_args(&v.iter().map(|f| f.to_string()).collect::<Vec<_>>())
+            .expect("test argv must parse against the awareness spec")
     }
 
     #[test]
     fn pick_mode_defaults_to_real() {
-        assert_eq!(pick_mode(&Vec::new()), InferenceMode::Real);
+        assert_eq!(pick_mode(&s(&[])), InferenceMode::Real);
     }
 
     #[test]
     fn pick_mode_mock_wins_over_dry_run() {
-        let f = s(&["--mock", "--dry-run"]);
-        assert_eq!(pick_mode(&f), InferenceMode::Mock);
+        assert_eq!(pick_mode(&s(&["--mock", "--dry-run"])), InferenceMode::Mock);
     }
 
     #[tokio::test]
@@ -502,7 +500,7 @@ job is named-entity extraction.
 Memories:
 [Memory 1]
 Had a great call with Sarah Chen at Acme Corp about the Q3 launch."#;
-        let out = (inf)(prompt).await.unwrap();
+        let out = (inf)(prompt, None).await.unwrap();
         let v: serde_json::Value = serde_json::from_str(&out).unwrap();
         let persons = v["persons"].as_array().unwrap();
         let orgs = v["organizations"].as_array().unwrap();
@@ -519,7 +517,7 @@ Had a great call with Sarah Chen at Acme Corp about the Q3 launch."#;
     #[tokio::test]
     async fn mock_returns_empty_object_for_unknown_prompts() {
         let inf = mock_inference();
-        let out = (inf)("a totally unrelated prompt").await.unwrap();
+        let out = (inf)("a totally unrelated prompt", None).await.unwrap();
         assert_eq!(out, "{}");
     }
 }

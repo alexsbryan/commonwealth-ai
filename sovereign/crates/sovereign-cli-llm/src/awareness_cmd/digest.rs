@@ -262,13 +262,18 @@ use sovereign_core::time::unix_now;
 mod tests {
     use super::*;
 
-    fn flag(k: &str, v: &str) -> (String, String) {
-        (k.into(), v.into())
+    fn budget(v: &str) -> Parsed {
+        parse_args(&["--budget".to_string(), v.to_string()])
+            .expect("--budget is a declared value flag")
+    }
+
+    fn no_flags() -> Parsed {
+        parse_args(&[]).expect("an empty argv always parses")
     }
 
     #[test]
     fn parse_budgets_defaults_when_unset() {
-        let (rel, strat) = parse_budgets(&Vec::new());
+        let (rel, strat) = parse_budgets(&no_flags());
         // ViewKind defaults — assert they're > 0.
         assert!(rel > 0);
         assert!(strat > 0);
@@ -276,24 +281,21 @@ mod tests {
 
     #[test]
     fn parse_budgets_overrides_relational_only() {
-        let flags = vec![flag("budget", "relational=200")];
-        let (rel, strat) = parse_budgets(&flags);
+        let (rel, strat) = parse_budgets(&budget("relational=200"));
         assert_eq!(rel, 200);
         assert!(strat > 0); // unchanged default
     }
 
     #[test]
     fn parse_budgets_overrides_both() {
-        let flags = vec![flag("budget", "relational=200,strategic=50")];
-        let (rel, strat) = parse_budgets(&flags);
+        let (rel, strat) = parse_budgets(&budget("relational=200,strategic=50"));
         assert_eq!(rel, 200);
         assert_eq!(strat, 50);
     }
 
     #[test]
     fn parse_budgets_ignores_unknown_keys() {
-        let flags = vec![flag("budget", "unknown=99,relational=200")];
-        let (rel, _strat) = parse_budgets(&flags);
+        let (rel, _strat) = parse_budgets(&budget("unknown=99,relational=200"));
         assert_eq!(rel, 200);
     }
 }

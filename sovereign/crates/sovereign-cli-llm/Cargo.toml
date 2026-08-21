@@ -19,6 +19,17 @@ description = "LLM-heavy CLI surface (bench, chat, eval, atlas, enrich, mesh, co
 # code path in the whole CLI and the original reason sovereign-cli
 # linked llama-cpp-2 in the first place.
 
+# The crate gained a `[lib]` target on 2026-08-21 (nc-26). It was binary-only
+# until then, which is why `sovereign-cli`'s `awareness_cmd` could reach into
+# `crate::enrich_cmd::inference_client` only by pretending it lived here — an
+# import that stopped compiling when the 2026-05-22 slice-5 split moved
+# `enrich_cmd` out and left `awareness_cmd` behind. `src/lib.rs` carries the
+# whole module tree and the crate docs explaining the split; `src/main.rs` is a
+# shim over `bin_main()`.
+[lib]
+name = "sovereign_cli_llm"
+path = "src/lib.rs"
+
 [[bin]]
 name = "sovereign-cli-llm"
 path = "src/main.rs"
@@ -90,11 +101,43 @@ hostname = { workspace = true }
 hex = "0.4"
 ed25519-dalek = { version = "2", features = ["pkcs8", "rand_core"] }
 rand = "0.9"
-# `awareness` is dev-tools only in sovereign-cli; the LLM sibling
-# doesn't carry that surface (rusqlite for awareness lives there).
+# ── `awareness`-only, and off in every ordinary build ──
+# `awareness_cmd` moved here from `sovereign-cli` on 2026-08-21 (nc-26)
+# together with the three dependencies only it needs. All three are optional
+# and none is in `default`, so the sibling binary's ordinary build — and the
+# dispatcher's, which links this crate only under its own `awareness`
+# pass-through — is byte-for-byte what it was.
+#
+# `sovereign-tools` above is already non-optional here with `treesitter`;
+# `awareness` adds only its `atos` flag, for the `AtosSnapshot` every
+# `knowledge_view::splice_extension` caller needs.
+corpus-engine-atos = { workspace = true, optional = true }
+# Direct SQLite reads in `awareness_cmd/{entities,reset,timeline}`. Production
+# paths go through StateStore; the diagnostic CLI reads the file.
+rusqlite = { version = "0.35", features = ["bundled"], optional = true }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
+
+[features]
+# The heavy `svrn awareness` knowledge-view diagnostic CLI. Opt-in, and NOT in
+# `default`, so the shipped sibling binary carries none of it.
+#
+# The feature lives on THIS crate because the code does. It lived on
+# `sovereign-cli` until 2026-08-21 while the module it gated needed
+# `enrich_cmd`, which lives here — a feature on the wrong crate, and the
+# reason the two module gates could disagree without anything noticing.
+#
+# `knowledge_view::splice_extension` (which every awareness subcommand
+# imports) is `#[cfg(feature = "treesitter")]` in sovereign-tools, and its
+# `AtosSnapshot` needs `atos` on top. Neither was declared when this feature
+# lived on the dispatcher, so it could not compile even once its module gate
+# was fixed — rustc reported them as "found an item that was configured out".
+awareness = [
+    "sovereign-tools/atos",
+    "dep:corpus-engine-atos",
+    "dep:rusqlite",
+]
 
 [lints]
 workspace = true

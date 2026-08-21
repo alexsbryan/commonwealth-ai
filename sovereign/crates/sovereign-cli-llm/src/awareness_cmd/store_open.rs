@@ -101,20 +101,35 @@ pub(super) fn try_open_features() -> Option<Arc<FeatureStore>> {
 mod tests {
     use super::*;
 
-    #[test]
-    fn sovereign_root_prefers_db_path_flag() {
-        let flags = vec![("db-path".into(), "/tmp/awareness-test".into())];
-        assert_eq!(sovereign_root(&flags), PathBuf::from("/tmp/awareness-test"));
+    fn flags(argv: &[&str]) -> Parsed {
+        parse_args(&argv.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+            .expect("test argv must parse against the awareness spec")
     }
 
     #[test]
-    fn sovereign_root_falls_back_to_home_or_cwd() {
-        let flags: Vec<(String, String)> = Vec::new();
-        let resolved = sovereign_root(&flags);
-        assert!(
-            resolved.ends_with(".sovereign"),
-            "got {}",
-            resolved.display()
+    fn sovereign_root_prefers_db_path_flag() {
+        let f = flags(&["--db-path", "/tmp/awareness-test"]);
+        assert_eq!(sovereign_root(&f), PathBuf::from("/tmp/awareness-test"));
+    }
+
+    /// With no `--db-path`, the root must come FROM the shared rebrand
+    /// accessor rather than be re-derived here — one accessor per path
+    /// (ARCH §10.6).
+    ///
+    /// This assertion used to read `resolved.ends_with(".sovereign")` and it
+    /// had never run: the module is `awareness`-gated, that feature did not
+    /// compile from 2026-05-22 to 2026-08-21, and no gate built it. It was
+    /// wrong when it was written — `.sovereign` is the LEGACY name and
+    /// production returns `~/.svrnmesh`. Naming either literal is the bug:
+    /// `resolve_branded_dir` legitimately returns the legacy directory when
+    /// that is where the user's data still lives, so a hardcoded expectation
+    /// is wrong for one user or the other. Comparing against the accessor is
+    /// right for both.
+    #[test]
+    fn sovereign_root_falls_back_to_the_shared_rebrand_root() {
+        assert_eq!(
+            sovereign_root(&flags(&[])),
+            sovereign_contracts::rebrand::svrnmesh_root()
         );
     }
 

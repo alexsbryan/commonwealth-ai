@@ -29,13 +29,11 @@ mod amend_cmd;
 #[cfg(feature = "dev-tools")]
 mod archaeology_eval_cmd;
 mod audit_cmd;
-// UNGATED on purpose. Only `awareness_cmd::args` (the flag SPEC — data
-// plus the shared parser) compiles without the feature; every heavy
-// submodule carries its own `#[cfg(feature = "awareness")]`. Declaring
-// the module here under a gate, while the module itself carried a
-// second, DIFFERENT inner gate (`dev-tools`), is what made
-// `--features awareness` fail to compile at all. See `awareness_cmd/mod.rs`.
-mod awareness_cmd;
+// `awareness_cmd` is NOT here any more (nc-26, 2026-08-21). It lives in
+// `sovereign-cli-llm`, which owns the `enrich_cmd::inference_client` two of
+// its files import — an import that had not resolved from this crate since
+// the 2026-05-22 split, because `crate::enrich_cmd` names nothing here. The
+// dispatch arm below calls it across the link, in this process.
 mod cache_audit_cmd;
 mod charter_cmd;
 // `svrn code index` in the shipped binary. Gated on `code-intel` rather than
@@ -1240,7 +1238,12 @@ async fn async_main() {
                     util::tracing_init::init_tracing(
                         "sovereign_cli=info,sovereign_tools=debug,corpus_engine=debug",
                     );
-                    let code = awareness_cmd::run_awareness(&raw_args[1..]).await;
+                    // LINKED, not exec'd — `sovereign_cli_llm` is a library
+                    // dependency under this feature, so this runs in the
+                    // dispatcher's own process. Adding an exec hop here
+                    // would spend exactly what nc-19 bought.
+                    let code =
+                        sovereign_cli_llm::awareness_cmd::run_awareness(&raw_args[1..]).await;
                     std::process::exit(code);
                 }
                 #[cfg(not(feature = "awareness"))]
