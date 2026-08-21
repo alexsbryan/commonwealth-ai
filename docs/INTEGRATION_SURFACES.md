@@ -60,6 +60,14 @@ stable machine-readable path (stdout stays clean; logs go to stderr).
 Other commands print for humans unless they document a `--format
 json` of their own — don't parse human output.
 
+**Governance oplog** — `governance_oplog.jsonl` is a versioned,
+internally-tagged, append-only act log, and the fold that derives current
+law from it is pure (no IO, no inference). The format is stable in
+practice; its location under `~/.svrnmesh/` is not yet a contract — see
+the caveat in
+[GOVERNANCE_INTEGRATION.md](./GOVERNANCE_INTEGRATION.md), which lays out
+the full spectrum from adopting the stack to speaking only this file.
+
 ## Internal — no compatibility promise
 
 **`:9742` and everything under `/internal/*`.** The mesh-internal
