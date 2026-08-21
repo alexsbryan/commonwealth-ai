@@ -35,6 +35,200 @@ Two commitments follow, and they are the whole design:
 The second is not a caveat on the first. It is what makes the first
 honest.
 
+## Before any of this — where a charter comes from
+
+Everything above and below assumes a community with governance to read.
+Most communities do not have one. Five people moving in together have no
+charter, no minutes and no accumulated debt, so every instrument
+described here returns empty for them — and they are both the majority
+of groups and the moment when governance is cheapest to get right.
+
+A community that already has rules needs to find out what they say. A
+community that is forming needs somewhere to start. The second is the
+larger problem and the design has to carry it.
+
+### Seeds, distributed like open weights
+
+The useful reference is the open-weight model families. Not one seed
+charter — a family, along four axes:
+
+- **Sizes.** Charter length scales with group size. Forty articles
+  handed to five roommates is a 72B model on a laptop: nobody reads it,
+  so it governs nothing. A five-person charter is a different artifact
+  from a twenty-five-person one, not a subset of it.
+- **Variants.** Student house, rented flatshare, owner co-op, worker
+  collective. Different conditions produce genuinely different rules.
+- **Lineages.** Consensus, delegated council, rotating steward. These
+  are different *traditions* — the analogue of different model families,
+  not versions of one.
+- **Generations.** A lineage improves as groups run it and report back,
+  and a community can stay on an older generation indefinitely.
+
+### Lineages are how variation survives
+
+This is the structural answer to the objection that seeds undermine the
+whole point. **Discovery requires variation, and a single canonical seed
+destroys it** — if every new house starts from the same charter,
+governance converges and the commons stops learning, merely propagating
+whatever the earliest contributors happened to believe.
+
+Competing lineages resolve that. Several traditions each improve, and a
+founding group chooses a tradition rather than accepting a consensus.
+Where lineages disagree is precisely where the commons does not know the
+answer, and preserving that disagreement is more honest than averaging
+it into a compromise nobody actually runs.
+
+So the interface never recommends *the* article. It shows what different
+traditions do, how it went, and what it cost.
+
+### Distillation is how hard-won governance travels
+
+A mature community's learning should reach a new small group **without**
+that group adopting the whole apparatus it came wrapped in. The
+shift-worker provision that cost one house a stability warning, a
+private outreach and a full vote to discover ought to be adoptable in an
+evening by a house of five who will never need thirty-nine other
+articles.
+
+That flow — compress what a large institution learned into something a
+small new one can actually run — is the most valuable movement in this
+design, and it is the reason the commons is the deliverable rather than
+a byproduct.
+
+### Adoption is the first governance session
+
+**Do not hand a group a charter. Walk them through choosing one, article
+by article.**
+
+That process is their first governance session, and it writes the
+opening entries of their log — each article an `AssertRule` with a real
+decision behind it. A group that clicked *accept defaults* has adopted
+nothing, and will not engage later. Everything in this document rests on
+engagement; a passively adopted charter is the disengagement failure at
+the very first moment.
+
+### Every seed ships a card, and the card's job is disclosure
+
+**No artifact of this kind is neutral, and the open-weight comparison is
+instructive precisely because weights are not neutral either** — they
+encode training-data selection, alignment preferences, refusal
+boundaries, whose dialect is treated as standard. Every major model
+family carries a politics, usually undeclared.
+
+The lesson to import is therefore not that charters have values and
+weights do not. It is that **cards systematically under-disclose the
+values in the artifact**, and a governance card repeating that pattern
+would launder a politics as a default. That is the likely failure mode
+because it is the normal one.
+
+A card states what the seed assumes, what politics it encodes in plain
+language, how many communities have run it and for how long, where it is
+known to fail — and, most importantly, what is *not* known about it.
+A first-generation seed authored by us, run by nobody, must say so
+rather than implying distilled experience it has not yet earned.
+
+## Divergence is the mechanism, not the failure
+
+**It is impossible to adopt a seed and not diverge from it.** A community
+begins amending the moment it starts living — a decision here, an
+exception there, a tolerated contradiction its founders never imagined.
+Divergence is not seed failure or user error. It is the entire point, and
+it makes the family an **evolutionary** system rather than a catalogue:
+variation from divergence, heredity through lineages and generations,
+and selection from what communities keep, supersede or abandon.
+
+That reframes what the commons is doing. It is not distributing best
+practice. It is running a very large number of natural experiments and
+watching which provisions survive contact with people.
+
+### The operations, and they are the ones you would expect
+
+The record is an append-only log of ops with content-addressed ids, and a
+pure fold over it derives current law. That makes the version-control
+vocabulary literal rather than a metaphor:
+
+- **Fork** — adopt a seed. Divergence starts immediately.
+- **Cherry-pick** — take one provision from another lineage. *This is
+  what distillation actually is:* a single hard-won article travelling
+  without the apparatus it grew in.
+- **Upgrade** — move to a later generation of your own lineage.
+- **Rebase** — replay your accumulated law onto a different foundation,
+  when a different tradition turns out to be more resonant than the one
+  you started in.
+- **Upstream** — contribute your divergence back so the lineage learns.
+
+### Rebase — the interesting one, and the honest mechanics
+
+Rebasing common law is a three-way operation exactly as it is in source
+control: the seed you started from, the law you have accumulated, and the
+foundation you want to move to. And like source control, **the conflicts
+are the substance, not an obstacle to it.**
+
+Three things make it tractable, and one makes it hard.
+
+**Content-hash rule ids already survive re-derivation.** The design
+anticipated a smaller version of this problem: edge ids are re-minted on
+every atlas rebuild, so adjudications record their endpoint rule-id pair
+as the durable identity, and past decisions stay settled across rebuilds.
+A charter rebase is the harder case of the same shape, and the mechanism
+is already there.
+
+**Much of your law is about your community, not about your charter's
+numbering.** Every `accept_tension` rationale is a statement of your
+values. Every `dismiss` is your judgment that two things are not really
+in conflict. Those transfer wholesale, because they were never about
+Article VII.
+
+**Your law separates into holding and mechanics.** An op that says *we
+are amending Article VII* is meaningless against a foundation with no
+Article VII — but the holding underneath it, *smoking on the porch is
+fine*, transfers cleanly. Only the substance rebases; the amendment
+mechanics are scaffolding that belongs to the old base.
+
+**What is hard: the mapping is semantic, so it cannot be automatic.** A
+conflict reads *you excused the cook from cleanup by amending Article
+III; this foundation has no Article III, and its chore article handles
+exemptions differently.* That is a real governance question. A rebase is
+therefore a bundle of adjudications, every one of them attributed to a
+person under INV-2, and never machine-resolved — the system proposes the
+mapping and marks what it could not carry.
+
+Two consequences for the interface. It must report **how much of your law
+survives before the community commits** — a rebase that silently discards
+half of what a house decided over four years is a catastrophe wearing an
+upgrade dialog. And a rebase is a constitutional convention, not a
+package update: socially expensive, appropriately rare, and revertible
+like every other act.
+
+### Convergent divergence is selection made visible
+
+The most valuable signal the commons can produce comes free from this.
+
+**When many communities independently amend the same article in the same
+direction, the seed is wrong.** Not disputed, not unpopular — wrong, with
+evidence, from natural experiments nobody had to design. That is the
+mechanism by which a lineage earns its next generation, and it is far
+stronger evidence than any single community's experience or any
+authorial intuition of ours.
+
+It is also why upstreaming has to be easy and free. A commons that only
+distributes is a catalogue; one that collects divergence is an
+evolutionary process.
+
+### The trap in the evolutionary framing
+
+Evolution smuggles in a definition of fitness, and the obvious one here
+is wrong. **If fitness means the community persisted, this breeds
+institutions that retain people rather than institutions that serve
+them** — and a group can persist precisely by grinding down whoever
+disagrees, which the record would show as a charter that worked.
+
+Selection pressure has to include what happened to the people who left,
+which is the exit-data gap named in the limits below. Until it does, the
+evolutionary claim should be stated carefully: this system currently
+selects for *survival*, and survival is a proxy whose failure mode is the
+exact harm the minority protections exist to prevent.
+
 ## The output has two dimensions
 
 A proposal carries an **alignment** relation to current law — supported,
@@ -401,7 +595,18 @@ mechanism is already load-bearing here for other reasons: decomposing a
 document into atom-level claims is structurally the refusal to let five
 questions be voted as one.
 
-## Two limits to hold
+## Three limits to hold
+
+**The commons only hears from survivors.** Communities that persist
+report back; those that dissolve go quiet, and the people who left go
+quietest of all. A corpus built on survivors learns *rules that keep a
+group together*, which is not the same as rules that are good for the
+people in it — a house can persist by grinding down whoever disagrees,
+and the record would show a charter that worked. Every minority
+protection in this document is aimed at that failure and none of them
+can see someone who already walked out. **Exit data is the most valuable
+and least available signal here, and nothing in the design collects it
+yet.**
 
 **Scoring is proposing, never deciding.** INV-2 keeps non-human actors
 out of adjudication, and a score that allocates chores, money, or
