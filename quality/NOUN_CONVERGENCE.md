@@ -1174,17 +1174,30 @@ What replaces them is a pre-registered adoption test, stated before the work:
 That is the same standard `Report` already failed at 1 of 105, applied
 honestly and in advance.
 
-**`nc-extends` cannot serve as the outcome metric as instrumented** — note
-`d8cd40a1`, measured by the seat 2026-08-20. The tool axis counts 112
-`impl Tool for`, 30 of them in `studio/`, which the campaign declares out of
-scope by name; a perfect `nc-13` leaves 30 > 0 and the axis still fails. The
-intent axis requires zero files naming an `Intent` variant, which `nc-14`
-correctly refuses on the grounds that matching a closed enum is what enums
-are for. Both corrections are alignments with rules this campaign already
-declared, both are operator-only under "bars move by measurement only," and
-§18.6 requires reporting movement-by-CODE separately from
-movement-by-RE-CLASSIFICATION. Until that decision is made, the honest
-outcome measures are the three below.
+**`nc-extends` reads 2 of 3, and the third axis is blocked by a decision, not
+by a missing instrument.** Note `d8cd40a1` found the tool axis unmovable by the
+rung meant to serve it: 30 of 112 `impl Tool for` sites sat in `studio/`, which
+this campaign declares out of scope by name, so a perfect `nc-13` would still
+have left it failing. `c102eb05` put `studio/` into SKIP and reported both
+halves per §18.6 — **by RE-CLASSIFICATION 112 → 82, by CODE 0, score 1/3
+unchanged.** `nc-13` and `nc-18` then moved it by CODE, and the axis now reads
+**0 sites, PASSES**: every tool is a manifest row plus a handler, with one
+shared `DeclaredTool` adapter carrying the trait.
+
+The intent axis was re-specified the same day by `nc-14`, which built the
+policy-vs-pattern-match discriminator the old spec lacked
+(`scripts/nc-extends.py`, with `--self-test` fixtures watched failing in three
+directions per §18.1), found and fixed a false pass in its own first cut, and
+reported both halves: by RE-CLASSIFICATION 33 files → 13 policy blocks, by CODE
+14 → 1. The one block remaining is `guard_story` in
+`runtime/authority_guard.rs`, which `nc-14` declined to tabulate **on the
+merits** — its column values name sovereign-core's internal file layout, so
+publishing them is the leak this campaign's kill clause fires on, and the block
+already has the property the rung exists to create. So this axis sits one
+deliberate refusal from passing. Whether that refusal stands, and therefore
+whether `nc-extends` can reach 3/3 at all, is an operator call under §18.6 and
+not a rung's to make. Until it is made, the measures below stand as this
+section's outcome metrics.
 
 | Metric | Today (snapshot, 2026-08-20, un-minted) | Direction | Owner |
 |---|---:|---|---|
