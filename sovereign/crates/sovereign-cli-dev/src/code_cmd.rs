@@ -36,6 +36,14 @@ pub async fn run_code(args: &[String]) -> i32 {
         return 0;
     }
 
+    // Verbs this crate serves as a LINKED library call are listed once, in
+    // `InProcessCodeVerb`, and dispatched through it here as well as from the
+    // `sovereign-cli` dispatcher. One list, two routers — a verb cannot be
+    // linked in one and forgotten in the other (ARCH §10.6).
+    if let Some(verb) = crate::InProcessCodeVerb::parse(args[0].as_str()) {
+        return verb.run(&args[1..]).await;
+    }
+
     match args[0].as_str() {
         "index" => sovereign_cli_shared::code_index::cmd_index(&args[1..]).await,
         "finalize" => cmd_finalize(&args[1..]).await,
@@ -48,7 +56,6 @@ pub async fn run_code(args: &[String]) -> i32 {
         "arch-report" => crate::arch_report_cmd::run(&args[1..]).await,
         "suggest-seams" => crate::suggest_seams_cmd::run(&args[1..]).await,
         "dry-report" => crate::dry_report_cmd::run(&args[1..]).await,
-        "converge" => crate::converge_cmd::run(&args[1..]).await,
         "redirect" => crate::redirect_cmd::run(&args[1..]).await,
         "capability-graph" => crate::code_capability_graph::cmd_capability_graph(&args[1..]).await,
         "fieldglass" => crate::code_fieldglass::run(&args[1..]).await,

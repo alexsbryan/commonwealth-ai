@@ -41,6 +41,18 @@ sovereign-agent-bench = { workspace = true, optional = true }
 # builds skip this; only `--features awareness` pulls it in.
 sovereign-tools = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
+# The workbench, LINKED rather than exec'd. `sovereign-cli-dev` grew a `[lib]`
+# target on 2026-08-21; with `default-features = false` it is two workspace
+# crates wide (`corpus-engine-scip` + `sovereign-cli-shared`, both already
+# here), so `svrn code converge` runs in THIS process instead of exec'ing a
+# 414 MB sibling that may be stale. `workbench` — sovereign-mesh/llama.cpp,
+# sovereign-tools/arrow+parquet, corpus-engine's grammars — stays off; the
+# remaining `code` subcommands still exec. Optional + pulled by `dev-tools`
+# only, so the shipped end-user dispatcher gains nothing.
+#
+# Path dep rather than a `[workspace.dependencies]` entry: this is the crate's
+# first consumer, and the edge is easier to read where it is paid.
+sovereign-cli-dev = { path = "../sovereign-cli-dev", default-features = false, optional = true }
 corpus-engine = { workspace = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-scip = { workspace = true, optional = true }
@@ -119,6 +131,9 @@ default = [
 dev-tools = [
     "dep:corpus-engine-archaeology",
     "dep:sovereign-agent-bench",
+    # The linked workbench surface — `InProcessCodeVerb`. Thin by construction
+    # (`default-features = false`); see the dep comment above.
+    "dep:sovereign-cli-dev",
     "deep-research",
 ]
 # The thin local-only research loop (T1): gated corpus + web search,

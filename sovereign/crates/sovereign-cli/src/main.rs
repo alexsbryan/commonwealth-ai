@@ -962,12 +962,47 @@ async fn async_main() {
             }
             "code" => {
                 // Split surface, same shape as `project`: `code index` runs
-                // here under `code-intel`; the analysis subcommands stay in
-                // the workbench sibling.
+                // here under `code-intel`; `code converge` runs here too since
+                // 2026-08-21 — linked, not exec'd; the remaining analysis
+                // subcommands stay in the workbench sibling.
                 #[cfg(feature = "code-intel")]
                 let handled = code_index_cmd::try_run(&raw_args[1..]).await;
                 #[cfg(not(feature = "code-intel"))]
                 let handled: Option<i32> = None;
+
+                // `sovereign-cli-dev` grew a `[lib]` target, so a workbench
+                // verb whose whole dependency surface this build already
+                // carries runs in THIS process: no exec, no 414 MB sibling,
+                // and no way for that sibling to be stale (the trap
+                // `sibling::warn_if_stale` exists to soften). The list of such
+                // verbs lives in `InProcessCodeVerb`, over in the workbench,
+                // so this router and the workbench's own cannot disagree.
+                #[cfg(feature = "dev-tools")]
+                let handled = match handled {
+                    Some(c) => Some(c),
+                    None => match raw_args
+                        .get(1)
+                        .and_then(|sub| sovereign_cli_dev::InProcessCodeVerb::parse(sub))
+                    {
+                        Some(verb) => {
+                            // The workbench binary installs no subscriber for
+                            // this path, so the dispatch decision was
+                            // invisible until now. WARN by default keeps the
+                            // verb's own stdout report clean; `RUST_LOG` wins.
+                            util::tracing_init::init_tracing(
+                                "sovereign_cli=warn,corpus_engine_scip=warn",
+                            );
+                            tracing::debug!(
+                                target: "sovereign_cli::dispatch",
+                                verb = verb.as_str(),
+                                "code verb served in-process from the linked \
+                                 workbench lib (no sibling exec)"
+                            );
+                            Some(verb.run(&raw_args[2..]).await)
+                        }
+                        None => None,
+                    },
+                };
 
                 let code = match handled {
                     Some(c) => c,
@@ -1356,5 +1391,30 @@ mod tests {
             ALL_VERBS,
             "ALL_VERBS must be kept sorted"
         );
+    }
+
+    /// `svrn code converge` is served BY THIS BINARY — linked out of the
+    /// workbench's `[lib]` target, not `exec`'d into the sibling. The test
+    /// exists because the linkage is invisible in the dispatch `match`: it is
+    /// a Cargo edge plus a `default-features = false`, and losing either would
+    /// silently fall back to the exec path. It also pins the other half of the
+    /// contract — verbs that still need `sovereign-tools` or the tree-sitter
+    /// grammars must NOT be claimed, because this binary never links them.
+    #[cfg(feature = "dev-tools")]
+    #[test]
+    fn code_converge_is_linked_from_the_workbench_lib_not_exec_d() {
+        use sovereign_cli_dev::InProcessCodeVerb;
+
+        assert_eq!(
+            InProcessCodeVerb::parse("converge"),
+            Some(InProcessCodeVerb::Converge),
+            "the dispatcher must resolve `code converge` to the linked verb"
+        );
+        for still_the_siblings in ["brief", "fieldglass", "arch-report", "dry-report", "map"] {
+            assert!(
+                InProcessCodeVerb::parse(still_the_siblings).is_none(),
+                "`code {still_the_siblings}` must keep exec'ing the sibling"
+            );
+        }
     }
 }
