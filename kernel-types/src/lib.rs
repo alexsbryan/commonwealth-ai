@@ -55,6 +55,20 @@
 //! | [`Freshness`] | is the artifact behind it still worth quoting |
 //! | [`Judgement`] | all of the above about one named subject, and it renders |
 //!
+//! **The released turn** — what the user is shown and what it stands on
+//! (minted 2026-08-20, rung nc-11-answer; see [`answer`] for why these are
+//! here rather than in `sovereign-contracts`, which sits BELOW `corpus-engine`
+//! and so cannot hold a type in this family):
+//!
+//! | Type | Answers |
+//! |---|---|
+//! | [`Seal`] | the one question a sealed body of evidence must answer |
+//! | [`Citation`] | a quote the seal vouched for, and where it came from |
+//! | [`Draft`] | composed text whose only exit is release — it cannot be read |
+//! | [`Answer`] | text + citations + provenance + judgement, and no door without one |
+//! | [`PeerAnswer`] | an answer the custody sweep cleared to leave this machine |
+//! | [`Refused`] | why a citation or a peer release said no — a value, not a log line |
+//!
 //! # The "ten types" cap, and what the bar actually measures
 //!
 //! The rung-1 header of this file read *"Ten types, which is the campaign's
@@ -79,6 +93,7 @@
 //! `sovereign-time` without creating the exact backflow edge it exists to
 //! forbid.
 
+pub mod answer;
 pub mod attribution;
 pub mod custody;
 pub mod hash;
@@ -86,6 +101,7 @@ pub mod ids;
 pub mod judgement;
 pub mod origin;
 
+pub use answer::{Answer, Citation, Draft, PeerAnswer, Refused, Seal, TURN_SUBJECT};
 pub use attribution::Attribution;
 pub use custody::{join_custody, Custody};
 pub use hash::ContentHash;

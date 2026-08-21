@@ -435,7 +435,20 @@ weakly; the chunk seal does not exist at all."""
 
 [[concept]]
 name        = "Draft"
-canonical   = "sovereign_contracts::answer::Draft"
+canonical   = "kernel_types::answer::Draft"
+# HOME CORRECTED 2026-08-20 (rung nc-11-answer), and it was FORCED, not
+# preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
+# EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
+# cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
+# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
+# declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
+# hold the trait and cannot hold the noun that needs it. `kernel-types` is the
+# only layer-0 crate both `corpus-engine` and `sovereign` already depend on.
+# This is a move WITHIN layer 0 — the same one rung 10 made for `Judgement`
+# and documented at length — not a change of which product domain owns the
+# noun. `Answer` never names `Evidence`: every field of it is already kernel
+# vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge (the turn concept); distinct (two squatters rename)"
 totality    = "A Draft cannot be returned to a surface. It becomes an Answer only through verify and release, which makes 'forgot to run the gate' unrepresentable."
 status      = "target"
@@ -443,11 +456,33 @@ in_program  = true
 phase       = 4
 verified_at = "differential"
 measure     = "surface-reachable text values that never passed through the gate (today: unmeasured — the type that would make it measurable does not exist)"
+landed_at   = """2026-08-20, rung nc-11-answer. "A Draft cannot be returned to
+a surface" landed in the sharper form the type can actually enforce: a Draft's
+TEXT cannot be read at all — no accessor, no Display, no Serialize, private
+field — so the only exit is release. Compile-fail proof:
+kernel-types/tests/ui/draft_text_is_not_readable.rs. The two squatters
+(sovereign-cli-llm/backlog_cmd/item.rs:49, deep_research/icd.rs:612) are
+DISTINCT concepts and are deliberately left alone: a backlog draft item and an
+inter-component document are not this noun, and renaming them apart is not
+this rung's work."""
 today       = "2026-08-17: no turn-level Draft type exists — TARGET_ARCHITECTURE's v1 `partial` marker was generous. Two other concepts squat the name: sovereign-cli-llm/item.rs:49 (a draft backlog item) and deep_research/icd.rs:604 (the DR inter-component document, minted this week). Both rename or namespace; the turn Draft is greenfield."
 
 [[concept]]
 name        = "Answer"
-canonical   = "sovereign_contracts::answer::Answer"
+canonical   = "kernel_types::answer::Answer"
+# HOME CORRECTED 2026-08-20 (rung nc-11-answer), and it was FORCED, not
+# preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
+# EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
+# cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
+# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
+# declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
+# hold the trait and cannot hold the noun that needs it. `kernel-types` is the
+# only layer-0 crate both `corpus-engine` and `sovereign` already depend on.
+# This is a move WITHIN layer 0 — the same one rung 10 made for `Judgement`
+# and documented at length — not a change of which product domain owns the
+# noun. `Answer` never names `Evidence`: every field of it is already kernel
+# vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge"
 totality    = """
 Cannot exist without a Judgement. An honest abstention is an Answer too —
@@ -461,11 +496,35 @@ in_program  = true
 phase       = 4
 verified_at = "journey"
 measure     = "paths where provenance presence is asserted by convention rather than type (today: functional.rs:235 asserts present, routing_moves.rs:277 asserts absent — same key, opposite assertions, distinguished only by which handler ran)"
+landed_at   = """2026-08-20, rung nc-11-answer. The totality is enforced by
+construction: private fields, no Default, no Deserialize, and every door
+(Draft::release, Draft::release_ungated, Answer::abstained) takes a Judgement
+by value. `release()` folds by ONE named policy and that policy is
+`Judgement::roll_up`, reused from rung 10 rather than re-reduced here — so an
+empty judgement set is could-not-judge and never a pass. `release_ungated`
+carries Verdict::NeverRan, which fixes a real defect: an un-gated turn was
+previously indistinguishable at the type level from a gated-and-passed one.
+Compile-fail proof: kernel-types/tests/ui/answer_without_a_judgement.rs.
+NOT DONE: the live turn path (grounding/mod.rs, streaming.rs) has not migrated
+onto the type, and the 8 metadata["provenance"] writer sites are untouched."""
 today       = "2026-08-17 (confirmed exact): ResponseProvenance is a real typed struct that travels serialized into message.metadata[\"provenance\"] from 8 writer sites; production readers are defensive (let-else / ?), the unwrap shape lives in the test surface. Presence is a per-path convention pinned by two tests asserting opposite things."
 
 [[concept]]
 name        = "Citation"
-canonical   = "sovereign_contracts::answer::Citation"
+canonical   = "kernel_types::answer::Citation"
+# HOME CORRECTED 2026-08-20 (rung nc-11-answer), and it was FORCED, not
+# preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
+# EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
+# cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
+# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
+# declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
+# hold the trait and cannot hold the noun that needs it. `kernel-types` is the
+# only layer-0 crate both `corpus-engine` and `sovereign` already depend on.
+# This is a move WITHIN layer 0 — the same one rung 10 made for `Judgement`
+# and documented at length — not a change of which product domain owns the
+# noun. `Answer` never names `Evidence`: every field of it is already kernel
+# vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge"
 totality    = "A Citation points INTO the sealed EvidenceSet — it cannot cite what the seal does not contain. The audited invariant sovereign-meshapp already states (the quoted text appears in the cited chunk) becomes construction, not audit."
 status      = "target"
@@ -473,6 +532,19 @@ in_program  = true
 phase       = 4
 verified_at = "differential"
 measure     = "D1 count for name Citation + citation shapes that carry no seal reference"
+landed_at   = """2026-08-20, rung nc-11-answer. `Citation::pointing_into(seal,
+quote)` is the only door: it refuses a quote the seal does not hold verbatim
+(Refused::NotInSeal, carrying the seal's size so an empty seal is
+distinguishable from a miss) and refuses one landing in Grain::Summary
+(Refused::NotQuotable) — the audited invariant sovereign-meshapp states in a
+doc comment at wrapped.rs:182, promoted to a constructor. Compile-fail proof:
+kernel-types/tests/ui/citation_without_a_seal.rs plus
+citation_has_no_public_constructor.rs (split, because rustc suppresses the
+private-field diagnostic when method resolution in the same body already
+failed — one fixture recorded one error and hid the other).
+NOT DONE: the three squatting definitions (sovereign-eval/judge.rs:79,
+sovereign-meshapp/wrapped.rs:182, sovereign-server/projection.rs:95) and the
+fourth under a different name (ReleasedCitation) are all still in place."""
 today       = "2026-08-17: three definitions, none canonical — sovereign-eval/judge.rs:79 (code location for an axis score — distinct concept, renames), sovereign-meshapp/wrapped.rs:182 (verbatim span + offsets, the closest to target), sovereign-server/projection.rs:95 (mobile-wire retrieval hit). The runtime's ReleasedCitation (grounding/mod.rs:1435) is a fourth shape the census misses because the name differs — a synonym-duplicate, exactly the class D1 is blind to."
 
 # ─────────────────────────────────────────────────────────────────────

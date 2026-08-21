@@ -1,0 +1,20 @@
+error[E0616]: field `text` of struct `Draft` is private
+  --> tests/ui/draft_text_is_not_readable.rs:10:20
+   |
+10 |     let _ = &draft.text;
+   |                    ^^^^ private field
+
+error[E0599]: no method named `text` found for struct `Draft` in the current scope
+  --> tests/ui/draft_text_is_not_readable.rs:11:19
+   |
+11 |     let _ = draft.text();
+   |                   ^^^^ private field, not a method
+
+error[E0277]: `Draft` doesn't implement `std::fmt::Display`
+  --> tests/ui/draft_text_is_not_readable.rs:12:15
+   |
+12 |     println!("{draft}");
+   |               ^^^^^^^ `Draft` cannot be formatted with the default formatter
+   |
+   = help: the trait `std::fmt::Display` is not implemented for `Draft`
+   = note: in format strings you may be able to use `{:?}` (or {:#?} for pretty-print) instead

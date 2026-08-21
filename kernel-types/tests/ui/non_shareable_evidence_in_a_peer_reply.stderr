@@ -1,0 +1,26 @@
+error[E0308]: mismatched types
+  --> tests/ui/non_shareable_evidence_in_a_peer_reply.rs:31:32
+   |
+31 |     let _cleared: PeerAnswer = PeerAnswer::bound_for_peer(answer(), Custody::PublicWeb);
+   |                   ----------   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `PeerAnswer`, found `Result<PeerAnswer, Refused>`
+   |                   |
+   |                   expected due to this
+   |
+   = note: expected struct `PeerAnswer`
+                found enum `Result<PeerAnswer, Refused>`
+help: consider using `Result::expect` to unwrap the `Result<PeerAnswer, Refused>` value, panicking if the value is a `Result::Err`
+   |
+31 |     let _cleared: PeerAnswer = PeerAnswer::bound_for_peer(answer(), Custody::PublicWeb).expect("REASON");
+   |                                                                                        +++++++++++++++++
+
+error[E0423]: cannot initialize a tuple struct which contains private fields
+  --> tests/ui/non_shareable_evidence_in_a_peer_reply.rs:34:13
+   |
+34 |     let _ = PeerAnswer(answer());
+   |             ^^^^^^^^^^
+   |
+note: constructor is not visible here due to private fields
+  --> src/answer.rs
+   |
+   | pub struct PeerAnswer(Answer);
+   |                       ^^^^^^ private field

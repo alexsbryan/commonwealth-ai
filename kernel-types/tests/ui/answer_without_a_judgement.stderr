@@ -1,0 +1,38 @@
+error: cannot construct `Answer` with struct literal syntax due to private fields
+  --> tests/ui/answer_without_a_judgement.rs:20:13
+   |
+20 |     let _ = Answer {
+   |             ^^^^^^
+21 |         text: "Whales are mammals.".to_string(),
+   |         --------------------------------------- private field
+22 |         citations: Vec::new(),
+   |         --------------------- private field
+23 |         provenance: attribution(),
+   |         ------------------------- private field
+   |
+   = note: ...and other private field `judgement` that was not provided
+help: you might have meant to use the `abstained` associated function
+   |
+20 -     let _ = Answer {
+21 -         text: "Whales are mammals.".to_string(),
+22 -         citations: Vec::new(),
+23 -         provenance: attribution(),
+24 -     };
+20 +     let _ = Answer::abstained(_, _, _);
+   |
+
+error[E0061]: this method takes 2 arguments but 1 argument was supplied
+  --> tests/ui/answer_without_a_judgement.rs:26:64
+   |
+26 |     let _ = Draft::composed("Whales are mammals.", Vec::new()).release(attribution());
+   |                                                                ^^^^^^^--------------- argument #2 of type `&[Judgement]` is missing
+   |
+note: method defined here
+  --> src/answer.rs
+   |
+   |     pub fn release(self, provenance: Attribution, judgements: &[Judgement]) -> Answer {
+   |            ^^^^^^^
+help: provide the argument
+   |
+26 |     let _ = Draft::composed("Whales are mammals.", Vec::new()).release(attribution(), /* &[Judgement] */);
+   |                                                                                     ++++++++++++++++++++

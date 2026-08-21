@@ -555,16 +555,27 @@ is why the ratchet is the mechanism rather than a report.
 
 | Invariant | Today | Target |
 |---|---|---|
-| Every answer is grounded in evidence | runtime gate | **type** — no `Answer` without `Judgement` |
+| Every answer is grounded in evidence | **type** (`kernel_types::Answer`, rung 11) — the runtime turn path has not migrated onto it | **type** — no `Answer` without `Judgement` |
 | Sharing policy is respected | ~149 raw-bool sites, ~5:1 plumbing to guards | **type** — one `SharingPolicy` + one resolution decider; the true guards remain, the plumbing collapses |
-| Chunk custody is respected | a metadata string key | **type** — non-shareable evidence cannot be constructed into a peer-bound reply |
-| Provenance is present | per-path convention | **type** — a required field |
+| Chunk custody is respected | **type** (`PeerAnswer`, rung 11) at the mesh boundary, which had no check at all before it; still a metadata string key on the retrieval path | **type** — non-shareable evidence cannot be constructed into a peer-bound reply |
+| Provenance is present | **type** (`Answer.provenance: Attribution`, rung 11) — a required argument of every release door; the 8 `metadata["provenance"]` writer sites are unmigrated | **type** — a required field |
 | The model never originates a number | runtime audit | audit **plus** the value's `Origin` |
 | A capability is wired | `if let Some(..)` | **type** — `Capability<T>` |
 | Two measurements are comparable | operator memory | **key** — fingerprint |
 | A command exists | 3 reconciliation harnesses | **generated** from the contract |
 | An endpoint is guarded | mounted by hand, 6 of 8 | **registry** attaches the guard |
 | Docs match code | ~16,600 lines of drift detection | **generated** from `CONCEPTS.toml` |
+
+**Read the middle column exactly as written.** Rung 11 minted the types and
+proved by compile-fail that the illegal constructions have no spelling
+(`kernel-types/tests/answer_reds.rs`, six fixtures, each watched failing before
+its `.stderr` was recorded). It did NOT migrate the live turn path:
+`grounding/mod.rs` still assembles `ReleasedCitation` by hand and
+`streaming.rs` still holds tokens procedurally. A row reading "type" where the
+product does not yet use the type is a real change — the construction is now
+impossible for anyone who reaches for the noun — and it is not the same as a
+migrated path. Saying otherwise here is exactly the well-formed, exit-0,
+wrong result ARCH §18 exists to catch.
 
 Gates remain for what types genuinely cannot hold: answer quality, judge
 calibration, retrieval recall, honesty under adversarial questioning. Those

@@ -49,14 +49,23 @@ REPO = Path(__file__).resolve().parent.parent
 # is the declared one, made countable. `fixture` is the basename under a
 # `tests/ui/` directory; None means no rung has proven it yet.
 #
-# Constructions 2 and 3 landed with nc-4-evidence. 1, 4 and 5 are Answer /
-# Citation / sharing claims and close at rung 11 (`closes_at` on the bar).
+# Constructions 2 and 3 landed with nc-4-evidence; 1, 4 and 5 with
+# nc-11-answer (`kernel-types/tests/answer_reds.rs`), which is the rung the bar
+# names in `closes_at`.
+#
+# FILLING IN A FIXTURE NAME HERE MOVES NOTHING ON ITS OWN, and that is the
+# point (ARCH §18.6 — a judge change reported only in the direction it was
+# meant to fix). A row scores only when `wired_fixtures()` finds the basename
+# inside a real `compile_fail(...)` call AND `has_recorded_stderr()` finds a
+# recorded `.stderr` beside it. Both are read off the tree, so a name typed
+# here without the test behind it scores zero exactly as before.
 DECLARED = [
-    ("an Answer with no Judgement", None),
+    ("an Answer with no Judgement", "answer_without_a_judgement"),
     ("an Evidence with no Origin", "evidence_without_an_origin"),
     ("an Evidence with no Custody", "evidence_without_a_custody"),
-    ("a Citation not pointing into a sealed EvidenceSet", None),
-    ("a non-shareable Evidence in a peer-bound reply", None),
+    ("a Citation not pointing into a sealed EvidenceSet", "citation_without_a_seal"),
+    ("a non-shareable Evidence in a peer-bound reply",
+     "non_shareable_evidence_in_a_peer_reply"),
 ]
 
 POSITIVE_CONTROL = "harness_positive_control"
@@ -114,10 +123,14 @@ def main():
           f"by type  ->  {value}")
     print(f"  positive control `{POSITIVE_CONTROL}` wired and recorded — the reading counts.")
     if proven < len(DECLARED):
-        print("\n  The open rows are Answer / Citation / sharing claims and close")
-        print("  at rung 11. This instrument scores COVERAGE of the declared list;")
-        print("  that the wired reds still fail is proven by the definition-of-done")
-        print("  sweep, which builds and runs them as ordinary test targets.")
+        print("\n  This instrument scores COVERAGE of the declared list; that the")
+        print("  wired reds still fail is proven by the definition-of-done sweep,")
+        print("  which builds and runs them as ordinary test targets.")
+    else:
+        print("\n  Every declared construction has a wired fixture with a recorded")
+        print("  .stderr. COVERAGE only: that the reds still FAIL is proven by the")
+        print("  definition-of-done sweep, which builds and runs them as ordinary")
+        print("  test targets. A green here over a red sweep is not a thesis.")
     return 0
 
 

@@ -211,6 +211,20 @@ impl Grain {
     pub fn may_be_quoted(self) -> bool {
         matches!(self, Grain::Leaf)
     }
+
+    /// The wire spelling, matching the `snake_case` serde form.
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Grain::Leaf => "leaf",
+            Grain::Summary => "summary",
+        }
+    }
+}
+
+impl fmt::Display for Grain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
 }
 
 /// Where inside its document a piece of content sits — the citation handle.

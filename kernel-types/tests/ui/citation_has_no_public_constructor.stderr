@@ -1,0 +1,18 @@
+error[E0599]: no function or associated item named `new` found for struct `Citation` in the current scope
+ --> tests/ui/citation_has_no_public_constructor.rs:7:23
+  |
+7 |     let _ = Citation::new("the whale is a fish");
+  |                       ^^^ function or associated item not found in `Citation`
+  |
+note: if you're trying to build a new `Citation`, consider using `Citation::pointing_into` which returns `Result<Citation, Refused>`
+ --> src/answer.rs
+  |
+  | /     pub fn pointing_into<S>(seal: &S, quote: impl Into<String>) -> Result<Citation, Refused>
+  | |     where
+  | |         S: Seal + ?Sized,
+  | |_________________________^
+help: there is a method `ne` with a similar name
+  |
+7 -     let _ = Citation::new("the whale is a fish");
+7 +     let _ = Citation::ne("the whale is a fish");
+  |

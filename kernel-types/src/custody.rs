@@ -75,6 +75,41 @@ impl Custody {
         !matches!(self, Custody::Unknown)
     }
 
+    /// How restrictive this class is, for release-floor comparison.
+    /// `PublicWeb` (0) is the least restrictive — web material egresses
+    /// unconditionally; `Personal` (2) the most; `Unknown` (3) sits above
+    /// every floor so no floor can release it.
+    ///
+    /// ONE implementation of the custody ordering (ARCH §10.6). It was a
+    /// private `fn restrictiveness` inside `sovereign-core/src/egress.rs`,
+    /// which is the third-party-provider boundary; the mesh-peer boundary
+    /// needs the same ordering and must not re-derive it. The ordering is a
+    /// fact about the classes, so it belongs beside them.
+    pub const fn restrictiveness(self) -> u8 {
+        match self {
+            Custody::PublicWeb => 0,
+            Custody::Peer => 1,
+            Custody::Personal => 2,
+            Custody::Unknown => 3,
+        }
+    }
+
+    /// Does a release floor of `floor` release content of THIS custody?
+    ///
+    /// Content releases when it is AT MOST as restrictive as the floor, and
+    /// `Unknown` never releases at any floor — a claim resting on
+    /// undeterminable provenance refuses before it reaches a release surface
+    /// (custody.md §4). The inverse comparison would let a `public-web` floor
+    /// release `personal` content, which is the direction that leaks; the
+    /// test `a_floor_releases_downward_only` pins it.
+    ///
+    /// ONE decider, two boundaries (ARCH §10.6): `egress::ConsentGrant::covers`
+    /// asks it about a third-party provider, `PeerAnswer::bound_for_peer`
+    /// asks it about a mesh peer.
+    pub const fn released_by(self, floor: Custody) -> bool {
+        !matches!(self, Custody::Unknown) && self.restrictiveness() <= floor.restrictiveness()
+    }
+
     /// Parse a wire spelling (lenient: accepts the exact contract strings
     /// only — a typo is an error, not a silent `Unknown`).
     pub fn parse_wire(s: &str) -> Option<Custody> {
@@ -146,6 +181,60 @@ mod tests {
         assert_eq!(Custody::parse_wire(""), None);
         assert_eq!("peer".parse::<Custody>().unwrap(), Custody::Peer);
         assert!("PEER".parse::<Custody>().is_err());
+    }
+
+    #[test]
+    fn a_floor_releases_downward_only() {
+        // The direction that leaks is the inverse: a public-web floor must
+        // NOT release personal content.
+        assert!(Custody::PublicWeb.released_by(Custody::PublicWeb));
+        assert!(!Custody::Personal.released_by(Custody::PublicWeb));
+        assert!(!Custody::Peer.released_by(Custody::PublicWeb));
+
+        assert!(Custody::PublicWeb.released_by(Custody::Peer));
+        assert!(Custody::Peer.released_by(Custody::Peer));
+        assert!(!Custody::Personal.released_by(Custody::Peer));
+
+        // `personal` is the most permissive floor and still refuses unknown.
+        for c in Custody::RELEASED_CLASSES {
+            assert!(
+                c.released_by(Custody::Personal),
+                "{c} at the personal floor"
+            );
+        }
+        for floor in [
+            Custody::PublicWeb,
+            Custody::Peer,
+            Custody::Personal,
+            Custody::Unknown,
+        ] {
+            assert!(
+                !Custody::Unknown.released_by(floor),
+                "unknown must refuse at every floor, including {floor}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_ordering_matches_the_join() {
+        // `join_custody` picks the MOST restrictive input; `restrictiveness`
+        // must agree with it or the two deciders disagree about one word.
+        let classes = [
+            Custody::PublicWeb,
+            Custody::Peer,
+            Custody::Personal,
+            Custody::Unknown,
+        ];
+        for a in classes {
+            for b in classes {
+                let joined = join_custody(&[a, b]);
+                assert_eq!(
+                    joined.restrictiveness(),
+                    a.restrictiveness().max(b.restrictiveness()),
+                    "join({a}, {b}) = {joined}"
+                );
+            }
+        }
     }
 
     #[test]
