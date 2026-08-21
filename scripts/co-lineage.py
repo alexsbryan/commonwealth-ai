@@ -501,6 +501,13 @@ def _run_instrument(instrument: str, timeout_s: int) -> tuple[int | None, str, s
             os.killpg(proc.pid, signal.SIGKILL)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # EPERM: the group exists but is not ours to signal. Fall back to the
+            # leader; the group check below will report honestly if it survives.
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                pass
         out, err = proc.communicate()
     dead = True
     if timed_out:
@@ -513,6 +520,14 @@ def _run_instrument(instrument: str, timeout_s: int) -> tuple[int | None, str, s
                 os.killpg(proc.pid, 0)
             except ProcessLookupError:
                 dead = True
+                break
+            except PermissionError:
+                # EPERM means the process group EXISTS and we may not signal it.
+                # That is the opposite of dead, and it must not crash the sweep:
+                # before this arm, one slow instrument aborted the whole
+                # `measure` run with a traceback instead of recording a
+                # could-not-judge row for the bar that was actually at fault.
+                dead = False
                 break
             _time.sleep(0.01)
     return proc.returncode, out or "", err or "", timed_out, dead
