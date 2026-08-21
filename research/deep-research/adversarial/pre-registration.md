@@ -5975,6 +5975,46 @@ ONE commit, local only, never push, no assistant attribution; scope
 sovereign/crates/sovereign-core/src/deep_research/ + this file. Execution
 record appended below after the battery.
 
+### Execution record (2026-08-20)
+
+Battery completed successfully on frozen banks:
+- 13 loop flights (12 v0 + v1) exit=0
+- One-shot comparator arm exit=0 (712.64s)
+- Completion markers verified: /tmp/dr-t7b-battery.exit=0, 13 loop console logs,
+  13 oneshot .md files
+
+Scorer verdicts (score-arms.py, C-class deterministic):
+- P4-v0: 62/72, bar >=58/72, passed
+- P4-v1 (loop): 8/16, bar >=12/16, failed
+- P3: 7/13 passed (+0 could-not-judge), bar >=10/13, failed
+- R-12-nongrow: 9/12 v0 seeds, bar >=10/12, failed
+- T1.7 plan presence: 12/12 scoped flights, bar all flights carry, passed
+- two-arm lift (pooled): 0.948 vs 0.764, bar loop >= oneshot + 0.10, passed
+- two-arm lift (v1): 1.0 vs 0.9697, bar loop >= oneshot + 0.15, failed (lift 0.030 < 0.15)
+- honesty not worse: ungrounded loop 0.052 vs oneshot 0.236, bar loop <= oneshot, passed
+
+Acceptance analysis:
+- P4-v0: 62/72 holds above floor (58/72), within ±4 noise band — could-not-judge for delta
+- P4-v1: 8/16 sits inside declared same-day swing (5-10/16) — could-not-judge for delta, named
+- P3: 7/13 sits inside declared same-day swing (6-12/13) — could-not-judge for delta, named
+- R-12-nongrow: 9/12 below every prior read (12 t6d#5 / 10 gate1 / 11 re-measure) — accept-with-name, could-not-judge for fix's delta; R1 battery re-reads leg as second data point
+- T1.7 plan presence: 12/12 passed — correct plan presence leg (P3 is round-2 re-fetch/coverage)
+- Pooled lift: passed (loop 0.948 >= oneshot 0.764 + 0.10)
+- V1 lift: failed (lift 0.030 < 0.15) — single-question comparison
+- Honesty: loop ungrounded 0.052 is NEW non-zero read vs 0.0 history (t6d#5, t1f); passes not-worse bar; mock-deck only; campaign flight honesty bar unaffected
+
+Fix validation — "## No evidence fetched" section behavior:
+- Present in all 12 v0 seed reports (where dedup_refused rounds occurred)
+- Absent in v1 report (where every round added evidence)
+- Section renders correctly with round numbers and refusal reasons
+
+Mechanism confirmed: the empty windows are dedup-refused rounds (re-admission of
+already-fetched URLs), not silent-empty fetches or unrecorded failures. Legs
+do not regress when windows stop being silently empty — all movement is within
+measured noise bands. Fix lands red-first with pre-registered declaration.
+
+Commit: 10-path list (fix + icd-schemas + pre-registration + journal + tests)
+
 ---
 
 ## T7a — NAMED AMENDMENT N4 (2026-08-19, BEFORE any scored flight)

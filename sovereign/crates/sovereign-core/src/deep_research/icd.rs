@@ -429,6 +429,47 @@ pub struct EmptyWindow {
     pub reason: String,
 }
 
+/// Why a round's evidence window came back empty — the closed set of
+/// round-level empty shapes (order deep-research-t7b, pre-registered).
+/// The one decider over the window's own fields lives in audit.rs
+/// (`empty_round_reason`); this enum is the ONLY wire form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmptyRoundReason {
+    /// Every fetch the round admitted was refused as already-fetched
+    /// (dedup gate, fetch.rs) — the pinned t6c shape: the round's
+    /// admits were exactly the already-acquired URLs.
+    Refused,
+    /// Every admitted fetch failed (dead URLs, fetch errors).
+    Failed,
+    /// Some refused, some failed.
+    Mixed,
+    /// Nothing was admitted to fetch this round (no hits).
+    NoAdmits,
+}
+
+impl EmptyRoundReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Refused => "all-admitted-fetches-refused",
+            Self::Failed => "all-admitted-fetches-failed",
+            Self::Mixed => "mixed-refused-and-failed",
+            Self::NoAdmits => "no-admitted-hits",
+        }
+    }
+}
+
+/// A round whose evidence window is empty — the round-level state the
+/// verdict assembly had no reader for (the t7b forensics: rounds whose
+/// fetches were all dedup-refused rendered identically to rounds that
+/// never added evidence). Recorded at acquire_round, carried on the
+/// checkpoint, surfaced on the verdict set and the report.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmptyRound {
+    pub round: u32,
+    pub reason: EmptyRoundReason,
+}
+
 // ---------------------------------------------------------------------------
 // §5 fetch-list-<round>.json — R4 + R5
 // ---------------------------------------------------------------------------
@@ -656,6 +697,12 @@ pub struct VerdictSet {
     pub run_id: String,
     pub charter_hash: String,
     pub claims: Vec<FinalClaim>,
+    /// The rounds that added no evidence (order deep-research-t7b,
+    /// additive — an old reader deserializes it as empty). A no-evidence
+    /// round reads as no-evidence at the verdict surface, not as
+    /// per-claim could-not-judge.
+    #[serde(default)]
+    pub empty_rounds: Vec<EmptyRound>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

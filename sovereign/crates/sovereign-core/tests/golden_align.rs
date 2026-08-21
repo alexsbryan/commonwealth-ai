@@ -295,7 +295,7 @@ fn render_golden(
         Some(a) => &a.redirected_question,
         None => QUESTION,
     };
-    render_report(question, &claims, v.run_id.as_str(), None, alignment, &[])
+    render_report(question, &claims, v.run_id.as_str(), None, alignment, &[], &[])
 }
 
 #[test]

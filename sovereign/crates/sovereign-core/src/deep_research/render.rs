@@ -13,8 +13,9 @@
 use super::audit::ClaimAudit;
 use super::containment::strip_citation_spans;
 use super::icd::{
-    AlignmentRecord, BudgetTotals, ClaimCitation, EvidenceWindow, FinalClaim, GateAction,
-    LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow, SourceLedger, Verdict, VerdictSet,
+    AlignmentRecord, BudgetTotals, ClaimCitation, EmptyRound, EmptyRoundReason, EvidenceWindow,
+    FinalClaim, GateAction, LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow, SourceLedger,
+    Verdict, VerdictSet,
 };
 
 /// Map the final audits to verdict-set rows, with C-class citations
@@ -103,6 +104,7 @@ pub fn render_report(
     reframe: Option<&ReframeRecord>,
     alignment: Option<&AlignmentRecord>,
     residue: &[ResidueRow],
+    empty_rounds: &[EmptyRound],
 ) -> String {
     // Model-written `[Source: …]` tails are demoted at the page (order
     // deep-research-t4a, pre-registered — pass site 1: 83% of claims
@@ -233,6 +235,28 @@ pub fn render_report(
             out.push_str(&format!(
                 "- round {}: \"{}\" — searched, no evidence returned\n",
                 row.round, row.query
+            ));
+        }
+        out.push('\n');
+    }
+    // T7b (order deep-research-t7b, pre-registered): the round-level
+    // "no evidence fetched" state — the verdict assembly had no reader
+    // for it (rounds whose fetches were all dedup-refused rendered
+    // identically to rounds that never added evidence). The section
+    // follows the residue pattern: every empty round is first-class
+    // report content naming its reason (the closed enum), and an empty
+    // rounds list renders NO section — a run where every round added
+    // evidence has nothing to disclose (keeps the goldens byte-pinned).
+    if !empty_rounds.is_empty() {
+        out.push_str("## No evidence fetched\n\n");
+        out.push_str(
+            "The rounds below added no evidence: the round's fetch yield was empty, so no \
+             claim could be judged on new material from that round.\n\n",
+        );
+        for er in empty_rounds {
+            out.push_str(&format!(
+                "- round {}: no evidence was added this round — {}\n",
+                er.round, er.reason.as_str()
             ));
         }
         out.push('\n');
@@ -462,7 +486,7 @@ mod tests {
             },
         ];
         let claims = final_claims(&audits, &window());
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[]);
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[], &[]);
         assert!(report.contains("[passed]"));
         assert!(report.contains("https://example.com/a"));
         assert!(report.contains("Open questions"));
@@ -493,7 +517,7 @@ mod tests {
             corroboration: None,
         }];
         let claims = final_claims(&audits, &window());
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[]);
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[], &[]);
         assert!(
             !report.contains("[Source:"),
             "model-written tails never ship on the page"
@@ -534,6 +558,7 @@ mod tests {
             }),
             None,
             &[],
+            &[],
         );
         assert!(report.starts_with("# Why is the bridge kept lit at night?"));
         assert!(report.contains("re-framed at round 2"));
@@ -564,6 +589,7 @@ mod tests {
                 trigger: "pre-acquisition alignment".to_string(),
             }),
             &[],
+            &[],
         );
         assert!(report.starts_with("# What did OpenAI and Anthropic do in March 2025?"));
         assert!(report.contains("redirected at alignment (round 0, pre-acquisition)"));
@@ -588,7 +614,7 @@ mod tests {
             not_covered(&claims),
             vec!["Unanswerable without evidence.".to_string()]
         );
-        let report = render_report("Q", &claims, "run-1", None, None, &[]);
+        let report = render_report("Q", &claims, "run-1", None, None, &[], &[]);
         assert!(report.contains("Not evaluated"));
         assert!(report.contains("[never-ran]"));
         // Could-not-judge claims are covered by not_covered too — the
@@ -632,7 +658,7 @@ mod tests {
                 round: 2,
             },
         ];
-        let report = render_report("Q", &claims, "run-1", None, None, &residue);
+        let report = render_report("Q", &claims, "run-1", None, None, &residue, &[]);
         assert!(
             report.contains("## Searched but absent"),
             "the searched-but-absent section must render: {report}"
@@ -658,10 +684,71 @@ mod tests {
     #[test]
     fn empty_residue_renders_no_section() {
         let claims = final_claims(&[], &window());
-        let report = render_report("Q", &claims, "run-1", None, None, &[]);
+        let report = render_report("Q", &claims, "run-1", None, None, &[], &[]);
         assert!(
             !report.contains("Searched but absent"),
             "an empty residue must render no section: {report}"
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // T7b — the "No evidence fetched" section (RED-FIRST: the section
+    // and the render_report `empty_rounds` parameter do not exist at
+    // HEAD — these calls did not compile before the fix landed; order
+    // deep-research-t7b, pre-registered).
+    // ------------------------------------------------------------------
+
+    /// Every no-evidence round is first-class report content — the
+    /// round-level state the verdict assembly had no reader for (the
+    /// defect forensics: rounds whose fetches were all dedup-refused
+    /// rendered identically to rounds that never added evidence). The
+    /// section names every empty round and its reason, and says what
+    /// the absence means.
+    #[test]
+    fn empty_rounds_section_renders_every_empty_round() {
+        let claims = final_claims(&[], &window());
+        let empty_rounds = [
+            EmptyRound {
+                round: 2,
+                reason: EmptyRoundReason::Refused,
+            },
+            EmptyRound {
+                round: 3,
+                reason: EmptyRoundReason::Mixed,
+            },
+        ];
+        let report = render_report("Q", &claims, "run-1", None, None, &[], &empty_rounds);
+        assert!(
+            report.contains("## No evidence fetched"),
+            "the no-evidence section must render: {report}"
+        );
+        for er in &empty_rounds {
+            assert!(
+                report.contains(&format!("round {}", er.round)),
+                "every no-evidence round must be named in the section: {report}"
+            );
+            assert!(
+                report.contains(er.reason.as_str()),
+                "every no-evidence round must name its reason: {report}"
+            );
+        }
+        assert!(
+            report.contains("no evidence was added this round"),
+            "the section must say what the absence means: {report}"
+        );
+    }
+
+    /// Empty empty_rounds renders NO section — a run where every round
+    /// added evidence has nothing to disclose, and the report must not
+    /// grow a vestigial heading (keeps the meridian/reframe/align
+    /// goldens byte-pinned).
+    #[test]
+    fn empty_rounds_empty_renders_no_section() {
+        let claims = final_claims(&[], &window());
+        let report = render_report("Q", &claims, "run-1", None, None, &[], &[]);
+        assert!(
+            !report.contains("No evidence fetched"),
+            "an empty rounds list must render no section: {report}"
         );
     }
 
@@ -753,7 +840,7 @@ mod tests {
         );
         // The transcript function is untouched — it still renders its
         // own stamps.
-        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[]);
+        let report = render_report("Meridian Bridge history", &claims, "run-1", None, None, &[], &[]);
         assert!(report.contains("[could-not-judge]"), "{report}");
     }
 }

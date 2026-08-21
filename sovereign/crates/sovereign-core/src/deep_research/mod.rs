@@ -31,9 +31,9 @@ use containment::{strip_citation_spans, ContainmentConfig};
 use fetch::fetch_round;
 use icd::{
     AcquisitionPlan, AlignmentRecord, BudgetTotals, Charter, CharterValues, CustodyPolicy, Draft,
-    EvidenceWindow, FailedSource, FetchFailure, FetchList, FetchedSource, Gap, GapList, LockRecord,
-    Manifest, Plan, ReframeInput, ReframeRecord, ResidueRow, RoundRow, SourceLedger, Survey,
-    TriageConfig, UrlConstraintPolicy, WindowChunk,
+    EmptyRound, EmptyRoundReason, EvidenceWindow, FailedSource, FetchFailure, FetchList,
+    FetchedSource, Gap, GapList, LockRecord, Manifest, Plan, ReframeInput, ReframeRecord,
+    ResidueRow, RoundRow, SourceLedger, Survey, TriageConfig, UrlConstraintPolicy, WindowChunk,
 };
 use render::{build_manifest, final_claims, not_covered, render_report, ManifestInput};
 use serde::{Deserialize, Serialize};
@@ -189,6 +189,14 @@ pub struct RunCheckpoint {
     pub alignment_record: Option<AlignmentRecord>,
     pub re_plans: u32,
     pub residue: Vec<ResidueRow>,
+    /// T7b: the rounds that added no evidence — the round-level state
+    /// the verdict assembly had no reader for. Recorded at
+    /// acquire_round (the moment the round window is final), restored
+    /// on resume (serde-default — old checkpoints restore empty), and
+    /// surfaced on the verdict set + report (the "No evidence fetched"
+    /// section).
+    #[serde(default)]
+    pub empty_rounds: Vec<EmptyRound>,
     pub windows: Vec<EvidenceWindow>,
     pub prior_gap_texts: Vec<String>,
     pub prior_gaps: Vec<Gap>,
@@ -867,6 +875,11 @@ struct Controller {
     /// that returned no evidence, collected in acquire_round, rendered
     /// as report content and carried on the manifest.
     residue: Vec<ResidueRow>,
+    /// T7b: the rounds that added no evidence — recorded at
+    /// acquire_round (the moment the round window is final), carried on
+    /// the checkpoint (resume-safe), surfaced on the verdict set and
+    /// the report.
+    empty_rounds: Vec<EmptyRound>,
     /// The windows accumulated so far (the estate window first).
     windows: Vec<EvidenceWindow>,
     /// The still-open gap claim texts — the strict-subset identity
@@ -972,6 +985,7 @@ impl Controller {
             alignment_record: None,
             re_plans: 0,
             residue: Vec::new(),
+            empty_rounds: Vec::new(),
             windows: Vec::new(),
             prior_gap_texts: Vec::new(),
             prior_gaps: Vec::new(),
@@ -1102,6 +1116,7 @@ impl Controller {
             alignment_record: cp.alignment_record.clone(),
             re_plans: cp.re_plans,
             residue: cp.residue.clone(),
+            empty_rounds: cp.empty_rounds.clone(),
             windows: cp.windows.clone(),
             prior_gap_texts: cp.prior_gap_texts.clone(),
             prior_gaps: cp.prior_gaps.clone(),
@@ -1151,6 +1166,7 @@ impl Controller {
             alignment_record: self.alignment_record.clone(),
             re_plans: self.re_plans,
             residue: self.residue.clone(),
+            empty_rounds: self.empty_rounds.clone(),
             windows: self.windows.clone(),
             prior_gap_texts: self.prior_gap_texts.clone(),
             prior_gaps: self.prior_gaps.clone(),
@@ -1982,6 +1998,21 @@ impl Controller {
                 ingested_into: c.ingested_into.clone(),
             });
         }
+        // T7b (order deep-research-t7b, pre-registered): the round
+        // window is final NOW — record the round-level empty state
+        // before it ships (glassbox: a no-evidence round is visible in
+        // the run log and on the verdict surface, never silently).
+        if let Some(reason) = audit::empty_round_reason(&window) {
+            self.empty_rounds.push(EmptyRound { round, reason });
+            let reason_s = reason.as_str();
+            tracing::warn!(
+                target: "deep_research",
+                run_id = %self.config.run_id,
+                round,
+                reason = reason_s,
+                "round {round} added no evidence: {reason_s}"
+            );
+        }
         self.write_artifact(&format!("evidence-window-{round}.json"), &window)?;
         self.windows.push(window.clone());
         self.step(Event::EnrichComplete)?; // → Rounding
@@ -2012,6 +2043,7 @@ impl Controller {
             run_id: self.config.run_id.clone(),
             charter_hash: self.charter_hash.clone(),
             claims: claims.clone(),
+            empty_rounds: self.empty_rounds.clone(),
         };
         self.write_artifact("verdict-set.json", &verdict_set)?;
         self.prior_gap_texts = not_covered(&claims);
@@ -2022,6 +2054,7 @@ impl Controller {
             self.reframe_record.as_ref(),
             self.alignment_record.as_ref(),
             &self.residue,
+            &self.empty_rounds,
         );
         let report_path = self.config.run_dir.join("report.md");
         std::fs::write(&report_path, report).map_err(|e| format!("report write: {e}"))?;

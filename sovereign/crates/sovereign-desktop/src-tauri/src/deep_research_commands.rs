@@ -1228,6 +1228,7 @@ mod tests {
                 run_id: "dr-100".to_string(),
                 charter_hash: "h".to_string(),
                 claims: Vec::new(),
+                empty_rounds: Vec::new(),
             })
             .unwrap(),
         )
@@ -1270,6 +1271,7 @@ mod tests {
             run_id: "dr-100".to_string(),
             charter_hash: "h".to_string(),
             claims: Vec::new(),
+            empty_rounds: Vec::new(),
         }
     }
 

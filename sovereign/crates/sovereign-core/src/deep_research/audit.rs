@@ -30,8 +30,8 @@
 
 use super::containment::{citation_handles, containment_witness, ContainmentConfig};
 use super::icd::{
-    ClaimVerdict, CorroborationRecord, EmptyWindow, Gap, GapList, GateAction, Verdict,
-    WitnessRecord,
+    ClaimVerdict, CorroborationRecord, EmptyRoundReason, EmptyWindow, EvidenceWindow,
+    FetchFailure, Gap, GapList, GateAction, Verdict, WitnessRecord,
 };
 use crate::oicp::ShardingPrivacy;
 use crate::runtime::grounding::{claim_violation_joint, grounding_gate_threshold};
@@ -202,6 +202,27 @@ pub fn split_claims(draft: &str) -> Vec<String> {
 /// `grounding_gate_threshold()` and frozen into the charter hash — the
 /// loop re-reads nothing mid-run (FR-3).
 #[allow(clippy::too_many_arguments)]
+/// The ONE decider over the round window's own fields (order
+/// deep-research-t7b, pre-registered — §10.6: one implementation per
+/// threshold; §2: closed sets are enums). A window that ADDED evidence
+/// is None; the four empty shapes are the closed enum. The round's own
+/// window is per-round (NEW chunks only), so "refused everything"
+/// reads as empty-chunks + empty-failures + non-empty dedup_refused —
+/// the t6c pinned shape.
+pub fn empty_round_reason(window: &EvidenceWindow) -> Option<EmptyRoundReason> {
+    if !window.chunks.is_empty() {
+        return None;
+    }
+    let failed = !window.fetch_failures.is_empty();
+    let refused = !window.dedup_refused.is_empty();
+    match (failed, refused) {
+        (true, true) => Some(EmptyRoundReason::Mixed),
+        (true, false) => Some(EmptyRoundReason::Failed),
+        (false, true) => Some(EmptyRoundReason::Refused),
+        (false, false) => Some(EmptyRoundReason::NoAdmits),
+    }
+}
+
 pub async fn assess_claim(
     provider: &Arc<dyn InferenceProvider>,
     claim: &str,
@@ -649,6 +670,7 @@ pub fn run_tau() -> f64 {
 mod tests {
     use super::*;
     use async_trait::async_trait;
+    use crate::types::Custody;
     use futures::Stream;
     use std::pin::Pin;
 
@@ -1634,5 +1656,88 @@ mod tests {
             "the ref-scoped witness downgrade keeps the abstained action, got {:?}",
             audit.action
         );
+    }
+
+    // ------------------------------------------------------------------
+    // T7b — the one decider over the round window's own fields
+    // (RED-FIRST: `empty_round_reason` does not exist at HEAD — this
+    // test did not compile before the fix landed; order
+    // deep-research-t7b, pre-registered). The four empty shapes are a
+    // closed enum (§2, §10.6): refused / failed / mixed / no-admits.
+    // ------------------------------------------------------------------
+
+    fn empty_window(
+        round: u32,
+        fetch_failures: Vec<FetchFailure>,
+        dedup_refused: Vec<String>,
+    ) -> EvidenceWindow {
+        EvidenceWindow {
+            icd: "evidence_window".to_string(),
+            version: 1,
+            run_id: "run-1".to_string(),
+            charter_hash: "hash".to_string(),
+            round,
+            chunks: Vec::new(),
+            fetch_failures,
+            dedup_refused,
+            derived_custody: "public-web".to_string(),
+        }
+    }
+
+    #[test]
+    fn empty_round_reason_classifies_round_windows() {
+        // Refused: everything the round admitted was already fetched
+        // (the pinned t6c shape — chunks [], failures [], refused [url]).
+        let refused = empty_window(
+            2,
+            Vec::new(),
+            vec!["https://estate.example/seed-02".to_string()],
+        );
+        assert_eq!(empty_round_reason(&refused), Some(EmptyRoundReason::Refused));
+
+        // Failed: admitted fetches errored, nothing refused.
+        let failed = empty_window(
+            2,
+            vec![FetchFailure {
+                url: "https://example.com/a".to_string(),
+                error: "fetch failed".to_string(),
+                absent: false,
+            }],
+            Vec::new(),
+        );
+        assert_eq!(empty_round_reason(&failed), Some(EmptyRoundReason::Failed));
+
+        // Mixed: some refused, some failed.
+        let mixed = empty_window(
+            3,
+            vec![FetchFailure {
+                url: "https://example.com/b".to_string(),
+                error: "fetch failed".to_string(),
+                absent: false,
+            }],
+            vec!["https://estate.example/seed-02".to_string()],
+        );
+        assert_eq!(empty_round_reason(&mixed), Some(EmptyRoundReason::Mixed));
+
+        // NoAdmits: nothing was admitted to fetch at all.
+        let no_admits = empty_window(3, Vec::new(), Vec::new());
+        assert_eq!(
+            empty_round_reason(&no_admits),
+            Some(EmptyRoundReason::NoAdmits)
+        );
+
+        // A round that ADDED evidence is not an empty round.
+        let mut populated = empty_window(1, Vec::new(), Vec::new());
+        populated.chunks.push(super::super::icd::WindowChunk {
+            id: "ev-1".to_string(),
+            locator: "l".to_string(),
+            source_url: "https://example.com/a".to_string(),
+            custody: Custody::PublicWeb.to_string(),
+            provenance_class: "direct".to_string(),
+            content: "evidence".to_string(),
+            ingested_into: None,
+            tags: Vec::new(),
+        });
+        assert_eq!(empty_round_reason(&populated), None);
     }
 }
