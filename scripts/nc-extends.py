@@ -128,10 +128,22 @@ def axis_tool():
 # BOTH HALVES ON THE UNCHANGED TREE (ARCH §18.6 — a judge change reported only
 # in the direction it was meant to fix is the smell):
 #     old spec (files naming `Intent::`)   33   FAIL
-#     new spec (per-intent policy blocks)  13   FAIL
+#     new spec (per-intent policy blocks)  14   FAIL
 # The re-spec does not flip the axis, and does not make it easier to pass.
+# (The new-spec figure read 13 for the first hour of its life: the scanner
+# keyed on the `Intent::` prefix and could not see a file that glob-imports
+# the variants. That was a FALSE PASS and is fixed below — see `_scan_blocks`.)
 
 _ARM_HEAD = re.compile(r"^\s*(?:\|\s*)?(?:Self|Intent|[\w:]+::Intent)::\w")
+#: `use crate::types::Intent::*;` — after this, arm heads are BARE variant
+#: names and the qualified pattern above cannot see them. Found 2026-08-20 in
+#: `runtime/authority_guard.rs`, whose `guard_story` is a thirteen-variant
+#: policy table the axis was reading as absent. That is a FALSE PASS, the one
+#: direction a zero-passes bar must never fail in, so the scanner learns the
+#: variant names rather than trusting the prefix.
+_GLOB_IMPORT = re.compile(r"\buse\s+[\w:]*Intent::\*\s*;")
+_ENUM_DECL = re.compile(r"^\s*pub enum Intent\b")
+_BARE_ARM = re.compile(r"^\s*(?:\|\s*)?([A-Z]\w*)\s*(?:[,{(|]|=>|$)")
 _VARIANT = re.compile(r"(?:Self|Intent|[\w:]+::Intent)::(\w+)")
 _MATCH_KW = re.compile(r"\bmatch\b")
 
@@ -146,6 +158,38 @@ _TABLE_ARITY = 3
 _ROW_TYPE = "IntentRow"
 
 
+def _intent_variants():
+    """The `Intent` variant names, read off the enum declaration itself.
+
+    Derived rather than hardcoded so a new variant is covered the day it
+    lands — a bar carrying its own stale copy of the closed set is the same
+    defect the rung it scores exists to remove.
+    """
+    names = set()
+    for path in subprocess.run(
+            ["git", "grep", "-lI", "-e", "pub enum Intent", "--", "*.rs"],
+            capture_output=True, text=True).stdout.splitlines():
+        if any(sk in path for sk in SKIP):
+            continue
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+        for i, line in enumerate(lines):
+            if not _ENUM_DECL.match(code_part(line)):
+                continue
+            depth = 0
+            for body in lines[i:]:
+                c = code_part(body)
+                before = depth
+                depth += c.count("{") - c.count("}")
+                if before == 1:
+                    m = _BARE_ARM.match(c)
+                    if m:
+                        names.add(m.group(1))
+                if before >= 1 and depth <= 0:
+                    break
+    return names
+
+
 def _intent_policy_blocks():
     """Every `match` over an `Intent`, classified.
 
@@ -155,24 +199,32 @@ def _intent_policy_blocks():
 
     Line-based rather than a real parser, deliberately: the bar must run in
     seconds off a clean checkout with no toolchain, and every judgement it
-    makes is visible in one screen of code. Its two known limits both
-    OVER-count, which for a bar that passes only at zero is the safe
-    direction — it can never manufacture a pass.
+    makes is visible in one screen of code.
+
+    THAT TRADE HAS ALREADY COST ONCE, so the limits are named rather than
+    waved at. The first cut assumed every limit ran in the OVER-counting
+    direction and therefore could never manufacture a pass. It could: keying
+    on the `Intent::` prefix made a glob-importing file invisible, and the axis
+    read PASSING with a live policy site in it. The remaining known limits —
+    a file-wide rather than scope-wide glob check, and a `//` inside a string
+    literal truncating a line — do over-count. That is an argument for
+    `--self-test`, not for trusting the shape of the error.
     """
     found = []
+    variants = _intent_variants()
     for path in subprocess.run(
             ["git", "grep", "-lI", "-e", "Intent::", "--", "*.rs"],
             capture_output=True, text=True).stdout.splitlines():
-        if any(s in path for s in SKIP):
+        if any(sk in path for sk in SKIP):
             continue
         with open(path, encoding="utf-8", errors="replace") as fh:
             lines = fh.read().splitlines()
-        for block in _scan_blocks(lines):
+        for block in _scan_blocks(lines, variants):
             found.append(dict(block, file=path))
     return found
 
 
-def _scan_blocks(lines):
+def _scan_blocks(lines, variants=frozenset()):
     """The judgement itself, over a list of source lines. Pure — no I/O.
 
     Split out from [`_intent_policy_blocks`] so `--self-test` can drive it on
@@ -181,11 +233,17 @@ def _scan_blocks(lines):
     """
     # `Self::Foo` is an Intent arm only inside `impl Intent`.
     self_is_intent = any("impl Intent" in line for line in lines)
+    # `use ..Intent::*;` makes arm heads BARE variant names. Checked
+    # file-wide rather than per-scope: that over-counts if one function globs
+    # the variants and another matches an unrelated enum, and over-counting is
+    # the only direction a bar that passes at zero may err in.
+    globbed = bool(variants) and any(
+        _GLOB_IMPORT.search(code_part(line)) for line in lines)
     found, i = [], 0
     while i < len(lines):
         head = code_part(lines[i])
         if _MATCH_KW.search(head) and head.rstrip().endswith("{"):
-            depth, j, variants, bodies, opened = 0, i, [], [], False
+            depth, j, named, bodies, opened = 0, i, [], [], False
             while j < len(lines):
                 line = code_part(lines[j])
                 outer = depth
@@ -201,14 +259,18 @@ def _scan_blocks(lines):
                     if outer == 1 and _ARM_HEAD.match(line):
                         is_self = line.lstrip().lstrip("| ").startswith("Self::")
                         if self_is_intent or not is_self:
-                            variants += _VARIANT.findall(line.split("=>")[0])
+                            named += _VARIANT.findall(line.split("=>")[0])
+                    elif outer == 1 and globbed and _BARE_ARM.match(line):
+                        head = line.split("=>")[0]
+                        named += [w for w in re.findall(r"\b([A-Z]\w*)", head)
+                                  if w in variants]
                 if opened and depth <= 0:
                     break
                 j += 1
-            if variants:
+            if named:
                 found.append({
                     "line": i + 1,
-                    "variants": sorted(set(variants)),
+                    "variants": sorted(set(named)),
                     "dispatch": any(".await" in b for b in bodies),
                     "builds_row": any(_ROW_TYPE in b for b in bodies),
                 })
@@ -217,9 +279,9 @@ def _scan_blocks(lines):
     return found
 
 
-def _classify(snippet):
+def _classify(snippet, variants=frozenset()):
     """`policy` / `dispatch` / `guard` / `none` for one planted snippet."""
-    blocks = _scan_blocks(snippet.splitlines())
+    blocks = _scan_blocks(snippet.splitlines(), variants)
     if not blocks:
         return "none"
     b = blocks[0]
@@ -352,6 +414,29 @@ def self_test():
         got = _classify(snippet)
         if got != want:
             bad.append(f"{why}: want {want}, got {got}")
+
+    # ── The glob import (ARCH §18.1, and this one was a live FALSE PASS) ────
+    #
+    # `use crate::types::Intent::*;` makes every arm head a BARE variant name,
+    # invisible to a scanner that keys on the `Intent::` prefix. Found
+    # 2026-08-20 in `runtime/authority_guard.rs`, whose `guard_story` is a
+    # thirteen-variant policy table the axis was reading as ABSENT — it
+    # reported the intent axis PASSING while a policy site was live. That is
+    # the one direction a bar passing only at zero must never fail in, so the
+    # scanner learns the variant names off the enum declaration and this
+    # fixture is what proves it still does.
+    globbed = ("use crate::types::Intent::*;\n"
+               "match intent {\n"
+               "    KnowledgeQuery | ComparisonQuery => GuardStory::Covered(\"kq\"),\n"
+               "    DeepQuery | SimpleQuery => GuardStory::Covered(\"deep\"),\n"
+               "    CodeQuery => GuardStory::NoOpByConstruction(\"code corpora\"),\n"
+               "}\n")
+    if _classify(globbed, _intent_variants()) != "policy":
+        bad.append("a glob-imported policy table read as absent — FALSE PASS")
+    # Without the variant set it is invisible: that is the bug, restated as a
+    # fixture, so a refactor that stops threading the names through fails here.
+    if _classify(globbed) != "none":
+        bad.append("the glob fixture no longer needs the variant set to be seen")
 
     # The table itself must be recognised, and a SECOND one must not be.
     table = ("match self {\n"

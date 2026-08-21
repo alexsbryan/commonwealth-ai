@@ -440,6 +440,28 @@ proof        = "one commit per feature adding ONLY data files; full suite green;
 # The axis passes at ZERO POLICY BLOCKS OUTSIDE ONE TABLE. The table itself —
 # the single `match` whose arms build `IntentRow` — does not count against it;
 # a SECOND one does, because two tables is two deciders (principle 8).
+#
+# FALSE PASS FOUND AND FIXED THE SAME DAY, by nc-14, in its own instrument.
+# The first cut keyed on the `Intent::` prefix, so a file doing
+# `use crate::types::Intent::*;` and matching on BARE variant names was
+# invisible to it. One such file exists: `runtime/authority_guard.rs`, whose
+# `guard_story` is a thirteen-variant policy table. With that blind spot the
+# axis read 0/DATA on a tree where a policy site was live — the one direction
+# a bar passing only at zero must never fail in. The scanner now reads the
+# variant names off the `pub enum Intent` declaration itself (so a new variant
+# is covered the day it lands) and accepts bare arm heads in glob-importing
+# files. `--self-test` carries the fixture and it was watched failing.
+#
+# MEASURED with the fixed instrument, both ends:
+#   before nc-14 (at bcabbb69):  14 policy blocks   CODE
+#   after  nc-14:                 1 policy block    CODE
+# The one remaining is `guard_story`, and nc-14 declined to tabulate it on the
+# merits: its column VALUES name sovereign-core's internal file layout
+# ("handlers/knowledge_query.rs exit"), so moving it into the published routing
+# contract is the leak this campaign's kill clause fires on — and it already
+# has the property this rung exists to create (exhaustive, no `_` arm, pinned
+# by test, so a new intent cannot ship without a decided story). Tabulating it
+# would buy the axis and close no defect class. GOAL OUTRANKS METRIC.
 instrument   = "scripts/nc-extends.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
 
 [[bar]]
