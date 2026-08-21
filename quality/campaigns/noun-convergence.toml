@@ -211,7 +211,8 @@ derives_from = "the measurement above; TARGET_ARCHITECTURE.md §6"
 # DEFERRED 2026-08-20 — evidence, not a target. Still measured, still checkable.
 # Full lineage in the "THE THREE WIDTH BARS ARE DEFERRED" section above,
 # including the reopen condition. Instrument and target below are UNCHANGED.
-status       = "deferred"
+# descoped 2026-08-21: 477 across 22 measurements, never moved. The campaign's payoff proved to be drifted deciders, not boundary width.
+status       = "descoped"
 # Distinct types crossing between the three product domains. Target derived,
 # not guessed: corpus-engine publishes Corpus/Evidence/Atom/Note/Record,
 # commonwealth publishes Peer/Capability, sovereign publishes
@@ -243,7 +244,8 @@ derives_from = "the layer map above; the back-of-house one-way rule"
 # including the reopen condition. Instrument and target below are UNCHANGED.
 # Note this bar's own HONESTY CLAUSE was already answered: of the original 337,
 # the campaign moved FOUR by code and 175 by re-classification.
-status       = "deferred"
+# descoped 2026-08-21: 143 -> 144 across 22 measurements — moved backwards by one. Layer-gate already exits 0; this bar measures a dimension that was healthy.
+status       = "descoped"
 # 337 types on edges that should not exist: BACKSTAGE 255 (product naming its
 # own instrument), BACKFLOW 82 (a lower layer naming a higher one).
 #
@@ -288,7 +290,8 @@ derives_from = "the measurement above"
 # PUBLISHING rung raises it and no funded rung reverses it. Its reopen condition
 # is therefore the sharpest of the three — see the notes.db middleware deletion
 # named in the section above. Instrument and target below are UNCHANGED.
-status       = "deferred"
+# descoped 2026-08-21: 23 vs target 10, flat. The bar cannot tell a published noun from a leaked god object (nc-2b recorded this).
+status       = "descoped"
 # Today 23 types, 22 owned by corpus-engine, two of them god objects. Target
 # <= 10 in a crate no domain owns. A kernel is judged by OWNERSHIP as much as
 # size: ten types still owned by one domain is the same disease.
@@ -498,7 +501,8 @@ derives_from = "NOUN_CONVERGENCE.md §10.2, minted 2026-08-20 by scripts/nc-reac
 # REOPEN CONDITION: a rung family whose MECHANISM moves private -> exported at
 # scale rather than one type at a time. Until such a mechanism is named and
 # priced, this bar reports and does not steer.
-status       = "deferred"
+# descoped 2026-08-21: 42.9 -> 42.5 across 8 measurements. Superseded by the real finding: a closed type with NO EXTENSION POINT forces a consumer to fork it. Privacy share is a symptom, not the disease.
+status       = "descoped"
 # WHY THIS BAR EXISTS, stated bluntly because the alternative is arguing it in
 # prose every turn. After three waves and ~30 commits the three type-counting
 # bars read 477 / 143 / 23 against targets of 50 / 0 / 10 — flat, one backwards.
