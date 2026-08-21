@@ -32,7 +32,7 @@ use corpus_engine::WikipediaGraph;
 
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
-use crate::eval_cmd::runner::{self, AtlasLoadFilter};
+use crate::eval_cmd::runner::{self, AtlasContextFilter};
 use sovereign_core::atlas_context::build_persistent_ann_seed_table;
 
 pub async fn run(args: &[String]) -> i32 {
@@ -114,15 +114,11 @@ pub async fn run(args: &[String]) -> i32 {
     };
     // PRODUCTION grounding filter — the ANN table must cover exactly the atom
     // universe the manager seeds from (its `AtlasContextFilter::default()`).
-    let prod = sovereign_tools::atlas_context_manager::AtlasContextFilter::default();
-    let filter = AtlasLoadFilter {
-        min_description_chars: prod.min_description_chars,
-        depth_allowlist: prod.depth_allowlist.clone(),
-        max_entries: prod.max_entries,
-        include_claims: prod.include_claims,
-        include_tensions: prod.include_tensions,
-        include_configurations: prod.include_configurations,
-    };
+    let prod = AtlasContextFilter::default();
+    // Was a six-field hand-copy of `prod` into a renamed near-twin
+    // (`AtlasLoadFilter`). Same type now, so the copy is the value — and a
+    // field added to the filter can no longer be silently left behind here.
+    let filter = prod.clone();
 
     println!(
         "{:<46} {:>7} {:>8} {:>5}  track",
@@ -220,13 +216,9 @@ pub async fn run(args: &[String]) -> i32 {
             let ctx = match strict {
                 Ok(ctx) if !ctx.entries.is_empty() => Some(ctx),
                 _ => {
-                    let relaxed = AtlasLoadFilter {
+                    let relaxed = AtlasContextFilter {
                         min_description_chars: 1,
-                        depth_allowlist: filter.depth_allowlist.clone(),
-                        max_entries: filter.max_entries,
-                        include_claims: filter.include_claims,
-                        include_tensions: filter.include_tensions,
-                        include_configurations: filter.include_configurations,
+                        ..filter.clone()
                     };
                     runner::load_atlas_context(&session, corpus_id, prod.top_k, &relaxed)
                         .await

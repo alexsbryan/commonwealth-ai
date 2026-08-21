@@ -30,7 +30,7 @@ use sovereign_core::atlas_context::{
 use super::paths;
 use crate::chat_cmd::bootstrap::build_session;
 use crate::chat_cmd::config::parse_globals;
-use crate::eval_cmd::runner::{load_atlas_context, AtlasLoadFilter};
+use crate::eval_cmd::runner::{load_atlas_context, AtlasContextFilter};
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 /// Per-node fanout cap on the CallChain BFS — a hot symbol referencing dozens of
@@ -316,13 +316,14 @@ async fn conceptual_seed(
     let ctx = if graph.has_ann_seed_table() {
         None
     } else {
-        let filter = AtlasLoadFilter {
+        let filter = AtlasContextFilter {
             min_description_chars: 1,
             depth_allowlist: Vec::new(),
             max_entries: None,
             include_claims: true,
             include_tensions: false,
             include_configurations: false,
+            ..AtlasContextFilter::default()
         };
         match load_atlas_context(&session, corpus_id, 8, &filter).await {
             Ok(c) => Some(c),

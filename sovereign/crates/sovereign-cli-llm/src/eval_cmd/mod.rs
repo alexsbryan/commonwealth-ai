@@ -724,13 +724,26 @@ async fn cmd_run(args: &[String]) -> i32 {
                     );
                 }
             }
-            let filter = runner::AtlasLoadFilter {
+            // KNOWN DIVERGENCE, left standing deliberately (nc-22c).
+            // `a.atlas_min_description_chars` defaults to 200 (see `Args`'s
+            // `Default`), while the grounding path this harness is supposed to
+            // be measuring uses `AtlasContextFilter::default()`, whose floor
+            // moved 200 -> 10 because 200 was found to drop ~85% of SEP atoms.
+            // So the eval run filters a different atom universe than
+            // production serves. Closing it moves published eval numbers,
+            // which is an operator call (`ARCH_PRINCIPLES` §18.6), not a
+            // drive-by: the one-line repair is to default the arg to
+            // `AtlasContextFilter::default().min_description_chars`.
+            // Converging the TYPE (this was a renamed copy of the filter) is
+            // what makes the divergence visible at all.
+            let filter = runner::AtlasContextFilter {
                 min_description_chars: a.atlas_min_description_chars,
                 depth_allowlist: a.atlas_depth.clone(),
                 max_entries: a.atlas_max_entries,
                 include_claims,
                 include_tensions,
                 include_configurations,
+                ..runner::AtlasContextFilter::default()
             };
             // `--with-atlas` accepts a comma-separated list of atlas
             // corpus ids. Each loads independently (with its own

@@ -587,53 +587,28 @@ use super::atlas_ann::SeedMode;
 pub use sovereign_core::atlas_context::atlas_navigate_ann;
 pub use sovereign_core::atlas_context::AtlasGraph;
 
-/// Filters applied during atlas-context loading. Used to keep the
-/// embed pass tractable on large atlases (e.g. wiki-l5-* has 50K+
-/// non-placeholder entities; without filtering, the pre-embed step
-/// dominates wall time).
-#[derive(Debug, Clone, Default)]
-pub struct AtlasLoadFilter {
-    /// Only embed entities whose `description` is at least this many
-    /// chars. Defaults to 200 — structural one-liners ("X is a Y born
-    /// in Z.") sit under that and would dilute retrieval; extracted /
-    /// augmented entities run hundreds-to-thousands of chars.
-    pub min_description_chars: usize,
-    /// Optional comma-separated `enrichment_depth` allowlist. Empty =
-    /// accept any depth. Useful for "only Tier-2 extracted" filters
-    /// (`--atlas-depth extracted`) without relying on the heuristic.
-    pub depth_allowlist: Vec<String>,
-    /// Hard cap on the number of entities embedded. `None` = no cap.
-    /// Set to bound the worst-case wall time on misconfigured runs.
-    pub max_entries: Option<usize>,
-    /// Path 2 Phase A — also surface Claim atoms as virtual chunks.
-    /// Each claim's `canonical_name` is the article slug derived from
-    /// the atlas corpus_id (so `score_sources` rigid title-match
-    /// credits the article when the claim ranks in top-K). The embed
-    /// text encodes discourse_act + epistemic_status + content. Off
-    /// by default — opt in via `--atlas-include claim`.
-    pub include_claims: bool,
-    /// Path 2 Phase B — also surface Tension edges as virtual chunks.
-    /// Each tension fuses its `sub_question` with both endpoint atoms
-    /// into a single embed text, so cosine similarity for a question
-    /// like "is X reducible to Y?" can hit the dialectical pair the
-    /// atlas extracted around that very tension. Endpoint atoms are
-    /// commonly Entities or Claims; the surface text uses whichever
-    /// natural-language fields each variant carries. Off by default —
-    /// opt in via `--atlas-include tension`. This is the only Phase 2
-    /// surface that can move the `dialectical_breadth` essay axis,
-    /// because the substance lives on the edge, not on either atom.
-    pub include_tensions: bool,
-    /// Path 2 Phase C — also surface Configuration atoms as virtual
-    /// chunks. Configurations capture the interpretive shape the
-    /// article enacts as a whole (spec §2.7) — "the article structures
-    /// the debate around a tripartite classification of...". One
-    /// Configuration becomes one AtlasEntry with `canonical_name =
-    /// article_slug` and embed text `[Configuration: <label>]
-    /// <description>`. Off by default — opt in via
-    /// `--atlas-include configuration`. Should lift the
-    /// argument_depth axis on essay-readiness.
-    pub include_configurations: bool,
-}
+/// The filter applied during atlas-context loading — the SAME type the
+/// production grounding path uses, deliberately.
+///
+/// This was a private `AtlasLoadFilter` here: a renamed copy of
+/// `AtlasContextFilter` carrying six of its seven fields, in a crate that
+/// already depends on `sovereign-tools` and already imported the owner one
+/// module over (`atlas_cmd::migrate_all`). Two call sites hand-copied
+/// `AtlasContextFilter::default()` field-by-field into the copy to keep them
+/// aligned, with a comment saying why — a re-derivation nothing enforced.
+///
+/// It drifted, exactly where that matters most. The owner's
+/// `min_description_chars` floor moved 200 → 10 (and became env-aware) after
+/// 200 was found to drop ~85% of SEP atoms; the copy still documented "200",
+/// and `#[derive(Default)]` gave it 0 rather than either. The eval harness
+/// was the one caller that did not hand-copy, so it filtered the atom
+/// universe by a rule production had already abandoned.
+///
+/// Importing the owner is what stops that recurring (`ARCH_PRINCIPLES`
+/// §10.6, one decider one name; §10, structural not remembered). Surfaced by
+/// nc-22c shape matching — a name-keyed census cannot see a fork that was
+/// renamed on copy.
+pub use sovereign_tools::atlas_context_manager::AtlasContextFilter;
 
 /// Read `atoms.json` for the named atlas corpus and embed each Entity's
 /// `name + aliases + description` once per call. ATLAS_STORAGE_V2 Phase B
@@ -645,7 +620,7 @@ pub async fn load_atlas_context(
     session: &ChatSession,
     atlas_corpus_id: &str,
     top_k: usize,
-    filter: &AtlasLoadFilter,
+    filter: &AtlasContextFilter,
 ) -> Result<AtlasContext, String> {
     let atlas_dir = paths::index_root(atlas_corpus_id).join(ATLAS_DIRNAME);
     if !atlas_dir.exists() {
