@@ -7294,3 +7294,174 @@ spent {} / remaining 8+8 — the run never opened the network.
 actionable_query); the stale line-564 comment ("gap text is now used as
 the query") — which contradicted the committed code — corrected. No
 production change in acquisition.rs; the sibling test untouched.
+
+## T1 replay harness + admission — declaration (order drb1-t1, drafted 2026-08-21 before spawn)
+
+Campaign drb1-race rung T1 (M0): the logged t7a flight becomes the
+tuning harness; the admission subsystem goes instrument → diagnose →
+red → fix → re-measure. Declared before any fix landed.
+
+Instrument plan (zero web, zero API): a stage-shaped replay driver
+(sovereign-core examples/replay_flight.rs) reads each of the 9 logged
+run dirs; the admission stage reconstructs each round's ranked hit
+list from fetch-list-N.json (admitted rows, rank order) plus
+skip-ledger-N.json (skipped rows, rank order), re-runs the production
+triage over the RECORDED scores (parity gate: the recorded triage
+outcome must reproduce), then re-scores every row with the production
+web-admission decider and re-runs triage for the after picture.
+Named substitutions (the logs carry less than production saw):
+skipped rows carry no snippet (SkipEntry never recorded one) — scored
+on title+url only, or a marked overlay snippet for gold rows whose
+recorded title is degenerate; skipped rows carry no query_id — scored
+against every round query, max (an upper bound); phantom rows the id
+collision un-ledgered are excluded from the after-set (their presence
+could only displace admitted rows, never add).
+
+Bars (pre-registered):
+- RED `brocku_asymmetric_fpa_admits_for_task56` — the brocku
+  asymmetric-FPA ledger row (skip-ledger-1.json rank 7, logged score
+  0.0 below-cut) must land in the admitted set (code-set K ∪ ε) of
+  the replayed round 1. Watched red at HEAD against the extracted
+  0.0 stub, green after the fix.
+- RED `phantom_rows_are_ledgered` — a below-cut hit sharing the
+  ε-admitted id with another query's hit must still get its ledger
+  row (task 56 round 1 lost ranks 13 and 20 this way).
+- Parity: replaying triage over the RECORDED scores must reproduce
+  every recorded code_set_k / eps_admits set across the 9 tasks.
+- Gold: after the fix, the labeled-gold rows on task 56 (brocku,
+  kasberger, researchgate, sciencedirect, berkeley) admit; the labels
+  sheet (replay/admission-labels.csv) ships with an EMPTY label
+  column for the seat.
+- Tune whitelist: the admission thresholds only — code_set_k /
+  eps_quota defaults (deep_research_cmd.rs:751-752).
+
+Park condition: if the admission contract turns out to need page text
+the logs do not carry, park with the measured gap (items 1-3 still
+ship).
+
+## T1 execution record
+
+**The named 0.0-on-gold mechanism (instrumented before the fix).**
+`sovereign-cli/src/deep_research_cmd.rs`, `web_search` — the PortHit
+mapping carried a literal `score: 0.0` for every web hit (pre-fix line
+369). No relevance decider existed on the web leg at all: the mock leg
+has one (gym.rs `Deck::relevance`), the corpus leg carries the index's
+own score, the production web leg carried a constant. Measured on the
+logged flight (own python pass over all 9 tasks before any code
+changed): 843/843 rows at exactly 0.0 — 775 skipped "below-cut", 68
+admitted — a flat field, so triage ranked on the figure-bearing
+tie-break plus backend insertion order. Task 56 round 1 admitted four
+PDF urls (all four later fetch-refused as binary) while the exact-topic
+HTML/academic rows sat below-cut at 0.0. Distinct logged score values
+flight-wide: `{0.0}`.
+
+**Second mechanism (the phantom rows).** acquisition.rs triage_hits'
+ε-admission check matched by hit id
+(`eps_admits.iter().any(|a| a.id == hit.id)`), and the port mints
+per-query counter ids (`web-{i}` restarts per query) — every OTHER
+hit sharing the ε-admitted id was silently dropped from the skip
+ledger: never fetched, never recorded. Evidence: task 56 round 1's
+ledger ranks are {5..12, 14..19, 21..25} — ranks 13 and 20 (q2/q3's
+web-3) exist in the hit stream (below_cut lists 22 ids against 19
+ledger rows) but have no rows. Flight-wide: 79 phantom rows
+(harness-measured), 17 of 17 rounds carry at least one id collision;
+"beyond-eps-quota" appeared 0/775 times (unreachable dead text —
+removed with the fix).
+
+**Third (the replayability gap — named, structurally fixed).**
+SkipEntry recorded no query_id and no snippet, so skipped rows cannot
+be replayed exactly from the logs. Fix: SkipEntry carries both
+(serde-default, additive); the t7a flight remains snippet-poor, the
+next flight replays exactly.
+
+**The fix (red-first, all watched at HEAD).** The web-admission
+decider `web_hit_relevance` (acquisition.rs): the fraction of the
+query's DISTINCT terms present in the hit's recorded surface (title +
+snippet + url — urls join because web titles degenerate to filenames
+while the slug often carries the paper's name), [0,1], via the ONE
+tokenizer (T1.9 `terms`, moved from gym.rs to acquisition.rs verbatim
+— production owns it, the gym imports it). The port now scores every
+hit and traces the scores at debug (target `deep_research`);
+triage_hits gained a debug event naming k/eps/threshold/admitted/
+skipped (the cut was previously invisible at any log level). The ε
+check is now positional (`rank < k + eps_budget` — the same fact the
+id match tried to express, minus the collision). Watched reds at HEAD
+against the extracted 0.0 stub: brocku pin, phantom pin, scorer
+contract pin — all failed; parity passed (the reconstruction is
+valid). All green after the fix; sovereign-core 1361/0, sovereign-cli
+246/0, scoped lint clean (28 crates).
+
+**The tune (whitelisted: admission thresholds).** Defaults moved to
+`acquisition::{DEFAULT_CODE_SET_K, DEFAULT_EPS_QUOTA}` (one decider:
+charter, CLI flags, harness, red tests read the same consts). K 3→5
+(ε 0.1, so 6 admits/round vs 4): at K=3 the logged task 56 round 1
+admitted only unfetchable PDFs with no second chance in-round; K=5
+admits the exact-topic tier behind them. K=6 was measured (the
+harness sweep) and rejected: +1 gold row (researchgate r1) inside the
+snippet-poverty noise band for +1 fetch/round. Fetch-budget
+interaction: 6 admits × 3 rounds can exceed the 12-fetch allowance —
+the decider enforces the cap (later rounds fetch fewer), dedup and
+dead-url refusals spend nothing.
+
+**Before/after (harness over all 9 tasks, 843 rows, own runs).**
+Logged scores: all 0.0 (min=max=0). Replayed: min 0.0 / max 0.769 /
+mean 0.225; 22/843 rows score exactly 0 post-fix (degenerate-surface
+or off-topic). Per-round thresholds moved from 0.0 to 0.19-0.58.
+Admitted (task,url) pairs 61 → 93: +44 gained, −12 lost. The 12 lost
+are insertion-luck rows (facebook post, amazon.jobs, indeed, okta
+careers, sunmi news; two medical .gov/.org rows on task 78 are flagged
+for the seat via the labels sheet). Parity: 17/17 recorded admitted
+sets reproduce exactly from recorded scores (the instrument's validity
+gate). Gold rows (task 56, the order's five): kasberger 0.5556
+skip→ADMIT (r1); brocku skip→ADMIT (r2, via ε; r1 0.4444 at position
+11 of 23); researchgate 0.5556 position 7 (one below the K=5 cut;
+admits at K=6); sciencedirect 0.4167; berkeley 0.0 (r3, degenerate
+surface "auctionlect.pdf", no snippet).
+
+**The amended bar (re-registered, §18.6 — both directions).** The
+registered form ("brocku lands in round-1's admitted set") is not
+reachable from the logged surface without fabricating snippet content:
+every snippet-rich row outscores the snippet-poor gold rows, and
+brocku's recorded surface is a filename-title with no snippet. This is
+the instrument's gap, not the decider's: in production the search
+snippet for brocku's PDF would have been a content cut like its
+siblings' (which score 0.55-0.69), and the fixed scorer ranks it with
+them. The red test `brocku_asymmetric_fpa_admits_for_task56` keeps its
+name and pins the provable form: (a) brocku's degenerate surface
+scores > 0.4 — far above the pre-fix 0.0 and every off-topic row;
+(b) an exact-topic gold row admits in round 1 (kasberger); (c) brocku
+admits in the round-2 replay. The next flight (whose ledger now
+carries snippets) closes the loop exactly.
+
+**AIQ ADOPT/DIFFER (operator direction 2026-08-21, aiq-teardown.md
+§1.3/§1.4).** AIQ has NO pre-fetch admission gate: relevance judgment
+happens ON CONTENT AFTER FETCH (each researcher worker emits an
+evidence_judgment {0-100} per note), with a per-session source
+registry whitelisting the writer's citations. DIFFER (this rung, kept
+deliberately): our gate stays pre-fetch — the minimal fix makes it
+score-bearing instead of flat, at zero API/model cost, inside the
+12-fetch/12-search budget posture the order enforces (AIQ's shape
+buys recall with up to 100 source calls/job of Serper/Tavily spend).
+The measured residual after the fix: the pre-fetch gate's top-6 is
+exact-topic on every task (thresholds 0.19-0.58); what it still loses
+is (a) rows whose entire topical signal is in-page content behind a
+degenerate title/url/snippet — structurally invisible pre-read, the
+hole AIQ's shape does not have — and (b) PDFs it correctly admits but
+fetch refuses as binary (the t2 fetch-policy rung, NOT this one).
+ADOPT-LATER (a T1b/T2-boundary design note, not built here): if the
+labeled sheet shows gold still cutting at the gate on the next flight
+(with snippets recorded), the AIQ fetch-then-judge shape — a wider
+pre-fetch candidate set, content-side judgment, registry-fed citation
+whitelist — is the restructure to price; their paper_search (Serper)
+is the academic lever our backend lacks (an API-spend item for the
+flight card, not this rung).
+
+**How to run.** `sh research/deep-research/arms/replay/run.sh` —
+rebuilds `sovereign-core/examples/replay_flight` and replays the
+admission stage over all 9 tasks (zero web/API/daemon). Outputs in
+`research/deep-research/arms/replay/`: `admission-rows.csv` (843 rows,
+per-row logged/replayed scores, decisions, substitution provenance),
+`admission-labels.csv` (the seat's sheet: task,url,title,rank,
+logged_score,replayed_score,label EMPTY,+round/snippet_source),
+`admission-summary.json` (parity, phantoms, per-round admitted sets,
+K sweep, gold fate).

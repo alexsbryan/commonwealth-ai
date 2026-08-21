@@ -43,6 +43,7 @@ use oicp_client::RemoteApiProvider;
 use sovereign_contracts::types::CompletionRequest;
 use sovereign_contracts::types::CompletionResponse;
 use sovereign_contracts::types::Speed;
+use sovereign_core::deep_research::acquisition::web_hit_relevance;
 use sovereign_core::deep_research::estate::{
     estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
 };
@@ -355,22 +356,42 @@ impl ResearchPort for CliResearchPort {
         // declared). Killing the run here would abandon the run dir
         // without a manifest — the F28 "instrument unavailable ≠
         // could-not-judge" shape, measured in demo run dr-1786720584.
-        Ok(out
+        //
+        // drb1-t1: every web hit is SCORED — the ONE web-admission
+        // decider (acquisition::web_hit_relevance) over the hit's
+        // recorded surface. The previous literal `score: 0.0` handed
+        // triage a fully-tied field on every round (the t7a flight:
+        // 843/843 rows at exactly 0.0), so admission fell to the
+        // figure-bearing tie-break plus backend insertion order and
+        // task 56's exact-topic papers all cut below-cut.
+        let hits: Vec<PortHit> = out
             .results
             .into_iter()
             .enumerate()
-            .map(|(i, r)| PortHit {
-                id: format!("web-{i}"),
-                url: r.url,
-                title: r.title,
-                snippet: r.snippet,
-                // Web results carry no body through this surface.
-                content: None,
-                score: 0.0,
-                source: format!("web:{backend}"),
-                custody: Custody::PublicWeb,
+            .map(|(i, r)| {
+                let score = web_hit_relevance(query, &r.title, &r.snippet, &r.url);
+                PortHit {
+                    id: format!("web-{i}"),
+                    url: r.url,
+                    title: r.title,
+                    snippet: r.snippet,
+                    // Web results carry no body through this surface.
+                    content: None,
+                    score,
+                    source: format!("web:{backend}"),
+                    custody: Custody::PublicWeb,
+                }
             })
-            .collect())
+            .collect();
+        tracing::debug!(
+            target: "deep_research",
+            backend,
+            query,
+            hits = hits.len(),
+            scores = ?hits.iter().map(|h| (h.id.as_str(), h.score)).collect::<Vec<_>>(),
+            "web admission scored (drb1-t1)"
+        );
+        Ok(hits)
     }
 
     async fn web_fetch(&self, url: &str) -> Result<String, String> {
@@ -748,8 +769,11 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     let mut resume_dir: Option<PathBuf> = None;
     let mut max_rounds = 3u32;
     let mut corpora: Vec<String> = Vec::new();
-    let mut code_set_k = 3usize;
-    let mut eps_quota = 0.1f64;
+    // drb1-t1: the admission thresholds default from the ONE decider
+    // (acquisition::{DEFAULT_CODE_SET_K, DEFAULT_EPS_QUOTA}) — the
+    // charter, the flags, and the replay harness read the same consts.
+    let mut code_set_k = sovereign_core::deep_research::acquisition::DEFAULT_CODE_SET_K;
+    let mut eps_quota = sovereign_core::deep_research::acquisition::DEFAULT_EPS_QUOTA;
     let mut search_allowance = 4u32;
     let mut fetch_allowance = 4u32;
     // Which flags the operator ACTUALLY passed (order deep-research-t3a):

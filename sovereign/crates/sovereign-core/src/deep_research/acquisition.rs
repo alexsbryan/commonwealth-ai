@@ -243,6 +243,79 @@ pub fn figure_bearing(hit: &SearchHit) -> bool {
 /// (glassbox — the artifact names the decider it ran).
 pub const ADMISSION_RULE_SCORE_THEN_FIGURE: &str = "score-then-figure-bearing";
 
+/// The admission thresholds' production defaults (drb1-t1 — one
+/// decider, one name: the charter's `triage.code_set_k` /
+/// `triage.eps_quota` and the CLI's flag defaults read THESE; the
+/// replay harness and the red tests replay the same numbers). Tuned
+/// on the logged t7a flight (order drb1-t1 item 4): at K=3 the
+/// logged task 56 round 1 admitted four unfetchable PDF urls and no
+/// second chance existed within the round; K=5 (+ the ε quota's one
+/// rank) admits the fetchable exact-topic pages behind them. See the
+/// T1 execution record for the measured before/after.
+pub const DEFAULT_CODE_SET_K: usize = 5;
+pub const DEFAULT_EPS_QUOTA: f64 = 0.1;
+
+/// drb1-t1 — the web leg's admission score: the fraction of the
+/// query's DISTINCT terms present in the hit's recorded surface
+/// (title + snippet + url), in [0, 1]. Deterministic, zero model
+/// tokens.
+///
+/// WHY this exists: the production web port recorded a constant
+/// `score: 0.0` for every web hit (deep_research_cmd.rs — the t7a
+/// flight's 843/843 logged rows at exactly 0.0, 775 of them skipped
+/// "below-cut"), so triage ranked a fully-tied field and admission
+/// fell to the figure-bearing tie-break plus backend insertion order
+/// — task 56's exact-topic papers (brocku, kasberger, researchgate,
+/// sciencedirect) all cut at 0.0 while four unfetchable PDF urls
+/// took the code set. The mock leg's decider (gym.rs
+/// `Deck::relevance` — distinct query terms present in the hit's
+/// term set) is the reference shape (§10.6); this is that decider
+/// over the web hit's own recorded surface, normalized by the
+/// query's distinct-term count so hits from DIFFERENT queries in one
+/// round are comparable. One scorer per leg, one triage: the corpus
+/// leg keeps the index's own score; the mock keeps the deck's.
+///
+/// The URL joins the surface because web titles degenerate (a PDF's
+/// `<title>` is its filename — "asymmetricfpa24.dvi" carries none of
+/// "asymmetric first price auctions") while the URL often carries
+/// the paper's slug
+/// (`researchgate.net/.../Linear_Bid_in_Asymmetric_First_Price_Auctions`).
+pub fn web_hit_relevance(query: &str, title: &str, snippet: &str, url: &str) -> f64 {
+    let q = terms(query);
+    if q.is_empty() {
+        return 0.0;
+    }
+    let surface: std::collections::HashSet<String> = terms(&format!("{title}\n{snippet}\n{url}"))
+        .into_iter()
+        .collect();
+    let covered = q.iter().filter(|t| surface.contains(*t)).count();
+    covered as f64 / q.len() as f64
+}
+
+/// The one tokenizer (T1.9): lowercase, split on non-alphanumeric,
+/// empty tokens dropped, deduped in first-appearance order. Applied
+/// identically to queries and to every indexed surface — one decider
+/// for both sides. A decimal figure splits at the point ("0.5469" →
+/// "0", "5469") — the same split a punctuation-splitting analyzer
+/// makes. Lives here (production's admission path) since drb1-t1;
+/// the search gym imports it (it owned the shape from T1.9 — the
+/// move is the fn verbatim, no behavior change).
+pub fn terms(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for t in text
+        .to_ascii_lowercase()
+        .split(|c: char| !c.is_alphanumeric())
+    {
+        if t.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|o| o == t) {
+            out.push(t.to_string());
+        }
+    }
+    out
+}
+
 /// The triage result for one round's hits.
 #[derive(Debug, Clone)]
 pub struct TriageResult {
@@ -284,24 +357,35 @@ pub fn triage_hits(
 
     // Skip ledger: every hit not in {code set ∪ ε admits} gets a row —
     // the ledger records the loop's judgment, not a silent drop.
+    // Admission is POSITIONAL (drb1-t1): the ε admits are, by the
+    // construction above, exactly the ranks in k..k+eps_budget. The
+    // previous id-matched check (`eps_admits.iter().any(|a| a.id ==
+    // hit.id)`) silently un-ledgered every OTHER hit sharing an
+    // ε-admitted id — and the web port mints per-query counter ids
+    // (`web-{i}`), so on the logged flight's task 56 round 1 the q2/q3
+    // hits named web-3 vanished (ranks 13 and 20: never fetched, never
+    // recorded). The positional form states the same fact without the
+    // id, and drops the "beyond-eps-quota" reason branch it had left
+    // unreachable (0 of 775 logged ledger rows ever carried it).
     let mut entries = Vec::new();
     for (rank, hit) in hits.iter().enumerate() {
-        let admitted = rank < k || eps_admits.iter().any(|a| a.id == hit.id);
-        if admitted {
+        if rank < k + eps_budget {
             continue;
         }
-        let reason = if rank < k + eps_budget {
-            "beyond-eps-quota".to_string()
-        } else {
-            "below-cut".to_string()
-        };
         entries.push(SkipEntry {
             url: hit.url.clone(),
             title: hit.title.clone(),
             score: hit.score,
             rank: rank + 1,
-            reason,
+            reason: "below-cut".to_string(),
             decision: "skip".to_string(),
+            // drb1-t1: the row's query and snippet ride the ledger so
+            // the admission stage replays exactly from the record
+            // (the logged flight could not — skipped rows carried
+            // neither, which is why the replay scores them against
+            // every round query on title+url alone).
+            query_id: hit.query_id.clone(),
+            snippet: hit.snippet.clone(),
         });
     }
 
@@ -310,6 +394,25 @@ pub fn triage_hits(
         .map(|h| h.id.clone())
         .chain(eps_admits.iter().map(|h| h.id.clone()))
         .collect();
+
+    // drb1-t1 glassbox: the admission decision is visible at debug —
+    // before this the round's cut was reconstructable only from the
+    // artifacts after the fact (§0/§9: a decision invisible at
+    // tracing=debug is not finished).
+    tracing::debug!(
+        target: "deep_research",
+        run_id,
+        round,
+        hits = hits.len(),
+        k,
+        eps_quota,
+        eps_budget,
+        admitted = admitted_ids.len(),
+        skipped = entries.len(),
+        threshold,
+        rule = ADMISSION_RULE_SCORE_THEN_FIGURE,
+        "triage decided"
+    );
 
     TriageResult {
         ranked: code_set

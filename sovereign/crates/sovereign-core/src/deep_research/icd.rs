@@ -581,6 +581,15 @@ pub struct SkipEntry {
     pub rank: usize,
     pub reason: String,
     pub decision: String,
+    /// drb1-t1: the hit's query id and search snippet, so the ledger
+    /// row replays exactly (the admission stage's recorded inputs —
+    /// the logged t7a flight could not replay its own skipped rows
+    /// because neither was persisted). Empty on artifacts predating
+    /// the field (additive, never a schema break).
+    #[serde(default)]
+    pub query_id: String,
+    #[serde(default)]
+    pub snippet: String,
 }
 
 // ---------------------------------------------------------------------------

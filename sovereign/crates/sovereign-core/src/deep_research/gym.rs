@@ -306,27 +306,10 @@ impl Deck {
     }
 }
 
-/// The one tokenizer (T1.9): lowercase, split on non-alphanumeric,
-/// empty tokens dropped, deduped in first-appearance order. Applied
-/// identically to queries and to the deck's indexed surface — one
-/// decider for both sides. A decimal figure splits at the point
-/// ("0.5469" → "0", "5469") — the same split a punctuation-splitting
-/// analyzer makes.
-fn terms(text: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for t in text
-        .to_ascii_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-    {
-        if t.is_empty() {
-            continue;
-        }
-        if !out.iter().any(|o| o == t) {
-            out.push(t.to_string());
-        }
-    }
-    out
-}
+// The one tokenizer (T1.9) lives in acquisition.rs since drb1-t1
+// (production's admission path owns it; the gym imports it). The move
+// was verbatim — no behavior change.
+use super::acquisition::terms;
 
 /// The corpus admission decider's deterministic second key (order
 /// deep-research-t2c — the t1h residual): inside an equal-score bucket
