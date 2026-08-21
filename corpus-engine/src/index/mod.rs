@@ -12,7 +12,7 @@ mod read;
 mod search;
 mod write;
 
-pub use evidence::Evidence;
+pub use evidence::{Evidence, EvidenceSet};
 pub use read::NeighborWindow;
 
 use std::path::{Path, PathBuf};

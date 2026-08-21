@@ -56,7 +56,7 @@
 //! [`Grain::may_be_quoted`] on the [`Origin`]. Neither can be misspelled, and
 //! neither can be absent.
 
-use kernel_types::{ContentHash, Custody, Grain, Locator, Origin, Server, Source};
+use kernel_types::{ContentHash, Custody, CorpusId, Grain, Locator, Origin, Seal, Server, Source};
 use serde::Serialize;
 
 use crate::error::Result;
@@ -149,8 +149,93 @@ impl Evidence {
     }
 }
 
+/// A sealed body of evidence for one turn — what `retrieve` hands out.
+///
+/// **Two seals, both carried**, which is the totality
+/// `quality/CONCEPTS.toml` states for this noun: the CHUNK SET composition
+/// reads, and the CORPUS SCOPE retrieval was bound to. The 2026-08-17
+/// verification found neither existed — the grounding gate received a
+/// filtered, reordered projection under two env vars, and the re-search
+/// "seal" was a list of corpus ids RECONSTRUCTED from the chunks themselves
+/// when none was passed. A scope derived from its own contents cannot
+/// constrain anything, which is why [`EvidenceSet::scope`] is an input to the
+/// seal here and never computed from `members`.
+///
+/// Constructible only inside this crate, for the same reason [`Evidence`] is:
+/// a set anyone can assemble is not a seal. It is the [`Seal`] implementor the
+/// kernel's [`kernel_types::Citation`] requires, so a citation minted against
+/// it cannot quote what this set does not hold.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct EvidenceSet {
+    members: Vec<Evidence>,
+    scope: Vec<CorpusId>,
+}
+
+impl EvidenceSet {
+    /// Seal a retrieval's output against the scope it was bound to.
+    ///
+    /// `pub(crate)` — the seal is minted at the acquisition door and nowhere
+    /// else. `scope` is what retrieval was ALLOWED to search, which is a fact
+    /// only the door knows; deriving it from `members` would reconstruct the
+    /// defect this type replaces.
+    pub(crate) fn sealed(members: Vec<Evidence>, scope: Vec<CorpusId>) -> Self {
+        Self { members, scope }
+    }
+
+    /// The chunk set — what composition may read and what support is judged
+    /// against.
+    pub fn members(&self) -> &[Evidence] {
+        &self.members
+    }
+
+    /// The corpus scope retrieval was bound to. Verification may search
+    /// WITHIN this; it may never widen it.
+    pub fn scope(&self) -> &[CorpusId] {
+        &self.scope
+    }
+
+    pub fn len(&self) -> usize {
+        self.members.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.members.is_empty()
+    }
+}
+
+impl Seal for EvidenceSet {
+    /// Where `quote` came from, if one sealed member contains it as a
+    /// contiguous verbatim run.
+    ///
+    /// Substring containment, deliberately: "the quoted text appears in the
+    /// cited chunk" is the invariant `sovereign-meshapp` states in prose, and
+    /// a fuzzier match would make a citation that points somewhere plausible
+    /// rather than somewhere true. A quote spanning two chunks matches
+    /// neither and produces no citation — refusal over guess, the same rule
+    /// `locator_of` already follows.
+    ///
+    /// First match wins. Members arrive in relevance order from `retrieve`,
+    /// so the first is the highest-scoring chunk containing the passage.
+    fn locate(&self, quote: &str) -> Option<(&Origin, Custody)> {
+        self.members
+            .iter()
+            .find(|e| e.content().contains(quote))
+            .map(|e| (e.origin(), e.custody()))
+    }
+
+    fn sealed_len(&self) -> usize {
+        self.members.len()
+    }
+}
+
 impl CorpusIndex {
-    /// Retrieve evidence for a query — the published door.
+    /// Retrieve evidence for a query — the published door, and the only
+    /// producer of [`Evidence`].
+    ///
+    /// Returns a SEALED set (rung nc-11-answer): the chunk set plus the corpus
+    /// scope it was bound to. A caller holding one can mint a
+    /// [`kernel_types::Citation`] against it and cannot mint one against
+    /// anything else.
     ///
     /// Wraps [`CorpusIndex::search`] and stamps each hit with an [`Origin`]
     /// and a [`Custody`] drawn from the index's OWN facts at the moment of
@@ -166,7 +251,7 @@ impl CorpusIndex {
         query_embedding: &[f32],
         query_text: &str,
         limit: usize,
-    ) -> Result<Vec<Evidence>> {
+    ) -> Result<EvidenceSet> {
         let hits = self.search(query_embedding, query_text, limit).await?;
         let found = hits.len();
         let mut out = Vec::with_capacity(found);
@@ -183,15 +268,20 @@ impl CorpusIndex {
                 None => uncitable += 1,
             }
         }
+        // The scope is this index's own corpus — `search` runs against one
+        // LanceDB table, so that is a fact the door knows, not a list
+        // reconstructed from what came back.
+        let scope: Vec<CorpusId> = CorpusId::new(self.corpus_id()).into_iter().collect();
         tracing::debug!(
             corpus = %self.corpus_id(),
             found,
             published = out.len(),
             uncitable,
             unstamped,
-            "retrieve: published evidence"
+            scope = scope.len(),
+            "retrieve: sealed evidence"
         );
-        Ok(out)
+        Ok(EvidenceSet::sealed(out, scope))
     }
 }
 
@@ -360,6 +450,65 @@ mod tests {
         // quietly reuse this constructor.
         let ev = evidence_from_hit(&hit(&[])).unwrap();
         assert!(!ev.origin().served_by.is_peer());
+    }
+
+    fn sealed(meta: &[(&str, &str)]) -> EvidenceSet {
+        let ev = evidence_from_hit(&hit(meta)).unwrap();
+        EvidenceSet::sealed(vec![ev], vec![CorpusId::new("wikipedia").unwrap()])
+    }
+
+    #[test]
+    fn a_seal_carries_both_the_chunk_set_and_the_corpus_scope() {
+        // The 2026-08-17 verification found neither seal existed. Both are
+        // fields here, and the scope is an INPUT — never derived from the
+        // members, which is the defect the type replaces.
+        let s = sealed(&[]);
+        assert_eq!(s.len(), 1);
+        assert!(!s.is_empty());
+        assert_eq!(s.scope(), &[CorpusId::new("wikipedia").unwrap()]);
+        assert_eq!(s.members()[0].content(), "the text");
+    }
+
+    #[test]
+    fn a_citation_can_only_be_minted_from_what_the_seal_holds() {
+        // The integration the rung exists for: corpus-engine seals, the
+        // kernel's one door mints, and the prose invariant sovereign-meshapp
+        // states at wrapped.rs:182 is now the constructor.
+        let s = sealed(&[]);
+        let c = kernel_types::Citation::pointing_into(&s, "the text").unwrap();
+        assert_eq!(c.quote(), "the text");
+        assert_eq!(c.custody(), Custody::Unknown);
+
+        // A passage the seal does not hold cannot become a citation, however
+        // plausible it looks.
+        let err = kernel_types::Citation::pointing_into(&s, "the txet").unwrap_err();
+        assert!(err.to_string().contains("does not contain"));
+    }
+
+    #[test]
+    fn a_raptor_rollup_seals_but_cannot_be_quoted() {
+        // A summary is IN the seal — it may orient retrieval — and still
+        // refuses at the citation door, through `Grain::may_be_quoted`.
+        let s = sealed(&[("source", "raptor")]);
+        assert_eq!(s.len(), 1);
+        let err = kernel_types::Citation::pointing_into(&s, "the text").unwrap_err();
+        assert!(
+            matches!(err, kernel_types::Refused::NotQuotable { .. }),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn an_empty_seal_reports_its_own_size_in_the_refusal() {
+        let empty = EvidenceSet::sealed(vec![], vec![]);
+        let err = kernel_types::Citation::pointing_into(&empty, "anything").unwrap_err();
+        assert_eq!(
+            err,
+            kernel_types::Refused::NotInSeal {
+                quote: "anything".into(),
+                sealed_len: 0
+            }
+        );
     }
 
     #[test]
