@@ -218,6 +218,79 @@ assembled as a byproduct of people asking ordinary questions.
 
 ---
 
+## What people bring with them
+
+Nobody arrives at collective governance empty. Members show up with a
+worked sense of how they like to be treated, what helps them do their
+best, and what quietly costs them — usually unwritten, occasionally
+written down, and almost never legible to the group until it is violated.
+
+Some Fernwood residents keep a **personal canon** (`~/.canon`): their own
+commitments, drafted from journals and revised over years. It is private
+and stays private. But it changes two moments completely.
+
+### Intake
+
+A new resident moves in. Rather than reading forty articles and nodding,
+they run their own canon against the house's:
+
+```
+$ canon check --against ./fernwood "moving in"
+
+  ALIGNED (14)
+  UNADDRESSED (3)
+    c-a81  "Mornings are protected; I don't schedule before 11."
+           The house canon says nothing about mornings.
+  CONFLICTS (1)
+    c-2f7  "I need a full day alone at home each week."
+           Art 9: common areas remain open to all members at all times.
+```
+
+**Nothing is disclosed.** The report is theirs. What they do with it is
+their choice — raise the conflict now, carry it quietly, or decide it
+does not matter. But they know on day one rather than in month eight,
+and so does the house if they choose to say so.
+
+That conflict is worth having in week one. It is the same conflict either
+way; the only variable is whether it arrives as a design question or as a
+grievance after two months of someone feeling crowded in their own home.
+
+### Founding
+
+Fernwood inherited a Charter written by eight people in 2019. A house
+forming *today* would not start from a blank page or from a seed alone —
+it would start from **the personal canons of the people in the room**.
+
+Not by pooling them. Each member brings forward the commitments they
+choose to make collective, one at a time, and the founding session is
+where those meet:
+
+- **Overlaps** become articles almost for free. Five people independently
+  committed to something is the strongest possible mandate, and it took
+  no debate to find.
+- **Conflicts** become the founding agenda. Three members whose canons
+  say *quiet after 10* against two whose canons say *I do my best work at
+  night* is the house's first real article — discovered before anyone has
+  resented anyone.
+
+### The callback
+
+Article 14 — the shift-worker provision — took five months, a stability
+warning, a private outreach and a house vote to find.
+
+**Four personal canons already contained it.** *I sleep 9am to 4pm.*
+*Evenings are my working hours.* Had those four members brought those
+commitments to an intake check, the gap between the Charter's assumption
+and their lives would have been legible on their first day.
+
+This is the most valuable thing the personal layer does for the
+collective one: **a declared minority position, offered voluntarily, is
+strictly better than one inferred statistically over months.** No small-N
+problem, no anonymity engineering, no partition geometry — the person
+names it themselves, if and when they choose to. The statistical
+machinery in `LIVING_GOVERNANCE.md` remains the safety net for what
+nobody declares, which is plenty.
+
 ## Cross-pollination — four houses, one city
 
 Fernwood peers with three other houses. The mesh model already answers
@@ -281,3 +354,44 @@ worked out well. The answer was no, and the reason is in
 `LIVING_GOVERNANCE.md`: the finding they valued came from the *position*,
 not the *person*, and the version that names people is an eviction
 argument wearing a dashboard.
+
+---
+
+## Grounded: how much of this is the lean tool
+
+Most of the story above is told through the mature surfaces — a panel, a
+standing reader, cross-house peering. Underneath, nearly all of it is
+`canon` ([CANON_CLI.md](./CANON_CLI.md)) over one file.
+
+| Beat | Command | Needs |
+|---|---|---|
+| Month 0 — extract the Charter + minutes | `canon draft --from ./charter ./minutes` | a local endpoint |
+| Month 0 — the Slack pins gap | re-run `draft` with them included | — |
+| Week 2 — the agreement diagnostic | survey + `canon list` | **no model** |
+| Month 1 — the agenda | `canon tensions` | one call, 63 rules |
+| Month 1 — the session | `resolve` · `accept -m` · `dismiss` | **no model** |
+| The felt moment | `canon check "guests?"` | one call |
+| Intake | `canon check --against ./fernwood` | one call |
+| Ongoing — the chore bot | `canon mcp` → `canon_check` | one call each |
+
+Sixty-three rules and a hundred-odd acts sit well inside the standalone
+regime: the canon fits in one context, so `tensions` is a single call and
+needs no index.
+
+**Three beats genuinely need the daemon**, and each corresponds to a
+named limit in `CANON_CLI.md`:
+
+- **The standing reader** (months 2-4). Watching a stream and raising
+  moot items, past-revisit-date rows and conflicts-on-arrival is not a
+  CLI invocation.
+- **The stability metric** (month 5). Partition geometry over the whole
+  decision history is arithmetic, but it needs that history modelled, not
+  just folded.
+- **Cross-pollination.** Tensions *across* four houses is the atlas.
+  Standalone cannot do it — not slower, cannot.
+
+So Fernwood could have run months 0 and 1 on a laptop with llama.cpp, and
+would have felt the thing that matters — dead law dropping out of answers
+the day after they retired it. The daemon is what they add when they want
+someone watching, and the cross-house library is what they add when three
+neighbouring houses want to compare notes.

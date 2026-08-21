@@ -253,3 +253,50 @@ nearly mechanical, and a principle requiring judgement will never score
 like that. The signal is a section scoring far below its own kind — and
 the ceiling for each kind has to be measured before any number gets read
 as a verdict.
+
+---
+
+## Grounded: how much of this is the lean tool
+
+The instruments in this repository are elaborate. The primitive under
+them is not — `canon` ([CANON_CLI.md](./CANON_CLI.md)), one file, two
+nouns and a fold.
+
+A team of twenty-five could start on Monday:
+
+```
+canon init --profile code
+canon draft --from-git --since 1y      # commit bodies + PR review text
+canon tensions                         # where the team already contradicts itself
+canon mcp                              # every agent gets canon_check
+```
+
+`draft --from-git` is the cold start that fits this audience exactly:
+**the normative content is already in the commit bodies and review
+threads**, written by people stating why, and nobody has ever extracted
+it. A team with no `ARCHITECTURE.md` still has a decade of arguments in
+git.
+
+| Beat | Command | Needs |
+|---|---|---|
+| The principles | `canon draft --from-git` | a local endpoint |
+| Agents stop guessing | `canon mcp` → `canon_check` | one call each |
+| Query instead of inject | `canon_list` at task start | **no model** |
+| Hold a standard in CI | `canon check "$TITLE" --json` | exit codes 0/1/2/3 |
+| Inter-agent agreement | N agents over `canon_list`, compared | the diagnostic |
+| Decision history | `canon why <id>` | **no model** |
+
+Eleven principles is far inside the standalone regime. The whole canon
+fits in one context, which is why `canon_list` alone is a workable agent
+integration here and `check` is for consistency rather than necessity.
+
+**What still needs the daemon:** the standing reader; drift between
+narrative and code, which is corpus-scale retrieval rather than a fold;
+and anything cross-repository.
+
+**The honest ordering.** A team should run `canon draft --from-git` and
+`canon mcp` before considering anything larger — it is a weekend, it
+costs nothing, and it answers the question the rest of this document is
+built on: *do our agents actually apply our principles, and can we tell?*
+
+If the answer is no, that is worth knowing from a small binary.
