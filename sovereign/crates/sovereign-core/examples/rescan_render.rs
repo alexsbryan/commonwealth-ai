@@ -208,6 +208,7 @@ fn rescan(dir: &Path, graded: bool) -> Result<(), String> {
         // window.chunks only); named substitution, empty is fine.
         fetch_failures: Vec::new(),
         dedup_refused: Vec::new(),
+        content_refused: Vec::new(),
         derived_custody: windows
             .last()
             .map(|w| w.derived_custody.clone())

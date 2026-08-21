@@ -121,6 +121,9 @@ async fn drill_once(run_dir: PathBuf) -> sovereign_core::deep_research::icd::Man
             max_rounds: MAX_ROUNDS,
             code_set_k: 3,
             eps_quota: 0.1,
+            content_coverage_floor:
+                sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+            prose_line_floor: sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
             evidence_window_max_chunks: 20,
             estate_corpus_ids: Vec::new(),
             web_backend: MockBackendImpl::BACKEND_ID.to_string(),

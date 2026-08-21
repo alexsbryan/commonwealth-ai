@@ -1064,6 +1064,10 @@ mod tests {
             triage: TriageConfig {
                 code_set_k: 3,
                 eps_quota: 0.1,
+                content_coverage_floor:
+                    sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+                prose_line_floor:
+                    sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
             },
             budget: BudgetAllowance {
                 web_search_queries: 4,
@@ -1259,6 +1263,7 @@ mod tests {
                 chunks,
                 fetch_failures: Vec::new(),
                 dedup_refused: Vec::new(),
+                content_refused: Vec::new(),
                 derived_custody: "personal".to_string(),
             },
         );

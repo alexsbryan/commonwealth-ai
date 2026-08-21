@@ -2,7 +2,7 @@
   "icd": "budget_ledger",
   "version": 1,
   "run_id": "run-meridian-1",
-  "charter_hash": "e55d99dbe827fc3f",
+  "charter_hash": "3ab42923e19a639d",
   "allowance": {
     "web-search:duckduckgo": 4,
     "web-fetch:pages": 4

@@ -1,0 +1,340 @@
+{
+  "production_defaults": {
+    "code_set_k": 5,
+    "content_coverage_floor": 0.25,
+    "eps_quota": 0.1,
+    "prose_line_floor": 500
+  },
+  "registry_rows": 30,
+  "registry_type_counts": {
+    "estate": 0,
+    "pdf": 0,
+    "web": 30
+  },
+  "stage": "fetch",
+  "tasks": {
+    "56": {
+      "allowance": 12,
+      "content_admitted": 1,
+      "content_rejected": [],
+      "gold_queue_membership": [
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "not-attempted-round-cap",
+          "round": 1,
+          "url": "https://kasberger.github.io/assets/pdf/fpa_robust.pdf"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "not-attempted-round-cap",
+          "round": 1,
+          "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "not-attempted-round-cap",
+          "round": 1,
+          "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "not-attempted-round-cap",
+          "round": 1,
+          "url": "https://brocku.ca/repec/pdf/0504.pdf"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "not-attempted-round-cap",
+          "round": 1,
+          "url": "https://www.sciencedirect.com/science/article/abs/pii/S0165176511002473"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "fetched-content-unknown",
+          "round": 2,
+          "url": "https://brocku.ca/repec/pdf/0504.pdf"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "fetched-content-unknown",
+          "round": 2,
+          "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "not-attempted-round-cap",
+          "round": 2,
+          "url": "https://kasberger.github.io/assets/pdf/fpa_robust.pdf"
+        },
+        {
+          "in_queue": true,
+          "noise_demoted": false,
+          "recorded": "never-fetched",
+          "replayed_outcome": "not-attempted-round-cap",
+          "round": 3,
+          "url": "https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf"
+        }
+      ],
+      "recorded_fetch_attempts": 8,
+      "rounds": [
+        {
+          "noise_demoted": 1,
+          "queue_len": 22,
+          "remaining_after": 8,
+          "round": 1,
+          "round_cap": 4,
+          "spent_round": 4
+        },
+        {
+          "noise_demoted": 1,
+          "queue_len": 8,
+          "remaining_after": 4,
+          "round": 2,
+          "round_cap": 4,
+          "spent_round": 4
+        },
+        {
+          "noise_demoted": 2,
+          "queue_len": 17,
+          "remaining_after": 0,
+          "round": 3,
+          "round_cap": 4,
+          "spent_round": 4
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 0.125
+    },
+    "58": {
+      "allowance": 12,
+      "content_admitted": 2,
+      "content_rejected": [],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 2,
+      "rounds": [
+        {
+          "noise_demoted": 1,
+          "queue_len": 72,
+          "remaining_after": 6,
+          "round": 1,
+          "round_cap": 6,
+          "spent_round": 6
+        },
+        {
+          "noise_demoted": 1,
+          "queue_len": 22,
+          "remaining_after": 0,
+          "round": 2,
+          "round_cap": 6,
+          "spent_round": 6
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 1.0
+    },
+    "59": {
+      "allowance": 12,
+      "content_admitted": 5,
+      "content_rejected": [],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 7,
+      "rounds": [
+        {
+          "noise_demoted": 11,
+          "queue_len": 47,
+          "remaining_after": 6,
+          "round": 1,
+          "round_cap": 6,
+          "spent_round": 6
+        },
+        {
+          "noise_demoted": 7,
+          "queue_len": 33,
+          "remaining_after": 0,
+          "round": 2,
+          "round_cap": 6,
+          "spent_round": 6
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 0.7142857142857143
+    },
+    "62": {
+      "allowance": 12,
+      "content_admitted": 3,
+      "content_rejected": [],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 3,
+      "rounds": [
+        {
+          "noise_demoted": 3,
+          "queue_len": 95,
+          "remaining_after": 0,
+          "round": 1,
+          "round_cap": 12,
+          "spent_round": 12
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 1.0
+    },
+    "65": {
+      "allowance": 12,
+      "content_admitted": 6,
+      "content_rejected": [
+        {
+          "coverage": 0.0,
+          "prose_line": 0,
+          "reason": "empty-content",
+          "round": 1,
+          "url": "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5"
+        },
+        {
+          "coverage": 0.0,
+          "prose_line": 0,
+          "reason": "empty-content",
+          "round": 3,
+          "url": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66"
+        }
+      ],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 9,
+      "rounds": [
+        {
+          "noise_demoted": 1,
+          "queue_len": 78,
+          "remaining_after": 8,
+          "round": 1,
+          "round_cap": 4,
+          "spent_round": 4
+        },
+        {
+          "noise_demoted": 0,
+          "queue_len": 17,
+          "remaining_after": 4,
+          "round": 2,
+          "round_cap": 4,
+          "spent_round": 4
+        },
+        {
+          "noise_demoted": 0,
+          "queue_len": 10,
+          "remaining_after": 0,
+          "round": 3,
+          "round_cap": 4,
+          "spent_round": 4
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 0.6666666666666666
+    },
+    "69": {
+      "allowance": 12,
+      "content_admitted": 7,
+      "content_rejected": [],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 7,
+      "rounds": [
+        {
+          "noise_demoted": 9,
+          "queue_len": 59,
+          "remaining_after": 6,
+          "round": 1,
+          "round_cap": 6,
+          "spent_round": 6
+        },
+        {
+          "noise_demoted": 6,
+          "queue_len": 30,
+          "remaining_after": 0,
+          "round": 2,
+          "round_cap": 6,
+          "spent_round": 6
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 1.0
+    },
+    "78": {
+      "allowance": 12,
+      "content_admitted": 0,
+      "content_rejected": [],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 0,
+      "rounds": [
+        {
+          "noise_demoted": 8,
+          "queue_len": 90,
+          "remaining_after": 0,
+          "round": 1,
+          "round_cap": 12,
+          "spent_round": 12
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 0.0
+    },
+    "83": {
+      "allowance": 12,
+      "content_admitted": 0,
+      "content_rejected": [],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 0,
+      "rounds": [
+        {
+          "noise_demoted": 14,
+          "queue_len": 87,
+          "remaining_after": 0,
+          "round": 1,
+          "round_cap": 12,
+          "spent_round": 12
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 0.0
+    },
+    "90": {
+      "allowance": 12,
+      "content_admitted": 4,
+      "content_rejected": [],
+      "gold_queue_membership": [],
+      "recorded_fetch_attempts": 4,
+      "rounds": [
+        {
+          "noise_demoted": 3,
+          "queue_len": 72,
+          "remaining_after": 6,
+          "round": 1,
+          "round_cap": 6,
+          "spent_round": 6
+        },
+        {
+          "noise_demoted": 3,
+          "queue_len": 13,
+          "remaining_after": 0,
+          "round": 2,
+          "round_cap": 6,
+          "spent_round": 6
+        }
+      ],
+      "spend_total": 12,
+      "surviving_fetch_rate": 1.0
+    }
+  }
+}

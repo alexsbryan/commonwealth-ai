@@ -8,10 +8,14 @@
 //!
 //! Each test fails at HEAD (before the fix) and passes after.
 
-use sovereign_core::deep_research::budget::{FAMILY_WEB_FETCH, FAMILY_WEB_SEARCH, KEY_FETCH_PAGES, SpendDecider};
-use sovereign_core::deep_research::fetch::{fetch_round, CHUNK_CONTENT_CAP};
+use sovereign_core::deep_research::budget::{
+    SpendDecider, FAMILY_WEB_FETCH, FAMILY_WEB_SEARCH, KEY_FETCH_PAGES,
+};
+use sovereign_core::deep_research::fetch::{self, fetch_round, CHUNK_CONTENT_CAP};
 use sovereign_core::deep_research::gym::{MockBackendImpl, MockDraftSurface};
-use sovereign_core::deep_research::icd::{EmptyRoundReason, FetchList, ICD_VERSION, SearchHit, TriageOutcome};
+use sovereign_core::deep_research::icd::{
+    EmptyRoundReason, FetchList, SearchHit, TriageOutcome, ICD_VERSION,
+};
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -106,7 +110,11 @@ fn fetch_list_with_hits(hit_urls: &[&str]) -> FetchList {
             })
             .collect(),
         triage: TriageOutcome {
-            code_set_k: hit_urls.iter().enumerate().map(|(i, _)| format!("h{i}")).collect(),
+            code_set_k: hit_urls
+                .iter()
+                .enumerate()
+                .map(|(i, _)| format!("h{i}"))
+                .collect(),
             eps_admits: Vec::new(),
             below_cut: Vec::new(),
             threshold: 0.0,
@@ -155,9 +163,18 @@ async fn fetch_failure_retries_with_backoff() {
         &hits,
         &[],
         1234,
+        // drb1-t2: the retry contract is what this test pins — the
+        // content gate is off so the fetch outcome (not the content
+        // verdict) decides.
+        &fetch::FetchPolicy {
+            round_fetch_cap: usize::MAX,
+            content_coverage_floor: 0.0,
+            prose_line_floor: 0,
+        },
     )
     .await
-    .unwrap();
+    .unwrap()
+    .window;
 
     // At HEAD: 1 call (no retry)
     // After fix: 3 calls (1 initial + 2 retries)
@@ -242,6 +259,9 @@ async fn caller_tightens_ceilings_downward_only() {
         max_rounds: 3,
         code_set_k: 10,
         eps_quota: 0.0,
+        content_coverage_floor:
+            sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+        prose_line_floor: sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
         evidence_window_max_chunks: 10,
         estate_corpus_ids: Vec::new(),
         web_backend: "mock".to_string(),
@@ -281,6 +301,9 @@ async fn caller_tightens_ceilings_downward_only() {
         max_rounds: 3,
         code_set_k: 10,
         eps_quota: 0.0,
+        content_coverage_floor:
+            sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+        prose_line_floor: sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
         evidence_window_max_chunks: 10,
         estate_corpus_ids: Vec::new(),
         web_backend: "mock".to_string(),
@@ -319,6 +342,9 @@ async fn caller_tightens_ceilings_downward_only() {
         max_rounds: 3,
         code_set_k: 10,
         eps_quota: 0.0,
+        content_coverage_floor:
+            sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+        prose_line_floor: sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
         evidence_window_max_chunks: 10,
         estate_corpus_ids: Vec::new(),
         web_backend: "mock".to_string(),
@@ -332,7 +358,9 @@ async fn caller_tightens_ceilings_downward_only() {
         max_fetch_override: None,
     };
 
-    let max_rounds_none = config_none.max_rounds_override.unwrap_or(config_none.max_rounds);
+    let max_rounds_none = config_none
+        .max_rounds_override
+        .unwrap_or(config_none.max_rounds);
     assert_eq!(
         max_rounds_none, 3,
         "no override should use charter value of 3"

@@ -1,5 +1,5 @@
 {
-  "flight_root": "research/deep-research/arms/runs-t7a/std",
+  "flight_root": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std",
   "gold_rows": [
     {
       "logged_score": 0.0,

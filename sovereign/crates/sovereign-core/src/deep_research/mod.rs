@@ -117,6 +117,17 @@ pub struct RunConfig {
     pub max_rounds: u32,
     pub code_set_k: usize,
     pub eps_quota: f64,
+    /// drb1-t2 (fetch-then-judge): the post-fetch content admission
+    /// floors — a fetched page admits when its content covers at least
+    /// `content_coverage_floor` of the query's distinct terms OR
+    /// carries a prose line of at least `prose_line_floor` chars
+    /// (calibrated on the logged t7a flight; see
+    /// `acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR`). Serde-default:
+    /// pre-t2 checkpoints resume with the production floors.
+    #[serde(default = "acquisition::default_content_coverage_floor")]
+    pub content_coverage_floor: f64,
+    #[serde(default = "acquisition::default_prose_line_floor")]
+    pub prose_line_floor: usize,
     pub evidence_window_max_chunks: usize,
     pub estate_corpus_ids: Vec<String>,
     pub web_backend: String,
@@ -207,6 +218,11 @@ pub struct RunCheckpoint {
     /// section).
     #[serde(default)]
     pub empty_rounds: Vec<EmptyRound>,
+    /// drb1-t2: the per-run source registry accumulated so far —
+    /// restored on resume (serde-default: pre-t2 checkpoints restore
+    /// empty, the resumed run's rows still land).
+    #[serde(default)]
+    pub source_registry: Vec<icd::SourceRegistryRow>,
     pub windows: Vec<EvidenceWindow>,
     pub prior_gap_texts: Vec<String>,
     pub prior_gaps: Vec<Gap>,
@@ -895,6 +911,13 @@ struct Controller {
     /// The still-open gap claim texts — the strict-subset identity
     /// (stable claim texts re-audited against each new window).
     prior_gap_texts: Vec<String>,
+    /// drb1-t2 (AIQ §1.4): the per-run source registry — every FETCHED
+    /// source (window-admitted or content-refused), url + title + type
+    /// + round + admitted. Written as `source-registry.json` at
+    /// finish; the T3 writer's citation whitelist surface. Failed
+    /// fetches stay on the manifest's failed list (they produced no
+    /// source).
+    source_registry: Vec<icd::SourceRegistryRow>,
     /// The current round's gaps AS THE GAP LIST RECORDED THEM — the
     /// compass's output. The acquisition leg queries
     /// `gap.actionable_query` (the question for empty-window gaps,
@@ -995,6 +1018,7 @@ impl Controller {
             alignment_record: None,
             re_plans: 0,
             residue: Vec::new(),
+            source_registry: Vec::new(),
             empty_rounds: Vec::new(),
             windows: Vec::new(),
             prior_gap_texts: Vec::new(),
@@ -1127,6 +1151,7 @@ impl Controller {
             re_plans: cp.re_plans,
             residue: cp.residue.clone(),
             empty_rounds: cp.empty_rounds.clone(),
+            source_registry: cp.source_registry.clone(),
             windows: cp.windows.clone(),
             prior_gap_texts: cp.prior_gap_texts.clone(),
             prior_gaps: cp.prior_gaps.clone(),
@@ -1177,6 +1202,7 @@ impl Controller {
             re_plans: self.re_plans,
             residue: self.residue.clone(),
             empty_rounds: self.empty_rounds.clone(),
+            source_registry: self.source_registry.clone(),
             windows: self.windows.clone(),
             prior_gap_texts: self.prior_gap_texts.clone(),
             prior_gaps: self.prior_gaps.clone(),
@@ -1406,6 +1432,7 @@ impl Controller {
             chunks,
             fetch_failures: Vec::new(),
             dedup_refused: Vec::new(),
+            content_refused: Vec::new(),
             derived_custody: custody,
         }
     }
@@ -1449,6 +1476,7 @@ impl Controller {
             chunks,
             fetch_failures: failures,
             dedup_refused: refused,
+            content_refused: Vec::new(),
             derived_custody: custody,
         }
     }
@@ -1545,6 +1573,16 @@ impl Controller {
         let report_path = self.config.run_dir.join("report.md");
         std::fs::write(&report_path, report).map_err(|e| format!("abort report write: {e}"))?;
         self.artifacts.push("report.md".to_string());
+        // drb1-t2: an aborted run's registry still lands — the sources
+        // fetched before the abort are real acquisitions.
+        let registry = icd::SourceRegistry {
+            icd: "source_registry".to_string(),
+            version: icd::ICD_VERSION,
+            run_id: self.config.run_id.clone(),
+            charter_hash: self.charter_hash.clone(),
+            sources: self.source_registry.clone(),
+        };
+        self.write_artifact("source-registry.json", &registry)?;
         // The abort landing goes through the machine: Abort (from
         // whatever state — the row exists for every state) → Aborted →
         // AbortRendered → DonePartial.
@@ -1835,9 +1873,9 @@ impl Controller {
                     // watched red in gym_deck::
                     // unsearchable_estate_refuses_the_web_leg.
                     self.step(Event::AcquisitionSkipped)?; // → Rounding
-                    // The consumed round is a real round in the ledger —
-                    // it drafted and audited, searched nothing, fetched
-                    // nothing (the reframe branch's row shape).
+                                                           // The consumed round is a real round in the ledger —
+                                                           // it drafted and audited, searched nothing, fetched
+                                                           // nothing (the reframe branch's row shape).
                     self.rounds.push(RoundRow {
                         round,
                         gaps_before,
@@ -2039,25 +2077,86 @@ impl Controller {
         self.write_artifact(&format!("skip-ledger-{round}.json"), &triaged.skip_ledger)?;
         self.step(Event::QueriesFormed)?; // → Triage
         self.step(Event::TriageComplete)?; // → Fetching
+                                           // NOTE (drb1-t2): the skip ledger written above is the TRIAGE
+                                           // record (every row not in the K ∪ ε tiers, plus demoted
+                                           // noise) — written before the fetch leg runs. Under permissive
+                                           // triage the walk may FETCH below-tier rows within budget, so
+                                           // the ledger is REWRITTEN after the fetch with the fetched
+                                           // urls removed (the ledger is the not-fetched record; a row
+                                           // the loop fetched must not carry a skip row). The rewrite
+                                           // lands beside the evidence window below.
 
         // R6 fetch through the decider; custody stamped by code;
         // failures recorded absent per-source (F17). Dedup: the URLs
         // fetched by prior rounds are refused (t1d fix 1 — a round-2
         // fetch of an already-fetched URL is refused, no re-spend).
+        //
+        // drb1-t2 (fetch-then-judge): the walk queue is the round's
+        // FULL non-noise candidate list (permissive triage — noise
+        // demoted, budget deciding the walk depth), bounded by the
+        // round's fetch share (the r2b split over the fetch family —
+        // the gap rounds keep their ammunition; the decider's global
+        // allowance still binds underneath), with same-query fallback
+        // promotion past failures and content admission post-fetch.
+        let rounds_left = self
+            .config
+            .max_rounds
+            .saturating_sub(round)
+            .saturating_add(1);
+        let round_fetch_cap = budget::round_allowance_cap(
+            self.decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES),
+            rounds_left,
+        ) as usize;
+        let fetch_policy = fetch::FetchPolicy {
+            round_fetch_cap,
+            content_coverage_floor: self.config.content_coverage_floor,
+            prose_line_floor: self.config.prose_line_floor,
+        };
         let already_fetched: Vec<String> =
             self.fetched_sources.iter().map(|s| s.url.clone()).collect();
-        let mut window = fetch_round(
+        let out = fetch_round(
             self.port.as_ref(),
             &mut self.decider,
             &self.config.run_id,
             &self.charter_hash,
             round,
             &fetch_list,
-            &triaged.ranked,
+            &triaged.candidates,
             &already_fetched,
             now_unix(),
+            &fetch_policy,
         )
         .await?;
+        let mut window = out.window;
+        self.source_registry.extend(out.registry_rows);
+        // drb1-t2: the post-fetch ledger rewrite — a below-tier row the
+        // walk FETCHED (within budget) must not carry a skip row; the
+        // window's chunks and content_refused are its fetch record.
+        // The pre-fetch ledger (written at triage time) named it
+        // below-cut; this rewrite is the honest final record.
+        {
+            let mut skip_ledger = triaged.skip_ledger;
+            let fetched_now: std::collections::HashSet<String> = window
+                .chunks
+                .iter()
+                .map(|c| c.source_url.clone())
+                .chain(window.content_refused.iter().map(|r| r.url.clone()))
+                .collect();
+            let before = skip_ledger.entries.len();
+            skip_ledger
+                .entries
+                .retain(|e| !fetched_now.contains(&e.url));
+            if before != skip_ledger.entries.len() {
+                tracing::debug!(
+                    target: "deep_research",
+                    run_id = %self.config.run_id,
+                    round,
+                    removed = before - skip_ledger.entries.len(),
+                    "drb1-t2: skip ledger rewritten post-fetch (below-tier rows the walk fetched)"
+                );
+                self.write_artifact(&format!("skip-ledger-{round}.json"), &skip_ledger)?;
+            }
+        }
         self.step(Event::FetchComplete)?; // → Enriching
         for f in &window.fetch_failures {
             self.failed_sources.push(FailedSource {
@@ -2136,6 +2235,19 @@ impl Controller {
             empty_rounds: self.empty_rounds.clone(),
         };
         self.write_artifact("verdict-set.json", &verdict_set)?;
+        // drb1-t2 (AIQ §1.4): the per-run source registry — every
+        // fetched source (window-admitted or content-refused), the T3
+        // writer's citation whitelist surface. Written at finish and
+        // on the checkpoint path (the registry rides the checkpoint,
+        // so a resumed run appends rather than truncates).
+        let registry = icd::SourceRegistry {
+            icd: "source_registry".to_string(),
+            version: icd::ICD_VERSION,
+            run_id: self.config.run_id.clone(),
+            charter_hash: self.charter_hash.clone(),
+            sources: self.source_registry.clone(),
+        };
+        self.write_artifact("source-registry.json", &registry)?;
         self.prior_gap_texts = not_covered(&claims);
         let report = render_report(
             &self.question,
@@ -2305,6 +2417,8 @@ fn build_charter(config: &RunConfig) -> Charter {
             triage: TriageConfig {
                 code_set_k: config.code_set_k,
                 eps_quota: config.eps_quota,
+                content_coverage_floor: config.content_coverage_floor,
+                prose_line_floor: config.prose_line_floor,
             },
             budget: icd::BudgetAllowance {
                 web_search_queries,
@@ -2450,6 +2564,8 @@ mod tests {
             max_rounds: 3,
             code_set_k: 3,
             eps_quota: 0.1,
+            content_coverage_floor: acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+            prose_line_floor: acquisition::DEFAULT_PROSE_LINE_FLOOR,
             evidence_window_max_chunks: 20,
             estate_corpus_ids: Vec::new(),
             web_backend: "duckduckgo".to_string(),
@@ -3321,9 +3437,9 @@ mod tests {
         );
         // The estate's spelled-out echo never leaks — the word form
         // strips to the digit form's template.
-        let estate = "researcher Martin analyzed data from the nation's one hundred largest cities.";
-        let estate_digit =
-            "researcher Martin analyzed data from the nation's 100 largest cities.";
+        let estate =
+            "researcher Martin analyzed data from the nation's one hundred largest cities.";
+        let estate_digit = "researcher Martin analyzed data from the nation's 100 largest cities.";
         let stripped = strip_disallowed_figures(estate, &["1980".to_string()]);
         assert_eq!(
             stripped,
@@ -3884,5 +4000,4 @@ mod tests {
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
-
 }

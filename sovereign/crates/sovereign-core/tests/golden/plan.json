@@ -2,7 +2,7 @@
   "icd": "plan",
   "version": 1,
   "run_id": "run-meridian-1",
-  "charter_hash": "e55d99dbe827fc3f",
+  "charter_hash": "3ab42923e19a639d",
   "rounds_planned": 3,
   "estate_first": true,
   "network_after_estate": true,

@@ -7465,3 +7465,291 @@ per-row logged/replayed scores, decisions, substitution provenance),
 logged_score,replayed_score,label EMPTY,+round/snippet_source),
 `admission-summary.json` (parity, phantoms, per-round admitted sets,
 K sweep, gold fate).
+
+## T2 fetch-then-judge + the fetch leg — declaration (order drb1-t2, drafted 2026-08-21 before spawn)
+
+Campaign drb1-race rung T2: adopt AIQ's fetch-then-judge shape
+(§1.3 ph.3 + §1.4) at our seam and harden the fetch leg. Declared
+before any code changed; every calibration number below is from my own
+passes over the logged t7a flight (runs-t7a/std, 9 tasks) and the 843
+replay rows.
+
+**The design (AIQ §1.3 ph.3/§1.4 ADOPT at the seam, DIFFER named
+below).**
+
+1. *Permissive triage*: triage keeps its ranker shape (score-then-
+   figure, code-set K + ε, one scorer) and gains a PRE-FETCH NOISE
+   DEMOTION — a closed-set classifier over host/path (social hosts,
+   jobs-board hosts, careers hosts/paths). Demoted rows never spend a
+   fetch and land in the skip ledger reason `noise-demoted:{class}`;
+   non-noise rows are NEVER excluded pre-fetch (the gate demotes
+   obvious junk only — AIQ's "pre-read gates demote noise, never
+   exclusively decide").
+2. *The fetch queue widens*: fetch_round walks ALL non-noise ranked
+   candidates (not just K ∪ ε) in rank order, bounded by a ROUND FETCH
+   CAP = `round_allowance_cap(remaining, rounds_left)` (the r2b split
+   applied to the fetch family — the gap round keeps its ammunition).
+3. *Fallbacks (AIQ preferred/fallback shape)*: when a fetch fails, the
+   walk continues down the queue; the next SAME-QUERY candidate is
+   promoted to the front (per-query fallback affinity — the failure
+   starved that query).
+4. *URL-health classification journaled per fetch*: every failure
+   carries `health` ∈ {binary, http-status, dead, budget-refused,
+   dedup, missing, terminal} (closed set, enum). Retry policy
+   re-derived: PERMANENT classes (binary, HTTP status) get ONE
+   attempt; transient/unknown keep drb1-r1's retry-with-backoff.
+   Measured justification: the logged flight's 12 fetch failures are
+   all `non-text payload` binary refusals (permanent — retry cannot
+   help); drb1-r1's retry-everything would burn 3 budget units per
+   binary URL, which under fallbacks starves the round exactly the way
+   the allowance died on task 56.
+5. *PDF extraction (the wall)*: the port's `web_fetch` routes PDF urls
+   (extension-classified) to a port-side fetch+extract: bytes → temp
+   file → `pdf-extract 0.7.12` (the SAME crate+version the corpus
+   ingest path uses — sovereign-tools' `safe_extract_pdf_text`; the
+   inventory answer, zero new PDF code) under catch_unwind + stdout
+   silence, capped at CHUNK_CONTENT_CAP (12k — the HTML path's 4k cut
+   is frozen in sovereign-tools-base, out of this order's landing
+   paths; filed for the seat). Non-PDF binaries keep refusing with the
+   classified reason.
+6. *Content admission post-fetch (the AIQ shape)*: every successful
+   fetch is judged on CONTENT before entering the window. REUSE
+   finding (one decider): the judge is the SAME admission scorer
+   (`web_hit_relevance`'s term-coverage core, the ONE tokenizer)
+   applied to the content surface, plus a prose floor —
+   `admit ⇔ coverage ≥ FLOOR_c ∨ longest-line ≥ FLOOR_p`. Calibration
+   (45 recorded surviving chunks, own pass): coverage-only real pages
+   floor at 0.38 (m-malinowski), rejected stubs top at 0.21 (sunmi
+   news); prose lines: rejects ≤ 338 chars (atlan), admits ≥ 561
+   (simutechgroup). FLOOR_c = 0.25, FLOOR_p = 500 — both mid-gap
+   (identical outcomes anywhere in (0.21, 0.31) × (338, 561)).
+   Rejected rows are recorded on the window's `content_refused` WITH
+   the score and reason (never silently un-ledgered — the phantom-row
+   invariant).
+7. *The source registry (AIQ §1.4)*: every FETCHED source (window-
+   admitted or content-refused) lands in a per-run SOURCE REGISTRY —
+   url + title + type {web,pdf,estate} + round + admitted — written as
+   `source-registry.json`; this is the T3 writer's citation whitelist
+   surface.
+
+**Why the witness/containment path cannot be the content judge
+(the order's investigate-before-building item).** (a) The containment
+witness judges CLAIM specifics against evidence — it needs a draft's
+claims, and round 1 fetches BEFORE any draft exists; admission is
+query-shaped, not claim-shaped. (b) `assess_claim` requires the
+inference provider — a judge call per fetched page inside the fetch
+leg changes the loop's cost shape (12+ model calls/run) and the replay
+harness could not run it at zero-API. (c) The witness is
+downgrade-only semantics for judge-supported claims — a ranker/
+admitter it is not. The machinery that DOES serve is the admission
+scorer itself: one scorer, one tokenizer, two surfaces (metadata
+pre-fetch, content post-fetch). AIQ's `evidence_judgment` is
+model-generated per note (0-100); ours stays deterministic C-class at
+zero model cost — the named DIFFER (their judgment is soft, ours is
+hard; the T1 ADOPT/DIFFER note's posture carried forward).
+
+**Bars (pre-registered).**
+
+- RED `jobs_board_row_never_spends_a_fetch`: a careers-page row within
+  the code-set K is demoted pre-fetch — the port is never called for
+  it; the ledger row carries `noise-demoted`.
+- RED `binary_refused_pages_route_to_fallback`: with the real binary
+  marker, top-pick failures route to the next candidates within the
+  round cap (chunks > 0 where HEAD burns the whole allowance on
+  retries and lands 0).
+- RED `metadata_only_page_is_content_rejected_with_reason`: a
+  task-65-shaped page (recorded chrome cut, vendored byte-identical)
+  is fetched then content-rejected — no chunk, `content_refused`
+  carries url + score + reason; the registry carries the row.
+- RED `every_fetched_source_lands_in_the_registry`: window-admitted
+  AND content-refused sources both present, url+title+type.
+- RED `fetch_queue_extends_beyond_the_code_set`: candidates beyond
+  K ∪ ε fetch within the round cap (TriageResult.candidates).
+- RED `pdf_bytes_extract_to_text` (sovereign-cli): a minimal generated
+  PDF extracts to text through the port's PDF path (same crate as the
+  corpus ingest); a `.pdf` url whose fetch serves the extracted text
+  reaches the window with registry type `pdf`.
+- Replay (harness `--stage fetch`, 9 tasks): gold-recall = gold rows
+  entering the fetch queue under permissive triage; surviving-fetch
+  rate on recorded fetches (content-judged); metadata pages
+  content-rejected; the K/ε sweep re-measured under the new shape
+  (K=6 was rejected at T1 under admission-cut semantics — under
+  permissive triage the cut no longer binds; expect flat, keep K=5).
+- Named substitution (§18.3): rows the flight never fetched carry no
+  content — the replay walk spends budget on them but cannot
+  content-judge them (`content-unknown`), never fabricating an
+  outcome; the end-to-end content path is the mock-deck battery's
+  (the seat's).
+
+Tune whitelist: the admission thresholds + the fetch allowance
+interaction only. Park condition: if content-level admission cannot
+reuse the scorer path, park with the measured conflict.
+
+## T2 execution record
+
+**What landed (the design the declaration pre-registered).**
+acquisition.rs: `noise_class` (the closed-set demoter — social/
+jobs-board/careers hosts, careers/jobs path segments with the
+.gov/.edu carve-out), `judge_content` + `prose_line_length` + the
+floor consts (`DEFAULT_CONTENT_COVERAGE_FLOOR` 0.25,
+`DEFAULT_PROSE_LINE_FLOOR` 500, calibration in the doc comment),
+`TriageResult.candidates` (the permissive queue — every non-noise
+ranked row). triage_hits: the ranking and the K/ε tiers run over ALL
+rows unchanged (8 noise urls sit inside the logged flight's recorded
+admitted sets — demoting them out of the ranking would have broken
+the T1 parity gate; measured before the shape was chosen), noise rows
+are excluded from the queue and ALWAYS ledgered
+(`noise-demoted:{class}`), below-tier non-noise rows keep
+`below-cut`. fetch.rs: `FetchPolicy` (round cap + the floors),
+`classify_fetch_error` (permanent binary/HTTP-status → one attempt;
+transient/unknown → drb1-r1's 3), `source_type_of` (the registry's
+type accessor), the walk (queue order, round cap, same-query fallback
+promotion past failures, post-fetch content admission, estate
+exemption — the estate's own search surface already admitted its
+chunks), `content_refused` on the window WITH score and reason, and
+the registry rows. icd.rs: `UrlHealth` (closed set, journaled on
+every failure), `ContentRefusal`, `SourceType`,
+`SourceRegistry{,Row}`, the additive TriageConfig/RunConfig/checkpoint
+fields (serde-default). mod.rs: the fetch-side round split
+(`round_allowance_cap` over FAMILY_WEB_FETCH), the registry state +
+`source-registry.json` at finish AND abort, the post-fetch skip-ledger
+rewrite (a below-tier row the walk FETCHED must not carry a skip row —
+found by the fetch_queue red test failing on its first assertion
+shape). deep_research_cmd.rs: the port's PDF path (`fetch_pdf_text` +
+`extract_pdf_bytes`) — `pdf-extract 0.7.12`, the SAME crate+version
+the corpus ingest uses (sovereign-tools' extract_stage), panic-guarded
+via catch_unwind on the blocking pool, capped at CHUNK_CONTENT_CAP
+(12k — the HTML path's 4k cut is frozen in sovereign-tools-base, out
+of this order's landing paths; the PDF path delivers 3× the content).
+The replay harness gained `--stage fetch`.
+
+**The witness-reuse finding (the order's investigate-first item).**
+Confirmed as declared: the containment witness cannot serve as the
+content judge (claim-shaped — it needs a draft's extracted specifics,
+and round 1 fetches before any draft exists; judge-bound — a model
+call per fetched page inside the fetch leg changes the loop's cost
+shape and the replay harness could not run it at zero-API;
+downgrade-only semantics for judge-supported claims, not an
+admitter). The machinery that serves is the admission scorer itself:
+`judge_content` runs the ONE scorer (`web_hit_relevance`'s
+term-coverage core, the ONE tokenizer) over the content surface —
+one scorer, two surfaces, zero model tokens. AIQ's
+`evidence_judgment` is model-generated per note (0-100); ours is
+deterministic C-class — the kept DIFFER.
+
+**Red tests (all watched failing first — compile-red for the new
+surface, assertion-red for the behavioral pins where the old surface
+allowed it; all green now).** sovereign-core fetch.rs tests:
+`jobs_board_row_never_spends_a_fetch`,
+`binary_refused_pages_route_to_fallback` (2 permanent binary
+failures + 3 fallback fetches = 5 port calls, 3 chunks, 5 of 6 spent
+— HEAD's retry-everything burns 6 for 0),
+`metadata_only_page_is_content_rejected_with_reason` (the vendored
+byte-identical recorded cuts: frontiersin chrome REFUSES under its
+recorded task-58 query, semanticscholar 0-word REFUSES
+`empty-content`, PMC7184763 chrome+prose ADMITS — the floor does not
+over-reject),
+`every_fetched_source_lands_in_the_registry` (admitted + refused
+rows, the `.pdf` row types `pdf`),
+`fetch_queue_extends_beyond_the_code_set` (queue 6 past a K=2 tier;
+cap 2 spent on 2 permanent failures → the un-reached TIER members
+record `round-cap` rows — the phantom invariant),
+`content_floor_calibration_pins_the_recorded_cuts` (longest lines
+138/762 bytes; the classifier's permanent/transient split; the
+type accessor). audit.rs: the `ContentRefused` empty-round arm
+pinned. sovereign-cli:
+`pdf_bytes_extract_to_text` (a minimal generated PDF extracts
+through the port's PDF path — the brocku title's words survive;
+malformed bytes are a typed error, the panic guard holds).
+ sovereign-core: 1360+ tests green; sovereign-cli: 155 green.
+The golden synthetic run (run-meridian-1) was regenerated as a
+consistent set for the additive charter fields (17 artifacts +
+the pinned identity: e55d99dbe827fc3f → 3ab42923e19a639d; the old
+hash reproduced exactly from the pre-change serialization before the
+rewrite — the method validated, not eyeballed).
+
+**Fetch-stage replay (9 tasks, own runs; run.sh now defaults
+--stage=fetch).** Parity 17/17 (0 failures), phantoms 79 — both the
+T1 instrument's numbers, unchanged. Noise: 71 rows demoted
+flight-wide (65 social — 27 youtube, 23 facebook, 11 linkedin, 3
+reddit, 1 instagram; 3 jobs boards; 3 careers hosts/paths), 0 noise
+url in any queue; 9 of them the T1 admission would have spent
+fetches on. The walk (772 queue rows): 28 content-admitted, 2
+content-refused, 10 fetch-failed (all binary, 1 attempt each — the
+recorded flight burned 3 per), 5 dead-refused, 7 dedup-refused, 68
+`fetched-content-unknown` (the named substitution — the flight never
+fetched them; spend simulated, outcome never fabricated), 652
+`not-attempted-round-cap` (the budget binds, as designed).
+Surviving-fetch rate on judgeable rows: 28/40 = 0.70 flight-wide;
+per task 0.12 (task 56 — the without-extraction bound: its 4 binary
+PDF failures count as dead attempts; under the landed PDF path they
+extract), 0.67-1.00 elsewhere; tasks 78/83 could-not-judge (0
+judgeable rows walked — the rescored rank puts 12 never-fetched rows
+ahead of every recorded fetch). Metadata pages: task 65's two
+semanticscholar 0-word pages content-rejected with
+`empty-content` (the recorded chrome+prose PMC pages admit — their
+long prose lines are real body text). Gold: all five unique task-56
+gold urls sit IN the queue in every round they appear (9 row
+sightings, 0 noise-demoted — the permissive gate's recall is
+complete at the queue level); the walk reaches brocku +
+researchgate in round 2 (queue positions 5-6) once the dead-set
+frees the share — with real content (PDF extraction) they are
+content-judged, not `content-unknown`. Registry: 30 rows emitted in
+the replay (all `web` — the flight's PDFs never delivered content to
+record; production registers extracted PDFs as `pdf`).
+
+**The K/ε re-derivation (whitelisted knobs).** Under permissive
+triage the queue is K-INDEPENDENT (candidates = every non-noise row;
+measured: identical queue at K=5 and K=6 — the T1-era K=6 question
+is closed, not reopened: the cut no longer binds anything). ε is
+subsumed (its admits are queue rows the budget may or may not
+reach). The binding knob is the fetch allowance: 12 → 4/4/4 via the
+r2b split; measured spend 12/12 on every task (budget-bound). K=5
+and ε=0.1 KEPT as the recorded tier semantics (charter/artifact
+compatibility, zero recall cost). The flight-card lever for fetch
+volume is the allowance, unchanged by this rung.
+
+**The PDF finding.** Extraction EXISTS in the inventory
+(`sovereign-tools::local_corpus::extract_stage::safe_extract_pdf_text`
+wrapping pdf-extract 0.7.12, panic-guarded + stdout-silenced for the
+corpus ingest batch path); the fetch leg now calls the SAME
+crate+version directly at the port with its own panic guard (the
+corpus wrapper lives in a crate the default end-user build
+deliberately excludes — pulling sovereign-tools into the
+deep-research feature would drag corpus-engine+lancedb into every
+default build, a documented layering gate). Zero new PDF code: the
+extraction implementation is pdf-extract's, one workspace version.
+The corpus path's stdout-silencing is NOT duplicated (a spewing
+malformed PDF pollutes the console log, never an artifact); lifting
+the wrapper into sovereign-tools-base (one shared panic-safe,
+silenced accessor for both paths) is FILED for the seat. Real
+scholarly PDFs' extraction quality is measured on the next flight
+(zero web in this order); the wall itself is down: a `.pdf` url
+fetches, extracts, is content-judged, and registers as type `pdf`.
+
+**Gates.** Scoped lint clean (workspace `--all-targets` check: 0
+errors). Full test gate: 10208 pass / 3 fail — all three in
+sovereign-inference `embedded::gates` (model-arch ladder tests in a
+crate this order never touched; sovereign-inference carries another
+session's uncommitted work). sovereign-cli's `alias_init` (project
+verb, sovereign-cli-dev — also foreign, fails with the verb absent
+after a full sibling rebuild). Both FILED, not chased.
+
+**AIQ ADOPT/DIFFER vs §1.3/§1.4/§1.5 (the order's required note).**
+ADOPTED: fetch-then-judge (admission on content, post-fetch —
+§1.3 ph.3); the pre-fetch gate demotes noise only, never exclusively
+decides (§1.3 ph.3's shape); the per-run source registry as the
+writer's citation whitelist (§1.4 — ours persists as a run artifact
+and compounds into the estate, theirs is per-session); per-query
+fallback lists (§1.5's preferred/fallback_tools shape, adapted: the
+fallback is the same query's next candidate in the round's queue);
+URL-health journaling per fetch. DIFFERED (named): our content judge
+is deterministic C-class at zero model cost (theirs is a
+model-generated 0-100 `evidence_judgment` per note); our budget is
+12 fetches/12 searches (theirs: up to 100 source calls/job of
+Serper/Tavily spend — the card's resource half, not this rung);
+their `paper_search` (Serper) remains an API-spend flight-card item;
+the HTML extraction cap stays 4k (theirs is `max_content_length`
+1000 — we deliver more even unfixed); PDF extraction has NO AIQ
+analog at all (their workers consume search snippets — the wall was
+ours alone, and it is down).

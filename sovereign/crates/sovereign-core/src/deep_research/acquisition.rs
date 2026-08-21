@@ -322,8 +322,225 @@ pub struct TriageResult {
     /// The ranked hits, code-set K first (the fetch list's search_hits
     /// order is the rank order).
     pub ranked: Vec<SearchHit>,
+    /// drb1-t2 (permissive triage): the FULL non-noise candidate list
+    /// in rank order — the fetch leg's walk queue. Under
+    /// fetch-then-judge the pre-fetch gate demotes noise only, so the
+    /// queue extends past the K ∪ ε tiers and the round's fetch budget
+    /// (plus fallbacks past failures) decides how deep it walks.
+    pub candidates: Vec<SearchHit>,
     pub outcome: TriageOutcome,
     pub skip_ledger: SkipLedger,
+}
+
+/// The noise classes (drb1-t2, AIQ §1.3 ph.3's "demote obvious junk")
+/// — a CLOSED set, classified from the URL alone (host + path). Jobs
+/// boards, careers pages, and social surfaces are never research
+/// evidence whatever the query; everything else stays a candidate and
+/// the topicality decision happens on CONTENT after fetch. Measured on
+/// the logged t7a flight: 70 of 843 rows carry one of these shapes
+/// (65 social — 27 youtube, 23 facebook, 11 linkedin, 3 reddit, 1
+/// instagram; 3 jobs boards; 2 careers hosts/paths), 9 of which the
+/// T1 admission would have spent fetches on (a youtube stub admitted
+/// on task 56 round 2 among them).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NoiseClass {
+    /// Social/video surfaces (facebook, youtube, linkedin, reddit, …).
+    Social,
+    /// Dedicated jobs boards (indeed, glassdoor, amazon.jobs, …).
+    JobsBoard,
+    /// A careers/jobs subdomain or host prefix.
+    CareersHost,
+    /// A careers/jobs PATH segment on an otherwise general host.
+    CareersPath,
+}
+
+impl NoiseClass {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Social => "social",
+            Self::JobsBoard => "jobs-board",
+            Self::CareersHost => "careers-host",
+            Self::CareersPath => "careers-path",
+        }
+    }
+}
+
+/// The social hosts — demoted whatever the query. Matched on the
+/// registrable domain (last two labels), so `www.`/`m.`/`mobile.`
+/// prefixes and subdomains all classify.
+const SOCIAL_HOSTS: &[&str] = &[
+    "facebook.com",
+    "twitter.com",
+    "x.com",
+    "instagram.com",
+    "linkedin.com",
+    "tiktok.com",
+    "reddit.com",
+    "youtube.com",
+    "pinterest.com",
+    "threads.net",
+];
+
+/// Dedicated jobs-board hosts (registrable domains).
+const JOBS_BOARD_HOSTS: &[&str] = &[
+    "indeed.com",
+    "glassdoor.com",
+    "monster.com",
+    "ziprecruiter.com",
+    "amazon.jobs",
+    "myworkdayjobs.com",
+    "lever.co",
+    "greenhouse.io",
+];
+
+/// The host's registrable domain (last two labels — the approximation
+/// the closed sets above are calibrated for; no public-suffix list,
+/// the lists are the decider).
+fn registrable_host(host: &str) -> &str {
+    let trimmed = host.trim_start_matches("www.");
+    if let Some((_, last2)) = trimmed.rsplit_once('.') {
+        if let Some((_, last1)) = last2.rsplit_once('.') {
+            return last1;
+        }
+    }
+    trimmed
+}
+
+/// Classify a URL as pre-fetch noise. One decider (the fetch leg, the
+/// replay harness, and the skip-ledger writer all call THIS); returns
+/// `None` for everything that stays a candidate. Host-based rules run
+/// first (strongest signal); the careers/jobs PATH segment is the
+/// weakest and last — a `.gov`/`.edu` statistics page whose path
+/// happens to carry /jobs/ is not demoted (BLS's jobs report shape:
+/// the host is not a board, the page is data).
+pub fn noise_class(url: &str) -> Option<NoiseClass> {
+    let lower = url.to_ascii_lowercase();
+    let after_scheme = lower
+        .strip_prefix("https://")
+        .or_else(|| lower.strip_prefix("http://"))
+        .unwrap_or(&lower);
+    let (host, path) = match after_scheme.split_once('/') {
+        Some((h, p)) => (h, format!("/{p}")),
+        None => (after_scheme, String::new()),
+    };
+    // Strip credentials/port noise; keep the host simple.
+    let host = host.split('@').next_back().unwrap_or(host);
+    let host = host.split(':').next().unwrap_or(host);
+    let domain = registrable_host(host);
+    if SOCIAL_HOSTS.contains(&domain) {
+        return Some(NoiseClass::Social);
+    }
+    if JOBS_BOARD_HOSTS.contains(&domain) {
+        return Some(NoiseClass::JobsBoard);
+    }
+    if host.starts_with("careers.") || host.starts_with("jobs.") {
+        return Some(NoiseClass::CareersHost);
+    }
+    let segs = || path.split('/').filter(|s| !s.is_empty());
+    if segs().any(|s| s == "careers" || s == "jobs") {
+        // Weakest rule: a careers/jobs path segment on a general host.
+        // Government/education hosts are excluded — their /jobs/ paths
+        // are data (labor statistics), not postings.
+        let tld = domain.rsplit('.').next().unwrap_or("");
+        if tld != "gov" && tld != "edu" {
+            return Some(NoiseClass::CareersPath);
+        }
+    }
+    None
+}
+
+/// The post-fetch content admission floors (drb1-t2). A fetched page
+/// admits to the evidence window when its CONTENT covers at least
+/// `DEFAULT_CONTENT_COVERAGE_FLOOR` of the query's distinct terms OR
+/// carries a prose line of at least `DEFAULT_PROSE_LINE_FLOOR` chars.
+/// Calibrated on the logged t7a flight's 45 recorded surviving chunks
+/// (own measurement): coverage-only real pages floor at 0.38
+/// (m-malinowski.github.io), rejected stubs top at 0.21 (sunmi news);
+/// prose lines — rejects peak at 338 chars (atlan.com), admits start
+/// at 561 (simutechgroup.com). 0.25 and 500 sit mid-gap; any pair in
+/// (0.21, 0.31) × (338, 561) classifies the 45 identically.
+pub const DEFAULT_CONTENT_COVERAGE_FLOOR: f64 = 0.25;
+pub const DEFAULT_PROSE_LINE_FLOOR: usize = 500;
+
+/// Serde default accessors (the charter's TriageConfig reads these —
+/// one decider, one name: the const IS the default).
+pub fn default_content_coverage_floor() -> f64 {
+    DEFAULT_CONTENT_COVERAGE_FLOOR
+}
+
+pub fn default_prose_line_floor() -> usize {
+    DEFAULT_PROSE_LINE_FLOOR
+}
+
+/// The content-admission rule's name (rides the window's refusal
+/// records and the tracing event — glassbox).
+pub const CONTENT_ADMISSION_RULE: &str = "coverage-floor-or-prose";
+
+/// The longest line in the fetched content — the prose signal. A page
+/// whose extraction delivered only site chrome (nav labels, menus,
+/// disclaimers — the task-65 shape) has no long line; real body text
+/// arrives as paragraphs. One accessor (fetch and the replay harness
+/// both call THIS).
+pub fn prose_line_length(content: &str) -> usize {
+    content.lines().map(str::len).max().unwrap_or(0)
+}
+
+/// drb1-t2 — the post-fetch content admission verdict. REUSE finding
+/// (one decider): the coverage score is the SAME admission scorer the
+/// pre-fetch gate runs (`web_hit_relevance`'s term-coverage core, the
+/// ONE tokenizer), applied to the content surface instead of the
+/// metadata surface — one scorer, two surfaces, zero model tokens.
+/// The witness/containment path cannot serve here (draft-shaped,
+/// judge-bound, downgrade-only — see the T2 declaration); this is the
+/// machinery that could.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ContentVerdict {
+    pub admits: bool,
+    pub coverage: f64,
+    pub prose_line: usize,
+    /// The named refusal reason when `!admits` (empty string when
+    /// admitted) — recorded on the window's `content_refused`, never
+    /// a silent un-ledgering.
+    pub reason: String,
+}
+
+/// Judge fetched content for window admission. `admits ⇔ coverage ≥
+/// coverage_floor ∨ prose_line ≥ prose_floor`. Empty content is its
+/// own named reason (the semanticscholar shape: the fetch succeeded
+/// and delivered nothing).
+pub fn judge_content(
+    query: &str,
+    title: &str,
+    content: &str,
+    url: &str,
+    coverage_floor: f64,
+    prose_floor: usize,
+) -> ContentVerdict {
+    let prose_line = prose_line_length(content);
+    if content.trim().is_empty() {
+        return ContentVerdict {
+            admits: false,
+            coverage: 0.0,
+            prose_line,
+            reason: "empty-content".to_string(),
+        };
+    }
+    let coverage = web_hit_relevance(query, title, content, url);
+    let admits = coverage >= coverage_floor || prose_line >= prose_floor;
+    let reason = if admits {
+        String::new()
+    } else {
+        format!(
+            "content-below-threshold: coverage {coverage:.3} < {coverage_floor}, \
+             longest line {prose_line} < {prose_floor} ({CONTENT_ADMISSION_RULE})"
+        )
+    };
+    ContentVerdict {
+        admits,
+        coverage,
+        prose_line,
+        reason,
+    }
 }
 
 /// Rank the hits, cut at K, admit an ε-quota of below-cut fetches by
@@ -332,6 +549,21 @@ pub struct TriageResult {
 /// figure-bearing-ness first (t1e — the K-cut must not silently
 /// exclude the hits the figures live in), then insertion order —
 /// deterministic. The admission rule's name rides the outcome.
+///
+/// drb1-t2 (permissive triage): the RANKING and the K/ε tiers run
+/// over ALL rows unchanged — the recorded tiers stay comparable to
+/// every logged flight (the T1 parity gate replays recorded rounds
+/// through this function; 8 noise urls sit inside the logged flight's
+/// recorded admitted sets, so demoting them out of the ranking would
+/// break the instrument). What changes is the FETCH side: the
+/// `candidates` queue excludes noise rows (they never spend a fetch),
+/// every NON-noise row is a queue member whatever its score (under
+/// fetch-then-judge the pre-fetch gate demotes junk only and never
+/// exclusively decides topicality), and every noise row gets a skip
+/// ledger row with reason `noise-demoted:{class}` whether or not its
+/// rank placed it in a tier — the ledger is the complete F25 record,
+/// and a tier-ranked noise row that never fetched is exactly the
+/// phantom shape the ledger exists to prevent.
 pub fn triage_hits(
     run_id: &str,
     charter_hash: &str,
@@ -347,6 +579,13 @@ pub fn triage_hits(
             fb_b.cmp(&fb_a)
         })
     });
+    // The permissive partition: noise rows stay in the ranked field
+    // (parity — see the doc comment) but never enter the fetch queue.
+    let candidates: Vec<SearchHit> = hits
+        .iter()
+        .filter(|h| noise_class(&h.url).is_none())
+        .cloned()
+        .collect();
     let k = k.min(hits.len());
     let code_set: Vec<SearchHit> = hits.iter().take(k).cloned().collect();
     let below_cut: Vec<SearchHit> = hits.iter().skip(k).cloned().collect();
@@ -367,8 +606,26 @@ pub fn triage_hits(
     // recorded). The positional form states the same fact without the
     // id, and drops the "beyond-eps-quota" reason branch it had left
     // unreachable (0 of 775 logged ledger rows ever carried it).
+    //
+    // drb1-t2: noise rows are ALWAYS ledgered (tier-ranked or not)
+    // with their class as the reason; non-noise rows below the tier
+    // boundary keep `below-cut` — a rank boundary, never an exclusion
+    // (they remain queue members the round's budget did not reach).
     let mut entries = Vec::new();
     for (rank, hit) in hits.iter().enumerate() {
+        if let Some(class) = noise_class(&hit.url) {
+            entries.push(SkipEntry {
+                url: hit.url.clone(),
+                title: hit.title.clone(),
+                score: hit.score,
+                rank: rank + 1,
+                reason: format!("noise-demoted:{}", class.as_str()),
+                decision: "skip".to_string(),
+                query_id: hit.query_id.clone(),
+                snippet: hit.snippet.clone(),
+            });
+            continue;
+        }
         if rank < k + eps_budget {
             continue;
         }
@@ -404,6 +661,8 @@ pub fn triage_hits(
         run_id,
         round,
         hits = hits.len(),
+        noise_demoted = hits.len() - candidates.len(),
+        candidates = candidates.len(),
         k,
         eps_quota,
         eps_budget,
@@ -411,7 +670,7 @@ pub fn triage_hits(
         skipped = entries.len(),
         threshold,
         rule = ADMISSION_RULE_SCORE_THEN_FIGURE,
-        "triage decided"
+        "triage decided (drb1-t2: permissive — noise demoted, budget decides the walk)"
     );
 
     TriageResult {
@@ -420,6 +679,7 @@ pub fn triage_hits(
             .cloned()
             .chain(eps_admits.iter().cloned())
             .collect(),
+        candidates,
         outcome: TriageOutcome {
             code_set_k: code_set.iter().map(|h| h.id.clone()).collect(),
             eps_admits: eps_admits.iter().map(|h| h.id.clone()).collect(),

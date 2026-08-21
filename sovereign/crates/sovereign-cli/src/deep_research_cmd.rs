@@ -442,6 +442,22 @@ impl ResearchPort for CliResearchPort {
             self.consent.as_ref(),
         )
         .map_err(|r| format!("fetch refused: {r}"))?;
+        // drb1-t2 (the PDF wall, order drb1-t2): scholarly gold is
+        // often PDF — the logged t7a flight's task 56 admitted four
+        // exact-topic papers that were ALL fetch-refused as binary
+        // (8 urls flight-wide, every one `non-text payload`). A PDF
+        // url now routes to the port-side extractor (pdf-extract
+        // 0.7.12 — the SAME crate+version the corpus ingest path
+        // uses; reuse, not a second extractor), and only non-PDF
+        // binaries keep refusing. The classification is the ONE
+        // accessor (sovereign-core fetch::source_type_of).
+        if sovereign_core::deep_research::fetch::source_type_of(url)
+            == sovereign_core::deep_research::icd::SourceType::Pdf
+        {
+            return fetch_pdf_text(&self.client, url)
+                .await
+                .map_err(|e| format!("fetch {url}: {e}"));
+        }
         sovereign_tools_base::web::extract::fetch_and_extract(&self.client, url)
             .await
             .map_err(|e| format!("fetch {url}: {e}"))
@@ -588,6 +604,107 @@ const MAX_SHED_RETRIES: usize = 3;
 /// the mesh's yield-refusal default (sovereign-mesh decision_log.rs
 /// YIELD_REFUSAL_DEFAULT_BACKOFF_SECS).
 const SHED_DEFAULT_BACKOFF_SECS: u64 = 5;
+
+/// drb1-t2 — fetch a PDF url and extract its text (the PDF wall).
+///
+/// REUSE (§19, the order's inventory answer): the extraction is
+/// `pdf-extract 0.7.12` — the SAME crate+version the corpus ingest
+/// path runs (`sovereign-tools`' `local_corpus::extract_stage`), so
+/// there is ONE PDF-to-text implementation in the workspace and this
+/// is a second CALLER of it, not a second extractor. The panic guard
+/// here is required (a `pdf-extract` panic — its DeviceN colour-space
+/// path `unimplemented!()`s — would otherwise unwind the whole
+/// research run); the corpus path's stdout-silencing is NOT
+/// duplicated (that lives with its wrapper in sovereign-tools, out of
+/// this change's landing paths — filed for the seat as a lift-to-
+/// tools-base item: one shared panic-safe, silenced PDF accessor for
+/// both paths). A PDF whose extraction fails (encrypted, malformed,
+/// panic) is a typed error the fetch leg journals and classifies —
+/// never a window-poisoning payload.
+///
+/// The extracted text is capped at the evidence chunk cap (12k chars,
+/// `sovereign_core::deep_research::fetch::CHUNK_CONTENT_CAP` — the
+/// ONE cap const): PDFs deliver full body text where the HTML path's
+/// 4k cut (frozen in sovereign-tools-base) delivers chrome-heavy
+/// prefixes. An HTML page served AT a .pdf url extracts as HTML
+/// (the shared `extract_text_from_html`), and a non-PDF binary keeps
+/// the port's named refusal shape so the fetch leg's health
+/// classifier still sees `non-text payload`.
+async fn fetch_pdf_text(client: &reqwest::Client, url: &str) -> Result<String, String> {
+    let response = client
+        .get(url)
+        .header(
+            "User-Agent",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
+             (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        )
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch {url}: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("HTTP {} for {url}", response.status()));
+    }
+    let content_type = response
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("")
+        .to_lowercase();
+    let body = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read response from {url}: {e}"))?;
+    let is_pdf = body.starts_with(b"%PDF") || content_type.starts_with("application/pdf");
+    if !is_pdf {
+        // A .pdf url that served HTML (a soft-404 landing page, an
+        // HTML viewer) extracts as HTML — the shared extractor.
+        let html = String::from_utf8_lossy(&body);
+        let text = sovereign_tools_base::web::extract::extract_text_from_html(&html);
+        let capped: String = text
+            .chars()
+            .take(sovereign_core::deep_research::fetch::CHUNK_CONTENT_CAP)
+            .collect();
+        return Ok(capped);
+    }
+    extract_pdf_bytes(&body).await
+}
+
+/// The PDF bytes → text half of the fetch path (drb1-t2): bytes →
+/// staging file → the extractor under `catch_unwind` on the blocking
+/// pool → text capped at the evidence chunk cap. `pdf_extract::
+/// extract_text` is CPU-bound and panics on some malformed inputs —
+/// both are the blocking task's problem, and the panic becomes a
+/// typed error (the unit-tested half of `fetch_pdf_text`).
+async fn extract_pdf_bytes(body: &[u8]) -> Result<String, String> {
+    let tmp = tempfile::Builder::new()
+        .prefix("drb1-t2-fetch-")
+        .suffix(".pdf")
+        .tempfile()
+        .map_err(|e| format!("pdf staging file: {e}"))?;
+    std::fs::write(tmp.path(), body).map_err(|e| format!("pdf staging write: {e}"))?;
+    let path = tmp.path().to_path_buf();
+    let extracted = tokio::task::spawn_blocking(move || {
+        use std::panic::{catch_unwind, AssertUnwindSafe};
+        catch_unwind(AssertUnwindSafe(|| pdf_extract::extract_text(&path)))
+    })
+    .await
+    .map_err(|e| format!("pdf extraction task failed: {e}"))?
+    .map_err(|payload| {
+        // Same downcast discipline as the corpus path's wrapper.
+        let msg = payload
+            .downcast_ref::<&'static str>()
+            .map(|s| s.to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_else(|| "unknown pdf-extract panic".to_string());
+        format!("pdf-extract panicked during extraction: {msg}")
+    })?
+    .map_err(|e| format!("pdf extraction failed: {e}"))?;
+    let capped: String = extracted
+        .chars()
+        .take(sovereign_core::deep_research::fetch::CHUNK_CONTENT_CAP)
+        .collect();
+    Ok(capped)
+}
 
 /// Is this inference error the daemon's shed shape (503 busy /
 /// overloaded / shutting down)? Mirrors the mesh's `looks_shed`
@@ -1098,6 +1215,12 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         max_rounds,
         code_set_k,
         eps_quota,
+        // drb1-t2: the content admission floors — one decider, the
+        // acquisition consts (the charter records them; no CLI flag
+        // until the seat asks for one).
+        content_coverage_floor:
+            sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+        prose_line_floor: sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
         evidence_window_max_chunks: 20,
         estate_corpus_ids: corpora,
         web_backend,
@@ -1680,8 +1803,8 @@ fn now_unix() -> i64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        complete_with_shed_retry, looks_shed, shed_retry_hint_secs, write_race_render,
-        MAX_SHED_RETRIES,
+        complete_with_shed_retry, extract_pdf_bytes, looks_shed, shed_retry_hint_secs,
+        write_race_render, MAX_SHED_RETRIES,
     };
     use futures::Stream;
     use sovereign_contracts::error::Error as ContractError;
@@ -2006,5 +2129,68 @@ mod tests {
         // evidence shows the loop client sees (seed-05: "Inference
         // error: Remote API returned 503 ...").
         assert_eq!(err, "Inference error: connection refused");
+    }
+
+    /// A minimal single-page PDF with a known text object — built
+    /// with computed xref offsets so the fixture is deterministic,
+    /// self-contained, and needs no vendored binary.
+    fn minimal_pdf(text: &str) -> Vec<u8> {
+        let content = format!("BT /F1 12 Tf 72 720 Td ({text}) Tj ET");
+        let objs: Vec<String> = vec![
+            "<< /Type /Catalog /Pages 2 0 R >>".to_string(),
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>".to_string(),
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>".to_string(),
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>".to_string(),
+            format!("<< /Length {} >>\nstream\n{}\nendstream", content.len(), content),
+        ];
+        let mut out = String::from("%PDF-1.4\n");
+        let mut offsets = Vec::new();
+        for (i, body) in objs.iter().enumerate() {
+            offsets.push(out.len());
+            out.push_str(&format!("{} 0 obj\n{}\nendobj\n", i + 1, body));
+        }
+        let xref_pos = out.len();
+        out.push_str(&format!("xref\n0 {}\n", objs.len() + 1));
+        out.push_str("0000000000 65535 f \n");
+        for off in offsets {
+            out.push_str(&format!("{off:010} 00000 n \n"));
+        }
+        out.push_str(&format!(
+            "trailer\n<< /Size {} /Root 1 0 R >>\nstartxref\n{xref_pos}\n%%EOF\n",
+            objs.len() + 1
+        ));
+        out.into_bytes()
+    }
+
+    /// RED `pdf_bytes_extract_to_text` (order drb1-t2, the PDF wall):
+    /// PDF bytes extract to text through the port's PDF path — the
+    /// SAME extractor (pdf-extract 0.7.12) the corpus ingest uses, so
+    /// the logged flight's fetch-refused-as-binary scholarly PDFs
+    /// (task 56: four exact-topic papers, `non-text payload`) become
+    /// window-admissible content. A malformed PDF is a typed error,
+    /// never a panic and never a window-poisoning payload.
+    #[tokio::test]
+    async fn pdf_bytes_extract_to_text() {
+        let bytes = minimal_pdf("A Simple Approach to Analyzing Asymmetric First Price Auctions");
+        let text = extract_pdf_bytes(&bytes)
+            .await
+            .expect("extraction succeeds");
+        assert!(
+            text.contains("Asymmetric"),
+            "the paper's title text survives extraction: {text:?}"
+        );
+        assert!(
+            text.contains("Auctions"),
+            "the extraction is text, not glyph soup: {text:?}"
+        );
+        // The task-56 gold shape: the brocku title's words are present.
+        assert!(text.to_lowercase().contains("first price auctions"));
+
+        // A malformed PDF is a typed error (the panic guard holds —
+        // the run never dies inside the fetch leg).
+        let err = extract_pdf_bytes(b"%PDF-1.4 not actually a pdf")
+            .await
+            .expect_err("malformed bytes must error");
+        assert!(!err.is_empty());
     }
 }

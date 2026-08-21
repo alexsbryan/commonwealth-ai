@@ -30,8 +30,8 @@
 
 use super::containment::{citation_handles, containment_witness, ContainmentConfig};
 use super::icd::{
-    ClaimVerdict, CorroborationRecord, EmptyRoundReason, EmptyWindow, EvidenceWindow,
-    FetchFailure, Gap, GapList, GateAction, Verdict, WitnessRecord,
+    ClaimVerdict, CorroborationRecord, EmptyRoundReason, EmptyWindow, EvidenceWindow, FetchFailure,
+    Gap, GapList, GateAction, Verdict, WitnessRecord,
 };
 use crate::oicp::ShardingPrivacy;
 use crate::runtime::grounding::{claim_violation_joint, grounding_gate_threshold};
@@ -218,16 +218,22 @@ pub fn empty_round_reason(window: &EvidenceWindow) -> Option<EmptyRoundReason> {
     }
     let failed = !window.fetch_failures.is_empty();
     let refused = !window.dedup_refused.is_empty();
+    // drb1-t2: pages WERE fetched but every one was content-refused —
+    // its own named shape (budget spent, no evidence; the refusals
+    // carry their reasons on the window).
+    let content_refused = !window.content_refused.is_empty();
 
     // drb1-r1 Item 2: Check if any failure exhausted retries
     let retries_exhausted = window.fetch_failures.iter().any(|f| f.retries > 0);
 
-    match (failed, refused, retries_exhausted) {
-        (true, true, _) => Some(EmptyRoundReason::Mixed),
-        (true, false, true) => Some(EmptyRoundReason::RetriesExhausted),
-        (true, false, false) => Some(EmptyRoundReason::Failed),
-        (false, true, _) => Some(EmptyRoundReason::Refused),
-        (false, false, _) => Some(EmptyRoundReason::NoAdmits),
+    match (failed, refused, content_refused, retries_exhausted) {
+        (true, true, _, _) => Some(EmptyRoundReason::Mixed),
+        (true, false, _, true) => Some(EmptyRoundReason::RetriesExhausted),
+        (true, false, _, false) => Some(EmptyRoundReason::Failed),
+        (false, true, true, _) => Some(EmptyRoundReason::Mixed),
+        (false, true, false, _) => Some(EmptyRoundReason::Refused),
+        (false, false, true, _) => Some(EmptyRoundReason::ContentRefused),
+        (false, false, false, _) => Some(EmptyRoundReason::NoAdmits),
     }
 }
 
@@ -677,8 +683,8 @@ pub fn run_tau() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use async_trait::async_trait;
     use crate::types::Custody;
+    use async_trait::async_trait;
     use futures::Stream;
     use std::pin::Pin;
 
@@ -1678,6 +1684,7 @@ mod tests {
         round: u32,
         fetch_failures: Vec<FetchFailure>,
         dedup_refused: Vec<String>,
+        content_refused: Vec<crate::deep_research::icd::ContentRefusal>,
     ) -> EvidenceWindow {
         EvidenceWindow {
             icd: "evidence_window".to_string(),
@@ -1688,6 +1695,7 @@ mod tests {
             chunks: Vec::new(),
             fetch_failures,
             dedup_refused,
+            content_refused,
             derived_custody: "public-web".to_string(),
         }
     }
@@ -1700,8 +1708,12 @@ mod tests {
             2,
             Vec::new(),
             vec!["https://estate.example/seed-02".to_string()],
+            Vec::new(),
         );
-        assert_eq!(empty_round_reason(&refused), Some(EmptyRoundReason::Refused));
+        assert_eq!(
+            empty_round_reason(&refused),
+            Some(EmptyRoundReason::Refused)
+        );
 
         // Failed: admitted fetches errored, nothing refused.
         let failed = empty_window(
@@ -1711,7 +1723,9 @@ mod tests {
                 error: "fetch failed".to_string(),
                 absent: false,
                 retries: 0,
+                health: crate::deep_research::icd::UrlHealth::Dead,
             }],
+            Vec::new(),
             Vec::new(),
         );
         assert_eq!(empty_round_reason(&failed), Some(EmptyRoundReason::Failed));
@@ -1724,7 +1738,9 @@ mod tests {
                 error: "fetch failed after retries".to_string(),
                 absent: false,
                 retries: 2,
+                health: crate::deep_research::icd::UrlHealth::Dead,
             }],
+            Vec::new(),
             Vec::new(),
         );
         assert_eq!(
@@ -1740,20 +1756,42 @@ mod tests {
                 error: "fetch failed".to_string(),
                 absent: false,
                 retries: 0,
+                health: crate::deep_research::icd::UrlHealth::Dead,
             }],
             vec!["https://estate.example/seed-02".to_string()],
+            Vec::new(),
         );
         assert_eq!(empty_round_reason(&mixed), Some(EmptyRoundReason::Mixed));
 
+        // drb1-t2 ContentRefused: pages WERE fetched but every one was
+        // content-refused at the post-fetch gate — budget spent, no
+        // evidence; its own named shape, not NoAdmits and not Failed.
+        let content_refused = empty_window(
+            3,
+            Vec::new(),
+            Vec::new(),
+            vec![crate::deep_research::icd::ContentRefusal {
+                url: "https://example.com/chrome".to_string(),
+                title: "A Listing Page".to_string(),
+                coverage: 0.083,
+                prose_line: 42,
+                reason: "content-below-threshold".to_string(),
+            }],
+        );
+        assert_eq!(
+            empty_round_reason(&content_refused),
+            Some(EmptyRoundReason::ContentRefused)
+        );
+
         // NoAdmits: nothing was admitted to fetch at all.
-        let no_admits = empty_window(3, Vec::new(), Vec::new());
+        let no_admits = empty_window(3, Vec::new(), Vec::new(), Vec::new());
         assert_eq!(
             empty_round_reason(&no_admits),
             Some(EmptyRoundReason::NoAdmits)
         );
 
         // A round that ADDED evidence is not an empty round.
-        let mut populated = empty_window(1, Vec::new(), Vec::new());
+        let mut populated = empty_window(1, Vec::new(), Vec::new(), Vec::new());
         populated.chunks.push(super::super::icd::WindowChunk {
             id: "ev-1".to_string(),
             locator: "l".to_string(),

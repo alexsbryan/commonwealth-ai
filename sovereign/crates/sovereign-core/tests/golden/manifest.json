@@ -2,7 +2,7 @@
   "icd": "manifest",
   "version": 1,
   "run_id": "run-meridian-1",
-  "charter_hash": "e55d99dbe827fc3f",
+  "charter_hash": "3ab42923e19a639d",
   "terminal_state": "done-partial",
   "aborted_at_round": null,
   "truncation_declared": true,

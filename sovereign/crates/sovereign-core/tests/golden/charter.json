@@ -15,7 +15,9 @@
     },
     "triage": {
       "code_set_k": 2,
-      "eps_quota": 0.5
+      "eps_quota": 0.5,
+      "content_coverage_floor": 0.25,
+      "prose_line_floor": 500
     },
     "budget": {
       "web_search_queries": 4,

@@ -9,11 +9,29 @@
 //! window creation (R-7). Fetch failures are recorded absent per-source
 //! (F17); the terminal-state poll gates the whole leg — an unreachable
 //! terminal records every planned fetch as absent and spends nothing.
+//!
+//! drb1-t2 (order drb1-t2, campaign drb1-race — the AIQ §1.3 ph.3
+//! fetch-then-judge shape adopted at this seam): the walk queue is the
+//! round's FULL non-noise candidate list (triage's `candidates`), the
+//! round's fetch share caps the spend (the r2b split applied to the
+//! fetch family), failures fall through to the next candidate — with
+//! same-query affinity (the AIQ preferred/fallback shape: a failed top
+//! pick's query gets its next candidate first) — permanent error
+//! classes do not retry, and every SUCCESSFUL fetch is judged on
+//! CONTENT before it enters the window (`acquisition::judge_content`,
+//! the one admission scorer on the content surface). Fetched-but-
+//! refused pages are recorded on the window's `content_refused` with
+//! the measured score and named reason, and every fetched source lands
+//! in the per-run source registry rows this returns (AIQ §1.4 — the
+//! T3 writer's citation whitelist surface).
 
-use super::acquisition::admitted_ids;
+use super::acquisition::{admitted_ids, judge_content};
 use super::budget::{SpendDecider, FAMILY_WEB_FETCH, KEY_FETCH_PAGES};
 use super::estate::ResearchPort;
-use super::icd::{EvidenceWindow, FetchFailure, FetchList, SearchHit, WindowChunk};
+use super::icd::{
+    ContentRefusal, EvidenceWindow, FetchFailure, FetchList, SearchHit, SourceRegistryRow,
+    SourceType, UrlHealth, WindowChunk,
+};
 use crate::types::{join_custody, Custody};
 
 /// The per-chunk content cap — a fetched page larger than this is
@@ -35,19 +53,119 @@ pub fn cap_content(body: &str) -> String {
     }
 }
 
-/// Fetch the round's admitted hits into the evidence window. `at_unix`
-/// is the run's round timestamp (journaled into the budget ledger).
-/// Returns the raw window (pre-tags); enrichment (R7) runs after.
+/// The retry classification for a fetch error — the ONE classifier
+/// (a closed set over OUR OWN port's error formats, never a guess
+/// about arbitrary text): `Permanent` outcomes cannot improve with a
+/// retry (binary refusal, HTTP failure status) and get a single
+/// attempt; everything else — including unclassifiable text — keeps
+/// drb1-r1's transient retry-with-backoff, conservatively. Measured on
+/// the logged t7a flight: all 12 recorded fetch failures are binary
+/// refusals (permanent), so retry-everything burned 3 budget units
+/// per unfetchable URL with zero recoveries.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RetryClass {
+    /// Retry with backoff (drb1-r1's shape: 3 total attempts).
+    Transient,
+    /// One attempt, no retry — the outcome cannot change.
+    Permanent(UrlHealth),
+}
+
+/// Classify a port fetch error. Markers are the exact formats our own
+/// port emits (`deep_research_cmd.rs` / `sovereign-tools-base`):
+/// binary refusal carries `non-text payload`, HTTP failures carry
+/// `HTTP <code> for`. Unknown text classifies Transient — the safe
+/// default drb1-r1 shipped.
+pub fn classify_fetch_error(error: &str) -> RetryClass {
+    if error.contains("non-text payload") {
+        return RetryClass::Permanent(UrlHealth::Binary);
+    }
+    // "HTTP 404 for …" / "HTTP 503 for …" — a failure status is
+    // permanent on the run's timescale.
+    if let Some(rest) = error.strip_prefix("HTTP ") {
+        if rest.chars().next().is_some_and(|c| c.is_ascii_digit()) {
+            return RetryClass::Permanent(UrlHealth::HttpStatus);
+        }
+    }
+    if error.contains("HTTP 4") || error.contains("HTTP 5") {
+        return RetryClass::Permanent(UrlHealth::HttpStatus);
+    }
+    RetryClass::Transient
+}
+
+/// The fetch surface that served a URL — the registry's `type`. One
+/// accessor (the fetch leg, the port's PDF routing, and the replay
+/// harness all call THIS).
+pub fn source_type_of(url: &str) -> SourceType {
+    if url.starts_with("estate:") {
+        return SourceType::Estate;
+    }
+    let lower = url.to_ascii_lowercase();
+    // Strip a query string/fragment before the extension check.
+    let path = lower.split(['?', '#']).next().unwrap_or(&lower);
+    if path.ends_with(".pdf") {
+        return SourceType::Pdf;
+    }
+    SourceType::Web
+}
+
+/// The round's fetch outcome: the window plus the registry rows the
+/// round contributed (every FETCHED source — window-admitted or
+/// content-refused).
+#[derive(Debug, Clone)]
+pub struct FetchRoundOutcome {
+    pub window: EvidenceWindow,
+    pub registry_rows: Vec<SourceRegistryRow>,
+}
+
+/// The round's fetch policy (drb1-t2) — the whitelisted knobs the
+/// fetch leg reads, threaded from the charter through RunConfig:
+/// the round's fetch share (the r2b split over the fetch family —
+/// `usize::MAX` when the caller does not split) and the content
+/// admission floors (see `acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR`
+/// for the calibration record).
+#[derive(Debug, Clone)]
+pub struct FetchPolicy {
+    pub round_fetch_cap: usize,
+    pub content_coverage_floor: f64,
+    pub prose_line_floor: usize,
+}
+
+impl Default for FetchPolicy {
+    fn default() -> Self {
+        Self {
+            round_fetch_cap: usize::MAX,
+            content_coverage_floor: super::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+            prose_line_floor: super::acquisition::DEFAULT_PROSE_LINE_FLOOR,
+        }
+    }
+}
+
+/// drb1-r1 Item 2: the transient retry ceiling (3 total attempts).
+const MAX_RETRIES: u32 = 2;
+
+/// Fetch the round's candidate queue into the evidence window.
+/// `at_unix` is the run's round timestamp (journaled into the budget
+/// ledger). Returns the raw window (pre-tags) plus the registry rows;
+/// enrichment (R7) runs after.
 ///
 /// Dedup (order deep-research-t1d fix 1): `already_fetched` carries the
-/// URLs fetched by prior rounds (the run's `fetched_sources`). An
-/// admitted hit whose URL was already fetched — in a prior round or
+/// URLs fetched by prior rounds (the run's `fetched_sources`). A
+/// candidate whose URL was already fetched — in a prior round or
 /// earlier in THIS round — is refused: no decider call (refusals spend
 /// no budget), no port call, and the URL recorded on the window's
 /// `dedup_refused`. Refusals are not fetch failures: the source was
 /// acquired once and is never re-fetched (the merged window already
 /// dedups chunks by URL — first wins — so the evidence is untouched;
 /// only the re-fetch and its spend are refused).
+///
+/// drb1-t2: `candidates` is the triage queue (all non-noise ranked
+/// rows) — not just the K ∪ ε tiers; the walk is bounded by
+/// `policy.round_fetch_cap` (the r2b round split over the fetch
+/// family) and by the decider itself, and admission to the window is
+/// decided on CONTENT after fetch. Tier members the walk never reached
+/// are recorded as failures (`round-cap` / `budget-refused`) — never
+/// silently un-ledgered.
+#[allow(clippy::too_many_arguments)]
 pub async fn fetch_round(
     port: &dyn ResearchPort,
     decider: &mut SpendDecider,
@@ -55,55 +173,72 @@ pub async fn fetch_round(
     charter_hash: &str,
     round: u32,
     fetch_list: &FetchList,
-    hits: &[SearchHit],
+    candidates: &[SearchHit],
     already_fetched: &[String],
     at_unix: i64,
-) -> Result<EvidenceWindow, String> {
+    policy: &FetchPolicy,
+) -> Result<FetchRoundOutcome, String> {
     // F17 terminal-state poll first: an unreachable terminal means the
     // leg spends nothing and every planned fetch is recorded absent.
     if let Err(e) = port.terminal_poll().await {
-        let failures: Vec<FetchFailure> = admitted_ids(fetch_list)
+        let failures: Vec<FetchFailure> = candidates
             .iter()
-            .map(|id| FetchFailure {
-                url: hits
-                    .iter()
-                    .find(|h| &h.id == id)
-                    .map(|h| h.url.clone())
-                    .unwrap_or_else(|| id.clone()),
+            .map(|hit| FetchFailure {
+                url: hit.url.clone(),
                 error: format!("terminal-poll-failed: {e}"),
                 absent: true,
                 retries: 0,
+                health: UrlHealth::Terminal,
             })
             .collect();
-        return Ok(EvidenceWindow {
-            icd: "evidence_window".to_string(),
-            version: super::icd::ICD_VERSION,
-            run_id: run_id.to_string(),
-            charter_hash: charter_hash.to_string(),
-            round,
-            chunks: Vec::new(),
-            fetch_failures: failures,
-            dedup_refused: Vec::new(),
-            derived_custody: Custody::PublicWeb.as_str().to_string(),
+        return Ok(FetchRoundOutcome {
+            window: EvidenceWindow {
+                icd: "evidence_window".to_string(),
+                version: super::icd::ICD_VERSION,
+                run_id: run_id.to_string(),
+                charter_hash: charter_hash.to_string(),
+                round,
+                chunks: Vec::new(),
+                fetch_failures: failures,
+                dedup_refused: Vec::new(),
+                content_refused: Vec::new(),
+                derived_custody: Custody::PublicWeb.as_str().to_string(),
+            },
+            registry_rows: Vec::new(),
         });
     }
+
+    let query_text = |hit: &SearchHit| -> String {
+        fetch_list
+            .queries
+            .iter()
+            .find(|q| q.id == hit.query_id)
+            .map(|q| q.text.clone())
+            .unwrap_or_default()
+    };
 
     let mut chunks: Vec<WindowChunk> = Vec::new();
     let mut failures: Vec<FetchFailure> = Vec::new();
     let mut refused: Vec<String> = Vec::new();
+    let mut content_refused: Vec<ContentRefusal> = Vec::new();
+    let mut registry_rows: Vec<SourceRegistryRow> = Vec::new();
     // The dedup set: prior rounds' URLs plus this round's as it fills.
     let mut fetched: Vec<String> = already_fetched.to_vec();
     let mut index = 0usize;
-    for id in admitted_ids(fetch_list) {
-        let Some(hit) = hits.iter().find(|h| h.id == id) else {
-            failures.push(FetchFailure {
-                url: id.clone(),
-                error: "hit-missing-from-round".to_string(),
-                absent: true,
-                retries: 0,
-            });
-            continue;
-        };
+    let mut spent_round = 0usize;
+    // The walk queue, in rank order. On a failure the next SAME-QUERY
+    // candidate is promoted to the front (AIQ's per-query fallback
+    // shape: the failed top pick's query gets first claim on the freed
+    // budget, instead of the round-global next rank starving it).
+    let mut queue: Vec<SearchHit> = candidates.to_vec();
+    while !queue.is_empty() {
+        // The round's fetch share (the r2b split over the fetch
+        // family): the gap rounds keep their ammunition. The decider's
+        // global allowance still binds underneath.
+        if spent_round >= policy.round_fetch_cap {
+            break;
+        }
+        let hit = queue.remove(0);
         // Dedup gate: an already-fetched URL is refused — no decider
         // call (spends nothing), no port call, recorded on the window.
         if fetched.iter().any(|u| u == &hit.url) {
@@ -116,7 +251,7 @@ pub async fn fetch_round(
         // URL whose fetch FAILED earlier in this run is refused — no
         // decider call (refusals spend no budget), no port call, the
         // URL recorded on the window's dedup_refused with the
-        // fetched-dedup refusals. t1d's dedup refused only
+        // fetched-dedup refusals. t1d's dedup only refused
         // already-FETCHED URLs; the task-56 shape re-admitted the same
         // 4 failing PDF URLs every round and re-spent the allowance
         // (12/12 spent on 4 unique URLs, every fetch an error).
@@ -126,17 +261,19 @@ pub async fn fetch_round(
             }
             continue;
         }
-        // drb1-r1 Item 2: fetch retry with exponential backoff.
-        // Retry up to 2 times (3 total attempts) before recording failure.
-        // Each retry attempt consumes budget via decider.allow().
+        // drb1-r1 Item 2 + drb1-t2: fetch retry with exponential
+        // backoff, bounded by the error's retry class — permanent
+        // classes (binary refusal, HTTP failure status) get ONE
+        // attempt; transient/unknown keep the 3-attempt ceiling. Each
+        // attempt consumes budget via decider.allow().
         let mut body = None;
         let mut last_error = None;
         let mut retry_count_used = 0u32;
-        const MAX_RETRIES: u32 = 2;
+        let mut health = UrlHealth::Dead;
 
         for retry_count in 0..=MAX_RETRIES {
-            // The ONE decider gate — no Allow, no fetch. Each retry attempt
-            // must consume budget separately.
+            // The ONE decider gate — no Allow, no fetch. Each retry
+            // attempt must consume budget separately.
             let verdict = decider
                 .allow(FAMILY_WEB_FETCH, KEY_FETCH_PAGES, 1, at_unix)
                 .await?;
@@ -146,9 +283,11 @@ pub async fn fetch_round(
                     error: "budget-refused".to_string(),
                     absent: true,
                     retries: retry_count_used,
+                    health: UrlHealth::BudgetRefused,
                 });
                 break;
             }
+            spent_round += 1;
 
             match port.web_fetch(&hit.url).await {
                 Ok(b) => {
@@ -158,6 +297,12 @@ pub async fn fetch_round(
                 Err(e) => {
                     last_error = Some(e);
                     retry_count_used = retry_count;
+                    let class = classify_fetch_error(last_error.as_deref().unwrap_or_default());
+                    if let RetryClass::Permanent(h) = class {
+                        health = h;
+                        break;
+                    }
+                    health = UrlHealth::Dead;
                     if retry_count < MAX_RETRIES {
                         let backoff_ms = 1000 * 2_u64.pow(retry_count);
                         tracing::debug!(
@@ -173,66 +318,172 @@ pub async fn fetch_round(
             }
         }
 
-        let body = match body {
-            Some(b) => b,
-            None => {
-                // All retries exhausted — record as failure and mark URL dead.
-                let error = last_error.unwrap();
-                // The URL is dead for the rest of the run: a later
-                // round's fetch list re-admitting it is refused with
-                // no decider call and no re-spend (the task-56 shape).
-                // A dead-record persistence failure does not abort the
-                // round — the failure row still records the fetch
-                // error; the in-memory gate holds for the live run.
-                if let Err(j) = decider.record_fetch_dead(&hit.url) {
-                    tracing::warn!(
-                        url = %hit.url,
-                        error = %j,
-                        "deep-research: fetch-dead record failed — the URL is dead in memory only"
-                    );
-                }
-                failures.push(FetchFailure {
-                    url: hit.url.clone(),
-                    error: error.clone(),
-                    absent: true,
-                    retries: retry_count_used,
-                });
-                continue;
+        let Some(body) = body else {
+            // All retries exhausted — record as failure and mark URL
+            // dead. The URL is dead for the rest of the run: a later
+            // round's fetch list re-admitting it is refused with no
+            // decider call and no re-spend (the task-56 shape). A
+            // dead-record persistence failure does not abort the
+            // round — the failure row still records the fetch error;
+            // the in-memory gate holds for the live run.
+            let error = last_error.unwrap();
+            if let Err(j) = decider.record_fetch_dead(&hit.url) {
+                tracing::warn!(
+                    url = %hit.url,
+                    error = %j,
+                    "deep-research: fetch-dead record failed — the URL is dead in memory only"
+                );
             }
+            failures.push(FetchFailure {
+                url: hit.url.clone(),
+                error: error.clone(),
+                absent: true,
+                retries: retry_count_used,
+                health,
+            });
+            // The fallback promotion (drb1-t2): the failed pick's
+            // query gets its next candidate first.
+            promote_next_same_query(&mut queue, &hit.query_id);
+            continue;
         };
-        // Custody stamped HERE, by code, FROM THE HIT'S STAMP (t1g rung
-        // 2): the port stamps custody at the source (estate hits are
-        // `personal` — a local corpus is the operator's own data), and
-        // the window chunk keeps that stamp — an estate chunk is never
-        // re-stamped public-web. The single production construction
-        // site (acquire_round) always stamps; an empty stamp is
-        // `Unknown` at the join — the audit refuses per-claim on
-        // unknown chunks, never a silent default.
-        index += 1;
+
+        // drb1-t2 — content admission (fetch-then-judge). Estate
+        // retrievals are exempt: their admission already happened on
+        // the estate's own search surface (the index scored the chunk
+        // into the round); the content gate exists for pages the loop
+        // could not see before fetching. Web pages (HTML or
+        // extracted-PDF text) are judged on content.
+        let capped = cap_content(&body);
+        let stype = source_type_of(&hit.url);
+        let verdict = if stype == SourceType::Estate {
+            None
+        } else {
+            Some(judge_content(
+                &query_text(&hit),
+                &hit.title,
+                &capped,
+                &hit.url,
+                policy.content_coverage_floor,
+                policy.prose_line_floor,
+            ))
+        };
+        let admitted = verdict.as_ref().is_none_or(|v| v.admits);
         fetched.push(hit.url.clone());
-        chunks.push(WindowChunk {
-            id: format!("ev-{index}"),
-            locator: hit.url.clone(),
-            source_url: hit.url.clone(),
-            custody: hit.custody.clone(),
-            provenance_class: "known".to_string(),
-            content: cap_content(&body),
-            ingested_into: None,
-            tags: Vec::new(),
+        if admitted {
+            // Custody stamped HERE, by code, FROM THE HIT'S STAMP (t1g
+            // rung 2): the port stamps custody at the source (estate
+            // hits are `personal` — a local corpus is the operator's
+            // own data), and the window chunk keeps that stamp — an
+            // estate chunk is never re-stamped public-web. The single
+            // production construction site (acquire_round) always
+            // stamps; an empty stamp is `Unknown` at the join — the
+            // audit refuses per-claim on unknown chunks, never a
+            // silent default.
+            index += 1;
+            chunks.push(WindowChunk {
+                id: format!("ev-{index}"),
+                locator: hit.url.clone(),
+                source_url: hit.url.clone(),
+                custody: hit.custody.clone(),
+                provenance_class: "known".to_string(),
+                content: capped,
+                ingested_into: None,
+                tags: Vec::new(),
+            });
+        } else {
+            let v = verdict.expect("admitted false implies verdict is Some");
+            content_refused.push(ContentRefusal {
+                url: hit.url.clone(),
+                title: hit.title.clone(),
+                coverage: v.coverage,
+                prose_line: v.prose_line,
+                reason: v.reason.clone(),
+            });
+            tracing::debug!(
+                target: "deep_research",
+                url = %hit.url,
+                coverage = v.coverage,
+                prose_line = v.prose_line,
+                reason = %v.reason,
+                "drb1-t2: fetched page content-refused (recorded, never silently un-ledgered)"
+            );
+        }
+        // The registry (drb1-t2, AIQ §1.4): every FETCHED source —
+        // admitted or content-refused — is a citation-whitelist row.
+        registry_rows.push(SourceRegistryRow {
+            url: hit.url.clone(),
+            title: hit.title.clone(),
+            source_type: stype,
+            round,
+            admitted,
         });
     }
 
-    Ok(EvidenceWindow {
-        icd: "evidence_window".to_string(),
-        version: super::icd::ICD_VERSION,
-        run_id: run_id.to_string(),
-        charter_hash: charter_hash.to_string(),
-        round,
-        chunks,
-        fetch_failures: failures,
-        dedup_refused: refused,
-        derived_custody: Custody::PublicWeb.as_str().to_string(),
+    // Tier members the walk never reached (the round cap or the
+    // decider stopped it mid-queue) are recorded — never silently
+    // un-ledgered (the phantom-row invariant, fetch-leg side). The
+    // round-cap hold is not a decider refusal: the r2b split reserved
+    // the spend for the later rounds, and the record names that.
+    let tier_ids = admitted_ids(fetch_list);
+    let walked: Vec<String> = chunks
+        .iter()
+        .map(|c| c.source_url.clone())
+        .chain(content_refused.iter().map(|r| r.url.clone()))
+        .chain(failures.iter().map(|f| f.url.clone()))
+        .chain(refused.iter().cloned())
+        .collect();
+    for hit in candidates {
+        if !tier_ids.contains(&hit.id) || walked.contains(&hit.url) {
+            continue;
+        }
+        let round_capped = spent_round >= policy.round_fetch_cap;
+        failures.push(FetchFailure {
+            url: hit.url.clone(),
+            error: if round_capped {
+                "round-fetch-cap".to_string()
+            } else {
+                "budget-refused".to_string()
+            },
+            absent: true,
+            retries: 0,
+            health: if round_capped {
+                UrlHealth::RoundCap
+            } else {
+                UrlHealth::BudgetRefused
+            },
+        });
+    }
+
+    Ok(FetchRoundOutcome {
+        window: EvidenceWindow {
+            icd: "evidence_window".to_string(),
+            version: super::icd::ICD_VERSION,
+            run_id: run_id.to_string(),
+            charter_hash: charter_hash.to_string(),
+            round,
+            chunks,
+            fetch_failures: failures,
+            dedup_refused: refused,
+            content_refused,
+            derived_custody: Custody::PublicWeb.as_str().to_string(),
+        },
+        registry_rows,
     })
+}
+
+/// Promote the next candidate from `query_id`'s fallback list to the
+/// front of the walk queue (AIQ's per-query fallback shape — when the
+/// top pick fails, the same query's next candidate fetches first).
+/// No-op when the failed pick was its query's last candidate.
+fn promote_next_same_query(queue: &mut Vec<SearchHit>, query_id: &str) {
+    if let Some(pos) = queue
+        .iter()
+        .position(|h| h.query_id == query_id)
+        .filter(|&p| p > 0)
+    {
+        let hit = queue.remove(pos);
+        queue.insert(0, hit);
+    }
 }
 
 /// The derived-custody join over a chunk set (R-7): max-restrictiveness
@@ -252,6 +503,9 @@ pub fn derive_custody(chunks: &[WindowChunk]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::deep_research::acquisition::{
+        triage_hits, DEFAULT_CONTENT_COVERAGE_FLOOR, DEFAULT_PROSE_LINE_FLOOR,
+    };
     use crate::deep_research::estate::{AlignmentDecision, EstateListing, PortHit};
     use crate::deep_research::icd::{BudgetLedger, Plan, TriageOutcome, ICD_VERSION};
     use std::collections::HashMap;
@@ -385,6 +639,29 @@ mod tests {
         }
     }
 
+    /// The drb1-t2 fetch tests need query-bearing fetch lists and
+    /// prose-bearing bodies (the content gate reads both); the older
+    /// dedup/dead fixtures below keep their minimal shape — their
+    /// assertions are about the gates, not the content verdicts, and
+    /// an empty query means the prose floor (or absence of a body)
+    /// decides. This policy disables the content gate for those
+    /// legacy-shaped fixtures so they keep pinning THEIR gates.
+    fn content_gate_off() -> FetchPolicy {
+        FetchPolicy {
+            round_fetch_cap: usize::MAX,
+            content_coverage_floor: 0.0,
+            prose_line_floor: 0,
+        }
+    }
+
+    fn production_policy() -> FetchPolicy {
+        FetchPolicy {
+            round_fetch_cap: usize::MAX,
+            content_coverage_floor: DEFAULT_CONTENT_COVERAGE_FLOOR,
+            prose_line_floor: DEFAULT_PROSE_LINE_FLOOR,
+        }
+    }
+
     /// RED (order deep-research-t1d fix 1, declared in
     /// pre-registration.md): "a round-2 fetch of an already-fetched URL
     /// is refused". Failed at HEAD — the round's fetch list admitted the
@@ -434,9 +711,11 @@ mod tests {
                 &hits,
                 &[],
                 1234,
+                &content_gate_off(),
             )
             .await
-            .unwrap();
+            .unwrap()
+            .window;
             let calls = port
                 .calls
                 .lock()
@@ -466,9 +745,11 @@ mod tests {
                 &hits,
                 &[],
                 1000,
+                &content_gate_off(),
             )
             .await
-            .unwrap();
+            .unwrap()
+            .window;
             assert_eq!(first.chunks.len(), 1, "round 1 fetched once");
             let round2 = fetch_round(
                 &port,
@@ -480,9 +761,11 @@ mod tests {
                 &hits,
                 &[url.clone()],
                 2000,
+                &content_gate_off(),
             )
             .await
-            .unwrap();
+            .unwrap()
+            .window;
             assert!(
                 round2.chunks.is_empty(),
                 "round 2 must not re-fetch an already-fetched URL"
@@ -539,9 +822,11 @@ mod tests {
                 &hits,
                 &[],
                 1000,
+                &content_gate_off(),
             )
             .await
-            .unwrap();
+            .unwrap()
+            .window;
             // drb1-r1 Item 2: with retry logic, each failed URL is now retried twice
             // before being marked dead, so we expect 12 port calls (4 URLs * 3 attempts each)
             assert_eq!(
@@ -565,9 +850,11 @@ mod tests {
                     &hits,
                     &[],
                     1000 + i64::from(round),
+                    &content_gate_off(),
                 )
                 .await
-                .unwrap();
+                .unwrap()
+                .window;
                 assert!(w.chunks.is_empty(), "round {round} fetches nothing");
                 assert!(
                     w.fetch_failures.is_empty(),
@@ -595,8 +882,8 @@ mod tests {
             assert_eq!(ledger.refused_urls, urls);
 
             // A resume replays the dead set: the same 4 URLs are refused
-            // without any spend. With retry logic, round 1 spent all 12 (4 URLs × 3
-            // attempts), so the restored state has 0 remaining.
+            // without any spend. With retry logic, round 1 spent all 12 (4 URLs
+            // × 3 attempts), so the restored state has 0 remaining.
             let mut restored = SpendDecider::restore("r-dead", "h", &allowance, &journal).unwrap();
             assert!(
                 urls.iter().all(|u| restored.is_fetch_dead(u)),
@@ -614,9 +901,11 @@ mod tests {
                 &hits,
                 &[],
                 4000,
+                &content_gate_off(),
             )
             .await
-            .unwrap();
+            .unwrap()
+            .window;
             assert!(w.chunks.is_empty() && w.fetch_failures.is_empty());
             assert_eq!(w.dedup_refused, urls);
             // drb1-r1 Item 2: With retry logic, round 1 spent all 12, remaining is 0.
@@ -663,6 +952,7 @@ mod tests {
             chunks: vec![mk("public-web"), mk("peer")],
             fetch_failures: Vec::new(),
             dedup_refused: Vec::new(),
+            content_refused: Vec::new(),
             derived_custody: String::new(),
         };
         assert_eq!(derive_custody(&window.chunks), "peer");
@@ -676,5 +966,717 @@ mod tests {
             ..window
         };
         assert_eq!(derive_custody(&window.chunks), "personal");
+    }
+
+    // -----------------------------------------------------------------
+    // drb1-t2 — fetch-then-judge + the fetch leg (order drb1-t2).
+    // Pre-registered in adversarial/pre-registration.md before the
+    // change; watched red at HEAD (compile-red for the new surface —
+    // FetchPolicy, content_refused, the registry rows, candidates —
+    // none existed; the assertion-level shape is documented per test).
+    // -----------------------------------------------------------------
+
+    /// The task-65 metadata-page shape, byte-identical cuts vendored
+    /// from the logged flight's evidence windows
+    /// (tests/golden/drb1-t2-fetch/).
+    fn golden(name: &str) -> String {
+        let path = format!(
+            "{}/tests/golden/drb1-t2-fetch/{}",
+            env!("CARGO_MANIFEST_DIR"),
+            name
+        );
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {path}: {e}"))
+    }
+
+    fn query_hit(id: &str, qid: &str, url: &str, title: &str) -> SearchHit {
+        SearchHit {
+            id: id.to_string(),
+            query_id: qid.to_string(),
+            url: url.to_string(),
+            title: title.to_string(),
+            snippet: String::new(),
+            content: None,
+            engine: "web".to_string(),
+            score: 1.0,
+            custody: Custody::PublicWeb.as_str().to_string(),
+        }
+    }
+
+    fn fetch_list_queries(q1: &str) -> FetchList {
+        FetchList {
+            icd: "fetch_list".to_string(),
+            version: ICD_VERSION,
+            run_id: "r-t2".to_string(),
+            charter_hash: "h".to_string(),
+            round: 1,
+            queries: vec![crate::deep_research::icd::FormedQuery {
+                id: "q1".to_string(),
+                text: q1.to_string(),
+                from_gap_id: None,
+                formed_by: "gap-template".to_string(),
+                provider: "deterministic".to_string(),
+                corroboration: None,
+            }],
+            search_hits: Vec::new(),
+            triage: TriageOutcome {
+                code_set_k: vec!["h1".to_string()],
+                eps_admits: Vec::new(),
+                below_cut: Vec::new(),
+                threshold: 0.0,
+                eps_quota: 0.0,
+                admission_rule: crate::deep_research::acquisition::ADMISSION_RULE_SCORE_THEN_FIGURE
+                    .to_string(),
+            },
+        }
+    }
+
+    /// RED `jobs_board_row_never_spends_a_fetch` (order drb1-t2): a
+    /// careers-page row inside the code-set K is demoted pre-fetch —
+    /// the port is NEVER called for it, and its skip-ledger row carries
+    /// `noise-demoted`. At HEAD no demotion existed: the row fetched.
+    #[test]
+    fn jobs_board_row_never_spends_a_fetch() {
+        let noise_hit = SearchHit {
+            id: "n1".to_string(),
+            query_id: "q1".to_string(),
+            url: "https://www.okta.com/company/careers/product/senior-product-manager".to_string(),
+            title: "Senior Product Manager, Okta Device".to_string(),
+            snippet: "Apply now for the senior product manager role".to_string(),
+            content: None,
+            engine: "web".to_string(),
+            score: 0.9,
+            custody: Custody::PublicWeb.as_str().to_string(),
+        };
+        let good = query_hit(
+            "h1",
+            "q1",
+            "https://research.example/paper",
+            "A Study of Payment Tablet Devices",
+        );
+        let triaged = triage_hits("r", "h", 1, vec![noise_hit, good], 5, 0.1);
+        assert!(
+            triaged
+                .candidates
+                .iter()
+                .all(|h| !h.url.contains("careers")),
+            "the careers row never enters the fetch queue: {:?}",
+            triaged.candidates
+        );
+        assert!(
+            triaged
+                .skip_ledger
+                .entries
+                .iter()
+                .any(|e| e.url.contains("careers")
+                    && e.reason.starts_with("noise-demoted:careers-path")),
+            "the careers row is ledgered with its noise class: {:?}",
+            triaged.skip_ledger.entries
+        );
+        // And through the fetch leg: the port never sees the noise url.
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let port = CountingPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                bodies: HashMap::from([(
+                    "https://research.example/paper".to_string(),
+                    "A long prose paragraph about payment tablet devices used for payments \
+                     and SaaS applications in commercial settings with figures and detail \
+                     that carries the query terms across the body of the page."
+                        .to_string(),
+                )]),
+            };
+            let tmp = tempfile::tempdir().unwrap();
+            let mut decider = SpendDecider::new(
+                "r-t2",
+                "h",
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 6u32)]),
+                &tmp.path().join("budget-ledger.json"),
+            )
+            .unwrap();
+            let mut fetch_list = fetch_list_queries("payment tablet devices SaaS applications");
+            fetch_list.triage.code_set_k =
+                triaged.candidates.iter().map(|h| h.id.clone()).collect();
+            let out = fetch_round(
+                &port,
+                &mut decider,
+                "r-t2",
+                "h",
+                1,
+                &fetch_list,
+                &triaged.candidates,
+                &[],
+                1234,
+                &production_policy(),
+            )
+            .await
+            .unwrap();
+            assert!(
+                port.calls
+                    .lock()
+                    .unwrap()
+                    .iter()
+                    .all(|u| !u.contains("careers")),
+                "the port is never called for the demoted careers row"
+            );
+            assert_eq!(out.window.chunks.len(), 1);
+        });
+    }
+
+    /// RED `binary_refused_pages_route_to_fallback` (order drb1-t2):
+    /// with the REAL binary-refusal marker, top-pick failures cost one
+    /// attempt each and the walk continues to the next candidates —
+    /// chunks land where HEAD's retry-everything burned the whole
+    /// allowance for zero chunks.
+    #[test]
+    fn binary_refused_pages_route_to_fallback() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            // The two top picks fail with the port's actual binary
+            // refusal text; the next three serve prose bodies.
+            let fail_urls: Vec<String> = (0..2)
+                .map(|i| format!("https://scholar.example/paper-{i}.pdf"))
+                .collect();
+            let ok_urls: Vec<String> = (0..3)
+                .map(|i| format!("https://site.example/article-{i}"))
+                .collect();
+            // A dedicated port for the REAL permanent marker (the
+            // shared FailingPort fixture's error text is deliberately
+            // transient-class for the drb1-r1 retry pins):
+            struct BinaryPort {
+                calls: Arc<Mutex<Vec<String>>>,
+                fail: Vec<String>,
+            }
+            #[async_trait::async_trait]
+            impl ResearchPort for BinaryPort {
+                async fn estate_listing(&self, _c: &[String]) -> Result<EstateListing, String> {
+                    unimplemented!()
+                }
+                async fn estate_search(
+                    &self,
+                    _c: &[String],
+                    _q: &str,
+                    _l: usize,
+                ) -> Result<Vec<PortHit>, String> {
+                    unimplemented!()
+                }
+                async fn web_search(
+                    &self,
+                    _b: &str,
+                    _q: &str,
+                    _l: usize,
+                ) -> Result<Vec<PortHit>, String> {
+                    unimplemented!()
+                }
+                async fn web_fetch(&self, url: &str) -> Result<String, String> {
+                    self.calls.lock().unwrap().push(url.to_string());
+                    if self.fail.iter().any(|u| u == url) {
+                        Err(format!(
+                            "fetch {url}: non-text payload (application/pdf) — binary \
+                             content refused (would poison the evidence window)"
+                        ))
+                    } else {
+                        Ok("A substantial prose paragraph reporting the equilibrium \
+                           bidding functions in asymmetric first-price auctions with \
+                           the supporting figures and comparative statics discussed \
+                           across the paper's sections."
+                            .to_string())
+                    }
+                }
+                async fn terminal_poll(&self) -> Result<(), String> {
+                    Ok(())
+                }
+                async fn draft(
+                    &self,
+                    _p: &str,
+                    _s: Option<&str>,
+                    _u: &[String],
+                ) -> Result<String, String> {
+                    unimplemented!()
+                }
+                async fn alignment_decision(
+                    &self,
+                    _p: &Plan,
+                    _r: &Path,
+                ) -> Result<AlignmentDecision, String> {
+                    Ok(AlignmentDecision::Proceed)
+                }
+            }
+            let port = BinaryPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                fail: fail_urls.clone(),
+            };
+            let mut hits: Vec<SearchHit> = fail_urls
+                .iter()
+                .chain(ok_urls.iter())
+                .enumerate()
+                .map(|(i, u)| query_hit(&format!("h{}", i + 1), "q1", u, "Asymmetric Auctions"))
+                .collect();
+            for (i, h) in hits.iter_mut().enumerate() {
+                h.score = 1.0 - i as f64 * 0.01;
+            }
+            let triaged = triage_hits("r", "h", 1, hits, 2, 0.0);
+            let mut fetch_list = fetch_list_queries("asymmetric first price auctions");
+            fetch_list.triage.code_set_k = vec!["h1".to_string(), "h2".to_string()];
+            let tmp = tempfile::tempdir().unwrap();
+            let mut decider = SpendDecider::new(
+                "r-t2",
+                "h",
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 6u32)]),
+                &tmp.path().join("budget-ledger.json"),
+            )
+            .unwrap();
+            let out = fetch_round(
+                &port,
+                &mut decider,
+                "r-t2",
+                "h",
+                1,
+                &fetch_list,
+                &triaged.candidates,
+                &[],
+                1234,
+                &production_policy(),
+            )
+            .await
+            .unwrap();
+            assert_eq!(
+                port.calls.lock().unwrap().len(),
+                5,
+                "two permanent binary failures (one attempt each) + three fallback fetches"
+            );
+            assert_eq!(
+                out.window.chunks.len(),
+                3,
+                "the fallback candidates land chunks where HEAD burned the allowance on retries"
+            );
+            assert!(out
+                .window
+                .fetch_failures
+                .iter()
+                .all(|f| f.health == UrlHealth::Binary));
+            assert_eq!(
+                decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES),
+                1,
+                "5 spends of the 6 allowance (no retry on permanent failures)"
+            );
+        });
+    }
+
+    /// RED `metadata_only_page_is_content_rejected_with_reason` (order
+    /// drb1-t2): a task-65-shaped page (the vendored byte-identical
+    /// recorded cuts) is fetched then content-rejected — no chunk, the
+    /// refusal recorded WITH score and reason, and the source
+    /// registered. At HEAD the chunk landed in the window unjudged.
+    #[test]
+    fn metadata_only_page_is_content_rejected_with_reason() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            // The chrome cut's recorded query (task 58 round 1, q1 —
+            // byte-exact from the flight's fetch-list-1.json): the
+            // content verdict is query-relative, so the pin replays
+            // the query the calibration measured (coverage 0.19,
+            // longest line 138 — both under the floors).
+            let chrome_query = "Exploring Horizontal Gene Transfer (HGT) in Plants and animals \
+                 (ie Non-Microbial Systems)\nYou could examine instances of horizontal gene \
+                 transfer in eukaryotes—particularly plants and animals—and evaluate the \
+                 evolutionary significance of these transfers. Its very rare and therefore \
+                 must be a really interesting reason behind this adaptation!\nEspecially as \
+                 this horizontal gene transfer has been well -studied in microbial systems, \
+                 but not in plants and animals (this is a relatively new discovery).  \
+                 Understanding  how commonly genes move between eukaryotic species and \
+                 whether these transfers confer benefits would be really interesting to \
+                 find out";
+            let cases: [(&str, &str, bool); 3] = [
+                // (name, query, admits?) — the chrome-only cut refuses
+                // under ITS recorded query, the empty extraction
+                // refuses (query-independent: nothing arrived), the
+                // chrome+prose cut admits (its long prose line is
+                // real body text whatever the query).
+                ("chrome-frontiersin.txt", chrome_query, false),
+                ("empty-semanticscholar.txt", "any query at all", false),
+                ("prose-pmc7184763.txt", "any query at all", true),
+            ];
+            for (name, query, admits) in cases {
+                let body = golden(name);
+                let url = format!("https://fixture.example/{name}");
+                let port = CountingPort {
+                    calls: Arc::new(Mutex::new(Vec::new())),
+                    bodies: HashMap::from([(url.clone(), body.clone())]),
+                };
+                let hit = query_hit("h1", "q1", &url, "A Crop Phenotyping Page");
+                let triaged = triage_hits("r", "h", 1, vec![hit], 5, 0.1);
+                let mut fetch_list = fetch_list_queries(query);
+                fetch_list.triage.code_set_k = vec!["h1".to_string()];
+                let tmp = tempfile::tempdir().unwrap();
+                let mut decider = SpendDecider::new(
+                    "r-t2",
+                    "h",
+                    HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 4u32)]),
+                    &tmp.path().join("budget-ledger.json"),
+                )
+                .unwrap();
+                let out = fetch_round(
+                    &port,
+                    &mut decider,
+                    "r-t2",
+                    "h",
+                    1,
+                    &fetch_list,
+                    &triaged.candidates,
+                    &[],
+                    1234,
+                    &production_policy(),
+                )
+                .await
+                .unwrap();
+                if admits {
+                    assert_eq!(
+                        out.window.chunks.len(),
+                        1,
+                        "{name}: the chrome+prose cut admits (real body text present)"
+                    );
+                    assert!(out.window.content_refused.is_empty());
+                } else {
+                    assert_eq!(
+                        out.window.chunks.len(),
+                        0,
+                        "{name}: the metadata-only page does not enter the window"
+                    );
+                    assert_eq!(
+                        out.window.content_refused.len(),
+                        1,
+                        "{name}: refusal recorded"
+                    );
+                    let r = &out.window.content_refused[0];
+                    assert_eq!(r.url, url);
+                    assert!(
+                        !r.reason.is_empty(),
+                        "{name}: the refusal carries a named reason"
+                    );
+                    assert!(
+                        r.reason.starts_with("empty-content")
+                            || r.reason.starts_with("content-below-threshold"),
+                        "{name}: the reason is one of the named classes: {}",
+                        r.reason
+                    );
+                    // The registry row exists — fetched, not admitted.
+                    assert_eq!(out.registry_rows.len(), 1);
+                    assert_eq!(out.registry_rows[0].url, url);
+                    assert!(!out.registry_rows[0].admitted);
+                }
+            }
+        });
+    }
+
+    /// RED `every_fetched_source_lands_in_the_registry` (order
+    /// drb1-t2): window-admitted AND content-refused sources both land
+    /// in the registry with url + title + type; the fetch-failed URL
+    /// does not (it produced no source).
+    #[test]
+    fn every_fetched_source_lands_in_the_registry() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let prose = "A long prose paragraph that carries the query terms payment \
+                         tablet devices and SaaS applications across the body of the page \
+                         with supporting detail and figures reported over multiple sentences.";
+            let pdf_url = "https://scholar.example/paper.pdf".to_string();
+            let port = CountingPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                bodies: HashMap::from([
+                    (
+                        "https://site.example/article".to_string(),
+                        prose.to_string(),
+                    ),
+                    (
+                        pdf_url.clone(),
+                        "A Simple Approach to Analyzing Asymmetric First Price Auctions \
+                         with equilibrium bidding functions characterized for the \
+                         asymmetric case across several long paragraphs of prose."
+                            .to_string(),
+                    ),
+                ]),
+            };
+            let h1 = query_hit(
+                "h1",
+                "q1",
+                "https://site.example/article",
+                "Payment Tablets",
+            );
+            let h2 = query_hit("h2", "q1", &pdf_url, "Asymmetric FPA paper");
+            let triaged = triage_hits("r", "h", 1, vec![h1, h2], 5, 0.1);
+            let mut fetch_list =
+                fetch_list_queries("payment tablet devices asymmetric auctions SaaS");
+            fetch_list.triage.code_set_k = vec!["h1".to_string(), "h2".to_string()];
+            let tmp = tempfile::tempdir().unwrap();
+            let mut decider = SpendDecider::new(
+                "r-t2",
+                "h",
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 4u32)]),
+                &tmp.path().join("budget-ledger.json"),
+            )
+            .unwrap();
+            let out = fetch_round(
+                &port,
+                &mut decider,
+                "r-t2",
+                "h",
+                1,
+                &fetch_list,
+                &triaged.candidates,
+                &[],
+                1234,
+                &production_policy(),
+            )
+            .await
+            .unwrap();
+            let urls: Vec<&str> = out.registry_rows.iter().map(|r| r.url.as_str()).collect();
+            assert!(urls.contains(&"https://site.example/article"));
+            assert!(urls.contains(&pdf_url.as_str()));
+            let pdf_row = out.registry_rows.iter().find(|r| r.url == pdf_url).unwrap();
+            assert_eq!(
+                pdf_row.source_type,
+                SourceType::Pdf,
+                "the .pdf url's registry row names its fetch surface"
+            );
+            assert!(out.registry_rows.iter().all(|r| !r.title.is_empty()));
+        });
+    }
+
+    /// RED `fetch_queue_extends_beyond_the_code_set` (order drb1-t2):
+    /// under permissive triage the candidate queue extends past the
+    /// K ∪ ε tiers, and the round cap bounds the walk — the
+    /// r2b-split shape over the fetch family.
+    #[test]
+    fn fetch_queue_extends_beyond_the_code_set() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let urls: Vec<String> = (0..6)
+                .map(|i| format!("https://site.example/article-{i}"))
+                .collect();
+            let hits: Vec<SearchHit> = urls
+                .iter()
+                .enumerate()
+                .map(|(i, u)| {
+                    let mut h = query_hit(
+                        &format!("h{}", i + 1),
+                        "q1",
+                        u,
+                        "Payment Tablet Devices SaaS Article",
+                    );
+                    h.score = 0.9 - i as f64 * 0.1;
+                    h
+                })
+                .collect();
+            let triaged = triage_hits("r", "h", 1, hits, 2, 0.0);
+            assert_eq!(
+                triaged.candidates.len(),
+                6,
+                "the queue carries every non-noise row, past the K=2 tier"
+            );
+            assert_eq!(triaged.ranked.len(), 2);
+            // The round cap holds the walk at its share: cap 3 of 6
+            // candidates → three fetches. Below-tier rows the walk
+            // never reached keep their triage ledger rows (the
+            // acquire_round rewrite drops only the FETCHED ones).
+            let port = CountingPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                bodies: urls
+                    .iter()
+                    .map(|u| {
+                        (
+                            u.clone(),
+                            "A long prose paragraph about payment tablet devices used \
+                             for SaaS applications with the query terms present."
+                                .to_string(),
+                        )
+                    })
+                    .collect(),
+            };
+            let mut fetch_list = fetch_list_queries("payment tablet devices SaaS");
+            fetch_list.triage.code_set_k = vec!["h1".to_string(), "h2".to_string()];
+            let tmp = tempfile::tempdir().unwrap();
+            let mut decider = SpendDecider::new(
+                "r-t2",
+                "h",
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 12u32)]),
+                &tmp.path().join("budget-ledger.json"),
+            )
+            .unwrap();
+            let policy = FetchPolicy {
+                round_fetch_cap: 3,
+                content_coverage_floor: DEFAULT_CONTENT_COVERAGE_FLOOR,
+                prose_line_floor: DEFAULT_PROSE_LINE_FLOOR,
+            };
+            let out = fetch_round(
+                &port,
+                &mut decider,
+                "r-t2",
+                "h",
+                1,
+                &fetch_list,
+                &triaged.candidates,
+                &[],
+                1234,
+                &policy,
+            )
+            .await
+            .unwrap();
+            assert_eq!(out.window.chunks.len(), 3, "the round cap bounds the walk");
+            assert_eq!(port.calls.lock().unwrap().len(), 3);
+
+            // The round-cap record: when failures consume the round's
+            // share BEFORE a tier member is reached, that member gets a
+            // `round-cap` row — never silently un-ledgered. Two top
+            // picks fail binary (one attempt each, permanent class),
+            // the cap is 2, so tier members h3/h4 are never reached.
+            struct BinaryFailPort {
+                calls: Arc<Mutex<Vec<String>>>,
+                fail: Vec<String>,
+            }
+            #[async_trait::async_trait]
+            impl ResearchPort for BinaryFailPort {
+                async fn estate_listing(&self, _c: &[String]) -> Result<EstateListing, String> {
+                    unimplemented!()
+                }
+                async fn estate_search(
+                    &self,
+                    _c: &[String],
+                    _q: &str,
+                    _l: usize,
+                ) -> Result<Vec<PortHit>, String> {
+                    unimplemented!()
+                }
+                async fn web_search(
+                    &self,
+                    _b: &str,
+                    _q: &str,
+                    _l: usize,
+                ) -> Result<Vec<PortHit>, String> {
+                    unimplemented!()
+                }
+                async fn web_fetch(&self, url: &str) -> Result<String, String> {
+                    self.calls.lock().unwrap().push(url.to_string());
+                    if self.fail.iter().any(|u| u == url) {
+                        Err("non-text payload (application/pdf) — binary content \
+                             refused (would poison the evidence window)"
+                            .to_string())
+                    } else {
+                        Ok("Prose about payment tablet devices for SaaS applications \
+                            across a full paragraph with the query terms."
+                            .to_string())
+                    }
+                }
+                async fn terminal_poll(&self) -> Result<(), String> {
+                    Ok(())
+                }
+                async fn draft(
+                    &self,
+                    _p: &str,
+                    _s: Option<&str>,
+                    _u: &[String],
+                ) -> Result<String, String> {
+                    unimplemented!()
+                }
+                async fn alignment_decision(
+                    &self,
+                    _p: &Plan,
+                    _r: &Path,
+                ) -> Result<AlignmentDecision, String> {
+                    Ok(AlignmentDecision::Proceed)
+                }
+            }
+            let port = BinaryFailPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                fail: vec![urls[0].clone(), urls[1].clone()],
+            };
+            let mut fetch_list = fetch_list_queries("payment tablet devices SaaS");
+            fetch_list.triage.code_set_k =
+                (1..=4).map(|i| format!("h{i}")).collect::<Vec<_>>().clone();
+            let tmp = tempfile::tempdir().unwrap();
+            let mut decider = SpendDecider::new(
+                "r-t2",
+                "h",
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 12u32)]),
+                &tmp.path().join("budget-ledger.json"),
+            )
+            .unwrap();
+            let policy = FetchPolicy {
+                round_fetch_cap: 2,
+                content_coverage_floor: DEFAULT_CONTENT_COVERAGE_FLOOR,
+                prose_line_floor: DEFAULT_PROSE_LINE_FLOOR,
+            };
+            let out = fetch_round(
+                &port,
+                &mut decider,
+                "r-t2",
+                "h",
+                1,
+                &fetch_list,
+                &triaged.candidates,
+                &[],
+                1234,
+                &policy,
+            )
+            .await
+            .unwrap();
+            assert_eq!(out.window.chunks.len(), 0, "both top picks failed");
+            assert!(
+                out.window
+                    .fetch_failures
+                    .iter()
+                    .any(|f| f.health == UrlHealth::RoundCap),
+                "the un-reached tier members record round-cap rows: {:?}",
+                out.window.fetch_failures
+            );
+        });
+    }
+
+    /// The calibration pin (the instrument-validity companion to the
+    /// replay harness): the vendored recorded cuts measure exactly the
+    /// numbers the floors were derived from — the chrome cut's longest
+    /// line sits under the prose floor, the prose cut's over it, and
+    /// the classifier's permanent/transient split reads our own port's
+    /// markers.
+    #[test]
+    fn content_floor_calibration_pins_the_recorded_cuts() {
+        use crate::deep_research::acquisition::prose_line_length;
+        let chrome = golden("chrome-frontiersin.txt");
+        let prose = golden("prose-pmc7184763.txt");
+        let empty = golden("empty-semanticscholar.txt");
+        assert_eq!(prose_line_length(&chrome), 138);
+        assert!(prose_line_length(&chrome) < DEFAULT_PROSE_LINE_FLOOR);
+        // Bytes, not chars: the recorded cut carries multibyte dashes
+        // (762 bytes over 760 chars) — the floor reads byte length.
+        assert_eq!(prose_line_length(&prose), 762);
+        assert!(prose_line_length(&prose) >= DEFAULT_PROSE_LINE_FLOOR);
+        assert_eq!(prose_line_length(&empty), 0);
+        // The retry classifier over the port's own markers.
+        assert_eq!(
+            classify_fetch_error(
+                "fetch https://x.example/a.pdf: non-text payload (application/pdf) — \
+                 binary content refused (would poison the evidence window)"
+            ),
+            RetryClass::Permanent(UrlHealth::Binary)
+        );
+        assert_eq!(
+            classify_fetch_error("HTTP 404 for https://x.example/a"),
+            RetryClass::Permanent(UrlHealth::HttpStatus)
+        );
+        assert_eq!(
+            classify_fetch_error("error sending request: connection reset"),
+            RetryClass::Transient
+        );
+        assert_eq!(
+            classify_fetch_error("fetch-failed (mock pdf)"),
+            RetryClass::Transient
+        );
+        // The registry's type accessor.
+        assert_eq!(source_type_of("https://x.example/a.pdf"), SourceType::Pdf);
+        assert_eq!(
+            source_type_of("https://x.example/a.pdf?download=1"),
+            SourceType::Pdf
+        );
+        assert_eq!(source_type_of("https://x.example/a"), SourceType::Web);
+        assert_eq!(source_type_of("estate:corpus:12"), SourceType::Estate);
     }
 }

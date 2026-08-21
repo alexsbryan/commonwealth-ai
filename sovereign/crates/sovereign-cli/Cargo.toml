@@ -66,6 +66,12 @@ dirs = "5"
 hex = "0.4"
 hostname = { workspace = true }
 tempfile = { workspace = true }
+# drb1-t2 (the PDF wall): the deep-research fetch port extracts PDF
+# text with the SAME crate+version the corpus ingest path uses
+# (sovereign-tools' extract_stage) — a second CALLER of the one
+# extractor, not a second implementation. Pure-Rust, no llama/lancedb
+# weight; the version is pinned by the shared workspace lock.
+pdf-extract = "0.7"
 which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }

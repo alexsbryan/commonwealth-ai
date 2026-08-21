@@ -231,6 +231,16 @@ pub struct ContainmentConfig {
 pub struct TriageConfig {
     pub code_set_k: usize,
     pub eps_quota: f64,
+    /// drb1-t2 (fetch-then-judge): the post-fetch content gate's
+    /// coverage floor — a fetched page admits to the window when its
+    /// content covers at least this fraction of the query's distinct
+    /// terms OR carries a prose line at least `prose_line_floor` chars.
+    /// Defaults from `acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR`
+    /// (serde-default keeps pre-t2 charters loadable).
+    #[serde(default = "crate::deep_research::acquisition::default_content_coverage_floor")]
+    pub content_coverage_floor: f64,
+    #[serde(default = "crate::deep_research::acquisition::default_prose_line_floor")]
+    pub prose_line_floor: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -449,6 +459,13 @@ pub enum EmptyRoundReason {
     Mixed,
     /// Nothing was admitted to fetch this round (no hits).
     NoAdmits,
+    /// drb1-t2 (fetch-then-judge): pages WERE fetched but every one was
+    /// content-refused at the post-fetch admission gate — the round
+    /// spent real budget and returned no evidence, a distinct shape
+    /// from a round that never fetched (NoAdmits) or whose fetches
+    /// failed (Failed). The refusals carry their reasons on the
+    /// window's `content_refused`.
+    ContentRefused,
 }
 
 impl EmptyRoundReason {
@@ -459,6 +476,7 @@ impl EmptyRoundReason {
             Self::RetriesExhausted => "all-admitted-fetches-retries-exhausted",
             Self::Mixed => "mixed-refused-and-failed",
             Self::NoAdmits => "no-admitted-hits",
+            Self::ContentRefused => "all-fetched-pages-content-refused",
         }
     }
 }
@@ -649,6 +667,13 @@ pub struct EvidenceWindow {
     /// fetches spend no budget.
     #[serde(default)]
     pub dedup_refused: Vec<String>,
+    /// drb1-t2 (fetch-then-judge): pages fetched this round that the
+    /// post-fetch content admission gate refused, each WITH the
+    /// measured score and the named reason — the fetch leg's half of
+    /// the phantom-row invariant (a fetched row is never silently
+    /// un-ledgered).
+    #[serde(default)]
+    pub content_refused: Vec<ContentRefusal>,
     pub derived_custody: String,
 }
 
@@ -675,6 +700,136 @@ pub struct FetchFailure {
     /// 0 = immediate failure, 1 = failed after 1 retry, 2 = failed after 2 retries.
     #[serde(default)]
     pub retries: u32,
+    /// drb1-t2 (URL-health classification, journaled per fetch): the
+    /// closed set of fetch-outcome health classes. `unknown` on
+    /// artifacts predating the field (serde default) — never guessed.
+    #[serde(default)]
+    pub health: UrlHealth,
+}
+
+/// The URL-health classification (drb1-t2, AIQ §1.3's tool-failure
+/// journaling adapted to our fetch leg): every fetch outcome carries
+/// one class from this closed set, so the ledger answers "what kind of
+/// failure ate the budget?" without re-parsing error strings later.
+/// The ONE classifier lives in fetch.rs (`classify_fetch_error`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UrlHealth {
+    /// Pre-classification artifacts / unclassifiable error text —
+    /// also the serde default (artifacts predating the field).
+    #[default]
+    Unknown,
+    /// The payload was non-text and not extractable (binary refusal).
+    Binary,
+    /// The server answered a failure status (HTTP 4xx/5xx).
+    HttpStatus,
+    /// The fetch errored after all retries — the URL is dead for the
+    /// run (budget.rs `record_fetch_dead`).
+    Dead,
+    /// The budget decider refused the fetch.
+    BudgetRefused,
+    /// drb1-t2: the round's fetch share (the r2b split) was spent
+    /// before this planned fetch ran — held for the later rounds, not
+    /// a decider refusal (the ledger's allowance is untouched).
+    RoundCap,
+    /// Refused as already-fetched (dedup gate) — not a failure.
+    Dedup,
+    /// The hit id had no row in the round's candidate set.
+    Missing,
+    /// The terminal-state poll failed — the whole leg is absent.
+    Terminal,
+    /// The fetch itself succeeded (registry rows only; failures never
+    /// carry this).
+    Ok,
+}
+
+impl UrlHealth {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Binary => "binary",
+            Self::HttpStatus => "http-status",
+            Self::Dead => "dead",
+            Self::BudgetRefused => "budget-refused",
+            Self::RoundCap => "round-cap",
+            Self::Dedup => "dedup",
+            Self::Missing => "missing",
+            Self::Terminal => "terminal",
+            Self::Ok => "ok",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// drb1-t2 (fetch-then-judge): a fetched page the post-fetch CONTENT
+/// admission gate refused — the reason is recorded, never a silent
+/// un-ledgering (the phantom-row invariant extended to the content
+/// gate). The page WAS fetched (budget spent, source registered); it
+/// did not enter the evidence window.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentRefusal {
+    pub url: String,
+    pub title: String,
+    /// The content-admission coverage score ([0,1]) that was measured.
+    pub coverage: f64,
+    /// The longest line in the fetched content (the prose signal).
+    pub prose_line: usize,
+    /// The named reason (e.g. `content-below-threshold`,
+    /// `empty-content`).
+    pub reason: String,
+}
+
+/// The fetch surface that served a source — the registry's `type`
+/// (AIQ §1.4 records URL/citation keys per source; ours names the
+/// surface so the writer knows what a citation points at).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceType {
+    /// A public-web HTML page.
+    Web,
+    /// A PDF whose text was extracted at the fetch boundary (drb1-t2).
+    Pdf,
+    /// An estate retrieval (`estate:<corpus>:<chunk>` locator).
+    Estate,
+}
+
+impl SourceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Web => "web",
+            Self::Pdf => "pdf",
+            Self::Estate => "estate",
+        }
+    }
+}
+
+/// One row of the per-run SOURCE REGISTRY (drb1-t2, AIQ §1.4): every
+/// FETCHED source — window-admitted or content-refused — lands here.
+/// This is the T3 writer's citation whitelist surface: a citation the
+/// registry does not carry is a citation to something the run never
+/// acquired. Failed fetch attempts stay on the manifest's failed list
+/// (they produced no source); the registry records acquisitions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRegistryRow {
+    pub url: String,
+    pub title: String,
+    pub source_type: SourceType,
+    pub round: u32,
+    /// Did the source enter an evidence window (passed the content
+    /// gate)? `false` = fetched but content-refused.
+    pub admitted: bool,
+}
+
+/// The run-scoped source registry (§ the source-registry.json ICD) —
+/// AIQ's per-session SourceRegistry shape, persisted as a run artifact
+/// and compounding into the estate write path later (ours-better: the
+/// registry survives the run).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRegistry {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub sources: Vec<SourceRegistryRow>,
 }
 
 // ---------------------------------------------------------------------------
