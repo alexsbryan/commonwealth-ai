@@ -8,15 +8,14 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine::CorpusEngine;
 
 use super::{group_by_file, query_all_code_indexes};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Default window if the caller omits `hours`.
 const DEFAULT_HOURS: u64 = 24;
@@ -38,28 +37,30 @@ impl RecentChangesTool {
     }
 }
 
-#[async_trait]
-impl Tool for RecentChangesTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("recent_changes").to_descriptor()
+impl RecentChangesTool {
+    /// Bind this tool's state to its `recent_changes` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("recent_changes", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("recent_changes")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if let Some(h) = params.get("hours").and_then(|v| v.as_u64()) {
-            if h == 0 {
-                return Err(Error::InvalidInput("hours must be positive".into()));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `recent_changes`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let hours = params
             .get("hours")
             .and_then(|v| v.as_u64())
@@ -115,5 +116,15 @@ impl Tool for RecentChangesTool {
         }
 
         Ok(StepOutput::Text(out))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if let Some(h) = params.get("hours").and_then(|v| v.as_u64()) {
+            if h == 0 {
+                return Err(Error::InvalidInput("hours must be positive".into()));
+            }
+        }
+        Ok(())
     }
 }

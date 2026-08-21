@@ -770,21 +770,21 @@ mod tests {
         registry.register(Box::new(sovereign_tools::SymbolLookupTool::new(
             Arc::clone(&engine),
             Arc::clone(&graph),
-        )));
+        ).declared()));
         registry.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
             &engine,
-        ))));
+        )).declared()));
         registry.register(Box::new(sovereign_tools::RecentChangesTool::new(
             Arc::clone(&engine),
-        )));
+        ).declared()));
         registry.register(Box::new(sovereign_tools::FindCalleesTool::new(
             Arc::clone(&engine),
             Arc::clone(&graph),
-        )));
+        ).declared()));
         registry.register(Box::new(sovereign_tools::FindCallersTool::new(
             Arc::clone(&engine),
             Arc::clone(&graph),
-        )));
+        ).declared()));
         registry
     }
 

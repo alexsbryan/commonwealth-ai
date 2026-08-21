@@ -38,14 +38,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::ProjectDocsStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Hard cap on the bytes returned for any one document. The spec
 /// is normally a few KB at most; ARCHITECTURE.md is the long
@@ -79,19 +78,25 @@ impl Default for SpecTool {
     }
 }
 
-#[async_trait]
-impl Tool for SpecTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("spec").to_descriptor()
+impl SpecTool {
+    /// Bind this tool's state to its `spec` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("spec", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("spec")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `spec`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let cwd = ctx
             .working_directory
             .as_deref()

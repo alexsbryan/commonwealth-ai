@@ -206,27 +206,28 @@ pub async fn build_session_with_skills(
     let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
     tools.register(Box::new(ShellTool));
-    tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    )));
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
-        &corpus_engine,
-    ))));
-    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::document::DocumentTool::new(Arc::clone(&store), Arc::clone(&inference))
+            .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::ClaimSearchTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::EpistemicLandscapeTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     // Deterministic land-value-tax analytics over parcel corpora
     // (e.g. sf-assessor-roll) — pre-cited figures the ComplexTask
     // synthesizer quotes verbatim ("no confabulated numbers").
     tools.register(Box::new(
-        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine)),
+        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine))
+            .declared(),
     ));
     // Typed SEC-filing figures with basis + accession, or first-class
     // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
     tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
         Arc::clone(&corpus_engine),
-    )));
+    ).declared()));
     // Code-intelligence tools previously registered here against an
     // in-memory stub ScipGraph. Dropped 2026-05-22 along with the
     // REPL's treesitter dep — real SCIP queries go through
@@ -255,14 +256,14 @@ pub async fn build_session_with_skills(
     // production daemon-side notes channel isn't load-bearing
     // for the gym, and the threads bench doesn't drive
     // knowledge_lookup directly anyway.
-    tools.register(Box::new(sovereign_tools::KnowledgeLookupTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::KnowledgeLookupTool::new(Arc::clone(&store), Arc::clone(&inference))
+            .declared(),
+    ));
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
-    tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::WikipediaFetchTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     // `attached_doc_search` is registered unconditionally; the
     // execute() path returns a clear "no document attached" payload
     // on conversations without a DocumentSession, so the model can
@@ -270,10 +271,13 @@ pub async fn build_session_with_skills(
     // ReasonWithTools loop can call it directly — that's the lever
     // the book-report bench exposed as missing (sovereign decision
     // 7693f16b: attached docs as Tool, not parallel pipeline).
-    tools.register(Box::new(sovereign_tools::AttachedDocumentSearchTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::AttachedDocumentSearchTool::new(
+            Arc::clone(&store),
+            Arc::clone(&inference),
+        )
+        .declared(),
+    ));
 
     // External MCP servers (the `[[mcp_servers]]` array of the canonical
     // config): connect over HTTP and register their tools into the SAME

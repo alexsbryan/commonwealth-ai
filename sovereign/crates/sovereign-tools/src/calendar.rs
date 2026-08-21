@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// CalDAV calendar tool for reading and creating events.
 pub struct CalendarTool {
@@ -24,19 +24,25 @@ impl CalendarTool {
     }
 }
 
-#[async_trait]
-impl Tool for CalendarTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("calendar").to_descriptor()
+impl CalendarTool {
+    /// Bind this tool's state to its `calendar` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("calendar", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("calendar")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `calendar`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let action = params
             .get("action")
             .and_then(|v| v.as_str())

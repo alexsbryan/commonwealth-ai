@@ -28,15 +28,15 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider, Tool};
+use sovereign_core::traits::{InferenceProvider};
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ReadNoteDigestTool {
     notes: Arc<NoteStore>,
@@ -57,19 +57,25 @@ impl ReadNoteDigestTool {
     }
 }
 
-#[async_trait]
-impl Tool for ReadNoteDigestTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("read_note_digest").to_descriptor()
+impl ReadNoteDigestTool {
+    /// Bind this tool's state to its `read_note_digest` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("read_note_digest", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("read_note_digest")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `read_note_digest`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let feature_id = params
             .get("feature_id")
             .and_then(|v| v.as_str())

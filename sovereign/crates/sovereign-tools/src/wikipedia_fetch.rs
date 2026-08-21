@@ -23,15 +23,13 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use corpus_engine::CorpusEngine;
-use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use crate::catalog_ingest::{run_catalog_ingest, CatalogIngestRequest};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Default catalog corpus id paired with this tool. Operators with a
 /// custom catalog setup can wrap [`run_catalog_ingest`] directly
@@ -56,19 +54,25 @@ impl WikipediaFetchTool {
     }
 }
 
-#[async_trait]
-impl Tool for WikipediaFetchTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("wikipedia_fetch").to_descriptor()
+impl WikipediaFetchTool {
+    /// Bind this tool's state to its `wikipedia_fetch` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("wikipedia_fetch", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("wikipedia_fetch")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `wikipedia_fetch`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let title = params
             .get("title")
             .and_then(|v| v.as_str())

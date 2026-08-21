@@ -10,15 +10,14 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::ProjectDocsStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ProjectContextTool {
     store: Arc<ProjectDocsStore>,
@@ -42,28 +41,30 @@ impl ProjectContextTool {
     }
 }
 
-#[async_trait]
-impl Tool for ProjectContextTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("project_context").to_descriptor()
+impl ProjectContextTool {
+    /// Bind this tool's state to its `project_context` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("project_context", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("project_context")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("query")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("project_context requires 'query'".to_string()))?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `project_context`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -166,5 +167,15 @@ impl Tool for ProjectContextTool {
             "hint": hint,
             "index_health": index_health
         })))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("query")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("project_context requires 'query'".to_string()))?;
+        Ok(())
     }
 }

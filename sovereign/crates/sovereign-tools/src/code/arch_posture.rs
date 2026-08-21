@@ -12,13 +12,13 @@
 
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::arch_report::compute_fingerprint;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ArchPostureTool {
     data_dir: PathBuf,
@@ -69,34 +69,30 @@ impl ArchPostureTool {
     }
 }
 
-#[async_trait]
-impl Tool for ArchPostureTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("arch_posture").to_descriptor()
+impl ArchPostureTool {
+    /// Bind this tool's state to its `arch_posture` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("arch_posture", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("arch_posture")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
-            if c.is_empty()
-                || !c
-                    .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-            {
-                return Err(Error::InvalidInput(format!(
-                    "invalid corpus_id '{c}': alphanumeric plus '-' and '_' only"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `arch_posture`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let corpus_id = match params.get("corpus_id").and_then(|v| v.as_str()) {
             Some(c) => c.to_string(),
             None => {
@@ -239,15 +235,32 @@ impl Tool for ArchPostureTool {
         let _ = writeln!(out, "full report: {}", dir.join("arch_report.md").display());
         Ok(StepOutput::Text(out))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
+            if c.is_empty()
+                || !c
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+            {
+                return Err(Error::InvalidInput(format!(
+                    "invalid corpus_id '{c}': alphanumeric plus '-' and '_' only"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::traits::Tool;
 
     #[test]
     fn descriptor_id_matches_mcp_surface() {
-        let tool = ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent"));
+        let tool = ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent")).declared();
         assert_eq!(tool.descriptor().id, "arch_posture");
         assert!(crate::mcp_surface::MCP_TOOLS_ALWAYS.contains(&tool.descriptor().id.as_str()));
     }
@@ -264,7 +277,7 @@ mod tests {
             ..Default::default()
         };
         let tool = ArchPostureTool::with_data_dir(PathBuf::from("/nonexistent"));
-        let out = futures::executor::block_on(tool.execute(&serde_json::json!({}), &ctx)).unwrap();
+        let out = futures::executor::block_on(tool.run(&serde_json::json!({}), &ctx)).unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("never_run")),
             other => panic!("expected text, got {other:?}"),

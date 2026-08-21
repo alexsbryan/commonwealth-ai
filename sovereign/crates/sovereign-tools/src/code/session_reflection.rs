@@ -23,14 +23,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::NoteStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct SessionReflectionTool {
     store: Arc<NoteStore>,
@@ -42,19 +41,25 @@ impl SessionReflectionTool {
     }
 }
 
-#[async_trait]
-impl Tool for SessionReflectionTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("session_reflection").to_descriptor()
+impl SessionReflectionTool {
+    /// Bind this tool's state to its `session_reflection` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("session_reflection", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("session_reflection")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `session_reflection`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let task_summary = params
             .get("task_summary")
             .and_then(|v| v.as_str())

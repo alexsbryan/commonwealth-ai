@@ -9,33 +9,39 @@
 //! function the bespoke `enrich atlas-gaps` runs. Effect is `Write` (it writes
 //! `gaps.json`); idempotent (same atoms → same gaps → same ids).
 
-use async_trait::async_trait;
 
 use corpus_engine::enrichment::atlas::{
     analysis::gaps::{detect_deterministic_gaps, GapDetectionInput, GapsOutput},
     read_atlas_atoms, read_atlas_edges, write_atlas_gaps, AtomEnvelope,
 };
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use crate::atlas_phase::atlas_dir_for;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct AtlasGapsTool;
 
-#[async_trait]
-impl Tool for AtlasGapsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("atlas_gaps").to_descriptor()
+impl AtlasGapsTool {
+    /// Bind this tool's state to its `atlas_gaps` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_gaps", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("atlas_gaps")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_gaps`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let corpus = params
             .get("corpus")
             .and_then(|v| v.as_str())
@@ -127,7 +133,7 @@ mod tests {
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasGapsTool.execute(&params, &ctx()).await.unwrap();
+        let out = AtlasGapsTool.run(&params, &ctx()).await.unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("0 gap"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -143,6 +149,6 @@ mod tests {
         // A missing atlas is a loud error (points the operator at resolve).
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasGapsTool.execute(&bad, &ctx()).await.is_err());
+        assert!(AtlasGapsTool.run(&bad, &ctx()).await.is_err());
     }
 }

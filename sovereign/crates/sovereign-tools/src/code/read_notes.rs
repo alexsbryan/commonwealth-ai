@@ -7,14 +7,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore, ScopeFilter};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Anchors whose notes are OPERATIONAL RECORD rather than knowledge.
 ///
@@ -207,35 +206,34 @@ impl ReadNotesTool {
     }
 }
 
-#[async_trait]
-impl Tool for ReadNotesTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("notes").to_descriptor()
+impl ReadNotesTool {
+    /// Bind this tool's state to its `notes` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("notes", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("notes")
-            .permissions
-            .clone()
-    }
-
-    /// Signal: count of unretired `todo`-kind notes. Surfaces backlog
-    /// the agent might otherwise miss, without needing a feature
-    /// context. Silent when the todo list is empty.
-    async fn signal(&self) -> Option<String> {
-        // Cap the query at 50 — we only need the count for the signal
-        // and an order-of-magnitude is enough context. If there are
-        // 50+ open todos the agent already knows there's a backlog.
-        let open = self.store.open_todos(50).await.ok()?;
-        if open.is_empty() {
-            return None;
-        }
-        let n = open.len();
-        let suffix = if n >= 50 { "+" } else { "" };
-        Some(format!("{n}{suffix} open todo note(s)"))
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `notes`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params.get("query").and_then(|v| v.as_str());
         let symbols: Vec<String> = params
             .get("symbols")
@@ -474,6 +472,20 @@ impl Tool for ReadNotesTool {
         }
         Ok(StepOutput::Json(out))
     }
+
+    async fn signal_now(&self) -> Option<String> {
+
+        // Cap the query at 50 — we only need the count for the signal
+        // and an order-of-magnitude is enough context. If there are
+        // 50+ open todos the agent already knows there's a backlog.
+        let open = self.store.open_todos(50).await.ok()?;
+        if open.is_empty() {
+            return None;
+        }
+        let n = open.len();
+        let suffix = if n >= 50 { "+" } else { "" };
+        Some(format!("{n}{suffix} open todo note(s)"))
+    }
 }
 
 #[cfg(test)]
@@ -694,7 +706,7 @@ mod tests {
 
         let tool = ReadNotesTool::new(Arc::clone(&store));
         let out = tool
-            .execute(&json!({"query": "chaos", "limit": 10}), &ctx())
+            .run(&json!({"query": "chaos", "limit": 10}), &ctx())
             .await
             .unwrap();
         let StepOutput::Json(v) = out else {

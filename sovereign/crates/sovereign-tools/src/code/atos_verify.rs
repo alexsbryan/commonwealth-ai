@@ -22,14 +22,14 @@
 use std::path::PathBuf;
 use std::time::UNIX_EPOCH;
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::atos_utils::{detect_hollow_files, run_verify_cmd};
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 const TOOL_ID: &str = "atos_verify";
 
@@ -47,19 +47,25 @@ impl Default for AtosVerifyTool {
     }
 }
 
-#[async_trait]
-impl Tool for AtosVerifyTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("atos_verify").to_descriptor()
+impl AtosVerifyTool {
+    /// Bind this tool's state to its `atos_verify` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atos_verify", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("atos_verify")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atos_verify`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let workdir = require_str(params, "workdir")?;
         let verify_cmd = require_str(params, "verify_cmd")?;
         let files_touched = parse_string_array(params, "files_touched");
@@ -188,14 +194,14 @@ mod tests {
     #[tokio::test]
     async fn rejects_missing_workdir() {
         let tool = AtosVerifyTool::new();
-        let result = tool.execute(&json!({"verify_cmd": "true"}), &ctx()).await;
+        let result = tool.run(&json!({"verify_cmd": "true"}), &ctx()).await;
         assert!(result.is_err());
     }
 
     #[tokio::test]
     async fn rejects_missing_verify_cmd() {
         let tool = AtosVerifyTool::new();
-        let result = tool.execute(&json!({"workdir": "/tmp"}), &ctx()).await;
+        let result = tool.run(&json!({"workdir": "/tmp"}), &ctx()).await;
         assert!(result.is_err());
     }
 
@@ -204,7 +210,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let tool = AtosVerifyTool::new();
         let v = json_output(
-            tool.execute(
+            tool.run(
                 &json!({
                     "workdir": tmp.path().to_string_lossy(),
                     "verify_cmd": "true",
@@ -225,7 +231,7 @@ mod tests {
         fs::write(tmp.path().join("lib.rs"), "  \n  ").unwrap();
         let tool = AtosVerifyTool::new();
         let v = json_output(
-            tool.execute(
+            tool.run(
                 &json!({
                     "workdir": tmp.path().to_string_lossy(),
                     "verify_cmd": "true",
@@ -255,7 +261,7 @@ mod tests {
         let future_ts = now + 600;
         let tool = AtosVerifyTool::new();
         let v = json_output(
-            tool.execute(
+            tool.run(
                 &json!({
                     "workdir": tmp.path().to_string_lossy(),
                     "verify_cmd": "true",
@@ -285,7 +291,7 @@ mod tests {
             .as_secs();
         let tool = AtosVerifyTool::new();
         let v = json_output(
-            tool.execute(
+            tool.run(
                 &json!({
                     "workdir": tmp.path().to_string_lossy(),
                     "verify_cmd": "true",

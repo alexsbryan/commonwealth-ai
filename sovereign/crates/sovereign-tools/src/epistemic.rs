@@ -8,16 +8,12 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
-use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
 use corpus_engine::CorpusEngine;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 // ─── ClaimSearchTool ─────────────────────────────────────
 
@@ -34,28 +30,30 @@ impl ClaimSearchTool {
     }
 }
 
-#[async_trait]
-impl Tool for ClaimSearchTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("claim_search").to_descriptor()
+impl ClaimSearchTool {
+    /// Bind this tool's state to its `claim_search` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("claim_search", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("claim_search")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if params.get("query").and_then(|v| v.as_str()).is_none() {
-            return Err(Error::InvalidInput(
-                "claim_search requires a 'query' string parameter".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `claim_search`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -147,6 +145,16 @@ impl Tool for ClaimSearchTool {
         results.truncate(10);
         Ok(StepOutput::Text(format_position_results(&results)))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if params.get("query").and_then(|v| v.as_str()).is_none() {
+            return Err(Error::InvalidInput(
+                "claim_search requires a 'query' string parameter".to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 struct PositionResult {
@@ -216,28 +224,30 @@ impl EpistemicLandscapeTool {
     }
 }
 
-#[async_trait]
-impl Tool for EpistemicLandscapeTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("epistemic_landscape").to_descriptor()
+impl EpistemicLandscapeTool {
+    /// Bind this tool's state to its `epistemic_landscape` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("epistemic_landscape", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("epistemic_landscape")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if params.get("topic").and_then(|v| v.as_str()).is_none() {
-            return Err(Error::InvalidInput(
-                "epistemic_landscape requires a 'topic' string parameter".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `epistemic_landscape`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let topic = params
             .get("topic")
             .and_then(|v| v.as_str())
@@ -329,6 +339,16 @@ impl Tool for EpistemicLandscapeTool {
         }
 
         Ok(StepOutput::Text(landscape.format_for_model()))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if params.get("topic").and_then(|v| v.as_str()).is_none() {
+            return Err(Error::InvalidInput(
+                "epistemic_landscape requires a 'topic' string parameter".to_string(),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -484,6 +504,7 @@ fn format_position_with_evidence(pwe: &PositionWithEvidence) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn format_empty_results_returns_helpful_message() {

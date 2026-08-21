@@ -111,20 +111,14 @@ pub use code::SpecTool;
 #[cfg(feature = "treesitter")]
 pub use code::SymbolLookupTool;
 #[cfg(feature = "treesitter")]
-pub use code::{
-    compute_posture, hash_file, write_fingerprint, DriftFingerprint, DriftPosture,
-    DriftPostureTool, PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE,
-};
+pub use code::{compute_posture, hash_file, write_fingerprint, DriftFingerprint, DriftPosture, DriftPostureTool, PostureStatus, TopCritical, DEFAULT_NARRATIVES, FINGERPRINT_FILE};
 pub use code::{overlaps_for_working_set, BriefingTool, OverlapAccumulator};
 #[cfg(feature = "treesitter")]
 pub use code::{ArchPostureTool, ArchReportTool};
 #[cfg(all(feature = "treesitter", feature = "atos"))]
 pub use code::{ArchiveFeatureTool, ProvisionFeatureTool, RecordAtosEventTool};
 #[cfg(feature = "treesitter")]
-pub use code::{
-    AtosPlanEmitTool, PromoteNoteTool, ReadNoteByIdTool, ReadNoteDigestTool,
-    WriteRedteamFindingTool,
-};
+pub use code::{AtosPlanEmitTool, PromoteNoteTool, ReadNoteByIdTool, ReadNoteDigestTool, WriteRedteamFindingTool};
 #[cfg(feature = "treesitter")]
 pub use code::{CapabilityFindingsTool, CapabilityPostureTool};
 pub use code::{CodeSearchTool, RecentChangesTool};
@@ -141,16 +135,8 @@ pub use code::{IndexHealth, IndexHealthChecker, StalenessLevel};
 pub use document_asset::DocumentAssetManager;
 pub use document_operation::DocumentOperationTool;
 pub use epistemic::{ClaimSearchTool, EpistemicLandscapeTool};
-pub use knowledge_lookup::{
-    Evidence, EvidenceId, EvidenceKind, KindCounts, KnowledgeLookupResponse, KnowledgeLookupTool,
-    SYSTEM_PROMPT as KNOWLEDGE_LOOKUP_SYSTEM_PROMPT,
-    TOOL_DESCRIPTION as KNOWLEDGE_LOOKUP_TOOL_DESCRIPTION,
-};
-pub use recipe_author::{
-    CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeProject,
-    RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool,
-    RegistryBrowseTool, ResearchFindingTool,
-};
+pub use knowledge_lookup::{Evidence, EvidenceId, EvidenceKind, KindCounts, KnowledgeLookupResponse, KnowledgeLookupTool, SYSTEM_PROMPT as KNOWLEDGE_LOOKUP_SYSTEM_PROMPT, TOOL_DESCRIPTION as KNOWLEDGE_LOOKUP_TOOL_DESCRIPTION};
+pub use recipe_author::{CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeProject, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool};
 pub use sovereign_core;
 pub use wikipedia_fetch::WikipediaFetchTool;
 
@@ -169,10 +155,10 @@ pub use wikipedia_fetch::WikipediaFetchTool;
 /// pre-extraction 16-tool registry.
 pub fn workflow_corpus_tools() -> Vec<Box<dyn sovereign_core::traits::Tool>> {
     vec![
-        Box::new(extract::ExtractTool),
-        Box::new(corpus_store::CorpusStoreTool),
-        Box::new(corpus_search::CorpusSearchTool),
-        Box::new(atlas_phase::gaps::AtlasGapsTool),
-        Box::new(atlas_phase::tensions::AtlasTensionsTool),
+        Box::new(extract::ExtractTool.declared()),
+        Box::new(corpus_store::CorpusStoreTool.declared()),
+        Box::new(corpus_search::CorpusSearchTool.declared()),
+        Box::new(atlas_phase::gaps::AtlasGapsTool.declared()),
+        Box::new(atlas_phase::tensions::AtlasTensionsTool.declared()),
     ]
 }

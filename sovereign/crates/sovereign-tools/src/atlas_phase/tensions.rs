@@ -12,7 +12,6 @@
 //! deterministic leaf.) The LLM classification pass that promotes candidates to
 //! real `Tension` edges is a separate `model:` step.
 
-use async_trait::async_trait;
 
 use corpus_engine::enrichment::atlas::{
     analysis::tensions::{
@@ -22,26 +21,33 @@ use corpus_engine::enrichment::atlas::{
     read_atlas_atoms, write_tension_candidates, AtomEnvelope,
 };
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use crate::atlas_phase::atlas_dir_for;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct AtlasTensionsTool;
 
-#[async_trait]
-impl Tool for AtlasTensionsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("atlas_tensions").to_descriptor()
+impl AtlasTensionsTool {
+    /// Bind this tool's state to its `atlas_tensions` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_tensions", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("atlas_tensions")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_tensions`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let corpus = params
             .get("corpus")
             .and_then(|v| v.as_str())
@@ -131,7 +137,7 @@ mod tests {
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasTensionsTool.execute(&params, &ctx()).await.unwrap();
+        let out = AtlasTensionsTool.run(&params, &ctx()).await.unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("0 candidate"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -148,6 +154,6 @@ mod tests {
         // A missing atlas is a loud error.
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasTensionsTool.execute(&bad, &ctx()).await.is_err());
+        assert!(AtlasTensionsTool.run(&bad, &ctx()).await.is_err());
     }
 }

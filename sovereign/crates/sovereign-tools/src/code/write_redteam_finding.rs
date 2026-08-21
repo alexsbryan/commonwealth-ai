@@ -21,14 +21,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct WriteRedteamFindingTool {
     store: Arc<NoteStore>,
@@ -40,47 +39,30 @@ impl WriteRedteamFindingTool {
     }
 }
 
-#[async_trait]
-impl Tool for WriteRedteamFindingTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("write_redteam_finding").to_descriptor()
+impl WriteRedteamFindingTool {
+    /// Bind this tool's state to its `write_redteam_finding` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("write_redteam_finding", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("write_redteam_finding")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        for key in ["feature_id", "invariant", "status", "confidence"] {
-            params
-                .get(key)
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .ok_or_else(|| {
-                    Error::InvalidInput(format!("write_redteam_finding requires non-empty '{key}'"))
-                })?;
-        }
-        let status = params.get("status").and_then(|v| v.as_str()).unwrap_or("");
-        if !matches!(status, "violated" | "potentially_violated" | "not_found") {
-            return Err(Error::InvalidInput(format!(
-                "status must be violated|potentially_violated|not_found, got '{status}'"
-            )));
-        }
-        let confidence = params
-            .get("confidence")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        if !matches!(confidence, "high" | "medium" | "low") {
-            return Err(Error::InvalidInput(format!(
-                "confidence must be high|medium|low, got '{confidence}'"
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `write_redteam_finding`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let feature_id = params
             .get("feature_id")
             .and_then(|v| v.as_str())
@@ -144,5 +126,34 @@ impl Tool for WriteRedteamFindingTool {
             "status": status,
             "confidence": confidence,
         })))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        for key in ["feature_id", "invariant", "status", "confidence"] {
+            params
+                .get(key)
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .ok_or_else(|| {
+                    Error::InvalidInput(format!("write_redteam_finding requires non-empty '{key}'"))
+                })?;
+        }
+        let status = params.get("status").and_then(|v| v.as_str()).unwrap_or("");
+        if !matches!(status, "violated" | "potentially_violated" | "not_found") {
+            return Err(Error::InvalidInput(format!(
+                "status must be violated|potentially_violated|not_found, got '{status}'"
+            )));
+        }
+        let confidence = params
+            .get("confidence")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !matches!(confidence, "high" | "medium" | "low") {
+            return Err(Error::InvalidInput(format!(
+                "confidence must be high|medium|low, got '{confidence}'"
+            )));
+        }
+        Ok(())
     }
 }

@@ -13,15 +13,15 @@
 
 use std::path::PathBuf;
 
-use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::capability_posture::resolve_corpus_dir;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// One finding from the reconcile artifact (permissive subset — extra fields
 /// ignored so the writer can evolve without breaking this reader).
@@ -84,19 +84,25 @@ impl Default for CapabilityFindingsTool {
     }
 }
 
-#[async_trait]
-impl Tool for CapabilityFindingsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("capability_findings").to_descriptor()
+impl CapabilityFindingsTool {
+    /// Bind this tool's state to its `capability_findings` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("capability_findings", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("capability_findings")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `capability_findings`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let caps_dir = match resolve_corpus_dir(&self.root, params) {
             Ok(d) => d,
             Err(e) => {
@@ -235,7 +241,7 @@ mod tests {
 
         // kind=undocumented → the two undocumented findings, drifted-first order.
         let out = tool
-            .execute(&json!({"corpus":"c","kind":"undocumented"}), &ctx)
+            .run(&json!({"corpus":"c","kind":"undocumented"}), &ctx)
             .await
             .unwrap();
         let v = match out {
@@ -249,7 +255,7 @@ mod tests {
 
         // query narrows to a single capability across kinds.
         let out = tool
-            .execute(&json!({"corpus":"c","query":"vector_mean"}), &ctx)
+            .run(&json!({"corpus":"c","query":"vector_mean"}), &ctx)
             .await
             .unwrap();
         let v = match out {
@@ -266,7 +272,7 @@ mod tests {
         std::fs::create_dir_all(root.path().join("c")).unwrap();
         let ctx = test_ctx();
         let tool = CapabilityFindingsTool::new().with_root(root.path().to_path_buf());
-        let out = tool.execute(&json!({"corpus":"c"}), &ctx).await.unwrap();
+        let out = tool.run(&json!({"corpus":"c"}), &ctx).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             _ => panic!("json"),

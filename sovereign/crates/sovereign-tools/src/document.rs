@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
+use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 const CHUNKS_PER_BATCH: usize = 4;
 const MAX_REDUCE_INPUT_CHARS: usize = 8192;
@@ -152,37 +152,30 @@ impl DocumentTool {
     }
 }
 
-#[async_trait]
-impl Tool for DocumentTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("document").to_descriptor()
+impl DocumentTool {
+    /// Bind this tool's state to its `document` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("document", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("document")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if params.get("source").and_then(|v| v.as_str()).is_none() {
-            return Err(Error::InvalidInput(
-                "Document tool requires a 'source' parameter".to_string(),
-            ));
-        }
-        let operation = params
-            .get("operation")
-            .and_then(|v| v.as_str())
-            .unwrap_or("summarize");
-        if !["summarize", "analyze"].contains(&operation) {
-            return Err(Error::InvalidInput(format!(
-                "Unknown operation: {operation}. Use 'summarize' or 'analyze'."
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `document`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let source = params
             .get("source")
             .and_then(|v| v.as_str())
@@ -230,6 +223,25 @@ impl Tool for DocumentTool {
         }
 
         self.process_chunks(&chunks, operation, source).await
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if params.get("source").and_then(|v| v.as_str()).is_none() {
+            return Err(Error::InvalidInput(
+                "Document tool requires a 'source' parameter".to_string(),
+            ));
+        }
+        let operation = params
+            .get("operation")
+            .and_then(|v| v.as_str())
+            .unwrap_or("summarize");
+        if !["summarize", "analyze"].contains(&operation) {
+            return Err(Error::InvalidInput(format!(
+                "Unknown operation: {operation}. Use 'summarize' or 'analyze'."
+            )));
+        }
+        Ok(())
     }
 }
 

@@ -15,27 +15,33 @@
 //! per-item error (panic-safe — a bad PDF fails its own item, not the run). No
 //! size cap: the output feeds the chunker, not a prompt.
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ExtractTool;
 
-#[async_trait]
-impl Tool for ExtractTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("extract").to_descriptor()
+impl ExtractTool {
+    /// Bind this tool's state to its `extract` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("extract", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("extract")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `extract`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let path = params
             .get("path")
             .and_then(|v| v.as_str())
@@ -73,7 +79,7 @@ mod tests {
         std::fs::write(&md, "# Title\n\nbody text").unwrap();
 
         let out = ExtractTool
-            .execute(
+            .run(
                 &serde_json::json!({ "path": txt.to_string_lossy() }),
                 &ctx(),
             )
@@ -86,21 +92,21 @@ mod tests {
 
         // Markdown extracts (the body text comes back).
         let md_out = ExtractTool
-            .execute(&serde_json::json!({ "path": md.to_string_lossy() }), &ctx())
+            .run(&serde_json::json!({ "path": md.to_string_lossy() }), &ctx())
             .await
             .unwrap();
         assert!(matches!(md_out, StepOutput::Text(t) if t.contains("body text")));
 
         // Missing path → loud error.
         assert!(ExtractTool
-            .execute(&serde_json::json!({}), &ctx())
+            .run(&serde_json::json!({}), &ctx())
             .await
             .is_err());
         // Unsupported extension → loud error (not a panic).
         let bin = dir.path().join("c.bin");
         std::fs::write(&bin, "x").unwrap();
         assert!(ExtractTool
-            .execute(
+            .run(
                 &serde_json::json!({ "path": bin.to_string_lossy() }),
                 &ctx()
             )

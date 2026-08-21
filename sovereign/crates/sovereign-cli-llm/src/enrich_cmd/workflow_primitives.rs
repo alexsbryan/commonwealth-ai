@@ -9,8 +9,6 @@
 //! verbatim — the refined selection, not basic RAG — so a workflow-composed phase
 //! picks exactly the exemplars the bespoke runner would.
 
-use async_trait::async_trait;
-
 use corpus_engine::enrichment::atlas::analysis::AtlasSummary;
 use corpus_engine::enrichment::pipeline::{
     assemble_phase_output,
@@ -23,7 +21,6 @@ use super::atlas_configuration::{build_atlas_summary, finalize_configurations};
 use super::atlas_phase_cmd::render_excerpts;
 use corpus_engine::enrichment::atlas::analysis::configuration::Phase8ParseItem;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 /// Parse a facet string (the Phase-3 `name` selector) into a `Facet`.
@@ -57,6 +54,8 @@ use super::config::EnrichConfig;
 use super::corpus_io::rebuild_corpus_state;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
+use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 /// `atlas_chapters` — the chapter-input prep: split the corpus's pinned source
 /// into `ChapterInput`s via the configured `chapter_regex`, exactly as the
@@ -65,35 +64,21 @@ use super::paths;
 /// chapters the bespoke pipeline does. `Read` effect.
 pub(crate) struct AtlasChaptersTool;
 
-#[async_trait]
-impl Tool for AtlasChaptersTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_chapters".to_string(),
-            name: "atlas_chapters".to_string(),
-            description: "Split the corpus's source into ChapterInputs (via the configured \
-                          chapter_regex), as a collection for a for_each extract. Reuses the \
-                          bespoke corpus-state rebuild — same chapters as `enrich`."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": { "corpus": { "type": "string" } },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl AtlasChaptersTool {
+    /// Bind this tool's state to its `atlas_chapters` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_chapters", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_chapters`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let cfg = EnrichConfig::require(&corpus)
             .map_err(|e| Error::Execution(format!("atlas_chapters: config: {e}")))?;
@@ -114,35 +99,21 @@ impl Tool for AtlasChaptersTool {
 /// prompt — identical to the runner's cache-miss path). `Read` effect.
 pub(crate) struct AtlasSeedTool;
 
-#[async_trait]
-impl Tool for AtlasSeedTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_seed".to_string(),
-            name: "atlas_seed".to_string(),
-            description: "The corpus's cached Stage-1a seed (canonical entities), read exactly as \
-                          the bespoke runner does. Thread into `pipeline_compose` (questions) so a \
-                          workflow Phase 1 sees the same seed as `enrich`. Null if no seed."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": { "corpus": { "type": "string" } },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl AtlasSeedTool {
+    /// Bind this tool's state to its `atlas_seed` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_seed", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_seed`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let cache = PhaseCache::new(paths::cache_dir(&corpus));
         let seed: Option<SeedEntities> = cache
@@ -174,35 +145,21 @@ fn str_param(params: &serde_json::Value, key: &str) -> Result<String> {
 /// `Read` effect.
 pub(crate) struct AtlasClustersTool;
 
-#[async_trait]
-impl Tool for AtlasClustersTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_clusters".to_string(),
-            name: "atlas_clusters".to_string(),
-            description: "The corpus's cached Phase-2 atlas clusters (AtlasCluster[]), as a \
-                          collection for a for_each name pass. Same clusters the bespoke name \
-                          phase reads. Errors if cluster hasn't run."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": { "corpus": { "type": "string" } },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl AtlasClustersTool {
+    /// Bind this tool's state to its `atlas_clusters` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_clusters", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_clusters`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let cache = PhaseCache::new(paths::cache_dir(&corpus));
         let phase2: Option<Phase2AtlasOutput> = cache
@@ -229,38 +186,21 @@ impl Tool for AtlasClustersTool {
 /// `Read` effect.
 pub(crate) struct AtlasClusterExcerptsTool;
 
-#[async_trait]
-impl Tool for AtlasClusterExcerptsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_cluster_excerpts".to_string(),
-            name: "atlas_cluster_excerpts".to_string(),
-            description: "Render a cluster's refs into per-facet SketchExcerpts (+ a joined \
-                          query_text for exemplar scoring), reusing the bespoke render_excerpts \
-                          over the Phase-1 section map. Returns {excerpts, query_text}."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string" },
-                    "cluster": { "type": "object", "description": "The AtlasCluster to render excerpts for" }
-                },
-                "required": ["corpus", "cluster"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl AtlasClusterExcerptsTool {
+    /// Bind this tool's state to its `atlas_cluster_excerpts` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_cluster_excerpts", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_cluster_excerpts`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let cluster: AtlasCluster = serde_json::from_value(
             params
@@ -314,39 +254,21 @@ impl Tool for AtlasClusterExcerptsTool {
 /// type is loosened to accept a hand-built lookalike. `Read` (pure).
 pub(crate) struct PipelineAssembleTool;
 
-#[async_trait]
-impl Tool for PipelineAssembleTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "pipeline_assemble".to_string(),
-            name: "pipeline_assemble".to_string(),
-            description: "Wrap a phase's parsed atoms into its canonical output struct (the \
-                          domain's own assembler — stamps written_at, assigns phase ids). One \
-                          tool, phase-as-data; replaces per-phase JSON envelopes."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "pipeline": { "type": "string", "description": "Pipeline id stamped into the struct (e.g. literary_atlas)" },
-                    "phase": { "type": "string", "enum": ["questions", "name"], "description": "Which phase output to assemble (questions → Phase1Output; name → Phase3AtlasOutput)" },
-                    "atoms": { "type": "array", "description": "The for_each parse step's atoms" }
-                },
-                "required": ["pipeline", "phase", "atoms"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl PipelineAssembleTool {
+    /// Bind this tool's state to its `pipeline_assemble` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("pipeline_assemble", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `pipeline_assemble`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let pipeline_id = str_param(params, "pipeline")?;
         let phase_str = str_param(params, "phase")?;
         let phase = match phase_str.as_str() {
@@ -374,35 +296,21 @@ impl Tool for PipelineAssembleTool {
 /// `Read` effect.
 pub(crate) struct AtlasSummaryTool;
 
-#[async_trait]
-impl Tool for AtlasSummaryTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_summary".to_string(),
-            name: "atlas_summary".to_string(),
-            description: "Summarise the resolved atlas (atoms + edges) for the Phase-8 configure \
-                          prompt — the same AtlasSummary the bespoke configuration cmd builds. \
-                          Errors if the atlas isn't resolved yet."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": { "corpus": { "type": "string" } },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl AtlasSummaryTool {
+    /// Bind this tool's state to its `atlas_summary` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_summary", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_summary`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let summary = build_atlas_summary(&corpus)
             .map_err(|e| Error::Execution(format!("atlas_summary: {e}")))?;
@@ -419,38 +327,21 @@ impl Tool for AtlasSummaryTool {
 /// domain I/O, not a clean envelope. Returns `{configurations: <count>}`. `Write`.
 pub(crate) struct AtlasWriteConfigurationsTool;
 
-#[async_trait]
-impl Tool for AtlasWriteConfigurationsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_write_configurations".to_string(),
-            name: "atlas_write_configurations".to_string(),
-            description: "Finalize Phase-8 configurations: validate the parse items against the \
-                          atlas + merge Configuration atoms into configurations.json + atoms.json \
-                          (the bespoke configure write). Returns the configuration count."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string" },
-                    "items": { "type": "array", "description": "The pipeline_parse(configure) output — Phase8ParseItem[]" }
-                },
-                "required": ["corpus", "items"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl AtlasWriteConfigurationsTool {
+    /// Bind this tool's state to its `atlas_write_configurations` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_write_configurations", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_write_configurations`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let items: Vec<Phase8ParseItem> = serde_json::from_value(
             params
@@ -477,41 +368,21 @@ impl Tool for AtlasWriteConfigurationsTool {
 /// JSON array, which the phase's compose step renders into its prompt.
 pub(crate) struct ExemplarSelectTool;
 
-#[async_trait]
-impl Tool for ExemplarSelectTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "exemplar_select".to_string(),
-            name: "exemplar_select".to_string(),
-            description: "Few-shot exemplar selection (extract/name): embed `query`, pick the \
-                          top-`k` exemplars from the corpus's phase bank via \
-                          ExemplarBank::select_top_k. Returns the selected exemplars as JSON."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string" },
-                    "phase": { "type": "string", "enum": ["questions", "atlas-named-clusters"], "description": "Which exemplar bank (extract → questions; name → atlas-named-clusters)" },
-                    "query": { "type": "string", "description": "Text to embed for similarity selection" },
-                    "k": { "type": "integer", "description": "How many exemplars (default 5)" },
-                    "facet": { "type": "string", "description": "Optional facet filter (name phase) — selects only exemplars tagged with this facet, via select_top_k_facet" }
-                },
-                "required": ["corpus", "phase", "query"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl ExemplarSelectTool {
+    /// Bind this tool's state to its `exemplar_select` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("exemplar_select", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `exemplar_select`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = params
             .get("corpus")
             .and_then(|v| v.as_str())
@@ -578,41 +449,21 @@ impl Tool for ExemplarSelectTool {
 /// (`Read`, no corpus, no daemon), so it's hermetically testable.
 pub(crate) struct PipelineParseTool;
 
-#[async_trait]
-impl Tool for PipelineParseTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "pipeline_parse".to_string(),
-            name: "pipeline_parse".to_string(),
-            description: "Parse a model response through a pipeline's parse_<phase> method \
-                          (seed|questions|name|tensions|configure). Returns the parsed atoms as \
-                          JSON. `pipeline` selects the pipeline (e.g. literary_atlas); `name` also \
-                          needs a `facet`."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "pipeline": { "type": "string", "description": "Pipeline id (e.g. literary_atlas)" },
-                    "phase": { "type": "string", "enum": ["seed", "questions", "name", "tensions", "configure"] },
-                    "response": { "type": "string", "description": "The model output to parse (e.g. {model.output})" },
-                    "facet": { "type": "string", "description": "Facet for `name` (question|claim|entity_state|relation_state|event)" }
-                },
-                "required": ["pipeline", "phase", "response"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl PipelineParseTool {
+    /// Bind this tool's state to its `pipeline_parse` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("pipeline_parse", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `pipeline_parse`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let pipeline_id = str_param(params, "pipeline")?;
         let phase = str_param(params, "phase")?;
         let response = str_param(params, "response")?;
@@ -676,41 +527,21 @@ impl Tool for PipelineParseTool {
 /// keeping the refined render in the pipeline (source of truth, no divergence).
 pub(crate) struct PipelineComposeTool;
 
-#[async_trait]
-impl Tool for PipelineComposeTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "pipeline_compose".to_string(),
-            name: "pipeline_compose".to_string(),
-            description: "Build a phase's prompt via a pipeline's compose_<phase> method. `input` \
-                          is the phase's typed input as JSON (seed/questions → a chapter; \
-                          configure → an atlas summary). Returns {system, user, schema} for a \
-                          model: step."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "pipeline": { "type": "string", "description": "Pipeline id (e.g. literary_atlas)" },
-                    "phase": { "type": "string", "enum": ["seed", "questions", "name", "configure"] },
-                    "input": { "description": "The phase's typed input as JSON (chapter / {chapter,exemplars,seed} / {cluster,excerpts,exemplars} / summary)" },
-                    "facet": { "type": "string", "description": "Facet for `name`" }
-                },
-                "required": ["pipeline", "phase", "input"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl PipelineComposeTool {
+    /// Bind this tool's state to its `pipeline_compose` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("pipeline_compose", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `pipeline_compose`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let pipeline_id = str_param(params, "pipeline")?;
         let phase = str_param(params, "phase")?;
         let input = params
@@ -792,6 +623,7 @@ impl Tool for PipelineComposeTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::traits::Tool;
 
     fn ctx() -> ToolContext {
         ToolContext {
@@ -818,7 +650,7 @@ mod tests {
             "approx_tokens": 120
         });
         let out = PipelineComposeTool
-            .execute(
+            .declared().execute(
                 &serde_json::json!({ "pipeline": "literary_atlas", "phase": "seed", "input": chapter.clone() }),
                 &ctx(),
             )
@@ -834,6 +666,7 @@ mod tests {
 
         // Extract: composite input { chapter, exemplars } → compose_phase1.
         let out2 = PipelineComposeTool
+            .declared()
             .execute(
                 &serde_json::json!({
                     "pipeline": "literary_atlas",
@@ -851,6 +684,7 @@ mod tests {
 
         // Unknown pipeline + unwired phase are loud errors.
         assert!(PipelineComposeTool
+            .declared()
             .execute(
                 &serde_json::json!({ "pipeline": "no-such", "phase": "seed", "input": {} }),
                 &ctx()
@@ -866,6 +700,7 @@ mod tests {
     async fn pipeline_parse_routes_by_phase() {
         // Phase 8 with an empty-configurations response → an empty JSON array.
         let out = PipelineParseTool
+            .declared()
             .execute(
                 &serde_json::json!({
                     "pipeline": "literary_atlas",
@@ -880,14 +715,14 @@ mod tests {
 
         // Unknown pipeline + unsupported phase are loud errors.
         assert!(PipelineParseTool
-            .execute(
+            .declared().execute(
                 &serde_json::json!({ "pipeline": "no-such", "phase": "configure", "response": "{}" }),
                 &ctx()
             )
             .await
             .is_err());
         assert!(PipelineParseTool
-            .execute(
+            .declared().execute(
                 &serde_json::json!({ "pipeline": "literary_atlas", "phase": "bogus", "response": "{}" }),
                 &ctx()
             )
@@ -900,10 +735,12 @@ mod tests {
     #[tokio::test]
     async fn atlas_chapters_validates_corpus() {
         assert!(AtlasChaptersTool
+            .declared()
             .execute(&serde_json::json!({}), &ctx())
             .await
             .is_err());
         assert!(AtlasChaptersTool
+            .declared()
             .execute(
                 &serde_json::json!({ "corpus": "definitely-not-real-zzz" }),
                 &ctx()
@@ -918,11 +755,13 @@ mod tests {
     #[tokio::test]
     async fn atlas_seed_missing_corpus_errors_absent_seed_is_null() {
         assert!(AtlasSeedTool
+            .declared()
             .execute(&serde_json::json!({}), &ctx())
             .await
             .is_err());
         // A corpus with no seed cache → null (the canonical "no seed" signal).
         let out = AtlasSeedTool
+            .declared()
             .execute(
                 &serde_json::json!({ "corpus": "definitely-not-real-zzz" }),
                 &ctx(),
@@ -939,6 +778,7 @@ mod tests {
     #[tokio::test]
     async fn exemplar_select_validates_params() {
         assert!(ExemplarSelectTool
+            .declared()
             .execute(
                 &serde_json::json!({ "phase": "questions", "query": "x" }),
                 &ctx()
@@ -946,6 +786,7 @@ mod tests {
             .await
             .is_err()); // missing corpus
         assert!(ExemplarSelectTool
+            .declared()
             .execute(
                 &serde_json::json!({ "corpus": "x", "phase": "bogus", "query": "y" }),
                 &ctx()
@@ -953,7 +794,7 @@ mod tests {
             .await
             .is_err()); // bad phase
         assert!(ExemplarSelectTool
-            .execute(
+            .declared().execute(
                 &serde_json::json!({ "corpus": "definitely-not-real-zzz", "phase": "questions", "query": "y" }),
                 &ctx()
             )

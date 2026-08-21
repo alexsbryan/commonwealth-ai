@@ -32,14 +32,14 @@
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use sovereign_core::error::Result;
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Default narrative docs the architectural drift detector tracks.
 /// Resolved relative to the workspace root.
@@ -339,19 +339,34 @@ impl Default for DriftPostureTool {
     }
 }
 
-#[async_trait]
-impl Tool for DriftPostureTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("drift_posture").to_descriptor()
+impl DriftPostureTool {
+    /// Bind this tool's state to its `drift_posture` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("drift_posture", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("drift_posture")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `drift_posture`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let narrative_paths = resolve_narratives(params, self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
         Ok(StepOutput::Json(
@@ -359,7 +374,8 @@ impl Tool for DriftPostureTool {
         ))
     }
 
-    async fn signal(&self) -> Option<String> {
+    async fn signal_now(&self) -> Option<String> {
+
         let narrative_paths = resolve_narratives(&json!({}), self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
         match posture.status {

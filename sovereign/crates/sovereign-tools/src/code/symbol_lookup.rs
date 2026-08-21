@@ -18,10 +18,8 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine::CorpusEngine;
@@ -30,6 +28,7 @@ use corpus_engine_scip::scip_graph::SymbolRow;
 use super::callees::ScipGraphHandle;
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Look up a symbol by exact name across every corpus in the merged
 /// SCIP graph.
@@ -55,36 +54,30 @@ impl SymbolLookupTool {
     }
 }
 
-#[async_trait]
-impl Tool for SymbolLookupTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("symbols").to_descriptor()
+impl SymbolLookupTool {
+    /// Bind this tool's state to its `symbols` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("symbols", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("symbols")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let name = params
-            .get("name")
-            .and_then(|v| v.as_str())
-            // Name the tool as DECLARED (`id: "symbols"`, above), not by its
-            // pre-March-2026 alias. A user who typed the canonical name and
-            // was told "symbol_lookup requires 'name'" got pointed at an
-            // identifier they did not use and that the docs tell them not to.
-            .ok_or_else(|| Error::InvalidInput("symbols requires 'name'".to_string()))?;
-        if !is_valid_symbol_name(name) {
-            return Err(Error::InvalidInput(format!(
-                "invalid symbol name '{name}': must be alphanumeric plus _, ::, or $, and ≤256 chars"
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `symbols`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let name = params
             .get("name")
             .and_then(|v| v.as_str())
@@ -149,6 +142,24 @@ impl Tool for SymbolLookupTool {
             }
         }
         Ok(StepOutput::Text(out))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let name = params
+            .get("name")
+            .and_then(|v| v.as_str())
+            // Name the tool as DECLARED (`id: "symbols"`, above), not by its
+            // pre-March-2026 alias. A user who typed the canonical name and
+            // was told "symbol_lookup requires 'name'" got pointed at an
+            // identifier they did not use and that the docs tell them not to.
+            .ok_or_else(|| Error::InvalidInput("symbols requires 'name'".to_string()))?;
+        if !is_valid_symbol_name(name) {
+            return Err(Error::InvalidInput(format!(
+                "invalid symbol name '{name}': must be alphanumeric plus _, ::, or $, and ≤256 chars"
+            )));
+        }
+        Ok(())
     }
 }
 

@@ -1,0 +1,107 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
+# Long-running solve sessions served by the daemon (`sovereign-cli-daemon`).
+#
+# The DECLARED half of each tool. Adding a tool here plus a handler is the
+# whole change; there is no `impl Tool for` block to write.
+
+[[tool]]
+id = "solve"
+name = "Solve"
+description = "The standard engine for executing a coding goal. Give it a workdir (a git repo) and a plain-language goal; the daemon makes the goal test-shaped \u2014 using your failing tests if you have them, writing the one failing test that pins the goal if you don't \u2014 then iterates until the tests pass. Prefer this over hand-editing for any goal a test can measure: bug fixes, new functions, behavior changes, splitting oversized files. Returns a job_id immediately; poll solve_status for live rounds and the result, then review the workdir with `git diff`."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "fast"
+scope = "session"
+permissions = ["Shell", "FileWrite"]
+
+[tool.parameters]
+type = "object"
+required = ["workdir", "goal"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.workdir]
+type = "string"
+description = "Absolute path to the git repo to solve in. Must be committed/clean unless force=true."
+
+[tool.parameters.properties.goal]
+type = "string"
+description = """
+Plain-language coding goal, e.g. "add an is_palindrome function to utils.py".
+"""
+
+[tool.parameters.properties.verb]
+type = "string"
+enum = ["fix", "pin", "split"]
+description = "Optional path override when the default inference isn't what you meant: fix = drive existing failing tests green; pin = only write the failing test; split = shrink oversized files (requires max_lines)."
+
+[tool.parameters.properties.max_lines]
+type = "integer"
+description = "With verb=split: the per-file line budget."
+
+[tool.parameters.properties.test_command]
+type = "string"
+description = "Override the auto-detected test command."
+
+[tool.parameters.properties.model]
+type = "string"
+description = "Override the model (default: the daemon's primary)."
+
+[tool.parameters.properties.force]
+type = "boolean"
+description = "Acknowledge solving on a dirty tree."
+
+[tool.output_schema]
+job_id = "string \u2014 pass to solve_status / solve_cancel"
+
+[tool.output_schema.detected]
+framework = "string"
+test_command = "string"
+model = "string"
+
+
+[[tool]]
+id = "solve_cancel"
+name = "Solve cancel"
+description = "Cancel a running solve job. The workdir keeps whatever the last promoted round wrote \u2014 `git diff` shows it, `git checkout .` discards it."
+effect = "write"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["job_id"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.job_id]
+type = "string"
+description = "From solve's response."
+
+
+[[tool]]
+id = "solve_status"
+name = "Solve status"
+description = "State of a solve job: running/done/cancelled, the rounds so far (what won, what each candidate tried), and \u2014 once done \u2014 the full result with test counts before/after and the winning diff."
+effect = "read"
+idempotency = "idempotent"
+latency = "instant"
+scope = "session"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = ["job_id"]
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.job_id]
+type = "string"
+description = "From solve's response."
+
+[tool.output_schema]
+state = "running | done | cancelled"
+rounds = "array of round events"
+result = "present when done: {path, result: TrialResult, ...}"

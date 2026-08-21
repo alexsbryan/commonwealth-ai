@@ -11,104 +11,38 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
 use super::solve_http::{SolveJobs, SubmitWire};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct SolveTool(pub Arc<SolveJobs>);
 pub struct SolveStatusTool(pub Arc<SolveJobs>);
 pub struct SolveCancelTool(pub Arc<SolveJobs>);
 
-#[async_trait]
-impl Tool for SolveTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "solve".to_string(),
-            name: "Solve".to_string(),
-            description: "The standard engine for executing a coding goal. Give it a \
-                workdir (a git repo) and a plain-language goal; the daemon makes the goal \
-                test-shaped — using your failing tests if you have them, writing the one \
-                failing test that pins the goal if you don't — then iterates until the \
-                tests pass. Prefer this over hand-editing for any goal a test can measure: \
-                bug fixes, new functions, behavior changes, splitting oversized files. \
-                Returns a job_id immediately; poll solve_status for live rounds and the \
-                result, then review the workdir with `git diff`."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "workdir": {
-                        "type": "string",
-                        "description": "Absolute path to the git repo to solve in. Must be committed/clean unless force=true."
-                    },
-                    "goal": {
-                        "type": "string",
-                        "description": "Plain-language coding goal, e.g. \"add an is_palindrome function to utils.py\"."
-                    },
-                    "verb": {
-                        "type": "string",
-                        "enum": ["fix", "pin", "split"],
-                        "description": "Optional path override when the default inference isn't what you meant: fix = drive existing failing tests green; pin = only write the failing test; split = shrink oversized files (requires max_lines)."
-                    },
-                    "max_lines": {
-                        "type": "integer",
-                        "description": "With verb=split: the per-file line budget."
-                    },
-                    "test_command": {
-                        "type": "string",
-                        "description": "Override the auto-detected test command."
-                    },
-                    "model": {
-                        "type": "string",
-                        "description": "Override the model (default: the daemon's primary)."
-                    },
-                    "force": {
-                        "type": "boolean",
-                        "description": "Acknowledge solving on a dirty tree."
-                    }
-                },
-                "required": ["workdir", "goal"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Fast, // submit returns immediately; the job itself is Slow
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "job_id": "string — pass to solve_status / solve_cancel",
-                "detected": {
-                    "framework": "string",
-                    "test_command": "string",
-                    "model": "string"
-                }
-            })),
-        }
+impl SolveTool {
+    /// Bind this tool's state to its `solve` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("solve", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        // The solver edits the workdir and runs its test command.
-        vec![Permission::Shell, Permission::FileWrite]
-    }
-
-    fn validate(&self, params: &Value) -> Result<()> {
-        for key in ["workdir", "goal"] {
-            if params.get(key).and_then(|v| v.as_str()).is_none() {
-                return Err(Error::InvalidInput(format!(
-                    "solve requires a '{key}' string parameter"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `solve`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let wire: SubmitWire = serde_json::from_value(params.clone())
             .map_err(|e| Error::InvalidInput(format!("solve params: {e}")))?;
         match self.0.submit(wire) {
@@ -123,43 +57,34 @@ impl Tool for SolveTool {
             }
         }
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+        for key in ["workdir", "goal"] {
+            if params.get(key).and_then(|v| v.as_str()).is_none() {
+                return Err(Error::InvalidInput(format!(
+                    "solve requires a '{key}' string parameter"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
-#[async_trait]
-impl Tool for SolveStatusTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "solve_status".to_string(),
-            name: "Solve status".to_string(),
-            description: "State of a solve job: running/done/cancelled, the rounds so far \
-                (what won, what each candidate tried), and — once done — the full result \
-                with test counts before/after and the winning diff."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "job_id": { "type": "string", "description": "From solve's response." }
-                },
-                "required": ["job_id"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "state": "running | done | cancelled",
-                "rounds": "array of round events",
-                "result": "present when done: {path, result: TrialResult, ...}"
-            })),
-        }
+impl SolveStatusTool {
+    /// Bind this tool's state to its `solve_status` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("solve_status", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `solve_status`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let id = job_id(params)?;
         match self.0.get(id) {
             Some(job) => Ok(StepOutput::Json(job.status_json())),
@@ -168,36 +93,21 @@ impl Tool for SolveStatusTool {
     }
 }
 
-#[async_trait]
-impl Tool for SolveCancelTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "solve_cancel".to_string(),
-            name: "Solve cancel".to_string(),
-            description: "Cancel a running solve job. The workdir keeps whatever the last \
-                promoted round wrote — `git diff` shows it, `git checkout .` discards it."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "job_id": { "type": "string", "description": "From solve's response." }
-                },
-                "required": ["job_id"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl SolveCancelTool {
+    /// Bind this tool's state to its `solve_cancel` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("solve_cancel", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `solve_cancel`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let id = job_id(params)?;
         match self.0.cancel(id) {
             Some(true) => Ok(StepOutput::Json(
@@ -227,6 +137,7 @@ fn no_such_job(id: &str) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::traits::Tool;
 
     fn ctx() -> ToolContext {
         ToolContext {
@@ -243,7 +154,7 @@ mod tests {
     #[test]
     fn solve_descriptor_names_it_the_standard_engine() {
         let tool = SolveTool(Arc::new(SolveJobs::new(1)));
-        let d = tool.descriptor();
+        let d = tool.declared().descriptor();
         assert_eq!(d.id, "solve");
         // The discoverability sentence is load-bearing (spec
         // done-means #3) — a fresh agent must be able to tell this
@@ -260,6 +171,7 @@ mod tests {
     async fn status_of_unknown_job_reports_no_such_job() {
         let tool = SolveStatusTool(Arc::new(SolveJobs::new(1)));
         let out = tool
+            .declared()
             .execute(&json!({"job_id": "nope"}), &ctx())
             .await
             .unwrap();

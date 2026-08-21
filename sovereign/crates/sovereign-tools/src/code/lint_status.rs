@@ -17,19 +17,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::WatcherHeartbeat;
 use corpus_engine_watchers::{LintResult, LintResultStore, LintRunSummary};
 
-use super::watcher_health::{
-    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
-};
+use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct LintStatusTool {
     store: Arc<LintResultStore>,
@@ -84,49 +81,34 @@ impl LintStatusTool {
     }
 }
 
-#[async_trait]
-impl Tool for LintStatusTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("lint_status").to_descriptor()
+impl LintStatusTool {
+    /// Bind this tool's state to its `lint_status` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("lint_status", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("lint_status")
-            .permissions
-            .clone()
-    }
-
-    /// Signal: a one-liner when the lint watcher shows failures or
-    /// stale state. Silent when the last run was clean. Read-only
-    /// SQLite point lookup — no extra I/O beyond what `execute()`
-    /// would do on the same call.
-    async fn signal(&self) -> Option<String> {
-        let summary = self.store.latest_run().await.ok().flatten()?;
-        if summary.passed() {
-            return None;
-        }
-        let age = summary
-            .finished_at
-            .elapsed()
-            .ok()
-            .map(|d| format!(" age {}s", d.as_secs()))
-            .unwrap_or_default();
-        // Find the file with the most recent failure to make the line
-        // actionable (operators can go straight there).
-        let top_file = self
-            .store
-            .latest_failures(1)
-            .await
-            .ok()
-            .and_then(|rs| rs.into_iter().next())
-            .map(|r| r.file);
-        let where_ = top_file
-            .map(|f| format!(" (first in {f})"))
-            .unwrap_or_default();
-        Some(format!("{} lint error(s){where_}{age}", summary.fail_count))
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `lint_status`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let legacy_active = read_legacy(&self.watcher_active);
         let configured = self.watched_scope.is_some();
 
@@ -322,6 +304,33 @@ impl Tool for LintStatusTool {
             "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
             "files": files_block,
         })))
+    }
+
+    async fn signal_now(&self) -> Option<String> {
+
+        let summary = self.store.latest_run().await.ok().flatten()?;
+        if summary.passed() {
+            return None;
+        }
+        let age = summary
+            .finished_at
+            .elapsed()
+            .ok()
+            .map(|d| format!(" age {}s", d.as_secs()))
+            .unwrap_or_default();
+        // Find the file with the most recent failure to make the line
+        // actionable (operators can go straight there).
+        let top_file = self
+            .store
+            .latest_failures(1)
+            .await
+            .ok()
+            .and_then(|rs| rs.into_iter().next())
+            .map(|r| r.file);
+        let where_ = top_file
+            .map(|f| format!(" (first in {f})"))
+            .unwrap_or_default();
+        Some(format!("{} lint error(s){where_}{age}", summary.fail_count))
     }
 }
 
@@ -743,7 +752,7 @@ mod tests {
         let _r2 = store.begin_run().await.unwrap();
 
         let tool = LintStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
@@ -774,7 +783,7 @@ mod tests {
         let _r = store.begin_run().await.unwrap();
 
         let tool = LintStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),

@@ -54,10 +54,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::traits::Tool;
-use crate::types::{
-    Effect, Idempotency, Latency, Permission, RetryConfig, Scope, StepOutput, ToolContext,
-    ToolDescriptor, ToolExample,
-};
+use crate::types::{AuthorityClaim, Effect, Idempotency, Latency, Permission, RetryConfig, Scope, StepOutput, ToolContext, ToolDescriptor, ToolExample};
 
 /// Code-intelligence manifests — every tool under `sovereign-tools/src/code/`.
 ///
@@ -76,11 +73,42 @@ pub const KNOWLEDGE_MANIFESTS_TOML: &str = include_str!(concat!(
     "/tool-manifests/knowledge.toml"
 ));
 
+/// Enrichment + workflow primitives — every tool under
+/// `sovereign-cli-llm/src/enrich_cmd/` plus `workflow_cmd`'s `chunk`.
+pub const ENRICH_MANIFESTS_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tool-manifests/enrich.toml"
+));
+
+/// Cross-mesh work coordination — every tool under
+/// `sovereign-work-atlas/src/tools/`.
+pub const WORK_ATLAS_MANIFESTS_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tool-manifests/work-atlas.toml"
+));
+
+/// The daemon's long-running solve sessions — `sovereign-cli-daemon`.
+pub const SOLVE_MANIFESTS_TOML: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/tool-manifests/solve.toml"
+));
+
 /// Every family file, by name. A new family is one line here; a new TOOL is
 /// zero lines here.
+///
+/// Families track SOURCE DIRECTORIES, not tools, which is why there are five
+/// of them and not eighty. nc-18 added the last three when it converted the
+/// remaining `impl Tool for` blocks: a tool outside `sovereign-tools` had
+/// nowhere to declare itself, and `DeclaredTool` resolves its row through
+/// [`require`], which PANICS on a missing id. Twenty-four ids were in exactly
+/// that state — a runtime panic at tool construction that no type check could
+/// see. `every_declared_id_resolves` below is what stops it recurring.
 pub const FAMILIES: &[(&str, &str)] = &[
     ("code", CODE_MANIFESTS_TOML),
     ("knowledge", KNOWLEDGE_MANIFESTS_TOML),
+    ("enrich", ENRICH_MANIFESTS_TOML),
+    ("work-atlas", WORK_ATLAS_MANIFESTS_TOML),
+    ("solve", SOLVE_MANIFESTS_TOML),
 ];
 
 /// The declared half of one tool.
@@ -330,11 +358,45 @@ pub type ToolHandler = Arc<
         + Sync,
 >;
 
+/// A parameter check the manifest schema cannot express.
+///
+/// `required` keys and `type` agreement are DATA and live in the row. This is
+/// for the residue the row cannot state — a symbol name's character set, a
+/// path's shape — which [`ToolManifest::validate_params`] deliberately leaves
+/// to the tool. Runs AFTER the schema check, never instead of it.
+pub type ValidateFn = Arc<dyn Fn(&serde_json::Value) -> Result<()> + Send + Sync>;
+
+/// A tool's cheap state summary — see [`Tool::signal`]. Async because every
+/// implementation in the tree reads a store.
+pub type SignalFn =
+    Arc<dyn Fn() -> Pin<Box<dyn Future<Output = Option<String>> + Send>> + Send + Sync>;
+
+/// Question-dependent authority claims — see [`Tool::claims`].
+pub type ClaimsFn = Arc<dyn Fn(&str) -> Vec<AuthorityClaim> + Send + Sync>;
+
+/// Question-INdependent declared authority — see [`Tool::authority_domains`].
+pub type AuthorityDomainsFn = Arc<dyn Fn() -> Vec<AuthorityClaim> + Send + Sync>;
+
 /// A tool assembled from a manifest and a handler — the one `Tool` trait impl
 /// that every declared tool shares.
+///
+/// # Why the four optional closures
+///
+/// The manifest carries every declaration answerable without running
+/// anything. Four things on the `Tool` trait are not answerable that way, and
+/// a survey of all 82 impls (nc-18) found exactly how many need each: 34 a
+/// bespoke `validate`, 6 a `signal`, 2 `claims`/`authority_domains`. They are
+/// closures rather than trait methods for the reason [`ToolHandler`] is —
+/// a trait here would be `Tool` under another name.
+///
+/// A tool that needs none of them (40 of 82) is a row plus a handler.
 pub struct DeclaredTool {
     manifest: ToolManifest,
     handler: ToolHandler,
+    validate: Option<ValidateFn>,
+    signal: Option<SignalFn>,
+    claims: Option<ClaimsFn>,
+    authority_domains: Option<AuthorityDomainsFn>,
 }
 
 impl DeclaredTool {
@@ -346,13 +408,44 @@ impl DeclaredTool {
         let manifest = get(id)
             .ok_or_else(|| Error::InvalidInput(format!("no manifest declared for tool id `{id}`")))?
             .clone();
-        Ok(Self { manifest, handler })
+        Ok(Self::from_manifest(manifest, handler))
     }
 
     /// Bind an owned manifest to `handler` — for manifests that did not come
     /// from the embedded catalog (a host-local declaration, a test).
     pub fn from_manifest(manifest: ToolManifest, handler: ToolHandler) -> Self {
-        Self { manifest, handler }
+        Self {
+            manifest,
+            handler,
+            validate: None,
+            signal: None,
+            claims: None,
+            authority_domains: None,
+        }
+    }
+
+    /// Attach the parameter check the row cannot state. Runs after the schema.
+    pub fn with_validate(mut self, f: ValidateFn) -> Self {
+        self.validate = Some(f);
+        self
+    }
+
+    /// Attach a state summary — see [`Tool::signal`].
+    pub fn with_signal(mut self, f: SignalFn) -> Self {
+        self.signal = Some(f);
+        self
+    }
+
+    /// Attach question-dependent authority claims — see [`Tool::claims`].
+    pub fn with_claims(mut self, f: ClaimsFn) -> Self {
+        self.claims = Some(f);
+        self
+    }
+
+    /// Attach declared authority domains — see [`Tool::authority_domains`].
+    pub fn with_authority_domains(mut self, f: AuthorityDomainsFn) -> Self {
+        self.authority_domains = Some(f);
+        self
     }
 
     /// The manifest this tool was declared from.
@@ -371,8 +464,15 @@ impl Tool for DeclaredTool {
         self.manifest.permissions.clone()
     }
 
+    /// Schema first, ALWAYS — a bespoke check adds to the declaration, it
+    /// never replaces it. Reversing these two would let a tool opt out of its
+    /// own row (ARCH §18.3).
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        self.manifest.validate_params(params)
+        self.manifest.validate_params(params)?;
+        match &self.validate {
+            Some(f) => f(params),
+            None => Ok(()),
+        }
     }
 
     fn retry_config(&self) -> Option<RetryConfig> {
@@ -382,6 +482,75 @@ impl Tool for DeclaredTool {
     async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         (self.handler)(params.clone(), ctx.clone()).await
     }
+
+    async fn signal(&self) -> Option<String> {
+        match &self.signal {
+            Some(f) => f().await,
+            None => None,
+        }
+    }
+
+    fn claims(&self, question: &str) -> Vec<AuthorityClaim> {
+        match &self.claims {
+            Some(f) => f(question),
+            None => Vec::new(),
+        }
+    }
+
+    fn authority_domains(&self) -> Vec<AuthorityClaim> {
+        match &self.authority_domains {
+            Some(f) => f(),
+            None => Vec::new(),
+        }
+    }
+}
+
+/// Bind the manifest row for `id` to an async handler — the whole binding for
+/// a tool whose declared half is a row.
+///
+/// This is the ergonomic reason to reach for the shared surface rather than
+/// hand-write an impl (NOUN_CONVERGENCE §10.3 — extract WORK). It carries the
+/// `Arc`/`Pin<Box<_>>` ceremony that [`ToolHandler`] otherwise makes every
+/// author restate, so the author writes an ordinary async closure.
+///
+/// PANICS when nothing declares `id`, naming it — the same contract the
+/// hand-written `descriptor()` bodies already had via [`require`], and for the
+/// same reason: a missing manifest is an id typo that must fail loudly at
+/// construction rather than reach a caller as a tool that half-works.
+pub fn declared<F, Fut>(id: &str, run: F) -> DeclaredTool
+where
+    F: Fn(serde_json::Value, ToolContext) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<StepOutput>> + Send + 'static,
+{
+    DeclaredTool::from_manifest(
+        require(id).clone(),
+        Arc::new(move |params, ctx| Box::pin(run(params, ctx))),
+    )
+}
+
+/// Like [`declared`], but for the few tools that genuinely COMPUTE one
+/// declared field rather than reading it off the row.
+///
+/// Three do, and each for a reason a table cannot carry:
+/// `session_state` generates one property per section from a Rust const it
+/// also validates against; `suggest_note`'s parameter `enum` is that same
+/// const; `knowledge_lookup`'s description is an `include_str!` asset with its
+/// own editing workflow. In every case a copy in the row would be a SECOND
+/// decider that goes stale silently (ARCH principle 8), so the row omits the
+/// field and the binding supplies it.
+///
+/// This is the documented seam, not a loophole: everything else on those three
+/// tools — id, name, effect, permissions, retry, output schema — is still the
+/// row. Reach for it only when a copy would drift, never to avoid writing one.
+pub fn declared_from<F, Fut>(manifest: ToolManifest, run: F) -> DeclaredTool
+where
+    F: Fn(serde_json::Value, ToolContext) -> Fut + Send + Sync + 'static,
+    Fut: Future<Output = Result<StepOutput>> + Send + 'static,
+{
+    DeclaredTool::from_manifest(
+        manifest,
+        Arc::new(move |params, ctx| Box::pin(run(params, ctx))),
+    )
 }
 
 /// A handler that forwards to an already-registered tool, merging `defaults`

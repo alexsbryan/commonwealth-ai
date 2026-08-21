@@ -14,18 +14,18 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use futures::TryStreamExt;
 use lancedb::index::scalar::FullTextSearchQuery;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{InferenceProvider, Tool};
+use sovereign_core::traits::{InferenceProvider};
 use sovereign_core::types::*;
 
 use corpus_engine::CorpusEngine;
 
 use super::{escape_sql, extract_code_rows_pub, CodeRow};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Semantic search over installed code corpora.
 /// A code corpus whose chunk index is at least this many days old gets
@@ -88,28 +88,30 @@ fn format_approximate_response(query: &str, rows: &[CodeRow]) -> String {
     )
 }
 
-#[async_trait]
-impl Tool for CodeSearchTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("code_search").to_descriptor()
+impl CodeSearchTool {
+    /// Bind this tool's state to its `code_search` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("code_search", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("code_search")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("query")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("code_search requires 'query'".into()))?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `code_search`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -272,6 +274,16 @@ impl Tool for CodeSearchTool {
         }
 
         Ok(StepOutput::Text(text))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("query")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("code_search requires 'query'".into()))?;
+        Ok(())
     }
 }
 

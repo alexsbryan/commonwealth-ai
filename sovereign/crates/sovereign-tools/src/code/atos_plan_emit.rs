@@ -32,12 +32,12 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct AtosPlanEmitTool {}
 
@@ -53,70 +53,30 @@ impl Default for AtosPlanEmitTool {
     }
 }
 
-#[async_trait]
-impl Tool for AtosPlanEmitTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("atos_plan_emit").to_descriptor()
+impl AtosPlanEmitTool {
+    /// Bind this tool's state to its `atos_plan_emit` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("atos_plan_emit", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("atos_plan_emit")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &Value) -> Result<()> {
-        let workdir = params
-            .get("workdir")
-            .and_then(Value::as_str)
-            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs string `workdir`".into()))?;
-        if !workdir.starts_with('/') {
-            return Err(Error::InvalidInput(format!(
-                "atos_plan_emit `workdir` must be absolute path; got `{workdir}`"
-            )));
-        }
-        let steps = params
-            .get("steps")
-            .and_then(Value::as_array)
-            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs array `steps`".into()))?;
-        if steps.is_empty() {
-            return Err(Error::InvalidInput(
-                "atos_plan_emit `steps` is empty".into(),
-            ));
-        }
-        if steps.len() > 32 {
-            return Err(Error::InvalidInput(format!(
-                "atos_plan_emit `steps` has {} entries; cap is 32",
-                steps.len()
-            )));
-        }
-        let mut seen = std::collections::HashSet::new();
-        for (i, step) in steps.iter().enumerate() {
-            let obj = step
-                .as_object()
-                .ok_or_else(|| Error::InvalidInput(format!("step {i} is not an object")))?;
-            for required in ["id", "goal", "verify_cmd"] {
-                let v = obj
-                    .get(required)
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.trim().is_empty());
-                if v.is_none() {
-                    return Err(Error::InvalidInput(format!(
-                        "step {i} missing required non-empty `{required}`"
-                    )));
-                }
-            }
-            let id = obj.get("id").and_then(Value::as_str).unwrap();
-            if !seen.insert(id.to_string()) {
-                return Err(Error::InvalidInput(format!(
-                    "step {i} has duplicate id `{id}`"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atos_plan_emit`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let workdir = params
             .get("workdir")
             .and_then(Value::as_str)
@@ -225,6 +185,58 @@ impl Tool for AtosPlanEmitTool {
             "feature_id": feature_id,
         })))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let workdir = params
+            .get("workdir")
+            .and_then(Value::as_str)
+            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs string `workdir`".into()))?;
+        if !workdir.starts_with('/') {
+            return Err(Error::InvalidInput(format!(
+                "atos_plan_emit `workdir` must be absolute path; got `{workdir}`"
+            )));
+        }
+        let steps = params
+            .get("steps")
+            .and_then(Value::as_array)
+            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs array `steps`".into()))?;
+        if steps.is_empty() {
+            return Err(Error::InvalidInput(
+                "atos_plan_emit `steps` is empty".into(),
+            ));
+        }
+        if steps.len() > 32 {
+            return Err(Error::InvalidInput(format!(
+                "atos_plan_emit `steps` has {} entries; cap is 32",
+                steps.len()
+            )));
+        }
+        let mut seen = std::collections::HashSet::new();
+        for (i, step) in steps.iter().enumerate() {
+            let obj = step
+                .as_object()
+                .ok_or_else(|| Error::InvalidInput(format!("step {i} is not an object")))?;
+            for required in ["id", "goal", "verify_cmd"] {
+                let v = obj
+                    .get(required)
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty());
+                if v.is_none() {
+                    return Err(Error::InvalidInput(format!(
+                        "step {i} missing required non-empty `{required}`"
+                    )));
+                }
+            }
+            let id = obj.get("id").and_then(Value::as_str).unwrap();
+            if !seen.insert(id.to_string()) {
+                return Err(Error::InvalidInput(format!(
+                    "step {i} has duplicate id `{id}`"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 fn read_prior_plan_meta(plan_path: &Path) -> (Option<u32>, Option<String>) {
@@ -270,8 +282,8 @@ mod tests {
                 {"id": "step-01", "goal": "scaffold", "verify_cmd": "true", "files_touched": ["Cargo.toml"]}
             ]
         });
-        tool.validate(&params).unwrap();
-        let out = tool.execute(&params, &ctx()).await.unwrap();
+        tool.validate_extra(&params).unwrap();
+        let out = tool.run(&params, &ctx()).await.unwrap();
         let written = tmp.path().join(".sovereign").join("plan.json");
         assert!(written.exists());
         let body = std::fs::read_to_string(&written).unwrap();
@@ -295,9 +307,9 @@ mod tests {
             "workdir": tmp.path().to_string_lossy(),
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        tool.execute(&params, &ctx()).await.unwrap();
-        tool.execute(&params, &ctx()).await.unwrap();
-        let third = tool.execute(&params, &ctx()).await.unwrap();
+        tool.run(&params, &ctx()).await.unwrap();
+        tool.run(&params, &ctx()).await.unwrap();
+        let third = tool.run(&params, &ctx()).await.unwrap();
         if let StepOutput::Json(v) = third {
             assert_eq!(v["revision"], 3);
         } else {
@@ -315,13 +327,13 @@ mod tests {
             "feature_id": "carry-me",
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        tool.execute(&first, &ctx()).await.unwrap();
+        tool.run(&first, &ctx()).await.unwrap();
         // Second call without feature_id should carry it over.
         let second = json!({
             "workdir": tmp.path().to_string_lossy(),
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        let out = tool.execute(&second, &ctx()).await.unwrap();
+        let out = tool.run(&second, &ctx()).await.unwrap();
         if let StepOutput::Json(v) = out {
             assert_eq!(v["feature_id"], "carry-me");
         }
@@ -334,7 +346,7 @@ mod tests {
             "workdir": "relative/path",
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        let err = tool.validate(&params).unwrap_err();
+        let err = tool.validate_extra(&params).unwrap_err();
         assert!(format!("{err}").contains("absolute"));
     }
 
@@ -342,7 +354,7 @@ mod tests {
     fn validate_rejects_empty_steps() {
         let tool = AtosPlanEmitTool::new();
         let params = json!({"workdir": "/tmp/x", "steps": []});
-        assert!(tool.validate(&params).is_err());
+        assert!(tool.validate_extra(&params).is_err());
     }
 
     #[test]
@@ -355,7 +367,7 @@ mod tests {
                 {"id": "s1", "goal": "b", "verify_cmd": "true"}
             ]
         });
-        let err = tool.validate(&params).unwrap_err();
+        let err = tool.validate_extra(&params).unwrap_err();
         assert!(format!("{err}").contains("duplicate"));
     }
 
@@ -366,7 +378,7 @@ mod tests {
             "workdir": "/tmp/x",
             "steps": [{"id": "s1", "verify_cmd": "true"}]
         });
-        let err = tool.validate(&params).unwrap_err();
+        let err = tool.validate_extra(&params).unwrap_err();
         assert!(format!("{err}").contains("goal"));
     }
 }

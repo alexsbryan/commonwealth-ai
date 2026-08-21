@@ -5,20 +5,16 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 use uuid::Uuid;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
 use crate::model::Privacy;
 use crate::store::WorkAtlasStore;
 use crate::tools::broadcast::ClaimBroadcaster;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 #[derive(Debug)]
 pub struct ReleaseScopeTool {
@@ -32,49 +28,25 @@ impl ReleaseScopeTool {
     }
 }
 
-#[async_trait]
-impl Tool for ReleaseScopeTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "release_scope".to_string(),
-            name: "Release Scope".to_string(),
-            description: "Drop a previously-declared claim. Idempotent — releasing an \
-                          already-released or expired claim returns `released: false` \
-                          without erroring. Once released, the claim is gone; spec §3 \
-                          forbids history."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "claim_id": {
-                        "type": "string",
-                        "description": "UUID returned by declare_scope."
-                    }
-                },
-                "required": ["claim_id"]
-            }),
-            examples: vec![ToolExample {
-                situation: "You finished the refactor you claimed earlier.".into(),
-                call: json!({ "claim_id": "550e8400-e29b-41d4-a716-446655440000" }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "released": { "type": "boolean" }
-                }
-            })),
-        }
+impl ReleaseScopeTool {
+    /// Bind this tool's state to its `release_scope` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("release_scope", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `release_scope`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let claim_id_str = params
             .get("claim_id")
             .and_then(|v| v.as_str())

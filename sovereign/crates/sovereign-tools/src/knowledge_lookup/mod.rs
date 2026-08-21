@@ -22,18 +22,15 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 
 use corpus_engine_notes::NoteStore;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::memory;
-use sovereign_core::traits::{InferenceProvider, MemoryScope, StateStore, Tool};
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, RetryConfig, Scope, StepOutput, ToolContext,
-    ToolDescriptor,
-};
+use sovereign_core::traits::{InferenceProvider, MemoryScope, StateStore};
+use sovereign_core::types::{StepOutput, ToolContext};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 // ─── Public types ──────────────────────────────────────────────
 
@@ -386,89 +383,35 @@ impl KnowledgeLookupTool {
     }
 }
 
-#[async_trait]
-impl Tool for KnowledgeLookupTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "knowledge_lookup".to_string(),
-            name: "Knowledge lookup".to_string(),
-            description: TOOL_DESCRIPTION.trim().to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "A short focused query (≤ 8 words is plenty)."
-                    },
-                    "kinds": {
-                        "type": "array",
-                        "items": { "type": "string", "enum": ["corpus", "memory", "note"] },
-                        "description": "Optional channel filter. Omit to fan out to all three."
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": { "type": "string" },
-                    "evidence": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": { "type": "string", "description": "Stable handle (e.g. ev-0001)" },
-                                "source_kind": { "type": "string", "enum": ["corpus", "memory", "note"] },
-                                "source_id": { "type": "string" },
-                                "title": { "type": "string" },
-                                "content": { "type": "string" },
-                                "confidence": { "type": "number" },
-                                "retrieval_context": { "type": "string" }
-                            }
-                        }
-                    },
-                    "by_kind_counts": {
-                        "type": "object",
-                        "properties": {
-                            "corpus": { "type": "integer" },
-                            "memory": { "type": "integer" },
-                            "note": { "type": "integer" }
-                        }
-                    }
-                }
-            })),
-        }
+impl KnowledgeLookupTool {
+    /// Bind this tool's state to its `knowledge_lookup` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        // The description is an `include_str!` asset with its own editing
+        // workflow, so the row declares everything else and this supplies the
+        // one field a copy would let drift (ARCH principle 8).
+        let mut manifest = sovereign_core::tool_manifest::require("knowledge_lookup").clone();
+        manifest.description = TOOL_DESCRIPTION.trim().to_string();
+        sovereign_core::tool_manifest::declared_from(manifest, move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn retry_config(&self) -> Option<RetryConfig> {
-        None
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let query = params.get("query").and_then(|v| v.as_str());
-        let Some(query) = query else {
-            return Err(Error::InvalidInput(
-                "knowledge_lookup requires a 'query' string parameter".to_string(),
-            ));
-        };
-        if query.trim().is_empty() {
-            return Err(Error::InvalidInput(
-                "knowledge_lookup 'query' cannot be empty".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `knowledge_lookup`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -603,6 +546,22 @@ impl Tool for KnowledgeLookupTool {
             .map_err(|e| Error::Execution(format!("knowledge_lookup: serialize: {e}")))?;
         Ok(StepOutput::Json(value))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let query = params.get("query").and_then(|v| v.as_str());
+        let Some(query) = query else {
+            return Err(Error::InvalidInput(
+                "knowledge_lookup requires a 'query' string parameter".to_string(),
+            ));
+        };
+        if query.trim().is_empty() {
+            return Err(Error::InvalidInput(
+                "knowledge_lookup 'query' cannot be empty".to_string(),
+            ));
+        }
+        Ok(())
+    }
 }
 
 // ─── Helpers ────────────────────────────────────────────────────
@@ -635,12 +594,12 @@ fn memory_title(content: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
+    use sovereign_core::traits::Tool;
     use std::pin::Pin;
 
     use futures::Stream;
-    use sovereign_core::types::{
-        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
-    };
+    use sovereign_core::types::{CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed};
 
     /// Bare-minimum InferenceProvider for the unit tests. Embeds
     /// return an empty vector — `corpus_evidence` interprets that
@@ -705,7 +664,7 @@ mod tests {
 
     #[test]
     fn descriptor_uses_short_id_and_loads_asset() {
-        let tool = mock_tool();
+        let tool = mock_tool().declared();
         let desc = tool.descriptor();
         assert_eq!(desc.id, "knowledge_lookup");
         assert!(
@@ -733,7 +692,7 @@ mod tests {
     fn validate_rejects_empty_query() {
         let tool = mock_tool();
         let err = tool
-            .validate(&serde_json::json!({ "query": "" }))
+            .validate_extra(&serde_json::json!({ "query": "" }))
             .expect_err("should reject empty query");
         let msg = format!("{err}");
         assert!(msg.contains("empty"));
@@ -743,7 +702,7 @@ mod tests {
     fn validate_rejects_missing_query() {
         let tool = mock_tool();
         let err = tool
-            .validate(&serde_json::json!({}))
+            .validate_extra(&serde_json::json!({}))
             .expect_err("should reject missing query");
         let msg = format!("{err}");
         assert!(msg.contains("requires"));
@@ -757,7 +716,7 @@ mod tests {
         // confabulating).
         let tool = mock_tool();
         let out = tool
-            .execute(
+            .run(
                 &serde_json::json!({ "query": "what is recursion" }),
                 &sovereign_core::types::ToolContext {
                     conversation_id: "test".into(),

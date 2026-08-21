@@ -8,14 +8,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::NoteStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ReadNoteByIdTool {
     store: Arc<NoteStore>,
@@ -27,28 +26,30 @@ impl ReadNoteByIdTool {
     }
 }
 
-#[async_trait]
-impl Tool for ReadNoteByIdTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("read_note_by_id").to_descriptor()
+impl ReadNoteByIdTool {
+    /// Bind this tool's state to its `read_note_by_id` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("read_note_by_id", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("read_note_by_id")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("id")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("read_note_by_id requires 'id'".to_string()))?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `read_note_by_id`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let id = params
             .get("id")
             .and_then(|v| v.as_str())
@@ -80,5 +81,15 @@ impl Tool for ReadNoteByIdTool {
             }))),
             None => Ok(StepOutput::Json(json!({ "found": false, "id": id }))),
         }
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("read_note_by_id requires 'id'".to_string()))?;
+        Ok(())
     }
 }

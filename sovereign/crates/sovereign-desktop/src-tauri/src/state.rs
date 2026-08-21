@@ -550,13 +550,13 @@ pub async fn bootstrap_with_progress(
         tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
             Arc::clone(&store),
             Arc::clone(&inference),
-        )));
+        ).declared()));
         let approval_for_doc = Arc::clone(&state.approval);
         tools.register(Box::new(
             sovereign_tools::DocumentOperationTool::new(Arc::clone(&store), Arc::clone(&inference))
                 .with_progress(Arc::new(move |p| {
                     approval_for_doc.emit_event("document-progress", &p);
-                })),
+                })).declared(),
         ));
     }
     if enabled
@@ -570,10 +570,7 @@ pub async fn bootstrap_with_progress(
         // direct-enum dispatch never had. The legacy path stays
         // available via SearchTool::with_web for the seven other call
         // sites still using it.
-        use sovereign_tools::web::search::{
-            BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
-            WebSearchBackend, WebSearchRegistry,
-        };
+        use sovereign_tools::web::search::{BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry};
 
         let mut registry = WebSearchRegistry::new();
         // DuckDuckGo is always available (zero-config fallback).
@@ -650,10 +647,7 @@ pub async fn bootstrap_with_progress(
         // instance vs. sharing — kept duplicate for scope-locality
         // (the search-tool block above is its own gated branch).
         if config.auto_escalate_to_web {
-            use sovereign_tools::web::search::{
-                BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
-                WebSearchBackend, WebSearchRegistry,
-            };
+            use sovereign_tools::web::search::{BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry};
             let mut registry = WebSearchRegistry::new();
             registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
             let preferred: Box<dyn WebSearchBackend> =
@@ -681,7 +675,7 @@ pub async fn bootstrap_with_progress(
                  thin local results will fall back to web search"
             );
         }
-        tools.register(Box::new(tool));
+        tools.register(Box::new(tool.declared()));
     }
 
     // Construct a shared CorpusEngine. This single instance backs both
@@ -1057,45 +1051,45 @@ pub async fn bootstrap_with_progress(
                         Arc::clone(&corpus_engine),
                         Arc::clone(&graph_handle),
                     )
-                    .with_health_checker(Arc::clone(&hc)),
+                    .with_health_checker(Arc::clone(&hc)).declared(),
                 ));
                 mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
                     &corpus_engine,
-                ))));
+                )).declared()));
                 mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
                     Arc::clone(&corpus_engine),
-                )));
+                ).declared()));
                 mcp_tools.register(Box::new(
                     sovereign_tools::FindCallersTool::new(
                         Arc::clone(&corpus_engine),
                         Arc::clone(&graph_handle),
                     )
-                    .with_health_checker(Arc::clone(&hc)),
+                    .with_health_checker(Arc::clone(&hc)).declared(),
                 ));
                 mcp_tools.register(Box::new(
                     sovereign_tools::FindCalleesTool::new(
                         Arc::clone(&corpus_engine),
                         Arc::clone(&graph_handle),
                     )
-                    .with_health_checker(Arc::clone(&hc)),
+                    .with_health_checker(Arc::clone(&hc)).declared(),
                 ));
                 mcp_tools.register(Box::new(
                     sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
-                        .with_health_checker(Arc::clone(&hc)),
+                        .with_health_checker(Arc::clone(&hc)).declared(),
                 ));
                 // Notes tools.
                 mcp_tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
                     &notes,
-                ))));
+                )).declared()));
                 mcp_tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
                     &notes,
-                ))));
+                )).declared()));
                 mcp_tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
                     &notes,
-                ))));
+                )).declared()));
                 mcp_tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
                     Arc::clone(&notes),
-                )));
+                ).declared()));
                 let session_id = format!("desktop-{}", uuid::Uuid::new_v4());
                 tracing::info!(tools = mcp_tools.count(), "desktop daemon: wiring /mcp");
                 daemon_arc
@@ -1269,10 +1263,10 @@ pub async fn bootstrap_with_progress(
 
     tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
         &corpus_engine,
-    ))));
+    )).declared()));
     tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
         Arc::clone(&corpus_engine),
-    )));
+    ).declared()));
     // Typed SEC-filing figures with basis + accession, or first-class refusals.
     //
     // UNCONDITIONAL, never gated on `config.enabled_tools`: this tool is what
@@ -1284,7 +1278,7 @@ pub async fn bootstrap_with_progress(
     // measured evidence.
     tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
         Arc::clone(&corpus_engine),
-    )));
+    ).declared()));
     // Code Intelligence tools. Build the merged SCIP handle first so
     // SymbolLookupTool can share it — exact-name lookup now reads
     // SCIP directly (Lance kept only embeddings/content/mtime).
@@ -1340,14 +1334,14 @@ pub async fn bootstrap_with_progress(
     tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
         Arc::clone(&corpus_engine),
         Arc::clone(&symbols_graph),
-    )));
+    ).declared()));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
-            .with_inference(Arc::clone(&inference)),
+            .with_inference(Arc::clone(&inference)).declared(),
     ));
     tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
         Arc::clone(&corpus_engine),
-    )));
+    ).declared()));
 
     // ── Recipe Author workspace tools ────────────────────────────
     //
@@ -1366,11 +1360,7 @@ pub async fn bootstrap_with_progress(
     // even when notes.db / features.db are unavailable.
     {
         use sovereign_contracts::recipe::notes::RecipeNotes;
-        use sovereign_tools::recipe_author::{
-            maintainer_inbox_dir, CapabilityRequestTool, CheckpointTool, DecisionLogTool,
-            ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
-            RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
-        };
+        use sovereign_tools::recipe_author::{maintainer_inbox_dir, CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool};
         use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
         use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
         tools.register(Box::new(RegistryBrowseTool));

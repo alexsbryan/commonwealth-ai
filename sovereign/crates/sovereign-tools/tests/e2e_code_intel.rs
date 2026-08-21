@@ -24,6 +24,7 @@
 //! Run with:
 //!     cargo test -p sovereign-tools --test e2e_code_intel
 
+use sovereign_core::tool_manifest::DeclaredTool;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
@@ -40,9 +41,9 @@ struct Fixture {
     root: PathBuf,
     data_dir: PathBuf,
     engine: Arc<CorpusEngine>,
-    sym: SymbolLookupTool,
-    search: CodeSearchTool,
-    recent: RecentChangesTool,
+    sym: DeclaredTool,
+    search: DeclaredTool,
+    recent: DeclaredTool,
     _tmp: tempfile::TempDir,
 }
 
@@ -139,9 +140,9 @@ vector = false
                 corpus_engine_scip::ScipGraph::open_in_memory("fixture")
                     .expect("in-memory ScipGraph for fixture"),
             ));
-        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&scip_handle));
-        let search = CodeSearchTool::new(Arc::clone(&engine));
-        let recent = RecentChangesTool::new(Arc::clone(&engine));
+        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&scip_handle)).declared();
+        let search = CodeSearchTool::new(Arc::clone(&engine)).declared();
+        let recent = RecentChangesTool::new(Arc::clone(&engine)).declared();
 
         Self {
             root,
@@ -645,10 +646,10 @@ struct AuthFixture {
     root: PathBuf,
     #[allow(dead_code)]
     engine: Arc<CorpusEngine>,
-    sym: SymbolLookupTool,
-    search: CodeSearchTool,
-    callees: FindCalleesTool,
-    callers: FindCallersTool,
+    sym: DeclaredTool,
+    search: DeclaredTool,
+    callees: DeclaredTool,
+    callers: DeclaredTool,
     graph: ScipGraphHandle,
     _tmp: tempfile::TempDir,
 }
@@ -739,10 +740,10 @@ vector = false
 
         // ── Build tools ──────────────────────────────────────
 
-        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph));
-        let search = CodeSearchTool::new(Arc::clone(&engine));
-        let callees = FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph));
-        let callers = FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph));
+        let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
+        let search = CodeSearchTool::new(Arc::clone(&engine)).declared();
+        let callees = FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
+        let callers = FindCallersTool::new(Arc::clone(&engine), Arc::clone(&graph)).declared();
 
         Self {
             root,
@@ -1490,8 +1491,8 @@ embedding_dimensions = 8
             .expect("in-memory ScipGraph for mixed-corpora test"),
     ));
     let sym = SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&mixed_graph));
-    let search = CodeSearchTool::new(Arc::clone(&engine));
-    let recent = RecentChangesTool::new(Arc::clone(&engine));
+    let search = CodeSearchTool::new(Arc::clone(&engine)).declared();
+    let recent = RecentChangesTool::new(Arc::clone(&engine)).declared();
     let ctx = ToolContext {
         conversation_id: "mixed-corpora-test".to_string(),
         task_id: None,
@@ -1503,7 +1504,7 @@ embedding_dimensions = 8
     };
 
     let sym_out = text(
-        &sym.execute(&serde_json::json!({ "name": "make_widget" }), &ctx)
+        &sym.declared().execute(&serde_json::json!({ "name": "make_widget" }), &ctx)
             .await,
     );
     assert!(

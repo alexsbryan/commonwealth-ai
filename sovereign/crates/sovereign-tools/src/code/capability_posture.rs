@@ -14,15 +14,15 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde::Deserialize;
 use serde_json::json;
 
 use sovereign_core::error::Result;
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use super::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Headline tallies pulled from the reconcile's JSON artifact — a permissive
 /// subset of its `FindingSet` (extra fields ignored so the writer can evolve).
@@ -131,19 +131,25 @@ impl Default for CapabilityPostureTool {
     }
 }
 
-#[async_trait]
-impl Tool for CapabilityPostureTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("capability_posture").to_descriptor()
+impl CapabilityPostureTool {
+    /// Bind this tool's state to its `capability_posture` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("capability_posture", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("capability_posture")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `capability_posture`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let caps_dir = match resolve_corpus_dir(&self.root, params) {
             Ok(d) => d,
             Err(e) => {
@@ -215,7 +221,7 @@ mod tests {
         let tool = CapabilityPostureTool::new().with_root(root.path().to_path_buf());
 
         // No fingerprint/findings yet → never_run with zero counts.
-        let out = tool.execute(&json!({"corpus": "c"}), &ctx).await.unwrap();
+        let out = tool.run(&json!({"corpus": "c"}), &ctx).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             _ => panic!("expected json"),
@@ -229,7 +235,7 @@ mod tests {
             json!({"corpus_id":"c","corroborated":114,"undocumented":112,"drifted":0,"findings":[]}).to_string(),
         )
         .unwrap();
-        let out = tool.execute(&json!({"corpus": "c"}), &ctx).await.unwrap();
+        let out = tool.run(&json!({"corpus": "c"}), &ctx).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             _ => panic!("expected json"),

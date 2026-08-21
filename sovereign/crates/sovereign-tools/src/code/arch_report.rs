@@ -27,15 +27,15 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use sha2::{Digest, Sha256};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_scip::arch_metrics::{self, normalize_crate_name, ArchOptions, DeclaredDeps};
 use corpus_engine_scip::ScipGraph;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Feature axes whose `cfg(feature = "…")` spread is worth watching — the
 /// flags that reshape the dependency graph (see CLAUDE.md's build-thrash
@@ -489,9 +489,7 @@ fn temporal_section(
     refs: &[corpus_engine_scip::ScipRefRecord],
     member_dirs: &BTreeMap<String, String>,
 ) -> Option<TemporalSection> {
-    use corpus_engine_archaeology::git_archaeology::{
-        batch_harvest_all_commits, compute_co_evolution,
-    };
+    use corpus_engine_archaeology::git_archaeology::{batch_harvest_all_commits, compute_co_evolution};
 
     let history = batch_harvest_all_commits(root).ok()?;
     let cutoff = std::time::SystemTime::now()
@@ -636,34 +634,30 @@ impl ArchReportTool {
     }
 }
 
-#[async_trait]
-impl Tool for ArchReportTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("arch_report").to_descriptor()
+impl ArchReportTool {
+    /// Bind this tool's state to its `arch_report` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("arch_report", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("arch_report")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
-            if c.is_empty()
-                || !c
-                    .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
-            {
-                return Err(Error::InvalidInput(format!(
-                    "invalid corpus_id '{c}': alphanumeric plus '-' and '_' only"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `arch_report`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let corpus_id = match params.get("corpus_id").and_then(|v| v.as_str()) {
             Some(c) => c.to_string(),
             None => {
@@ -708,15 +702,32 @@ impl Tool for ArchReportTool {
         .await?;
         Ok(StepOutput::Text(render_report(&data)))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
+            if c.is_empty()
+                || !c
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_')
+            {
+                return Err(Error::InvalidInput(format!(
+                    "invalid corpus_id '{c}': alphanumeric plus '-' and '_' only"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::traits::Tool;
 
     #[test]
     fn descriptor_id_matches_mcp_surface() {
-        let tool = ArchReportTool::with_indexes_dir(PathBuf::from("/nonexistent"));
+        let tool = ArchReportTool::with_indexes_dir(PathBuf::from("/nonexistent")).declared();
         assert_eq!(tool.descriptor().id, "arch_report");
         assert!(crate::mcp_surface::MCP_TOOLS_ALWAYS.contains(&tool.descriptor().id.as_str()));
     }
@@ -725,10 +736,10 @@ mod tests {
     fn corpus_id_validation_rejects_path_traversal() {
         let tool = ArchReportTool::with_indexes_dir(PathBuf::from("/nonexistent"));
         assert!(tool
-            .validate(&serde_json::json!({"corpus_id": "../etc"}))
+            .validate_extra(&serde_json::json!({"corpus_id": "../etc"}))
             .is_err());
         assert!(tool
-            .validate(&serde_json::json!({"corpus_id": "commonwealth-ai"}))
+            .validate_extra(&serde_json::json!({"corpus_id": "commonwealth-ai"}))
             .is_ok());
     }
 

@@ -12,14 +12,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct PromoteNoteTool {
     store: Arc<NoteStore>,
@@ -31,48 +30,30 @@ impl PromoteNoteTool {
     }
 }
 
-#[async_trait]
-impl Tool for PromoteNoteTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("promote_note").to_descriptor()
+impl PromoteNoteTool {
+    /// Bind this tool's state to its `promote_note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("promote_note", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("promote_note")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("id")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("promote_note requires 'id'".to_string()))?;
-        let scope = params
-            .get("to_scope")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("promote_note requires 'to_scope'".to_string()))?;
-        if !matches!(scope, "feature" | "global") {
-            return Err(Error::InvalidInput(format!(
-                "promote_note 'to_scope' must be 'feature' or 'global', got '{scope}'"
-            )));
-        }
-        if scope == "feature"
-            && params
-                .get("feature_id")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .is_none()
-        {
-            return Err(Error::InvalidInput(
-                "promote_note to_scope='feature' requires 'feature_id'".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `promote_note`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let id = params.get("id").and_then(|v| v.as_str()).unwrap_or("");
         let to_scope_s = params
             .get("to_scope")
@@ -103,5 +84,35 @@ impl Tool for PromoteNoteTool {
             "to_scope": to_scope.as_str(),
             "feature_id": feature_id,
         })))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("promote_note requires 'id'".to_string()))?;
+        let scope = params
+            .get("to_scope")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("promote_note requires 'to_scope'".to_string()))?;
+        if !matches!(scope, "feature" | "global") {
+            return Err(Error::InvalidInput(format!(
+                "promote_note 'to_scope' must be 'feature' or 'global', got '{scope}'"
+            )));
+        }
+        if scope == "feature"
+            && params
+                .get("feature_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .is_none()
+        {
+            return Err(Error::InvalidInput(
+                "promote_note to_scope='feature' requires 'feature_id'".to_string(),
+            ));
+        }
+        Ok(())
     }
 }

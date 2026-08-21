@@ -27,25 +27,16 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::runtime::numeric_audit::numeric_tokens;
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
-use corpus_engine::enrichment::atlas::analysis::sec_facts::{
-    available_period_ends, calendar_period_in_question, change, coverage_summary,
-    discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
-    scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
-    SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
-};
+use corpus_engine::enrichment::atlas::analysis::sec_facts::{available_period_ends, calendar_period_in_question, change, coverage_summary, discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept, scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal, SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR};
 use corpus_engine::CorpusEngine;
 use sovereign_core::types::AuthorityClaim;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Typed SEC-filing figures over an installed SEC filings corpus —
 /// identified by its recipe's `[authority]` declaration, not by the
@@ -127,169 +118,87 @@ impl SecFactsTool {
     }
 }
 
-#[async_trait]
-impl Tool for SecFactsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            // The id a recipe's `[authority] tool = …` must name to declare
-            // this tool authoritative. Bound to the const the discovery
-            // rule matches on, so a rename cannot leave the two spellings
-            // disagreeing and silently un-claim every corpus (ARCH §10.6).
-            id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
-            name: "SEC Filing Facts (typed financial figures)".to_string(),
-            description: "Look up a company's EXACT reported financial figures from its \
-                SEC filings corpus (Form 10-K, XBRL) — revenue, net sales, cost of \
-                revenue, gross profit, operating income, net income, earnings per share \
-                (EPS), total assets, liabilities, shareholders' equity, cash flow, \
-                capital expenditures — for a fiscal year or balance date, with unit, \
-                fiscal period basis, and SEC accession citation. Computes derived \
-                quantities DETERMINISTICALLY: margins and ratios (ratio_to), \
-                year-over-year change (compare_period). When the corpus cannot support \
-                a figure it refuses and names what IS available — never approximate. \
-                Use this for ANY financial figure, ratio, growth rate, or fiscal-period \
-                amount from a public company's SEC filings instead of recalling or \
-                computing numbers yourself."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "concept": {
-                        "type": "string",
-                        // THE CLOSED SET, PUBLISHED (ARCH §9). Derived from
-                        // the compiled concept map — never hand-listed, so a
-                        // new row in concept-map.toml cannot leave the schema
-                        // advertising a stale vocabulary (§10.6).
-                        "enum": &crate::sec_edgar::concept_vocabulary().ids,
-                        "description": "Canonical concept id — MUST be one of the listed values, copied EXACTLY. Not a label, not a description, and never several ids joined by '|' or '/': send ONE id. If the user's wording matches no id, send the closest single id and let the tool refuse — a refusal names what IS available; an invented id is rejected outright."
-                    },
-                    "period": {
-                        "type": "string",
-                        "description": "FY<year> (e.g. FY2025), a balance date YYYY-MM-DD, or a duration YYYY-MM-DD..YYYY-MM-DD. Pass the period AS THE USER STATED IT — a calendar year is the range YYYY-01-01..YYYY-12-31, never converted to FY<year>, because fiscal and calendar years are different periods. This is CHECKED, not trusted: when the question states a calendar period the tool compares it against this parameter and refuses on a mismatch, naming the periods that do exist. A refusal is the correct answer, not a failure."
-                    },
-                    "corpus_id": {
-                        "type": "string",
-                        "description": "Corpus id of an installed SEC filings corpus. Optional when exactly one is installed."
-                    },
-                    "ratio_to": {
-                        "type": "string",
-                        // Same vocabulary, same reason — a denominator is a
-                        // concept id too, and was open text for the same
-                        // three occurrences.
-                        "enum": &crate::sec_edgar::concept_vocabulary().ids,
-                        "description": "Optional denominator concept id, from the same list as `concept`: returns concept ÷ ratio_to for the same period (e.g. gross margin percent = gross_profit ratio_to revenue)."
-                    },
-                    "compare_period": {
-                        "type": "string",
-                        "description": "Optional prior period: returns the change and percent change from it (e.g. FY2024)."
-                    },
-                    "mode": {
-                        "type": "string",
-                        "enum": ["figure", "coverage"],
-                        "description": "figure (default) answers one concept+period; coverage states what this corpus can and cannot answer."
-                    }
+impl SecFactsTool {
+    /// Bind this tool's state to its `sec_facts` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        // The id stays bound to the const a recipe's `[authority] tool = …`
+        // must name, so a rename cannot leave the two spellings disagreeing
+        // and silently un-claim every corpus (ARCH §10.6).
+        let mut manifest =
+            sovereign_core::tool_manifest::require(SEC_FACTS_AUTHORITY_TOOL).clone();
+        manifest.parameters = Self::parameter_schema();
+        sovereign_core::tool_manifest::declared_from(manifest, move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_claims({
+            let state = Arc::clone(&state);
+            Arc::new(move |q: &str| state.claims_for(q))
+        })
+        .with_authority_domains({
+            let state = Arc::clone(&state);
+            Arc::new(move || state.authority_domains_for())
+        })
+    }
+
+    /// The `concept` and `ratio_to` enums are the compiled concept map's ids.
+    /// Generated rather than hand-listed in the row: a new row in
+    /// `concept-map.toml` must never leave this schema advertising a stale
+    /// closed set (ARCH §10.6).
+    fn parameter_schema() -> serde_json::Value {
+        json!({
+            "type": "object",
+            "properties": {
+                "concept": {
+                    "type": "string",
+                    // THE CLOSED SET, PUBLISHED (ARCH §9). Derived from
+                    // the compiled concept map — never hand-listed, so a
+                    // new row in concept-map.toml cannot leave the schema
+                    // advertising a stale vocabulary (§10.6).
+                    "enum": &crate::sec_edgar::concept_vocabulary().ids,
+                    "description": "Canonical concept id — MUST be one of the listed values, copied EXACTLY. Not a label, not a description, and never several ids joined by '|' or '/': send ONE id. If the user's wording matches no id, send the closest single id and let the tool refuse — a refusal names what IS available; an invented id is rejected outright."
                 },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "What was Apple's revenue in fiscal 2025?".to_string(),
-                    call: json!({"concept": "revenue", "period": "FY2025"}),
+                "period": {
+                    "type": "string",
+                    "description": "FY<year> (e.g. FY2025), a balance date YYYY-MM-DD, or a duration YYYY-MM-DD..YYYY-MM-DD. Pass the period AS THE USER STATED IT — a calendar year is the range YYYY-01-01..YYYY-12-31, never converted to FY<year>, because fiscal and calendar years are different periods. This is CHECKED, not trusted: when the question states a calendar period the tool compares it against this parameter and refuses on a mismatch, naming the periods that do exist. A refusal is the correct answer, not a failure."
                 },
-                ToolExample {
-                    situation: "Gross margin percentage for fiscal 2025.".to_string(),
-                    call: json!({"concept": "gross_profit", "period": "FY2025",
-                                 "ratio_to": "revenue"}),
+                "corpus_id": {
+                    "type": "string",
+                    "description": "Corpus id of an installed SEC filings corpus. Optional when exactly one is installed."
                 },
-                ToolExample {
-                    situation: "Revenue for the calendar year 2025, January through \
-                                December — NOT the fiscal year."
-                        .to_string(),
-                    call: json!({"concept": "revenue",
-                                 "period": "2025-01-01..2025-12-31"}),
+                "ratio_to": {
+                    "type": "string",
+                    // Same vocabulary, same reason — a denominator is a
+                    // concept id too, and was open text for the same
+                    // three occurrences.
+                    "enum": &crate::sec_edgar::concept_vocabulary().ids,
+                    "description": "Optional denominator concept id, from the same list as `concept`: returns concept ÷ ratio_to for the same period (e.g. gross margin percent = gross_profit ratio_to revenue)."
                 },
-                ToolExample {
-                    situation: "How much did R&D spend grow year over year?".to_string(),
-                    call: json!({"concept": "research_and_development_expense",
-                                 "period": "FY2025", "compare_period": "FY2024"}),
+                "compare_period": {
+                    "type": "string",
+                    "description": "Optional prior period: returns the change and percent change from it (e.g. FY2024)."
                 },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "corpus_id": {"type": "string"},
-                    "refused": {"type": "boolean"},
-                    "reason": {"type": "string", "description": "Refusal reason naming what IS available (present when refused)."},
-                    "value": {"type": "number"},
-                    "unit": {"type": "string"},
-                    "fiscal_year": {"type": "number"},
-                    "accession": {"type": "string"},
-                    "cited_figures": {"type": "array", "description": "Pre-formatted figures with period basis and accession — quote these verbatim."},
-                    "derivation": {"type": "array", "description": "Formula, inputs and result for every figure — rendered verbatim downstream."},
-                    "reproduce": {"type": "string"},
-                    "summary": {"type": "string", "description": "All cited figures (or the refusal) as one quotable block."},
-                    "numeric_audit": {"type": "object", "description": "Opt-in bare-numeral audit declaration for this turn."}
+                "mode": {
+                    "type": "string",
+                    "enum": ["figure", "coverage"],
+                    "description": "figure (default) answers one concept+period; coverage states what this corpus can and cannot answer."
                 }
-            })),
-        }
+            },
+            "required": []
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    // NO `validate` override, deliberately. The obvious place for a
-    // parameter check is this hook, and it is the wrong one here: its
-    // signature is `Result<()>`, so rejecting through it turns a bad
-    // concept into a FAILED STEP, and a failed step gives the answer
-    // path nothing to be honest with. Measured, n=3 — see
-    // `concept_vocabulary_refusal`. The check runs in `execute` and
-    // returns a refusal instead.
-
-    /// §7.3: deterministic authority claim. Claims a question iff it
-    /// names an entity AND a concept ask-term of a store whose recipe
-    /// declared this tool authoritative. Pure phrase matching over the
-    /// cached claim index (`store_claims`) — no embeddings, no
-    /// threshold, ~µs. Over-claiming fails safe: the tool refuses,
-    /// naming what IS available, and the refusal is audited.
-    fn claims(&self, question: &str) -> Vec<AuthorityClaim> {
-        self.claim_stores()
-            .iter()
-            .filter_map(|(corpus_id, store)| {
-                store_claims(store, question).map(|matched| AuthorityClaim {
-                    tool_id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
-                    corpus_id: corpus_id.clone(),
-                    matched,
-                })
-            })
-            .collect()
-    }
-
-    /// Corpus-granularity read of the SAME cached claim index
-    /// (order authority-guard-at-exit): every corpus whose recipe
-    /// declared this tool authoritative, independent of any question.
-    /// `claims` above deliberately declines explanation-shaped
-    /// questions so they route to the prose path — the answer-exit
-    /// numeric guard arms off THIS surface so those same answers still
-    /// cannot originate figures.
-    fn authority_domains(&self) -> Vec<AuthorityClaim> {
-        self.claim_stores()
-            .iter()
-            .map(|(corpus_id, store)| AuthorityClaim {
-                tool_id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
-                corpus_id: corpus_id.clone(),
-                matched: format!(
-                    "recipe [authority] declaration for entity '{}'",
-                    store.entity
-                ),
-            })
-            .collect()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `sec_facts`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let explicit = params.get("corpus_id").and_then(|v| v.as_str());
         let (corpus_id, store) = self.resolve_corpus(explicit)?;
         let mode = params
@@ -599,6 +508,35 @@ impl Tool for SecFactsTool {
             out[k.as_str()] = v;
         }
         Ok(StepOutput::Json(with_audit_optin(out)))
+    }
+
+    fn claims_for(&self, question: &str) -> Vec<AuthorityClaim> {
+
+        self.claim_stores()
+            .iter()
+            .filter_map(|(corpus_id, store)| {
+                store_claims(store, question).map(|matched| AuthorityClaim {
+                    tool_id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
+                    corpus_id: corpus_id.clone(),
+                    matched,
+                })
+            })
+            .collect()
+    }
+
+    fn authority_domains_for(&self) -> Vec<AuthorityClaim> {
+
+        self.claim_stores()
+            .iter()
+            .map(|(corpus_id, store)| AuthorityClaim {
+                tool_id: SEC_FACTS_AUTHORITY_TOOL.to_string(),
+                corpus_id: corpus_id.clone(),
+                matched: format!(
+                    "recipe [authority] declaration for entity '{}'",
+                    store.entity
+                ),
+            })
+            .collect()
     }
 }
 

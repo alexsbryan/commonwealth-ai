@@ -19,28 +19,34 @@
 //! replaces its chunks rather than doubling them — the right semantic for the
 //! per-item ingest model. Effect is `Write` (a real side effect, never cached).
 
-use async_trait::async_trait;
 
 use corpus_engine::{CorpusIndex, InsertChunk};
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct CorpusStoreTool;
 
-#[async_trait]
-impl Tool for CorpusStoreTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("corpus_store").to_descriptor()
+impl CorpusStoreTool {
+    /// Bind this tool's state to its `corpus_store` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("corpus_store", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("corpus_store")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `corpus_store`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let title = params
             .get("title")
@@ -340,7 +346,7 @@ mod tests {
             "build_indexes": false
         });
 
-        let out = CorpusStoreTool.execute(&params, &ctx()).await.unwrap();
+        let out = CorpusStoreTool.run(&params, &ctx()).await.unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("stored 3"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -367,7 +373,7 @@ mod tests {
 
         // Idempotent: re-storing the same document replaces, not duplicates —
         // the row count stays 3, not 6.
-        CorpusStoreTool.execute(&params, &ctx()).await.unwrap();
+        CorpusStoreTool.run(&params, &ctx()).await.unwrap();
         let index2 = CorpusIndex::open(&index_dir.join("conrad")).await.unwrap();
         assert_eq!(
             index2.chunk_count().await.unwrap(),

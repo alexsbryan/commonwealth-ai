@@ -7,14 +7,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Kinds the tool admits in `validate()`. Single source of truth for
 /// the schema-`enum` field, the validator, and any future test that
@@ -42,40 +41,30 @@ impl WriteNoteTool {
     }
 }
 
-#[async_trait]
-impl Tool for WriteNoteTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("note").to_descriptor()
+impl WriteNoteTool {
+    /// Bind this tool's state to its `note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("note", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("note")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let kind = params
-            .get("kind")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("write_note requires 'kind'".to_string()))?;
-        if !WRITE_NOTE_KINDS.contains(&kind) {
-            return Err(Error::InvalidInput(format!(
-                "invalid kind '{kind}': must be one of {}",
-                WRITE_NOTE_KINDS.join(", ")
-            )));
-        }
-        params
-            .get("content")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                Error::InvalidInput("write_note requires non-empty 'content'".to_string())
-            })?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `note`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let kind = params
             .get("kind")
             .and_then(|v| v.as_str())
@@ -183,6 +172,28 @@ impl Tool for WriteNoteTool {
             "retired": retired,
         })))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let kind = params
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("write_note requires 'kind'".to_string()))?;
+        if !WRITE_NOTE_KINDS.contains(&kind) {
+            return Err(Error::InvalidInput(format!(
+                "invalid kind '{kind}': must be one of {}",
+                WRITE_NOTE_KINDS.join(", ")
+            )));
+        }
+        params
+            .get("content")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                Error::InvalidInput("write_note requires non-empty 'content'".to_string())
+            })?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -221,7 +232,7 @@ mod tests {
 
         let a_id = id_of(
             &tool
-                .execute(
+                .run(
                     &json!({"kind": "decision", "content": "A: original decision"}),
                     &ctx(),
                 )
@@ -238,7 +249,7 @@ mod tests {
             .is_none());
 
         let out_b = tool
-            .execute(
+            .run(
                 &json!({"kind": "decision", "content": "B: replaces A", "supersedes": a_id}),
                 &ctx(),
             )
@@ -270,7 +281,7 @@ mod tests {
         let tool = WriteNoteTool::new(Arc::clone(&store));
 
         let out = tool
-            .execute(
+            .run(
                 &json!({"kind": "invariant", "content": "X", "supersedes": "does-not-exist"}),
                 &ctx(),
             )

@@ -30,19 +30,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::LintResultStore;
 use corpus_engine_watchers::WatcherHeartbeat;
 
-use super::watcher_health::{
-    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
-};
+use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Maximum output bytes per error in the default (non-`full`)
 /// response. Each error's `output` field is truncated to this with
@@ -98,40 +95,34 @@ impl BuildTool {
     }
 }
 
-#[async_trait]
-impl Tool for BuildTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("build").to_descriptor()
+impl BuildTool {
+    /// Bind this tool's state to its `build` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("build", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("build")
-            .permissions
-            .clone()
-    }
-
-    /// Signal mirrors `LintStatusTool::signal` — a one-liner
-    /// surfaced when the watcher shows failures or stale state.
-    /// Silent when the last run was clean.
-    async fn signal(&self) -> Option<String> {
-        let status = self.store.latest_run().await.ok().flatten()?;
-        if status.passed() && !self.store.has_stale_files().await.unwrap_or(false) {
-            return None;
-        }
-        if !status.passed() {
-            Some(format!(
-                "build failing: {} errors, {} warnings (run #{})",
-                status.fail_count, status.warn_count, status.run_id,
-            ))
-        } else {
-            Some(format!(
-                "build stale (files changed since run #{}; rerun pending)",
-                status.run_id,
-            ))
-        }
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `build`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let full = params
             .get("full")
             .and_then(|v| v.as_bool())
@@ -287,6 +278,25 @@ impl Tool for BuildTool {
             "watcher_active": reason.is_live(),
             "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
         })))
+    }
+
+    async fn signal_now(&self) -> Option<String> {
+
+        let status = self.store.latest_run().await.ok().flatten()?;
+        if status.passed() && !self.store.has_stale_files().await.unwrap_or(false) {
+            return None;
+        }
+        if !status.passed() {
+            Some(format!(
+                "build failing: {} errors, {} warnings (run #{})",
+                status.fail_count, status.warn_count, status.run_id,
+            ))
+        } else {
+            Some(format!(
+                "build stale (files changed since run #{}; rerun pending)",
+                status.run_id,
+            ))
+        }
     }
 }
 

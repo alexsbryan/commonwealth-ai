@@ -16,19 +16,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::TestResultStore;
 use corpus_engine_watchers::WatcherHeartbeat;
 
-use super::watcher_health::{
-    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
-};
+use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct TestStatusTool {
     store: Arc<TestResultStore>,
@@ -87,38 +84,34 @@ impl TestStatusTool {
     }
 }
 
-#[async_trait]
-impl Tool for TestStatusTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("test_status").to_descriptor()
+impl TestStatusTool {
+    /// Bind this tool's state to its `test_status` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("test_status", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("test_status")
-            .permissions
-            .clone()
-    }
-
-    /// Signal: one-liner when the last test run failed. Silent on a
-    /// clean run. SQLite point lookup — no extra work.
-    async fn signal(&self) -> Option<String> {
-        let summary = self.store.latest_run().await.ok().flatten()?;
-        if summary.passed() {
-            return None;
-        }
-        let age = summary
-            .finished_at
-            .elapsed()
-            .ok()
-            .map(|d| format!(" age {}s", d.as_secs()))
-            .unwrap_or_default();
-        Some(format!(
-            "last test run: {} passed, {} failed{age}",
-            summary.pass_count, summary.fail_count
-        ))
-    }
-
-    async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `test_status`.
+    async fn run(
+        &self,
+        _params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let legacy_active = read_legacy(&self.watcher_active);
         let configured = self.watched_scope.is_some();
 
@@ -259,6 +252,24 @@ impl Tool for TestStatusTool {
             "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
         })))
     }
+
+    async fn signal_now(&self) -> Option<String> {
+
+        let summary = self.store.latest_run().await.ok().flatten()?;
+        if summary.passed() {
+            return None;
+        }
+        let age = summary
+            .finished_at
+            .elapsed()
+            .ok()
+            .map(|d| format!(" age {}s", d.as_secs()))
+            .unwrap_or_default();
+        Some(format!(
+            "last test run: {} passed, {} failed{age}",
+            summary.pass_count, summary.fail_count
+        ))
+    }
 }
 
 /// Build the `previous_run` payload returned alongside `status:
@@ -355,7 +366,7 @@ mod tests {
         let _r2 = store.begin_run().await.unwrap();
 
         let tool = TestStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
@@ -388,7 +399,7 @@ mod tests {
         let _r = store.begin_run().await.unwrap();
 
         let tool = TestStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
@@ -426,7 +437,7 @@ mod tests {
             .with_watched_scope("cargo test --workspace".into())
             .with_heartbeat(hb);
 
-        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+        let v = match tool.run(&json!({}), &ctx()).await.unwrap() {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
         };
@@ -462,7 +473,7 @@ mod tests {
             .with_watched_scope("cargo test --workspace".into())
             .with_heartbeat(hb);
 
-        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+        let v = match tool.run(&json!({}), &ctx()).await.unwrap() {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
         };
@@ -484,7 +495,7 @@ mod tests {
         hb.stamp();
         let tool = TestStatusTool::new(Arc::clone(&store)).with_heartbeat(hb);
 
-        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+        let v = match tool.run(&json!({}), &ctx()).await.unwrap() {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
         };
@@ -514,7 +525,7 @@ mod tests {
         let _r2 = store.begin_run().await.unwrap();
 
         let tool = TestStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),

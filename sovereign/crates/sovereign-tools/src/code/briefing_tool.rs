@@ -18,21 +18,17 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use corpus_engine_notes::NoteStore;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 use sovereign_work_atlas::store::ScopeMatch;
 use sovereign_work_atlas::WorkAtlasStore;
 
 use super::brief::{assemble_brief, BriefInputs, WorkInFlightEntry};
 use super::working_set::{detect_working_set, Strategy};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Daemon-side MCP wrapper around the brief assembler.
 pub struct BriefingTool {
@@ -231,19 +227,25 @@ fn current_branch(repo_root: &std::path::Path) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-#[async_trait]
-impl Tool for BriefingTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("briefing").to_descriptor()
+impl BriefingTool {
+    /// Bind this tool's state to its `briefing` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("briefing", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("briefing")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `briefing`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let Some(repo_root) = self.workspace_root.clone() else {
             return Err(Error::InvalidInput(
                 "briefing: daemon has no workspace configured — set \

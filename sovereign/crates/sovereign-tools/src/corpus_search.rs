@@ -22,28 +22,34 @@
 
 use std::collections::HashSet;
 
-use async_trait::async_trait;
 
 use corpus_engine::CorpusIndex;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct CorpusSearchTool;
 
-#[async_trait]
-impl Tool for CorpusSearchTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("corpus_search").to_descriptor()
+impl CorpusSearchTool {
+    /// Bind this tool's state to its `corpus_search` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("corpus_search", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("corpus_search")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `corpus_search`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let query_text = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
         let top_k = parse_top_k(params).unwrap_or(10);
@@ -212,6 +218,7 @@ fn default_index_dir() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::traits::Tool;
     use crate::corpus_store::CorpusStoreTool;
 
     fn ctx() -> ToolContext {
@@ -258,6 +265,7 @@ mod tests {
             "build_indexes": false
         });
         CorpusStoreTool
+            .declared()
             .execute(&store_params, &ctx())
             .await
             .unwrap();
@@ -270,7 +278,7 @@ mod tests {
             "index_dir": index_dir.to_string_lossy()
         });
         let out = CorpusSearchTool
-            .execute(&search_params, &ctx())
+            .run(&search_params, &ctx())
             .await
             .unwrap();
         let arr = match out {
@@ -312,7 +320,7 @@ mod tests {
             "embedding": [0.1, 0.2, 0.3],
             "index_dir": dir.path().join("indexes").to_string_lossy()
         });
-        let err = CorpusSearchTool.execute(&params, &ctx()).await.unwrap_err();
+        let err = CorpusSearchTool.run(&params, &ctx()).await.unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("not found"), "{msg}");
         assert!(
@@ -353,12 +361,12 @@ mod tests {
                 "index_dir": index_dir.to_string_lossy(),
                 "build_indexes": false
             });
-            CorpusStoreTool.execute(&p, &ctx()).await.unwrap();
+            CorpusStoreTool.declared().execute(&p, &ctx()).await.unwrap();
         }
 
         // single=true → ONE object (not an array), and it's alpha (its own vector).
         let single = CorpusSearchTool
-            .execute(
+            .run(
                 &serde_json::json!({
                     "corpus": "films",
                     "embedding": [1.0, 0.0, 0.0, 0.0],
@@ -381,7 +389,7 @@ mod tests {
         // exclude=[{source_doc_id: alpha}] → alpha never appears, bravo (runner-up)
         // does. Proves over-fetch-and-drop keeps real results, not just removes one.
         let recs = CorpusSearchTool
-            .execute(
+            .run(
                 &serde_json::json!({
                     "corpus": "films",
                     "embedding": [1.0, 0.0, 0.0, 0.0],

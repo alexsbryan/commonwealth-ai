@@ -55,13 +55,13 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// On-disk shape of one finding inside the drift report's JSON
 /// sidecar. Mirrors `Finding` in `atlas_drift_report.rs`. We
@@ -159,19 +159,25 @@ impl Default for DriftFindingsTool {
     }
 }
 
-#[async_trait]
-impl Tool for DriftFindingsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("drift_findings").to_descriptor()
+impl DriftFindingsTool {
+    /// Bind this tool's state to its `drift_findings` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("drift_findings", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("drift_findings")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `drift_findings`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -376,7 +382,7 @@ mod tests {
         write_report(tmp.path(), &sample_report());
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "open_index"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -406,7 +412,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "anything"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -443,7 +449,7 @@ mod tests {
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         // "resolve_parameters" is only in the quotable text, not the anchor.
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "resolve_parameters", "kind": "any"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -479,7 +485,7 @@ mod tests {
         write_report(tmp.path(), &sample_report());
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "resolve_parameters"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -514,7 +520,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let err = tool
-            .execute(
+            .run(
                 &json!({"query": "   "}),
                 &ToolContext {
                     conversation_id: "t".into(),

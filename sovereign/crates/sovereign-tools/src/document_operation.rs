@@ -12,11 +12,10 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
-use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
+use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
 // ToolExample is part of types::* but explicit for clarity.
 
@@ -32,6 +31,7 @@ const REDUCE_BATCH_SIZE: usize = 8;
 const MAX_REDUCE_DEPTH: usize = 5;
 
 use sovereign_core::time::unix_now as now;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 // ─── Progress reporting ──────────────────────────────────────
 
@@ -319,30 +319,30 @@ impl DocumentOperationTool {
     }
 }
 
-#[async_trait]
-impl Tool for DocumentOperationTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("document_operation").to_descriptor()
+impl DocumentOperationTool {
+    /// Bind this tool's state to its `document_operation` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("document_operation", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("document_operation")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        for field in &["source", "operation", "map_prompt", "reduce_prompt"] {
-            if params.get(*field).and_then(|v| v.as_str()).is_none() {
-                return Err(Error::InvalidInput(format!(
-                    "document_operation requires '{field}'"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `document_operation`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let source = params["source"].as_str().unwrap();
         let operation = params["operation"].as_str().unwrap();
         let map_prompt = params["map_prompt"].as_str().unwrap();
@@ -437,6 +437,18 @@ impl Tool for DocumentOperationTool {
             conversation_id,
         )
         .await
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        for field in &["source", "operation", "map_prompt", "reduce_prompt"] {
+            if params.get(*field).and_then(|v| v.as_str()).is_none() {
+                return Err(Error::InvalidInput(format!(
+                    "document_operation requires '{field}'"
+                )));
+            }
+        }
+        Ok(())
     }
 }
 

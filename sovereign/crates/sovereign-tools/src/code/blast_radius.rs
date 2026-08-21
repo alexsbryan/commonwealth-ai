@@ -27,17 +27,16 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_scip::scip_graph::{BlastEntry, ScipGraph, StalenessCaution};
 
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub type ScipGraphHandleRef = Arc<ArcSwap<ScipGraph>>;
 
@@ -127,32 +126,30 @@ impl BlastRadiusTool {
     }
 }
 
-#[async_trait]
-impl Tool for BlastRadiusTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("blast").to_descriptor()
+impl BlastRadiusTool {
+    /// Bind this tool's state to its `blast` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("blast", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("blast")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let symbol = params
-            .get("symbol")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("blast_radius requires 'symbol'".to_string()))?;
-        if !is_valid_symbol_name(symbol) {
-            return Err(Error::InvalidInput(format!(
-                "invalid symbol name '{symbol}'"
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `blast`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -253,6 +250,20 @@ impl Tool for BlastRadiusTool {
             obj["index_health"] = serde_json::to_value(&health).unwrap_or_default();
         }
         Ok(StepOutput::Json(obj))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let symbol = params
+            .get("symbol")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("blast_radius requires 'symbol'".to_string()))?;
+        if !is_valid_symbol_name(symbol) {
+            return Err(Error::InvalidInput(format!(
+                "invalid symbol name '{symbol}'"
+            )));
+        }
+        Ok(())
     }
 }
 

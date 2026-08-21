@@ -19,23 +19,17 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine::enrichment::atlas::{
-    resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME,
-};
-use corpus_engine::enrichment::pipeline::{
-    ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction,
-};
+use corpus_engine::enrichment::atlas::{resolve_entities_and_events, resolve_step_3b, write_atlas, write_atlas_full, ATLAS_DIRNAME};
+use corpus_engine::enrichment::pipeline::{ExtractedQuestion, Phase1Output, PipelinePhase, SectionExtraction};
 use corpus_engine::types::EmbedFn;
 
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use async_trait::async_trait;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-};
+use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_core::types::{StepOutput, ToolContext};
+use std::sync::Arc;
 
 const HELP: Help = Help {
     command: "svrn enrich atlas-resolve",
@@ -412,39 +406,21 @@ pub(crate) enum ResolvePhase {
 /// Effect `Write` (writes the canonical `atlas/` files); needs the daemon up.
 pub(crate) struct AtlasResolveTool;
 
-#[async_trait]
-impl Tool for AtlasResolveTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_resolve".to_string(),
-            name: "atlas_resolve".to_string(),
-            description: "Literary-atlas Phase 3a/3b: resolve Phase-1 section sketches into \
-                          canonical atoms + edges + trajectories (entity merge by description \
-                          cosine, typed-atom resolution). Reads cache/questions.json, writes \
-                          atlas/atoms.json + edges.json + trajectories.json. Needs the daemon."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (must be enrich-init'd with an *_atlas pipeline)" },
-                    "phase": { "type": "string", "enum": ["3a", "3b", "all"], "description": "Resolution depth (default: all)" }
-                },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+impl AtlasResolveTool {
+    /// Bind this tool's state to its `atlas_resolve` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_resolve", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(
+    /// The executable half of `atlas_resolve`.
+    async fn run(
         &self,
         params: &serde_json::Value,
         _ctx: &ToolContext,
@@ -568,6 +544,7 @@ fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sovereign_core::traits::Tool;
 
     #[test]
     fn parse_args_defaults_to_phase_3a() {
@@ -622,10 +599,12 @@ mod tests {
             ..Default::default()
         };
         assert!(AtlasResolveTool
+            .declared()
             .execute(&serde_json::json!({}), &ctx)
             .await
             .is_err());
         assert!(AtlasResolveTool
+            .declared()
             .execute(
                 &serde_json::json!({ "corpus": "x", "phase": "bogus" }),
                 &ctx
@@ -633,6 +612,7 @@ mod tests {
             .await
             .is_err());
         assert!(AtlasResolveTool
+            .declared()
             .execute(
                 &serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }),
                 &ctx

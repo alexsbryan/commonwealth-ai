@@ -11,14 +11,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::NoteStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct RetireNoteTool {
     store: Arc<NoteStore>,
@@ -30,35 +29,30 @@ impl RetireNoteTool {
     }
 }
 
-#[async_trait]
-impl Tool for RetireNoteTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("retire_note").to_descriptor()
+impl RetireNoteTool {
+    /// Bind this tool's state to its `retire_note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("retire_note", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("retire_note")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("id")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("retire_note requires 'id'".to_string()))?;
-        params
-            .get("reason")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                Error::InvalidInput("retire_note requires a non-empty 'reason'".to_string())
-            })?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `retire_note`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let id = params
             .get("id")
             .and_then(|v| v.as_str())
@@ -109,6 +103,23 @@ impl Tool for RetireNoteTool {
             })
         }
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("retire_note requires 'id'".to_string()))?;
+        params
+            .get("reason")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                Error::InvalidInput("retire_note requires a non-empty 'reason'".to_string())
+            })?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -140,7 +151,7 @@ mod tests {
 
         let tool = RetireNoteTool::new(Arc::clone(&store));
         let out = tool
-            .execute(&json!({"id": id, "reason": "the gate was removed"}), &ctx())
+            .run(&json!({"id": id, "reason": "the gate was removed"}), &ctx())
             .await
             .unwrap();
         match out {
@@ -155,7 +166,7 @@ mod tests {
 
         // Second retire is a no-op error (already retired).
         let again = tool
-            .execute(&json!({"id": id, "reason": "again"}), &ctx())
+            .run(&json!({"id": id, "reason": "again"}), &ctx())
             .await;
         assert!(again.is_err(), "re-retiring an already-retired note errors");
     }
@@ -180,7 +191,7 @@ mod tests {
 
         let tool = RetireNoteTool::new(Arc::clone(&store));
         let out = tool
-            .execute(&json!({"id": id, "reason": "landed"}), &ctx())
+            .run(&json!({"id": id, "reason": "landed"}), &ctx())
             .await
             .unwrap();
         match out {
@@ -205,8 +216,8 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let store = Arc::new(NoteStore::open(&tmp.path().join("notes.db")).unwrap());
         let tool = RetireNoteTool::new(store);
-        assert!(tool.validate(&json!({"id": "x"})).is_err());
-        assert!(tool.validate(&json!({"id": "x", "reason": ""})).is_err());
-        assert!(tool.validate(&json!({"id": "x", "reason": "ok"})).is_ok());
+        assert!(tool.validate_extra(&json!({"id": "x"})).is_err());
+        assert!(tool.validate_extra(&json!({"id": "x", "reason": ""})).is_err());
+        assert!(tool.validate_extra(&json!({"id": "x", "reason": "ok"})).is_ok());
     }
 }

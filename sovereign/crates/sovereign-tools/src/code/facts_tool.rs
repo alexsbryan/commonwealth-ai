@@ -28,13 +28,13 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use corpus_engine::facts_store::FactStore;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct FactsTool {
     /// Root under which each corpus has `<corpus_id>/facts.db` (a legacy
@@ -71,19 +71,25 @@ impl FactsTool {
     }
 }
 
-#[async_trait]
-impl Tool for FactsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("facts").to_descriptor()
+impl FactsTool {
+    /// Bind this tool's state to its `facts` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("facts", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("facts")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `facts`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -327,7 +333,7 @@ mod tests {
     }
 
     async fn run(tool: &FactsTool, params: serde_json::Value) -> serde_json::Value {
-        match tool.execute(&params, &ctx()).await.unwrap() {
+        match tool.run(&params, &ctx()).await.unwrap() {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
         }

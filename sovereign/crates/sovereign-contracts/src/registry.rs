@@ -275,64 +275,66 @@ impl Default for ToolRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::types::{AuthorityClaim, Effect, Idempotency, Latency, Permission, Scope};
-    use async_trait::async_trait;
+    use crate::tool_manifest::DeclaredTool;
+    use crate::types::AuthorityClaim;
+
+    /// The fake store's DECLARED half, as a host-local family rather than a
+    /// row in the shipped catalog — a fake store must never appear in the real
+    /// tool surface. [`crate::tool_manifest::parse_family`] exists for exactly
+    /// this: a declaration that is not checked in.
+    const FAKE_STORE_FAMILY: &str = r#"
+[[tool]]
+id = "fake_store"
+name = "Fake Store"
+description = "test"
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+"#;
 
     /// A fake authoritative store: claims any question containing both
     /// "acme" and "revenue" for its declared corpus.
-    struct FakeStoreTool {
-        corpus: &'static str,
-    }
-
-    #[async_trait]
-    impl Tool for FakeStoreTool {
-        fn descriptor(&self) -> ToolDescriptor {
-            ToolDescriptor {
-                id: "fake_store".into(),
-                name: "Fake Store".into(),
-                description: "test".into(),
-                parameters: serde_json::json!({}),
-                examples: vec![],
-                effect: Effect::Read,
-                idempotency: Idempotency::Idempotent,
-                latency: Latency::Fast,
-                scope: Scope::Persistent,
-                output_schema: None,
-            }
-        }
-        fn required_permissions(&self) -> Vec<Permission> {
-            vec![]
-        }
-        async fn execute(&self, _p: &serde_json::Value, _c: &ToolContext) -> Result<StepOutput> {
+    ///
+    /// A row plus two closures, with no `impl Tool for` of its own — so these
+    /// tests now drive authority claims through the SAME `DeclaredTool`
+    /// adapter every real tool routes through, rather than a bespoke impl that
+    /// could diverge from it.
+    fn fake_store(corpus: &'static str) -> DeclaredTool {
+        let manifest = crate::tool_manifest::parse_family(FAKE_STORE_FAMILY)
+            .expect("the fake-store family parses")
+            .remove(0);
+        crate::tool_manifest::declared_from(manifest, |_p, _c| async {
             Ok(StepOutput::Text("ok".into()))
-        }
-        fn claims(&self, question: &str) -> Vec<AuthorityClaim> {
+        })
+        .with_claims(Arc::new(move |question: &str| {
             let q = question.to_lowercase();
             if q.contains("acme") && q.contains("revenue") {
                 vec![AuthorityClaim {
                     tool_id: "fake_store".into(),
-                    corpus_id: self.corpus.into(),
+                    corpus_id: corpus.into(),
                     matched: "entity 'acme' + concept term 'revenue'".into(),
                 }]
             } else {
                 Vec::new()
             }
-        }
-        fn authority_domains(&self) -> Vec<AuthorityClaim> {
+        }))
+        .with_authority_domains(Arc::new(move || {
             vec![AuthorityClaim {
                 tool_id: "fake_store".into(),
-                corpus_id: self.corpus.into(),
+                corpus_id: corpus.into(),
                 matched: "declared authoritative".into(),
             }]
-        }
+        }))
     }
 
     #[test]
     fn authority_claims_default_is_empty_and_claims_are_sorted() {
         let mut reg = ToolRegistry::new();
         // Register in REVERSE corpus order to prove the tie rule sorts.
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-b" }));
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-a" }));
+        reg.register(Box::new(fake_store("corpus-b")));
+        reg.register(Box::new(fake_store("corpus-a")));
 
         // The failing input, by name: a question with no entity match
         // claims nothing — generic finance wording never routes on
@@ -361,8 +363,8 @@ mod tests {
         assert!(ToolRegistry::new().authority_domains().is_empty());
 
         let mut reg = ToolRegistry::new();
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-b" }));
-        reg.register(Box::new(FakeStoreTool { corpus: "corpus-a" }));
+        reg.register(Box::new(fake_store("corpus-b")));
+        reg.register(Box::new(fake_store("corpus-a")));
 
         // The failing input for question-level arming, by name: this
         // question claims NOTHING at question granularity …

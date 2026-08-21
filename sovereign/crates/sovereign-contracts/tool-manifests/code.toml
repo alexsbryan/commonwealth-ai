@@ -2484,3 +2484,92 @@ type = "string"
 [[tool.examples]]
 situation = "You found that ZoteroLibrary's factory method relies on a default for `scope=Local` when the charter said the field must be set explicitly. Medium confidence — the default currently happens to be correct but a refactor could silently flip it."
 call = { feature_id = "zotero-acquirer", invariant = "LocalCorpusConfig::zotero_library MUST set scope=Local explicitly, not via default.", status = "violated", evidence = "corpus-engine/src/acquirers/zotero.rs::factory() line 42 omits the field.", confidence = "medium", files = ["corpus-engine/src/acquirers/zotero.rs"] }
+
+[[tool]]
+id = "session_state"
+name = "Session State Upsert"
+description = "Upsert your session frame (the successor-facing gist: objective, goal, state, next, decisions, invariants, dead ends, working set, verification) at transitions \u2014 task start, plan step done, blocker hit \u2014 NOT only at session end. Provided sections replace their previous body; others are preserved. Writes are rejected over the 2.1k-token budget with per-section counts so you trim instead of bloating. Encode-time writes are the strong continuity path (self-reported frames grade 100% vs 17% for post-hoc distillation); a current frame is what lets a successor session resume your work without re-reading the repo. `objective` is the standing outcome the work serves and is REQUIRED alongside any of goal/state/next/decisions \u2014 inherit it from your predecessor rather than restating it as a delta. Sections are FLAT string params \u2014 one key per section (objective, goal, state, next, decisions, invariants, dead_ends, working_set, verification); there is no `sections` array and no `section`/`content` pair."
+effect = "write"
+idempotency = "idempotent"
+latency = "fast"
+scope = "session"
+permissions = []
+
+# `parameters` is GENERATED at construction — see the `declared()`
+# binding. It is derived from a Rust const the tool also validates
+# against, so a copy here would be a second decider that goes stale.
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.path]
+type = "string"
+
+[tool.output_schema.properties.created]
+type = "boolean"
+
+[tool.output_schema.properties.sections_updated]
+type = "array"
+
+[tool.output_schema.properties.sections_updated.items]
+type = "string"
+
+[tool.output_schema.properties.approx_tokens]
+type = "integer"
+
+[tool.output_schema.properties.budget_tokens]
+type = "integer"
+
+[tool.output_schema.properties.objective_sessions]
+type = "integer"
+
+[tool.output_schema.properties.carried]
+type = "array"
+
+[tool.output_schema.properties.carried.items]
+type = "object"
+
+[tool.output_schema.properties.carried.items.properties]
+
+[tool.output_schema.properties.carried.items.properties.item]
+type = "string"
+
+[tool.output_schema.properties.carried.items.properties.depth]
+type = "integer"
+
+[tool.output_schema.properties.advice]
+type = "string"
+
+
+[[tool]]
+id = "suggest_note"
+name = "Suggest Note"
+description = "Surface a commitment, follow-up, or goal you detected in the user's message \u2014 pending user confirmation. Use when the user said: \u2022 'I'll send X by Friday' (commitment) \u2022 'check back with Y in two weeks' (follow-up) \u2022 'we want under 5% churn by Q3' (goal) Do NOT use for: things you decide, things the assistant plans to do, or topics the user merely thinks about. The note is NOT written until the user approves it via the approval channel. On rejection the tool returns {dismissed:true} and the suggestion is dropped."
+effect = "write"
+idempotency = "nonidempotent"
+latency = "instant"
+scope = "persistent"
+permissions = []
+
+# `parameters` is GENERATED at construction — see the `declared()`
+# binding. It is derived from a Rust const the tool also validates
+# against, so a copy here would be a second decider that goes stale.
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.id]
+type = ["string", "null"]
+
+[tool.output_schema.properties.kind]
+type = "string"
+
+[tool.output_schema.properties.related_entity]
+type = ["string", "null"]
+
+[tool.output_schema.properties.dismissed]
+type = "boolean"

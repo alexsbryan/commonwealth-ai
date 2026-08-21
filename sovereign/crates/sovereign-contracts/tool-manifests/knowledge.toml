@@ -526,3 +526,208 @@ type = "integer"
 
 [tool.output_schema.properties.title]
 type = "string"
+
+[[tool]]
+id = "knowledge_lookup"
+name = "Knowledge lookup"
+# description is supplied at construction from the tool's own asset —
+# see the `declared()` binding. One decider (ARCH principle 8): a copy
+# here would go stale the moment the asset changed.
+description = "Supplied at construction from assets/tool_description.md."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.query]
+type = "string"
+
+[tool.output_schema.properties.evidence]
+type = "array"
+
+[tool.output_schema.properties.evidence.items]
+type = "object"
+
+[tool.output_schema.properties.evidence.items.properties]
+
+[tool.output_schema.properties.evidence.items.properties.id]
+type = "string"
+description = "Stable handle (e.g. ev-0001)"
+
+[tool.output_schema.properties.evidence.items.properties.source_kind]
+type = "string"
+enum = ["corpus", "memory", "note"]
+
+[tool.output_schema.properties.evidence.items.properties.source_id]
+type = "string"
+
+[tool.output_schema.properties.evidence.items.properties.title]
+type = "string"
+
+[tool.output_schema.properties.evidence.items.properties.content]
+type = "string"
+
+[tool.output_schema.properties.evidence.items.properties.confidence]
+type = "number"
+
+[tool.output_schema.properties.evidence.items.properties.retrieval_context]
+type = "string"
+
+[tool.output_schema.properties.by_kind_counts]
+type = "object"
+
+[tool.output_schema.properties.by_kind_counts.properties]
+
+[tool.output_schema.properties.by_kind_counts.properties.corpus]
+type = "integer"
+
+[tool.output_schema.properties.by_kind_counts.properties.memory]
+type = "integer"
+
+[tool.output_schema.properties.by_kind_counts.properties.note]
+type = "integer"
+
+
+[[tool]]
+id = "parcel_analytics"
+name = "Parcel Analytics (Land-Value Tax)"
+description = "Compute land-value-tax rates and land-base aggregates DETERMINISTICALLY from a corpus of parcel atoms (default `sf-assessor-roll`). Returns pre-cited figures for TWO reforms \u2014 (a) the property-tax SWAP: the revenue-neutral rate for a land-only tax replacing today's property tax (property_tax_swap_rate, on land+improvements), and (b) the business-tax replacement (neutral_rate) \u2014 plus land value total, parcel count, and land-share / underuse flag counts. Every figure MUST be quoted verbatim: each is summed from source parcels, never estimated. Use this for any land-value-tax dollar figure, rate, or count instead of doing the arithmetic yourself."
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+[tool.parameters]
+type = "object"
+required = []
+
+[tool.parameters.properties]
+
+[tool.parameters.properties.corpus_id]
+type = "string"
+description = "Parcel corpus id (default `sf-assessor-roll`)."
+
+[tool.parameters.properties.business_tax_target]
+type = "number"
+description = "Revenue the flat land levy must replace, in dollars (default 1.4e9 \u2014 the SF business-tax take)."
+
+[tool.parameters.properties.current_property_tax_rate]
+type = "number"
+description = "Effective property-tax rate for the labelled current-tax estimate (default 0.0118)."
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.corpus_id]
+type = "string"
+
+[tool.output_schema.properties.parcel_count]
+type = "number"
+
+[tool.output_schema.properties.land_value_total]
+type = "number"
+
+[tool.output_schema.properties.improvement_value_total]
+type = "number"
+
+[tool.output_schema.properties.business_tax_target]
+type = "number"
+
+[tool.output_schema.properties.neutral_rate]
+type = "number"
+description = "= business_tax_target / land_value_total, on the LAND base (business-tax replacement)"
+
+[tool.output_schema.properties.property_tax_revenue_est]
+type = "number"
+description = "= (land + improvement) \u00d7 property_tax_rate \u2014 est. revenue today's property tax raises"
+
+[tool.output_schema.properties.property_tax_swap_rate]
+type = "number"
+description = "= property_tax_revenue_est / land_value_total \u2014 revenue-neutral land-ONLY rate replacing the property tax (the swap)"
+
+[tool.output_schema.properties.high_land_share_count]
+type = "number"
+
+[tool.output_schema.properties.underused_count]
+type = "number"
+
+[tool.output_schema.properties.cited_figures]
+type = "array"
+description = "Pre-formatted figures with [corpus: \u2026] citations \u2014 quote these verbatim."
+
+[tool.output_schema.properties.summary]
+type = "string"
+description = "All cited figures as one quotable block."
+
+[[tool]]
+id = "sec_facts"
+name = "SEC Filing Facts (typed financial figures)"
+description = """
+Look up a company's EXACT reported financial figures from its SEC filings corpus (Form 10-K, XBRL) — revenue, net sales, cost of revenue, gross profit, operating income, net income, earnings per share (EPS), total assets, liabilities, shareholders' equity, cash flow, capital expenditures — for a fiscal year or balance date, with unit, fiscal period basis, and SEC accession citation. Computes derived quantities DETERMINISTICALLY: margins and ratios (ratio_to), year-over-year change (compare_period). When the corpus cannot support a figure it refuses and names what IS available — never approximate. Use this for ANY financial figure, ratio, growth rate, or fiscal-period amount from a public company's SEC filings instead of recalling or computing numbers yourself.
+"""
+effect = "read"
+idempotency = "idempotent"
+latency = "fast"
+scope = "persistent"
+permissions = []
+
+# `parameters` is GENERATED at construction from the compiled concept map
+# (`concept_vocabulary().ids`) — see the `declared()` binding. Hand-listing the
+# vocabulary here would let a new row in concept-map.toml leave this schema
+# advertising a stale closed set, which is the defect the const exists to
+# prevent (ARCH §10.6).
+
+[tool.output_schema]
+type = "object"
+
+[tool.output_schema.properties]
+
+[tool.output_schema.properties.corpus_id]
+type = "string"
+
+[tool.output_schema.properties.refused]
+type = "boolean"
+
+[tool.output_schema.properties.reason]
+type = "string"
+description = "Refusal reason naming what IS available (present when refused)."
+
+[tool.output_schema.properties.value]
+type = "number"
+
+[tool.output_schema.properties.unit]
+type = "string"
+
+[tool.output_schema.properties.fiscal_year]
+type = "number"
+
+[tool.output_schema.properties.accession]
+type = "string"
+
+[tool.output_schema.properties.cited_figures]
+type = "array"
+description = "Pre-formatted figures with period basis and accession \u2014 quote these verbatim."
+
+[tool.output_schema.properties.derivation]
+type = "array"
+description = "Formula, inputs and result for every figure \u2014 rendered verbatim downstream."
+
+[tool.output_schema.properties.reproduce]
+type = "string"
+
+[tool.output_schema.properties.summary]
+type = "string"
+description = "All cited figures (or the refusal) as one quotable block."
+
+[tool.output_schema.properties.numeric_audit]
+type = "object"
+description = "Opt-in bare-numeral audit declaration for this turn."

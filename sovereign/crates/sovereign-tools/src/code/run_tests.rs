@@ -15,14 +15,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::Result;
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::TestWatcher;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct RunTestsTool {
     watcher: Arc<TestWatcher>,
@@ -34,19 +33,25 @@ impl RunTestsTool {
     }
 }
 
-#[async_trait]
-impl Tool for RunTestsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("run_tests").to_descriptor()
+impl RunTestsTool {
+    /// Bind this tool's state to its `run_tests` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("run_tests", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("run_tests")
-            .permissions
-            .clone()
-    }
-
-    async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `run_tests`.
+    async fn run(
+        &self,
+        _params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         self.watcher.force_run().await;
         Ok(StepOutput::Json(json!({
             "status": "started",

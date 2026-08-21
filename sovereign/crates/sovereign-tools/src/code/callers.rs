@@ -7,10 +7,8 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine::CorpusEngine;
@@ -18,6 +16,7 @@ use corpus_engine::CorpusEngine;
 use super::callees::ScipGraphHandle;
 use super::index_health::IndexHealthChecker;
 use super::is_valid_symbol_name;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct FindCallersTool {
     #[allow(dead_code)]
@@ -41,32 +40,30 @@ impl FindCallersTool {
     }
 }
 
-#[async_trait]
-impl Tool for FindCallersTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        sovereign_core::tool_manifest::require("callers").to_descriptor()
+impl FindCallersTool {
+    /// Bind this tool's state to its `callers` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("callers", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        sovereign_core::tool_manifest::require("callers")
-            .permissions
-            .clone()
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let symbol = params
-            .get("symbol")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("find_callers requires 'symbol'".to_string()))?;
-        if !is_valid_symbol_name(symbol) {
-            return Err(Error::InvalidInput(format!(
-                "invalid symbol name '{symbol}': must be alphanumeric plus _, ::, or $, and \u{2264}256 chars"
-            )));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `callers`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -133,5 +130,19 @@ impl Tool for FindCallersTool {
             }
         }
         Ok(StepOutput::Text(out))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let symbol = params
+            .get("symbol")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("find_callers requires 'symbol'".to_string()))?;
+        if !is_valid_symbol_name(symbol) {
+            return Err(Error::InvalidInput(format!(
+                "invalid symbol name '{symbol}': must be alphanumeric plus _, ::, or $, and \u{2264}256 chars"
+            )));
+        }
+        Ok(())
     }
 }
