@@ -233,7 +233,13 @@ fn findings_tail(c: &FinalClaim, no_citation_note: &str) -> String {
 
 const NOTE_JUDGE_SUPPORTED: &str = "judge-supported; no witnessable specifics — see verdict set";
 const NOTE_SINGLE_ORIGIN_UNCITED: &str = "single origin; no witnessable citation — see verdict set";
-const FINDINGS_GRADED_NOTE: &str = "*Rows stamped [single-origin] without [passed] are \
+// drb1-r3b follow-up (seat finding, 2026-08-21): presentation prose
+// never spells a stamp in brackets — the campaign bar's regex counts
+// raw bracket-stamps, so a legend like "[single-origin]" adds
+// non-verdict markers to the denominator (measured: 8 legends × 2
+// stamps = +16, regex read 55/153 vs the true per-claim 55/137).
+// Stamps live on claim rows only; prose names them quoted.
+const FINDINGS_GRADED_NOTE: &str = "*Rows stamped 'single-origin' without 'passed' are \
      could-not-judge at the corroboration floor: one origin supports the claim's substance, \
      the floor requires two. The verdict stands in the verdict set; the page presents the \
      claim, floor-capped, instead of walling it.*";

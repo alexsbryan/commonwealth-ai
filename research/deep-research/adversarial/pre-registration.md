@@ -7068,3 +7068,23 @@ recorded 0.927 exactly — 127/137, race and report agreeing):**
   `runs-t7a/std` runs, so the re-measure covered all 9 (the 3 named included)
   — named substitution, not silent.
 
+### R3b execution-record addendum — instrument integrity (seat finding, follow-up commit)
+
+*The graded renders' Findings legend spelled the tier names in literal
+brackets ("Rows stamped [single-origin] without [passed] …"), and the campaign
+bar's regex counts raw bracket-stamps — so each legend contributed 2
+non-verdict markers. Measured on the first graded artifacts: 137 claim rows +
+16 prose stamp occurrences (8 legends × 2 stamps; the 9th run has no graded
+rows) = regex denominator 153, reading 55/153 = 0.3595 against the true
+per-claim 55/137. Presentation prose must not move the instrument.*
+
+*Fix: the legend names tiers quoted ('single-origin', 'passed'), never
+bracketed — the only prose offender (swept: every other bracket-stamp literal
+in render.rs is a claim-row format, a comment, or a test). Pinned structurally
+by golden `prose_never_spells_a_bracket_stamp` (any line carrying a
+bracket-stamp must be a claim row). Re-measured on the regenerated graded
+artifacts: prose stamp occurrences 0, regex reads 55/137 = 0.4015 in both the
+report and race families — equal to the per-claim census exactly. Claim rows
+(137), open markers (55), graded rows (72) unchanged; golden report.md
+re-pinned with a one-line legend reword as its only diff.*
+

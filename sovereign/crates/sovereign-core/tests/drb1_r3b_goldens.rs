@@ -401,6 +401,58 @@ fn producer_flag_and_render_grade_agree() {
     );
 }
 
+/// Instrument integrity (seat finding 2026-08-21, follow-up commit):
+/// bracket-stamps live on claim rows ONLY — never in presentation
+/// prose. The campaign bar's regex counts raw bracket-stamps, so a
+/// legend line spelling "[single-origin]" or "[passed]" adds
+/// non-verdict markers to the denominator (measured on the graded
+/// re-renders: 8 legends x 2 stamps = +16 pooled, regex read 55/153
+/// against the true per-claim 55/137). Every line carrying a stamp
+/// must be a claim row (`- **[...]** ...`); prose names tiers quoted
+/// ('single-origin', 'passed'), not bracketed.
+#[test]
+fn prose_never_spells_a_bracket_stamp() {
+    let claims = mixed_fixture();
+    let report = render_report(
+        "Meridian Bridge history",
+        &claims,
+        "run-r3b",
+        None,
+        None,
+        &[],
+        &[],
+    );
+    let page = render_race("Meridian Bridge history", &claims, "run-r3b");
+    for out in [&report, &page] {
+        for line in out.lines() {
+            let carries_stamp = [
+                "[passed]",
+                "[single-origin]",
+                "[could-not-judge]",
+                "[open question]",
+                "[refuted]",
+                "[never-ran]",
+                "[not evaluated]",
+            ]
+            .iter()
+            .any(|s| line.contains(s));
+            if carries_stamp {
+                assert!(
+                    line.trim_start().starts_with("- **["),
+                    "bracket-stamps belong to claim rows only — this prose line spells one \
+                     (the bar regex counts it): {line:?}"
+                );
+            }
+        }
+    }
+    // The legend still explains the tier, in quoted form.
+    assert!(
+        report.contains("Rows stamped 'single-origin' without 'passed'"),
+        "the legend must name the tiers without bracket stamps: {report}"
+    );
+    assert!(page.contains("Rows stamped 'single-origin' without 'passed'"));
+}
+
 /// A minimal tracing subscriber capturing WARN-or-worse events on the
 /// `deep_research` target — enough to assert the glassbox WARN fired
 /// (same shape as the rescan harness's sink).

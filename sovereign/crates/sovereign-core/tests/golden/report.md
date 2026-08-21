@@ -4,7 +4,7 @@
 
 ## Findings
 
-*Rows stamped [single-origin] without [passed] are could-not-judge at the corroboration floor: one origin supports the claim's substance, the floor requires two. The verdict stands in the verdict set; the page presents the claim, floor-capped, instead of walling it.*
+*Rows stamped 'single-origin' without 'passed' are could-not-judge at the corroboration floor: one origin supports the claim's substance, the floor requires two. The verdict stands in the verdict set; the page presents the claim, floor-capped, instead of walling it.*
 
 - **[single-origin]** The Meridian Bridge across the Selune river was completed in 1873. — *single-origin support (corroboration floor); verdict stands could-not-judge* — origin: [https://meridian-herald.org/1873](https://meridian-herald.org/1873)
 - **[single-origin]** Its span is 240 meters, the longest in the county at completion. — *single-origin support (corroboration floor); verdict stands could-not-judge* — origin: [https://meridian-history.net/funding](https://meridian-history.net/funding)
