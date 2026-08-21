@@ -92,10 +92,170 @@ def rg(pattern, glob="*.rs"):
     return len(hits), sorted(files)
 
 
+# ─── The tool axis: PER-TOOL impls, not the one shared adapter ──────────────
+#
+# RE-SPECIFIED 2026-08-21 by nc-18, on the seat's ruling. The old `axis_tool`
+# was a bare `rg("impl Tool for")` passing only at ZERO, with no allowance for
+# the target shape — so the ONE generic adapter that every declared tool routes
+# through counted against the axis it exists to close.
+#
+# WHY THE ALLOWANCE IS NOT A LOWERED BAR. `axis_intent` below already has the
+# identical exemption and documents it in its own code: `sites = len(scattered)
+# + max(0, len(tables) - 1)`, "One table is the target shape; every extra one is
+# a second decider." Two axes answering the same question ("is adding one of
+# these a DATA change?") under two different rules is two deciders for one
+# question (ARCH principle 8). This makes them one rule.
+#
+# WHY ZERO WAS UNREACHABLE BY CONSTRUCTION, which is the same defect the
+# `studio/` line in SKIP corrects: the `Tool` trait cannot be deleted. `studio/`
+# carries 30 more `impl Tool for` on the SAME `sovereign_contracts::traits::Tool`
+# and is excluded from this axis by campaign scope, while
+# `sovereign-tools/Cargo.toml` takes a NON-optional dep on a studio crate — so
+# the registry must keep accepting `dyn Tool`, and something must adapt a
+# manifest row to it. The one route to a literal zero (registry holds
+# `Arc<DeclaredTool>`, studio bridged in) was refused ON THE MERITS: it buys one
+# deleted impl by creating a SECOND way to be a tool, plus a synthesised-manifest
+# bridge. That is principle 8 backwards, and contorting code to move a grep is
+# what this campaign exists to stop.
+#
+# BOTH SPECS ON THE UNCHANGED TREE at `51178383` (ARCH §18.6 — a judge change
+# reported only in the direction it was meant to fix is the smell):
+#     old spec (every `impl Tool for`)      82   FAIL
+#     new spec (per-tool impls only)        81   FAIL
+# The re-spec does not flip the axis and does not make it reachable without the
+# work: 81 bespoke impls still have to go.
+#
+# WHAT IS EXEMPT, deliberately narrow (the seat's condition 4 — the exemption
+# must not become the new hatch): an impl whose `descriptor()` names NO string
+# literal and whose block reads a manifest it HOLDS. Identity from data, not
+# baked into the block. The 55 per-tool impls that call
+# `tool_manifest::require("some_literal_id")` are manifest-BACKED but not
+# generic — their id is in the block, which is what makes them per-tool — and
+# they get nothing. A hand-rolled generic adapter with a `descriptor` field and
+# no manifest gets nothing either.
+#
+# AND AT MOST ONE, exactly as at most one `IntentRow` table is free. A tree of
+# hand-written tools that merely share a base type still counts every impl but
+# one, so the spec cannot pass the tree the ruling's kill bar names.
+
+#: A `descriptor()` that names its own id is a PER-TOOL impl, however it reads
+#: the manifest. This is the anti-hatch: to be exempt a block must actually be
+#: generic over a held manifest, which IS the target shape.
+_ID_LITERAL = re.compile(r'"[^"]*"')
+#: Identity taken from a manifest the value HOLDS.
+_HELD_MANIFEST = re.compile(r"\bself\.manifest\b")
+
+
+def _scan_tool_impls(lines):
+    """Every `impl Tool for` block in `lines`, classified. Pure — no I/O.
+
+    Split out so `--self-test` can drive it on planted snippets: a classifier
+    only ever exercised on the live tree is one nobody has watched fail
+    (ARCH §18.1).
+    """
+    found, i = [], 0
+    while i < len(lines):
+        head = code_part(lines[i])
+        m = re.search(r"impl Tool for (\w+)", head)
+        if not m:
+            i += 1
+            continue
+        depth, j, opened, body = 0, i, False, []
+        while j < len(lines):
+            c = code_part(lines[j])
+            for ch in c:
+                if ch == "{":
+                    depth += 1
+                    opened = True
+                elif ch == "}":
+                    depth -= 1
+            body.append(c)
+            if opened and depth <= 0:
+                break
+            j += 1
+        # `descriptor()`'s own body, where the identity decision is visible.
+        desc, d, o, seen = [], 0, False, False
+        for c in body:
+            if not seen and re.search(r"\bfn\s+descriptor\s*\(", c):
+                seen = True
+            if seen:
+                for ch in c:
+                    if ch == "{":
+                        d += 1
+                        o = True
+                    elif ch == "}":
+                        d -= 1
+                desc.append(c)
+                if o and d <= 0:
+                    break
+        desc = "\n".join(desc)
+        found.append({
+            "line": i + 1,
+            "ty": m.group(1),
+            "generic": seen and not _ID_LITERAL.search(desc),
+            "held_manifest": bool(_HELD_MANIFEST.search("\n".join(body))),
+        })
+        i = j + 1
+    return found
+
+
+def _is_adapter(block):
+    """THE exemption test. One implementation, and everything routes through it.
+
+    The first draft of this re-spec had two — one here and one in the
+    `--self-test` helper — so three deliberate breaks of the axis all passed
+    the fixtures that were supposed to catch them. Two implementations of one
+    threshold is ARCH principle 8, and it voided the check silently. Do not
+    inline this predicate anywhere.
+    """
+    return block["generic"] and block["held_manifest"]
+
+
+def _tool_axis_sites(total, adapters):
+    """THE axis arithmetic: every block, minus ONE exemption.
+
+    One implementation, shared by [`axis_tool`] and the fixtures, for the
+    reason given on [`_is_adapter`].
+    """
+    return total - min(1, len(adapters))
+
+
+def _tool_adapters(files):
+    """The generic manifest-backed adapters across `files`."""
+    out = []
+    for path in files:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            lines = fh.read().splitlines()
+        for b in _scan_tool_impls(lines):
+            if _is_adapter(b):
+                out.append(dict(b, file=path))
+    return out
+
+
 def axis_tool():
-    """Adding a tool: does it need a new `impl Tool for` block?"""
+    """Adding a tool: does it need a new PER-TOOL `impl Tool for` block?
+
+    Zero means the declared half of every tool is a manifest row and the
+    executable half is an ordinary function — so a new tool is a row plus a
+    handler. The one shared adapter does not count against the axis; a SECOND
+    one does, because two adapters is two deciders (principle 8).
+    """
     n, files = rg("impl Tool for")
-    return n, files, "each tool is a hand-written trait impl, not a row"
+    adapters = _tool_adapters(files)
+    # One adapter is the target shape; every extra one is a second decider.
+    sites = _tool_axis_sites(n, adapters)
+    exempt = {(a["file"], a["line"]) for a in adapters[:1]}
+    hot = sorted({f for f in files
+                  if any(a["file"] == f for a in adapters[1:])
+                  or not any(a["file"] == f for a in adapters)})
+    if sites == 0:
+        note = ("every tool is a manifest row plus a handler; one shared "
+                "`DeclaredTool` adapter carries the trait")
+    else:
+        note = (f"{sites} per-tool trait impls, not rows "
+                f"({len(adapters)} generic adapter(s) found)")
+    _ = exempt
+    return sites, hot, note
 
 
 # ─── The intent axis: POLICY sites, not mentions ────────────────────────────
@@ -279,6 +439,21 @@ def _scan_blocks(lines, variants=frozenset()):
     return found
 
 
+def _classify_tool(snippet):
+    """`adapter` / `per-tool` / `none` for one planted `impl Tool for` block."""
+    blocks = _scan_tool_impls(snippet.splitlines())
+    if not blocks:
+        return "none"
+    return "adapter" if _is_adapter(blocks[0]) else "per-tool"
+
+
+def _tool_sites(snippet):
+    """The axis's own arithmetic over planted blocks — same two functions the
+    live axis calls, so a break in either is visible here."""
+    blocks = _scan_tool_impls(snippet.splitlines())
+    return _tool_axis_sites(len(blocks), [b for b in blocks if _is_adapter(b)])
+
+
 def _classify(snippet, variants=frozenset()):
     """`policy` / `dispatch` / `guard` / `none` for one planted snippet."""
     blocks = _scan_blocks(snippet.splitlines(), variants)
@@ -438,6 +613,73 @@ def self_test():
     if _classify(globbed) != "none":
         bad.append("the glob fixture no longer needs the variant set to be seen")
 
+    # ── The tool axis's one-adapter allowance (ARCH §18.1, §18.6) ──────────
+    #
+    # The exemption is the whole risk of the 2026-08-21 re-spec: if it can be
+    # claimed by a hand-written tool it becomes the hatch that voids the axis.
+    # Both directions get a named failing input, because a check with no
+    # failing input you can name is not a check.
+    ADAPTER = ("impl Tool for DeclaredTool {\n"
+               "    fn descriptor(&self) -> ToolDescriptor {\n"
+               "        self.manifest.to_descriptor()\n"
+               "    }\n"
+               "}\n")
+    tool_cases = [
+        ("adapter", "generic, identity from a HELD manifest — the target shape",
+         ADAPTER),
+        ("per-tool", "manifest-BACKED but names its own id: the 55-impl shape, "
+                     "which the allowance must NOT cover",
+         "impl Tool for GetLintOutputTool {\n"
+         "    fn descriptor(&self) -> ToolDescriptor {\n"
+         "        tool_manifest::require(\"get_lint_output\").to_descriptor()\n"
+         "    }\n"
+         "}\n"),
+        ("per-tool", "HOLDS a manifest but still names its own id — isolates "
+                     "the anti-hatch, which the no-manifest case masks",
+         "impl Tool for GetLintOutputTool {\n"
+         "    fn descriptor(&self) -> ToolDescriptor {\n"
+         "        self.manifest.to_descriptor_for(\"get_lint_output\")\n"
+         "    }\n"
+         "}\n"),
+        ("per-tool", "hand-rolled generic adapter with NO manifest — the seat's "
+                     "condition 4: no manifest, no exemption",
+         "impl Tool for GenericTool {\n"
+         "    fn descriptor(&self) -> ToolDescriptor {\n"
+         "        self.descriptor.clone()\n"
+         "    }\n"
+         "}\n"),
+        ("per-tool", "a descriptor literal — the pre-nc-13 shape",
+         "impl Tool for ExtractTool {\n"
+         "    fn descriptor(&self) -> ToolDescriptor {\n"
+         "        ToolDescriptor { id: \"extract\".into(), name: \"Extract\".into() }\n"
+         "    }\n"
+         "}\n"),
+    ]
+    for want, why, snippet in tool_cases:
+        got = _classify_tool(snippet)
+        if got != want:
+            bad.append(f"tool axis — {why}: want {want}, got {got}")
+
+    # ONE exemption, not one per adapter. A second adapter is a second decider
+    # and counts, exactly as a second `IntentRow` table does.
+    two = ADAPTER + ADAPTER.replace("DeclaredTool", "OtherDeclaredTool")
+    if _tool_sites(two) != 1:
+        bad.append(f"a SECOND adapter went unexempted: want 1 site, "
+                   f"got {_tool_sites(two)}")
+
+    # THE RULING'S KILL BAR, as a fixture: a tree where tools are still
+    # hand-written but happen to share a base type must NOT pass. None of these
+    # is generic, so none is exempt and every one counts.
+    shared_base = "".join(
+        f"impl Tool for {n}Tool {{\n"
+        f"    fn descriptor(&self) -> ToolDescriptor {{\n"
+        f"        self.base.descriptor(\"{n.lower()}\")\n"
+        f"    }}\n"
+        f"}}\n" for n in ("Alpha", "Beta", "Gamma"))
+    if _tool_sites(shared_base) != 3:
+        bad.append(f"hand-written tools sharing a base type were exempted: "
+                   f"want 3 sites, got {_tool_sites(shared_base)}")
+
     # The table itself must be recognised, and a SECOND one must not be.
     table = ("match self {\n"
              "    Self::SimpleQuery => IntentRow { slug: \"simple_query\" },\n"
@@ -456,7 +698,9 @@ def self_test():
         return 1
     print(f"self-test: pass — {len(counts_as_code)} code shapes counted, "
           f"{len(counts_as_prose)} prose shapes refused, "
-          f"{len(cases)} intent shapes classified, table recognised.")
+          f"{len(cases)} intent shapes classified, table recognised, "
+          f"{len(tool_cases)} tool shapes classified, one-adapter allowance "
+          f"held against a second adapter and a shared base type.")
     return 0
 
 
