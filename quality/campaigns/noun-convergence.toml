@@ -410,15 +410,36 @@ proof        = "one commit per feature adding ONLY data files; full suite green;
 # v1 -> v2, where the instrument matched a type's OWNER and never its
 # REFERENCE SITE.
 #
-# THE INTENT AXIS IS STILL WRONG AND IS DELIBERATELY LEFT SO. It counts FILES
-# naming `Intent::` (37) and passes only at zero — i.e. no Rust anywhere may
-# name an intent variant. nc-14's order says the opposite and is right:
-# "matching on a CLOSED enum is what enums are FOR ... pattern matches stay."
-# Re-specifying it to count per-intent POLICY sites requires a discriminator
-# that does not exist yet; building it is nc-14's own first task, and §18.4
-# says validate the instrument before the result. The seat did not guess it
-# from outside. nc-14's first commit re-specs this axis and reports both
-# halves. Until then this axis reads a number no honest work can zero.
+# THE INTENT AXIS WAS RE-SPECIFIED 2026-08-20 by nc-14, seat-authorised. It
+# counted FILES naming `Intent::` and passed only at zero — i.e. no Rust
+# anywhere may name an intent variant. nc-14's order says the opposite and is
+# right: "matching on a CLOSED enum is what enums are FOR ... pattern matches
+# stay." Driving the old number to zero means erasing variant naming from the
+# codebase: worse architecture bought to flip a number.
+#
+# It now counts per-intent POLICY blocks — a `match` over an `Intent` naming
+# >=3 distinct variants whose arms derive a per-variant ATTRIBUTE. Handler
+# DISPATCH (an arm that awaits), guards, and construction sites are refused.
+#
+# BOTH HALVES, per §18.6, on the unchanged tree at d8156d06:
+#   by RE-CLASSIFICATION:  intent 33 files -> 13 policy blocks
+#   by CODE this commit:   0 — no Rust changed
+#   score:                 1/3 -> 1/3, unchanged
+# The re-spec does not flip the axis and does not make it easier to pass.
+#
+# THE GAMING VECTOR IT DELIBERATELY DOES NOT OPEN. The obvious alternative —
+# spec the axis on EXHAUSTIVENESS, counting matches with no `_` arm — can be
+# zeroed by ADDING fallback arms, trading a compile error for a silent default.
+# That is ARCH principle 6 backwards and is the precise disease nc-14's order
+# names. Three live sites already have that shape and are still counted:
+# `speed_for_retrieval_intent`'s `_ => Speed::Slow`, `resolve_output_budget`'s
+# `_ => 700`, `operation_of`'s `_ => None`. `--self-test` carries the planted
+# failing input for each direction and was watched failing three ways before
+# this line was written (§18.1).
+#
+# The axis passes at ZERO POLICY BLOCKS OUTSIDE ONE TABLE. The table itself —
+# the single `match` whose arms build `IntentRow` — does not count against it;
+# a SECOND one does, because two tables is two deciders (principle 8).
 instrument   = "scripts/nc-extends.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
 
 [[bar]]
