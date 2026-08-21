@@ -35,6 +35,51 @@ pub const FAMILY_FRONTIER_KEY: &str = "frontier-key";
 /// The fetch meter's one key.
 pub const KEY_FETCH_PAGES: &str = "pages";
 
+/// drb1-r2b (order drb1-r2b, campaign drb1-race, the whitelisted
+/// Tuning knob "search/fetch allowances and cap derivation"): how many
+/// units of a meter ONE acquisition round may spend — the
+/// round-allowance split.
+///
+/// The measured defect (runs-r3a loop seed-02, dr-1787328255): round 1
+/// formed more queries than the 12-search allowance holds (2 survey-gap
+/// queries + 10 frontier sub-questions), spent all 12, and the
+/// between-rounds budget gate then refused the gap round entry before
+/// it could ask anything — round-2 search_calls 0, gaps flat 2→2, no
+/// fetch-list-2.json. On exactly the hardest questions (round-1
+/// searches return little, every call burns) the loop's closure
+/// mechanism — round N+1's gap-derived queries — starves.
+///
+/// Policy: a fair-share waterfall. The round may spend at most
+/// `ceil(remaining / rounds_left)` of the meter, where `rounds_left`
+/// counts the current round. Properties:
+///
+/// - no round but the last can exhaust the meter: the cap is strictly
+///   below `remaining` whenever `rounds_left ≥ 2` and `remaining ≥ 2`,
+///   so every later round — above all the gap round — enters with a
+///   queryable allowance;
+/// - the split degrades to (near-)equality at any max-rounds /
+///   allowance pair: 12@3 → 4/4/4, 12@2 → 6/6, 4@3 → 2/1/1, 4@2 →
+///   2/2 — a small allowance still hands every round at least one
+///   query as long as the allowance lasts;
+/// - the FINAL round (`rounds_left ≤ 1`) may spend everything left —
+///   the R1 consume-the-remaining-budget stop rule's shape is intact
+///   exactly where it belongs, on the last round;
+/// - a degenerate allowance of 1 gives the opening round the unit
+///   (ceil), never a structurally empty round — with fewer units than
+///   rounds someone must go without, and the broadest round is the
+///   better spender.
+///
+/// The decider itself is untouched: this caps how many times a round
+/// ASKS, never what the ledger records — spent/remaining stay the real
+/// consumption (the bank instruments read the truth, not a mask).
+pub fn round_allowance_cap(remaining: u32, rounds_left: u32) -> u32 {
+    if rounds_left <= 1 || remaining == 0 {
+        remaining
+    } else {
+        remaining.div_ceil(rounds_left)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SpendVerdict {
     Allow {

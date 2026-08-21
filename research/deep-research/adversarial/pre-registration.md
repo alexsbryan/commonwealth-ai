@@ -7088,3 +7088,130 @@ report and race families — equal to the per-claim census exactly. Claim rows
 (137), open markers (55), graded rows (72) unchanged; golden report.md
 re-pinned with a one-line legend reword as its only diff.*
 
+
+## R2b round-allowance split — declaration (order drb1-r2b, drafted 2026-08-21 before spawn)
+
+Order drb1-r2b (campaign drb1-race, autonomy directive 80784024), the
+whitelisted Tuning knob "search/fetch allowances and cap derivation"
+(campaign.md Decisions 2026-08-21). Pre-registered expectation, quoted
+from the order:
+
+- Item 1 (the split, red-first): "a test pins the seed-02 shape — a
+  mock run whose round 1 would exhaust the search allowance must leave
+  round 2 with a non-zero queryable allowance and must actually fire
+  its gap-derived queries (round-2 fetch-list entries with
+  from_gap_id)", constrained by: round 1 must never be able to consume
+  the whole allowance; the split must degrade sensibly at max-rounds
+  2..3 and allowances 4..12; the runner's R1 consume-the-remaining-
+  budget stop rule must still work — a final round may still spend
+  everything.
+- Item 2 (interaction check): "the budget-ledger fields the scorer
+  reads (per-round search_calls, budget.remaining) must still record
+  spent calls truthfully under the split — the bank instruments must
+  see real consumption, not a masked one. If the manifest schema needs
+  a field (e.g. per-round allowance), append it serde-default so old
+  runs parse."
+
+The mechanism named by the checkpoint battery (runs-r3a, 2026-08-21):
+seed-02's round 1 consumed the full 12-search allowance
+(`search_calls: 12`, `budget.remaining["web-search:mock"] = 0`),
+leaving round 2's gap-derived queries unable to run (`search_calls: 0`
+in round 2, gaps flat 2→2, no fetch-list-2.json — the between-rounds
+budget gate refuses the gap round entry before it can ask anything).
+Verdict semantics, audit, render, the banks, the scorer: untouched.
+
+## R2b round-allowance split — execution record (2026-08-21)
+
+**Policy chosen: a fair-share waterfall cap, search meter only.** A
+non-final acquisition round may spend at most
+`ceil(remaining / rounds_left)` of the search meter (`rounds_left`
+counts the current round); the final round (`rounds_left == 1`) keeps
+the whole remaining allowance. `budget::round_allowance_cap` is the one
+decider for the derivation (budget.rs); `acquire_round` truncates the
+round's query list to the cap BEFORE the search loop — gap queries
+first (the round's own gaps outrank the frontier), so the fetch list
+records exactly the queries the round executed, the residue's
+"searched but absent" stays exact, and the decider still journals only
+real asks. Truncation fires a `tracing::debug!` event (glassbox).
+
+Why this policy: it bounds every non-final round strictly below the
+meter (`ceil(r/l) < r` whenever `l ≥ 2, r ≥ 2`) while never
+structurally zeroing a round; it degrades to equal shares at the
+campaign's charter shape (12@3 → 4/4/4); it keeps R1's consume-fully
+stop-rule shape exactly where it belongs (the last round); and it
+changes no ICD, no verdict semantics, and no bank reader. The fetch
+meter keeps the un-split allowance: its per-round consumption is
+already structurally bounded by triage admission (`code_set_k` + the
+ε-quota, ≤ 4 at the r3a charter values) and the dead-URL gate; a
+fetch-side split is a separate order if a battery ever shows fetch
+starvation.
+
+**Red test, watched fail at HEAD** (fix fully reverted, single-test
+run): `sovereign-core/tests/drb1_r2b_reds.rs::
+r2b_round_split_keeps_the_gap_round_firing` —
+`assertion left == right failed: left: 12, right: 4` (round-1
+search_calls 12 = the whole allowance, the seed-02 arithmetic). The
+same fixture at HEAD produces no fetch-list-2.json at all and closes
+done-partial at round 2 with gaps flat.
+
+**Measured before → after on the seed-02-shaped fixture** (clean mock
+deck, scripted 12-line frontier — round 1 forms 22 queries against a
+12-search charter, mirroring seed-02's 2 gap + 10 frontier against 12):
+
+| trace | before (HEAD / seed-02 production run dr-1787328255) | after (the split) |
+|---|---|---|
+| round-1 search_calls | 12 (allowance exhausted) | 4 (`ceil(12/3)`) |
+| round-2 search_calls | 0 (gap round gated out; finish's audit row) | 4 (gap round FIRED) |
+| round-3 search_calls | — | 4 (final round) |
+| fetch-list-2.json | absent | 4 queries, all `from_gap_id` (g1..g4) |
+| fetch-list-3.json | absent | 4 queries, all `from_gap_id` |
+| budget after round 1 | remaining 0 | remaining 8 |
+| budget at close | spent 12 / remaining 0 (all in round 1) | spent 12 / remaining 0 (4+4+4 — final round consumed the rest) |
+| ledger journal | 12 allows + refuses past the allowance | 12 allows, 0 refuses |
+
+Gaps in the fixture run 0→10 at round 1 and stay 10→10→10 (the
+scripted draft never learns anything from the empty deck — the spin is
+the point: the gap queries still fire every round).
+
+**Item 2 (interaction check): no schema change was needed.** The
+manifest and budget-ledger ICDs are byte-shape identical; per-round
+`search_calls`, `budget.spent`, and `budget.remaining` record real
+consumption because the split limits how many times the round ASKS,
+never what the decider journals. Pinned in the red test: per-round
+`search_calls` sum to `budget.spent["web-search:mock"]`,
+`spent + remaining == allowance`, and the journal's allow units equal
+the manifest's spent. No serde-default field was appended anywhere;
+old runs and checkpoints parse unchanged (no new state — the cap is
+derived fresh from live `remaining` each round, so resume needs
+nothing).
+
+**Degrade table** (unit test
+`r2b_cap_degrades_sensibly_across_rounds_and_allowances`, exhaustive
+over allowances 0..=12 × rounds_left 1..=3): 12@3 → 4/4/4+;
+12@2 → 6/6+; 4@3 → 2/1/1; 4@2 → 2/2; the invariants — a non-final
+round can never exhaust the meter, the final round always may, a live
+meter always allows at least one ask, and a degenerate allowance of 1
+goes to the opening round (ceil), never a structurally empty round.
+
+**One existing test re-pinned to the split's contract** (the intended
+movement, nothing else): `deep_research::tests::
+round1_queries_cover_every_deck_hit` (mod.rs in-crate) — round 1 now
+EXECUTES `ceil(40/3) = 14` of its 16 formed queries (8 audit-gap + 8
+frontier; 6 frontier run, the gap queries cover the remainder). The
+full frontier stays recorded verbatim on plan.json (still asserted),
+and the test's real invariant — every deck hit covered by a round-1
+query — still passes.
+
+**Verification:** full `sovereign-test.sh --package sovereign-core`:
+1354 pass / 2 fail — both failures verified pre-existing at HEAD with
+the fix fully reverted (watched):
+`deep_research::acquisition::tests::queries_come_from_gaps_deterministically`
+(a stale t6f unit expectation vs the committed actionable_query code)
+and `tests/gym_deck.rs::unsearchable_estate_refuses_the_web_leg`
+(the drb1-r1 F4 continue path fires RoundStarted from Auditing — no
+transition). Scoped `sovereign-lint.sh`: 0 errors across the 28
+changed-scope crates. Zero API, zero daemon calls, zero inference.
+
+The gap round keeps its ammunition; battery #2 (runs-r2b) is the
+seat's checkpoint — R-12 back into >=10/12 is the gate, stated either
+way by the seat.

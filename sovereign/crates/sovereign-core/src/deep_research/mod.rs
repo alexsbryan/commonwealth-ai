@@ -1913,6 +1913,42 @@ impl Controller {
         // refused query spends nothing and is journaled in the budget
         // ledger — the ledger is the record.
         let source_key = source_budget_key(self.config.search_source, &self.config.web_backend);
+        // drb1-r2b (order drb1-r2b, campaign drb1-race): the
+        // round-allowance split — the gap round keeps its ammunition.
+        // Round 1 asks its own gaps plus the whole frontier and can
+        // form more queries than the search allowance holds; without a
+        // split it exhausts the meter and the between-rounds gate then
+        // refuses the gap round entry (the seed-02 shape: round-1
+        // search_calls 12/12, round-2 search_calls 0, gaps flat). The
+        // round's query list is truncated to its fair share BEFORE the
+        // search loop, so the fetch list records exactly the queries
+        // the round executed (the residue's "searched but absent" stays
+        // exact) and the decider still journals only real asks —
+        // spent/remaining are the truth, never a mask. The FINAL round
+        // (rounds_left == 1) keeps the whole remaining allowance: the
+        // R1 consume-the-remaining-budget stop rule still ends the run
+        // with everything spent where it should.
+        let rounds_left = self
+            .config
+            .max_rounds
+            .saturating_sub(round)
+            .saturating_add(1);
+        let search_cap = budget::round_allowance_cap(
+            self.decider.remaining(FAMILY_WEB_SEARCH, &source_key),
+            rounds_left,
+        ) as usize;
+        if fetch_list.queries.len() > search_cap {
+            tracing::debug!(
+                target: "deep_research",
+                run_id = %self.config.run_id,
+                round,
+                formed = fetch_list.queries.len(),
+                cap = search_cap,
+                rounds_left,
+                "drb1-r2b: round-allowance split holds queries back for the later rounds"
+            );
+            fetch_list.queries.truncate(search_cap);
+        }
         let mut all_hits = Vec::new();
         for query in &fetch_list.queries {
             let verdict = self
@@ -2582,6 +2618,13 @@ mod tests {
         );
 
         // Round-1 queries cover every deck hit — the fix-2 invariant.
+        // drb1-r2b: under the round-allowance split round 1 EXECUTES
+        // its fair share of the allowance, not the whole formed set —
+        // ceil(40/3) = 14 of the 16 formed queries (8 audit-gap +
+        // 8 frontier; the gaps outrank the frontier in the executed
+        // set, so 6 of 8 frontier queries run in round 1 and the rest
+        // are covered by the gap queries below). The FULL frontier
+        // stays recorded on the plan (the assertion above).
         let fetch_list: super::icd::FetchList = serde_json::from_str(
             &std::fs::read_to_string(run_dir.join("fetch-list-1.json"))
                 .expect("fetch-list-1.json exists"),
@@ -2594,9 +2637,15 @@ mod tests {
             .map(|q| q.text.as_str())
             .collect();
         assert_eq!(
+            fetch_list.queries.len(),
+            14,
+            "round 1 executes ceil(allowance/max_rounds) queries — the \
+             round-allowance split (order drb1-r2b)"
+        );
+        assert_eq!(
             frontier_queries.len(),
-            8,
-            "round 1 must carry the full acquisition frontier as queries"
+            6,
+            "the round's own gaps outrank the frontier in the executed set"
         );
         for (i, hit) in deck.hits.iter().enumerate() {
             let covered = fetch_list
