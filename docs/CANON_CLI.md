@@ -201,30 +201,50 @@ suffices:
 chunk                                   no model
 map: extract per chunk, keep chunk id   N completions
 reduce: dedupe                          1 completion, or /v1/embeddings
-tensions over accepted commitments      1 completion, all in context
+tensions over accepted commitments      k(k+1)/2 completions, k = n/12
 ```
 
-Two properties carry it, both consequences of smallness. **Provenance is
-free in the map step** — a candidate was extracted *from* a chunk, so
-citing it is bookkeeping, not retrieval; nothing is synthesised across
-chunks, so the hard grounding problem never arises. And **tensions is one
-call** — thirty commitments is under two thousand tokens.
+**Provenance is free in the map step** — a candidate was extracted *from*
+a chunk, so citing it is bookkeeping, not retrieval; nothing is synthesised
+across chunks, so the hard grounding problem never arises.
+
+**The tensions step is not one call, and this document said it was.** The
+claim was that thirty commitments fit in one comparison and therefore
+all-pairs needed no machinery. Measured against Maple House, one comparison
+over sixty extracted rules found **1 of 11** planted tensions; the same
+sixty rules compared in blocks of twelve, every block against every other,
+found **5 of 11**. False positives on the seven labelled compatible pairs
+were **zero at every batch size**, so what the big single pass loses is
+recall, not discrimination — a model asked to weigh 1,770 pairs in one
+breath does not weigh them.
+
+So the step is block-pairwise, at `k(k+1)/2` calls for `k` blocks of
+twelve. Sixty commitments is fifteen calls, not one. That is the real cost
+and it is quadratic, which is what actually sets the ceiling below.
 
 Where it stops:
 
 - **One corpus, not many.** Tensions *across* corpora is the atlas.
   Standalone cannot — not slower, cannot.
-- **~100 commitments**, past which all-pairs-in-context degrades and you
-  need retrieval plus a candidate enumerator.
+- **Roughly sixty commitments**, and the wall is cost rather than quality:
+  block-pairwise comparison is quadratic, so sixty is fifteen calls and a
+  hundred is forty-five. Past that you want retrieval plus a deterministic
+  candidate enumerator — which is what the daemon adds. The figure in an
+  earlier draft was ~100 and was never measured.
 - **Large source corpora.** Two hundred chunks is minutes; twenty
   thousand is a checkpointed pipeline.
-- **Precision.** The full pipeline pre-filters candidate pairs on
-  structural signals and carries tuned extraction guidance with
-  hand-written carve-outs for recurring false positives. Standalone ships
-  the guidance without the pre-filter, so expect more spurious tensions.
+- **Recall, not precision.** The full pipeline pre-filters candidate pairs
+  on structural signals and carries tuned extraction guidance with
+  hand-written carve-outs for recurring false positives. The prediction was
+  that standalone would therefore be noisier. It is not: standalone flagged
+  none of the seven labelled compatible pairs, including the outright
+  decoy. What it does instead is **miss**, and the numbers are published in
+  the README rather than described here.
 
-Standalone degrades on precision; it does not fail. That is the claim,
-narrow on purpose.
+The original claim here was that standalone degrades on precision and does
+not fail. **The measurement says the opposite half is true**: precision
+holds and recall is what degrades. Kept as written above and corrected
+here, because a prediction is worth more when you can see it was wrong.
 
 ### The bar that makes the claim honest
 
