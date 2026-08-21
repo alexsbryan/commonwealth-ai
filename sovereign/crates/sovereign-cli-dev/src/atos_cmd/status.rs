@@ -14,13 +14,20 @@
 use corpus_engine_notes::NoteScope;
 use sovereign_atos::AtosOrchestrator;
 
-use super::args::{get_flag, split_args};
+use super::args::parse_args;
 use super::stores::open_orchestrator;
 
 // ─── status ──────────────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_status(args: &[String]) -> i32 {
-    let (positional, _flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let orc = match open_orchestrator() {
         Ok(o) => o,
         Err(e) => {
@@ -89,12 +96,19 @@ pub(crate) async fn cmd_status(args: &[String]) -> i32 {
 // ─── promote ─────────────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_promote(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(note_id) = positional.first().cloned() else {
         eprintln!("promote: missing <note-id>");
         return 2;
     };
-    let to = match get_flag(&flags, "--to").as_deref() {
+    let to = match flags.value("to").map(|s| s.to_string()).as_deref() {
         Some("global") => NoteScope::Global,
         Some("feature") => NoteScope::Feature,
         Some(other) => {
@@ -106,8 +120,8 @@ pub(crate) async fn cmd_promote(args: &[String]) -> i32 {
             return 2;
         }
     };
-    let feature_id = get_flag(&flags, "--feature-id");
-    let content = match get_flag(&flags, "--content") {
+    let feature_id = flags.value("feature-id").map(|s| s.to_string());
+    let content = match flags.value("content").map(|s| s.to_string()) {
         Some(p) => match std::fs::read_to_string(&p) {
             Ok(s) => Some(s),
             Err(e) => {
@@ -147,17 +161,26 @@ pub(crate) async fn cmd_promote(args: &[String]) -> i32 {
 // ─── report ──────────────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_report(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("report: missing <feature-id>");
         return 2;
     };
-    let section = match get_flag(&flags, "--section").as_deref() {
+    let section = match flags.value("section").map(|s| s.to_string()).as_deref() {
         None | Some("all") => sovereign_atos::ReportSection::All,
         Some("epistemic") => sovereign_atos::ReportSection::Epistemic,
         Some("red-team") | Some("redteam") => sovereign_atos::ReportSection::RedTeam,
         Some("milestone") => {
-            let n = get_flag(&flags, "--milestone")
+            let n = flags
+                .value("milestone")
+                .map(|s| s.to_string())
                 .and_then(|s| s.parse::<i64>().ok())
                 .unwrap_or(1);
             sovereign_atos::ReportSection::Milestone(n)
@@ -167,7 +190,7 @@ pub(crate) async fn cmd_report(args: &[String]) -> i32 {
             return 2;
         }
     };
-    let out_path = get_flag(&flags, "--out");
+    let out_path = flags.value("out").map(|s| s.to_string());
 
     let orc = match open_orchestrator() {
         Ok(o) => o,

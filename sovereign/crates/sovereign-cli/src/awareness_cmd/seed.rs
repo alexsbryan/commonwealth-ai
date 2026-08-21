@@ -29,7 +29,7 @@ use sovereign_core::traits::ConversationStore;
 use sovereign_core::types::{Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::render::display_path;
 use super::store_open::{sovereign_root, state_db_path};
 use super::templates::{list_builtin_names, load_builtin, load_from_path, Template};
@@ -37,7 +37,13 @@ use super::templates::{list_builtin_names, load_builtin, load_from_path, Templat
 use super::templates::{TemplateConversation, TemplateMessage};
 
 pub(super) async fn cmd_seed(args: &[String]) -> i32 {
-    let (_pos, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
 
     let template = match resolve_template(&flags) {
         Ok(t) => t,
@@ -47,7 +53,7 @@ pub(super) async fn cmd_seed(args: &[String]) -> i32 {
         }
     };
 
-    let dry_run = has_flag(&flags, "dry-run");
+    let dry_run = flags.has("dry-run");
     let now = unix_now();
     let plan = build_seed_plan(&template, now);
 
@@ -127,11 +133,19 @@ pub(super) async fn cmd_seed(args: &[String]) -> i32 {
     0
 }
 
-fn resolve_template(flags: &[(String, String)]) -> Result<Template, String> {
-    if let Some(name) = get_flag(flags, "from-template").filter(|s| !s.is_empty()) {
+fn resolve_template(flags: &Parsed) -> Result<Template, String> {
+    if let Some(name) = flags
+        .value("from-template")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         return load_builtin(&name);
     }
-    if let Some(p) = get_flag(flags, "from-file").filter(|s| !s.is_empty()) {
+    if let Some(p) = flags
+        .value("from-file")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         return load_from_path(std::path::Path::new(&p));
     }
     Err(format!(
@@ -205,6 +219,7 @@ fn parse_role(s: &str) -> Role {
     }
 }
 
+use sovereign_cli_shared::args::Parsed;
 use sovereign_core::time::unix_now;
 
 fn print_plan(t: &Template, plan: &SeedPlan) {

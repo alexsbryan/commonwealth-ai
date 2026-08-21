@@ -21,18 +21,24 @@ use std::path::PathBuf;
 
 use rusqlite::{params, Connection, OpenFlags};
 
-use super::args::{has_flag, split_args};
+use super::args::parse_args;
 use super::render::display_path;
 use super::store_open::{atlas_dir_for, notes_db_path, sovereign_root, state_db_path};
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
 pub(super) async fn cmd_reset(args: &[String]) -> i32 {
-    let (_pos, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
 
-    let entities_only = has_flag(&flags, "entities-only");
-    let full = has_flag(&flags, "full");
-    let assume_yes = has_flag(&flags, "yes") || has_flag(&flags, "y");
+    let entities_only = flags.has("entities-only");
+    let full = flags.has("full");
+    let assume_yes = flags.has("yes") || flags.has("y");
 
     if entities_only == full {
         eprintln!(

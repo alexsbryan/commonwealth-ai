@@ -22,7 +22,7 @@ use sovereign_tools::knowledge_view::splice_extension::{
 };
 use sovereign_tools::knowledge_view::timeline::{AtosLink, AtosLinkKind, AtosLookup};
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::render::{display_path, format_date};
 use super::store_open::{
     atlas_dir_for, project_toml_path, sovereign_root, try_open_features, try_open_notes,
@@ -45,9 +45,18 @@ const HEDGE_WORDS: &[&str] = &[
 ];
 
 pub(super) async fn cmd_entities(args: &[String]) -> i32 {
-    let (_pos, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
 
-    let kind_filter = get_flag(&flags, "kind").unwrap_or_else(|| "all".to_string());
+    let kind_filter = flags
+        .value("kind")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "all".to_string());
     if !matches!(
         kind_filter.as_str(),
         "all" | "person" | "organization" | "initiative"
@@ -58,7 +67,10 @@ pub(super) async fn cmd_entities(args: &[String]) -> i32 {
         return 2;
     }
 
-    let sort_mode = get_flag(&flags, "sort").unwrap_or_else(|| "name".to_string());
+    let sort_mode = flags
+        .value("sort")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "name".to_string());
     if !matches!(sort_mode.as_str(), "name" | "recency" | "frequency") {
         eprintln!(
             "awareness entities: --sort must be one of: recency, frequency, name (got '{sort_mode}')"
@@ -66,7 +78,7 @@ pub(super) async fn cmd_entities(args: &[String]) -> i32 {
         return 2;
     }
 
-    let json_out = has_flag(&flags, "json");
+    let json_out = flags.has("json");
 
     let root = sovereign_root(&flags);
 

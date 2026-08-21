@@ -25,7 +25,7 @@
 
 use sovereign_atos::AtosOrchestrator;
 
-use super::args::{get_flag, split_args};
+use super::args::parse_args;
 use super::stores::open_orchestrator;
 
 pub(crate) async fn cmd_provision(_args: &[String]) -> i32 {
@@ -41,12 +41,22 @@ pub(crate) async fn cmd_provision(_args: &[String]) -> i32 {
 }
 
 pub(crate) async fn cmd_archive(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(id) = positional.first().cloned() else {
         eprintln!("archive: missing <id>");
         return 2;
     };
-    let reason = get_flag(&flags, "--reason").unwrap_or_else(|| "(no reason given)".into());
+    let reason = flags
+        .value("reason")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "(no reason given)".into());
 
     let orc = match open_orchestrator() {
         Ok(o) => o,

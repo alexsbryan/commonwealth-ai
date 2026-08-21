@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use super::args::{get_flag, split_args};
+use super::args::parse_args;
 
 const DEFAULT_SYNTH_MODEL: &str = "commonwealth/primary";
 const DEFAULT_DAEMON_URL: &str = "http://localhost:9741";
@@ -34,9 +34,15 @@ const SYNTH_TIMEOUT_SECS: u64 = 600;
 const MAX_DIFF_BYTES: usize = 64 * 1024;
 
 pub async fn cmd_replay(args: &[String]) -> i32 {
-    let (_positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
 
-    let commit = match get_flag(&flags, "--commit") {
+    let commit = match flags.value("commit").map(|s| s.to_string()) {
         Some(s) => s,
         None => {
             eprintln!("atos replay: missing --commit <sha>");
@@ -44,7 +50,7 @@ pub async fn cmd_replay(args: &[String]) -> i32 {
             return 2;
         }
     };
-    let workdir = match get_flag(&flags, "--workdir") {
+    let workdir = match flags.value("workdir").map(|s| s.to_string()) {
         Some(s) => PathBuf::from(s),
         None => {
             eprintln!("atos replay: missing --workdir <path>");
@@ -60,14 +66,24 @@ pub async fn cmd_replay(args: &[String]) -> i32 {
         return 2;
     }
 
-    let driver = get_flag(&flags, "--driver").unwrap_or_else(|| "opencode".to_string());
-    let daemon_url =
-        get_flag(&flags, "--daemon-url").unwrap_or_else(|| DEFAULT_DAEMON_URL.to_string());
-    let synth_model =
-        get_flag(&flags, "--synth-model").unwrap_or_else(|| DEFAULT_SYNTH_MODEL.to_string());
-    let custom_branch = get_flag(&flags, "--branch-name");
-    let dry_run = flags.iter().any(|(k, _)| k == "dry-run");
-    let max_iters = get_flag(&flags, "--max-iters").unwrap_or_else(|| "8".to_string());
+    let driver = flags
+        .value("driver")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "opencode".to_string());
+    let daemon_url = flags
+        .value("daemon-url")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| DEFAULT_DAEMON_URL.to_string());
+    let synth_model = flags
+        .value("synth-model")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| DEFAULT_SYNTH_MODEL.to_string());
+    let custom_branch = flags.value("branch-name").map(|s| s.to_string());
+    let dry_run = flags.has("dry-run");
+    let max_iters = flags
+        .value("max-iters")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "8".to_string());
 
     println!("atos replay: workdir = {}", workdir.display());
     println!("  commit       = {commit}");

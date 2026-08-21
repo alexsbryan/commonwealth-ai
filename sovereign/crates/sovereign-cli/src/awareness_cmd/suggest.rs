@@ -22,20 +22,27 @@ use sovereign_core::traits::ConversationStore;
 use sovereign_core::types::{Conversation, Message, Role};
 use sovereign_store::sqlite::SqliteStateStore;
 
-use super::args::{has_flag, split_args};
+use super::args::parse_args;
 use super::inference::resolve_inference;
 use super::render::display_path;
 use super::store_open::{sovereign_root, state_db_path};
 
 pub(super) async fn cmd_suggest(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(conv_id) = positional.into_iter().next() else {
         eprintln!("awareness suggest: <conversation-id> is required");
         eprintln!("usage: sovereign awareness suggest <conversation-id> [--all-turns] [--verbose]");
         return 2;
     };
-    let verbose = has_flag(&flags, "verbose");
-    let _all_turns = has_flag(&flags, "all-turns"); // stub flag — every turn already evaluated
+    let verbose = flags.has("verbose");
+    let _all_turns = flags.has("all-turns"); // stub flag — every turn already evaluated
 
     let (inference, mode) = match resolve_inference(&flags).await {
         Ok(p) => p,
@@ -90,7 +97,7 @@ pub(super) async fn cmd_suggest(args: &[String]) -> i32 {
             eprintln!("{prompt}");
             eprintln!("──────────────────────────────────────────────────────");
         }
-        let raw = match (inference)(&prompt).await {
+        let raw = match (inference)(&prompt, None).await {
             Ok(r) => r,
             Err(e) => {
                 eprintln!("awareness suggest: inference failed on turn {turn_no}: {e}");

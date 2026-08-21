@@ -23,14 +23,20 @@ use sovereign_core::types::Memory;
 use sovereign_store::sqlite::SqliteStateStore;
 use sovereign_tools::knowledge_view::splice_extension::build_entity_inventory;
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::render::display_path;
 use super::store_open::{sovereign_root, state_db_path};
 
 pub(super) async fn cmd_decay(args: &[String]) -> i32 {
-    let (_pos, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
 
-    let months: i64 = match get_flag(&flags, "months") {
+    let months: i64 = match flags.value("months").map(|s| s.to_string()) {
         None => 3,
         Some(s) => match s.parse() {
             Ok(n) if n >= 0 => n,
@@ -40,7 +46,7 @@ pub(super) async fn cmd_decay(args: &[String]) -> i32 {
             }
         },
     };
-    let rate: f64 = match get_flag(&flags, "rate") {
+    let rate: f64 = match flags.value("rate").map(|s| s.to_string()) {
         None => DEFAULT_DECAY_RATE,
         Some(s) => match s.parse() {
             Ok(r) if (0.0..=1.0).contains(&r) => r,
@@ -50,7 +56,7 @@ pub(super) async fn cmd_decay(args: &[String]) -> i32 {
             }
         },
     };
-    let threshold: f64 = match get_flag(&flags, "threshold") {
+    let threshold: f64 = match flags.value("threshold").map(|s| s.to_string()) {
         None => DEFAULT_PRUNE_THRESHOLD,
         Some(s) => match s.parse() {
             Ok(t) if (0.0..=1.0).contains(&t) => t,
@@ -60,7 +66,7 @@ pub(super) async fn cmd_decay(args: &[String]) -> i32 {
             }
         },
     };
-    let show_entity_linked = has_flag(&flags, "show-entity-linked");
+    let show_entity_linked = flags.has("show-entity-linked");
 
     let root = sovereign_root(&flags);
     let db_path = state_db_path(&root);

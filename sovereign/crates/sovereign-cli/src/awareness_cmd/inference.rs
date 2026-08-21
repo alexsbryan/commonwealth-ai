@@ -29,7 +29,8 @@ use std::sync::Arc;
 
 use corpus_engine::InferenceFn;
 
-use super::args::{get_flag, has_flag};
+use super::args::parse_args;
+use sovereign_cli_shared::args::Parsed;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum InferenceMode {
@@ -42,9 +43,9 @@ pub(super) enum InferenceMode {
 /// Mutually exclusive — `--mock` wins over `--dry-run` and both win
 /// over the default real path; we surface a warning if both are set
 /// so the developer doesn't think they're combined.
-pub(super) fn pick_mode(flags: &[(String, String)]) -> InferenceMode {
-    let mock = has_flag(flags, "mock");
-    let dry = has_flag(flags, "dry-run");
+pub(super) fn pick_mode(flags: &Parsed) -> InferenceMode {
+    let mock = flags.has("mock");
+    let dry = flags.has("dry-run");
     match (mock, dry) {
         (true, true) => {
             eprintln!("awareness: --mock and --dry-run both set; using --mock.");
@@ -61,7 +62,7 @@ pub(super) fn pick_mode(flags: &[(String, String)]) -> InferenceMode {
 /// the awareness CLI defers that cost until the user explicitly
 /// asks for real extraction quality.
 pub(super) async fn resolve_inference(
-    flags: &[(String, String)],
+    flags: &Parsed,
 ) -> Result<(InferenceFn, InferenceMode), String> {
     let mode = pick_mode(flags);
     match mode {
@@ -383,13 +384,15 @@ fn dry_run_inference() -> InferenceFn {
 /// extraction exercises the same model + sampler the production
 /// pipeline does, with no parallel model load (which would contend
 /// for GPU memory). The daemon must be running before the call.
-async fn real_inference(flags: &[(String, String)]) -> Result<InferenceFn, String> {
+async fn real_inference(flags: &Parsed) -> Result<InferenceFn, String> {
     use crate::enrich_cmd::inference_client::{
         probe_daemon, resolve_default_models, DaemonInferenceClient,
     };
     use crate::util::urls::{v1_url, DEFAULT_CLIENT_PORT};
 
-    let base_url = get_flag(flags, "daemon-url")
+    let base_url = flags
+        .value("daemon-url")
+        .map(|s| s.to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| {
             v1_url(DEFAULT_CLIENT_PORT)
@@ -405,7 +408,11 @@ async fn real_inference(flags: &[(String, String)]) -> Result<InferenceFn, Strin
         ));
     }
 
-    let chat_model = match get_flag(flags, "model").filter(|s| !s.is_empty()) {
+    let chat_model = match flags
+        .value("model")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         Some(m) => m,
         None => {
             let (chat, _embed) = resolve_default_models(&base_url).await;
@@ -423,7 +430,9 @@ async fn real_inference(flags: &[(String, String)]) -> Result<InferenceFn, Strin
 
     // Entity-extraction JSON can run several KB; default daemon
     // caps (often 256 tokens on llama.cpp) truncate mid-array.
-    let max_output_tokens: u32 = get_flag(flags, "max-tokens")
+    let max_output_tokens: u32 = flags
+        .value("max-tokens")
+        .map(|s| s.to_string())
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(4096);
 
@@ -436,7 +445,7 @@ async fn real_inference(flags: &[(String, String)]) -> Result<InferenceFn, Strin
          max_tokens = {max_output_tokens}"
     );
 
-    let verbose = has_flag(flags, "verbose");
+    let verbose = flags.has("verbose");
     let client = Arc::new(client);
     let f: InferenceFn = Arc::new(move |prompt: &str, _schema: Option<&serde_json::Value>| {
         let client = client.clone();

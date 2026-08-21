@@ -27,27 +27,61 @@
 //! Phase 1 ships the three read-only subcommands plus reset. Phases
 //! 2–4 add seed/extract/digest/suggest/trace/decay/eval/scenario.
 
-#![cfg(feature = "dev-tools")]
+// ─── Feature gating ──────────────────────────────────────────────────
+//
+// The gate lives in `main.rs` (`#[cfg(feature = "awareness")] mod
+// awareness_cmd;`) and, for the heavy submodules, here. It does NOT
+// live as an inner `#![cfg]` on this module: it did until 2026-08-21,
+// spelled `dev-tools`, while `main.rs` declared the module under
+// `awareness` — so `--features awareness` alone configured the entire
+// module out and the build failed with E0433 at the dispatch site. Two
+// gates on one module, disagreeing, is how a feature nothing compiles
+// stays that way.
+//
+// `args` is deliberately NOT gated. It is data plus
+// `sovereign_cli_shared::args::parse` — none of the knowledge-view
+// surface the rest of this module needs. Gated with its readers, its
+// tests never ran in ANY build (nc-22b reported three of them
+// never-ran, correctly). Ungated, they run in every `sovereign-cli`
+// test run.
+pub(crate) mod args;
 
-mod args;
+#[cfg(feature = "awareness")]
 mod decay;
+#[cfg(feature = "awareness")]
 mod digest;
+#[cfg(feature = "awareness")]
 mod entities;
+#[cfg(feature = "awareness")]
 mod eval;
+#[cfg(feature = "awareness")]
 mod extract;
+#[cfg(feature = "awareness")]
 mod filter;
+#[cfg(feature = "awareness")]
 mod golden;
+#[cfg(feature = "awareness")]
 mod inference;
+#[cfg(feature = "awareness")]
 mod render;
+#[cfg(feature = "awareness")]
 mod reset;
+#[cfg(feature = "awareness")]
 mod scenario;
+#[cfg(feature = "awareness")]
 mod seed;
+#[cfg(feature = "awareness")]
 mod store_open;
+#[cfg(feature = "awareness")]
 mod suggest;
+#[cfg(feature = "awareness")]
 mod templates;
+#[cfg(feature = "awareness")]
 mod timeline;
+#[cfg(feature = "awareness")]
 mod trace;
 
+#[cfg(feature = "awareness")]
 pub async fn run_awareness(args: &[String]) -> i32 {
     let Some(first) = args.first() else {
         print_help();
@@ -81,6 +115,7 @@ pub async fn run_awareness(args: &[String]) -> i32 {
     }
 }
 
+#[cfg(feature = "awareness")]
 fn print_help() {
     eprintln!(
         "svrn awareness — development glassbox CLI for the\n\

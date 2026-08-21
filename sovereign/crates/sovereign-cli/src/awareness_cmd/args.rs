@@ -1,101 +1,84 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Flag parsing shared by every `svrn awareness` subcommand.
+//! The flag surface of `svrn awareness`, as data.
 //!
-//! Mirrors `atos_cmd/args.rs` — manual split into positional + flag
-//! pairs, then subcommands look up flags by name. Boolean flags that
-//! don't consume the next token are listed below.
+//! Until 2026-08-21 this file held a hand-rolled `while i < args.len()`
+//! loop — one of five byte-identical copies across the CLI crates, and
+//! one of roughly 144 such loops in total. nc-22b converged their
+//! BEHAVIOUR (four of the five silently dropped `--key=value`, so
+//! `--kind=person` landed as the flag NAME `"kind=person"` and
+//! `entities.rs` listed every kind); nc-25 removes the copies. Parsing
+//! happens once, in [`sovereign_cli_shared::args::parse`], and this
+//! module supplies only what is genuinely local: which flags
+//! `awareness` accepts.
 //!
-//! Lifted as a private copy rather than re-exporting `atos_cmd::args`
-//! because the boolean-flag set differs (we have `--entities-only`,
-//! `--full`, `--include-chunks`, `--show-scores`, etc. that atos
-//! doesn't), and `atos_cmd::args` is module-private.
+//! **This module is NOT gated on `awareness`, and that is deliberate.**
+//! A spec is data plus the shared parser — no `sovereign-tools`, no
+//! knowledge-view surface, nothing the heavy feature drags in. Gating it
+//! with the subcommands that read it meant its tests never ran in any
+//! build (`--features awareness` does not compile at all; see
+//! `mod.rs`), so the `--key=value` regression it exists to catch was
+//! unwatched. Data with no heavy dependency should not inherit a heavy
+//! dependency's gate.
 
-/// Boolean flags that do not consume the next token as their value.
-pub(super) const BOOLEAN_FLAGS: &[&str] = &[
-    // Phase 1
-    "entities-only",
-    "full",
-    "include-chunks",
-    "json",
-    "yes",
-    "y",
-    // Phase 2+ (declared early so the module's flag splitter is
-    // forward-compatible — unused booleans don't cost anything).
-    "verbose",
-    "dry-run",
-    "mock",
-    "show-scores",
-    "show-rejected",
-    "all-turns",
-    "show-entity-linked",
-    "interactive",
-    "use-cached",
+#![cfg_attr(not(feature = "awareness"), allow(dead_code))]
+
+use sovereign_cli_shared::args::{parse, ArgError, ArgSpec, Parsed};
+
+/// Every flag any `svrn awareness` subcommand accepts. One union rather
+/// than one spec per subcommand, because that is what the old
+/// `BOOLEAN_FLAGS` list already was.
+///
+/// Declaring the VALUE flags — not just the booleans that list carried —
+/// is what closes the hole: the splitter treated every UNDECLARED `--x`
+/// as value-taking, so a typo silently ate the following token and the
+/// command ran on defaults.
+pub(super) const SPECS: &[ArgSpec] = &[
+    // booleans
+    ArgSpec::flag("entities-only"),
+    ArgSpec::flag("full"),
+    ArgSpec::flag("include-chunks"),
+    ArgSpec::flag("json"),
+    ArgSpec::flag_short("yes", 'y'),
+    // `--y` was accepted by the old splitter as a long flag and is read
+    // as one; kept so the spelling does not regress. `-y` is NEW — the
+    // splitter never handled single-dash forms at all.
+    ArgSpec::flag("y"),
+    ArgSpec::flag("verbose"),
+    ArgSpec::flag("dry-run"),
+    ArgSpec::flag("mock"),
+    ArgSpec::flag("show-scores"),
+    ArgSpec::flag("show-rejected"),
+    ArgSpec::flag("all-turns"),
+    ArgSpec::flag("show-entity-linked"),
+    ArgSpec::flag("interactive"),
+    // Declared by the old boolean list and read nowhere yet. Kept
+    // declared so it stays accepted rather than starting to error.
+    ArgSpec::flag("use-cached"),
+    // value-taking
+    ArgSpec::value("budget"),
+    ArgSpec::value("context"),
+    ArgSpec::value("daemon-url"),
+    ArgSpec::value("db-path"),
+    ArgSpec::value("from-file"),
+    ArgSpec::value("from-template"),
+    ArgSpec::value("golden"),
+    ArgSpec::value("kind"),
+    ArgSpec::value("limit"),
+    ArgSpec::value("max-tokens"),
+    ArgSpec::value("model"),
+    ArgSpec::value("months"),
+    ArgSpec::value("output"),
+    ArgSpec::value("phase"),
+    ArgSpec::value("rate"),
+    ArgSpec::value("report"),
+    ArgSpec::value("sort"),
+    ArgSpec::value("threshold"),
+    ArgSpec::value("window"),
 ];
 
-/// Split `args` into `(positional, flag_pairs)`. Value-taking flags
-/// (e.g. `--window 90`) consume the following token, or carry the value
-/// inline as `--window=90`. Boolean flags listed in [`BOOLEAN_FLAGS`]
-/// stand alone and are recorded with an empty value.
-///
-/// The inline form was missing here until 2026-08-21, which made
-/// `--kind=person` land as the flag NAME `"kind=person"` — so
-/// `entities.rs:50` saw no `--kind` at all and silently listed every
-/// kind. Same for `--sort=` (entities.rs:61), `--phase=` (extract.rs:48)
-/// and `--context=` (digest.rs:48).
-pub(super) fn split_args(args: &[String]) -> (Vec<String>, Vec<(String, String)>) {
-    let mut positional = Vec::new();
-    let mut flags = Vec::new();
-    let mut i = 0;
-    while i < args.len() {
-        let arg = &args[i];
-        if let Some(name_eq_val) = arg.strip_prefix("--") {
-            // `--key=value` in one token. The declarative parser this
-            // family is migrating to (`sovereign_cli_shared::args::parse`)
-            // accepts it, `tools_cmd`'s splitter accepts it, and AGENTS.md
-            // teaches `--key=value` as THE form — so an operator or agent
-            // types it here too. Without this branch the whole token became
-            // the flag NAME ("driver-model=x"), `get_flag("driver-model")`
-            // returned None, the caller silently took its default, AND the
-            // following token was eaten as the phantom flag's value.
-            if let Some((k, v)) = name_eq_val.split_once('=') {
-                // A boolean carries no inline value — the canonical parser
-                // rejects `--flag=x` outright. Record presence and, crucially,
-                // do not consume the next token.
-                if BOOLEAN_FLAGS.contains(&k) {
-                    flags.push((k.to_string(), String::new()));
-                } else {
-                    flags.push((k.to_string(), v.to_string()));
-                }
-                i += 1;
-                continue;
-            }
-            let name = name_eq_val;
-            if BOOLEAN_FLAGS.contains(&name) {
-                flags.push((name.to_string(), String::new()));
-                i += 1;
-            } else {
-                let value = args.get(i + 1).cloned().unwrap_or_default();
-                flags.push((name.to_string(), value));
-                i += 2;
-            }
-        } else {
-            positional.push(arg.clone());
-            i += 1;
-        }
-    }
-    (positional, flags)
-}
-
-/// Look up a flag's value. Accepts both `"--window"` and `"window"`.
-pub(super) fn get_flag(flags: &[(String, String)], name: &str) -> Option<String> {
-    let key = name.strip_prefix("--").unwrap_or(name);
-    flags.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
-}
-
-/// Boolean-flag presence check.
-pub(super) fn has_flag(flags: &[(String, String)], name: &str) -> bool {
-    let key = name.strip_prefix("--").unwrap_or(name);
-    flags.iter().any(|(k, _)| k == key)
+/// Parse a subcommand's own argument slice against [`SPECS`].
+pub(super) fn parse_args(args: &[String]) -> Result<Parsed, ArgError> {
+    parse(SPECS, args)
 }
 
 #[cfg(test)]
@@ -108,71 +91,83 @@ mod tests {
 
     #[test]
     fn split_separates_positional_and_flag_pairs() {
-        let (pos, flags) = split_args(&s(&["timeline", "Sarah Chen", "--window", "90"]));
-        assert_eq!(pos, vec!["timeline", "Sarah Chen"]);
-        assert_eq!(flags, vec![("window".into(), "90".into())]);
+        let p = parse_args(&s(&["timeline", "Sarah Chen", "--window", "90"])).unwrap();
+        assert_eq!(
+            p.positionals(),
+            &["timeline".to_string(), "Sarah Chen".to_string()]
+        );
+        assert_eq!(p.value("window"), Some("90"));
     }
 
     #[test]
     fn boolean_flag_does_not_consume_next_token() {
-        let (pos, flags) = split_args(&s(&[
+        let p = parse_args(&s(&[
             "timeline",
             "Sarah",
             "--include-chunks",
             "--window",
             "30",
-        ]));
-        assert_eq!(pos, vec!["timeline", "Sarah"]);
-        assert!(has_flag(&flags, "include-chunks"));
-        assert_eq!(get_flag(&flags, "window"), Some("30".into()));
-    }
-
-    #[test]
-    fn get_flag_accepts_bare_or_dashed_name() {
-        let (_pos, flags) = split_args(&s(&["entities", "--kind", "person"]));
-        assert_eq!(get_flag(&flags, "kind"), Some("person".into()));
-        assert_eq!(get_flag(&flags, "--kind"), Some("person".into()));
+        ]))
+        .unwrap();
+        assert_eq!(
+            p.positionals(),
+            &["timeline".to_string(), "Sarah".to_string()]
+        );
+        assert!(p.has("include-chunks"));
+        assert_eq!(p.value("window"), Some("30"));
     }
 
     #[test]
     fn missing_flag_returns_none() {
-        let (_pos, flags) = split_args(&s(&["entities"]));
-        assert_eq!(get_flag(&flags, "kind"), None);
-        assert!(!has_flag(&flags, "json"));
+        let p = parse_args(&s(&["entities"])).unwrap();
+        assert_eq!(p.value("kind"), None);
+        assert!(!p.has("json"));
     }
 
     /// `--key=value` must mean what `--key value` means.
     ///
-    /// This half of the splitter fork dropped the `=` form entirely: the
-    /// whole token became the flag NAME, so the lookup missed, the caller
-    /// silently fell back to its default, and the NEXT token was swallowed
-    /// as the phantom flag's value. `svrn atos run --driver-model=X` ran
-    /// on DEFAULT_DRIVER_MODEL and exited 0 (atos_cmd/run.rs:165) — a
-    /// silent substitution, which is the one thing a flag must never do.
-    /// `tools_cmd::args` and `sovereign_cli_shared::args::parse` both
-    /// accepted `=` the whole time; only these copies did not.
+    /// nc-22b wrote this test and it had NEVER RUN: the module was gated
+    /// behind `awareness`, which does not compile, and no gate builds
+    /// that feature. It runs now because the spec is no longer gated
+    /// with the subcommands that read it — see the module doc.
+    ///
+    /// The bug it pins: the whole token became the flag NAME, so the
+    /// lookup missed, the caller silently fell back to its default, and
+    /// the NEXT token was swallowed. `--kind=person` (entities.rs) then
+    /// listed every kind and exited 0 — a silent substitution, which is
+    /// the one thing a flag must never do.
     #[test]
     fn equals_form_is_the_same_as_the_space_form() {
-        let (pos_eq, flags_eq) = split_args(&s(&["entities", "--kind=person"]));
-        let (pos_sp, flags_sp) = split_args(&s(&["entities", "--kind", "person"]));
-        assert_eq!(pos_eq, pos_sp);
-        assert_eq!(flags_eq, flags_sp);
-        assert_eq!(get_flag(&flags_eq, "kind").as_deref(), Some("person"));
+        let eq = parse_args(&s(&["entities", "--kind=person"])).unwrap();
+        let sp = parse_args(&s(&["entities", "--kind", "person"])).unwrap();
+        assert_eq!(eq, sp);
+        assert_eq!(eq.value("kind"), Some("person"));
     }
 
     /// A value containing `=` survives: only the FIRST `=` splits.
     #[test]
     fn equals_form_keeps_the_rest_of_the_value() {
-        let (_pos, flags) = split_args(&s(&["--kind=a=b=c"]));
-        assert_eq!(get_flag(&flags, "kind").as_deref(), Some("a=b=c"));
+        let p = parse_args(&s(&["--kind=a=b=c"])).unwrap();
+        assert_eq!(p.value("kind"), Some("a=b=c"));
     }
 
-    /// A boolean given an inline value records presence and — the part
-    /// that actually bites — does NOT eat the following token.
+    /// BEHAVIOUR CHANGE (nc-25). The hand-rolled splitter accepted
+    /// `--json=whatever` and recorded bare presence. The canonical parser
+    /// refuses it and says so rather than guessing. The half that
+    /// mattered is preserved either way: the following token is never
+    /// swallowed.
     #[test]
-    fn equals_form_on_a_boolean_consumes_no_following_token() {
-        let (_pos, flags) = split_args(&s(&["--json=whatever", "--kind", "person"]));
-        assert!(has_flag(&flags, "json"));
-        assert_eq!(get_flag(&flags, "kind").as_deref(), Some("person"));
+    fn inline_value_on_a_boolean_is_refused_not_guessed() {
+        let err = parse_args(&s(&["--json=whatever", "--kind", "person"])).unwrap_err();
+        assert_eq!(err.to_string(), "--json does not take a value");
+    }
+
+    /// BEHAVIOUR CHANGE (nc-25). An undeclared flag was value-taking, so
+    /// a typo silently consumed the next token and the command ran on
+    /// defaults. It is now a hard error naming the flag.
+    #[test]
+    fn an_undeclared_flag_is_refused_instead_of_eating_the_next_token() {
+        let err = parse_args(&s(&["entities", "--kidn", "person"])).unwrap_err();
+        assert_eq!(err.to_string(), "unknown flag '--kidn'");
     }
 }

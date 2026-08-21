@@ -29,7 +29,12 @@ mod amend_cmd;
 #[cfg(feature = "dev-tools")]
 mod archaeology_eval_cmd;
 mod audit_cmd;
-#[cfg(feature = "awareness")]
+// UNGATED on purpose. Only `awareness_cmd::args` (the flag SPEC — data
+// plus the shared parser) compiles without the feature; every heavy
+// submodule carries its own `#[cfg(feature = "awareness")]`. Declaring
+// the module here under a gate, while the module itself carried a
+// second, DIFFERENT inner gate (`dev-tools`), is what made
+// `--features awareness` fail to compile at all. See `awareness_cmd/mod.rs`.
 mod awareness_cmd;
 mod cache_audit_cmd;
 mod charter_cmd;

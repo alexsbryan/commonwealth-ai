@@ -30,16 +30,24 @@ use corpus_engine::enrichment::atlas::writer::read_atlas_atoms;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use serde_json::json;
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::golden::{score_entities, EntityScore, ExpectedEntity, GoldenSet};
 use super::render::display_path;
 use super::store_open::{atlas_dir_for, sovereign_root};
 use super::templates::load_builtin;
+use sovereign_cli_shared::args::Parsed;
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
 pub(super) async fn cmd_eval(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
 
     // Golden set source — flag has priority; positional is treated
     // as a JSONL path for ergonomics.
@@ -51,10 +59,12 @@ pub(super) async fn cmd_eval(args: &[String]) -> i32 {
         }
     };
 
-    let report_path: Option<PathBuf> = get_flag(&flags, "report")
+    let report_path: Option<PathBuf> = flags
+        .value("report")
+        .map(|s| s.to_string())
         .filter(|s| !s.is_empty())
         .map(PathBuf::from);
-    let json_only = has_flag(&flags, "json");
+    let json_only = flags.has("json");
 
     // Read both atlases; collapse to a list of (kind, name) pairs.
     let root = sovereign_root(&flags);
@@ -161,13 +171,21 @@ pub(super) async fn cmd_eval(args: &[String]) -> i32 {
 
 /// Pick the golden set source. Errors when no source is given.
 pub(super) fn resolve_golden(
-    flags: &[(String, String)],
+    flags: &Parsed,
     positional: Option<&String>,
 ) -> Result<GoldenSet, String> {
-    if let Some(name) = get_flag(flags, "from-template").filter(|s| !s.is_empty()) {
+    if let Some(name) = flags
+        .value("from-template")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         return Ok(GoldenSet::from_template(&load_builtin(&name)?));
     }
-    if let Some(p) = get_flag(flags, "golden").filter(|s| !s.is_empty()) {
+    if let Some(p) = flags
+        .value("golden")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         return load_jsonl(&p);
     }
     if let Some(p) = positional {

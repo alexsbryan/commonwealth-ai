@@ -26,22 +26,26 @@ use super::judge::{parse_witness_verdict, witness_judge_request};
 use super::personas::{load_memories, resolve_bench_dir};
 use super::report;
 use super::transcript::TranscriptTurn;
+use sovereign_cli_shared::args::Parsed;
 
 /// Entry point for `--rejudge <journal>`.
-pub async fn run(
-    flags: &[(String, String)],
-    journal_path: PathBuf,
-    bench_dir: Option<PathBuf>,
-) -> i32 {
-    let Some(judge_model) = super::get_flag(flags, "judge-model") else {
+pub async fn run(flags: &Parsed, journal_path: PathBuf, bench_dir: Option<PathBuf>) -> i32 {
+    let Some(judge_model) = flags
+        .value("judge-model")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+    else {
         eprintln!(
             "inner-chaos --rejudge: --judge-model <id> is required (the whole point is to \
              re-score with a specific, usually stronger, judge — e.g. the 122B)."
         );
         return 2;
     };
-    let daemon_base =
-        super::get_flag(flags, "daemon").unwrap_or_else(|| "http://localhost:9741".to_string());
+    let daemon_base = flags
+        .value("daemon")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "http://localhost:9741".to_string());
 
     // Seed memories are the fabricated_memory ground truth; identical for
     // every turn (the live runner seeds the whole memories.toml set).
@@ -186,7 +190,11 @@ pub async fn run(
         );
     }
 
-    if let Some(o) = super::get_flag(flags, "output") {
+    if let Some(o) = flags
+        .value("output")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+    {
         if let Err(e) = report::write_json(&PathBuf::from(&o), &report) {
             eprintln!("inner-chaos --rejudge: write report {o}: {e}");
         } else {

@@ -33,7 +33,7 @@ use corpus_engine::index::StoredChunk;
 use sovereign_core::traits::{ConversationStore, MemoryStore};
 use sovereign_store::sqlite::SqliteStateStore;
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::inference::{resolve_inference, InferenceMode};
 use super::render::display_path;
 use super::store_open::{atlas_dir_for, sovereign_root, state_db_path};
@@ -43,9 +43,18 @@ const CONVERSATIONAL_VIEW: &str = "conversation-history";
 const MAX_CONVERSATION_LIST: usize = 10_000;
 
 pub(super) async fn cmd_extract(args: &[String]) -> i32 {
-    let (_pos, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
 
-    let phase = get_flag(&flags, "phase").unwrap_or_else(|| "entity".to_string());
+    let phase = flags
+        .value("phase")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "entity".to_string());
     if !matches!(phase.as_str(), "entity" | "all") {
         eprintln!("awareness extract: --phase must be one of: entity, all (got '{phase}')");
         return 2;
@@ -59,7 +68,7 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
         return 2;
     }
 
-    let limit: Option<usize> = match get_flag(&flags, "limit") {
+    let limit: Option<usize> = match flags.value("limit").map(|s| s.to_string()) {
         None => None,
         Some(s) => match s.parse::<usize>() {
             Ok(n) if n > 0 => Some(n),
@@ -69,7 +78,7 @@ pub(super) async fn cmd_extract(args: &[String]) -> i32 {
             }
         },
     };
-    let verbose = has_flag(&flags, "verbose");
+    let verbose = flags.has("verbose");
 
     let (inference, mode) = match resolve_inference(&flags).await {
         Ok(p) => p,

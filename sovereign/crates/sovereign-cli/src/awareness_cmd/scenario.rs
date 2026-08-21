@@ -39,7 +39,7 @@ use sovereign_tools::knowledge_view::timeline::{
     assemble_timelines_from_atlas, InteractionTimeline,
 };
 
-use super::args::{has_flag, split_args};
+use super::args::parse_args;
 use super::golden::{
     score_entities, score_suggestions, DetectedSuggestion, EntityScore, GoldenSet,
 };
@@ -50,13 +50,22 @@ use super::templates::{load_builtin, load_from_path, Template};
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
 pub(super) async fn cmd_scenario(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(path) = positional.into_iter().next() else {
         eprintln!("awareness scenario: <path-to-toml> is required");
         return 2;
     };
-    let _interactive = has_flag(&flags, "interactive");
-    let output_dir = super::args::get_flag(&flags, "output")
+    let _interactive = flags.has("interactive");
+    let output_dir = flags
+        .value("output")
+        .map(|s| s.to_string())
         .filter(|s| !s.is_empty())
         .map(PathBuf::from);
 
@@ -632,13 +641,17 @@ async fn drive_suggest_replay(
     let store = Arc::new(store);
 
     // Resolve inference once, then reuse for every conversation.
-    let mut flag_kv: Vec<(String, String)> = Vec::new();
-    flag_kv.push(("db-path".into(), sandbox.display().to_string()));
-    if inference_mode == "mock" {
-        flag_kv.push(("mock".into(), String::new()));
-    } else if inference_mode == "dry_run" {
-        flag_kv.push(("dry-run".into(), String::new()));
-    } // "real" → no flag
+    // Synthesised through the SAME parser the CLI uses, rather than a
+    // hand-built pair list: one decider for what a flag means, whoever
+    // is asking.
+    let mut argv: Vec<String> = vec!["--db-path".into(), sandbox.display().to_string()];
+    match inference_mode {
+        "mock" => argv.push("--mock".into()),
+        "dry_run" => argv.push("--dry-run".into()),
+        _ => {} // "real" → no flag
+    }
+    let flag_kv =
+        super::args::parse_args(&argv).map_err(|e| format!("scenario inference flags: {e}"))?;
 
     let (inference, _mode) = super::inference::resolve_inference(&flag_kv)
         .await
@@ -655,7 +668,7 @@ async fn drive_suggest_replay(
                 continue;
             }
             let prompt = build_detection_prompt(&conversation, idx);
-            let raw = match (inference)(&prompt).await {
+            let raw = match (inference)(&prompt, None).await {
                 Ok(r) => r,
                 Err(_) => continue,
             };

@@ -18,7 +18,8 @@ use std::sync::Arc;
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::NoteStore;
 
-use super::args::get_flag;
+use super::args::parse_args;
+use sovereign_cli_shared::args::Parsed;
 
 /// Where awareness reads/writes user-level state.
 ///
@@ -26,8 +27,12 @@ use super::args::get_flag;
 ///   1. `--db-path <path>` flag (treats `<path>` as the `.svrnmesh/`
 ///      root — atoms.json lives at `<path>/indexes/...`).
 ///   2. `~/.svrnmesh/` (matches main.rs:482-484).
-pub(super) fn sovereign_root(flags: &[(String, String)]) -> PathBuf {
-    if let Some(p) = get_flag(flags, "db-path").filter(|s| !s.is_empty()) {
+pub(super) fn sovereign_root(flags: &Parsed) -> PathBuf {
+    if let Some(p) = flags
+        .value("db-path")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         return PathBuf::from(p);
     }
     sovereign_contracts::rebrand::svrnmesh_root()

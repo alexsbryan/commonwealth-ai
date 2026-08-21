@@ -20,7 +20,7 @@ use sovereign_tools::knowledge_view::timeline::{
     InteractionTimeline, TimelineEntityKind,
 };
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::render::{display_path, format_date, format_datetime};
 use super::store_open::{
     atlas_dir_for, project_toml_path, sovereign_root, state_db_path, try_open_features,
@@ -30,7 +30,14 @@ use super::store_open::{
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
 pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
 
     let Some(name) = positional.into_iter().next() else {
         eprintln!("awareness timeline: <entity-name> is required");
@@ -40,7 +47,7 @@ pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
         return 2;
     };
 
-    let window_days: i64 = match get_flag(&flags, "window") {
+    let window_days: i64 = match flags.value("window").map(|s| s.to_string()) {
         Some(s) => match s.parse::<i64>() {
             Ok(n) if n > 0 => n,
             _ => {
@@ -50,7 +57,7 @@ pub(super) async fn cmd_timeline(args: &[String]) -> i32 {
         },
         None => 90,
     };
-    let include_chunks = has_flag(&flags, "include-chunks");
+    let include_chunks = flags.has("include-chunks");
 
     let root = sovereign_root(&flags);
 

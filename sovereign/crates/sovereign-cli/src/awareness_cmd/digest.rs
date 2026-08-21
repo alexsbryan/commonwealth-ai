@@ -33,7 +33,7 @@ use sovereign_tools::knowledge_view::timeline::{
 };
 use sovereign_tools::knowledge_view::view_kind::ViewKind;
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::render::display_path;
 use super::store_open::{
     notes_db_path, project_toml_path, sovereign_root, state_db_path, try_open_features,
@@ -43,12 +43,21 @@ use super::store_open::{
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
 pub(super) async fn cmd_digest(args: &[String]) -> i32 {
-    let (_pos, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
 
-    let context = get_flag(&flags, "context").unwrap_or_default();
+    let context = flags
+        .value("context")
+        .map(|s| s.to_string())
+        .unwrap_or_default();
     let (rel_budget, strat_budget) = parse_budgets(&flags);
-    let show_scores = has_flag(&flags, "show-scores");
-    let show_rejected = has_flag(&flags, "show-rejected");
+    let show_scores = flags.has("show-scores");
+    let show_rejected = flags.has("show-rejected");
     if show_scores || show_rejected {
         eprintln!(
             "awareness digest: --show-scores / --show-rejected are stubbed for Phase 2 \
@@ -216,12 +225,16 @@ pub(super) async fn cmd_digest(args: &[String]) -> i32 {
     0
 }
 
-fn parse_budgets(flags: &[(String, String)]) -> (usize, usize) {
+fn parse_budgets(flags: &Parsed) -> (usize, usize) {
     let default_rel = ViewKind::Relational.default_budget_tokens();
     let default_strat = ViewKind::Strategic.default_budget_tokens();
     let mut rel = default_rel;
     let mut strat = default_strat;
-    if let Some(b) = get_flag(flags, "budget").filter(|s| !s.is_empty()) {
+    if let Some(b) = flags
+        .value("budget")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         for pair in b.split(',') {
             let mut iter = pair.splitn(2, '=');
             match (iter.next(), iter.next()) {
@@ -242,6 +255,7 @@ fn parse_budgets(flags: &[(String, String)]) -> (usize, usize) {
     (rel, strat)
 }
 
+use sovereign_cli_shared::args::Parsed;
 use sovereign_core::time::unix_now;
 
 #[cfg(test)]

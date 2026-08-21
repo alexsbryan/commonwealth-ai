@@ -170,7 +170,17 @@ code-intel = [
 # `awareness` builds the heavy `sovereign awareness` knowledge-view
 # diagnostic CLI, which pulls `sovereign-tools`. Opt-in and independent
 # of `dev-tools` so the common developer build stays light.
-awareness = ["dep:sovereign-tools", "dep:corpus-engine-atos"]
+# `knowledge_view::splice_extension` (which every awareness subcommand
+# imports) is `#[cfg(feature = "treesitter")]` in sovereign-tools, and
+# its `AtosSnapshot` needs `atos` on top. Neither was declared, so the
+# feature could not compile even once its module gate was fixed —
+# rustc reported them as "found an item that was configured out".
+awareness = [
+    "dep:sovereign-tools",
+    "sovereign-tools/treesitter",
+    "sovereign-tools/atos",
+    "dep:corpus-engine-atos",
+]
 
 [lints]
 workspace = true

@@ -25,7 +25,7 @@ use sovereign_tools::knowledge_view::timeline::{
     InteractionTimeline, TimelineEntityKind,
 };
 
-use super::args::split_args;
+use super::args::parse_args;
 use super::render::{display_path, format_datetime};
 use super::store_open::{
     atlas_dir_for, project_toml_path, sovereign_root, state_db_path, try_open_features,
@@ -35,7 +35,14 @@ use super::store_open::{
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
 pub(super) async fn cmd_trace(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(name) = positional.into_iter().next() else {
         eprintln!("awareness trace: <entity-name> is required");
         return 2;

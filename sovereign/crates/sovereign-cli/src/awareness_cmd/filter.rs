@@ -38,20 +38,27 @@ use corpus_engine::enrichment::pipeline::atlas::EntityType;
 use corpus_engine::enrichment::pipeline::ChatPrompt;
 use serde_json::json;
 
-use super::args::{get_flag, has_flag, split_args};
+use super::args::parse_args;
 use super::render::display_path;
 use super::store_open::{atlas_dir_for, sovereign_root};
 use crate::enrich_cmd::inference_client::{
     probe_daemon, resolve_default_models, DaemonInferenceClient,
 };
 use crate::util::urls::{v1_url, DEFAULT_CLIENT_PORT};
+use sovereign_cli_shared::args::Parsed;
 
 const RELATIONAL_VIEWS: &[&str] = &["personal-knowledge", "conversation-history"];
 
 pub(super) async fn cmd_filter(args: &[String]) -> i32 {
-    let (_pos, flags) = split_args(args);
-    let verbose = has_flag(&flags, "verbose");
-    let dry_run = has_flag(&flags, "dry-run");
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("awareness: {e}");
+            return 2;
+        }
+    };
+    let verbose = flags.has("verbose");
+    let dry_run = flags.has("dry-run");
 
     // The filter pass uses grammar-constrained generation
     // (`response_format: json_schema`) to force the model to emit a
@@ -152,8 +159,10 @@ impl FilterReport {
     }
 }
 
-async fn build_filter_client(flags: &[(String, String)]) -> Result<DaemonInferenceClient, String> {
-    let base_url = get_flag(flags, "daemon-url")
+async fn build_filter_client(flags: &Parsed) -> Result<DaemonInferenceClient, String> {
+    let base_url = flags
+        .value("daemon-url")
+        .map(|s| s.to_string())
         .filter(|s| !s.is_empty())
         .unwrap_or_else(|| {
             v1_url(DEFAULT_CLIENT_PORT)
@@ -168,7 +177,11 @@ async fn build_filter_client(flags: &[(String, String)]) -> Result<DaemonInferen
         ));
     }
 
-    let chat_model = match get_flag(flags, "model").filter(|s| !s.is_empty()) {
+    let chat_model = match flags
+        .value("model")
+        .map(|s| s.to_string())
+        .filter(|s| !s.is_empty())
+    {
         Some(m) => m,
         None => {
             let (chat, _embed) = resolve_default_models(&base_url).await;
@@ -186,7 +199,9 @@ async fn build_filter_client(flags: &[(String, String)]) -> Result<DaemonInferen
     // generous; 4096 covers up to ~500 candidates. The schema makes
     // the model deterministic about output shape, but it can still
     // think; tokens spent on `<think>` count too.
-    let max_output_tokens: u32 = get_flag(flags, "max-tokens")
+    let max_output_tokens: u32 = flags
+        .value("max-tokens")
+        .map(|s| s.to_string())
         .and_then(|s| s.parse::<u32>().ok())
         .unwrap_or(4096);
 

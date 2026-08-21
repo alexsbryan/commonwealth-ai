@@ -28,20 +28,26 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 use super::journal::TurnRecord;
 use super::personas::{load_memories, resolve_bench_dir};
 use super::runner::{build_thread_session, seed_memories};
+use sovereign_cli_shared::args::Parsed;
 
 /// Entry point for `--replay-witness <journal>`.
-pub async fn run(
-    flags: &[(String, String)],
-    journal_path: PathBuf,
-    bench_dir: Option<PathBuf>,
-) -> i32 {
-    let daemon_base = super::get_flag(flags, "daemon");
-    let chat_model = super::get_flag(flags, "chat-model");
-    let only_breach = super::has_flag(flags, "only-breach-threads");
+pub async fn run(flags: &Parsed, journal_path: PathBuf, bench_dir: Option<PathBuf>) -> i32 {
+    let daemon_base = flags
+        .value("daemon")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let chat_model = flags
+        .value("chat-model")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let only_breach = flags.has("only-breach-threads");
     // Semi-deterministic by default: temperature 0. Still not bit-exact
     // on an MoE, but it removes the 0.9 sampling spread the live brain
     // loop runs at, so a category flip is attributable to the prompt.
-    let temperature = super::get_flag(flags, "temperature")
+    let temperature = flags
+        .value("temperature")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
         .and_then(|v| v.parse::<f32>().ok())
         .or(Some(0.0));
 
@@ -61,7 +67,10 @@ pub async fn run(
     };
 
     let skills_dir = match crate::voice_eval::runner::resolve_skills_dir(
-        super::get_flag(flags, "skills-dir")
+        flags
+            .value("skills-dir")
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string())
             .map(PathBuf::from)
             .as_ref(),
     ) {
@@ -210,7 +219,10 @@ pub async fn run(
         .file_stem()
         .and_then(|s| s.to_str())
         .unwrap_or("journal");
-    let out_path = super::get_flag(flags, "output")
+    let out_path = flags
+        .value("output")
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
         .map(PathBuf::from)
         .unwrap_or_else(|| journal_path.with_file_name(format!("{stem}.replayed.jsonl")));
     match std::fs::File::create(&out_path) {
