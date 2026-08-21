@@ -59,7 +59,28 @@ fn split_args(args: &[String]) -> (Vec<String>, Vec<(String, String)>) {
     let mut i = 0;
     while i < args.len() {
         let arg = &args[i];
-        if let Some(name) = arg.strip_prefix("--") {
+        if let Some(name_eq_val) = arg.strip_prefix("--") {
+            // `--key=value` in one token. The declarative parser this
+            // family is migrating to (`sovereign_cli_shared::args::parse`)
+            // accepts it, `tools_cmd`'s splitter accepts it, and AGENTS.md
+            // teaches `--key=value` as THE form — so an operator or agent
+            // types it here too. Without this branch the whole token became
+            // the flag NAME ("driver-model=x"), `get_flag("driver-model")`
+            // returned None, the caller silently took its default, AND the
+            // following token was eaten as the phantom flag's value.
+            if let Some((k, v)) = name_eq_val.split_once('=') {
+                // A boolean carries no inline value — the canonical parser
+                // rejects `--flag=x` outright. Record presence and, crucially,
+                // do not consume the next token.
+                if BOOLEAN_FLAGS.contains(&k) {
+                    flags.push((k.to_string(), String::new()));
+                } else {
+                    flags.push((k.to_string(), v.to_string()));
+                }
+                i += 1;
+                continue;
+            }
+            let name = name_eq_val;
             if BOOLEAN_FLAGS.contains(&name) {
                 flags.push((name.to_string(), String::new()));
                 i += 1;
@@ -396,6 +417,10 @@ mod tests {
     use super::*;
     use std::fs;
 
+    fn svec(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
     fn write_scenario(dir: &std::path::Path, id: &str, skill: &str) {
         let body = format!(
             r#"[scenario]
@@ -456,5 +481,46 @@ user = "hello"
         let flags = vec![("all".to_string(), String::new())];
         let picked = select_scenarios(dir.path(), &flags, &[]).unwrap();
         assert_eq!(picked.len(), 2);
+    }
+
+    /// `--key=value` must mean what `--key value` means.
+    ///
+    /// This half of the splitter fork dropped the `=` form entirely: the
+    /// whole token became the flag NAME, so the lookup missed, the caller
+    /// silently fell back to its default, and the NEXT token was swallowed
+    /// as the phantom flag's value. `svrn atos run --driver-model=X` ran
+    /// on DEFAULT_DRIVER_MODEL and exited 0 (atos_cmd/run.rs:165) — a
+    /// silent substitution, which is the one thing a flag must never do.
+    /// `tools_cmd::args` and `sovereign_cli_shared::args::parse` both
+    /// accepted `=` the whole time; only these copies did not.
+    #[test]
+    fn equals_form_is_the_same_as_the_space_form() {
+        let (pos_eq, flags_eq) = split_args(&svec(&["--scenarios-dir=/tmp/sc"]));
+        let (pos_sp, flags_sp) = split_args(&svec(&["--scenarios-dir", "/tmp/sc"]));
+        assert_eq!(pos_eq, pos_sp);
+        assert_eq!(flags_eq, flags_sp);
+        assert_eq!(
+            get_flag(&flags_eq, "scenarios-dir").as_deref(),
+            Some("/tmp/sc")
+        );
+    }
+
+    /// A value containing `=` survives: only the FIRST `=` splits.
+    #[test]
+    fn equals_form_keeps_the_rest_of_the_value() {
+        let (_pos, flags) = split_args(&svec(&["--scenarios-dir=a=b=c"]));
+        assert_eq!(get_flag(&flags, "scenarios-dir").as_deref(), Some("a=b=c"));
+    }
+
+    /// A boolean given an inline value records presence and — the part
+    /// that actually bites — does NOT eat the following token.
+    #[test]
+    fn equals_form_on_a_boolean_consumes_no_following_token() {
+        let (_pos, flags) = split_args(&svec(&["--json=whatever", "--scenarios-dir", "/tmp/sc"]));
+        assert!(has_flag(&flags, "json"));
+        assert_eq!(
+            get_flag(&flags, "scenarios-dir").as_deref(),
+            Some("/tmp/sc")
+        );
     }
 }

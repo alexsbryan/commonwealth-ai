@@ -142,10 +142,7 @@ fn split_oversized_segment(text: &str, chunks: &mut Vec<TextChunk>, chunk_index:
         *chunk_index += 1;
 
         // Apply overlap: start the next chunk a bit before where we cut.
-        let mut overlap_start = split_at.saturating_sub(OVERLAP_CHARS);
-        while overlap_start > 0 && !remaining.is_char_boundary(overlap_start) {
-            overlap_start -= 1;
-        }
+        let overlap_start = floor_char_boundary(remaining, split_at.saturating_sub(OVERLAP_CHARS));
         let overlap_start = remaining[overlap_start..split_at]
             .rfind(' ')
             .map(|i| overlap_start + i + 1)
@@ -155,15 +152,40 @@ fn split_oversized_segment(text: &str, chunks: &mut Vec<TextChunk>, chunk_index:
     }
 }
 
+/// Largest byte index <= `pos` that is a char boundary in `text`.
+///
+/// One decider for the whole file. Every byte index here is computed
+/// arithmetically — `MAX_CHUNK_CHARS`, `saturating_sub(OVERLAP_CHARS)` — and
+/// then used to slice, so each one has to be snapped first or a multi-byte
+/// character (CJK, curly quotes, PDF ligatures) turns it into a panic.
+/// Mirrors `corpus_engine::chunkers::floor_char_boundary`, which is the same
+/// decision on the other half of this chunker fork.
+#[inline]
+fn floor_char_boundary(text: &str, pos: usize) -> usize {
+    if pos >= text.len() {
+        return text.len();
+    }
+    if text.is_char_boundary(pos) {
+        return pos;
+    }
+    (0..pos)
+        .rev()
+        .find(|&i| text.is_char_boundary(i))
+        .unwrap_or(0)
+}
+
 /// Find the best character position to split at, up to max_len.
 /// Prefers: sentence end (. ! ?) > comma/semicolon > word boundary.
+///
+/// Every `return` is a byte index the caller will slice at, so `max_len` is
+/// snapped to a char boundary ONCE, up front, and every branch below — the
+/// `> max_len / 2` guards and the last-resort hard cut alike — reads the
+/// snapped value. Snapping only the search region (which is what this half of
+/// the fork used to do) left the hard cut returning the raw argument, and
+/// space-free multi-byte prose reaches exactly that branch.
 fn find_split_point(text: &str, max_len: usize) -> usize {
-    // Snap max_len to a char boundary to avoid panicking on multi-byte chars.
-    let mut safe_max = max_len.min(text.len());
-    while safe_max > 0 && !text.is_char_boundary(safe_max) {
-        safe_max -= 1;
-    }
-    let search_region = &text[..safe_max];
+    let max_len = floor_char_boundary(text, max_len);
+    let search_region = &text[..max_len];
 
     // Try sentence boundary (last '. ' or '! ' or '? ' in the region).
     if let Some(pos) = search_region.rfind(". ") {
@@ -211,13 +233,9 @@ fn finalize_chunk(chunks: &mut Vec<TextChunk>, current: &mut String, chunk_index
     });
     *chunk_index += 1;
 
-    // Start next chunk with overlap from the end of this one.
-    // Snap to a char boundary to avoid panicking on multi-byte characters
-    // (common in PDF-extracted text with ligatures like fi, fl).
-    let mut overlap_start = content.len().saturating_sub(OVERLAP_CHARS);
-    while overlap_start > 0 && !content.is_char_boundary(overlap_start) {
-        overlap_start -= 1;
-    }
+    // Start next chunk with overlap from the end of this one. Snapped, because
+    // multi-byte characters (PDF ligatures fi/fl, CJK) otherwise panic here.
+    let overlap_start = floor_char_boundary(&content, content.len().saturating_sub(OVERLAP_CHARS));
     let overlap_start = content[overlap_start..]
         .find(' ')
         .map(|i| overlap_start + i + 1)
@@ -225,10 +243,20 @@ fn finalize_chunk(chunks: &mut Vec<TextChunk>, current: &mut String, chunk_index
     *current = content[overlap_start..].to_string();
 }
 
-/// The corpus chunker as a workflow `Step` — the exact `chunk_text` the real
-/// ingest uses, exposed as a `1→N` tool so a workflow can fan a downstream step
-/// (`embed:`) over its output. Reads a file `path` (or chunks inline `text`)
-/// and emits a JSON-array *collection* of `{text, index}` objects.
+/// The paragraph chunker as a workflow `Step`, exposed as a `1→N` tool so a
+/// workflow can fan a downstream step (`embed:`) over its output. Reads a file
+/// `path` (or chunks inline `text`) and emits a JSON-array *collection* of
+/// `{text, index}` objects.
+///
+/// NOT byte-identical to ingest, despite what this comment claimed until
+/// 2026-08-21. It is the same ALGORITHM as
+/// `corpus_engine::chunkers::paragraph` — same segment split, same split-point
+/// preference order, same overlap rule — but the sizes are fixed here at
+/// `MAX_CHUNK_CHARS`/`OVERLAP_CHARS` (700/120), while ingest takes them from
+/// the recipe's `ChunkerConfig::Paragraph` and defaults to 2048/256
+/// (`corpus-engine/src/recipe.rs`, `default_max_chunk_chars`). A workflow that
+/// chunks here and a corpus that ingests there produce DIFFERENT chunk
+/// boundaries; do not treat one as a preview of the other.
 ///
 /// `Read`-effect + idempotent: pure over its input, so the workflow cache skips
 /// it on an unchanged file.
@@ -504,6 +532,64 @@ mod tests {
             chunks.len() > 1,
             "Should split oversized paragraph, got {} chunks",
             chunks.len()
+        );
+    }
+
+    /// Space-free multi-byte text must not panic.
+    ///
+    /// `find_split_point`'s last-resort `max_len` used to be the RAW argument,
+    /// while the search region had already been snapped DOWN to a char
+    /// boundary. For CJK prose (3 bytes/char, no ASCII spaces) every earlier
+    /// branch misses — `rfind(". ")`, `rfind(", ")`, `rfind(' ')` all return
+    /// `None` — so the fallback fired with a byte index sitting inside a
+    /// character, and the caller's `remaining.split_at(split_at)` panicked
+    /// with "byte index 700 is not a char boundary".
+    ///
+    /// corpus-engine's copy of this same function (chunkers/paragraph.rs) has
+    /// always clamped the fallback; this half of the fork had not. Any
+    /// Japanese/Chinese/Thai document over MAX_CHUNK_CHARS reached it, through
+    /// `tool:chunk` and `tool:section` alike.
+    #[test]
+    fn chunk_space_free_multibyte_text_does_not_panic() {
+        // 14 chars x 3 bytes x 60 = 2520 bytes; byte 700 lands inside a char.
+        let text = "\u{77e5}\u{8b58}\u{306f}\u{529b}\u{306a}\u{308a}\u{6559}\u{80b2}\u{306f}\u{672a}\u{6765}\u{3092}\u{7bc9}\u{304f}".repeat(60);
+        assert!(
+            !text.is_char_boundary(MAX_CHUNK_CHARS),
+            "fixture must straddle a char at the cut"
+        );
+
+        let chunks = chunk_text(&text);
+        assert!(
+            chunks.len() > 1,
+            "oversized CJK text should split, got {}",
+            chunks.len()
+        );
+        // Nothing was dropped or corrupted: every chunk is valid UTF-8 the
+        // source actually contains.
+        for c in &chunks {
+            assert!(!c.content.is_empty());
+            assert!(
+                text.contains(c.content.as_str()),
+                "chunk {} is not a substring of the source",
+                c.index
+            );
+        }
+    }
+
+    /// The last-resort branch itself, in isolation: whatever it returns must
+    /// be sliceable. This is the assertion the caller depends on and the one
+    /// the fork lost.
+    #[test]
+    fn find_split_point_fallback_returns_a_char_boundary() {
+        let text = "\u{77e5}\u{8b58}\u{306f}\u{529b}\u{306a}\u{308a}\u{6559}\u{80b2}\u{306f}\u{672a}\u{6765}\u{3092}\u{7bc9}\u{304f}".repeat(60);
+        let at = find_split_point(&text, MAX_CHUNK_CHARS);
+        assert!(
+            text.is_char_boundary(at),
+            "find_split_point returned {at}, which is inside a character"
+        );
+        assert!(
+            at <= MAX_CHUNK_CHARS,
+            "returned {at}, past the requested max"
         );
     }
 }

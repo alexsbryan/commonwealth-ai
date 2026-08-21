@@ -1,7 +1,13 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Flag parser for `svrn tools`. Same shape as
-//! [`crate::atos_cmd::args`] so agents see consistent `--k=v` / `--k v`
-//! argument handling across subcommands.
+//! Flag parser for `svrn tools`. Accepts `--k=v` and `--k v` alike.
+//!
+//! This used to claim it was "the same shape as `crate::atos_cmd::args`".
+//! It was not: until 2026-08-21 this was the ONLY splitter in the family
+//! with the `=` branch, and `atos_cmd` / `awareness_cmd` / `inner_chaos` /
+//! `voice_eval` silently dropped that form. The four have been converged
+//! onto this contract. The structural fix is still outstanding — all five
+//! should call `sovereign_cli_shared::args::parse`, which has handled
+//! `--k=v` since it landed and today has zero adopters.
 
 /// Split `args` into `(positional, flag_pairs)`. Boolean flags (listed
 /// below) stand alone; value-taking flags consume the following token
