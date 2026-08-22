@@ -22,6 +22,7 @@
 //! with the same model, so `embedding_dimensions` is consistent
 //! across the installation.
 
+use sovereign_cli_shared::dirs::sovereign_root;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -1285,13 +1286,6 @@ async fn cmd_capability_map(args: &[String]) -> i32 {
         );
     }
     0
-}
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 const BRIEF_HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {

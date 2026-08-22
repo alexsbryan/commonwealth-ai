@@ -27,6 +27,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
+use sovereign_cli_shared::dirs::sovereign_root;
 
 // ─── on-disk shapes (subset; serde ignores the fields we don't name) ───────
 
@@ -770,13 +771,6 @@ pub async fn cmd_capability_graph(args: &[String]) -> i32 {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
-}
 
 /// Open an emitted artifact in the OS default application (the browser), so a CLI
 /// user lands on the rendered graph without copy-pasting the path. Best-effort:

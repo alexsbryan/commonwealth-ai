@@ -17,14 +17,8 @@ use corpus_engine::snapshot::{
 };
 use corpus_engine::CorpusIndex;
 
+use sovereign_cli_shared::dirs::sovereign_root;
 use sovereign_cli_shared::help::{Help, HelpSection};
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
-}
 
 const PRODUCER_VERSION: &str = concat!("sovereign-cli/", env!("CARGO_PKG_VERSION"));
 

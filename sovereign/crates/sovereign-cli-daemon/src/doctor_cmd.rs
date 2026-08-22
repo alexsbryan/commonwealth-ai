@@ -13,6 +13,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use serde::Serialize;
+use sovereign_cli_shared::dirs::sovereign_root;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
 
@@ -149,13 +150,6 @@ async fn http_post_json(url: &str, body: serde_json::Value) -> Option<reqwest::R
 }
 
 // ── Checks ────────────────────────────────────────────────────────────────────
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
-}
 
 async fn check_server_running() -> CheckResult {
     let up = tcp_connectable("127.0.0.1", 9741).await;

@@ -23,6 +23,7 @@ use corpus_engine_archaeology::archaeology_eval::{
     Verdict, WitnessKind,
 };
 use corpus_engine_archaeology::git_archaeology::GitArchaeologyReport;
+use sovereign_cli_shared::dirs::sovereign_root;
 
 pub async fn run(args: &[String]) -> i32 {
     if crate::util::help::wants_help(args) {
@@ -326,13 +327,6 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 }
 
 // ── IO helpers ───────────────────────────────────────────────
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
-}
 
 fn default_baseline_path(atlas: &str) -> PathBuf {
     sovereign_root()

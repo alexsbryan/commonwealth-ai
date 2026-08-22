@@ -22,6 +22,7 @@ use std::process::Command;
 use std::time::Duration;
 
 use super::args::parse_args;
+use sovereign_cli_shared::dirs::sovereign_root;
 
 const DEFAULT_SYNTH_MODEL: &str = "commonwealth/primary";
 const DEFAULT_DAEMON_URL: &str = "http://localhost:9741";
@@ -433,13 +434,6 @@ fn git_checkout_new_branch(workdir: &Path, branch: &str, base_sha: &str) -> Resu
         ));
     }
     Ok(())
-}
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn print_help() {
