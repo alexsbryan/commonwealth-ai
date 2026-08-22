@@ -178,7 +178,7 @@ are cluster-local → move), then extract-verify one cluster at a time
 | `charter_amend.rs` | 491 | `cmd_charter` / `cmd_amend` / `cmd_amend_design` |
 | `design_plan.rs` | 401 | `cmd_design` / `cmd_plan` |
 | `phase.rs` | 350 | `cmd_phase` progression |
-| `registry_watch.rs` | 347 | `cmd_register`/`unregister`/`list`/`watch` + daemon helpers |
+| `registry_watch.rs` | 347 | `cmd_register`/`unregister`/`list`/`watch` + daemon helpers — **DELETED 2026-08-21 (nc-27)**: unreachable once `sovereign-cli/src/project_registry.rs` served all four verbs in-process; `daemon_get` moved to `mod.rs` |
 | `hooks.rs` | 305 | `cmd_install_hooks` + hook write/strip internals |
 
 **Mechanics that made it safe:** each submodule opens `use super::*` (inherits

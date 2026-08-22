@@ -219,11 +219,14 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // remain are cmd_facts' http client and cmd_watch's two.
     ("sovereign/crates/sovereign-cli-dev/src/code_cmd.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-dev/src/tools_cmd/registry.rs", Class::LocalDaemon, 3),
-    ("sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 2),
+    // 2 -> 3 on 2026-08-21 (nc-27): `daemon_get` MOVED here from
+    // `project_cmd/registry_watch.rs` when that file was deleted as an
+    // unreachable fork. Same loopback client, same class — a relocation,
+    // not a new egress site.
+    ("sovereign/crates/sovereign-cli-dev/src/project_cmd/mod.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-dev/src/plan_enricher.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/code_map.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/doctor.rs", Class::LocalDaemon, 2),
-    ("sovereign/crates/sovereign-cli-dev/src/project_cmd/registry_watch.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/doc_fetcher.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-cli-dev/src/design_session.rs", Class::LocalDaemon, 1),
