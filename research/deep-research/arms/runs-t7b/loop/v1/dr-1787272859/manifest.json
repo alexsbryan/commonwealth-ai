@@ -1,0 +1,102 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787272859",
+  "charter_hash": "409ded03c13dfa76",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 2,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 22,
+      "fetched": 2,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 22,
+      "gaps_after": 17,
+      "fetched": 4,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://v1-demo.example/source-report",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787272859"
+      },
+      {
+        "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787272859"
+      },
+      {
+        "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787272859"
+      },
+      {
+        "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787272859"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 4,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 8,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "### Gentrification\n*   **Acceleration:** The term was coined in 1963 by a British sociologist, but its prevalence surged as Americans pursued urban lifestyles [Source: ev-2].",
+    "Since 1980, nearly 80% of under-45 population growth concentrated in metro areas over one million residents [Source: ev-1].",
+    "*   **City-Specific Intensity:** A small group of cities saw extensive transformation. [Source: ev-1]",
+    "In terms of raw numbers, New York City had the most gentrified tracts with 128, despite a lower percentage rate of 29.8% due to its large total tract count (2,152) [Source: ev-2].",
+    "Conversely, cities such as Detroit (2.8%), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification [Source: ev-2].",
+    "Major cities exceeded this significantly; New York City led with a Gini of 0.5469, while Atlanta and Miami were at 0.57 and New Orleans at 0.56 [Source: ev-1].",
+    "In some metros, the income ratio reaches 18:1 (specifically noted for Atlanta and Washington D.C.) [Source: ev-2] [Source: ev-1].",
+    "Between 2007 and 2014, the national 95/20 rose from 8.5 to 9.3; in San Francisco specifically, top incomes rose approximately $120,000 in two years (2014–2016), while bottom quintile gains remained minimal across all cities [Source: ev-1].",
+    "Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018–2021 [Source: ev-1].",
+    "### Affordability and Cost of Living\nUrban areas have seen nominal wealth growth that does not keep pace with housing costs, creating an affordability crisis [Source: ev-1].",
+    "*   **Price-to-Income Ratios:** California cities exhibit price-to-income ratios between 9.6 and 12.2, which is more than double the national average of 4.7 [Source: ev-1].",
+    "*   **Job Market Shifts:** The economic base shifted from manufacturing to professional services; manufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic, while finance and professional services grew from 12 million to 32 million jobs [Source: ev-1] (Note: Source tag for job shift details appears as ev-2 in prompt list but text matches ev-1 content regarding Cooper Center data).",
+    "### Displacement and Neighborhood Characteristics\n*   **Neighborhood Characteristics:** Gentrifying neighborhoods saw population increases of an average 6.5% and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points [Source: ev-2].",
+    "Poverty rates in these gentrifying tracts decreased by 0.7 percentage points on average [Source: ev-1] [Source: ev-2].",
+    "*   **Non-Gentrifying Areas:** In contrast, lower-income areas that did *not* gentrify experienced slight population losses (-2.4%), a decrease in the white population share (by 5.0 percentage points), and a sharp increase in poverty rates (+6.7 percentage points) [Source: ev-1] [Source: ev-2].",
+    "*   **Displacement Dynamics:** Residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, whereas residents from other gentrifying neighborhoods often move to wealthier areas, indicating minority communities face more challenges during this process [Source: ev-1].",
+    "The term was coined in 1963 by a British sociologist, but its prevalence surged as Americans pursued urban lifestyles [Source: ev-2].",
+    "*   **City-Specific Intensity:** A small group of cities saw extensive transformation. [Source: ev-2]",
+    "*   **Income Ratios:** The gap between top and bottom earners has expanded to extremes. [Source: ev-2]",
+    "In some metros, the income ratio reaches 18:1 (specifically noted for Atlanta and Washington D.C. [Source: ev-2]",
+    "In San Francisco specifically, top incomes rose approximately $120,000 in two years (2014–2016), while bottom quintile gains remained minimal across all cities [Source: ev-1].",
+    "*   **Job Market Shifts:** The economic base shifted from manufacturing to professional services. [Source: ev-2]",
+    "*   **Neighborhood Characteristics:** Gentrifying neighborhoods saw population increases of an average 6.5% and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points [Source: ev-2].",
+    "*   **Broader Demographics:** Since 1980, nearly 80% of under-45 population growth was concentrated in metro areas over 1 million residents [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787272859",
+    "acquired_at_unix": 1787272859,
+    "released_at_unix": 1787273889
+  }
+}

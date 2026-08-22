@@ -1,0 +1,76 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787260359",
+  "charter_hash": "eb22b805c469965b",
+  "round": 3,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://www.plantphenomics.org.au/resources/published-research",
+      "source_url": "https://www.plantphenomics.org.au/resources/published-research",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Australian Plant Phenomics Network | Published Research Follow us on Twitter Follow us on linkedIn Follow us on Vimeo About About APPN APPN and NCRIS What does APPN do? Governance Strategic Plan Plant Phenomics Our Infrastructure Our Services Access & Bookings About Plant Phenomics Our Nodes APPN Head Office Adelaide University Australian National University Charles Sturt University Department of Primary Industries & Regional Development, WA La Trobe University The University of Queensland The University of Sydney The University of Western Australia Western Sydney University Data Transforming data to knowledge FAIR Data APPN Data Publishing and Licensing Policy Plant Phenotyping Data Collection Resources Fact Sheets Published Research Impact Case Studies Educational Resources Jobs & Training Postgraduate Internship Awards Career Opportunities News News from our blog APPN in the media LinkedIn & X Newsletters Contact Published Research\nAPPN enables world-leading crop research every day. The project results and discoveries we support are published in leading scientific journals.\nHome Resources Published Research Research Publications\n2026 2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 2009 Arbuscular Mycorrhizal Fungi Can Increase Nitrogen Use Efficiency in Aerobically Grown Rice Under Water‐Limited Conditions. Gill, A. R., Nguyen, T. D., Jewell, N., Brien, C., & Watts‐Williams, S. J. (2026). Journal of Sustainable Agriculture and Environment, 5(3). https://doi.org/10.1002/sae2.70190\nFrom plots to commercial fields: scalable, transferable cotton morphology and productivity estimation using functional growth proxies from UAV and PlanetScope time series. Devoto, F., Bange, M., Camino, C., Woodgate, W., Chapman, S. & Potgieter, A. (2026). Plant Phenomics, 8(3), Article 100220. https://doi.org/10.1016/j.plaphe.2026.100220\nKey Technological Levers of Indoor LED-Farming – Pilot Scale Study, Extrapolation to Commercial Scale, and Space Vantage Point. Hessel, V., Jost, R., Escribà-Gelonch, M., Benny, M. A., Osorio-Tejada, J., Rosenthal, E., Lewsey, M. G., & Johnson, K. L. (2026). Chemical Engineering Research & Design, 230, 816-837. https://doi.org/10.1016/j.cherd.2026.05.003\nGABA and ABA-mediated mitigation of salt stress–induced oxidative damage by modulating secondary metabolites, defense metabolism, and photosynthetic pathways in wheat. Kumari, S., Khatoon, S., Pratap, A., Rehman, M. T., & Khan, M. I. R. (2026). Plant Physiology and Biochemistry, 235, Article 111370. https://doi.org/10.1016/j.plaphy.2026.111370\nTranscriptome assemblies for two drug-type cannabis chemotypes by long-read RNA sequencing. Berkowitz, O., Jost, R., Ng, S., Bacic, A., Whelan, J. & Lewsey, G. M. The Plant Genome, 19(2), e70240. https://doi.org/10.1002/tpg2.70240\nClimate change and crop resilience: harnessing metabolomics for predicting stress tolerance. Pratap, A., Fazeli, A., Bandehagh, A. & Taylor, N. L. (2026). The New Phytologist. https://doi.org/10.1111/nph.71219\nLeaf Analyzer: A fully automated and open-source tool for high-throughput leaf trait measurement. Hu, T., Poire, R., & Way, D. (2026). Plant Phenomics, Article 100145. https://doi.org/10.1016/j.plaphe.2025.100145\nAPPN advanced field phenomics: high-resolution sensing for improved varieties and smarter agronomy. Salter, W., Cassidy, C., Burrell, A., Harwood, R., Collyer, B., Paine, H., Escobar, G. L. & Garnett, T. (2026). GRDC Grains Research Update – Wagga Wagga, Australia. https://grdc.com.au/resources-and-publications/grdc-update-papers/tab-content/grdc-update-papers/2026/02/appn-advanced-field-phenomics-high-resolution-sensing-for-improved-varieties-and-smarter-agronomy\nPotential protein biomarkers for heat tolerance in wheat at seedling and ear peep stages. Pratap, A., Siddique, K. H. M., & Taylor, N. L. (2026). Journal of Proteomics, Article 105526. https://doi.org/10.1016/j.jprot.2025.105526\nOzBarley: A genetic and phenotypic data resource capt",
+      "ingested_into": null,
+      "tags": [
+        "published",
+        "research"
+      ]
+    },
+    {
+      "id": "ev-2",
+      "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "The evolution of plant phenomics: global insights, trends, and collaborations (2000-2021) - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice Front Plant Sci\n. 2024 Jul 22;15:1410738. doi: 10.3389/fpls.2024.1410738 Search in PMC Search in PubMed View in NLM Catalog Add to search The evolution of plant phenomics: global insights, trends, and collaborations (2000-2021)\nLana Awada\nLana Awada\n1 Centre for the Study of Science and Innovation Policy, Johnson Shoyama Graduate School of Public Policy, University of Saskatchewan, Saskatoon, SK, Canada Find articles by Lana Awada 1,*, Peter W B Phillips\nPeter W B Phillips\n1 Centre for the Study of Science and Innovation Policy, Johnson Shoyama Graduate School of Public Policy, University of Saskatchewan, Saskatoon, SK, Canada Find articles by Peter W B Phillips 1, Ana Maria Bodan\nAna Maria Bodan\n2 Canadian Hub for Applied and Social Research, University of Saskatchewan, Saskatoon, SK, Canada Find articles by Ana Maria Bodan 2 Author information Article notes Copyright and License information 1 Centre for the Study of Science and Innovation Policy, Johnson Shoyama Graduate School of Public Policy, University of Saskatchewan, Saskatoon, SK, Canada 2 Canadian Hub for Applied and Social Research, University of Saskatchewan, Saskatoon, SK, Canada Edited by: Tariq Aftab, Aligarh Muslim University, India\nReviewed by: Thiago Teixeira Santos, Brazilian Agricultural Research Corporation (EMBRAPA), Brazil\nJagadish Rane, Indian Council of Agricultural Research (ICAR), India\n✉\n*Correspondence: Lana Awada, lna174@mail.usask.ca Received 2024 Apr 1; Accepted 2024 Jul 8; Collection date 2024.\nCopyright © 2024 Awada, Phillips and Bodan\nThis is an open-access article distributed under the terms of the Creative Commons Attribution License (CC BY). The use, distribution or reproduction in other forums is permitted, provided the original author(s) and the copyright owner(s) are credited and that the original publication in this journal is cited, in accordance with accepted academic practice. No use, distribution or reproduction is permitted which does not comply with these terms.\nPMC Copyright notice\nPMCID: PMC11298374 PMID: 39104843 Abstract\nIntroduction\nPhenomics, an interdisciplinary field that investigates the relationships between genomics and environmental factors, has significantly advanced plant breeding by offering comprehensive insights into plant traits from molecular to physiological levels. This study examines the global evolution, geographic distribution, collaborative efforts, and primary research hubs in plant phenomics from 2000 to 2021, using data derived from patents and scientific publications. Methods\nThe study utilized data from the EspaceNet and Lens databases for patents, and Web of Science (WoS) and Scopus for scientific publications. The final datasets included 651 relevant patents and 7173 peer-reviewed articles. Data were geocoded to assign country-level geographical coordinates and underwent multiple processing and cleaning steps using Python, Excel, R, and ArcGIS. Social network analysis (SNA) was conducted to assess",
+      "ingested_into": null,
+      "tags": [
+        "evolution",
+        "global",
+        "insights",
+        "phenomics",
+        "plant",
+        "trends"
+      ]
+    },
+    {
+      "id": "ev-3",
+      "locator": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+      "source_url": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "",
+      "ingested_into": null,
+      "tags": [
+        "complex",
+        "deep",
+        "learning",
+        "phenomics",
+        "phenotyping",
+        "plant"
+      ]
+    },
+    {
+      "id": "ev-4",
+      "locator": "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+      "source_url": "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Client Challenge JavaScript is disabled in your browser. Please enable JavaScript to proceed.\nA required part of this site couldn’t load. This may be due to a browser extension, network issues, or browser settings. Please check your connection, disable any ad blockers, or try using a different browser.",
+      "ingested_into": null,
+      "tags": [
+        "data",
+        "developmental",
+        "generated",
+        "high",
+        "normalization",
+        "phenomics"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [],
+  "derived_custody": "public-web"
+}

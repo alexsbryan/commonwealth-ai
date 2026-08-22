@@ -15,7 +15,8 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use corpus_engine_scip::converge::{
-    census, crate_dag, dossier, duplicate_count, render_census, render_dossier, type_defs, SourceScope,
+    census, crate_dag, dossier, duplicate_count, render_census, render_dossier, type_defs,
+    SourceScope,
 };
 use corpus_engine_scip::ScipGraph;
 
@@ -276,7 +277,10 @@ fn cmd_status(
         ]
         .into_iter()
         .collect();
-        println!("{}", serde_json::to_string_pretty(&body).unwrap_or_default());
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&body).unwrap_or_default()
+        );
     }
 
     match prior {

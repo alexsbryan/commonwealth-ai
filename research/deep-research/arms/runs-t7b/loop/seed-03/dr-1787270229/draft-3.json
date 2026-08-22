@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787270229",
+  "charter_hash": "2e1d7cd0aff62642",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "NASA ordered Boeing's Starliner to return uncrewed from its first crewed flight because the spacecraft experienced 5 reaction-control system thruster anomalies during its docking approach. NASA determined that these thruster anomalies could not be guaranteed safe for the deorbit burn, as the thrusters could not be ground-tested in their flight condition. This decision meant that astronauts Butch Wilmore and Suni Williams were stranded on the International Space Station until March 18, 2025, spending roughly 9.5 months aloft compared to a planned duration of approximately 8 days. Following NASA's announcement on August 24, 2024, that Starliner would return without crew, the spacecraft undocked from the station on September 6, 2024. The program operates under a fixed-price contract where Boeing has received about $4.2 billion compared to SpaceX’s roughly $2.6 billion since the Commercial Crew program began in 2014. By 2025, Boeing disclosed cumulative losses of more than $1.5 billion for the Starliner program.",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-03",
+      "custody": "public-web"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787337552",
+  "charter_hash": "e4324e1e3f375dbb",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of privacy experts and security researchers who publicly criticized Microsoft Recall in April 2024",
+      "Percentage change in Microsoft stock price from March 1, 2024 to June 30, 2025 reflecting market reaction to the controversy",
+      "Count of major media outlets publishing investigative reports on Windows Recall data storage vulnerabilities between May and July 2024",
+      "Share of Windows Copilot+ PCs shipped by OEMs that had Recall enabled by default prior to the policy update in August 2024",
+      "Median size in gigabytes of local snapshot databases created by a single user over a one-week period during beta testing phases",
+      "Number of specific privacy laws or regulations cited by legal analysts as potentially violated by initial unencrypted local storage design",
+      "Percentage increase in search volume for \"Windows Recall privacy\" globally from April 1, 2023 to June 15, 2024 according to Google Trends data",
+      "Count of hardware security features (such as NPU encryption) required for Microsoft's revised Recall implementation announced in late 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

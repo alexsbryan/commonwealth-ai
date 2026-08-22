@@ -1,0 +1,16 @@
+BATCH_ITEMS 4 BATCH_OFFSET 4
+PROMPT_CHARS 20680
+CALL_SECS 146.8
+STRIP_EVENTS []
+USAGE {"prompt_tokens": 5584, "completion_tokens": 1485, "total_tokens": 7069}
+TOKPS 10.12 PER_ITEM_TOKENS 371.2 TOTAL_OUTPUT_TOKENS 1485
+RAW_SAVED /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/results/canary-m0b-raw.txt RAW_CHARS 6549
+RAW_START '```json\n{\n    "results": [\n        {\n            "rubric_item": "Explicitly state that Indonesia\'s \'Retirement severance (PP)\' is a Severance Defined Benefit (Severance DB) scheme for long-term workers.",\n            "score": 0,\n            "reason": "The article does not mention the \'Retirement severance (PP)\', nor does it classify any Indonesian scheme as a \'Severance Defined Benefit\'. It lists Taspen JP and BPJS Ketenagakerjaan schemes but omits this specific plan type/name combination required by the rubric.",\n            "evidence": ""\n        },\n        {\n            "rubric_item": "Explicitly state that Malaysia\'s \'Public service pension system (JPA)\' is a Pay-As-You-Go Defined Benefit (PAYG DB) scheme for pensionable public sector employees.",\n            "score": 1,\n            "reason": "The article explicitly identifies the JPA Public Sector Pension as a PAYG DB scheme. The coverage description \'Mandatory for civil servants and pensionable public sector employees\' matches the requirement for \'pensionable public sector employees\'. No blocked references are cited in these sentences.",\n            "evidence": "**JPA Public Sector Pension**\\n\\n- **Type:** Pay-As-You-Go Identified Benefit (PAYG DB)\\n- **Coverage:** Mandatory for civil servants and pensionable public section employees[^3]"\n        },\n        {\n            "rubric_item": "Explicitly state that Indonesia\'s \'DPPK\' and \'DPLK\' are voluntary Asset-backed Defined Benefit/Defined Contribution (Asset-backed DB/DC'
+RAW_END 's is missing or contradicted by the structure which implies distinct schemes. Actually, looking closely at Malaysian law, i-Saraan is often linked to EPF, but here they are separate bullet points. The rubric item likely expects the text to say \'EPF covers... mandatory for X, voluntary for Y\'. The text says \'Mandatory for...\' and lists others separately. It fails the explicit inclusion of \'voluntary for self employed\' in the EPF profile.",\n            "evidence": "**EPF (Employees Provident Fund / KWSP)**\\n\\n- **Type:** Asset-backed Defined Contribution (Asset-back DC)\\n- **Coverage:** Mandatory for all Malaysian citizens and permanent residents employed in the private sector and non-Pensionable public servants; mandatory for foreign workers from October 2025[^9][^10]"\n        }\n    ]\n}\n```'
+FENCES ['```json', '```']
+COUNT_LBRACE 5 RBRACE 5 LBRACKET 9 RBRACKET 9
+HAS_RESULTS_KEY True
+RAW_DECODE_START_FAIL Expecting value: line 1 column 1 (char 0)
+DECODE_ERROR_POS 0 first_bad_ctx '```json\n{\n    "results": [\n        {\n            "rubric_item": "Explicitly state that Indonesia\'s \'Retirement severance'
+ENDS_CLEAN False
+M0B_CANARY_DONE

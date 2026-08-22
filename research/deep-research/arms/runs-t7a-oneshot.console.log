@@ -1,0 +1,1039 @@
+/home/alexbryan/.bashrc: line 43: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:33:5
+   |
+33 |     General,
+   |     ^^^^^^^
+   |
+note: the lint level is defined here
+  --> oicp-types/src/lib.rs:4:9
+   |
+ 4 | #![warn(missing_docs)]
+   |         ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:34:5
+   |
+34 |     Code,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:35:5
+   |
+35 |     Analysis,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:36:5
+   |
+36 |     Math,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:37:5
+   |
+37 |     Creative,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:38:5
+   |
+38 |     Instruction,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:39:5
+   |
+39 |     Multilingual,
+   |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:40:5
+   |
+40 |     Vision,
+   |     ^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:41:5
+   |
+41 |     LongContext,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:43:5
+   |
+43 |     Unknown,
+   |     ^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:35:5
+   |
+35 |     pub corpus_id: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:45:5
+   |
+45 |     pub corpus_id: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:57:5
+   |
+57 |     Pending,
+   |     ^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:58:5
+   |
+58 |     Downloading,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:59:5
+   |
+59 |     Embedding,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:60:5
+   |
+60 |     Indexing,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:61:5
+   |
+61 |     Optimizing,
+   |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:62:5
+   |
+62 |     Enriching,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:63:5
+   |
+63 |     Complete,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:64:5
+   |
+64 |     Failed,
+   |     ^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:78:5
+   |
+78 |     pub phase: IngestPhase,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:91:5
+   |
+91 |     pub progress: BTreeMap<String, CorpusIngestProgress>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:100:5
+    |
+100 |     pub options: RecipeTestOptions,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:120:5
+    |
+120 |     pub docs_in: u32,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:121:5
+    |
+121 |     pub docs_out: u32,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:133:5
+    |
+133 |     pub stages: Vec<RecipeStageReport>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/knowledge.rs:17:1
+   |
+17 | pub struct KnowledgeSearchRequest {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:32:5
+   |
+32 |     pub corpora: Option<Vec<String>>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:34:5
+   |
+34 |     pub limit: Option<u32>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/knowledge.rs:48:1
+   |
+48 | pub struct KnowledgeSearchResponse {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:49:5
+   |
+49 |     pub results: Vec<KnowledgeResult>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:50:5
+   |
+50 |     pub corpora_searched: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:52:5
+   |
+52 |     pub corpora_unavailable: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:54:5
+   |
+54 |     pub total_chunks_searched: Option<u64>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/knowledge.rs:58:1
+   |
+58 | pub struct KnowledgeResult {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:59:5
+   |
+59 |     pub content: String,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:61:5
+   |
+61 |     pub title: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:62:5
+   |
+62 |     pub corpus_id: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:64:5
+   |
+64 |     pub url: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:65:5
+   |
+65 |     pub score: f32,
+   |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:67:5
+   |
+67 |     pub metadata: HashMap<String, String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/knowledge.rs:101:5
+    |
+101 |     pub view_id: String,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/knowledge.rs:102:5
+    |
+102 |     pub body: String,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/knowledge.rs:141:5
+    |
+141 |     pub digests: Vec<LandscapeDigestEntry>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:102:5
+    |
+102 |     pub oicp_version: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:104:5
+    |
+104 |     pub provider: Option<ProviderInfo>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:105:5
+    |
+105 |     pub models: Vec<ProviderModel>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:107:5
+    |
+107 |     pub knowledge: Option<KnowledgeManifest>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:109:5
+    |
+109 |     pub federation: Option<FederationManifest>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> oicp-types/src/manifest.rs:119:5
+    |
+119 |     pub fn new(models: Vec<ProviderModel>) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:137:1
+    |
+137 | pub struct ProviderInfo {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:139:5
+    |
+139 |     pub name: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:141:5
+    |
+141 |     pub provider_type: Option<ProviderType>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:149:5
+    |
+149 |     Local,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:150:5
+    |
+150 |     Mesh,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:151:5
+    |
+151 |     Cloud,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:152:5
+    |
+152 |     Hybrid,
+    |     ^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:156:1
+    |
+156 | pub struct ProviderModel {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:157:5
+    |
+157 |     pub id: String,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:159:5
+    |
+159 |     pub base_model: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:161:5
+    |
+161 |     pub quantization: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:162:5
+    |
+162 |     pub context_tokens: u32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:163:5
+    |
+163 |     pub status: ModelStatus,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:190:1
+    |
+190 | pub struct ModelStatus {
+    | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:191:5
+    |
+191 |     pub available: bool,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:192:5
+    |
+192 |     pub loaded: bool,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:194:5
+    |
+194 |     pub estimated_tokens_per_sec: Option<f32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:196:5
+    |
+196 |     pub estimated_ttft_ms: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:198:5
+    |
+198 |     pub estimated_load_time_sec: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:241:5
+    |
+241 |     pub pooling: PoolingStrategy,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:242:5
+    |
+242 |     pub normalization: NormalizationStrategy,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:253:1
+    |
+253 | pub struct KnowledgeManifest {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:254:5
+    |
+254 |     pub corpora: Vec<CorpusDescriptor>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:255:5
+    |
+255 |     pub search_endpoint: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:269:1
+    |
+269 | pub struct CorpusDescriptor {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:270:5
+    |
+270 |     pub id: String,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:272:5
+    |
+272 |     pub name: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:273:5
+    |
+273 |     pub total_chunks: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:275:5
+    |
+275 |     pub shards: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:277:5
+    |
+277 |     pub replicas: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:278:5
+    |
+278 |     pub fully_available: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:280:5
+    |
+280 |     pub last_updated: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:284:1
+    |
+284 | pub struct FederationManifest {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:285:5
+    |
+285 |     pub peers: Vec<PeerDescriptor>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:289:1
+    |
+289 | pub struct PeerDescriptor {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:290:5
+    |
+290 |     pub name: String,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:291:5
+    |
+291 |     pub capabilities_url: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:293:5
+    |
+293 |     pub trust_level: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> oicp-types/src/registry.rs:65:5
+   |
+65 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> oicp-types/src/registry.rs:128:5
+    |
+128 |     pub fn is_empty(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/requirements.rs:17:5
+   |
+17 |     pub oicp_version: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/requirements.rs:19:5
+   |
+19 |     pub privacy: Option<PrivacyRequirements>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/requirements.rs:21:5
+   |
+21 |     pub request_id: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/requirements.rs:190:1
+    |
+190 | pub struct PrivacyRequirements {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/requirements.rs:192:5
+    |
+192 |     pub sharding: ShardingPrivacy,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/requirements.rs:206:5
+    |
+206 |     LocalOnly,
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/requirements.rs:207:5
+    |
+207 |     MeshAllowed,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/response.rs:14:1
+   |
+14 | pub struct OicpResponseMeta {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/response.rs:16:5
+   |
+16 |     pub quantization: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/response.rs:18:5
+   |
+18 |     pub match_quality: Option<MatchQuality>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/response.rs:20:5
+   |
+20 |     pub request_id: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+  --> oicp-types/src/response.rs:32:1
+   |
+32 | pub enum MatchQuality {
+   | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:33:5
+   |
+33 |     Full,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:34:5
+   |
+34 |     Partial,
+   |     ^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:35:5
+   |
+35 |     Degraded,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:36:5
+   |
+36 |     Unmatched,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:439:5
+    |
+439 |     pub score: f32,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:440:5
+    |
+440 |     pub size_gb: Option<f32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:441:5
+    |
+441 |     pub model_id: String,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:512:5
+    |
+512 |     pub claim_score: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:516:5
+    |
+516 |     pub load_penalty: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:517:5
+    |
+517 |     pub locality_bonus: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:518:5
+    |
+518 |     pub cold_start_weight: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:519:5
+    |
+519 |     pub throughput_factor: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `oicp-types` (lib) generated 114 warnings
+warning: lance-linalg@4.0.0: fp16kernels feature is not enabled, skipping build of fp16 kernels
+warning: lance-linalg@4.0.0: fp16kernels feature is not enabled, skipping build of fp16 kernels
+warning: missing documentation for a struct field
+  --> sovereign/crates/sovereign-contracts/src/types/search_privacy.rs:32:16
+   |
+32 |     External { provider: &'static str },
+   |                ^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> sovereign/crates/sovereign-contracts/src/lib.rs:4:9
+   |
+ 4 | #![warn(missing_docs)]
+   |         ^^^^^^^^^^^^
+
+warning: `sovereign-contracts` (lib) generated 1 warning
+warning: function `now` is never used
+   --> studio/crates/sovereign-tools-base/src/search.rs:494:4
+    |
+494 | fn now() -> i64 {
+    |    ^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: missing documentation for an associated function
+   --> oicp-client/src/lib.rs:135:5
+    |
+135 |     pub fn new(endpoint: &str, api_key: Option<String>, model_id: &str, context_size: u32) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: the lint level is defined here
+   --> oicp-client/src/lib.rs:4:9
+    |
+  4 | #![warn(missing_docs)]
+    |         ^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+    --> oicp-client/src/lib.rs:1164:5
+     |
+1164 | /     pub fn new(
+1165 | |         endpoint_v1: &str,
+1166 | |         chat_model_id: String,
+1167 | |         embed_model_id: String,
+1168 | |         context_size: u32,
+1169 | |         embed_query_instruction: String,
+1170 | |     ) -> Self {
+     | |_____________^
+
+warning: `sovereign-tools-base` (lib) generated 1 warning
+warning: `oicp-client` (lib) generated 2 warnings
+warning: value assigned to `last_error` is never read
+   --> corpus-engine/src/enrichment/field_engine.rs:697:46
+    |
+697 |         let mut last_error: Option<String> = None;
+    |                                              ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `aggregated_article_for_test` is never used
+   --> corpus-engine/src/enrichment/atlas/strategies/structure_first.rs:827:15
+    |
+827 | pub(crate) fn aggregated_article_for_test(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: static `PHASE1A_SEED_SYSTEM` is never used
+  --> corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs:52:8
+   |
+52 | static PHASE1A_SEED_SYSTEM: ::std::sync::LazyLock<&'static str> =
+   |        ^^^^^^^^^^^^^^^^^^^
+
+warning: `corpus-engine` (lib) generated 3 warnings
+warning: unused import: `FetchFailure`
+  --> sovereign/crates/sovereign-core/src/deep_research/audit.rs:34:5
+   |
+34 |     FetchFailure, Gap, GapList, GateAction, Verdict, WitnessRecord,
+   |     ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused imports: `EmptyRoundReason` and `VerdictSet`
+  --> sovereign/crates/sovereign-core/src/deep_research/render.rs:16:63
+   |
+16 |     AlignmentRecord, BudgetTotals, ClaimCitation, EmptyRound, EmptyRoundReason, EvidenceWindow,
+   |                                                               ^^^^^^^^^^^^^^^^
+17 |     FinalClaim, GateAction, LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow, SourceLedger,
+18 |     Verdict, VerdictSet,
+   |              ^^^^^^^^^^
+
+warning: unused imports: `EmptyRoundReason` and `FetchList`
+  --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:34:17
+   |
+34 |     EmptyRound, EmptyRoundReason, EvidenceWindow, FailedSource, FetchFailure, FetchList,
+   |                 ^^^^^^^^^^^^^^^^                                              ^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:970:13
+    |
+970 |         let mut ctl = Controller {
+    |             ----^^^
+    |             |
+    |             help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::io::Write`
+  --> sovereign/crates/sovereign-core/src/deep_research/state.rs:12:5
+   |
+12 | use std::io::Write as _;
+   |     ^^^^^^^^^^^^^^
+
+warning: unused variable: `admitted_ids`
+   --> sovereign/crates/sovereign-core/src/deep_research/acquisition.rs:303:9
+    |
+303 |     let admitted_ids: Vec<String> = code_set
+    |         ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_admitted_ids`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `posture`
+   --> sovereign/crates/sovereign-core/src/deep_research/containment.rs:406:5
+    |
+406 |     posture: ShardingPrivacy,
+    |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_posture`
+
+warning: variable does not need to be mutable
+  --> sovereign/crates/sovereign-core/src/deep_research/budget.rs:88:13
+   |
+88 |         let mut d = SpendDecider {
+   |             ----^
+   |             |
+   |             help: remove this `mut`
+
+warning: unused variable: `audits`
+    --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:1723:18
+     |
+1723 |             let (audits, gap_list) = self.audit_pass(&draft, &window).await?;
+     |                  ^^^^^^ help: if this is intentional, prefix it with an underscore: `_audits`
+
+warning: variable does not need to be mutable
+   --> sovereign/crates/sovereign-core/src/runtime/epistemic.rs:309:9
+    |
+309 |     let mut push_unique = |demands: &mut Vec<Demand>, facet: DemandFacet, text: &str| {
+    |         ----^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: value assigned to `sub_extract_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:571:34
+    |
+571 |         let mut sub_extract_ms = 0u64;
+    |                                  ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `sub_gliner_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:572:33
+    |
+572 |         let mut sub_gliner_ms = 0u64;
+    |                                 ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `sub_record_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:573:33
+    |
+573 |         let mut sub_record_ms = 0u64;
+    |                                 ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `sub_pulls_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:574:32
+    |
+574 |         let mut sub_pulls_ms = 0u64;
+    |                                ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `sub_hops_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:575:31
+    |
+575 |         let mut sub_hops_ms = 0u64;
+    |                               ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `head_flushed` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/streaming.rs:300:17
+    |
+300 |                 head_flushed = true;
+    |                 ^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: method `journal_path` is never used
+    --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:1198:8
+     |
+ 920 | impl Controller {
+     | --------------- method in this implementation
+...
+1198 |     fn journal_path(&self) -> PathBuf {
+     |        ^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `file` is never read
+   --> sovereign/crates/sovereign-core/src/deep_research/state.rs:181:5
+    |
+180 | pub struct RunLock {
+    |            ------- field in this struct
+181 |     file: File,
+    |     ^^^^
+    |
+    = note: `RunLock` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `skills` is never read
+   --> sovereign/crates/sovereign-core/src/router.rs:296:5
+    |
+293 | pub struct LlmRouter {
+    |            --------- field in this struct
+...
+296 |     skills: Arc<SkillRegistry>,
+    |     ^^^^^^
+
+warning: function `grounding_gate_flags` is never used
+   --> sovereign/crates/sovereign-core/src/runtime/grounding/config.rs:590:8
+    |
+590 | pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `margin`, `source`, `pool`, and `elapsed_ms` are never read
+   --> sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs:223:9
+    |
+221 |     Decided {
+    |     ------- fields in this variant
+222 |         verdict: GroundingVerdict,
+223 |         margin: f32,
+    |         ^^^^^^
+224 |         source: MarginSource,
+    |         ^^^^^^
+225 |         pool: usize,
+    |         ^^^^
+226 |         elapsed_ms: u64,
+    |         ^^^^^^^^^^
+    |
+    = note: `AdmissionOutcome` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `build_question_conditional_passages` is never used
+    --> sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs:1228:25
+     |
+  11 | impl Runtime {
+     | ------------ method in this implementation
+...
+1228 |     pub(crate) async fn build_question_conditional_passages(
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `GuardStory` is never used
+   --> sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:329:17
+    |
+329 | pub(crate) enum GuardStory {
+    |                 ^^^^^^^^^^
+
+warning: function `guard_story` is never used
+   --> sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:345:15
+    |
+345 | pub(crate) fn guard_story(intent: &crate::types::Intent) -> GuardStory {
+    |               ^^^^^^^^^^^
+
+warning: `sovereign-core` (lib) generated 24 warnings (run `cargo fix --lib -p sovereign-core` to apply 9 suggestions)
+warning: fields `inference` and `embed_model` are never read
+   --> sovereign/crates/sovereign-tools/src/atlas_context_manager.rs:168:5
+    |
+166 | pub struct AtlasContextManager {
+    |            ------------------- fields in this struct
+167 |     indexes_dir: PathBuf,
+168 |     inference: Arc<dyn InferenceProvider>,
+    |     ^^^^^^^^^
+169 |     embed_model: String,
+    |     ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `id` is never read
+   --> sovereign/crates/sovereign-tools/src/atlas_postinstall.rs:559:9
+    |
+558 |     struct Expansion {
+    |            --------- field in this struct
+559 |         id: String,
+    |         ^^
+
+warning: function `parse_lean_skeleton_batch` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:2977:4
+     |
+2977 | fn parse_lean_skeleton_batch(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_segment_naming` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:3123:4
+     |
+3123 | fn parse_segment_naming(text: &str) -> Option<(String, String, SectionFunction, Vec<String>)> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_entity_kind` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:3395:4
+     |
+3395 | fn parse_entity_kind(s: &str) -> EntityKind {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `parse_skeleton_batch` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:3416:4
+     |
+3416 | fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<SkeletonBatchEntry>> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `name_to_id` is never read
+  --> sovereign/crates/sovereign-tools/src/entity_graph.rs:63:5
+   |
+61 | pub struct EntityGraph {
+   |            ----------- field in this struct
+62 |     /// Canonical entity name → compact node id.
+63 |     name_to_id: HashMap<String, u32>,
+   |     ^^^^^^^^^^
+   |
+   = note: `EntityGraph` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: field `task` is never read
+   --> sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs:244:5
+    |
+236 | struct JobHandle {
+    |        --------- field in this struct
+...
+244 |     task: JoinHandle<()>,
+    |     ^^^^
+
+warning: `sovereign-tools` (lib) generated 8 warnings
+    Finished `test` profile [unoptimized] target(s) in 0.48s
+     Running tests/oneshot_rag.rs (target/debug/deps/oneshot_rag-989f998fd84a3294)
+
+running 1 test
+test one_shot_arm has been running for over 60 seconds
+test one_shot_arm ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 452.10s
+

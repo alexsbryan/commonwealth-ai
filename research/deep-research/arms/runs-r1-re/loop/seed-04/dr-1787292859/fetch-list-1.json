@@ -1,0 +1,139 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787292859",
+  "charter_hash": "e7d8fd48f0d7c772",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did OpenAI release o3 and o4-mini in April 2025, and what did the launch signal about the direction of frontier reasoning models?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Date of OpenAI o3 and o4-mini model release",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Number of parameters in OpenAI o3 model if disclosed by OpenAI or third-party estimates",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Benchmark score of OpenAI o3 on ARC-AGI benchmark compared to previous models like o1-preview",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Percentage improvement in reasoning accuracy of OpenAI o4-mini over GPT-4o on MMLU-Pro dataset",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Price per million tokens for input and output for OpenAI o3 API access at launch",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Count of frontier AI labs releasing new reasoning-focused models between January 2025 and April 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Share of enterprise adoption reports citing \"reasoning capabilities\" as a primary driver for LLM selection in Q1 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q6",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 9.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,577 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787262340",
+  "charter_hash": "7a9a364495f9f05b",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://cleanfleetreport.com/adas-safety-limits-and-driver-responsibility-in-modern-vehicle-accidents",
+      "title": "ADAS Safety Limits and Driver Responsibility in Modern Vehicle Accidents",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.martinandjones.com/blog/who-is-liable-when-the-failure-of-advanced-driver-assistance-systems-cause-a-car-accident",
+      "title": "Who is Liable When the Failure of Advanced Driver Assistance Systems Cause a Car Accident? - Martin & Jones, PLLC",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mdpi.com/1424-8220/24/19/6223",
+      "title": "Analysis of Advanced Driver-Assistance Systems for Safe and Comfortable Driving of Motor Vehicles",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://aaafoundation.org/research/examining-the-safety-benefits-of-partial-vehicle-automation-technologies-in-an-uncertain-future",
+      "title": "Examining the Safety Benefits of Partial Vehicle Automation Technologies in an Uncertain Future - AAA Foundation for Traffic Safety",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://market.us/report/advanced-driver-assistance-systems-market",
+      "title": "Advanced Driver Assistance Systems Market Size | CAGR of 14%",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nhtsa.gov/laws-regulations/standing-general-order-crash-reporting",
+      "title": "Standing General Order on Crash Reporting",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://injuryfacts.nsc.org/motor-vehicle/occupant-protection/advanced-driver-assistance-systems/data-details",
+      "title": "Advanced Driver Assistance Systems-Data Details - Injury Facts",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.iihs.org/research-areas/advanced-driver-assistance",
+      "title": "Advanced driver assistance",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems",
+      "title": "Potential Reduction in Crashes, Injuries and Deaths from Large-Scale Deployment of Advanced Driver Assistance Systems - AAA Foundation for Traffic Safety",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://tsr.international/TSR/article/view/25177",
+      "title": "Estimating the crash reducing effect of Advanced Driver Assistance Systems (ADAS) for vulnerable road users | Traffic Safety Research",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.itskrs.its.dot.gov/2023-b01753",
+      "title": "Large-Scale Analysis Using Data from 13 States Found ...",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S0022437525001525",
+      "title": "Safety impact of advanced driver assistance systems in Europe in 2030",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.marketsandmarkets.com/Market-Reports/driver-assistance-systems-market-1201.html",
+      "title": "ADAS Market Report 2026-2033 [500 Pages & 250 Tables]",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://afdc.energy.gov/data/10315",
+      "title": "Alternative Fuels Data Center: Maps and Data - Annual Vehicle Miles Traveled in the United States",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.gminsights.com/industry-analysis/passenger-vehicle-adas-market",
+      "title": "Passenger Vehicle ADAS Market Size & Share 2026-2035",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://highways.dot.gov/media/116921",
+      "title": "TRAFFIC VOLUME TRENDS - Federal Highway Administration",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://css.umich.edu/publications/factsheets/mobility/personal-transportation-factsheet",
+      "title": "Personal Transportation Factsheet | Center for Sustainable Systems",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://vitalsigns.mtc.ca.gov/indicators/daily-miles-traveled",
+      "title": "Daily Miles Traveled - Vital Signs - SF Bay Area",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ir.cccis.com/news-releases/news-release-details/ccc-crash-course-report-highlights-forces-reshaping-us-vehicle",
+      "title": "CCC Crash Course Report Highlights the Forces Reshaping the U.S. Vehicle Fleet and Implications for the Auto Claims and Repair Ecosystem | CCC Intelligent Solutions",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.craftlawfirm.com/autonomous-vehicle-accidents-2019-2024-crash-data",
+      "title": "Data Analysis: Self-Driving Car Accidents [Updated 2026]",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://usclaims.com/educational-resources/non-licensed-drivers-responsible-for-20-percent-of-all-auto-accidents",
+      "title": "Unlicensed Driver Accident Statistics | USClaims",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nhtsa.gov/laws-regulations/standing-general-order-crash-reporting",
+      "title": "Standing General Order on Crash Reporting",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://naqvilaw.com/self-driving-car-accident-statistics",
+      "title": "Self-Driving Car Accident Statistics",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems",
+      "title": "Potential Reduction in Crashes, Injuries and Deaths from ...",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://crashstats.nhtsa.dot.gov/Api/Public/ViewPublication/813663",
+      "title": "Estimating Effectiveness of Lane Keeping Assist Systems in ...",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/30121111",
+      "title": "Effects of lane departure warning on police-reported crash ...",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dklaw.com/insights/personal-injury-settlement-amounts-2026",
+      "title": "Personal Injury Settlement Amounts 2026 | 62 Cases / $243M",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://fairsettlement.org",
+      "title": "Free Personal Injury Settlement Calculator (2026 AI Model)",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.casepeer.com/blog/personal-injury-settlement-amount-examples",
+      "title": "Personal Injury Settlement Amount Examples: 2025 Payouts Guide",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://trellis.law/doc/202886280/170-6-peremptory-challenge-peremptory-challenge-pursuant-to-ccp-170-6-filed",
+      "title": "170.6 Peremptory Challenge - Peremptory Challenge Pursuant to CCP 170.6 Filed",
+      "score": 0.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/330togo/posts/for-subscribers-only-august-19th-20261-president-trump-has-announced-he-is-pausi/1518967780251194",
+      "title": "August 19th, 2026 1) President Trump has announced he ...",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mauicounty.gov/CivicAlerts.aspx?CID=6",
+      "title": "News Flash • Maui County",
+      "score": 0.0,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dailypioneer.com/uploads/2026/epaper/august/thiruvananthapuram-english-edition-2026-08-21.pdf",
+      "title": "[PDF] CM Satheesan pushes for new dam, port hub - The Pioneer",
+      "score": 0.0,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.documentation.ca-cib.com/IssuerInformation/DownloadDocument?id=3e65d17a-e8c3-42bd-8c51-5743c6975b69",
+      "title": "[PDF] Half yearly Financial Report - 30062022 - Documentation",
+      "score": 0.0,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.federalregister.gov/documents/2016/08/15/2016-18399/finding-that-greenhouse-gas-emissions-from-aircraft-cause-or-contribute-to-air-pollution-that-may",
+      "title": "Finding That Greenhouse Gas Emissions From Aircraft ...",
+      "score": 0.0,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mdpi.com/2032-6653/17/1/32",
+      "title": "Comparing Tort Liability Frameworks in Autonomous Vehicle Accident Governance",
+      "score": 0.0,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles",
+      "title": "Navigating Liability in the Age of Autonomous Vehicles",
+      "score": 0.0,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://farahandfarah.com/blog/self-driving-cars-liability-current-legislation-more",
+      "title": "Self-Driving Cars: Liability, Current Legislation & More",
+      "score": 0.0,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S2590198224000198",
+      "title": "Automated driving regulations – where are we now?",
+      "score": 0.0,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ncsl.org/transportation/autonomous-vehicles",
+      "title": "Self-Driving Vehicles Enacted Legislation",
+      "score": 0.0,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.brookings.edu/articles/setting-the-standard-of-liability-for-self-driving-cars",
+      "title": "Setting the standard of liability for self-driving cars",
+      "score": 0.0,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nhtsa.gov/vehicle-safety/automated-vehicle-safety",
+      "title": "Automated Vehicle Safety | NHTSA",
+      "score": 0.0,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://heplerbroom.com/blog/when-no-one-has-to-drive-navigating-liability-in-the-era-of-driverless-vehicles",
+      "title": "When No One Has to Drive: Navigating Liability in the Era of Driverless Vehicles - HeplerBroom",
+      "score": 0.0,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.knrlegal.com/car-accident-lawyer/self-driving-car-accident-statistics",
+      "title": "Self-Driving Car Accident Statistics (2026) | Kisling, Nestico & Redick",
+      "score": 0.0,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.craftlawfirm.com/autonomous-vehicle-accidents-2019-2024-crash-data",
+      "title": "Data Analysis: Self-Driving Car Accidents [Updated 2026]",
+      "score": 0.0,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nhtsa.gov/parts-partnership-for-analytics-research-in-traffic-safety",
+      "title": "PARTS | Partnership for Analytics Research in Traffic Safety | NHTSA",
+      "score": 0.0,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nhtsa.gov/press-releases/nhtsa-2025-vehicles-5-star-safety-ratings-testing",
+      "title": "NHTSA's 5-Star Safety Ratings 2025 Crash Test Vehicles | NHTSA",
+      "score": 0.0,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nhtsa.gov/automated-vehicles-safety/published-reports-and-documents",
+      "title": "Published Reports and Documents | NHTSA",
+      "score": 0.0,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nhtsa.gov/research-data/crash-avoidance",
+      "title": "Crash Avoidance | NHTSA",
+      "score": 0.0,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.consumershield.com/articles/self-driving-car-accidents-trends",
+      "title": "Self Driving Car Accidents Trend Chart (2026)",
+      "score": 0.0,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.iihs.org/research-areas/distracted-driving",
+      "title": "Distracted driving",
+      "score": 0.0,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pacificdrivereducation.com/blog/new-driving-laws-for-2026-what-every-u.s.-driver-needs-to-know",
+      "title": "New Driving Laws for 2026: What Every U.S. Driver Needs to Know",
+      "score": 0.0,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ncsl.org/transportation/traffic-safety-review-states-focus-on-distracted-driving",
+      "title": "Traffic Safety Review: States Focus on Distracted Driving",
+      "score": 0.0,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.aamva.org/getmedia/122cb514-786f-4854-bffd-287947150081/Strengthening-Distracted-Driving-Education_final.pdf",
+      "title": "Strengthening Distracted Driving Education, Legislation, ...",
+      "score": 0.0,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=TUp9krGmJxE",
+      "title": "10 Driving Laws Just Changed in 2026 — Most Drivers Miss #4",
+      "score": 0.0,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ghsa.org/state-laws-issues/distracted-driving",
+      "title": "Distracted Driving | Governors Highway Safety Association",
+      "score": 0.0,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/therockhillherald/posts/big-changes-in-2026-traffic-laws-what-drivers-should-know-nationwide/1458690152934080",
+      "title": "Big changes in 2026 traffic laws: What... - Rock Hill Herald",
+      "score": 0.0,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4001667",
+      "title": "U.S. State and Federal Laws Targeting Distracted Driving",
+      "score": 0.0,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.autobodynews.com/news/preventing-common-adas-failures-can-save-shops-millions-in-liability-costs-analyst-says",
+      "title": "Preventing Common ADAS Failures Can Save Shops Millions in Liability Costs, Analyst Says - Autobody News",
+      "score": 0.0,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://samandashlaw.com/resources/product-liability-lawsuits-2026-key-cases-stats-how-to-get-justice",
+      "title": "Product Liability Lawsuits 2026 - Sam and Ash Law",
+      "score": 0.0,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.expertinstitute.com/resources/insights/latest-product-liability-payouts",
+      "title": "The Biggest Product Liability Settlements & Verdicts of 2025",
+      "score": 0.0,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+      "title": "Liability for Defective Advanced Driver Assistance Systems",
+      "score": 0.0,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.lexisnexis.com/community/pressroom/b/news/posts/lex-machina-releases-2023-product-liability-litigation-report",
+      "title": "2023 Product Liability Report Released | LexisNexis Newsroom",
+      "score": 0.0,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.iii.org/fact-statistic/facts-statistics-product-liability",
+      "title": "Facts + Statistics: Product liability - Triple-I®",
+      "score": 0.0,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.swissre.com/press-release/Litigation-costs-drive-US-liability-claims-by-57-over-past-decade-reveals-Swiss-Re-Institute/0b538159-9648-47da-a152-4550a7640d35",
+      "title": "Litigation costs drive US liability claims by 57% over past decade, reveals Swiss Re Institute | Swiss Re",
+      "score": 0.0,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.jdsupra.com/legalnews/global-trends-in-product-liability-and-2825903",
+      "title": "Global Trends in Product Liability and Class Action Litigation | DLA Piper - JDSupra",
+      "score": 0.0,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://roadwaydynamics.com/adas-crash-analysis-liability-1",
+      "title": "ADAS Car Crashes: Understanding Liability When Systems Fail",
+      "score": 0.0,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ppic.org/publication/driving-change-reducing-vehicle-miles-traveled-in-california-summary",
+      "title": "Reducing Vehicle Miles Traveled in California, Summary",
+      "score": 0.0,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/308087710_The_effectiveness_of_lane_departure_warning_systems-A_reduction_in_real-world_passenger_car_injury_crashes",
+      "title": "The effectiveness of lane departure warning systems—A ...",
+      "score": 0.0,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://repository.law.miami.edu/cgi/viewcontent.cgi?article=2243&context=fac_articles",
+      "title": "[PDF] Liability Rules for Automated Vehicle: Definitions and Details",
+      "score": 0.0,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.federalregister.gov/documents/2024/05/09/2024-09054/federal-motor-vehicle-safety-standards-automatic-emergency-braking-systems-for-light-vehicles",
+      "title": "Federal Register\n       :: \n      Federal Motor Vehicle Safety Standards; Automatic Emergency Braking Systems for Light Vehicles",
+      "score": 0.0,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

@@ -1,0 +1,150 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "allowance": {
+    "web-fetch:pages": 12,
+    "web-search:web": 12
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787259132,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787259135,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787259136,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259138,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259138,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259138,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259138,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787259143,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259145,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787259183,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787259186,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259189,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259189,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259189,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787259189,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-search:web": 6,
+    "web-fetch:pages": 9
+  },
+  "remaining": {
+    "web-fetch:pages": 3,
+    "web-search:web": 6
+  },
+  "refused_urls": [
+    "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+    "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+    "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+    "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+    "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+    "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+    "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+    "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf"
+  ]
+}

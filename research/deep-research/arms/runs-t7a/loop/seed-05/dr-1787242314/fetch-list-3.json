@@ -1,0 +1,67 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787242314",
+  "charter_hash": "63e56e6c3d32832c",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2024 2027 Act entered force phases ensure obligations land institutional capacity technology mature schedule serves compliance roadmap exported worldwide through Brussels effect",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "These deadlines are supported by enforcement mechanisms where fines reach € million or of global annual turnover for prohibited-practice vio (2024, 2027)",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 18.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 15.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

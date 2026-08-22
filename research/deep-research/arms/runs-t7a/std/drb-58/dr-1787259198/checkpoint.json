@@ -1,0 +1,366 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787259198",
+  "charter_hash": "7784c16c082bba48",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787259198",
+    "question": "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)\nYou could examine instances of horizontal gene transfer in eukaryotes—particularly plants and animals—and evaluate the evolutionary significance of these transfers. Its very rare and therefore must have a really interesting reason behind this adaptation!\nEspecially as this horizontal gene transfer has been well -studied in microbial systems, but not in plants and animals (this is a relatively new discovery).  Understanding  how commonly genes move between eukaryotic species and whether these transfers confer benefits would be really interesting to find out",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-58/dr-1787259198",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "tavily",
+    "search_source": "Web",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": {
+      "run-id": "dr-1787259198",
+      "granted-at-unix": 1787259198,
+      "release-floor": "personal"
+    }
+  },
+  "question": "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)\nYou could examine instances of horizontal gene transfer in eukaryotes—particularly plants and animals—and evaluate the evolutionary significance of these transfers. Its very rare and therefore must have a really interesting reason behind this adaptation!\nEspecially as this horizontal gene transfer has been well -studied in microbial systems, but not in plants and animals (this is a relatively new discovery).  Understanding  how commonly genes move between eukaryotic species and whether these transfers confer benefits would be really interesting to find out",
+  "frontier": [
+    "Number of confirmed horizontal gene transfer events in land plants from 1980 to 2023",
+    "Percentage of plant genomes containing horizontally acquired genes relative to total genomic content",
+    "Median number of foreign DNA segments per genome in angiosperms versus gymnosperms",
+    "Count of documented HGT instances between fungi and animals (e.g., *Tetrahymena*, insects) from 2000 to 2024",
+    "Share of animal species with known endosymbiotic or viral-mediated gene acquisitions compared to prokaryotes",
+    "Rate of functional integration of horizontally transferred genes into eukaryotic regulatory networks over the last 50 million years",
+    "Number of cases where HGT conferred antibiotic resistance or metabolic novelty in non-microbial eukaryotes",
+    "Percentage change in identified HGT events in plants following the advent of high-throughput sequencing technologies between 2010 and 2020"
+  ],
+  "frontier_question": "Exploring Horizontal Gene Transfer (HGT) in Plants and animals (ie Non-Microbial Systems)\nYou could examine instances of horizontal gene transfer in eukaryotes—particularly plants and animals—and evaluate the evolutionary significance of these transfers. Its very rare and therefore must have a really interesting reason behind this adaptation!\nEspecially as this horizontal gene transfer has been well -studied in microbial systems, but not in plants and animals (this is a relatively new discovery).  Understanding  how commonly genes move between eukaryotic species and whether these transfers confer benefits would be really interesting to find out",
+  "figure_specifiers": [],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259198",
+      "charter_hash": "7784c16c082bba48",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259198",
+      "charter_hash": "7784c16c082bba48",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+          "source_url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Horizontal gene transfer - Wikipedia Jump to content Main menu Main menu\nmove to sidebar hide Navigation Main page\nContents\nCurrent events\nRandom article\nAbout Wikipedia\nContact us Contribute Help\nLearn to edit\nCommunity portal\nRecent changes\nUpload file\nSpecial pages Search Search Appearance Donate Create account Log in Personal tools Donate Create account Log in Contents\nmove to sidebar hide (Top)\n1 History 2 Mechanisms Toggle Mechanisms subsection 2.1 Horizontal transposon transfer 3 Methods of detection 4 Viruses 5 Prokaryotes Toggle Prokaryotes subsection 5.1 Bacterial transformation 5.2 Bacterial conjugation 5.3 Archaeal DNA transfer 6 Eukaryotes Toggle Eukaryotes subsection 6.1 Organelle to nuclear genome 6.2 Organelle to organelle 6.3 Bacteria to fungi 6.4 Bacteria to plants 6.5 Bacteria to animals 6.6 Plant to plant 6.7 Plants to animals 6.8 Plant to fungus 6.9 Plant to bacteria 6.10 Fungi to insects 6.11 Fungi to fungi 6.12 Fungi to oomycetes 6.13 Oomycetes to fungi 6.14 Animals to animals 6.15 Animals to bacteria 6.16 Human to protozoan 6.17 Human genome 7 Compounds found to promote horizontal gene transfer 8 Promiscuous DNA Toggle Promiscuous DNA subsection 8.1 History 8.2 Mechanism 8.3 Types 8.3.1 NUMTs 8.3.2 NUPTs 9 Artificial horizontal gene transfer 10 In evolution Toggle In evolution subsection 10.1 Challenge to the tree of life 10.2 Phylogenetic information in HGT 10.3 The chromosomal organization of horizontal gene transfer 10.4 Genes 11 See also 12 References 13 Further reading 14 External links Toggle the table of contents Horizontal gene transfer\n39 languages العربية\nБългарски\nBosanski\nCatalà\nČeština\nЧӑвашла\nDansk\nDeutsch\nΕλληνικά\nEspañol\nEesti\nEuskara\nفارسی\nSuomi\nFrançais\nGaeilge\nGalego\nעברית\nMagyar\nBahasa Indonesia\nItaliano\n日本語\n한국어\nМакедонски\nМонгол\nNederlands\nNorsk nynorsk\nPolski\nPortuguês\nРусский\nSimple English\nSvenska\nไทย\nTagalog\nTürkçe\nУкраїнська\nTiếng Việt\n粵語\n中文 Edit links\nArticle Talk English Read Edit View history Tools Tools\nmove to sidebar hide Actions Read Edit View history General What links here\nRelated changes\nUpload file\nPermanent link\nPage information\nCite this page\nGet shortened URL\nSwitch to legacy parser Print/export Download as PDF\nPrintable version In other projects Wikimedia Commons\nWikidata item Appearance\nmove to sidebar hide From Wikipedia, the free encyclopedia\nTransfer of genes from unrelated organisms\n\"HGT\" redirects here. For other uses, see HGT (disambiguation).\nThis article is about the natural process. For artificial gene transfer, see Gene delivery.\nTree of life showing vertical and horizontal gene transfers Horizontal gene transfer (HGT) or lateral gene transfer (LGT)[1][2][3] is the movement of genetic material between organisms other than by the (\"vertical\") transmission of DNA from parent to offspring (reproduction).[4] HGT is an important factor in the evolution of many organisms.[5][6] HGT is influencing scientific understanding of higher-order evolution while more significantly shifting perspectives on bacterial evolution.[7]\nHorizontal gene transfer is the primary mechanism for the spread of antibiotic resistance in bacteria,[8][5][9][10] and plays an important role in the evolution of bacteria that can degrade novel compounds such as human-created pesticides[11] and in the evolution, maintenance, and transmission of virulence.[12] It often involves temperate bacteriophages and plasmids.[13][14][15] Genes responsible for antibiotic resistance in one species of bacteria can be transferred to another species of bacteria through various mechanisms of HGT such as transformation, transduction and conjugation, subsequently arming the antibiotic resistant genes' recipient against antibiotics. The rapid spread of antibiotic resistance genes in this manner is becoming a challenge to manage in the field of medicine. Ecological factors may also play a role in the H",
+          "ingested_into": null,
+          "tags": [
+            "gene",
+            "horizontal",
+            "transfer",
+            "wikipedia"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://www.youtube.com/watch?v=BiRc2FGh71o",
+          "source_url": "https://www.youtube.com/watch?v=BiRc2FGh71o",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "What is Horizontal Gene Transfer? - YouTube\nAboutPressCopyrightContact usCreatorsAdvertiseDevelopersTermsPrivacyPolicy & SafetyHow YouTube worksTest new featuresNFL Sunday Ticket\n&copy; 2026 Google LLC",
+          "ingested_into": null,
+          "tags": [
+            "gene",
+            "horizontal",
+            "transfer",
+            "what"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Horizontal gene transfer between bacteria and animals - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice Trends Genet\n. Author manuscript; available in PMC: 2012 Apr 1.\nPublished in final edited form as: Trends Genet. 2011 Feb 18;27(4):157–163. doi: 10.1016/j.tig.2011.01.005 Search in PMC Search in PubMed View in NLM Catalog Add to search Horizontal gene transfer between bacteria and animals\nJulie C Dunning Hotopp\nJulie C Dunning Hotopp\n1Institute for Genome Science, Department of Microbiology & Immunology, University of Maryland School of Medicine, Baltimore, MD 21201\nFind articles by Julie C Dunning Hotopp 1 Author information Article notes Copyright and License information 1Institute for Genome Science, Department of Microbiology & Immunology, University of Maryland School of Medicine, Baltimore, MD 21201\n✉\nCorresponding author: Dunning Hotopp, J. C. (jdhotopp@som.umaryland.edu)\nIssue date 2011 Apr.\nPMC Copyright notice\nPMCID: PMC3068243 NIHMSID: NIHMS269564 PMID: 21334091 The publisher's version of this article is available at Trends Genet Abstract\nHorizontal gene transfer is increasingly described between bacteria and animals. Such transfers that are vertically inherited have the potential to influence the evolution of animals. One classic example is the transfer of DNA from mitochondria and chloroplasts to the nucleus after the acquisition of these organelles by eukaryotes. Even today, many of the described instances of bacteria to animal transfer occur as part of intimate relationships like those of endosymbionts and their invertebrate hosts, particularly insects and nematodes, while numerous transfers are also found in asexual animals. Both of these observations are consistent with modern evolutionary theory, in particular the serial endosymbiotic theory and Muller’s ratchet. While it is tempting to suggest that these particular lifestyles might promote horizontal gene transfer, it is difficult to ascertain given the non-random sampling of animal genome sequencing projects and the lack of a systematic analysis of animal genomes for such transfers.\nOccurrence and significance of horizontal gene transfer\nHorizontal gene transfer (HGT) is the transfer of DNA between diverse organisms which allows for the acquisition of novel traits that are unique from those inherited. The advent of large scale genome sequencing has greatly improved our understanding of the importance of HGT particularly among Eubacteria where most cases of genetic transfers have been described so far. For example, the phylogenetic analysis of 144 prokaryotic genomes has indicated that, although most genetic information flows vertically, genes are also frequently transferred horizontally between closely related taxa and between bacteria inhabiting the same environment [1]. HGT in Eubacteria has been implicated in the acquisition and evolution of many traits including antibiotic resistance, pathogenesis, and bioremediation [2, 3].\nAlthough less common, HGT events among eukaryotes have also been identified. In animals, cases of eukaryote-to-eukaryote HGT include the recent acquisition of P e",
+          "ingested_into": null,
+          "tags": [
+            "animals",
+            "bacteria",
+            "between",
+            "gene",
+            "horizontal",
+            "transfer"
+          ]
+        },
+        {
+          "id": "ev-4",
+          "locator": "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2024.1338026/full",
+          "source_url": "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2024.1338026/full",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Frontiers | Horizontal gene transfer in plant microbiomes: integrons as hotspots for cross-species gene exchange Frontiers in Microbiology\nAbout us\nAbout us\nWho we are\nMission and values\nHistory\nLeadership\nAwards\nImpact and progress\nFrontiers impact\nOur annual reports\nThought leadership\nResearcher perspectives\nPublishing model\nHow we publish\nOpen access\nQuality and research integrity\nPeer review\nResearch Topics\nPublish your data with FAIR²\nFee policy\nServices\nSocieties\nNational consortia\nInstitutional partnerships\nCollaborators\nMore from Frontiers\nFrontiers Forum\nFrontiers Planet Prize\nPress office\nSustainability\nCareer opportunities\nContact us\nAll journalsAll articles\nSubmit manuscriptSubmit data\nSearch\nFrontiers in Microbiology\nSections\nSections\nAncient DNA and Forensic Microbiology\nAntimicrobials, Resistance and Chemotherapy\nAquatic Microbiology\nBiology of Archaea\nExtreme Microbiology\nFood Microbiology\nInfectious Agents and Disease\nMicrobe and Virus Interactions with Plants\nMicrobial Symbioses\nMicrobiological Chemistry and Geomicrobiology\nMicrobiome Data Science\nMicrobiotechnology\nMicroorganisms in Vertebrate Digestive Systems\nPhage Biology\nPhysiology and Metabolism of Microorganisms\nSystems Microbiology\nTerrestrial Microbiology\nVirology\nArticlesResearch TopicsEditorial board\nAbout journal\nAbout journal\nScope\nField chief editors\nMission and scope\nFacts\nJournal sections\nOpen access statement\nCopyright statement\nQuality\nFor authors\nWhy submit?\nArticle types\nAuthor guidelines\nEditor guidelines\nPublishing fees\nSubmission checklist\nContact editorial office\nAbout us\nAbout us\nWho we are\nMission and values\nHistory\nLeadership\nAwards\nImpact and progress\nFrontiers impact\nOur annual reports\nThought leadership\nResearcher perspectives\nPublishing model\nHow we publish\nOpen access\nQuality and research integrity\nPeer review\nResearch Topics\nPublish your data with FAIR²\nFee policy\nServices\nSocieties\nNational consortia\nInstitutional partnerships\nCollaborators\nMore from Frontiers\nFrontiers Forum\nFrontiers Planet Prize\nPress office\nSustainability\nCareer opportunities\nContact us\nAll journalsAll articles\nSubmit manuscriptSubmit data\nFrontiers in Microbiology\nSections\nSections\nAncient DNA and Forensic Microbiology\nAntimicrobials, Resistance and Chemotherapy\nAquatic Microbiology\nBiology of Archaea\nExtreme Microbiology\nFood Microbiology\nInfectious Agents and Disease\nMicrobe and Virus Interactions with Plants\nMicrobial Symbioses\nMicrobiological Chemistry and Geomicrobiology\nMicrobiome Data Science\nMicrobiotechnology\nMicroorganisms in Vertebrate Digestive Systems\nPhage Biology\nPhysiology and Metabolism of Microorganisms\nSystems Microbiology\nTerrestrial Microbiology\nVirology\nArticlesResearch TopicsEditorial board\nAbout journal\nAbout journal\nScope\nField chief editors\nMission and scope\nFacts\nJournal sections\nOpen access statement\nCopyright statement\nQuality\nFor authors\nWhy submit?\nArticle types\nAuthor guidelines\nEditor guidelines\nPublishing fees\nSubmission checklist\nContact editorial office\nFrontiers in Microbiology\nSections\nSections\nAncient DNA and Forensic Microbiology\nAntimicrobials, Resistance and Chemotherapy\nAquatic Microbiology\nBiology of Archaea\nExtreme Microbiology\nFood Microbiology\nInfectious Agents and Disease\nMicrobe and Virus Interactions with Plants\nMicrobial Symbioses\nMicrobiological Chemistry and Geomicrobiology\nMicrobiome Data Science\nMicrobiotechnology\nMicroorganisms in Vertebrate Digestive Systems\nPhage Biology\nPhysiology and Metabolism of Microorganisms\nSystems Microbiology\nTerrestrial Microbiology\nVirology\nArticlesResearch TopicsEditorial board\nAbout journal\nAbout journal\nScope\nField chief editors\nMission and scope\nFacts\nJournal sections\nOpen access statement\nCopyright statement\nQuality\nFor authors\nWhy submit?\nArticle types\nAuthor guidelines\nEditor guidelines\nPublishing fees\nSubmission checklist\nContact editorial office\nSubmit manuscriptSubmit data\nSearch\nORIGINAL RESEARCH article\nFront. Microbiol., 29 April 2024\nSec. Evolutionary an",
+          "ingested_into": null,
+          "tags": [
+            "cross",
+            "exchange",
+            "frontiers",
+            "gene",
+            "horizontal",
+            "hotspots"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259198",
+      "charter_hash": "7784c16c082bba48",
+      "round": 2,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+          "source_url": "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "20.3B: Horizontal Gene Transfer - Biology LibreTexts Skip to main content Table of Contents menu\nsearch Searchbuild_circle Toolbarfact_check Homeworkcancel Exit Reader Mode\nschool Campus Bookshelves menu_book Bookshelves perm_media Learning Objects login Login how_to_reg Request Instructor Account hub Instructor Commons Search\nSearch this book Submit Search\nx\nText Color\nReset\nBright Blues Gray Inverted\nText Size\nReset\n+-  Margin Size\nReset\n+-  Font Type\nEnable Dyslexic Font  Downloads expand_more Download Page (PDF) Download Full Book (PDF) Resources expand_more Periodic Table Physics Constants Scientific Calculator Reference expand_more Reference & Cite Tools expand_more Help expand_more Get Help Feedback Readability  x\nselected template will load here\nError\nThis action is not available.\nchrome_reader_mode Enter Reader Mode\n20.3: Perspectives on the Phylogenetic Tree\n20: Phylogenies and the History of Life\n{ }\n{ \"20.3A:_Limitations_to_the_Classic_Model_of_Phylogenetic_Trees\" : \"property get [Map MindTouch.Deki.Logic.ExtensionProcessorQueryProvider+<>c__DisplayClass234_0.<PageSubPageProperty>b__1]()\", \"20.3B:_Horizontal_Gene_Transfer\" : \"property get [Map MindTouch.Deki.Logic.ExtensionProcessorQueryProvider+<>c__DisplayClass234_0.<PageSubPageProperty>b__1]()\", \"20.3C:_Endosymbiotic_Theory_and_the_Evolution_of_Eukaryotes\" : \"property get [Map MindTouch.Deki.Logic.ExtensionProcessorQueryProvider+<>c__DisplayClass234_0.<PageSubPageProperty>b__1]()\", \"20.3D:_Web_Network_and_Ring_of_Life_Models\" : \"property get [Map MindTouch.Deki.Logic.ExtensionProcessorQueryProvider+<>c__DisplayClass234_0.<PageSubPageProperty>b__1]()\" }\n{ \"20.01:_Organizing_Life_on_Earth\" : \"property get [Map MindTouch.Deki.Logic.ExtensionProcessorQueryProvider+<>c__DisplayClass234_0.<PageSubPageProperty>b__1]()\", \"20.02:_Determining_Evolutionary_Relationships\" : \"property get [Map MindTouch.Deki.Logic.ExtensionProcessorQueryProvider+<>c__DisplayClass234_0.<PageSubPageProperty>b__1]()\", \"20.03:_Perspectives_on_the_Phylogenetic_Tree\" : \"property get [Map MindTouch.Deki.Logic.ExtensionProcessorQueryProvider+<>c__DisplayClass234_0.<PageSubPageProperty>b__1]()\" }\nSat, 23 Nov 2024 03:45:29 GMT\n20.3B: Horizontal Gene Transfer\n13535\n13535\nDelmar Larsen\n{ }\nAnonymous\nAnonymous\n2\nfalse\nfalse\n[ \"article:topic\", \"horizontal gene transfer\", \"authorname:boundless\", \"showtoc:no\", \"license:ccbysa\", \"columns:two\", \"cssprint:dense\", \"licenseversion:40\" ]\n[ \"article:topic\", \"horizontal gene transfer\", \"authorname:boundless\", \"showtoc:no\", \"license:ccbysa\", \"columns:two\", \"cssprint:dense\", \"licenseversion:40\" ]\nhttps://bio.libretexts.org/@app/auth/3/login?returnto=https%3A%2F%2Fbio.libretexts.org%2FBookshelves%2FIntroductory_and_General_Biology%2FGeneral_Biology_(Boundless)%2F20%253A_Phylogenies_and_the_History_of_Life%2F20.03%253A_Perspectives_on_the_Phylogenetic_Tree%2F20.3B%253A_Horizontal_Gene_Transfer\nSearch site Search Search Go back to previous article\nUsername Password Sign in Sign in Sign in Forgot password Expand/collapse global hierarchy Home Bookshelves Introductory and General Biology General Biology (Boundless) 20: Phylogenies and the History of Life 20.3: Perspectives on the Phylogenetic Tree 20.3B: Horizontal Gene Transfer Expand/collapse global location 20.3B: Horizontal Gene Transfer Last updated Save as PDF Page ID13535\nBoundless (now LumenLearning)\nBoundless\n\\( \\newcommand{\\vecs}[1]{\\overset { \\scriptstyle \\rightharpoonup} {\\mathbf{#1}} } \\)\n\\( \\newcommand{\\vecd}[1]{\\overset{-\\!-\\!\\rightharpoonup}{\\vphantom{a}\\smash {#1}}} \\)\n\\( \\newcommand{\\dsum}{\\displaystyle\\sum\\limits} \\)\n\\( \\newcommand{\\dint}{\\displaystyle\\int\\limits} \\)\n\\( \\newcommand{\\dlim}{\\displaystyle\\lim\\limits} \\)\n\\( \\newcommand{\\id}{\\mathrm{id}}\\) \\( \\newcommand{\\Span}{\\mathrm{span}}\\)\n( \\newcommand{\\kernel}{\\mathrm{null}\\,}\\) \\( \\newcommand{\\range}{\\mathrm{range}\\,}\\)\n\\( \\newcommand{\\RealPart}{\\mathrm{Re}}\\) \\( \\newcommand{\\ImaginaryPart}{\\mathrm{Im}}\\)\n\\( \\newcommand{\\Argument}{\\mathrm{Arg}}\\) \\( ",
+          "ingested_into": null,
+          "tags": [
+            "biology",
+            "gene",
+            "horizontal",
+            "libretexts",
+            "transfer"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+          "source_url": "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Horizontal Gene Transfer Happens More Often Than Anyone Thought | The Scientist\nJuly 2022\nBrought to you by\nTable of ContentsTOC\nTen Minute Sabbatical\nCrossword Puzzle\nOpinion: Many Clinical Trials Fail to Navigate the Literature\nNews\nHow Mange Remade an Ecosystem\nFeature\nPufferfish Don&rsquo;t Need Functional Stomach, Inflate Instead\nFeature\nHorizontal Gene Transfer Happens More Often Than Anyone Thought Feature\nSlideshow: Examples of Eukaryotic Horizontal Gene Transfer\nSlideshow\nInfographic: Possible Mechanisms of Gene Transfer in Eukaryotes\nInfographic\nFusion with Spider Silk Increases Anticancer Protein&rsquo;s Stability\nNews\nBull Ant Venom Evolved to Make Bites More Painful to Mammals\nNews\nMasking Up, 1619 to Present\nFoundations\nBrought to you by\nJuly 2022\nTable of ContentsTOC\nTen Minute Sabbatical\nCrossword Puzzle\nOpinion: Many Clinical Trials Fail to Navigate the Literature\nNews\nHow Mange Remade an Ecosystem\nFeature\nPufferfish Don&rsquo;t Need Functional Stomach, Inflate Instead\nFeature\nHorizontal Gene Transfer Happens More Often Than Anyone Thought Feature\nSlideshow: Examples of Eukaryotic Horizontal Gene Transfer\nSlideshow\nInfographic: Possible Mechanisms of Gene Transfer in Eukaryotes\nInfographic\nFusion with Spider Silk Increases Anticancer Protein&rsquo;s Stability\nNews\nBull Ant Venom Evolved to Make Bites More Painful to Mammals\nNews\nMasking Up, 1619 to Present\nFoundations\nFeature\nHorizontal Gene Transfer Happens More Often Than Anyone Thought DNA passed to and from all kinds of organisms, even across kingdoms, has helped shape the tree of life, to a large and undisputed degree in microbes and also unexpectedly in multicellular fungi, plants, and animals. Written byChristie Wilcox, PhD\n| 15 min read\nRegister for free to listen to this article\nListen with Speechify\n0:00\n15:00\nPDF version\nSave for Later\nTop Image credit:© nicolle fuller, sayo studio\nBack in the spring of 2012, Duke University graduate student Fay-Wei Li was struggling with his dissertation research. He had set out to uncover the evolutionary history of neochrome, a strange photoreceptor found in ferns that allows the plants to sense and grow toward light sources. It was a big innovation for the plant clade as it enabled life in the shade, and helped them thrive as their flowering cousins rapidly took over the planet during the Cretaceous period some 144 million to 65 million years ago. Indeed, scientists hypothesize that neochrome was a big part of why ferns, which reproduce via spores, not only survived in the face of their new floral competition, but actually flourished, now boasting more than 10,000 species—about four times the biodiversity of any other group of non-flowering land plants.\nIt was a dream project for Li, as he says he’s always adored ferns and even credits them with inspiring his career in science. The only problem was that he was nearly two years into the project and had little to show for it, as he was struggling to find homologs of the neochrome gene or pieces of it in the available genome data—clues that might shed light on how the protein evolved. “I remember I was sitting in my advisor Kathleen Pryer’s office, very depressed . . . really worried about my prospects as a scientist,” he says.\nThen a fellow grad student helped him get early access to the wealth of transcriptome data being amassed by the One Thousand Plant Transcriptomes Initiative. If other plant species had similar photoreceptor genes, their sequences were sure to be in there. So Li designed a bioinformatic pipeline for detecting genetic code for photoreceptors and started scanning the data for neochrome homologs. Then one day, while he sat on the floor of his Durham, North Carolina, duplex watching TV with his laptop running the program on his coffee table, he got a match—from a hornwort. “The first thing I did was Google ‘what is a hornwort’,” Li, now an evolutionary biologist at the Boyce Thompson Institute in New York, recalls, laughing",
+          "ingested_into": null,
+          "tags": [
+            "anyone",
+            "gene",
+            "happens",
+            "horizontal",
+            "more",
+            "often"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+        "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "Based on the provided evidence, horizontal gene transfer (HGT) in eukaryotes—specifically plants and animals—is a documented phenomenon that plays a role in evolution, though it is less common than HGT among prokaryotes. [Source: ev-1]",
+    "While this process is well-studied in bacteria where it facilitates antibiotic resistance and virulence [Source: ev-1], it also occurs in eukaryotic systems.",
+    "The table of contents for the Wikipedia article on HGT explicitly lists sections dedicated to \"Eukaryotes,\" including specific subsections for transfers such as \"Bacteria to plants\" (6.4), \"Plant to plant\" (6.6), \"Plants to animals\" (6.7), \"Animals to animals\" (6.14), and \"Human genome\" (6.17) [Source: ev-1].",
+    "More recent instances often occur within intimate relationships, such as those between endosymbionts and their invertebrate hosts (particularly insects and nematodes), or in asexual animals [Source: ev-3].",
+    "These transfers are consistent with modern evolutionary theories like the serial endosymbiotic theory and Muller’s ratchet [Source: ev-3].",
+    "**Evolutionary Significance and Prevalence**\nThe evolutionary significance of HGT lies in its ability to allow organisms to acquire novel traits unique from those inherited vertically [Source: ev-3].",
+    "In prokaryotes, phylogenetic analysis of 144 genomes indicates that while most information flows vertically, genes are frequently transferred horizontally between closely related taxa or bacteria sharing the same environment [Source: ev-3].",
+    "Although less common than in eubacteria, HGT among eukaryotes has been identified and is considered an important factor in evolution [Source: ev-1][ev-3].",
+    "The rapid spread of such genes can challenge traditional views of the \"tree of life,\" as indicated by section headings regarding challenges to this model [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, horizontal gene transfer (HGT) in eukaryotes—specifically plants and animals—is a documented phenomenon that plays a role in evolution, though it is less common than HGT among prokaryotes. [Source: ev-1]",
+      "actionable_query": "Based provided evidence horizontal gene transfer HGT eukaryotes—specifically plants animals—is documented phenomenon plays role evolution though less common among prokaryotes",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "While this process is well-studied in bacteria where it facilitates antibiotic resistance and virulence [Source: ev-1], it also occurs in eukaryotic systems.",
+      "actionable_query": "process well-studied bacteria facilitates antibiotic resistance virulence occurs eukaryotic systems",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The table of contents for the Wikipedia article on HGT explicitly lists sections dedicated to \"Eukaryotes,\" including specific subsections for transfers such as \"Bacteria to plants\" (6.4), \"Plant to plant\" (6.6), \"Plants to animals\" (6.7), \"Animals to animals\" (6.14), and \"Human genome\" (6.17) [Source: ev-1].",
+      "actionable_query": "The table of contents for the Wikipedia article on HGT explicitly lists sections dedicated to \"Eukaryotes,\" including specific subsections f",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "More recent instances often occur within intimate relationships, such as those between endosymbionts and their invertebrate hosts (particularly insects and nematodes), or in asexual animals [Source: ev-3].",
+      "actionable_query": "recent instances often occur within intimate relationships endosymbionts invertebrate hosts particularly insects nematodes asexual animals",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "These transfers are consistent with modern evolutionary theories like the serial endosymbiotic theory and Muller’s ratchet [Source: ev-3].",
+      "actionable_query": "transfers consistent modern evolutionary theories like serial endosymbiotic theory Muller’s ratchet",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "**Evolutionary Significance and Prevalence**\nThe evolutionary significance of HGT lies in its ability to allow organisms to acquire novel traits unique from those inherited vertically [Source: ev-3].",
+      "actionable_query": "Evolutionary Significance Prevalence HGT lies ability allow organisms acquire novel traits unique inherited vertically",
+      "from_claim_id": "c13",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "In prokaryotes, phylogenetic analysis of 144 genomes indicates that while most information flows vertically, genes are frequently transferred horizontally between closely related taxa or bacteria sharing the same environment [Source: ev-3].",
+      "actionable_query": "prokaryotes phylogenetic analysis genomes indicates information flows vertically genes frequently transferred horizontally closely related taxa bacteria sharing same environment",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [
+          "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "Although less common than in eubacteria, HGT among eukaryotes has been identified and is considered an important factor in evolution [Source: ev-1][ev-3].",
+      "actionable_query": "Although less common than in eubacteria, HGT among eukaryotes has been identified and is considered an important factor in evolution [ev- ].",
+      "from_claim_id": "c15",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "The rapid spread of such genes can challenge traditional views of the \"tree of life,\" as indicated by section headings regarding challenges to this model [Source: ev-1].",
+      "actionable_query": "rapid spread genes can challenge traditional views tree life indicated section headings regarding challenges model",
+      "from_claim_id": "c16",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 4,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 9,
+      "fetched": 2,
+      "search_calls": 3
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=BiRc2FGh71o",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2024.1338026/full",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

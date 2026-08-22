@@ -1,0 +1,101 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787260359",
+  "charter_hash": "eb22b805c469965b",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "The available evidence only provides metadata and titles for relevant research papers: (3)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "DGS), and beyond,\" published in *Plant Phenomics* . (3)",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q1",
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+      "title": "The Role of Title, Metadata and Abstract in Identifying Clinically Relevant Journal Articles",
+      "snippet": "An experienced nurse viewed an onscreen list of the titles without having access to the abstracts and indexing information, and assigned each title to one of the three groups: 1) potentially consistent and good-quality patient-oriented evidence (recommendations strength A ); 2) clinically relevant information (recommendations strength B and C), and 3) other. The accuracy of the title-based judgment was evaluated against the gold standard created using the citations of the articles that provided [...] 1: Clinically Relevant Summary\n➢Meta-Analysis, Practice Guidelines, Consensus Development Conferences\nClinical Trials\n➢Controlled Clinical Trials, Randomized Controlled Trials, Multicenter Studies, Double-Blind Method\n2: Clinical Evidence\n➢Studies: Case-Control, Cohort, Cross-Sectional, Cross-Over, Evaluation, Follow-up, Longitudinal, Retrospective, Twin, Validation, Case Reports\nReview (not systematic)\n3: Other\n➢Journal Article, Editorial, Interview, Letter, Legal Case [...] Identification of the potential evidence level based on the title is problematic. Our proposed solution for this problem is to group the retrieval results into potential strength of evidence categories (see Table 1). For example, Figure 1 demonstrates the presentation of the search results in our PubMed on Tap application for wireless handheld computers , clustered by evidence level.\n\n### Figure 1.\n\nImage 23: Figure 1\n\nOpen in a new tab",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-1",
+      "query_id": "q1",
+      "url": "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+      "title": "Write a Search Strategy - Evidence Synthesis in the Social Sciences - LibGuides at Arizona State University",
+      "snippet": "Full-text vs. bibliographic databases: Databases do not always contain the full text of every article and often only offer bibliographic details rather than the complete content of the articles. The article record will include common metadata elements, such as document title, author, publication name, volume, issue, page numbers, publication date, DOI, author-supplied keywords, and other relevant fields. [...] Locate between 3 and 5 relevant studies that meet many or all of the stated inclusion criteria and use these examples to identify search terms (keywords and their synonyms) and database-specific subject headings. You can also use them to determine whether the concepts of interest are mentioned in the title or abstract of the articles (as opposed to the full text) and what study designs are used in this field. These \"known articles\" can also eventually be used to test the search strategy that [...] Harvesting terms from known articles: Retrieve terms by scanning article records in databases, focusing on titles, abstracts, author keywords, and subject terms. Collect these terms into a working file (e.g., notepad, word processor, or spreadsheet) and organize them by concept, possibly using a table format for clarity.\n    Database entries: Use database searches to identify additional terms related to your concepts.\n3. #### Verify search concepts:",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-2",
+      "query_id": "q1",
+      "url": "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+      "title": "Research Paper APIs for Scientific Literature in 2026 | IntuitionLabs",
+      "snippet": "While DataCite has an open API, it is less central to “research papers” than Crossref. Where relevant, some researchers use DataCite alongside Crossref for publications that have associated datasets. DataCite’s free public REST API supports GET queries by DOI (i.e. ` to retrieve metadata in JSON. The records include titles, creators, publication year, and \"relatedIdentifier\" fields (which may link to publications referencing the dataset), giving insight into data–paper connections. [...] Metadata APIs such as Crossref and DataCite provide publication metadata (titles, authors, abstracts, etc.) for anything with a DOI. Crossref alone holds metadata for ≈180 million research outputs ((\n Full-text and repository APIs like PubMed Central (PMC) and CORE allow retrieval of open-access article text. For preprints, arXiv offers its own REST API (( [...] This report surveys the best and most widely used APIs for research papers, citations, and scientific literature as of early 2026. It provides historical context for the rise of digital scholarly databases, summarizes the current state of major data sources and APIs, compares their coverage and features, and highlights real-world use cases. We include extensive evidence such as service usage statistics, dataset sizes, and relevant research findings. Where applicable, we offer comparative tables",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-3",
+      "query_id": "q1",
+      "url": "https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309",
+      "title": "Systematic reviews as a metaknowledge tool: caveats and ...",
+      "snippet": "by A Avenali · 2023 · Cited by 49 — A systematic literature review is a research method that aims to identify, evaluate, and synthesize all available evidence on a particular",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-1",
+      "web-2"
+    ],
+    "eps_admits": [
+      "web-3"
+    ],
+    "below_cut": [
+      "web-3",
+      "web-4",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-7",
+      "web-8",
+      "web-5",
+      "web-5",
+      "web-6"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787329254",
+  "charter_hash": "f5a7d6eb2cff311a",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI GPT-5 release date August 2025",
+      "OpenAI announcement statement reasons for releasing GPT-5 in August 2025",
+      "OpenAI model pricing structure before and after GPT-5 launch",
+      "Percentage change in OpenAPI API token prices from July 2025 to September 2025",
+      "Comparison of OpenAI enterprise contract terms pre-GPT-5 versus post-GPT-5"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "5",
+      "2025"
+    ]
+  }
+}

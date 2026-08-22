@@ -1,0 +1,72 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787272859 — How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/v1/dr-1787272859
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/bank/v1/deck (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787272859] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787272859] Dedupe: no duplicates found (4 rows)
+[dr-estate-dr-1787272859] Dedupe preserved 4 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787272859] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787272859] Building FTS content index (2/3)...
+[dr-estate-dr-1787272859] FTS content index done
+[dr-estate-dr-1787272859] Building FTS title index (3/3)...
+[dr-estate-dr-1787272859] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787272859 built — 4 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/v1/dr-1787272859/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787272859", charter_hash: "409ded03c13dfa76", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 2, search_calls: 8 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 22, fetched: 2, search_calls: 4 }, RoundRow { round: 3, gaps_before: 22, gaps_after: 17, fetched: 4, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://v1-demo.example/source-report", custody: "public-web", ingested_into: Some("dr-estate-dr-1787272859") }, FetchedSource { url: "https://www.governing.com/archive/gentrification-in-cities-governing-report.html", custody: "public-web", ingested_into: Some("dr-estate-dr-1787272859") }, FetchedSource { url: "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/", custody: "public-web", ingested_into: Some("dr-estate-dr-1787272859") }, FetchedSource { url: "https://www.terry.uga.edu/news/gentrification-by-the-numbers/", custody: "public-web", ingested_into: Some("dr-estate-dr-1787272859") }], failed: [] }, budget: BudgetTotals { spent: {"web-fetch:pages": 4, "web-search:mock": 12}, remaining: {"web-fetch:pages": 8, "web-search:mock": 0} }, not_covered: ["### Gentrification\n*   **Acceleration:** The term was coined in 1963 by a British sociologist, but its prevalence surged as Americans pursued urban lifestyles [Source: ev-2].", "Since 1980, nearly 80% of under-45 population growth concentrated in metro areas over one million residents [Source: ev-1].", "*   **City-Specific Intensity:** A small group of cities saw extensive transformation. [Source: ev-1]", "In terms of raw numbers, New York City had the most gentrified tracts with 128, despite a lower percentage rate of 29.8% due to its large total tract count (2,152) [Source: ev-2].", "Conversely, cities such as Detroit (2.8%), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification [Source: ev-2].", "Major cities exceeded this significantly; New York City led with a Gini of 0.5469, while Atlanta and Miami were at 0.57 and New Orleans at 0.56 [Source: ev-1].", "In some metros, the income ratio reaches 18:1 (specifically noted for Atlanta and Washington D.C.) [Source: ev-2] [Source: ev-1].", "Between 2007 and 2014, the national 95/20 rose from 8.5 to 9.3; in San Francisco specifically, top incomes rose approximately $120,000 in two years (2014–2016), while bottom quintile gains remained minimal across all cities [Source: ev-1].", "Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018–2021 [Source: ev-1].", "### Affordability and Cost of Living\nUrban areas have seen nominal wealth growth that does not keep pace with housing costs, creating an affordability crisis [Source: ev-1].", "*   **Price-to-Income Ratios:** California cities exhibit price-to-income ratios between 9.6 and 12.2, which is more than double the national average of 4.7 [Source: ev-1].", "*   **Job Market Shifts:** The economic base shifted from manufacturing to professional services; manufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic, while finance and professional services grew from 12 million to 32 million jobs [Source: ev-1] (Note: Source tag for job shift details appears as ev-2 in prompt list but text matches ev-1 content regarding Cooper Center data).", "### Displacement and Neighborhood Characteristics\n*   **Neighborhood Characteristics:** Gentrifying neighborhoods saw population increases of an average 6.5% and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points [Source: ev-2].", "Poverty rates in these gentrifying tracts decreased by 0.7 percentage points on average [Source: ev-1] [Source: ev-2].", "*   **Non-Gentrifying Areas:** In contrast, lower-income areas that did *not* gentrify experienced slight population losses (-2.4%), a decrease in the white population share (by 5.0 percentage points), and a sharp increase in poverty rates (+6.7 percentage points) [Source: ev-1] [Source: ev-2].", "*   **Displacement Dynamics:** Residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, whereas residents from other gentrifying neighborhoods often move to wealthier areas, indicating minority communities face more challenges during this process [Source: ev-1].", "The term was coined in 1963 by a British sociologist, but its prevalence surged as Americans pursued urban lifestyles [Source: ev-2].", "*   **City-Specific Intensity:** A small group of cities saw extensive transformation. [Source: ev-2]", "*   **Income Ratios:** The gap between top and bottom earners has expanded to extremes. [Source: ev-2]", "In some metros, the income ratio reaches 18:1 (specifically noted for Atlanta and Washington D.C. [Source: ev-2]", "In San Francisco specifically, top incomes rose approximately $120,000 in two years (2014–2016), while bottom quintile gains remained minimal across all cities [Source: ev-1].", "*   **Job Market Shifts:** The economic base shifted from manufacturing to professional services. [Source: ev-2]", "*   **Neighborhood Characteristics:** Gentrifying neighborhoods saw population increases of an average 6.5% and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points [Source: ev-2].", "*   **Broader Demographics:** Since 1980, nearly 80% of under-45 population growth was concentrated in metro areas over 1 million residents [Source: ev-1]."], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1787272859", acquired_at_unix: 1787272859, released_at_unix: Some(1787273889) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/v1/dr-1787272859/report.md
+rounds: 3 | gaps after last round: 17 | searches: 12 | fetched sources: 4
+open questions (could-not-judge):
+  - ### Gentrification
+*   **Acceleration:** The term was coined in 1963 by a British sociologist, but its prevalence surged as Americans pursued urban lifestyles [Source: ev-2].
+  - Since 1980, nearly 80% of under-45 population growth concentrated in metro areas over one million residents [Source: ev-1].
+  - *   **City-Specific Intensity:** A small group of cities saw extensive transformation. [Source: ev-1]
+  - In terms of raw numbers, New York City had the most gentrified tracts with 128, despite a lower percentage rate of 29.8% due to its large total tract count (2,152) [Source: ev-2].
+  - Conversely, cities such as Detroit (2.8%), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification [Source: ev-2].
+  - Major cities exceeded this significantly; New York City led with a Gini of 0.5469, while Atlanta and Miami were at 0.57 and New Orleans at 0.56 [Source: ev-1].
+  - In some metros, the income ratio reaches 18:1 (specifically noted for Atlanta and Washington D.C.) [Source: ev-2] [Source: ev-1].
+  - Between 2007 and 2014, the national 95/20 rose from 8.5 to 9.3; in San Francisco specifically, top incomes rose approximately $120,000 in two years (2014–2016), while bottom quintile gains remained minimal across all cities [Source: ev-1].
+  - Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018–2021 [Source: ev-1].
+  - ### Affordability and Cost of Living
+Urban areas have seen nominal wealth growth that does not keep pace with housing costs, creating an affordability crisis [Source: ev-1].
+  - *   **Price-to-Income Ratios:** California cities exhibit price-to-income ratios between 9.6 and 12.2, which is more than double the national average of 4.7 [Source: ev-1].
+  - *   **Job Market Shifts:** The economic base shifted from manufacturing to professional services; manufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic, while finance and professional services grew from 12 million to 32 million jobs [Source: ev-1] (Note: Source tag for job shift details appears as ev-2 in prompt list but text matches ev-1 content regarding Cooper Center data).
+  - ### Displacement and Neighborhood Characteristics
+*   **Neighborhood Characteristics:** Gentrifying neighborhoods saw population increases of an average 6.5% and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points [Source: ev-2].
+  - Poverty rates in these gentrifying tracts decreased by 0.7 percentage points on average [Source: ev-1] [Source: ev-2].
+  - *   **Non-Gentrifying Areas:** In contrast, lower-income areas that did *not* gentrify experienced slight population losses (-2.4%), a decrease in the white population share (by 5.0 percentage points), and a sharp increase in poverty rates (+6.7 percentage points) [Source: ev-1] [Source: ev-2].
+  - *   **Displacement Dynamics:** Residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, whereas residents from other gentrifying neighborhoods often move to wealthier areas, indicating minority communities face more challenges during this process [Source: ev-1].
+  - The term was coined in 1963 by a British sociologist, but its prevalence surged as Americans pursued urban lifestyles [Source: ev-2].
+  - *   **City-Specific Intensity:** A small group of cities saw extensive transformation. [Source: ev-2]
+  - *   **Income Ratios:** The gap between top and bottom earners has expanded to extremes. [Source: ev-2]
+  - In some metros, the income ratio reaches 18:1 (specifically noted for Atlanta and Washington D.C. [Source: ev-2]
+  - In San Francisco specifically, top incomes rose approximately $120,000 in two years (2014–2016), while bottom quintile gains remained minimal across all cities [Source: ev-1].
+  - *   **Job Market Shifts:** The economic base shifted from manufacturing to professional services. [Source: ev-2]
+  - *   **Neighborhood Characteristics:** Gentrifying neighborhoods saw population increases of an average 6.5% and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points [Source: ev-2].
+  - *   **Broader Demographics:** Since 1980, nearly 80% of under-45 population growth was concentrated in metro areas over 1 million residents [Source: ev-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  verdict-set.json
+  report.md
+  manifest.json

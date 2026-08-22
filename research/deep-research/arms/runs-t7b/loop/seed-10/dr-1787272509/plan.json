@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787272509",
+  "charter_hash": "a65f573e21714f98",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI GPT-5 release date announcement",
+      "GPT-5 model architecture improvements over GPT-4o benchmark scores",
+      "Comparison of GPT-5 API pricing per million tokens versus previous models",
+      "Changes to OpenAI enterprise licensing terms in 2025",
+      "Share of OpenAI revenue from direct enterprise contracts vs. Azure partnership in Q3 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "5",
+      "2025"
+    ]
+  }
+}

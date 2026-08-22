@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787243181",
+  "charter_hash": "d20d0e4dc4cf0ced",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's market capitalization on the specific date it first exceeded $4 trillion in July 2025",
+      "Global AI infrastructure capex forecast for data centers in fiscal year 2026",
+      "Share of total semiconductor industry revenue attributable to Nvidia in Q1 and Q2 2025",
+      "Growth rate of hyperscaler cloud provider spending on GPU-accelerated servers from 2023 to 2024",
+      "Price per unit of Hopper and Blackwell architecture GPUs compared to previous generation architectures",
+      "Percentage increase in Nvidia's quarterly data center segment revenue from Q1 2024 to Q1 2025",
+      "Total number of artificial intelligence training clusters deployed by major tech companies between January 2024 and July 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

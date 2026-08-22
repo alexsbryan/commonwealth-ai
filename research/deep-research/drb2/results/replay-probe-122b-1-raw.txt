@@ -1,0 +1,158 @@
+{
+    "results": [
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'Taspen - JP' is a mandatory Pay-As-You-Go Defined Benefit (PAYG DB) scheme for public sector employees.",
+            "score": 1,
+            "reason": "The article explicitly states under the Indonesia section that Taspen - JP is a 'Pay-As-You-Going Defined Benefit (PAYG DB)' and is 'Mandatory for all civil servants and public sector employees'. The citations used ([^1], [^2], [^3]) do not match the blocked URLs list exactly (the blocked URL is the full report of a different title or specific sub-pages, while the cited sources are distinct OECD pages on asset-backed pensions in Indonesia), so it does not trigger the -1 condition based on exact URL matching provided in the input.",
+            "evidence": "**Taspen - JP (Jaminan Pensiun)** - Public Sector\n- **Type:** Pay-As-You-GoDefined Benefit (PAYG DB)\n- **Coverage:** Mandatory for all civil servants and public sector employee"
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'taspen - THT' is a mandatory Asset-backed Defined Contribution (Asset-backed DC) scheme for public sector employees.",
+            "score": 0,
+            "reason": "The article does not mention a scheme named 'Taspen - THT'. It mentions 'BPJS Ketenagakerjaan - JHT' as an old age security scheme but attributes it to the private sector, or implies Taspen handles pensions while BPJS handles other social securities. The specific scheme name 'Taspen - THT' and its description as mandatory Asset-backed DC for public sector are absent from the text.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'BPJS - JP' is a mandatory Pay-as-you-go defined benefit (PAYG DB) scheme for employees of large and medium-sized private enterprises.",
+            "score": 1,
+            "reason": "The article explicitly describes 'BPJS Ketenagowerjaan - JP' as an 'Asset-backed Defined Benefit (Asset-backed DB)', not PAYG. However, looking closely at the rubric requirement: it asks to state it IS a PAYG DB. The article states it is Asset-backed DB. Wait, let me re-read the scoring rule. Score 0 if NOT mentioned or does not satisfy. Score -1 if cited blocked ref. Score 1 if clearly satisfies AND no blocked ref.\n\nRe-evaluating the content vs rubric:\nThe rubric requires the text to say: 'Indonesia's BPJS-JP is a mandatory Pay-As-Your-Go Defined Benefit...'.\nThe article says: '**Type:** Asset-backed Defined Benefit (Asset-backed db)'.\nTherefore, the article DOES NOT satisfy the condition of stating it is PAYG. It actually contradicts it by calling it Asset-backed DB.\nThus, score should be 0 because the specific statement required ('is a PAYG') is not made; instead, a different type is stated.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's'BPJS - JHT' is a mandatory asset-backed defined contribution (asset-backed DC) scheme for employees of large, medium, and small-sized private enterprises, and voluntary for micro-enterprise employees.",
+            "score": 1,
+            "reason": "The article states: 'Type:** Asset-backed Defined Contribution (**Asset-backed**DC)' and '**Coverage**: Mandatory for all private sector employee'. It does not explicitly mention the distinction regarding 'micro-enterprise' being voluntary in the provided text snippet, but it covers 'all private sector employees'. Let me check if the specific detail about micro-enterprises being voluntary is present. The text says 'Mandatory for all private sector employees[^4]'. It does NOT explicitly state the exception or voluntary nature for micro-enterprises as requested by the rubric ('and voluntary for micro-enterprise employees').\n\nHowever, usually, if the main definition matches (Mandatory DC) and the nuance is missing, it might be a 0 (not mentioned). But let's look closer. The prompt asks to 'Explicitly state... [specific details]'. If the article misses the 'voluntary for micro' part, strictly speaking, it doesn't satisfy the full item.\n\nLet's re-read the evidence in Section 1.1:\n'**BPJS Ketenagakerjaa - JHT** ... **Coverage**: Mandatory for all private sector employee[^4]' ...\nIt does not mention micro-enterprises or voluntary status for them.\nTherefore, the specific condition 'and voluntary for micro-enterprise employees' is NOT met.\nScore: 0.",
+            "evidence": ""
+        }
+    ]
+}
+
+Wait, I need to be very strict with the scoring rules provided in the prompt instructions.
+Rule: Score = 1 if article clearly satisfies AND no blocked ref.
+Rule: Score = 0 if article does NOT mention this rubric item at all (or fails to satisfy the specific claim).
+Rule: Score = -1 if mentions but cites blocked ref.
+
+Let's re-evaluate Item 3 and 4 based on strict satisfaction.
+
+Item 2: Rubric asks for 'Taspen-THT' as mandatory DC. Article has NO such entry. Score 0. Correct.
+
+Item 3: Rubric asks for statement that BPJS-JP is PAYG DB. Article says it is Asset-backed DB. The article explicitly contradicts the premise of the rubric item or simply describes a different type. It definitely does not "Explicitly state" what the rubric asks (that it IS PAYG). So it fails to satisfy. Score 0.
+
+Item 4: Rubric asks for statement including "voluntary for micro-enterprise". Article only says "Mandatory for all private sector". It misses the specific condition about micro-enterprises. Does this count as "not mentioned"? Yes, the specific detail required by the rubric is missing. Score 0.
+
+Let's re-check Item 1.
+Rubric: Explicitly state Taspen-JP is mandatory PAYG DB for public sector.
+Article: "**Taspen - JP** ... Type:** Pay-As-You-G... Defined Benefit (PAYG **DB**) ... Coverage:** Mandatory for all civil servants and pubic sector employee" -> Matches perfectly.
+Citations: [^1], [^2]. Blocked URLs are `protection-gaps-in-insurance-for-natural-hazards-and-retirement-savings-in-asia_294f044e-en.html` etc. The cited links in the text are different (OECD addressing challenges for asset-backed pensions, or other specific pages). Even if they point to OECD, do they match the *exact* blocked URL string?
+Blocked URL 3: `https://www.oecd.org/en/publications/protection-gaps-in-insurance.../full-report.html`
+Cited link ^3 is `https://www.oecd.org/en/publications/protection-gaps.../full-report/protection-gaps...`. This looks like a sub-page of the full report.
+However, the citations for Item 1 are [^1] and [^2].
+[^1]: `https://www.oecd.org/en/publications/addressing-the-challenges-for-asset-backed-pensions-in-indonesia_37f4700d-en.html` -> NOT in blocked list.
+[^2]: `https://www.oecd.org/en/publications/addressing-the-challeges...` -> NOT in blocked list.
+So Item 1 is Score 1.
+
+Let's re-evaluate the "blocked" check logic. The prompt says "match by title/urls".
+The article uses footnotes like `[^3]`. Let's see what `[^3]` links to.
+[^3]: `https://www.oecd.org/en/publications/protection-gaps-.../full-report/protection-pensions-ab0a0abc.html` (This looks like a chapter within the full report).
+Does this match any of the blocked URLs?
+Blocked:
+1. `..._294f04c-en.html`
+2. `..._053a754c/294f4e-en.pdf`
+3. `.../full-report.html`
+4. `https://www.preventionweb.net/...`
+
+The URL in ^3 is `.../full-report/protection-gapps...`. It contains `/full-report/` but ends with `/protection-....html`. The blocked item 3 is exactly `.../full-report.html`. They are not identical strings. Usually, strict matching implies exact string match or domain/path match? "match by title/url". If the system requires exact URL string equality for -1, then it's safe. If it matches base document, it might be risky. But looking at Item 1 citations [^1] and [[^2], they are clearly different titles ("addressing challenges..." vs "protection gaps...").
+So Item 1 is definitely Score 1.
+
+Item 3 (BPJS-JP): Article says Asset-backed DB. Rubric asks to state PAYG DB. The article does NOT make the statement required. It makes a contradictory one. So Score 0.
+
+Item 4 (BPJS-JHT): Article says Mandatory for all private. Rubric requires stating it includes voluntary for micro. Missing detail -> Score 0.
+
+Wait, did I miss something in the text for Item 4?
+Text: "**Coverage:** Mandatory for all private sector employees[^7][^4]"
+No mention of micro-enterprises being voluntary.
+So Score 0 is correct.
+
+Let's double check Item 2 again. "Taspen - THT". Text has no such name. Score 0.
+
+Final Check on Blocked Refs for items that might have citations pointing to blocked content if they existed. Since items 2,3,4 are Score 0 (not satisfied), we don't need to worry about their citations triggering -1 unless the rubric item was "mentioned" but with bad refs. But here the specific claim isn't even made or is contradicted. So 0 is appropriate.
+
+Wait, looking at Item 3 again. The article says:
+"**BPJS Ketenagokerjaan - JP** ... **Type:** Asset-backed Defined Benefit..."
+The rubric asks: "Explicitly state... is a mandatory Pay-As-you-go Defined Benefit".
+Since the text explicitly defines it as something else (Asset-backed), it does not satisfy the condition of stating what the rubric wants. It effectively denies that statement. Score 0.
+
+One nuance: Is "Asset-backed DB" considered distinct from "Pay-As-You-G"? Yes, in pension terminology they are different funding mechanisms. So the text fails the specific type requirement.
+
+Let's refine the output JSON.
+
+```json
+{
+    "results": [
+        {
+            "rubric_item": "Explicitly state that Indonesia's'Taspen - JP'is a mandatory Pay-As-Yo-Go Defined Benefit(PAYG **DB**) scheme for public sector employees.",
+            "score": 1,
+            "reason": "The article explicitly identifies 'Taspen -JP' as a 'Pay-As-Year-GoDefined Benefit ( PAYG DB)' and states it is 'Mandatory for allcivil servantsandpublicsectoremployees'. The supporting citations ([^1],[^2]) do not match the blocked URL list exactly.",
+            "evidence": "**Taspen-JP(Jaminan** Pensiun) - Public Sector\n- **Type:** Pay-As-**You**-Go DefinedBenefit(**PAYG**DB)\n-**Coverage**: Mandatoryforall civilservantsand public sector employees"
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's'taspen-THT'is a mandatory Asset-backedDefined Contribution (Asset-backedDC)scheme for publicsector employees.",
+            "score": 0,
+            "reason": "The article does not contain any mention of a pension scheme named'Taspen-THT'. It only lists Taspen-JP and BPJS schemes. Therefore, the specific statement is absent.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Explicitly state thatIndonesia's 'BPJS -JP'isa mandatory Pay-As-**You**-Go Defined Benefit (**PAYG**DB) scheme foremployeesoflargeand medium-sized privateenterprises.",
+            "score": 0,
+            "reason": "The article explicitly classifies'B P J S Ketenagakerjaan-JP' as an'Asset-backedDefinedBenefit(Asset-backedDB)', not a Pay-As-You-GoDefined Benefit(PAYG DB). Thus, the required statement is not made; in fact, the text contradicts the type specified in the rubric.",
+            "evidence": "**BPJSKetenagakerjaanJP(Jaminan Pensiun)** - Private Sector\n-**Type:** Asset-backed Defined Benefit (**Asset-backed**DB)"
+        },
+        {
+            "rubric_item": "Explicitlystate thatIndonesia's 'B P J S-JHT'isamandatory Asset-backedDefinedContribution (Asset-backedDC) scheme foremployees of large,medium,and small-sized privateenterprises,andvoluntaryformicro-enterpriseemployees.",
+            "score": 0,
+            "reason": "While the article states BPJS-JH T is a mandatoryAsset-backed DC forprivate sector employees, it does NOT explicitly mention or state that coverage is voluntary formicro-enterprise employees. The text only says'Mandatoryforall privatesector employees'.",
+            "evidence": "**BPJS KetenagkerjaanJHT(Jaminan Hari Tua)** - Old Age Security\n-**Type:** **A**sset-backedDefinedContribution (**Asset-backedDC**)\n-**Coverage**: Mandatoryfor allprivate sectoremployees"
+        }
+    ]
+}
+```
+
+Wait, I should check if there are any subtle matches in the blocked list.
+Blocked URL 3: `https://www.oecd.org/en/publications/protection-gaps.../full-report.html`
+Citation ^3 in text (used for BPJS-JP section): `https://www.oecd.org/en/publications/protection-.../full-report/protection-....html`. This is a sub-page. It does not match exactly. Even if it did, Item 3 got score 0 because of content mismatch, so -1 wouldn't apply anyway (score -1 requires "mentions this rubric item"). Since it doesn't mention the *correct* fact, it's a 0.
+
+One final check on Item 4: Does the article imply micro-enterprises? No. It says "Mandatory for all". If the reality is different but the text doesn't say it, we must stick to what the text says. The rubric demands an explicit statement including the voluntary part. That statement is missing. Score 0.
+
+The output format requires strict JSON. I will ensure no markdown code blocks around the JSON in the final thought block, but the actual response should be just the JSON or wrapped as requested? The prompt says "Your output MUST strictly follow this JSON format". Usually means raw JSON string. But the system instructions often wrap in code blocks for clarity. I will provide the raw JSON object inside a code block if that's standard, but looking at the `<output_format>` example, it shows a JSON structure. I will output valid JSON.
+
+Wait, the prompt asks for "THREE-WAY score" and specific fields.
+I need to make sure the `evidence` strings are exact quotes from the passage.
+
+Evidence 1: "**Taspen - JP** (Jaminan Pensiung) ... **Type**: Pay-As-**You**-Go Defined Benefit (**PAYG DB**) ... **Coverage**: Mandatory for all civil servants..." -> The text in image is: "**Taspen - J P (J a m i n a n P e n s i u n)** - Public Sector \n- **Type:** Pay-As-**Y o u **-Go D efined B enefit(PAY GDB)...". I will copy the relevant lines as they appear in the text provided.
+Text segment:
+"**Taspen - JP **(JaminanPensiun)-PublicSector\n\n**Type:**Pay-As-**You**-GoDefinedBenefit(**PAYGDB**)\n-**Coverage**:Mandatoryforallcivilservantsandpublicsectoremployees"
+
+Evidence 3: "**BPJS Ketenagakerj aan-JP... Type: Asset-backed Defined Benefit...**"
+
+Evidence 4: "**BPJS Ketenaga kerja an-JHT... Coverage:Mandatoryforallprivate sectoremploye es**"
+
+Let's assemble.
+
+One detail on Item 1 evidence: The text has "Pay-As-**Y o u **-Go". I should preserve the spacing or just quote naturally? The prompt says "specific supporting sentence(s)". I will quote the lines exactly as they appear in the source text provided, handling line breaks appropriately (usually joined with spaces or newlines).
+
+Re-checking blocked list for citation [^3] used in Item 3 section.
+The article uses `[^3]` for BPJS JP description? No, looking at Section 1.1:
+"**BPJS Ketenagakerjaa -JP**... Benefit Formula ... adjusted for inflation[^3]" -> Yes, it cites ^3 here.
+Citation ^3 URL: `https://www.oecd.org/en/publications/protection-gaps.../full-report/protection-....html`.
+Blocked URL: `.../full-report.html`.
+Are they a match? "match by title/url". If the logic is exact string equality, then no match. If partial path match (contains /full-report/), maybe yes. But usually, these tasks require specific blocking of the *exact* resource cited if it's the main report. The blocked list has `full-report.html` at the end. The cited link has `/protection-gapps-in-retirement-savings_ab0a0abc.html` appended. They are different URLs. I will assume strict matching or that this sub-page is not considered the same as the full report file listed in blocked. Even if it were -1, Item 3 content fails anyway so score remains 0.
+
+However, for Item 1, citations are [^1] and ^2.
+[^1]: `addressing-the-challenges...` (Different title) -> Safe.
+So Item 1 is safe Score 1.
+
+Final check on Item 4 evidence text: "Mandatoryforallprivatesectoremployees". The text actually says "Mandatoryfor allprivate sectoremployee" with a typo? No, let's look at the raw input string carefully.
+"**Coverage**: Mandatory forall private sector employees[^7][[4]" -> It seems to say "employees".
+I will extract the sentence exactly.
+
+Let's generate the JSON.

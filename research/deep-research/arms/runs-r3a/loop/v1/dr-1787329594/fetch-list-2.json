@@ -1,0 +1,298 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787329594",
+  "charter_hash": "9d9824d21ed52525",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Despite growth gentrification remains geographically concentrated",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "* **Seattle, WA:** of eligible tracts ( tracts; total ) .",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Other notable cities include Atlanta Virginia Beach Denver Austin",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "terms raw volume New York City highest number gentrified tracts though rate lower due larger base ineligible wealthy areas",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "Conversely, cities like Detroit ( ), Las Vegas ( ), El Paso ( ), and Arlington, TX ( ) experienced little to no gentrification . (4, 1980, 2024)",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "1980 2024 Economic Inequality Widening American cities have become wealthier nominal terms unequal since",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q7",
+      "text": "Atlanta Miami Followed closely Gini coefficient",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "gap top bottom earners widened significantly",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "Federal Reserve data tracking series confirms inequality reached record levels U.S",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "1980 showing sharpest increase among advanced economies since",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q11",
+      "text": "This divergence is particularly acute on the West Coast; California cities exhibit price-to-income ratios between and more than double the n",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q12",
+      "text": "1980 Displacement Demographic Shifts Gentrification driven distinct changes",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q13",
+      "text": "Gentrifying neighborhoods recorded population increases and became whiter, with the share of non-Hispanic white residents increasing by an a",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q14",
+      "text": "In contrast, lower-income neighborhoods that did not gentrify experienced slight population losses (- ) and saw minority concentrations incr",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q15",
+      "text": "Economic outcomes for residents diverged sharply based on neighborhood status: * **Poverty Rates:** Poverty rates dropped slightly (by perce",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q16",
+      "text": "The white population share fell by points in urban cores and points in suburbs .",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q17",
+      "text": "Additionally educational gentrification evident urban areas now have residents bachelor's degrees higher compared suburbs rural",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q18",
+      "text": "nearly of the country’s under- population growth was concentrated in metro areas over million residents .",
+      "from_gap_id": "g18",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q19",
+      "text": "Structural Economic Shifts labor market transformation contributed trends",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "snippet": "Governing analyzed Census tract data for the nation's 50 largest cities. Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) led; nearly 20 percent of lower-income neighborhoods gentrified since 2000, compared to 9 percent in the 1990s; poverty rate percentage-point change -0.7 gentrifying vs +6.7 not gentrifying.",
+      "content": null,
+      "engine": "mock",
+      "score": 3.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h8",
+      "query_id": "q1",
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "snippet": "Manufacturing jobs, which peaked at 19.5 million in 1979, fell to under 11.5 million during the pandemic, while employment in finance and professional and business services soared from 12 million to 32 million; nearly 80 percent of the country's growth in its under-45 population has been concentrated in metro areas with over a million residents.",
+      "content": null,
+      "engine": "mock",
+      "score": 3.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h11",
+      "query_id": "q1",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 3.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h5",
+      "query_id": "q1",
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "snippet": "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities.",
+      "content": null,
+      "engine": "mock",
+      "score": 1.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h8",
+      "h11"
+    ],
+    "eps_admits": [
+      "h5"
+    ],
+    "below_cut": [
+      "h5",
+      "h6",
+      "h7",
+      "h10",
+      "h9"
+    ],
+    "threshold": 3.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

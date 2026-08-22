@@ -678,11 +678,18 @@ fn additional_properties_walker_does_not_rescue_a_broken_oneof() {
 /// tool's `parameters` verbatim, so a fixture of bare ids would prove
 /// nothing about the thing under test.
 fn tools(ids: &[&str]) -> Vec<sovereign_core::types::ToolDescriptor> {
-    ids.iter().map(|id| tool_with(id, serde_json::json!({
-        "type": "object",
-        "required": ["query"],
-        "properties": { "query": {"type": "string", "minLength": 1} }
-    }))).collect()
+    ids.iter()
+        .map(|id| {
+            tool_with(
+                id,
+                serde_json::json!({
+                    "type": "object",
+                    "required": ["query"],
+                    "properties": { "query": {"type": "string", "minLength": 1} }
+                }),
+            )
+        })
+        .collect()
 }
 
 fn tool_with(id: &str, parameters: serde_json::Value) -> sovereign_core::types::ToolDescriptor {
@@ -720,11 +727,7 @@ fn plan_schema_compiles_with_and_without_tools() {
     // request, so an uncompilable one takes planning down entirely
     // rather than quietly widening it.
     assert!(
-        compiles(plan_schema(&tools(&[
-            "search",
-            "web_search",
-            "sec_facts"
-        ]))),
+        compiles(plan_schema(&tools(&["search", "web_search", "sec_facts"]))),
         "the multi-branch plan schema must compile — every branch carries \
          `type: object` plus a `const` kind discriminator (invariant 0479b961)"
     );
@@ -905,7 +908,12 @@ fn plan_schema_key_order_depends_on_preserve_order() {
     // this is a live difference between build graphs, not a
     // hypothetical.
     let probe = serde_json::json!({"zeta": 1, "alpha": 2, "beta": 3});
-    let keys: Vec<&str> = probe.as_object().unwrap().keys().map(|k| k.as_str()).collect();
+    let keys: Vec<&str> = probe
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(|k| k.as_str())
+        .collect();
     assert_eq!(
         keys,
         vec!["zeta", "alpha", "beta"],
@@ -919,7 +927,12 @@ fn plan_schema_key_order_depends_on_preserve_order() {
     // step object must be `id`, as the prompt example shows.
     let schema = plan_schema(&tools(&["search"]));
     let branch = &schema["properties"]["steps"]["items"]["oneOf"][0];
-    let first = branch["properties"].as_object().unwrap().keys().next().unwrap();
+    let first = branch["properties"]
+        .as_object()
+        .unwrap()
+        .keys()
+        .next()
+        .unwrap();
     assert_eq!(first, "id", "a step object must open on `id`");
 }
 
@@ -947,10 +960,7 @@ fn plan_schema_masks_a_non_enum_concept_id() {
 
     // Twin first — a declared id must stay reachable from this state.
     let mut good = matcher_at(schema.clone(), prefix);
-    assert!(
-        allows(&mut good, b'r'),
-        "`revenue` must remain samplable"
-    );
+    assert!(allows(&mut good, b'r'), "`revenue` must remain samplable");
 
     // `ebitda` is the shape the tool rejects and the corpus cannot
     // resolve — an invented id that reads to the operator as a coverage
@@ -969,18 +979,25 @@ fn plan_schema_binds_arguments_to_the_named_tool_not_to_tools_in_general() {
     // narrows: `search` takes `query`, `sec_facts` takes `concept`, and
     // neither may borrow the other's arguments.
     let schema = plan_schema(&[
-        tool_with("search", serde_json::json!({
-            "type": "object", "required": ["query"],
-            "properties": {"query": {"type": "string", "minLength": 1}}
-        })),
-        tool_with("sec_facts", serde_json::json!({
-            "type": "object", "required": ["concept"],
-            "properties": {"concept": {"type": "string", "enum": ["revenue"]}}
-        })),
+        tool_with(
+            "search",
+            serde_json::json!({
+                "type": "object", "required": ["query"],
+                "properties": {"query": {"type": "string", "minLength": 1}}
+            }),
+        ),
+        tool_with(
+            "sec_facts",
+            serde_json::json!({
+                "type": "object", "required": ["concept"],
+                "properties": {"concept": {"type": "string", "enum": ["revenue"]}}
+            }),
+        ),
     ]);
 
     let open = |id: &str| -> Vec<u8> {
-        let mut v = br#"{"goal":"g","steps":[{"id":0,"description":"d","kind":"tool","tool_id":""#.to_vec();
+        let mut v =
+            br#"{"goal":"g","steps":[{"id":0,"description":"d","kind":"tool","tool_id":""#.to_vec();
         v.extend_from_slice(id.as_bytes());
         v.extend_from_slice(br#"","params":{""#);
         v
@@ -1008,14 +1025,17 @@ fn plan_schema_compiles_at_registry_scale() {
         .iter()
         .enumerate()
         .map(|(i, id)| {
-            tool_with(id, serde_json::json!({
-                "type": "object",
-                "required": ["query"],
-                "properties": {
-                    "query": {"type": "string", "minLength": 1},
-                    "mode":  {"type": "string", "enum": [format!("m{i}"), "other"]}
-                }
-            }))
+            tool_with(
+                id,
+                serde_json::json!({
+                    "type": "object",
+                    "required": ["query"],
+                    "properties": {
+                        "query": {"type": "string", "minLength": 1},
+                        "mode":  {"type": "string", "enum": [format!("m{i}"), "other"]}
+                    }
+                }),
+            )
         })
         .collect();
     let schema = plan_schema(&descriptors);

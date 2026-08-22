@@ -1,0 +1,60 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787328255",
+  "charter_hash": "b9f21f871928ee1e",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 12
+    },
+    {
+      "round": 2,
+      "gaps_before": 2,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-02",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787328255"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "DeepSeek’s release of DeepSeek-R1 on January 20, 2025 [Source: ev-1] triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class reasoning model could be trained for a fraction of incumbent costs, challenging the thesis that AI capital expenditure and Nvidia demand are protected by compute scale [Source: ev-1].",
+    "This revelation showed that US export controls restricting access to H800 chips had forced Chinese labs toward efficiency, meaning scarcity rather than preference drove these economic outcomes [Source: ev-1].",
+    "The economics revealed included specific training metrics from DeepSeek’s predecessor, DeepSeek-V3 (released December 26, 2024), which reported using roughly 2.79 million GPU-hours at a claimed cost of about $5.6 million on those restricted H800 chips [Source: ev-1].",
+    "Following the R1 release, Nvidia lost approximately $589 billion in market capitalization on January 27, 2025, with about $1 trillion erased across the tech complex as markets repriced this new understanding of AI training costs [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787328255",
+    "acquired_at_unix": 1787328255,
+    "released_at_unix": 1787328320
+  }
+}

@@ -1,0 +1,15 @@
+BATCH_ITEMS 4 BATCH_OFFSET 53
+PROMPT_CHARS 20786
+CALL_SECS 90.1
+STRIP_EVENTS []
+USAGE {"prompt_tokens": 5586, "completion_tokens": 727, "total_tokens": 6313}
+TOKPS 8.07 PER_ITEM_TOKENS 181.8 TOTAL_OUTPUT_TOKENS 727
+RAW_SAVED /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/results/canary-m0b-raw-53-4.txt RAW_CHARS 3548
+RAW_START '{\n    "results": [\n        {\n            "rubric_item": "Explain the impact of gender differences in labor force participation, noting the prevalent informal employment among women, which prevents many from accessing mandatory pension schemes.",\n            "score": 0,\n            "reason": "The article does not discuss gender differences in labor force participation or informality as a driver for exclusion from pension schemes. It mentions coverage types (public/private/self-employed) but does not analyze the specific dynamic of female informal employment preventing access to mandatory schemes.",\n            "evidence": ""\n        },\n        {\n            "rubric_item": "Explain how, even with the same retirement age, women\'s longer life expectancy means their accumulated assets must support a longer retirement period, leading to lower annual benefits from Defined Contribution (DC) schemes.",\n            "score": 0,\n            "reason": "The article does not mention life expectancy differences between genders or their impact on DC scheme benefit adequacy.",\n            "evidence": ""\n        },\n        {\n            "rubric_item": "Analyze the impact of different retirement ages for men and women (e.g., 55 vs. 60 in Pakistan\'s private sector), explaining that this creates a \'double penalty\' for women: a shorter accumulation phase and a longer drawdown phase.",\n            "score": -1,\n            "reason": "The article mentions different withdrawal/retirement ages for males'
+RAW_END 'ence": ""\n        },\n        {\n            "rubric_item": "Analyze the impact of benefit calculation formulas in Defined Benefit (DB) schemes, explaining that using \'final salary\' (as in Malaysia\'s public scheme) is more generous than using \'career-average salary\' (as in Vietnam).",\n            "score": 0,\n            "reason": "The article provides data on salary bases for various countries (Malaysia uses final salary/average depending on context or specific plan details are mixed, Vietnam section is cut off/not fully present with explicit formula comparison). The text provided ends before completing Thailand and does not contain the Vietnam section. Therefore, it cannot make the comparative analysis between Malaysia and Vietnam as requested.",\n            "evidence": ""\n        }\n    ]\n}'
+FENCES []
+COUNT_LBRACE 5 RBRACE 5 LBRACKET 1 RBRACKET 1
+HAS_RESULTS_KEY True
+RAW_DECODE_START_OK end_at 3548 of 3548
+ENDS_CLEAN True
+M0B_CANARY_DONE

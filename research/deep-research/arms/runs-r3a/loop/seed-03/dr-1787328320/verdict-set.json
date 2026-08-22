@@ -1,0 +1,63 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787328320",
+  "charter_hash": "562ac67cb5479c5c",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed from its first crewed flight because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during the docking approach, and NASA could not guarantee these thrusters were safe for the critical deorbit burn [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The specific technical reason cited was that the thrusters could not be ground-tested in their actual flight condition to verify safety [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This decision had several significant implications for the program:\n*   **Crew Duration:** Astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 18, 2025, resulting in a stay of roughly 9.5 months compared to the originally planned ~8 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "NASA ordered Boeing’s Starliner to return uncrewed from its first crewed flight because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during the docking approach, and NASA could not guarantee these thrusters were safe for the critical deorbit burn [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

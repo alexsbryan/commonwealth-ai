@@ -1,0 +1,264 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787336767",
+  "charter_hash": "42c7d62984d3df0a",
+  "written_after_round": 3,
+  "config": {
+    "run_id": "dr-1787336767",
+    "question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-r2b/loop/seed-05/dr-1787336767",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null,
+    "max_rounds_override": null,
+    "max_search_override": null,
+    "max_fetch_override": null
+  },
+  "question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+  "frontier": [
+    "Date the EU AI Act entered into force in 2024",
+    "List of dates for each phase of entry into force between 2025 and 2027",
+    "Specific obligations required by the prohibition on high-risk AI practices effective February 2, 2025",
+    "Specific obligations required by general purpose AI model provider rules effective August 2, 2026",
+    "Specific obligations required by high-risk AI system requirements under Annex III effective August 2, 2"
+  ],
+  "frontier_question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+  "figure_specifiers": [
+    "2024",
+    "2027"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787336767",
+      "charter_hash": "42c7d62984d3df0a",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787336767",
+      "charter_hash": "42c7d62984d3df0a",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-05",
+          "source_url": "https://estate.example/seed-05",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "The EU AI Act — the world's first comprehensive AI law — was published in the EU Official Journal on 2024-07-12 and entered into force on 2024-08-01. Its obligations are phased: prohibited practices (\"unacceptable risk\") apply from 2025-02-02; general-purpose AI (GPAI) model obligations from 2025-08-02; high-risk system obligations from 2026-08-02, with a subset applying from 2027-08-02. The risk tiers are unacceptable (banned outright — social scoring, certain manipulative or exploitation-of-vulnerability uses), high, limited (transparency duties), and minimal, plus the separate GPAI model category with duties scaled by systemic-risk status (the 10^26 FLOPs threshold). Fines reach €35 million or 7% of global annual turnover, whichever is higher, for prohibited-practice violations, and €15 million or 3% for most other breaches. The European AI Office (established 2024, Brussels) leads implementation; a GPAI Code of Practice was drafted through 2024-2025 with broad industry participation (including OpenAI, Google, Microsoft, Anthropic, Meta) as the safe-zone interpretation of the GPAI obligations. The phased entry was deliberate: obligations land as institutional capacity and technology mature, and the schedule doubles as the compliance roadmap the \"Brussels effect\" exports to providers worldwide.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2027",
+            "act",
+            "entry",
+            "force",
+            "phased"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-05"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787336767",
+      "charter_hash": "42c7d62984d3df0a",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-05"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787336767",
+      "charter_hash": "42c7d62984d3df0a",
+      "round": 3,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-05"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "The EU AI Act entered into force in phases to ensure that obligations are implemented only as institutional capacity and technology mature, with the schedule also serving as a compliance roadmap for global providers [Source: ev-1].",
+    "The specific deadlines require the following actions:\n\n*   **2025-02-02**: Prohibited practices (classified as \"unacceptable risk\") must cease. [Source: ev-1]",
+    "These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+    "*   **2025-08-02**: Obligations apply to general-purpose AI (GPAI) models. [Source: ev-1]",
+    "Duties for these models are scaled by systemic-risk status, defined partly by a 10^26 FLOPs threshold [Source: ev-1].",
+    "The Act was published in the EU Official Journal on 2024-07-12 and entered into force initially on 2024-18-01 (noted as 2024, 08, 01 in evidence) to begin this phased implementation process [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "The EU AI Act entered into force in phases to ensure that obligations are implemented only as institutional capacity and technology mature, with the schedule also serving as a compliance roadmap for global providers [Source: ev-1].",
+      "actionable_query": "Act entered force phases ensure obligations implemented institutional capacity technology mature schedule serving compliance roadmap global providers",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "The specific deadlines require the following actions:\n\n*   **2025-02-02**: Prohibited practices (classified as \"unacceptable risk\") must cease. [Source: ev-1]",
+      "actionable_query": "specific deadlines require following actions Prohibited practices classified unacceptable risk must cease",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+      "actionable_query": "include social scoring certain manipulative exploitation-of-vulnerability uses",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "*   **2025-08-02**: Obligations apply to general-purpose AI (GPAI) models. [Source: ev-1]",
+      "actionable_query": "Obligations apply general-purpose GPAI models",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Duties for these models are scaled by systemic-risk status, defined partly by a 10^26 FLOPs threshold [Source: ev-1].",
+      "actionable_query": "Duties models scaled systemic-risk status defined partly FLOPs threshold",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "The Act was published in the EU Official Journal on 2024-07-12 and entered into force initially on 2024-18-01 (noted as 2024, 08, 01 in evidence) to begin this phased implementation process [Source: ev-1].",
+      "actionable_query": "- - - - in evidence) to begin this phased implementation process . (2024, 2027)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 6,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json",
+    "draft-3.json",
+    "gap-list-3.json",
+    "fetch-list-3.json",
+    "skip-ledger-3.json",
+    "evidence-window-3.json"
+  ],
+  "aborted_at_round": null
+}

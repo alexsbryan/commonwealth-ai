@@ -1,0 +1,126 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787349621",
+  "charter_hash": "569c895c6bddf163",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2025 Google acquired Wiz March close security gap competitors AWS Azure positioning cloud-security consolidation critical battleground ongoing cloud wars",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "company bet AI-driven cloud adoption primary demand driver sector",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "underscored transaction size approximately billion all-cash deal marked largest acquisition Google's history",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Additionally final price reflected competitive pressure during negotiations following Wiz’s rejection Google’s earlier billion offer July",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-01",
+      "title": "Google–Wiz acquisition (2025)",
+      "snippet": "Google agreed to acquire cloud-security firm Wiz for approximately $32 billion in cash — the largest acquisition in Google's history.",
+      "content": null,
+      "engine": "mock",
+      "score": 6.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 6.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

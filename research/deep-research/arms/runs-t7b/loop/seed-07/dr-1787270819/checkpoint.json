@@ -1,0 +1,651 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787270819",
+  "charter_hash": "a7ab96adf12fa3f4",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787270819",
+    "question": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/seed-07/dr-1787270819",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+  "frontier": [
+    "Number of US federal laws enacted between 2023 and 2024 mandating the divestiture or ban of TikTok",
+    "Count of executive orders issued by President Biden in 2025 regarding TikTok's ownership structure",
+    "Percentage change in daily active users for TikTok in China versus the United States from 2019 to 2024",
+    "Share of global data center capacity located within Chinese borders as reported by major cloud providers in 2024",
+    "Median age of TikTok users in the United States compared to other social media platforms in 2023",
+    "Number of congressional hearings held on national security risks associated with ByteDance between January 2024 and December 2024",
+    "Price per share offered in potential acquisition bids for TikTok US operations during Q1-Q3 2025",
+    "Count of state-level laws passed banning government use of TikTok apps prior to federal legislation"
+  ],
+  "frontier_question": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+  "figure_specifiers": [
+    "2024",
+    "2025"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [
+    {
+      "query": "next number",
+      "round": 2
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787270819",
+      "charter_hash": "a7ab96adf12fa3f4",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787270819",
+      "charter_hash": "a7ab96adf12fa3f4",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-07",
+          "source_url": "https://estate.example/seed-07",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "The Protecting Americans from Foreign Adversary Controlled Applications Act — signed by President Biden on 2024-04-24 — required ByteDance to divest TikTok's US operations within roughly 270 days (extendable by 90), or face a US ban. The Supreme Court upheld the law 9-0 (per curiam) on 2025-01-17, one day before the effective date of 2025-01-19. TikTok went dark in the US on 2025-01-18/19 (roughly 14 hours) and was restored 2025-01-19 after President Trump pledged to pause enforcement; his executive order of 2025-01-20 delayed enforcement for 75 days. The resolution was an Oracle-led deal (announced 2025-06-10 per Bloomberg) giving Oracle about a 12.5% stake in TikTok's US operations, with SoftBank and other investors participating; Vice President JD Vance led the White House negotiations, and ByteDance retained a majority interest. The national-security case rested on Chinese government access to US user data and the algorithm (CFIUS review, Project Texas hosting). The app stayed live, structured as a joint venture rather than an outright sale — \"Project Texas\": US user data in Oracle's cloud under US control — with the final ownership structure completed through 2025.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2025",
+            "ban",
+            "divest",
+            "saga",
+            "tiktok"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-07"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787270819",
+      "charter_hash": "a7ab96adf12fa3f4",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-07"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "The United States moved to force TikTok's divestiture or ban primarily due to national security concerns regarding potential Chinese government access to US user data and the platform's algorithm, which had been subject to CFIUS review. [Source: ev-1]",
+    "The next number is `270`.",
+    "Then `90`.",
+    "Then `9`, `0`.",
+    "(Vote count).",
+    "And later `75`.",
+    "The year associated with these in recent history is **2024** (signing) and **2025** (SCOTUS/Ban).",
+    "270 ...",
+    "90 ...",
+    "9, 0 ...",
+    "What year?",
+    "The next date is Supreme Court ruling.",
+    "Figures: `9`, `0` (vote).",
+    "Then effective date/ban: `18/19`.",
+    "Restored after EO of `[Date]`: Figure `75` days delay.",
+    "Deal announced: Figure `6`, `10`.",
+    "Stake: `12.5%`.",
+    "If so, the figures would include `2024`.",
+    "But wait, Trump took office Jan 20.",
+    "And **TikTok went dark...",
+    "And **Executive order...",
+    "Resolution: Oracle-led joint venture (not outright sale), ByteDance retains majority, Oracle gets ~12.5%, SoftBank/others participate, Vance led negotiations, Project Texas structure maintained/completed.",
+    "But here we have specific days (17, 18/19).",
+    "Let's assume the years ARE present (e.g., 2024) because otherwise \"between 2024 and 1765\" makes no sense for Biden/Trump.",
+    "The SCOTUS ruling was \"9-0\" (`9`, `0`).",
+    "The dispute was ultimately resolved through an Oracle-led joint venture structure rather than a full sale, announced in June.",
+    "- Did I include years?",
+    "`19`.",
+    "The Supreme Court affirmed this statute in a unanimous decision recorded as 9-0 during January proceedings [Source: ev-1].",
+    "Evidence says \"upheld... [Source: ev-1]",
+    "9-0 (per curiam)\". [Source: ev-1]",
+    "\"9-0\" is digits. [Source: ev-1]",
+    "This is compliant. [Source: ev-1]",
+    "Check \"January\". [Source: ev-1]",
+    "Day `17`. [Source: ev-1]",
+    "Text likely has it. [Source: ev-1]",
+    "Check \"June\". [Source: ev-1]",
+    "The question implies the timeframe. [Source: ev-1]",
+    "My answer describes the sequence which inherently places them in that window based on Biden/Trump roles mentioned (Biden signed, Trump EO). [Source: ev-1]",
+    "This relies on external knowledge of who was president when? [Source: ev-1]",
+    "Evidence establishes the actors. [Source: ev-1]",
+    "There IS a `20`. [Source: ev-1]",
+    "No, `14`. [Source: ev-1]",
+    "The dispute ended with an Oracle-led joint venture announced in June granting Oracle about a .5% stake alongside SoftBank while ByteDance retained majority control under Project Texas structures negotiated by Vice President Vance [Source: ev-1].",
+    "9 -> 9. [Source: ev-1]",
+    "14 -> 14. [Source: ev-1]",
+    "75 -> 75. [Source: ev-1]",
+    "12.5 -> 12.5%. [Source: ev-1]"
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "The United States moved to force TikTok's divestiture or ban primarily due to national security concerns regarding potential Chinese government access to US user data and the platform's algorithm, which had been subject to CFIUS review. [Source: ev-1]",
+      "actionable_query": "United States moved force TikTok's divestiture ban primarily due national security concerns regarding potential Chinese government access user data platform's algorithm subject CFIUS review",
+      "from_claim_id": "c266",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "The next number is `270`.",
+      "actionable_query": "next number",
+      "from_claim_id": "c268",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Then `90`.",
+      "actionable_query": "Then ` `. (2024, 2025)",
+      "from_claim_id": "c44",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "Then `9`, `0`.",
+      "actionable_query": "Then ` `, ` `. (2024, 2025)",
+      "from_claim_id": "c45",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "(Vote count).",
+      "actionable_query": "(Vote count).",
+      "from_claim_id": "c46",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "And later `75`.",
+      "actionable_query": "And later ` `. (2024, 2025)",
+      "from_claim_id": "c146",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "The year associated with these in recent history is **2024** (signing) and **2025** (SCOTUS/Ban).",
+      "actionable_query": "** (SCOTUS/Ban). (2024, 2025)",
+      "from_claim_id": "c65",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "270 ...",
+      "actionable_query": "... (2024, 2025)",
+      "from_claim_id": "c71",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "90 ...",
+      "actionable_query": "... (2024, 2025)",
+      "from_claim_id": "c72",
+      "corroboration": null
+    },
+    {
+      "id": "g10",
+      "text": "9, 0 ...",
+      "actionable_query": "... (2024, 2025)",
+      "from_claim_id": "c73",
+      "corroboration": null
+    },
+    {
+      "id": "g11",
+      "text": "What year?",
+      "actionable_query": "What year? (2024, 2025)",
+      "from_claim_id": "c83",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "The next date is Supreme Court ruling.",
+      "actionable_query": "The next date is Supreme Court ruling. (2024, 2025)",
+      "from_claim_id": "c84",
+      "corroboration": null
+    },
+    {
+      "id": "g13",
+      "text": "Figures: `9`, `0` (vote).",
+      "actionable_query": "Figures: ` `, ` ` (vote). (2024, 2025)",
+      "from_claim_id": "c270",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "Then effective date/ban: `18/19`.",
+      "actionable_query": "Then effective date/ban: ` `. (2024, 2025)",
+      "from_claim_id": "c88",
+      "corroboration": null
+    },
+    {
+      "id": "g15",
+      "text": "Restored after EO of `[Date]`: Figure `75` days delay.",
+      "actionable_query": "Restored Date Figure days delay",
+      "from_claim_id": "c264",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g16",
+      "text": "Deal announced: Figure `6`, `10`.",
+      "actionable_query": "Deal announced: Figure ` `, ` `. (2024, 2025)",
+      "from_claim_id": "c91",
+      "corroboration": null
+    },
+    {
+      "id": "g17",
+      "text": "Stake: `12.5%`.",
+      "actionable_query": "Stake",
+      "from_claim_id": "c265",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g18",
+      "text": "If so, the figures would include `2024`.",
+      "actionable_query": "`. (2024, 2025)",
+      "from_claim_id": "c104",
+      "corroboration": null
+    },
+    {
+      "id": "g19",
+      "text": "But wait, Trump took office Jan 20.",
+      "actionable_query": "But wait, Trump took office Jan (2024, 2025)",
+      "from_claim_id": "c147",
+      "corroboration": null
+    },
+    {
+      "id": "g20",
+      "text": "And **TikTok went dark...",
+      "actionable_query": "And **TikTok went dark... (2024, 2025)",
+      "from_claim_id": "c155",
+      "corroboration": null
+    },
+    {
+      "id": "g21",
+      "text": "And **Executive order...",
+      "actionable_query": "And **Executive order... (2024, 2025)",
+      "from_claim_id": "c247",
+      "corroboration": null
+    },
+    {
+      "id": "g22",
+      "text": "Resolution: Oracle-led joint venture (not outright sale), ByteDance retains majority, Oracle gets ~12.5%, SoftBank/others participate, Vance led negotiations, Project Texas structure maintained/completed.",
+      "actionable_query": "Resolution Oracle-led joint venture outright sale ByteDance retains majority Oracle gets SoftBank/others participate Vance led negotiations Project Texas structure maintained/completed",
+      "from_claim_id": "c225",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g23",
+      "text": "But here we have specific days (17, 18/19).",
+      "actionable_query": "But here we have specific days ( ). (2024, 2025)",
+      "from_claim_id": "c167",
+      "corroboration": null
+    },
+    {
+      "id": "g24",
+      "text": "Let's assume the years ARE present (e.g., 2024) because otherwise \"between 2024 and 1765\" makes no sense for Biden/Trump.",
+      "actionable_query": "and \" makes no sense for Biden/Trump. (2024, 2025)",
+      "from_claim_id": "c177",
+      "corroboration": null
+    },
+    {
+      "id": "g25",
+      "text": "The SCOTUS ruling was \"9-0\" (`9`, `0`).",
+      "actionable_query": "The SCOTUS ruling was \" - \" (` `, ` `). (2024, 2025)",
+      "from_claim_id": "c188",
+      "corroboration": null
+    },
+    {
+      "id": "g26",
+      "text": "The dispute was ultimately resolved through an Oracle-led joint venture structure rather than a full sale, announced in June.",
+      "actionable_query": "The dispute was ultimately resolved through an Oracle-led joint venture structure rather than a full sale, announced in June. (2024, 2025)",
+      "from_claim_id": "c197",
+      "corroboration": null
+    },
+    {
+      "id": "g27",
+      "text": "- Did I include years?",
+      "actionable_query": "- Did I include years? (2024, 2025)",
+      "from_claim_id": "c209",
+      "corroboration": null
+    },
+    {
+      "id": "g28",
+      "text": "`19`.",
+      "actionable_query": "` `. (2024, 2025)",
+      "from_claim_id": "c217",
+      "corroboration": null
+    },
+    {
+      "id": "g29",
+      "text": "The Supreme Court affirmed this statute in a unanimous decision recorded as 9-0 during January proceedings [Source: ev-1].",
+      "actionable_query": "The Supreme Court affirmed this statute in a unanimous decision recorded as - during January proceedings . (2024, 2025)",
+      "from_claim_id": "c226",
+      "corroboration": null
+    },
+    {
+      "id": "g30",
+      "text": "Evidence says \"upheld... [Source: ev-1]",
+      "actionable_query": "Evidence says upheld",
+      "from_claim_id": "c246",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g31",
+      "text": "9-0 (per curiam)\". [Source: ev-1]",
+      "actionable_query": "- (per curiam)\". (2024, 2025)",
+      "from_claim_id": "c228",
+      "corroboration": null
+    },
+    {
+      "id": "g32",
+      "text": "\"9-0\" is digits. [Source: ev-1]",
+      "actionable_query": "\" - \" is digits. (2024, 2025)",
+      "from_claim_id": "c230",
+      "corroboration": null
+    },
+    {
+      "id": "g33",
+      "text": "This is compliant. [Source: ev-1]",
+      "actionable_query": "compliant",
+      "from_claim_id": "c234",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g34",
+      "text": "Check \"January\". [Source: ev-1]",
+      "actionable_query": "Check January",
+      "from_claim_id": "c235",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g35",
+      "text": "Day `17`. [Source: ev-1]",
+      "actionable_query": "Day",
+      "from_claim_id": "c237",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g36",
+      "text": "Text likely has it. [Source: ev-1]",
+      "actionable_query": "Text likely",
+      "from_claim_id": "c238",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g37",
+      "text": "Check \"June\". [Source: ev-1]",
+      "actionable_query": "Check June",
+      "from_claim_id": "c239",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g38",
+      "text": "The question implies the timeframe. [Source: ev-1]",
+      "actionable_query": "The question implies the timeframe. (2024, 2025)",
+      "from_claim_id": "c243",
+      "corroboration": null
+    },
+    {
+      "id": "g39",
+      "text": "My answer describes the sequence which inherently places them in that window based on Biden/Trump roles mentioned (Biden signed, Trump EO). [Source: ev-1]",
+      "actionable_query": "My answer describes the sequence which inherently places them in that window based on Biden/Trump roles mentioned (Biden signed, Trump EO). (2024, 2025)",
+      "from_claim_id": "c244",
+      "corroboration": null
+    },
+    {
+      "id": "g40",
+      "text": "This relies on external knowledge of who was president when? [Source: ev-1]",
+      "actionable_query": "This relies on external knowledge of who was president when? (2024, 2025)",
+      "from_claim_id": "c245",
+      "corroboration": null
+    },
+    {
+      "id": "g41",
+      "text": "Evidence establishes the actors. [Source: ev-1]",
+      "actionable_query": "Evidence establishes actors",
+      "from_claim_id": "c248",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g42",
+      "text": "There IS a `20`. [Source: ev-1]",
+      "actionable_query": "",
+      "from_claim_id": "c253",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g43",
+      "text": "No, `14`. [Source: ev-1]",
+      "actionable_query": "",
+      "from_claim_id": "c272",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g44",
+      "text": "The dispute ended with an Oracle-led joint venture announced in June granting Oracle about a .5% stake alongside SoftBank while ByteDance retained majority control under Project Texas structures negotiated by Vice President Vance [Source: ev-1].",
+      "actionable_query": "The dispute ended with an Oracle-led joint venture announced in June granting Oracle about a . stake alongside SoftBank while ByteDance reta (2024, 2025)",
+      "from_claim_id": "c275",
+      "corroboration": null
+    },
+    {
+      "id": "g45",
+      "text": "9 -> 9. [Source: ev-1]",
+      "actionable_query": "-> (2024, 2025)",
+      "from_claim_id": "c278",
+      "corroboration": null
+    },
+    {
+      "id": "g46",
+      "text": "14 -> 14. [Source: ev-1]",
+      "actionable_query": "",
+      "from_claim_id": "c279",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g47",
+      "text": "75 -> 75. [Source: ev-1]",
+      "actionable_query": "",
+      "from_claim_id": "c280",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g48",
+      "text": "12.5 -> 12.5%. [Source: ev-1]",
+      "actionable_query": "",
+      "from_claim_id": "c281",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 2,
+      "gaps_after": 48,
+      "fetched": 0,
+      "search_calls": 2
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-07",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2-degenerate.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

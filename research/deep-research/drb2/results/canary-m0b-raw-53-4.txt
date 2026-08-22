@@ -1,0 +1,28 @@
+{
+    "results": [
+        {
+            "rubric_item": "Explain the impact of gender differences in labor force participation, noting the prevalent informal employment among women, which prevents many from accessing mandatory pension schemes.",
+            "score": 0,
+            "reason": "The article does not discuss gender differences in labor force participation or informality as a driver for exclusion from pension schemes. It mentions coverage types (public/private/self-employed) but does not analyze the specific dynamic of female informal employment preventing access to mandatory schemes.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Explain how, even with the same retirement age, women's longer life expectancy means their accumulated assets must support a longer retirement period, leading to lower annual benefits from Defined Contribution (DC) schemes.",
+            "score": 0,
+            "reason": "The article does not mention life expectancy differences between genders or their impact on DC scheme benefit adequacy.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Analyze the impact of different retirement ages for men and women (e.g., 55 vs. 60 in Pakistan's private sector), explaining that this creates a 'double penalty' for women: a shorter accumulation phase and a longer drawdown phase.",
+            "score": -1,
+            "reason": "The article mentions different withdrawal/retirement ages for males and females in Sri Lanka (Males at age 55, females at age 50) but does not provide an analysis of the 'double penalty' concept or specifically address Pakistan's private sector retirement ages as requested by the rubric item text which cites Pakistan as the example context. More critically, looking closely at the provided text, it states \"Withdrawal: Males at age 55, female at age 50\" for Sri Lanka EPF. However, the rubric asks to analyze this impact *explaining* that it creates a double penalty. The text only lists the facts without providing the required analytical explanation regarding accumulation vs drawdown phases. Furthermore, if we look strictly for the specific content about gender-based retirement age differences creating penalties, it is absent in terms of analysis. Wait, let me re-read carefully. The text says \"If retirement age varies by gender, please list them separately.\" It lists them for SL. But does it explain the *impact*? No. Does it mention Pakistan's private sector specifically with different ages? For Pakistan EOBI (private), it doesn't specify separate male/female ages in the profile, just general eligibility. Thus, the article fails to provide the requested analysis/explanation.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Analyze the impact of benefit calculation formulas in Defined Benefit (DB) schemes, explaining that using 'final salary' (as in Malaysia's public scheme) is more generous than using 'career-average salary' (as in Vietnam).",
+            "score": 0,
+            "reason": "The article provides data on salary bases for various countries (Malaysia uses final salary/average depending on context or specific plan details are mixed, Vietnam section is cut off/not fully present with explicit formula comparison). The text provided ends before completing Thailand and does not contain the Vietnam section. Therefore, it cannot make the comparative analysis between Malaysia and Vietnam as requested.",
+            "evidence": ""
+        }
+    ]
+}

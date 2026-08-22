@@ -1,0 +1,173 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787329161",
+  "charter_hash": "b378e244a006f16f",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Anthropic released Claude 4 as two distinct models, Opus 4 and Sonnet 4, on May 8, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 2, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The launch signaled that Anthropic was positioning itself as the leader in the agentic-coding market by offering a tiered approach to meet different developer needs [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Specifically, Opus 4 served as the flagship model (\"Claude 4\") priced at $15 per million input tokens and $75 per million output tokens, while Sonnet 4 acted as the fast workhorse and \"developer-default coding model\" with lower pricing of $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "This strategy proved successful, contributing to record API usage and helping cement Anthropic’s position as the coding-agent leader, which later supported a funding round at a reported valuation of approximately $183 billion in late September 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "183",
+          "2025"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The launch signaled that Anthropic was positioning itself as the leader in the agentic-coding market by offering a tiered approach to meet different developer needs. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "The strategy proved successful, contributing to record API usage and helping cement Anthropic’s position as the coding-agent leader, which later supported a funding round at a reported valuation of approximately $183 billion in late September 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "183",
+          "2025"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Anthropic released Claude 4 as two distinct models, Opus 4 and Sonnet 4, on May 8, 2025 [Source: ev-1].",
+      "actionable_query": "on May . (4, 2, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The launch signaled that Anthropic was positioning itself as the leader in the agentic-coding market by offering a tiered approach to meet different developer needs. [Source: ev-1]",
+      "actionable_query": "launch signaled Anthropic positioning itself leader agentic-coding market offering tiered approach meet different developer needs",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Specifically, Opus 4 served as the flagship model (\"Claude 4\") priced at $15 per million input tokens and $75 per million output tokens, while Sonnet 4 acted as the fast workhorse and \"developer-default coding model\" with lower pricing of $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "actionable_query": "\") priced at $ per million input tokens and $ acted as the fast workhorse and \"developer-default coding model\" with lower pricing of $ per m (4, 2, 2025)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The strategy proved successful, contributing to record API usage and helping cement Anthropic’s position as the coding-agent leader, which later supported a funding round at a reported valuation of approximately $183 billion in late September 2025 [Source: ev-1].",
+      "actionable_query": "2025 strategy proved successful contributing record API usage helping cement Anthropic’s position coding-agent leader later supported funding round reported valuation approximately billion late",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

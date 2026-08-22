@@ -1,0 +1,50 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: consent grant for run dr-1787259122 — release floor personal (recorded in the manifest)
+deep-research: run dr-1787259122 — Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-56/dr-1787259122
+deep-research: web backend tavily
+deep-research: search source web
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787259122] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787259122] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1787259122] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787259122] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787259122] Building FTS content index (2/3)...
+[dr-estate-dr-1787259122] FTS content index done
+[dr-estate-dr-1787259122] Building FTS title index (3/3)...
+[dr-estate-dr-1787259122] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787259122 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-56/dr-1787259122/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787259122", charter_hash: "704a46672a27359c", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 0, search_calls: 3 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 1, fetched: 1, search_calls: 1 }, RoundRow { round: 3, gaps_before: 1, gaps_after: 2, fetched: 0, search_calls: 2 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://python.quantecon.org/two_auctions.html", custody: "public-web", ingested_into: Some("dr-estate-dr-1787259122") }], failed: [FailedSource { url: "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf", error: "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf", error: "fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: Execution error: fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://economics.yale.edu/sites/default/files/symmetric_0.pdf", error: "fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: Execution error: fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf", error: "fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: Execution error: fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf", error: "fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: Execution error: fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf", error: "fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: Execution error: fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf", error: "fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: Execution error: fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }, FailedSource { url: "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf", error: "fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: Execution error: fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)" }] }, budget: BudgetTotals { spent: {"web-search:web": 6, "web-fetch:pages": 9}, remaining: {"web-fetch:pages": 3, "web-search:web": 6} }, not_covered: ["The text in [ev-1] outlines the setup for a First-Price Sealed-Bid Auction (FPSB) involving \\(n > 2\\) prospective buyers and describes the bidder's objective to maximize expected surplus conditional on winning. [Source: ev-1]", "It mentions that buyer \\(i\\) needs to know the probability distribution of bids made by other prospective buyers to set an optimal bid [Source: ev-1].", "The evidence lists sections such as \"Characterization of FPSB auction\" and \"Calculation of bid price in FPSB,\" but the provided text snippet only contains the introductory setup and protocol description without detailing the mathematical derivation or general method requested. [Source: ev-1]"], reframe: None, alignment: None, residue: [], consent: Some(ConsentGrant { run_id: "dr-1787259122", granted_at_unix: 1787259122, release_floor: Personal }), lock: LockRecord { id: "dr-1787259122", acquired_at_unix: 1787259122, released_at_unix: Some(1787259198) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "fetch-list-3.json", "skip-ledger-3.json", "evidence-window-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-56/dr-1787259122/report.md
+rounds: 3 | gaps after last round: 2 | searches: 6 | fetched sources: 1
+open questions (could-not-judge):
+  - The text in [ev-1] outlines the setup for a First-Price Sealed-Bid Auction (FPSB) involving \(n > 2\) prospective buyers and describes the bidder's objective to maximize expected surplus conditional on winning. [Source: ev-1]
+  - It mentions that buyer \(i\) needs to know the probability distribution of bids made by other prospective buyers to set an optimal bid [Source: ev-1].
+  - The evidence lists sections such as "Characterization of FPSB auction" and "Calculation of bid price in FPSB," but the provided text snippet only contains the introductory setup and protocol description without detailing the mathematical derivation or general method requested. [Source: ev-1]
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  fetch-list-3.json
+  skip-ledger-3.json
+  evidence-window-3.json
+  verdict-set.json
+  report.md
+  manifest.json

@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787270229",
+  "charter_hash": "2e1d7cd0aff62642",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of helium leaks detected in the Starliner spacecraft during its first crewed flight, 2024",
+      "Count of thruster malfunctions or failures recorded on Boeing's CFTS system during the Starliner test mission, 2022-2024",
+      "Percentage decrease in NASA's commercial crew program budget allocated to Boeing due to delays and safety concerns, 2015-2023",
+      "Total cost incurred by NASA for the uncrewed return of the Crew Flight Test (CFT) capsule compared to a standard crewed landing scenario, 2024",
+      "Duration in days that the Starliner remained docked at the ISS before deciding to undock without astronauts, September-October 2024",
+      "Number of subsequent launch attempts or missions scheduled for Boeing Starliner after the CFT incident as of late 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1",
+      "mean"
+    ]
+  }
+}

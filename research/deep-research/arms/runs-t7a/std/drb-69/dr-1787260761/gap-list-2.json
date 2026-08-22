@@ -1,0 +1,354 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787260761",
+  "charter_hash": "49d304d9f02b574b",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The Model Context Protocol, or MCP, and the Agent2Agent protocol, or A2A, are distinct but complementary standards designed to solve different integration challenges in artificial intelligence systems. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "MCP is a vertical protocol developed by Anthropic that standardizes how large language models connect with external data sources and tools [Source: ev-1] [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "It addresses the N times M problem where connecting multiple LLMs with various systems requires unsustainable custom logic for each combination [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "By providing one universal interface, MCP allows developers to leverage a single protocol across most use cases instead of building unique application programming interfaces for every tool connection [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "In contrast, A2A is a horizontal open protocol backed by Google that enables autonomous agents from different frameworks to communicate and collaborate with each other [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "While MCP handles agent-to-tool connectivity, A2A manages agent-to-agent communication, allowing AI teammates to interoperate securely regardless of who built them or what framework they use [Source: ev-1] [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "The innovative aspects of the A2A protocol lie in its mechanism for capability discovery and task management without exposing implementation details. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "It introduces Agent Cards, which act as digital business cards in JSON format that describe an agent's capabilities and how to interact with it [Source: ev-2] [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "The protocol operates through four key concepts including the Agent Card, the A2A Server which handles execution, the A2A Client which packages tasks, and the A2A Task itself which is a single unit of work with a defined lifecycle from submitted to completed [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "This structure allows agents to negotiate user experience and manage collaboration effectively across ecosystems [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "The specific problems A2A is designed to address include fragmentation among AI agents built on different frameworks, APIs, tools, and by different companies. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "By creating a universal language for these agents, similar to how English allows people from different countries to communicate, A2A fixes the issue where agents cannot talk to each other due to their disparate origins [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "Production multi-agent systems require both protocols because MCP provides data access per agent while A2A handles task coordination between them [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "Neither protocol governs context quality or versioning, meaning they rely on an underlying context layer as their substrate [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "Both standards are gaining rapid adoption and are often used together in enterprise deployments to unlock maximum value through seamless integration [Source: ev-2] [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "The Model Context Protocol, or MCP, and the Agent2Agent protocol, or A2A, are distinct but complementary standards designed to solve different integration challenges in artificial intelligence systems. [Source: ev-3]",
+      "actionable_query": "2 Model Context Protocol MCP distinct complementary standards designed solve different integration challenges artificial intelligence systems",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "It addresses the N times M problem where connecting multiple LLMs with various systems requires unsustainable custom logic for each combination [Source: ev-2].",
+      "actionable_query": "addresses times problem connecting multiple LLMs various systems requires unsustainable custom logic combination",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "By providing one universal interface, MCP allows developers to leverage a single protocol across most use cases instead of building unique application programming interfaces for every tool connection [Source: ev-2].",
+      "actionable_query": "By providing universal interface, MCP allows developers to leverage a single protocol across most use cases instead of building unique appli (2)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "While MCP handles agent-to-tool connectivity, A2A manages agent-to-agent communication, allowing AI teammates to interoperate securely regardless of who built them or what framework they use [Source: ev-1] [Source: ev-3].",
+      "actionable_query": "A manages agent-to-agent communication, allowing AI teammates to interoperate securely regardless of who built them or what framework they u (2)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "The innovative aspects of the A2A protocol lie in its mechanism for capability discovery and task management without exposing implementation details. [Source: ev-3]",
+      "actionable_query": "A protocol lie in its mechanism for capability discovery and task management without exposing implementation details. (2)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "It introduces Agent Cards, which act as digital business cards in JSON format that describe an agent's capabilities and how to interact with it [Source: ev-2] [Source: ev-3].",
+      "actionable_query": "introduces Agent Cards act digital business JSON format describe agent's capabilities interact",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "The protocol operates through four key concepts including the Agent Card, the A2A Server which handles execution, the A2A Client which packages tasks, and the A2A Task itself which is a single unit of work with a defined lifecycle from submitted to completed [Source: ev-3].",
+      "actionable_query": "The protocol operates through A Task itself which is a single unit of work with a defined lifecycle from submitted to completed . (2)",
+      "from_claim_id": "c9",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "This structure allows agents to negotiate user experience and manage collaboration effectively across ecosystems [Source: ev-2].",
+      "actionable_query": "This structure allows agents to negotiate user experience and manage collaboration effectively across ecosystems . (2)",
+      "from_claim_id": "c12",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

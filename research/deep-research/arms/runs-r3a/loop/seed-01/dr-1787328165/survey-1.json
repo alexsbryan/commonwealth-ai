@@ -1,0 +1,20 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1787328165",
+  "charter_hash": "6f64b6a0e10a8339",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "Why did Google acquire cloud-security firm Wiz in March 2025, and what did the deal signal about the cloud-security market?",
+      "hits": []
+    }
+  ],
+  "estate_answer": "No evidence was retrieved this round."
+}

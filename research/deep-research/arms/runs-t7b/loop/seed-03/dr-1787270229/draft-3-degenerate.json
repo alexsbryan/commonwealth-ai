@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787270229",
+  "charter_hash": "2e1d7cd0aff62642",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "**Why NASA ordered Starliner to return uncrewed:**\nNASA determined that the five reaction-control system (RCS) thruster anomalies experienced during the docking approach could not be guaranteed safe for the deorbit burn, as the thrusters could not be ground-tested in their flight condition [Source: ev-1].\n\n**Implications for the program and astronauts:**\n*   **Extended Astronaut Stay:** The decision resulted in Butch Wilmore and Suni Williams remaining on the International Space Station until March 18, 2025. They spent roughly 9.5 months aloft compared to a planned duration of approximately 8 days [Source: ev-1].\n*   **Uncrewed Return:** Following NASA's announcement on August 24, 2024, that Starliner would return without crew, the spacecraft undocked from the station on September 6, 2024 [Source: ev-1].\n*   **Financial Impact:** Under the fixed-price contract where Boeing has received about $4.2 billion (compared to SpaceX’s roughly $2.6 billion) since the Commercial Crew program began in 2014, Boeing disclosed cumulative losses of more than $1.5 billion for the Starliner program by 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-03",
+      "custody": "public-web"
+    }
+  ]
+}

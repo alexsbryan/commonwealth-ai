@@ -1,0 +1,70 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787242739",
+  "charter_hash": "1e87406bf0d24961",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 5,
+      "gaps_after": 5,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-08",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787242739"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Based on the evidence provided, Judge Amit Mehta of the US District Court for the District of Columbia found Google's search business to be a monopoly because he ruled on 2024-08-05 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+    "The primary theory of harm was \"default-distribution deals,\" where Google paid companies like Apple, Samsung, and Mozilla billions of dollars to remain their default search engine [Source: ev-1].",
+    "Specifically, trial evidence showed that Google paid approximately $26.3 billion for distribution in 2021 and gave Apple roughly 36% of Safari search-ad revenue [Source: ev-1].",
+    "Judge Mehta determined this conduct was exclusionary because it created a self-reinforcing loop where defaults generate scale, which creates data, improves quality, and ultimately protects the default status against rivals [Source: ev-1].",
+    "The remedies ordered by Judge Mehta on 2025-08-05 included requiring Google to sell Chrome (the first forced divestiture of a major tech company since the Microsoft case of 2000), prohibiting Google from paying for default search placement or entering into revenue-sharing agreements, and imposing limits on acquisitions and AI-related investments [Source: ev-1].",
+    "A US court found Google’s search business to be a monopoly because Judge Amit Mehta of the US District Court for the District of Columbia ruled on 2024-08-05 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+    "Additionally, the ruling imposed limits on Google’s acquisitions and AI-related investments [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787242739",
+    "acquired_at_unix": 1787242739,
+    "released_at_unix": 1787242849
+  }
+}

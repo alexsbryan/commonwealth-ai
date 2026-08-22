@@ -1,0 +1,117 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787337003",
+  "charter_hash": "077d85b8d7dd773f",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2024 2025 United States moved force sale ban TikTok primarily due national security concerns specifically risk Chinese government could access user data platform’s algorithm",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "2024 Legally President Biden signed Protecting Americans Foreign Adversary Controlled Applications Act April requiring ByteDance divest TikTok's operations within roughly days extendable face ban",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "The Supreme Court upheld this law with a unanimous - per curiam decision on January . (2024, 2025)",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "The dispute was resolved through an Oracle-led deal announced on June - - per Bloomberg in evidence), which structured the resolution as a j (2024, 2025)",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 22.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 19.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1"
+    ],
+    "threshold": 16.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

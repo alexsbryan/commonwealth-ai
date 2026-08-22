@@ -1,0 +1,29 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787251851",
+  "charter_hash": "c073f3875b415be1",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://estate.example/seed-02",
+      "source_url": "https://estate.example/seed-02",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "DeepSeek released DeepSeek-R1, its open-weights reasoning model with accompanying paper, on 2025-01-20. Its predecessor DeepSeek-V3 (released 2024-12-26) reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million, on export-restricted H800 chips. R1's reasoning was produced by reinforcement learning (GRPO), and R1-Zero was trained with no supervised fine-tuning at all. On 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization — at the time the largest single-day loss in stock-market history — with about US$1 trillion erased across the tech complex. Markets repriced the thesis that frontier-AI capex, and therefore Nvidia's demand, is moated by compute scale: an open-weights frontier-class reasoning model had been trained for a fraction of the incumbent cost. US export controls (the H800 restrictions) had forced Chinese labs toward efficiency — scarcity, not preference, drove the economics.\n",
+      "ingested_into": null,
+      "tags": [
+        "2025",
+        "deepseek",
+        "loss",
+        "nvidia"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-02"
+  ],
+  "derived_custody": "public-web"
+}

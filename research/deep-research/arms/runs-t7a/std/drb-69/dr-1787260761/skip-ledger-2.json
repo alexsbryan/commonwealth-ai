@@ -1,0 +1,265 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787260761",
+  "charter_hash": "49d304d9f02b574b",
+  "round": 2,
+  "entries": [
+    {
+      "url": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "title": "What is MCP? The Universal Connector for AI Explained",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.anthropic.com/news/model-context-protocol",
+      "title": "Introducing the Model Context Protocol",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://media.defense.gov/2026/Jun/02/2003943289/-1/-1/0/CSI_MCP_SECURITY.PDF",
+      "title": "Security Design Considerations for AI-Driven Automation",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.kosmoy.com/resources/blog/why-every-company-running-more-than-one-llm-needs-an-ai-gateway",
+      "title": "Running 2+ LLMs? Why You Need an AI Gateway (2026 Guide)",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://medium.com/@abhaychougule0907/underlying-factors-behind-inconsistency-in-llm-responses-with-multi-tool-calling-628ce7b4de76",
+      "title": "Medium",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://futureagi.substack.com/p/why-do-multi-agent-llm-systems-fail",
+      "title": "Why do multi agent LLM systems fail (and how to fix)- 2026 Guide",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://redis.io/blog/why-multi-agent-llm-systems-fail",
+      "title": "Why Multi-Agent LLM Systems Fail & How to Fix Them",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/paulfishwick_ai-swe-tip-17-work-with-multiple-llms-in-activity-7396606865637494786-U9eY",
+      "title": "How to work with multiple LLMs in a network architecture",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=ej7-n9OoGnQ",
+      "title": "Too Many Tools? How LLMs Struggle at Scale | MCP Talk w - YouTube",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=_O_XtZcQ6D0",
+      "title": "2025 LLM Playbook: SLMs, Model Flexibility, and Deployment Best Practices",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://workos.com/blog/everything-your-team-needs-to-know-about-mcp-in-2026",
+      "title": "Everything your team needs to know about MCP in 2026 - WorkOS",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://medium.com/mongodb/understanding-mcp-the-universal-bridge-for-ai-models-8ff8b4392e21",
+      "title": "Understanding MCP: The Universal Bridge for AI Models",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=wZn9XvXBnU4",
+      "title": "What is MCP? The AI Protocol Changing Everything (2026)",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://newsletter.pragmaticengineer.com/p/mcp",
+      "title": "MCP Protocol: a new AI dev tools building block",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps",
+      "title": "MCP Apps - Bringing UI Capabilities To MCP Clients",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://handsonarchitects.com/blog/2026/what-makes-mcp-server-successful",
+      "title": "What makes an MCP server successful? | Tech notes of hands-on software architects",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future",
+      "title": "Exploring the Future of MCP Transports | Model Context Protocol Blog",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://blog.doubleslash.de/en/software-technologien/kuenstliche-intelligenz/the-a2a-protocol-when-ai-agents-finally-learn-to-talk-to-each-other",
+      "title": "A2A protocol: AI agents communicate with each other",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/axiosnews/posts/exclusive-ai-agents-inch-toward-interoperability/1438910344765597",
+      "title": "Exclusive: AI agents inch toward interoperability - Facebook",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://onereach.ai/blog/what-is-a2a-agent-to-agent-protocol",
+      "title": "A2A Protocol Explained: Secure Interoperability for Agentic AI 2026",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability",
+      "title": "Announcing the Agent2Agent Protocol (A2A)",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.solo.io/topics/ai-infrastructure/what-is-a2a",
+      "title": "What Is Agent2Agent Protocol (A2A)? | Solo.io | Solo.io",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ruh.ai/blogs/ai-agent-protocols-2026-complete-guide",
+      "title": "AI Agent Protocols 2026: Complete Guide - Ruh AI",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.salesforce.com/ap/agentforce/ai-agents/agent2agent-protocol",
+      "title": "Agent2Agent Protocol: The Standard for AI Agent Interoperability | Salesforce AP",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://galileo.ai/blog/agent-to-agent-interaction-frameworks",
+      "title": "7 Agent-to-Agent Interaction Frameworks That Transform AI Development | Galileo",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "title": "A Survey of Agent Interoperability Protocols: Model Context ... - arXiv",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.databricks.com/blog/what-is-model-context-protocol",
+      "title": "What is the Model Context Protocol (MCP)?",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://modelcontextprotocol.io/docs/2026-07-28/getting-started/intro",
+      "title": "Model Context Protocol",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://blog.marcnuri.com/model-context-protocol-mcp-introduction",
+      "title": "Introduction to the Model Context Protocol (MCP): The Future of AI Integration - Marc Nuri",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.reddit.com/r/singularity/comments/1k3wrcm/random_thought_why_cant_multiple_llms_have_an",
+      "title": "Random thought: why can't multiple LLMs have an ...",
+      "score": 0.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+      "title": "What is MCP? The Universal Connector for AI Explained",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://blog.cloudflare.com/mcp-v2",
+      "title": "The next generation of MCP - Cloudflare Blog",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

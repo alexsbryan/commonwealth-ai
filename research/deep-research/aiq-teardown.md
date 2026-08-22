@@ -551,3 +551,107 @@ deliverable.
 - DRB-I repo: https://github.com/Ayanami0730/deep_research_bench (fetched 2026-08-19) — RACE/FACT, arXiv 2506.11763.
 - Our loop's measured position: `research/deep-research/arms/score-report-t6b.json` (P4-v0 70/72, P4-v1 13/16, P3 12/13, R-12 0/12, loop density 1.0) and `arms/score-report-t6c.json` (P4-v0 68/72, P4-v1 11/16, P3 12/13, R-12-nongrow 0/12, loop density 0.797), both scored 2026-08-14 by `score-arms.py`.
 - Corroboration floor: `research/deep-research/notes/corroboration.md`; spine mechanisms: `research/deep-research/SPINE.md`; t6f seam: `.sovereign/features/deep-research-t6f/order.md`; frozen DRB holdout: `research/deep-research/drb/README.md`.
+
+---
+
+## 6. The unmined veins — bench config + prompt contracts (excavated 2026-08-20, campaign drb1-race)
+
+The first teardown pass mapped the architecture; this pass excavates the
+behavioral specifications — the DRB bench configuration and the planner/writer
+prompt contracts. All paths in the clone at 4b0b931.
+
+### 6.1 The DRB bench config (the benchmaxx audit, refined)
+
+`frontends/benchmarks/deepresearch_bench/configs/config_deep_research_bench.yml`:
+
+- **Nemotron-3-Ultra 550B (A55B) on EVERY stage** — orchestrator, router,
+  researcher, planner — temperature 0.2, top_p 0.7, thinking DISABLED,
+  5 retries.
+- **The writer gets its own LLM config with max_tokens 32768 — double every
+  other stage's 16384.** The report is the one artifact they refuse to
+  truncate. (Direct precedent for our R3a cap policy: the deliverable's
+  budget must exceed the working stages'.)
+- **Tools: paper_search (Serper, max_results 5) + advanced_web_search
+  (Tavily, max_results 2, advanced_search true).** Breadth via ~20 queries
+  × few results, not depth per query; snippet economy
+  (max_content_length 1000 per the tool config). Paper search is enabled
+  ONLY in this bench config — the benchmark task mix is academic, and they
+  point a scholar-search tool at it. That is the "benchmaxxed a little"
+  read, confirmed: it is legal (the leaderboard allows any tools) and it
+  is tuned to the task distribution.
+- **max_loops: 2** at the agent level; eval max_concurrency 4.
+
+Transferable to the R4 flight card: the sampling profile (temp 0.2,
+thinking off), the writer-budget-exceeds-working-budget rule, snippet
+economy, and — pending an operator budget decision — a scholar-search tool
+for academic intake (new API dependency: a Serper key).
+
+### 6.2 The planner contract (feeds R2 + the flight card)
+
+`src/aiq_agent/agents/deep_researcher/prompts/planner.j2`:
+
+1. **Bounded discovery with a marginal-value stop rule**: the planner
+   searches "only enough to identify source coverage, source types, and
+   research lanes"; it stops when "every required component has a credible
+   source path, the query list is stable, and additional searches return
+   redundant source families." Discovery shapes queries; workers gather
+   depth.
+2. **required_components as coverage UNITS** (not headings): anchor
+   values, decisive evidence, comparison dimensions, risks/caveats/gaps,
+   final recommendation — each with a stable id; every component must have
+   supporting queries. This is a coverage ledger the writer later audits
+   against — the RACE Comprehensiveness dimension, mechanized in the plan.
+3. **Self-contained focused queries over umbrella queries**: prefer MORE
+   independent narrow queries; subqueries default 0 (max 1-2, only when
+   inseparable); no overlap; each query maps to target_components; query
+   count sized to batch concurrency, compressing lowest-marginal overlap.
+4. **Internal-before-external**: if a knowledge/document tool is available,
+   call it FIRST; topics found internally do not get web/paper queries.
+   (Our estate is the internal source — the §19 inventory principle as a
+   planner rule.)
+5. **answer_type taxonomy** (long_form_report / comparison / table /
+   data_extraction / …) chosen at PLAN time — the writer's output shape is
+   decided by the plan, not the writer's whim.
+
+### 6.3 The writer contract (feeds R3b directly)
+
+`src/aiq_agent/agents/deep_researcher/prompts/writer.j2`:
+
+1. **Synthesis map BEFORE drafting**: map required_components → supporting
+   notes; rank by evidence judgment; list the facts/figures/dates/names
+   that must survive; identify consensus, complementarity, and conflicts;
+   decide tables vs prose per section.
+2. **Evidence tiering drives synthesis**: high notes = anchors, medium =
+   support/nuance, low = gaps/caveats/conflicts/weak-evidence-labeled.
+   (Our verdicts are a STRONGER tier signal: passed = cited anchor,
+   refuted = negation, could-not-judge = named gap — the writer contract
+   ports onto our verdict set directly.)
+3. **Retain useful detail — "do not flatten rich research notes into
+   generic themes"**: numbers, examples, mechanisms, caveats survive into
+   the answer. Cross-synthesize across notes into higher-level
+   conclusions instead of summarizing file-by-file. Developed paragraphs,
+   not checklists. (Direct Insight-dimension lever.)
+4. **Conflicts are presented, not papered over**: competing claims with
+   which evidence is stronger or more recent.
+5. **"Err on the side of more useful information rather than less"** —
+   the anti-truncation stance, matching the 32K writer budget.
+6. **Missing notes are named as gaps in the answer** (absence reported).
+7. **Citation whitelist discipline** (already adopted as the registry):
+   citations map 1:1 to verified sources only; derived statistics cite
+   their inputs, not themselves; unverifiable labels removed.
+8. **KV-cache boundary**: static contract above the fold, dynamic context
+   below — prompt-caching economy (a throughput lesson for our render
+   path).
+
+### 6.4 What this changes in the campaign
+
+- **R3b's writer prompt** is now specified by contract (6.3) ported onto
+  verdict tiers — not designed from scratch.
+- **R2's gap-query composition** gains the planner's query shape rules
+  (6.2.3): narrow, self-contained, non-overlapping, component-mapped.
+- **R3a's cap policy** gains the 6.1 precedent: the deliverable's budget
+  exceeds the working stages'.
+- **The R4 flight card** gains: sampling profile, snippet economy, and
+  the scholar-search decision (operator: new API spend).
+- Still skipped, reaffirmed: their identity-only verification, per-session
+  sources, model-judgment stop rules.

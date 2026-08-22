@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787278811",
+  "charter_hash": "911e0ad792bda911",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of counts Google was found liable for antitrust violations in the US District Court ruling, United States v. Google LLC (2024)",
+      "Percentage share of US search engine market held by Google as cited in the court's findings or DOJ complaint, 2013-2023",
+      "Total number of exclusive distribution agreements signed between Google and device manufacturers or browsers identified by the court, 2005-2023",
+      "Annual payments made by Google to Apple Inc. under their default search agreement, 2019-2023",
+      "Specific remedies ordered regarding the divestiture of Chrome browser or Android operating system, July 2024",
+      "Number of injunctions issued against specific anti-competitive practices such as self-preferencing in search results, July 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

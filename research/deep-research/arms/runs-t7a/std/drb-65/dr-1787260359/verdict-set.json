@@ -1,0 +1,79 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787260359",
+  "charter_hash": "eb22b805c469965b",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, it is not possible to develop a design report utilizing modern control theory for 3D reconstruction and phenotypic analysis of crop grains. [Source: ev-1]",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The available evidence does not contain information regarding \"modern control theory,\" specific theoretical methods/models for grain modeling, or detailed technical content from the cited papers beyond their metadata and titles. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "The only relevant details supported by the evidence are:\n*   There exists a survey titled \"A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond\" published in *Plant Phenomics*.[Source: ev-2]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "*   This survey covers topics ranging from classical methods to NeRF and 3DGS.[Source: ev-2]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "*   Another study titled \"Analysing the phenotype development of soybean plants using low-cost 3D reconstruction\" was published in *Sci Rep*.[Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "No evidence supports the application of modern control theory or provides specific modeling/analysis design details for crop grains within these sources.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "A survey titled \"A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond,\" published in *Plant Phenomics* [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": []
+}

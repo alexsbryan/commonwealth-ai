@@ -1,0 +1,246 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787337447",
+  "charter_hash": "2d823579659b4aa8",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Nvidia’s market value crossed $4 trillion on 2025-07-09, making it the first company in history to close above this threshold [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This milestone was driven by several key factors related to AI infrastructure spending and demand:\n*   **Accelerator Demand:** Strong demand for Blackwell accelerator rack systems, specifically the GB200/GB300 models, contributed significantly to the valuation increase [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "200/",
+          "300"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "*   **Major Infrastructure Projects:** The Stargate project included an approximately $500 billion plan for AI infrastructure, further boosting confidence in Nvidia’s position [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "500"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "*   **Hyperscaler Capital Expenditure (Capex):** Companies such as Microsoft, Meta, Google, and Amazon repeatedly raised their capex guidance throughout 2025, indicating sustained investment in AI capabilities where Nvidia holds a dominant market share [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "AI capabilities"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "It reflects a transition from training to inference demand, with CEO Jensen Huang describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Additionally, Nvidia’s stock price crossed approximately $160 during this period [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "160"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "This milestone was driven by several key factors related to AI infrastructure spending and demand:\n\n*   **Accelerator Demand:** Strong demand for Blackwell accelerator rack systems, specifically the GB200/GB300 models, contributed significantly to the valuation increase [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "200/",
+          "300"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Nvidia’s market value crossed $4 trillion on 2025-07-09, making it the first company in history to close above this threshold [Source: ev-1].",
+      "actionable_query": "- - making it the company in history to close above this threshold . (4, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This milestone was driven by several key factors related to AI infrastructure spending and demand:\n\n*   **Accelerator Demand:** Strong demand for Blackwell accelerator rack systems, specifically the GB200/GB300 models, contributed significantly to the valuation increase [Source: ev-1].",
+      "actionable_query": "milestone driven several key factors related infrastructure spending demand Accelerator Strong Blackwell rack systems specifically models contributed significantly valuation increase",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "*   **Major Infrastructure Projects:** The Stargate project included an approximately $500 billion plan for AI infrastructure, further boosting confidence in Nvidia’s position [Source: ev-1].",
+      "actionable_query": "Major Infrastructure Projects Stargate project included approximately billion plan further boosting confidence Nvidia’s position",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "*   **Hyperscaler Capital Expenditure (Capex):** Companies such as Microsoft, Meta, Google, and Amazon repeatedly raised their capex guidance throughout 2025, indicating sustained investment in AI capabilities where Nvidia holds a dominant market share [Source: ev-1].",
+      "actionable_query": "2025 Hyperscaler Capital Expenditure Capex Companies Microsoft Meta Google Amazon repeatedly raised guidance throughout indicating sustained investment capabilities Nvidia holds dominant market share",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "It reflects a transition from training to inference demand, with CEO Jensen Huang describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+      "actionable_query": "reflects transition training inference demand CEO Jensen Huang describing factories selling compute commodity",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Additionally, Nvidia’s stock price crossed approximately $160 during this period [Source: ev-1].",
+      "actionable_query": "Additionally Nvidia’s stock price crossed approximately during period",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

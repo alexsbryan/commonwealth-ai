@@ -436,7 +436,11 @@ fn resolve_concept_inner(store: &SecFactStore, requested: &str) -> Result<String
     let hits: Vec<&String> = store
         .concepts
         .iter()
-        .filter(|(_, cf)| cf.ask_terms.iter().any(|t| normalize_concept_phrase(t) == phrase))
+        .filter(|(_, cf)| {
+            cf.ask_terms
+                .iter()
+                .any(|t| normalize_concept_phrase(t) == phrase)
+        })
         .map(|(id, _)| id)
         .collect();
     match hits.as_slice() {
@@ -929,7 +933,10 @@ mod tests {
         let reason = r.reason();
         assert!(reason.contains("consolidated-only"), "{reason}");
         assert!(reason.contains("segment"), "{reason}");
-        assert!(reason.contains("net_income"), "names alternatives: {reason}");
+        assert!(
+            reason.contains("net_income"),
+            "names alternatives: {reason}"
+        );
         assert!(
             reason.contains("not offered as a substitute"),
             "must refuse the substitution outright: {reason}"

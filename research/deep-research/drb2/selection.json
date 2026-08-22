@@ -1,0 +1,129 @@
+{
+  "seed_string": "deep-research-t7a-drb2-sample-2026-08-19",
+  "seed": 4248975044,
+  "n": 8,
+  "weights": {
+    "Art & Design": 2.33,
+    "Crime & Law": 2.057,
+    "Education & Jobs": 3.027,
+    "Entertainment": 3.382,
+    "Fashion & Beauty": 4.897,
+    "Finance & Business": 2.413,
+    "Food & Dining": 2.546,
+    "Games": 3.615,
+    "Hardware": 2.862,
+    "Health": 2.157,
+    "History": 2.391,
+    "Home & Hobbies": 1.883,
+    "Industrial": 3.012,
+    "Literature": 2.625,
+    "Religion": 2.788,
+    "Science & Technology": 2.683,
+    "Social Life": 3.489,
+    "Software": 1.811,
+    "Software Development": 2.618,
+    "Sports & Fitness": 3.109,
+    "Transportation": 2.709,
+    "Travel": 2.364
+  },
+  "theme_probabilities": {
+    "Art & Design": 0.0383,
+    "Crime & Law": 0.0339,
+    "Education & Jobs": 0.0498,
+    "Entertainment": 0.0557,
+    "Fashion & Beauty": 0.0806,
+    "Finance & Business": 0.0397,
+    "Food & Dining": 0.0419,
+    "Games": 0.0595,
+    "Hardware": 0.0471,
+    "Health": 0.0355,
+    "History": 0.0393,
+    "Home & Hobbies": 0.031,
+    "Industrial": 0.0496,
+    "Literature": 0.0432,
+    "Religion": 0.0459,
+    "Science & Technology": 0.0442,
+    "Social Life": 0.0574,
+    "Software": 0.0298,
+    "Software Development": 0.0431,
+    "Sports & Fitness": 0.0512,
+    "Transportation": 0.0446,
+    "Travel": 0.0389
+  },
+  "exclusion": {
+    "rule": "language==en AND license not CC BY-NC",
+    "excluded_nc_idx": [
+      26,
+      110
+    ],
+    "note": "NC tasks excluded per t6g control-arm design; CC0 idx 119 included (not NC)"
+  },
+  "stratum_source": "paper arXiv 2601.08536 v2 Appendix B Table 8 (Perplexity per-theme totals) — the named substitution for per-domain InfoRecall weakness, which is not published",
+  "draws": [
+    {
+      "draw": 1,
+      "idx": 4,
+      "theme": "Finance & Business",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 2.413
+    },
+    {
+      "draw": 2,
+      "idx": 96,
+      "theme": "Industrial",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 3.012
+    },
+    {
+      "draw": 3,
+      "idx": 126,
+      "theme": "Social Life",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 3.489
+    },
+    {
+      "draw": 4,
+      "idx": 112,
+      "theme": "Sports & Fitness",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 3.109
+    },
+    {
+      "draw": 5,
+      "idx": 98,
+      "theme": "Art & Design",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 2.33
+    },
+    {
+      "draw": 6,
+      "idx": 114,
+      "theme": "Software",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 1.811
+    },
+    {
+      "draw": 7,
+      "idx": 70,
+      "theme": "Health",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 2.157
+    },
+    {
+      "draw": 8,
+      "idx": 128,
+      "theme": "Food & Dining",
+      "language": "en",
+      "license": "CC BY 4.0",
+      "theme_weight": 2.546
+    }
+  ],
+  "content_blind": "selection read only idx/language/theme/license; prompts opened first at flight time"
+}

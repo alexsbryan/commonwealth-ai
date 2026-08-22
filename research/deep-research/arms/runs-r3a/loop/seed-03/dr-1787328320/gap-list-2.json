@@ -1,0 +1,178 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787328320",
+  "charter_hash": "562ac67cb5479c5c",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "NASA ordered Boeing’s Starliner to return uncrewed from its first crewed flight because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during the docking approach, and NASA could not guarantee these thrusters were safe for the critical deorbit burn [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1, 5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The specific technical reason cited was that the thrusters could not be ground-tested in their actual flight condition to verify safety [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This decision had several significant implications for the program:\n*   **Crew Duration:** Astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 18, 2025, resulting in a stay of roughly 9.5 months compared to the originally planned ~8 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9.5, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "*   **Financial Impact:** Under the fixed-price contract from the 2014 Commercial Crew program (where Boeing’s award was about $4.2 billion versus SpaceX’s $2.6 billion), Boeing disclosed cumulative program losses exceeding $1.5 billion by 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4.2, 2.6, 1.5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "*   **Workforce Reduction:** In June 2025, Boeing announced approximately 400 job cuts within its space division [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "400"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "*   **Certification Status:** As of 2025, NASA's path to certifying Starliner for future crewed missions remained unresolved [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "NASA",
+          "Starliner",
+          "certification status"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "NASA ordered Boeing’s Starliner to return uncrewed from its first crewed flight because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during the docking approach, and NASA could not guarantee these thrusters were safe for the critical deorbit burn [Source: ev-1].",
+      "actionable_query": "crewed flight because the spacecraft experienced reaction-control system (RCS) thruster anomalies during the docking approach, and NASA coul (1, mean)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The specific technical reason cited was that the thrusters could not be ground-tested in their actual flight condition to verify safety [Source: ev-1].",
+      "actionable_query": "specific technical reason cited thrusters could ground-tested actual flight condition verify safety",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "This decision had several significant implications for the program:\n*   **Crew Duration:** Astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 18, 2025, resulting in a stay of roughly 9.5 months compared to the originally planned ~8 days [Source: ev-1].",
+      "actionable_query": "decision several significant implications program Crew Duration Astronauts Butch Wilmore Suni Williams remained International Space Station until March resulting stay roughly months compared",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

@@ -1,0 +1,141 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787272754",
+  "charter_hash": "b7f6261358e57633",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2024 Microsoft's Recall feature became privacy scandal because initially designed memory tool took screenshots user’s screen few seconds stored them locally make searchable",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "2024 address concerns Microsoft delayed feature June subsequently reversed default settings",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "relaunched version now opt-in default OFF rather enabled",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Additionally accessing timeline now requires Windows Hello authentication presence detection system explicitly excludes incognito mode DRM content capture",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "Although revised opt-in version reached general availability Copilot PCs initial controversy permanently shaped privacy discussions surrounding",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 18.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1"
+    ],
+    "threshold": 10.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

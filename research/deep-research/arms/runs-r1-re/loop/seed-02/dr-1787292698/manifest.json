@@ -1,0 +1,67 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787292698",
+  "charter_hash": "6d90c96601efa04f",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 2,
+      "fetched": 0,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 2,
+      "gaps_after": 2,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-02",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787292698"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "DeepSeek's R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the cost previously assumed necessary [Source: ev-1].",
+    "This event revealed to markets that the thesis regarding frontier-AI capital expenditure and Nvidia's demand being moated by compute scale was incorrect, as an open-weights frontier-class reasoning model had been achieved at significantly lower costs than incumbent standards [Source: ev-1].",
+    "Specifically, DeepSeek-R1 was released on January 20, 2025 [Source: ev-1], following its predecessor DeepSeek-V3 (released December 26, 2024), which reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+    "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the cost previously assumed necessary [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787292698",
+    "acquired_at_unix": 1787292698,
+    "released_at_unix": 1787292790
+  }
+}

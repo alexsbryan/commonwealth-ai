@@ -1,0 +1,151 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787351331",
+  "charter_hash": "9f73b2d381087123",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 4,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 16,
+      "fetched": 4,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 16,
+      "gaps_after": 15,
+      "fetched": 3,
+      "search_calls": 4
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://v1-demo.example/source-report",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://smartasset.com/data-studies/income-inequality-2024",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      },
+      {
+        "url": "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787351331"
+      }
+    ],
+    "failed": [
+      {
+        "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+        "error": "round-fetch-cap"
+      },
+      {
+        "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+        "error": "round-fetch-cap"
+      },
+      {
+        "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+        "error": "round-fetch-cap"
+      },
+      {
+        "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+        "error": "round-fetch-cap"
+      }
+    ]
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 11
+    },
+    "remaining": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "In New York, 128 tracts gentrified, which was the highest raw total among cities reviewed [Source: ev-2].",
+    "Economic disparities have intensified significantly across metropolitan areas. [Source: ev-1]",
+    "Several metros exhibit extreme patterns where income ratios reach 18:1 between top and bottom earners [Source: ev-1].",
+    "Specifically, Atlanta and Washington D.C. [Source: ev-1]",
+    "Housing affordability has deteriorated as costs outpaced wage growth. [Source: ev-1]",
+    "On an inflation-adjusted basis, incomes rose just 8.5%, whereas home prices rose more than 56% [Source: ev-4].",
+    "The national price-to-income ratio is approximately 4.6–4.7 [Source: ev-1] [Source: ev-4].",
+    "In California cities such as Los Angeles, San Jose, Long Beach, San Francisco, and San Diego, ratios range from 9.6 to 12.2—more than double the national average [Source: ev-1] [Source: ev-4].",
+    "Five of the six large U.S. [Source: ev-1]",
+    "cities with the highest price-to-income ratios are in California [Source: ev-4].",
+    "Demographic shifts have accompanied these economic changes. [Source: ev-1]",
+    "Gentrifying neighborhoods saw population increases (+6.5%) and became whiter (non-Hispanic white share increased by +4.3 percentage points), while poverty rates decreased by 0.7 percentage points [Source: ev-1] [Source: ev-2].",
+    "In contrast, lower-income areas that did not gentrify experienced slight population losses (-2.4%), an increase in minority concentration, and a rise in poverty of 6.7 percentage points [Source: ev-1] [Source: ev-2].",
+    "Displacement patterns vary by race; residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, whereas residents from other gentrifying areas often move to wealthier ones [Source: ev-1].",
+    "Since 1980, nearly 80% of the country's under-45 population growth was concentrated in metro areas with over 1 million residents [Source: ev-1] [ev-4].",
+    "*   **Price-to-Income Ratios:** The national price-to-income ratio is approximately 4.6–4.7 [Source: ev-1] [Source: ev-4].",
+    "**Displacement and Demographic Shifts (1980–Present)**\n*   **Neighborhood Outcomes:** Gentrifying neighborhoods saw population increases (+6.5%) and became whiter (non-Hispanic white share increased by +4.3 percentage points), while poverty rates decreased by 0.7 percentage points [Source: ev-1] [Source: ev-2].",
+    "In contrast, lower-income areas that did *not* gentrify experienced slight population losses (-2.4%), an increase in minority concentration, and a rise in poverty of 6.7 percentage points [Source: ev-1] [Source: ev-2].",
+    "*   **Mobility and Displacement:** Residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, whereas residents from other gentrifying areas often move to wealthier ones [Source: ev-1].",
+    "Since 1980, nearly 80% of the country's under-45 population growth was concentrated in metro areas with over 1 million residents [Source: ev-1].",
+    "[ev-4]. [Source: ev-1]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787351331",
+    "acquired_at_unix": 1787351331,
+    "released_at_unix": 1787353281
+  }
+}

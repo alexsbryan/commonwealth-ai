@@ -1,0 +1,69 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787350611",
+  "charter_hash": "79095d1e92ef5eac",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 6,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-08",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787350611"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "A US court found Google’s search business to be a monopoly because it violated Section 2 of the Sherman Act through exclusionary conduct involving default-distribution deals [Source: ev-1].",
+    "Specifically, Judge Amit Mehta ruled on August 5, 2024, that Google is a monopolist in general search services and general search text advertising [Source: ev-1].",
+    "The theory of harm centered on Google paying companies such as Apple, Samsung, and Mozilla billions of dollars to secure default search engine placement; for instance, trial evidence showed Google paid approximately $26.3 billion for distribution in 2021 and paid Apple roughly 36% of Safari search-ad revenue [Source: ev-1].",
+    "This practice created a self-reinforcing loop where defaults generated scale, which produced data, improved quality, and protected the default status against rivals [Source: ev-1].",
+    "Additionally, the ruling imposed limits on acquisitions and AI-related investments [Source: ev-1].",
+    "While Google appealed these decisions in 2025, arguing that the trial court punished procompetitive innovation, the final outcome remained pending through 2025 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787350611",
+    "acquired_at_unix": 1787350611,
+    "released_at_unix": 1787350746
+  }
+}

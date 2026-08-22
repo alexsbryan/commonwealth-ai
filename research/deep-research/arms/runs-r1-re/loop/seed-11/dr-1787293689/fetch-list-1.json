@@ -1,0 +1,130 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787293689",
+  "charter_hash": "ae902c441ad6eebb",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Nvidia's market capitalization on July 30, 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Global data center capex forecast for 2025 by major hyperscalers (Microsoft, Amazon, Google, Meta)",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Year-over-year growth rate of Nvidia's Data Center segment revenue in Q1 FY2026",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Share of global AI accelerator market held by Nvidia in 2024 and projected share in 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Total addressable market size estimate for generative AI infrastructure spending through 2030",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Quarterly earnings call guidance from Microsoft regarding Azure AI infrastructure investment increase percentage",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 6.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 6.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 6.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

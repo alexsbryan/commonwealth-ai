@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787262042",
+  "charter_hash": "e92111801f41e19c",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Prevalence of non-motor symptoms in early-stage Parkinson's disease patients",
+      "Percentage change in motor symptom severity scores from mild to moderate stage Parkinson's disease",
+      "Median age at onset for different clinical stages of Parkinson's disease",
+      "Share of Parkinson's disease patients experiencing sleep disturbances by disease stage",
+      "Rate of cognitive decline measured by MMSE score across early, middle, and late stages of Parkinson's disease",
+      "Count of specific red flag symptoms associated with rapid progression in young-onset Parkinson's disease",
+      "Frequency of falls per year among Parkinson's disease patients classified as Hoehn-Yahr stage 3 versus stage 4",
+      "Proportion of caregivers reporting high stress levels when managing a patient transitioning from independent living to assisted care",
+      "Number of recommended daily physical therapy sessions for post-DBS rehabilitation protocols",
+      "Percentage improvement in UPDRS motor subscale scores following Deep Brain Stimulation surgery at six months",
+      "Share of DBS patients experiencing speech difficulties requiring voice therapy intervention after implantation",
+      "Median duration of medication adjustment period required post-Deep Brain Stimulation surgery"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

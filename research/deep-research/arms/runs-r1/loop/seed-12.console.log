@@ -1,0 +1,53 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787279319 — Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-r1/loop/seed-12/dr-1787279319
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-12 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787279319] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787279319] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1787279319] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787279319] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787279319] Building FTS content index (2/3)...
+[dr-estate-dr-1787279319] FTS content index done
+[dr-estate-dr-1787279319] Building FTS title index (3/3)...
+[dr-estate-dr-1787279319] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787279319 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-r1/loop/seed-12/dr-1787279319/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787279319", charter_hash: "602065f91080bdf7", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 6 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 4, fetched: 0, search_calls: 4 }, RoundRow { round: 3, gaps_before: 4, gaps_after: 4, fetched: 0, search_calls: 2 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://estate.example/seed-12", custody: "public-web", ingested_into: Some("dr-estate-dr-1787279319") }], failed: [] }, budget: BudgetTotals { spent: {"web-fetch:pages": 1, "web-search:mock": 12}, remaining: {"web-fetch:pages": 11, "web-search:mock": 0} }, not_covered: ["Microsoft's Recall feature became a privacy scandal in 2024 because security researchers, notably Kevin Beaumont, demonstrated that the AI \"memory\" tool stored screenshots of users' screens unencrypted (in plaintext) within a local SQLite database [Source: ev-1].", "This contradicted Microsoft’s claims that the data was encrypted and allowed any process running as the user to access sensitive content captured by default, such as passwords, health data, and private messages [Source: ev-1].", "The incident drew scrutiny from regulatory bodies including the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson [Source: ev-1].", "In response, Microsoft delayed the feature in June 2024 and reversed its default setting so that it is now opt-in (default OFF), requires Windows Hello and presence detection to open the timeline, and excludes incognito/DRM content [Source: ev-1].", "This revised version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1]."], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1787279319", acquired_at_unix: 1787279319, released_at_unix: Some(1787279419) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "fetch-list-3.json", "skip-ledger-3.json", "evidence-window-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-r1/loop/seed-12/dr-1787279319/report.md
+rounds: 3 | gaps after last round: 4 | searches: 12 | fetched sources: 1
+open questions (could-not-judge):
+  - Microsoft's Recall feature became a privacy scandal in 2024 because security researchers, notably Kevin Beaumont, demonstrated that the AI "memory" tool stored screenshots of users' screens unencrypted (in plaintext) within a local SQLite database [Source: ev-1].
+  - This contradicted Microsoft’s claims that the data was encrypted and allowed any process running as the user to access sensitive content captured by default, such as passwords, health data, and private messages [Source: ev-1].
+  - The incident drew scrutiny from regulatory bodies including the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson [Source: ev-1].
+  - In response, Microsoft delayed the feature in June 2024 and reversed its default setting so that it is now opt-in (default OFF), requires Windows Hello and presence detection to open the timeline, and excludes incognito/DRM content [Source: ev-1].
+  - This revised version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  fetch-list-3.json
+  skip-ledger-3.json
+  evidence-window-3.json
+  verdict-set.json
+  report.md
+  manifest.json

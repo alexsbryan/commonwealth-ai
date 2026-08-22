@@ -1,0 +1,26 @@
+# Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS applications. Your report should: 1) List major manufacturers, specific device models, and their configurations. 2) Include images of these devices. 3) Analyze the primary use cases and scenarios where these devices are deployed. 4) Investigate the market penetration, common usage scenarios, typical price ranges, and estimated installed base for such devices across different regions (North America, Japan/Korea, Southeast Asia, South America).
+
+_run: `dr-1787262188` — 0 findings established; 10 claims open. Citations are chunk-level (evidence id + source URL)._
+
+## Findings
+
+
+## Refuted claims
+
+- **[refuted]** Based on the evidence provided, it is **not possible** to conduct the requested in-depth research report.  — *refuted by the evidence*
+- **[refuted]** **Missing Information:**
+The evidence lacks all required specifics for sections 1 through 4 of your request (specific device models/configurations, images, detailed regional market penetration/price/installation data).  — *refuted by the evidence*
+- **[refuted]** Therefore, I cannot provide the requested report without guessing.  — *refuted by the evidence*
+
+## Open questions
+
+- **[open question]** The retrieved evidence does not contain information regarding tablet-style payment or SaaS devices, their manufacturers (other than a general mention of SUNMI), specific models, configurations, images, detailed use cases beyond generic descriptions, market penetration statistics, price ranges, or installed base figures for any region   . — *extracted specifics absent from the evidence*
+- **[open question]** Here is what can be stated based strictly on the available text:
+
+*   **SUNMI:** One manufacturer mentioned is SUNMI, which produces "payment CPADs" and "all-in-one touchscreen terminals" that integrate payment processing . — *extracted specifics absent from the evidence*
+- **[open question]** The evidence lists product categories such as CPad, Interactive Display, Mobile Payment, Desktop Kiosks, Network Accessories, and a SoftPOS Platform . — *single-origin support (corroboration floor)*
+- **[open question]** However, no specific device models, configurations, prices, or market data are provided in this chunk.  — *single-origin support (corroboration floor)*
+- **[open question]** *   **Okta:** Okta offers an identity platform with products like Adaptive Multifactor Authentication and Identity Governance for securing access to applications from any device (including via their Device Access team), but the text does not describe hardware tablets or SaaS-specific tablet devices manufactured by Okta . — *single-origin support (corroboration floor)*
+- **[open question]** *   **Amazon:** Amazon’s Devices & Services organization builds products leveraging AI, sensors, smart home devices, cloud services, and Alexa, including work towards net zero carbon by 2040 . — *single-origin support (corroboration floor)*
+- **[open question]** The job description mentions experience building and launching hardware products is a must for a specific role, but it does not list specific tablet models used for payments or SaaS in this context . — *extracted specifics absent from the evidence*
+

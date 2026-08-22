@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787279319",
+  "charter_hash": "602065f91080bdf7",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Microsoft's Recall feature became a privacy scandal in 2024 because security researchers, notably Kevin Beaumont, demonstrated that the AI \"memory\" tool stored screenshots of users' screens unencrypted (in plaintext) within a local SQLite database [Source: ev-1]. This contradicted Microsoft’s claims that the data was encrypted and allowed any process running as the user to access sensitive content captured by default, such as passwords, health data, and private messages [Source: ev-1]. The incident drew scrutiny from regulatory bodies including the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson [Source: ev-1].\n\nIn response to these findings, Microsoft delayed the release in June 2024 and subsequently reversed its configuration so that Recall is now opt-in (default OFF) rather than enabled by default [Source: ev-1]. To further address privacy concerns, the relaunched feature requires Windows Hello authentication and presence detection to open the timeline, and it excludes incognito browsing sessions and DRM content from capture [Source: ev-1]. This revised version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-12",
+      "custody": "public-web"
+    }
+  ]
+}

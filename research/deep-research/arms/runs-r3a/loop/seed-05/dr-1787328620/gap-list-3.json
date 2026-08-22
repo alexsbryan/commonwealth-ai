@@ -1,0 +1,258 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787328620",
+  "charter_hash": "520965a046ff7877",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The EU's AI Act entered into force in phases between 2024 and 2027 to ensure that obligations are implemented only as institutional capacity and technology mature [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "2027",
+          "phases"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This deliberate scheduling also serves as a compliance roadmap, leveraging the \"Brussels effect\" to export these standards to providers worldwide [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Regarding the specific deadlines and requirements between 2024 and the subsequent phase-in dates provided in the evidence:\n*   **August 1, 2024:** The law officially entered into force after being published on July 12, 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1, 2024:"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "*   **February 2, 2025:** Obligations regarding prohibited practices (classified as \"unacceptable risk\") begin applying. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2, 2025:"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "These bans cover social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Additionally, while general-purpose AI (GPAI) model obligations are mentioned as part of the risk tiers with duties scaled by systemic-risk status using a $10^{26}$ FLOPs threshold, the specific start date for GPAI obligations is not explicitly listed among the phase-in dates provided in this text segment [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "10",
+          "26"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "The EU AI Act entered into force in phases to ensure that obligations are implemented only as institutional capacity and technology mature [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Regarding the specific deadlines and requirements between 2024 and 2027:\n*   **August 1, 2024:** The law officially entered into force after being published on July 12, 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2027:, 1, 2024:"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "Additionally, while general-purpose AI (GPAI) model obligations are mentioned as part of the risk tiers and duties scaled by systemic-risk status (using a $10^{26}$ FLOPs threshold), the specific start date for GPAI obligations is not explicitly listed among the phase-in dates provided in the text. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "10",
+          "26"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "The EU AI Act entered into force in phases to ensure that obligations are implemented only as institutional capacity and technology mature [Source: ev-1].",
+      "actionable_query": "Act entered force phases ensure obligations implemented institutional capacity technology mature",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This deliberate scheduling also serves as a compliance roadmap, leveraging the \"Brussels effect\" to export these standards to providers worldwide [Source: ev-1].",
+      "actionable_query": "deliberate scheduling serves compliance roadmap leveraging Brussels effect export standards providers worldwide",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Regarding the specific deadlines and requirements between 2024 and 2027:\n*   **August 1, 2024:** The law officially entered into force after being published on July 12, 2024 [Source: ev-1].",
+      "actionable_query": "and * **August ** The law officially entered into force after being published on July . (2024, 2027)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "*   **February 2, 2025:** Obligations regarding prohibited practices (classified as \"unacceptable risk\") begin applying. [Source: ev-1]",
+      "actionable_query": "* **February ** Obligations regarding prohibited practices (classified as \"unacceptable risk\") begin applying. (2024, 2027)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "These bans cover social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+      "actionable_query": "bans cover social scoring certain manipulative exploitation-of-vulnerability uses",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Additionally, while general-purpose AI (GPAI) model obligations are mentioned as part of the risk tiers and duties scaled by systemic-risk status (using a $10^{26}$ FLOPs threshold), the specific start date for GPAI obligations is not explicitly listed among the phase-in dates provided in the text. [Source: ev-1]",
+      "actionable_query": "Additionally general-purpose GPAI model obligations mentioned part risk tiers duties scaled systemic-risk status using FLOPs threshold specific start date explicitly listed among phase-in dates",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

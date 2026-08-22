@@ -1,0 +1,100 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787350611",
+  "charter_hash": "79095d1e92ef5eac",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did a US court find Google's search business a monopoly, and what remedies were ordered?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Number of countervailing powers or competitors cited by the court in defining the relevant market for general web search",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Percentage share of US general web search traffic held by Google as determined by the court's evidence",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Count of major browser manufacturers whose default search settings were locked to Google via exclusive distribution agreements",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 7.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

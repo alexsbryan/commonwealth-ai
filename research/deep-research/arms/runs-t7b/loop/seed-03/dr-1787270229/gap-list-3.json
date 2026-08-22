@@ -1,0 +1,277 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787270229",
+  "charter_hash": "2e1d7cd0aff62642",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed from its first crewed flight because the spacecraft experienced 5 reaction-control system thruster anomalies during its docking approach.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "NASA determined that these thruster anomalies could not be guaranteed safe for the deorbit burn, as the thrusters could not be ground-tested in their flight condition.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "This decision meant that astronauts Butch Wilmore and Suni Williams were stranded on the International Space Station until March 18, 2025, spending roughly 9.5 months aloft compared to a planned duration of approximately 8 days.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "Following NASA's announcement on August 24, 2024, that Starliner would return without crew, the spacecraft undocked from the station on September 6, 2024.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "The program operates under a fixed-price contract where Boeing has received about $4.2 billion compared to SpaceX’s roughly $2.6 billion since the Commercial Crew program began in 2014.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "By 2025, Boeing disclosed cumulative losses of more than $1.5 billion for the Starliner program.",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "refused_no_citation_handle",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "NASA determined that these thruster anomalies could not be guaranteed safe for the deorbit burn, as the thrusters could not be ground-tested in their flight condition [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "This decision had several significant implications for the program and astronauts:\n*   **Extended Astronaut Stay:** The astronauts aboard, Butch Wilmore and Suni Williams, were stranded on the International Space Station. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "They did not return until March 18, 2025, spending roughly 9.5 months aloft compared to a planned duration of approximately 8 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9.5, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "*   **Uncrewed Return:** Following NASA's announcement on August 24, 2024, that Starliner would return without crew, the spacecraft undocked from the station on September 6, 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 6"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "*   **Financial Impact:** The program operates under a fixed-price contract where Boeing has received about $4.2 billion compared to SpaceX’s roughly $2.6 billion since the Commercial Crew program began in 2014 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4.2, 2.6"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "By 2025, Boeing disclosed cumulative losses of more than $1.5 billion for the Starliner program [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1.5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach [Source: ev-1].",
+      "actionable_query": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced reaction-control system (RCS) thruster anomalies durin (1, mean)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "NASA determined that these thruster anomalies could not be guaranteed safe for the deorbit burn, as the thrusters could not be ground-tested in their flight condition [Source: ev-1].",
+      "actionable_query": "NASA determined thruster anomalies could guaranteed safe deorbit burn thrusters ground-tested flight condition",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "This decision had several significant implications for the program and astronauts:\n*   **Extended Astronaut Stay:** The astronauts aboard, Butch Wilmore and Suni Williams, were stranded on the International Space Station. [Source: ev-1]",
+      "actionable_query": "decision several significant implications program astronauts Extended Astronaut Stay aboard Butch Wilmore Suni Williams stranded International Space Station",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "They did not return until March 18, 2025, spending roughly 9.5 months aloft compared to a planned duration of approximately 8 days [Source: ev-1].",
+      "actionable_query": "They did not return until March spending roughly months aloft compared to a planned duration of approximately days . (1, mean)",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "*   **Uncrewed Return:** Following NASA's announcement on August 24, 2024, that Starliner would return without crew, the spacecraft undocked from the station on September 6, 2024 [Source: ev-1].",
+      "actionable_query": "* **Uncrewed Return:** Following NASA's announcement on August that Starliner would return without crew, the spacecraft undocked from the st (1, mean)",
+      "from_claim_id": "c11",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "*   **Financial Impact:** The program operates under a fixed-price contract where Boeing has received about $4.2 billion compared to SpaceX’s roughly $2.6 billion since the Commercial Crew program began in 2014 [Source: ev-1].",
+      "actionable_query": "* **Financial Impact:** The program operates under a fixed-price contract where Boeing has received about $ billion compared to SpaceX’s rou",
+      "from_claim_id": "c12",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "By 2025, Boeing disclosed cumulative losses of more than $1.5 billion for the Starliner program [Source: ev-1].",
+      "actionable_query": "By Boeing disclosed cumulative losses of more than $ billion for the Starliner program . (1, mean)",
+      "from_claim_id": "c13",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

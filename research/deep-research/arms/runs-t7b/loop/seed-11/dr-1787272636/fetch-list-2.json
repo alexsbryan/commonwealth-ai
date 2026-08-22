@@ -1,0 +1,143 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787272636",
+  "charter_hash": "278a4e62cb8e9486",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "- - making it the company in history to close above this threshold . (4, 2025)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "milestone driven several key factors related infrastructure spending demand Accelerator Strong Blackwell rack systems contributed significantly valuation increase",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Major Infrastructure Projects Stargate project approximately billion plan played role driving growth",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "2025 Hyperscaler Capex Repeatedly raised capital expenditure guidance major hyperscalers—including Microsoft Meta Google Amazon—throughout supported Nvidia’s market position held dominant share",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "Shift Inference CEO Jensen Huang characterized period transition training demand describing factories sell compute commodity",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "trillion, Nvidia’s share price was approximately $ .",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-11",
+      "title": "Nvidia crosses $4 trillion (2025-07-09)",
+      "snippet": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to do so.",
+      "content": null,
+      "engine": "mock",
+      "score": 5.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1"
+    ],
+    "threshold": 7.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

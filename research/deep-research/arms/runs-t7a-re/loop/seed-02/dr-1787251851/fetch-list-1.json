@@ -1,0 +1,157 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787251851",
+  "charter_hash": "c073f3875b415be1",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Nvidia's single-day market capitalization loss in dollars and percentage on January 27, 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Comparison of Nvidia's historical largest daily stock price decline versus the drop following DeepSeek R1 release",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "DeepSeek V3/R1 total training cost estimates reported by analysts or media sources",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Estimated number of H800 GPUs used for DeepSeek V3/R1 pre-training according to technical reports or leaks",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Average energy consumption per token generation for MoE architectures like DeepSeek-V3 compared to dense models",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Price difference between NVIDIA H800/H100 GPU clusters and alternative hardware solutions cited as factors in AI infrastructure costs",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Nvidia revenue share from data center segment in fiscal year 2024 compared to previous years",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "Number of parameters in DeepSeek-R1 model architecture versus competing frontier models like Llama 3.1 or GPT-4o",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q10",
+      "text": "Inference cost reduction percentage achieved by DeepSeek R1 compared to comparable closed-source API pricing",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-02",
+      "title": "DeepSeek R1 and the Nvidia loss (2025-01)",
+      "snippet": "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27.",
+      "content": null,
+      "engine": "mock",
+      "score": 18.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-02",
+      "title": "DeepSeek R1 and the Nvidia loss (2025-01)",
+      "snippet": "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-02",
+      "title": "DeepSeek R1 and the Nvidia loss (2025-01)",
+      "snippet": "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-02",
+      "title": "DeepSeek R1 and the Nvidia loss (2025-01)",
+      "snippet": "DeepSeek-R1's 2025-01-20 release triggered the largest single-day loss in Nvidia's history — about $589 billion on 2025-01-27.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 9.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

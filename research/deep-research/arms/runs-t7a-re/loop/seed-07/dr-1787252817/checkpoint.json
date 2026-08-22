@@ -1,0 +1,224 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787252817",
+  "charter_hash": "f21e0ab8656a46d6",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787252817",
+    "question": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-re/loop/seed-07/dr-1787252817",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+  "frontier": [
+    "Number of US federal court rulings declaring TikTok's ban unconstitutional in 2024",
+    "Percentage share of total US social media users aged 13-54 using TikTok as reported by Pew Research Center in 2023",
+    "Count of days until the original statutory deadline for TikTok divestiture under the Protecting Americans from Foreign Adversary Controlled Applications Act (PAFACA) passed on April 5, 2025",
+    "Name and date of the executive order signed by President Trump suspending enforcement of PAFACA in January 2025",
+    "Share of TikTok's global user base located within China compared to international markets according to company financial disclosures or third-party estimates in 2024",
+    "Number of state attorneys general who filed lawsuits challenging the constitutionality of the TikTok ban between June 2024 and December 2024",
+    "Percentage change in daily active users for TikTok in the United States following the initial court injunctions in late 2023 through early 2024"
+  ],
+  "frontier_question": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+  "figure_specifiers": [
+    "2024",
+    "2025"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787252817",
+      "charter_hash": "f21e0ab8656a46d6",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787252817",
+      "charter_hash": "f21e0ab8656a46d6",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-07",
+          "source_url": "https://estate.example/seed-07",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "The Protecting Americans from Foreign Adversary Controlled Applications Act — signed by President Biden on 2024-04-24 — required ByteDance to divest TikTok's US operations within roughly 270 days (extendable by 90), or face a US ban. The Supreme Court upheld the law 9-0 (per curiam) on 2025-01-17, one day before the effective date of 2025-01-19. TikTok went dark in the US on 2025-01-18/19 (roughly 14 hours) and was restored 2025-01-19 after President Trump pledged to pause enforcement; his executive order of 2025-01-20 delayed enforcement for 75 days. The resolution was an Oracle-led deal (announced 2025-06-10 per Bloomberg) giving Oracle about a 12.5% stake in TikTok's US operations, with SoftBank and other investors participating; Vice President JD Vance led the White House negotiations, and ByteDance retained a majority interest. The national-security case rested on Chinese government access to US user data and the algorithm (CFIUS review, Project Texas hosting). The app stayed live, structured as a joint venture rather than an outright sale — \"Project Texas\": US user data in Oracle's cloud under US control — with the final ownership structure completed through 2025.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2025",
+            "ban",
+            "divest",
+            "saga",
+            "tiktok"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-07"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787252817",
+      "charter_hash": "f21e0ab8656a46d6",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-07"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "The United States moved to force TikTok’s divestiture or ban due to national security concerns, specifically the risk of Chinese government access to US user data and its recommendation algorithm [Source: ev-1].",
+    "This concern was formalized in legislation signed by President Biden on 2024-04-24, which required ByteDance to divest TikTok's US operations within roughly 270 days (extendable by an additional 90 days) or face a ban [Source: ev-1].",
+    "The Supreme Court upheld this law with a unanimous 9-0 decision on 2025-01-17, one day before the effective date of 2025-0-19 [Source: ev-1].",
+    "The dispute was resolved through a negotiated deal rather than an outright sale. [Source: ev-1]",
+    "Following a brief service outage in the US from 2025-18/19 that lasted roughly 14 hours, President Trump pledged to pause enforcement and issued an executive order on 2025--01-20 delaying it for 75 days [Source: ev-1].",
+    "The final resolution, announced per Bloomberg on 202-6-10, established TikTok's US operations as a joint venture where ByteDance retained majority interest, but Oracle received approximately a 12.5% stake along with other investors like SoftBank [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "The United States moved to force TikTok’s divestiture or ban due to national security concerns, specifically the risk of Chinese government access to US user data and its recommendation algorithm [Source: ev-1].",
+      "actionable_query": "The United States moved to force TikTok’s divestiture or ban due to national security concerns, specifically the risk of Chinese government  (2024, 2025)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This concern was formalized in legislation signed by President Biden on 2024-04-24, which required ByteDance to divest TikTok's US operations within roughly 270 days (extendable by an additional 90 days) or face a ban [Source: ev-1].",
+      "actionable_query": "2024 concern formalized legislation signed President Biden required ByteDance divest TikTok's operations within roughly days extendable additional face ban",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The Supreme Court upheld this law with a unanimous 9-0 decision on 2025-01-17, one day before the effective date of 2025-0-19 [Source: ev-1].",
+      "actionable_query": "The Supreme Court upheld this law with a unanimous - - - - - . (2024, 2025)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The dispute was resolved through a negotiated deal rather than an outright sale. [Source: ev-1]",
+      "actionable_query": "dispute resolved through negotiated deal rather outright sale",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Following a brief service outage in the US from 2025-18/19 that lasted roughly 14 hours, President Trump pledged to pause enforcement and issued an executive order on 2025--01-20 delaying it for 75 days [Source: ev-1].",
+      "actionable_query": "2025 Following brief service outage lasted roughly hours President Trump pledged pause enforcement issued executive order delaying days",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "The final resolution, announced per Bloomberg on 202-6-10, established TikTok's US operations as a joint venture where ByteDance retained majority interest, but Oracle received approximately a 12.5% stake along with other investors like SoftBank [Source: ev-1].",
+      "actionable_query": "The final resolution, announced per Bloomberg on - - established TikTok's US operations as a joint venture where ByteDance retained majority (2024, 2025)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-07",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

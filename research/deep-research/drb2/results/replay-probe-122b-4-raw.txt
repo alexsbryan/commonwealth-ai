@@ -1,0 +1,28 @@
+{
+    "results": [
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'Taspen - JP' is a mandatory Pay-As-You-Go Defined Benefit (PAYG DB) scheme for public sector employees.",
+            "score": 1,
+            "reason": "The article explicitly states under the Indonesia section that Taspen - JP is a 'Pay-As-You-Go Defined Benefits (PAYG DB)' scheme with 'Mandatory for all civil servants and public sector employees'.",
+            "evidence": "**Taspen - JP (Jaminan Pensiun)** - Public Sector\n\n- **Type:** Pay-As-You-Going Defined Benefit (PAYG DB)\n- **Coverage:** Mandatory for all civil servants and public sector employee"
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'taspen - THT' is a mandatory Asset-backed Defined Contribution (Asset-backed DC) scheme for public sector employees.",
+            "score": 0,
+            "reason": "The article does not mention an Indonesian pension scheme named 'Taspen - THT'. It mentions 'BPJS Ketenagakerjaan - JHT' as the defined contribution scheme for the private sector, but no specific plan with this name exists in the text for the public sector.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'BPJS - JP' is a mandatory pay-as-you-go defined benefit (PAYG DB) scheme of large and medium-sized private enterprises.",
+            "score": 0,
+            "reason": "The article describes 'BPJS Ketenagakerجاan - JP' as an 'Asset-backed Defined Benefit (Asset-backed DB)' scheme, not a 'Pay-As-You-GO Defined Benefits (PAYG DB)'. Additionally, it does not restrict coverage to only 'large and medium-sized' enterprises, stating instead it is mandatory for the 'private sector'.",
+            "evidence": "**BPJS Ketenaga kerjaan - JP (Jamin Pensiun)** - Private Sector\n\n- **Type:** Asset-backed Defined Benefit (Asset backed DB)"
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's BPJS-JHT is a mandatory asset-backed defined contribution (asset-backed DC) scheme of employees large, medium, and small private enterprises, and voluntary for micro-enterprise employees.",
+            "score": 0,
+            "reason": "The article states that 'BPJS Ketenagkerjaan - JHT' is mandatory for 'all private sector employee', but it does not explicitly distinguish between enterprise sizes or mention that the scheme is 'voluntary for micro-enterprise employees'.",
+            "evidence": "**BPJS Kete naga kerja an - JHT (Jamin Hari Tua)** - Old Age Security\n\n- **Type:** Asset-backed Defined Contribution (Asset backed DC)\n- **Coverage:** Mandatory for all private sec tor employ ees"
+        }
+    ]
+}

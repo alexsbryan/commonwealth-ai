@@ -1,0 +1,213 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1787260761",
+  "charter_hash": "49d304d9f02b574b",
+  "allowance": {
+    "web-search:web": 12,
+    "web-fetch:pages": 12
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260778,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260781,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260784,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260787,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260792,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260794,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260797,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260799,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260801,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260801,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260801,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260801,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260983,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260986,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260988,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260990,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "refuse",
+      "reason": "no-allowance-or-exhausted"
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260993,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-fetch:pages": 8,
+    "web-search:web": 12
+  },
+  "remaining": {
+    "web-search:web": 0,
+    "web-fetch:pages": 4
+  },
+  "refused_urls": []
+}

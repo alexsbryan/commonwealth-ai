@@ -1,0 +1,28 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787243416",
+  "charter_hash": "694eb377cf58479d",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median home price index change in major US metros from 1980 to 2024",
+      "Percentage of households paying more than 30% of income on housing by metro area for 1985, 1995, 2005, and 2023",
+      "Gini coefficient for household income in top 50 US cities annually from 1979 to 2022",
+      "Number of owner-occupied homes sold per capita in gentrifying neighborhoods versus non-gentrifying neighborhoods between 1980 and 2010",
+      "Average rent increase rate in central city districts compared to suburbs over the period 1980-2020",
+      "Share of low-income residents displaced due to rising rents or property taxes in major metros during the last decade (2014-2024)",
+      "Change in median household income for white households versus Black and Hispanic households in top 20 US cities from 1983 to 2023",
+      "Count of affordable housing units lost or gained through rezoning and development approvals in New York, Los Angeles, Chicago, Houston, and Phoenix between 1990 and 2020",
+      "Ratio of median renter burden to median owner cost burden by city tier (large metro vs. small town) for years 1985, 2000, and 2022"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "1980",
+      "2024"
+    ]
+  }
+}

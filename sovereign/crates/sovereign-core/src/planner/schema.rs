@@ -270,8 +270,14 @@ pub fn plan_schema(available_tools: &[ToolDescriptor]) -> Result<serde_json::Val
     let mut branches = vec![step_branch(
         "reason",
         vec![
-            ("prompt", serde_json::json!({"type": "string", "minLength": 1})),
-            ("speed", serde_json::json!({"type": "string", "enum": ["fast", "slow"]})),
+            (
+                "prompt",
+                serde_json::json!({"type": "string", "minLength": 1}),
+            ),
+            (
+                "speed",
+                serde_json::json!({"type": "string", "enum": ["fast", "slow"]}),
+            ),
         ],
         &["prompt", "speed"],
     )];
@@ -290,7 +296,10 @@ pub fn plan_schema(available_tools: &[ToolDescriptor]) -> Result<serde_json::Val
             branches.push(step_branch(
                 "tool",
                 vec![
-                    ("tool_id", serde_json::json!({"type": "string", "const": t.id})),
+                    (
+                        "tool_id",
+                        serde_json::json!({"type": "string", "const": t.id}),
+                    ),
                     ("params", tool_params_schema(t)?),
                 ],
                 &["tool_id", "params"],
@@ -299,9 +308,18 @@ pub fn plan_schema(available_tools: &[ToolDescriptor]) -> Result<serde_json::Val
         branches.push(step_branch(
             "reason_with_tools",
             vec![
-                ("prompt", serde_json::json!({"type": "string", "minLength": 1})),
-                ("speed", serde_json::json!({"type": "string", "enum": ["fast", "slow"]})),
-                ("tools", serde_json::json!({"type": "array", "minItems": 1, "items": tool_id_enum})),
+                (
+                    "prompt",
+                    serde_json::json!({"type": "string", "minLength": 1}),
+                ),
+                (
+                    "speed",
+                    serde_json::json!({"type": "string", "enum": ["fast", "slow"]}),
+                ),
+                (
+                    "tools",
+                    serde_json::json!({"type": "array", "minItems": 1, "items": tool_id_enum}),
+                ),
                 ("max_iterations", iteration_count()),
             ],
             &["prompt", "speed", "tools", "max_iterations"],
@@ -309,8 +327,14 @@ pub fn plan_schema(available_tools: &[ToolDescriptor]) -> Result<serde_json::Val
         branches.push(step_branch(
             "delegate",
             vec![
-                ("goal", serde_json::json!({"type": "string", "minLength": 1})),
-                ("tools", serde_json::json!({"type": "array", "minItems": 1, "items": tool_id_enum})),
+                (
+                    "goal",
+                    serde_json::json!({"type": "string", "minLength": 1}),
+                ),
+                (
+                    "tools",
+                    serde_json::json!({"type": "array", "minItems": 1, "items": tool_id_enum}),
+                ),
                 ("return_schema", open_object()),
                 ("max_iterations", iteration_count()),
             ],
@@ -422,7 +446,12 @@ mod tests {
             .as_array()
             .expect("steps.items.oneOf")
             .iter()
-            .map(|b| b["properties"]["kind"]["const"].as_str().unwrap().to_string())
+            .map(|b| {
+                b["properties"]["kind"]["const"]
+                    .as_str()
+                    .unwrap()
+                    .to_string()
+            })
             .fold(Vec::new(), |mut acc, k| {
                 // Deduped: there is one branch PER TOOL, so "tool"
                 // appears once per registered tool. This helper answers
@@ -530,7 +559,10 @@ mod tests {
             serde_json::json!({"type": "string"}),
         ] {
             let err = plan_schema(&[tool("loose", bad)]).unwrap_err().to_string();
-            assert!(err.contains("loose"), "the refusal must name the tool: {err}");
+            assert!(
+                err.contains("loose"),
+                "the refusal must name the tool: {err}"
+            );
             assert!(
                 err.contains("not a typed object"),
                 "and say what is wrong: {err}"

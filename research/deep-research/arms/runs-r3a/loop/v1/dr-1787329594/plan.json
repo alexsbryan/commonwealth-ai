@@ -1,0 +1,29 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787329594",
+  "charter_hash": "9d9824d21ed52525",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median home price in major US cities 1980 vs 2024",
+      "Share of households spending more than 30% of income on housing by city and year 1985-2023",
+      "Poverty rate in urban neighborhoods United States 1980, 1990, 2000, 2010, 2020",
+      "Gini coefficient for household income in top 50 US metropolitan areas 1983 to 2023",
+      "Number of evictions filed per 1,000 renters in major US cities annually from 2015 to 2024",
+      "Percentage change in median rent in New York City Los Angeles Chicago Houston Seattle between 1987 and 2023",
+      "Share of white residents vs non-white residents in gentrifying neighborhoods United States Census Tract level data 1980-2020",
+      "Median age of homeowners in historically minority neighborhoods versus new arrivals in same tracts 1990-2022",
+      "Ratio of local property tax revenue growth to resident income growth in Austin Denver Nashville Phoenix 2010-2023",
+      "Count of displacement events or forced moves due to rising costs reported by local housing authorities in San Francisco Oakland Boston Washington DC from 2005 to 2022"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "1980",
+      "2024"
+    ]
+  }
+}

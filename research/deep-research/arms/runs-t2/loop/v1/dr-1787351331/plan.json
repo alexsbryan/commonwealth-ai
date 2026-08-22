@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787351331",
+  "charter_hash": "9f73b2d381087123",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median household income in major US metropolitan areas 1980 vs 2024",
+      "Gini coefficient for personal income by state or metro area 1980 to 2023",
+      "Share of housing costs as a percentage of median household income (cost-burdened households) in US cities 1980, 1990, 2000, 2010, and 2020",
+      "Average asking price per square foot for residential real estate in top 50 US metros from 1980 to present",
+      "Rate of population change in specific gentrifying neighborhoods (e.g., SoMa San Francisco, Williamsburg Brooklyn) between census tracts data points 1970-2020",
+      "Percentage increase in rents in major coastal cities like New York, Los Angeles, and Seattle from 1985 to 2024",
+      "Number of households displaced by eviction filings or foreclosure auctions annually in large US cities during the last decade",
+      "Change in racial composition percentage of low-income neighborhoods that experienced income growth above national average (gentrification index) between decennial censuses 1980-2020"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "1980",
+      "2024"
+    ]
+  }
+}

@@ -1,0 +1,161 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787259198",
+  "charter_hash": "7784c16c082bba48",
+  "round": 2,
+  "entries": [
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+      "title": "Widespread of horizontal gene transfer events in eukaryotes",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ars.usda.gov/ARSUserFiles/50620500/Publications/HCK/horizon.pdf",
+      "title": "role of horizontal gene transfer",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://prizedwriting.ucdavis.edu/horizontal-gene-transfer-between-host-eukaryotes-and-their-bacterial-endosymbionts-analyses-and",
+      "title": "Horizontal Gene Transfer Between Host Eukaryotes and Their ...",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=BiRc2FGh71o",
+      "title": "What is Horizontal Gene Transfer?",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mdpi.com/2073-4425/8/1/39",
+      "title": "The Complex Relationship between Virulence and Antibiotic Resistance",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://learn.genetics.utah.edu/content/microbiome/resistance",
+      "title": "Antibiotic Resistance",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S1876034121003403",
+      "title": "Antibiotic resistance in microbes: History, mechanisms, therapeutic strategies and future prospects",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3623377",
+      "title": "Antimicrobial Resistance and Virulence: a Successful or ...",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Eukaryote",
+      "title": "Eukaryote",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Category:Eukaryotes",
+      "title": "Category:Eukaryotes - Wikipedia",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+      "title": "Widespread of horizontal gene transfer events in eukaryotes",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "title": "Horizontal gene transfer",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4033532",
+      "title": "Horizontal gene transfer in eukaryotes: The weak-link model",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms",
+      "title": "Mechanisms and Research Advances of Horizontal Gene ...",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/bacterial-virulence",
+      "title": "Bacterial Virulence - an overview",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pasteur.fr/en/research-journal/news/antibiotic-resistance-how-bacteria-become-resistant",
+      "title": "Antibiotic resistance, or how bacteria become resistant |",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.britannica.com/science/eukaryote",
+      "title": "Eukaryote | Definition, Structure, Evolution, Diversity, & Facts",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/figure/Distribution-of-HGT-events-across-the-different-eukaryotic-superkingdoms-Distribution-of_fig2_311779001",
+      "title": "Distribution of HGT events across the different eukaryotic...",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Wikipedia:Contents/Categories",
+      "title": "Wikipedia:Contents/Categories - Wikipedia",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

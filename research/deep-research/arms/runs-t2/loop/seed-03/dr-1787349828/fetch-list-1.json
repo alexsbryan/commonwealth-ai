@@ -1,0 +1,100 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787349828",
+  "charter_hash": "f71523d15ad32954",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did NASA order Boeing's Starliner to return uncrewed from its first crewed flight, and what did the decision mean for the program?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Number of helium tank leaks detected during the Starliner CFT-1 mission, 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Count of thruster malfunctions or anomalies reported on Boeing CST-100 Starliner, 2022–2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Percentage change in NASA's Commercial Crew Program milestone schedule for Starliner operational flights, 2023 vs. 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 7.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

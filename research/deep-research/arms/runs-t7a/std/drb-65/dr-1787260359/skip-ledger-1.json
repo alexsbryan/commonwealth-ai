@@ -1,0 +1,609 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787260359",
+  "charter_hash": "eb22b805c469965b",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2022.974339/full",
+      "title": "Frontiers | Three-dimensional reconstruction and phenotype measurement of maize seedlings based on multi-view image sequences",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/380253946_Research_on_automatic_3D_reconstruction_of_plant_phenotype_based_on_Multi-View_images",
+      "title": "Research on automatic 3D reconstruction of plant ...",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://rae.agriculturejournals.cz/in-press.php",
+      "title": "Research in Agricultural Engineering: Research in Agricultural Engineering - In Press",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ui.adsabs.harvard.edu/abs/2021Agric..11.1010Y/abstract",
+      "title": "High-Resolution 3D Crop Reconstruction and Automatic ...",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/abs/2311.04154",
+      "title": "[2311.04154] High-fidelity 3D Reconstruction of Plants using Neural Radiance Field",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sphericalinsights.com/reports/agriculture-robots-market",
+      "title": "Global Agriculture Robots Market Size, Share, Forecasts to 2033",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.psmarketresearch.com/market-analysis/agricultural-robots-market-report",
+      "title": "Agricultural Robots Market Size, and Growth Report, 2032",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.grandviewresearch.com/industry-analysis/agriculture-4-market-report",
+      "title": "Agriculture 4.0 Market Size And Share Report, 2024-2030",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.coherentmarketinsights.com/market-insight/agriculture-robots-market-1183",
+      "title": "Agriculture Robots Market Size, Trends & Forecast, 2026-2033",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.snsinsider.com/reports/agriculture-robots-market-2548",
+      "title": "Agriculture Robots Market Size, Share & Growth Analysis 2032",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.fortunebusinessinsights.com/agricultural-robots-market-109044",
+      "title": "Agricultural Robots Market Size | Global Industry Report [2034]",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.technavio.com/report/precision-agriculture-market-industry-analysis",
+      "title": "Precision Agriculture Market Growth Analysis - Size and Forecast 2025-2029 | Technavio | Technavio",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.marketsandmarkets.com/Market-Reports/precision-farming-market-1243.html",
+      "title": "Precision Farming Market Size, Share, Latest Trends & Growth Analysis, 2025-2032",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.linkedin.com/pulse/forecasting-agricultural-robots-market-industry-m2vef",
+      "title": "Forecasting the Agricultural Robots Market: Industry Analysis and ...",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://kimstp.github.io/files/kimspublications_complete.pdf",
+      "title": "[PDF] Publications of Kim Steenstrup Pedersen",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mdpi.com/2073-4395/12/11/2659",
+      "title": "Convolutional Neural Networks in Computer Vision for Grain Crop Phenotyping: A Review",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/pdf/2502.16950",
+      "title": "[PDF] Agriculture Computer Vision Dataset Survey - arXiv",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S0168169918305829",
+      "title": "Review Computer vision and artificial intelligence in precision agriculture ...",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/Computer-vision-and-artificial-intelligence-in-for-Patr%C3%ADcio-Rieder/24696daab4cf7795fea37000108051ea6d9cab23",
+      "title": "[PDF] Computer vision and artificial intelligence in precision agriculture ...",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://medium.com/@jacob_marks/computer-vision-in-agriculture-2023-bb9a6d958f21",
+      "title": "Medium",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2023.1187301/full",
+      "title": "Editorial: Computer vision in plant phenotyping and agriculture - Frontiers",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/392065303_Harnessing_deep_learning_for_wheat_variety_classification_a_convolutional_neural_network_and_transfer_learning_approach",
+      "title": "Harnessing deep learning for wheat variety classification",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12355334",
+      "title": "Harnessing deep learning for wheat variety classification - PMC",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.newswise.com/articles/new-deep-learning-model-sharpens-accuracy-in-wheat-spike-counting",
+      "title": "New Deep Learning Model Sharpens Accuracy in Wheat ...",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://vtechworks.lib.vt.edu/bitstreams/0773d655-ebf8-403a-8abc-e7f814224d5c/download",
+      "title": "Machine Learning Analysis of Hyperspectral Images of ...",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2026.1724501/full",
+      "title": "Study on automatic detection of wheat spike grain number ...",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S2772375522001009",
+      "title": "Machine learning approach for the classification of wheat ...",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://harvest.usask.ca/bitstreams/ae81de04-4682-44b1-9227-58421a280946/download",
+      "title": "Detection of Fusarium Damaged Kernels in Wheat Using ...",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/article/10.1186/s13007-023-01062-6",
+      "title": "Segmentation and counting of wheat spike grains based on ...",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12983262",
+      "title": "Three-dimensional phenotyping: Technological advances and applications in genomics-assisted crop breeding",
+      "score": 0.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dataintelo.com/report/biofilm-detection-sensors-for-food-plants-market",
+      "title": "Biofilm Detection Sensors For Food Plants Market Research Report 2034",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2026.1731852/full",
+      "title": "Frontiers | Advancements in 3D field-crop phenotyping using point clouds: a comparative review of sensor technology, target traits, and challenges under controlled and field conditions",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2504.16840v1",
+      "title": "A Low-Cost Photogrammetry Systemfor 3D Plant Modeling and Phenotyping",
+      "score": 0.0,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.24marketreports.com/machines/global-multispectral-d-plant-scanner-forecast-market",
+      "title": "Multispectral 3D Plant Scanner Market 2026 forecast to 2032",
+      "score": 0.0,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S2773126X26000274",
+      "title": "Affordable crop phenotyping matters",
+      "score": 0.0,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/326641896_What_is_cost-efficient_phenotyping_Optimizing_costs_for_different_scenarios",
+      "title": "What is cost-efficient phenotyping? Optimizing costs for different ...",
+      "score": 0.0,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://acsess.onlinelibrary.wiley.com/doi/10.1002/ppj2.70034",
+      "title": "Affordable phenomics: Expanding access to enhancing genetic gain in ...",
+      "score": 0.0,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mdpi.com/1424-8220/25/11/3401",
+      "title": "Analysis of Selected Potentially Harmful Metal Elements in Soils and Vegetables in Gold Mining Region: Case Study Evaluated in Kenya, Africa",
+      "score": 0.0,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pure.iiasa.ac.at/id/eprint/20739/1/s41597-025-05331-y.pdf",
+      "title": "A global dataset of public agricultural R&D investment",
+      "score": 0.0,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://agpolicyreview.card.iastate.edu/winter-2023/world-spending-agricultural-research-and-development",
+      "title": "World Spending on Agricultural Research and Development | Agricultural Policy Review",
+      "score": 0.0,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://globalagriculturalproductivity.org/gap-bulletin/cornell-research-quantifies-funding-needs-as-us-agricultural-rd-spending-falls-behind",
+      "title": "Cornell Research Quantifies Funding Needs as U.S. Agricultural R&D Spending Falls Behind | Global Agricultural Productivity Initiative at Virginia Tech",
+      "score": 0.0,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.fortunebusinessinsights.com/crop-monitoring-market-104782",
+      "title": "Crop Monitoring Market Size, Industry Share | Forecast 2034",
+      "score": 0.0,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S0034425726002087",
+      "title": "Global annual cropland dynamics 2015–2024",
+      "score": 0.0,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12274707",
+      "title": "Revolutionizing agriculture: A comprehensive review on artificial intelligence applications in enhancing properties of agricultural produce☆",
+      "score": 0.0,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://nimss.org/projects/view/mrp/outline/18868",
+      "title": "S1090: AI in Agroecosystems: Big Data and Smart Technology-Driven Sustainable Production – NIMSS",
+      "score": 0.0,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ers.usda.gov/amber-waves/2022/june/investment-in-u-s-public-agricultural-research-and-development-has-fallen-by-a-third-over-past-two-decades-lags-major-trade-competitors",
+      "title": "Investment in U.S. Public Agricultural Research and Development Has Fallen by a Third Over Past Two Decades, Lags Major Trade Competitors | Economic Research Service",
+      "score": 0.0,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.oecd.org/en/publications/progress-in-implementing-the-european-union-coordinated-plan-on-artificial-intelligence-volume-2_3ac96d41-en/full-report/ai-in-agriculture_c9ac6d24.html",
+      "title": "AI in agriculture: Progress in Implementing the European Union Coordinated Plan on Artificial Intelligence (Volume 2)",
+      "score": 0.0,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.datainsightsreports.com/reports/grain-graders-334236",
+      "title": "Grain Graders Trends and Opportunities for Growth",
+      "score": 0.0,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S0022474X25000475",
+      "title": "AI-driven grain storage solutions: Exploring current ...",
+      "score": 0.0,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12274707",
+      "title": "Revolutionizing agriculture: A comprehensive review on artificial ...",
+      "score": 0.0,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://marketintelo.com/report/automated-produce-grading-systems-market",
+      "title": "Automated Produce Grading Systems Market",
+      "score": 0.0,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/article/10.1007/s42452-025-07191-y",
+      "title": "a comparative study of maize seed samples in Malawi",
+      "score": 0.0,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.niti.gov.in/sites/default/files/2023-03/National-Strategy-for-Artificial-Intelligence.pdf",
+      "title": "National Strategy for Artificial Intelligence",
+      "score": 0.0,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41598-022-26809-4",
+      "title": "Development of a high-performance open-source 3D bioprinter | Scientific Reports",
+      "score": 0.0,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/article/10.1007/s40192-026-00449-2",
+      "title": "pyTriBeam: Open-Source Software for Enhanced 3D Data Collection in TriBeam Microscopes",
+      "score": 0.0,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2510.01296v1",
+      "title": "From 2D to 3D, Deep Learning-based Shape ...",
+      "score": 0.0,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://chanzuckerberg.com/eoss/proposals",
+      "title": "Essential Open Source Software for Science",
+      "score": 0.0,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S0092867424006366",
+      "title": "Open-ST: High-resolution spatial transcriptomics in 3D",
+      "score": 0.0,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://journals.biologists.com/dev/article/151/8/dev202550/346998/Acto3D-an-open-source-user-friendly-volume",
+      "title": "Acto3D: an open-source user-friendly volume rendering software for high ...",
+      "score": 0.0,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.open3d.org",
+      "title": "Open3D – A Modern Library for 3D Data Processing",
+      "score": 0.0,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.kitware.com/open-source",
+      "title": "Building Solutions on Open Source Technologies",
+      "score": 0.0,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2020.11.09.374926.full",
+      "title": "SlicerMorph: An open and extensible platform to retrieve, visualize and ...",
+      "score": 0.0,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.credenceresearch.com/report/3d-point-cloud-processing-software-market",
+      "title": "3D Point Cloud Processing Software Market Size, Share and Forecast 2032",
+      "score": 0.0,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pipeline-conference.com/abstracts/automated-3d-point-cloud-analysis-pipeline-corridors-high-density-point-clouds-change",
+      "title": "Automated 3D Point Cloud Analysis for Pipeline Corridors: From High Density Point Clouds to Change Detection to Advanced Visualization, in Minutes | 21st Pipeline Technology Conference",
+      "score": 0.0,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.productteacher.com/quick-product-tips/point-cloud-processing-for-3d-mapping",
+      "title": "Point Cloud Processing for 3D Mapping — Product Teacher",
+      "score": 0.0,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pipeline-conference.com/abstracts/automated-3d-point-cloud-analysis-pipeline-corridors-high-density-point-clouds-change",
+      "title": "Automated 3D Point Cloud Analysis for Pipeline Corridors: From High Density Point Clouds to Change Detection to Advanced Visualization, in Minutes | 21st Pipeline Technology Conference",
+      "score": 0.0,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "http://arxiv.org/html/2511.02293v1",
+      "title": "3D Point Cloud Object Detection on Edge Devices for Split Computing",
+      "score": 0.0,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2511.02293v1",
+      "title": "3D Point Cloud Object Detection on Edge Devices for Split Computing",
+      "score": 0.0,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/LiDAR-Point-Cloud-Data-Processing-in-Autonomous-Saravanarajan-Chen/8dcdb4ec2336a1733cf9d0f961e67d0d464be6cf",
+      "title": "LiDAR Point Cloud Data Processing in Autonomous Vehicles | Semantic Scholar",
+      "score": 0.0,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/349853225_Interactive_Holographic_Display_for_Real-Time_Drawing_and_Erasing_of_3D_Point-Cloud_Images_With_a_Fingertip",
+      "title": "Interactive Holographic Display for Real-Time Drawing and Erasing of 3D Point-Cloud Images With a Fingertip",
+      "score": 0.0,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.irit.fr/recherches/STORM/MelladoNicolas/real-time-3d-reconstruction-from-single-photon-lidar-data-using-plug-and-play-point-cloud-denoisers",
+      "title": "Real-time 3D reconstruction from single-photon lidar data using plug-and-play point cloud denoisers - Nicolas Mellado",
+      "score": 0.0,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/gigascience/article/8/1/giy153/5232233",
+      "title": "Computer vision-based phenotyping for improvement of plant productivity",
+      "score": 0.0,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://mospace.umsystem.edu/items/b5dd20da-f4ca-49f3-a0ba-431677d85550",
+      "title": "developing deep learning and computer vision algorithms for UAV ...",
+      "score": 0.0,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://openknowledge.fao.org/bitstreams/64cdae9c-d160-4809-8c6a-62f94d48b6f6/download",
+      "title": "[PDF] Global investments in agricultural research: Where are we and where ...",
+      "score": 0.0,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/396520771_Implementing_artificial_intelligence_and_machine_learning_algorithms_for_optimized_crop_management_a_systematic_review_on_data-driven_approach_to_enhancing_resource_use_and_agricultural_sustainability",
+      "title": "a systematic review on data-driven approach to enhancing ...",
+      "score": 0.0,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

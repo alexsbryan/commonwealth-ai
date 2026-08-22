@@ -1,0 +1,127 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787260359",
+  "charter_hash": "eb22b805c469965b",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 3,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 2,
+      "fetched": 3,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 2,
+      "gaps_after": 1,
+      "fetched": 4,
+      "search_calls": 1
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+        "custody": "public-web",
+        "ingested_into": null
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7184763",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      },
+      {
+        "url": "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      },
+      {
+        "url": "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      },
+      {
+        "url": "https://www.plantphenomics.org.au/resources/published-research",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      },
+      {
+        "url": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+        "custody": "public-web",
+        "ingested_into": null
+      },
+      {
+        "url": "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787260359"
+      }
+    ],
+    "failed": [
+      {
+        "url": "https://www.mdpi.com/2073-4395/15/11/2518",
+        "error": "fetch https://www.mdpi.com/2073-4395/15/11/2518: Execution error: HTTP 403 Forbidden for https://www.mdpi.com/2073-4395/15/11/2518"
+      },
+      {
+        "url": "https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309",
+        "error": "fetch https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309: Execution error: HTTP 403 Forbidden for https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309"
+      }
+    ]
+  },
+  "budget": {
+    "spent": {
+      "web-search:web": 12,
+      "web-fetch:pages": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 0,
+      "web-search:web": 0
+    }
+  },
+  "not_covered": [
+    "The available evidence does not contain information regarding \"modern control theory,\" specific theoretical methods/models for grain modeling, or detailed technical content from the cited papers beyond their metadata and titles. [Source: ev-1]",
+    "The only relevant details supported by the evidence are:\n*   There exists a survey titled \"A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond\" published in *Plant Phenomics*.[Source: ev-2]",
+    "*   This survey covers topics ranging from classical methods to NeRF and 3DGS.[Source: ev-2]",
+    "*   Another study titled \"Analysing the phenotype development of soybean plants using low-cost 3D reconstruction\" was published in *Sci Rep*.[Source: ev-1]",
+    "No evidence supports the application of modern control theory or provides specific modeling/analysis design details for crop grains within these sources.",
+    "A survey titled \"A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond,\" published in *Plant Phenomics* [Source: ev-2]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": {
+    "run-id": "dr-1787260359",
+    "granted-at-unix": 1787260359,
+    "release-floor": "personal"
+  },
+  "lock": {
+    "id": "dr-1787260359",
+    "acquired_at_unix": 1787260359,
+    "released_at_unix": 1787260760
+  }
+}

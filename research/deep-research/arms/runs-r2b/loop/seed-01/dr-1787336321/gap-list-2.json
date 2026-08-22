@@ -1,0 +1,270 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787336321",
+  "charter_hash": "17a9f53589915946",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Google acquired the cloud-security firm Wiz in an all-cash deal worth approximately $32 billion [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "32"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The company announced this agreement on 2025-03-18, which marked the largest acquisition in Google's history [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025-03-18",
+          "2025",
+          "03",
+          "18"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This transaction followed a previous event where Wiz rejected Google’s earlier offer of $23 billion in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "23",
+          "2024"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "The strategic rationale for the acquisition was driven by Google Cloud, led by Thomas Kurian, aiming to close the security gap with competitors AWS and Azure [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "By pursuing Wiz, Google bet that cloud-security consolidation would become the next battleground in the \"cloud wars,\" while anticipating that AI-driven cloud adoption would serve as the primary demand driver [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "The deal signaled these broader market dynamics regarding competition and technological trends. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Following shareholder and regulatory steps, the transaction closed in 2025, with completion specifically reported in July 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "July 2025",
+          "ev-1"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Google acquired the cloud-security firm Wiz in an all-cash deal worth approximately $32 billion [Source: ev-1].",
+      "actionable_query": "Google acquired cloud-security firm Wiz all-cash deal worth approximately billion",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "The company announced this agreement on 2025-03-18, which marked the largest acquisition in Google's history [Source: ev-1].",
+      "actionable_query": "2025 company announced agreement marked largest acquisition Google's history",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "This transaction followed a previous event where Wiz rejected Google’s earlier offer of $23 billion in July 2024 [Source: ev-1].",
+      "actionable_query": "transaction followed previous event Wiz rejected Google’s earlier offer billion July",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "The strategic rationale for the acquisition was driven by Google Cloud, led by Thomas Kurian, aiming to close the security gap with competitors AWS and Azure [Source: ev-1].",
+      "actionable_query": "strategic rationale acquisition driven Google Cloud led Thomas Kurian aiming close security gap competitors AWS Azure",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "The deal signaled these broader market dynamics regarding competition and technological trends. [Source: ev-1]",
+      "actionable_query": "deal signaled broader market dynamics regarding competition technological trends",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Following shareholder and regulatory steps, the transaction closed in 2025, with completion specifically reported in July 2025 [Source: ev-1].",
+      "actionable_query": "2025 Following shareholder regulatory steps transaction closed completion specifically reported July",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

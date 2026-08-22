@@ -1,0 +1,122 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787336574",
+  "charter_hash": "6983ecf0c4d70cd2",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "decision several significant implications program astronauts involved Extended Mission Duration Butch Wilmore Suni Williams remained aboard International Space Station far longer planned",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "No, the text says September and landed at White Sands on September (implied year context is late based on launch date) without crew . (1, mean)",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Note evidence states undocked",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Financial Operational Impact Under fixed-price contract NASA’s Commercial Crew program Boeing already incurred cumulative losses billion compared SpaceX's lower cost structure total contracts",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 1.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1"
+    ],
+    "threshold": 9.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,8 @@
+DeepSeek’s R1 release triggered the largest single-day loss in Nvidia's history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the cost previously assumed to be necessary [Source: ev-1]. This caused markets to reprice the thesis that demand for Nvidia's chips is moated by compute scale, as investors realized that efficiency gains driven by scarcity (specifically US export controls on H800 chips) had allowed Chinese labs to achieve competitive performance without massive capital expenditure [Source: ev-1].
+
+The event revealed several key aspects about frontier-AI training economics and specific metrics associated with DeepSeek’s models:
+*   **Cost Efficiency:** The predecessor model, DeepSeek-V3, was reported to have been trained using roughly 2.79 million GPU-hours at a claimed cost of approximately US$5.6 million [Source: ev-1]. This low-cost baseline set the stage for R1's impact.
+*   **Methodology:** R1 utilized reinforcement learning (specifically GRPO), and its variant R1-Zero was trained entirely without supervised fine-tuning [Source: ev-1].
+*   **Market Reaction Scale:** On January 27, 2025, Nvidia lost approximately US$589 billion in market capitalization, which was recorded as the largest single-day loss in stock-market history at that time [Source: ev-1]. Additionally, about US$1 trillion was erased across the broader tech complex [Source: ev-1].
+
+Timeline context from the evidence includes DeepSeek-V3's release on December 26, 2024, followed by DeepSeek-R1's release and accompanying paper on January 20, 2025 [Source: ev-1]. The hardware involved included export-restricted H800 chips [Source: ev-1].

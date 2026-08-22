@@ -1,0 +1,11 @@
+OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1]. The primary strategic reason for this launch was to defend the reasoning-model frontier against competitive pressures from DeepSeek’s R1 cost shock and Anthropic’s agentic-coding push, particularly because GPT-5 had not yet shipped at that time [Source: ev-1].
+
+The launch signaled a specific direction for future frontier reasoning models by reframing "frontier capability" as tool-using reasoning available at commodity prices [Source: ev-1]. This shift is evidenced by several key technical and commercial features introduced with these models:
+
+*   **Native Integration:** Unlike previous iterations where vision might have been added later, o3 and o4-mini featured vision built directly into the model itself rather than being bolted on [Source: ev-1].
+*   **Built-in Tool Use:** The models included native tool use capabilities—specifically web search and code interpreter—that were trained into the architecture from the start [Source: ev-1].
+*   **Dynamic Compute (Budget Forcing):** OpenAI implemented a technique called "budget forcing," which uses a fixed maximum thought budget but allows for task-adaptive dynamic compute; this means harder questions trigger longer thinking times while simpler ones do not [Source: ev-1].
+*   **Privacy of Reasoning:** This release marked the implementation of OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].
+*   **Performance Benchmarks:** The models demonstrated significant capability gains, with o3 setting a record on the ARC-AGI benchmark by achieving approximately 87.5% on ARC-AGI-1 at high compute levels, surpassing or meeting the ~85% human baseline for the first time in model history [Source: ev-1].
+
+Additionally, the launch signaled an "API-first" approach and aggressive pricing strategy aimed at developers. Both models were available via API from day one (though o3 was initially absent from the ChatGPT app), and they offered competitive rates of $10 / $40 per million tokens (input/output) for o3 and $1.10 / $4.40 for o4-mini [Source: ev-1].

@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787253176",
+  "charter_hash": "803d518b4168e6c9",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Anthropic Claude 4 model names and release date in May 2025",
+      "Number of distinct models released by Anthropic for the Claude 4 series",
+      "Listed capabilities or benchmarks differentiating the two Claude 4 models at launch",
+      "Market share of AI coding assistants held by agentic tools as of Q1 2025",
+      "Revenue growth rate of enterprise software development tools featuring autonomous agents from 2023 to 2024",
+      "Count of major tech companies announcing integration with multi-agent coding frameworks between January 2025 and May 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2",
+      "2025"
+    ]
+  }
+}

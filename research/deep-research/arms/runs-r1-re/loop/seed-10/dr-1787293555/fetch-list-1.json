@@ -1,0 +1,130 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787293555",
+  "charter_hash": "aed9cd93015b466a",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did OpenAI release GPT-5 in August 2025, and what did it change about how the company sells its models?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "OpenAI GPT-5 official release date and announcement details",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "GPT-5 model pricing per million tokens compared to GPT-4o or o1 models",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Change in OpenAI API subscription tiers for GPT-5 access",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Share of enterprise customers adopting GPT-5 within 30 days of launch",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Comparison of GPT-5 benchmark scores on MMLU-Pro vs. previous flagship models",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Number of new features added to ChatGPT interface specifically for GPT-5 usage",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q6",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 6.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 8.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

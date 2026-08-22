@@ -1,0 +1,70 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787269990",
+  "charter_hash": "649e09de0b310541",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 3,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 3,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 1
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-01",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787269990"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Based on the evidence provided, Google acquired Wiz for approximately $32 billion in an all-cash deal announced on 2025-03-18 [Source: ev-1].",
+    "The primary strategic reason for this acquisition was to close the security gap with competitors AWS and Azure under the leadership of Thomas Kurian at Google Cloud [Source: ev-1].",
+    "Regarding what the deal signaled about the cloud-security market, it indicated a focus on cloud-security consolidation as the next battleground in the \"cloud wars,\" driven by AI-driven cloud adoption [Source: ev-1].",
+    "Additionally, the transaction marked the largest acquisition in Google's history [Source: ev-1].",
+    "Google announced on 2025-03-18 that it would acquire the cloud-security firm Wiz for approximately $32 billion in an all-cash transaction, which marked the largest acquisition in Google's history [Source: ev-1].",
+    "This deal followed Wiz's rejection of a previous offer from Google worth $23 billion in July 2024 [Source: ev-1].",
+    "The strategic move was driven by Google Cloud under Thomas Kurian to close the security gap with competitors AWS and Azure [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787269990",
+    "acquired_at_unix": 1787269990,
+    "released_at_unix": 1787270094
+  }
+}

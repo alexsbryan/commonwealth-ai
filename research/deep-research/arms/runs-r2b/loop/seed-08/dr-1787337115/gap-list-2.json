@@ -1,0 +1,263 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787337115",
+  "charter_hash": "76b58eae9a7ebb22",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "A US court found Google's search business a monopoly because Judge Amit Mehta of the US District Court for the District of Columbia ruled on August 5, 2024 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5, 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The primary theory of harm was \"default-distribution deals,\" where Google paid companies like Apple, Samsung, and Mozilla billions to be their default search engine [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Evidence showed Google paid approximately $26.3 billion for distribution in 2021, including roughly 36% of Safari search-ad revenue to Apple [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2021",
+          "$26.3 billion",
+          "26.3",
+          "36%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "The court determined this conduct created an exclusionary loop where defaults create scale, which creates data, leading to quality that protects the default position against rivals [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The remedies ordered on August 5, 25 were structural and behavioral [Source: ev-1]:\n*   **Divestiture:** Google must sell Chrome, marking the first forced divestiture of a major tech company since the Microsoft case of 2000 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5, 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*   **Prohibition on Payments:** Google may no longer pay for default search placement or enter into revenue-sharing agreements [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "*   **Investment Limits:** The ruling includes limits on acquisitions and AI-related investments [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Google appealed to the DC Circuit in 2025, arguing that the trial court punished procompetitive innovation; as of 2025, the final outcome remained pending [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "DC Circuit",
+          "Google",
+          "procompetitive innovation"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "A US court found Google's search business a monopoly because Judge Amit Mehta of the US District Court for the District of Columbia ruled on August 5, 2024 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+      "actionable_query": "A US court found Google's search business a monopoly because Judge Amit Mehta of the US District Court for the District of Columbia ruled on",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The primary theory of harm was \"default-distribution deals,\" where Google paid companies like Apple, Samsung, and Mozilla billions to be their default search engine [Source: ev-1].",
+      "actionable_query": "primary theory harm default-distribution deals Google paid companies like Apple Samsung Mozilla billions default search engine",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Evidence showed Google paid approximately $26.3 billion for distribution in 2021, including roughly 36% of Safari search-ad revenue to Apple [Source: ev-1].",
+      "actionable_query": "Evidence showed Google paid approximately billion distribution including roughly Safari search-ad revenue Apple",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "The court determined this conduct created an exclusionary loop where defaults create scale, which creates data, leading to quality that protects the default position against rivals [Source: ev-1].",
+      "actionable_query": "court determined conduct created exclusionary loop defaults create scale creates data leading quality protects default position against rivals",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "*   **Investment Limits:** The ruling includes limits on acquisitions and AI-related investments [Source: ev-1].",
+      "actionable_query": "Investment Limits ruling includes acquisitions AI-related investments",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Google appealed to the DC Circuit in 2025, arguing that the trial court punished procompetitive innovation; as of 2025, the final outcome remained pending [Source: ev-1].",
+      "actionable_query": "Google appealed Circuit arguing trial court punished procompetitive innovation final outcome remained pending",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

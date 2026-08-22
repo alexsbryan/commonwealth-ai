@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787336321",
+  "charter_hash": "17a9f53589915946",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Wiz acquisition price by Google in March 2025",
+      "Google's stated strategic rationale for acquiring Wiz as reported in press releases or earnings calls",
+      "Wiz revenue growth rate and annual recurring run-rate prior to the acquisition announcement",
+      "Market share of cloud security platforms held by Wiz versus competitors like Palo Alto Networks, CrowdStrike, and Microsoft Sentinel",
+      "Number of enterprise customers using Wiz before the acquisition",
+      "Change in stock prices of major cybersecurity firms following the announcement of the Google-Wiz deal (2025)",
+      "Total value of M&A deals in the cloud-security sector from January 2024 to March 2025",
+      "Average multiple (EV/Revenue) paid for cloud-security startups compared to traditional on-premise security acquisitions"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2025"
+    ]
+  }
+}

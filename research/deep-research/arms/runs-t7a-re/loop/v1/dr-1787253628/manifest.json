@@ -1,0 +1,101 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787253628",
+  "charter_hash": "cfd0bf5480bc813d",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 2,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 17,
+      "fetched": 1,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 17,
+      "gaps_after": 18,
+      "fetched": 3,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://v1-demo.example/source-report",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787253628"
+      },
+      {
+        "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787253628"
+      },
+      {
+        "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787253628"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 3
+    },
+    "remaining": {
+      "web-fetch:pages": 9,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Based on the evidence provided, American cities have undergone fundamental economic and demographic transformations from 1980 to 2024, characterized by accelerating gentrification, rising inequality, widening affordability gaps, and specific patterns of displacement.[Source: ev-1]",
+    "**Gentrification Trends (1990s–2010s)**\n*   Gentrification accelerated significantly after 2000; nearly 20% of neighborhoods with lower incomes and home values experienced gentrification since 2000, compared to only 9% during the 1990s.[Source: ev-2]",
+    "*   Nationally, gentrification remains rare in terms of total volume, with only 8% of all reviewed neighborhoods experiencing it since the 2000 Census.[Source: ev-2]",
+    "*   **Seattle:** 50% of eligible tracts gentriciated, involving 7 tracts out of 132 total [Source: ev-1] [Source: ev-2].",
+    "*   Other cities with notable gentrification shares include Atlanta (46.2%, 30 tracts), Virginia Beach (46.2%, 6 tracts), Denver (42.1%, 24 tracts), and Austin (39.7%, 25 tracts) [Source: ev-2].",
+    "*   Conversely, cities such as El Paso and Arlington experienced 0% gentrification among their eligible tracts, while Detroit saw only 2.8% and Las Vegas 2% [Source: ev-2].",
+    "**Inequality Metrics**\nSpecific city data highlights this disparity:\n*   **New York City:** Leads with a Gini coefficient of 0.5469 [Source: ev-1].",
+    "*   **Atlanta and Miami:** Both recorded Gini coefficients of 0.57 [Source: ev-1].",
+    "*   **New Orleans:** Reached a Gini coefficient of 0.56 [Source: ev-1].",
+    "Income ratio analyses further illustrate these gaps.[Source: ev-1]",
+    "Additionally, the 95/20 income ratio indicates that Atlanta and Washington D.C.[Source: ev-1]",
+    "Federal Reserve data tracking over 3,140 inequality series confirms that inequality reached record levels by 2018–2021, marking the sharpest increase among advanced economies since the 1980s for the U.S.[Source: ev-1].",
+    "In San Francisco specifically, top incomes rose by approximately $120,000 in just two years between 2014 and 2016, while gains for the bottom quintile remained minimal across all cities studied [Source: ev-1].",
+    "**Affordability Gaps (Post-2000)**\nThis divergence is particularly acute in high-cost regions; California cities exhibit price-to-income ratios between 9.6 and 12.2, which is more than double national average ratio of 4.7 [Source: ev-1].",
+    "**Demographic Shifts and Displacement Patterns**\nSince 1980 nearly 80% of the country's under-45 population growth was concentrated in metro areas with over 1 million residents, driving an influx of prime-age workers (ages 25–54) into urban counties while rural counties lost this demographic group [Source: ev-1].",
+    "However, gentrifying neighborhoods specifically became whiter.[Source: ev-1]",
+    "Gentrificated tracts recorded an average increase of +4.3 percentage points in their non-Hispanic white population share and experienced a -0.7 percentage point decrease in poverty rates [Source: ev-1] [Source: ev-2].",
+    "In contrast, lower-income areas that did *not* gentrify saw slight population losses (-2.4%), a concentration of minorities (decrease of 5.0 percentage points in white share), and a significant rise in poverty (+6.7 percentage points) [Source: ev-1] [Source: ev-2].",
+    "Educational attainment has shifted similarly, with urban areas now having 35% of residents holding bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-1].",
+    "Based on the evidence provided, American cities have undergone fundamental economic and demographic transformations from 1980 to 2024, characterized by accelerating gentrification, rising inequality, widening affordability gaps, and specific patterns of displacement. [Source: ev-1]",
+    "Other cities with notable gentrification shares include Atlanta (46.2%, 30 tracts), Virginia Beach (46.2%, 6 tracts), Denver (42.1%, 24 tracts), and Austin (39.7%, 25 tracts) [Source: ev-2].",
+    "Conversely, cities such as El Paso and Arlington experienced 0% gentrification among their eligible tracts, while Detroit saw only 2.8% and Las Vegas 2% [Source: ev-2].",
+    "Specific city data highlights this disparity:\n*   **New York City:** Leads with a Gini coefficient of 0.5469 [Source: ev-1].",
+    "Income ratio analyses further illustrate these gaps. [Source: ev-1]",
+    "Additionally, the 95/20 income ratio indicates that Atlanta and Washington D.C. [Source: ev-1]",
+    "This divergence is particularly acute in high-cost regions; California cities exhibit price-to-income ratios between 9.6 and 12.2, which is more than double national average ratio of 4.7 [Source: ev-1].",
+    "Since 1980 nearly 80% of the country's under-45 population growth was concentrated in metro areas with over 1 million residents, driving an influx of prime-age workers (ages 25–54) into urban counties while rural counties lost this demographic group [Source: ev-1].",
+    "However, gentrifying neighborhoods specifically became whiter. [Source: ev-1]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787253628",
+    "acquired_at_unix": 1787253628,
+    "released_at_unix": 1787254142
+  }
+}

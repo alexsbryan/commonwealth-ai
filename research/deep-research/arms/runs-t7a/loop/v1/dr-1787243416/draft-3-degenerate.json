@@ -1,0 +1,30 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787243416",
+  "charter_hash": "694eb377cf58479d",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, here is how American cities changed across four decades (1980–2024) regarding gentrification, inequality, affordability, and displacement:\n\n**Gentrification Acceleration and Geographic Concentration**\n*   Gentrification accelerated significantly after 2000; nearly 20% of lower-income neighborhoods in major cities experienced gentrification since 2000, compared to only 9% during the 1990s [Source: ev-1] [Source: ev-2].\n*   Since 1980, nearly 80% of the country’s under-45 population growth concentrated in metropolitan areas with over one million residents [Source: ev-1].\n*   This phenomenon remains geographically uneven, largely confined to select regions rather than most urban areas [Source: ev-2].\n*   The most intensive transformation occurred in specific metropolitan areas where over half of eligible tracts changed status:\n    *   **Portland:** 58.1% (36 out of 62 eligible tracts) [Source: ev-2]\n    *   **Washington D.C.:** 51.9% (54 out of 104 eligible tracts) [Source: ev-2]\n    *   **Minneapolis:** 50.6% (39 out of 77 eligible tracts) [Source: ev-2]\n    *   **Seattle:** 50% (7 out of 14 eligible tracts) [Source: ev-2]\n*   Other cities with high gentrification rates include Atlanta and Virginia Beach at 46.2%, Denver at 42.1%, and Austin at 39.7% [Source: ev-2].\n*   In contrast, major metros like Detroit (2.8%), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification among eligible tracts [Source: ev-2].\n*   New York City had the highest raw number of gentrified tracts (128), despite a lower percentage rate of 29.8% due to its large total tract count [Source: ev-2].\n\n**Inequality**\n*   American cities have seen inequality rise sharply since the 1980s, reaching record levels by 2018–2021 according to Federal Reserve data tracking over 3,140 inequality series [Source: ev-1].\n*   Specific city-level metrics include:\n    *   **New York City:** Gini coefficient of 0.5469 [Source: ev-1]\n    *   **Atlanta and Miami:** Gini coefficients of approximately 0.57 [Source: ev-1]\n    *   **New Orleans:** Gini coefficient of 0.56 [Source: ev-1]\n*   Income ratios further illustrate this divide; for example, the 80/20 income ratio in New Orleans is 7.87, meaning the 80th percentile earns nearly 8 times the 20th percentile [Source: ev-1].\n\n**Affordability**\n*   Since 2000, home prices increased by 177% while median household income grew only 92% [Source: ev-1].\n*   This divergence is most acute on the West Coast; California cities exhibit price-to-income ratios between 9.6 and 12.2, more than double the national average of 4.7 [Source: ev-1].\n\n**Displacement and Demographic Shifts**\n*   Gentrifying tracts saw population increases (+6.5%) and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points while poverty rates dropped slightly (0.7 percentage point decrease) [Source: ev-2] [Source: ev-1].\n*   Conversely, lower-income areas that failed to gentrify experienced population losses (-2.4%), increased minority concentration (non-white share change noted as -5.0 in table context implying relative increase or specific metric shift), and sharp rises in poverty, which climbed nearly 7% (specifically a 6.7 percentage point increase) [Source: ev-2] [Source: ev-1].\n*   Educational gentrification is also evident, with urban areas now having 35% of residents holding bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-1].\n*   This economic shift concentrated high-income professionals in urban cores, contributing to income polarization where urban centers house both top earners and low-wage service workers, unlike the more moderate distributions found in suburbs [Source: ev-1] [Source: ev-2].\n*   Economic mobility for low-income families worsened in 48 of the 50 largest metros over 15 years; only Houston showed improvement, with a mere 1.1% gain in income outcomes [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://v1-demo.example/source-report",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-1",
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "custody": "public-web"
+    }
+  ]
+}

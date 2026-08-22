@@ -1,0 +1,284 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787262340",
+  "charter_hash": "7a9a364495f9f05b",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "###",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Technical Principles and System Capabilities To understand liability, must distinguish between passive and active ADAS systems.",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "systems rely fusion data cameras radars ultrasonic sensors other inputs assess environment",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "###",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Legal Frameworks and Regulatory Landscape The regulatory environment is fragmented and evolving.",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "In the United States, slightly over half of the states have enacted some form of legislation regulating autonomous vehicles (AVs), creating ",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "federal level National Highway Traffic Safety Administration NHTSA finalized requirement mandating front crash prevention nearly all new vehicles gross vehicle weight rating pounds less September",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "rule requires systems operable both daylight dark conditions capable warning braking speeds mph",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "light vehicle sales make technology standard September",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "Boundaries Responsibility Driver",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q11",
+      "text": "Determining negligence often involves assessing extent ADAS use reliability time crash",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "Research indicates Waymo’s driverless vehicles have crash rates lower human drivers suggesting removing element significantly reduces risk",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q13",
+      "text": "###",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q14",
+      "text": "",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q15",
+      "text": "",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q16",
+      "text": "supports need robust black-box data can distinguish driver inaction sensor/algorithmic failure",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q17",
+      "text": "",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q18",
+      "text": "**Manufacturer Accountability for Active Systems:** Given that active systems take actionable control steps, regulatory guidelines should re",
+      "from_gap_id": "g18",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q19",
+      "text": "As technology advances toward higher levels of automation—where the Society of Automotive Engineers identifies levels ranging from full huma",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q2",
+      "url": "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+      "title": "Liability for Defective Advanced Driver Assistance Systems",
+      "snippet": "The two most common forms of ADAS in use today are passive and active systems. Passive systems are the features in a vehicle that are designed to alert the driver but not actively control vehicle movements. Common passive ADAS systems include anti-lock braking systems (ABS), electronic stability control (ESC), and tire pressure monitoring systems (TPMS). The second type of system, and the one subjected to increasing liability today, are active systems. Active systems are features that take [...] features that take actionable steps to avoid potential accidents. Common active ADAS features include adaptive cruise control (ACC), automatic emergency breaking (AEB), blind spot monitoring (BSM) and lane departure warnings (LDW). [...] Advanced Driver Assistance Systems (“ADAS”) are a sophisticated network of electronic technologies for modern vehicles intended to automate certain aspects of driving and improve driver situational awareness to increase safety behind the wheel. ADAS uses a variety of technologies, including radars, sensors, and cameras to assess vehicle speed, tendencies, processing time, decision time and response time.",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-2",
+      "query_id": "q2",
+      "url": "https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html",
+      "title": "What is ADAS? Advanced Driver Assistance Basics - NI",
+      "snippet": "In the realm of ADAS, two main categories exist: active ADAS and passive ADAS. The key distinction lies in their respective roles and functions. Active ADAS refers to systems that actively intervene and assist in critical driving situations. These systems utilize sensors, cameras, and intelligent algorithms to detect potential hazards, issue warnings, and even perform automatic corrective actions. Examples of active ADAS include Collision Avoidance Systems (CAS), Lane Keep Assist (LKA) systems, [...] On the other hand, passive ADAS focuses on providing information and alerts to the driver without directly intervening in the driving process. Passive ADAS systems use sensors and cameras to monitor the surrounding environment and provide feedback to the driver through visual or auditory alerts. Examples of passive ADAS include Blind Spot Monitoring (BSM) systems, rearview cameras, Lane Departure Warning (LDW) and Traffic Sign Recognition (TSR). [...] While active ADAS takes a proactive approach to enhance safety, passive ADAS serves as an additional layer of awareness and assistance, keeping the driver informed and aiding in decision-making. Together, these two categories of ADAS contribute to safer and more efficient driving experiences.\n\n## What’s the Difference Between ADAS and Autonomous Driving?",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-4",
+      "query_id": "q2",
+      "url": "https://www.spiceworks.com/soft-tech/what-is-adas",
+      "title": "ADAS Working, Types, Applications",
+      "snippet": "### 2. Active ADAS systems\n\nThe car takes active steps in these ADAS systems. To avoid worst-case scenarios, the vehicle can take action on its own. Automatic emergency braking (AEB) detects an impending accident and applies the brakes without the driver’s assistance. Functional features include adaptive cruise control (ACC), lane-keeping assist (LKA), lane centering (LC), and traffic jam assist. [...] The term ADAS currently refers to a rising variety of passive and active systems available as optional or as standard on an increasing number of new commercial vehicles. Some ADAS capabilities are so well-proven and successful that they are now mandatory in some parts of the world. Today’s ADAS features range from driver and passenger convenience and comfort to accident and injury mitigation and prevention. The borders are getting increasingly blurred, and it might be difficult to tell where [...] Advanced driver assistance technologies (ADAS) are passive and active safety mechanisms that eliminate human mistakes when driving various types of automobiles. ADAS systems employ innovative technology to aid drivers while operating and enhance driver performance. ADAS utilizes a range of sensor technologies to monitor the environment around the vehicle, then relays data to the driver or takes appropriate action. Their role in a connected Internet of Things (IoT) includes the following:",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-6",
+      "query_id": "q2",
+      "url": "https://www.facebook.com/Mobileye/posts/adas-capabilities-are-quickly-becoming-baseline-safety-requirements-not-premium-/1455234786647361",
+      "title": "Mobileye - ADAS capabilities are quickly becoming baseline...",
+      "snippet": "## Mobileye's Post\n\n### Mobileye\n\nJuly 14  ·\n\nADAS capabilities are quickly becoming baseline safety requirements, not premium features.\n\nWith new regulations emerging across global markets, automakers must navigate increasingly complex expectations around driver monitoring, system accountability, and automated driving safety.\n\nWe take a closer look at the regulatory shifts shaping ADAS deployment in 2026: \n\nNo photo description available. [...] '/%3E%3Cpath d='M16.0001 7.9996c0 4.418-3.5815 7.9996-7.9995 7.9996S.001 12.4176.001 7.9996 3.5825 0 8.0006 0C12.4186 0 16 3.5815 16 7.9996Z' fill='url(%23paint1_radial_15251_63610)'/%3E%3Cpath d='M16.0001 7.9996c0 4.418-3.5815 7.9996-7.9995 7.9996S.001 12.4176.001 7.9996 3.5825 0 8.0006 0C12.4186 0 16 3.5815 16 7.9996Z' fill='url(%23paint2_radial_15251_63610)' fill-opacity='.5'/%3E%3Cpath d='M7.3014 3.8662a.6974.6974 0 0 1 .6974-.6977c.6742 0 1.2207.5465 1.2207 1.2206v1.7464a.101.101 0 0 0 [...] gradientTransform='rotate(90 .0005 8) scale(7.99958)'%3E%3Cstop offset='.5618' stop-color='%230866FF' stop-opacity='0'/%3E%3Cstop offset='1' stop-color='%230866FF' stop-opacity='.1'/%3E%3C/radialGradient%3E%3CradialGradient id='paint2_radial_15251_63610' cx='0' cy='0' r='1' gradientUnits='userSpaceOnUse' gradientTransform='rotate(45 -4.5257 10.9237) scale(10.1818)'%3E%3Cstop offset='.3143' stop-color='%2302ADFC'/%3E%3Cstop offset='1' stop-color='%2302ADFC'",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-2",
+      "web-4"
+    ],
+    "eps_admits": [
+      "web-6"
+    ],
+    "below_cut": [
+      "web-6",
+      "web-7",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-7",
+      "web-8",
+      "web-1",
+      "web-3",
+      "web-5",
+      "web-6"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

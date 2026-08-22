@@ -1,0 +1,193 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787292859",
+  "charter_hash": "e7d8fd48f0d7c772",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787292859",
+    "question": "Why did OpenAI release o3 and o4-mini in April 2025, and what did the launch signal about the direction of frontier reasoning models?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-r1-re/loop/seed-04/dr-1787292859",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null,
+    "max_rounds_override": null,
+    "max_search_override": null,
+    "max_fetch_override": null
+  },
+  "question": "Why did OpenAI release o3 and o4-mini in April 2025, and what did the launch signal about the direction of frontier reasoning models?",
+  "frontier": [
+    "Date of OpenAI o3 and o4-mini model release",
+    "Number of parameters in OpenAI o3 model if disclosed by OpenAI or third-party estimates",
+    "Benchmark score of OpenAI o3 on ARC-AGI benchmark compared to previous models like o1-preview",
+    "Percentage improvement in reasoning accuracy of OpenAI o4-mini over GPT-4o on MMLU-Pro dataset",
+    "Price per million tokens for input and output for OpenAI o3 API access at launch",
+    "Count of frontier AI labs releasing new reasoning-focused models between January 2025 and April 2025",
+    "Share of enterprise adoption reports citing \"reasoning capabilities\" as a primary driver for LLM selection in Q1 2025"
+  ],
+  "frontier_question": "Why did OpenAI release o3 and o4-mini in April 2025, and what did the launch signal about the direction of frontier reasoning models?",
+  "figure_specifiers": [
+    "3",
+    "4",
+    "2025"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787292859",
+      "charter_hash": "e7d8fd48f0d7c772",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787292859",
+      "charter_hash": "e7d8fd48f0d7c772",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-04",
+          "source_url": "https://estate.example/seed-04",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built into the model itself, not bolted on, and with native tool use (web search, code interpreter) trained into the model. The launch was API-first: o3 and o4-mini were available to developers from day one, and o3 was not in the ChatGPT app at launch (o4-mini was). The technique was budget forcing — a fixed maximum thought budget with task-adaptive (dynamic) compute, so harder questions think longer — and OpenAI's first private chain-of-thought policy (reasoning tokens not exposed to API callers, announced in the o3/o4-mini system card). Pricing: o3 at $10 / $40 per million tokens (input/output), o4-mini at $1.10 / $4.40. o3 set a record on the ARC-AGI benchmark — about 87.5% on ARC-AGI-1 at high compute, at or above the ~85% human baseline, the first model to reach it. With GPT-5 not yet shipping, OpenAI used the launch to defend the reasoning-model frontier against DeepSeek's R1 cost shock and Anthropic's agentic-coding push — reframing frontier capability as tool-using reasoning at commodity prices.\n",
+          "ingested_into": null,
+          "tags": [
+            "2025",
+            "mini",
+            "openai"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-04"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787292859",
+      "charter_hash": "e7d8fd48f0d7c772",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-04"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+    "The launch signaled that the direction of frontier reasoning models is shifting toward native vision capabilities built directly into the model rather than being bolted on, as well as native tool use (such as web search and code interpreter) trained into the architecture itself [Source: ev-1].",
+    "Additionally, it marked OpenAI’s first private chain-of-thought policy where reasoning tokens are not exposed to API callers [Source: ev-1].",
+    "This move reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini’s pricing of $1.10 per million input tokens and $4.40 per million output tokens, compared to o3’s higher tier of $10 and $40 respectively [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+      "actionable_query": "-mini on April . (3, 4, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The launch signaled that the direction of frontier reasoning models is shifting toward native vision capabilities built directly into the model rather than being bolted on, as well as native tool use (such as web search and code interpreter) trained into the architecture itself [Source: ev-1].",
+      "actionable_query": "launch signaled direction frontier reasoning models shifting toward native vision capabilities built directly model rather bolted well tool use web search code interpreter trained architecture itself",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Additionally, it marked OpenAI’s first private chain-of-thought policy where reasoning tokens are not exposed to API callers [Source: ev-1].",
+      "actionable_query": "Additionally, it marked OpenAI’s private chain-of-thought policy where reasoning tokens are not exposed to API callers . (3, 4, 2025)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "This move reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini’s pricing of $1.10 per million input tokens and $4.40 per million output tokens, compared to o3’s higher tier of $10 and $40 respectively [Source: ev-1].",
+      "actionable_query": "-mini’s pricing of $ per million input tokens and $ ’s higher tier of $ and $ respectively . (3, 4, 2025)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-04",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

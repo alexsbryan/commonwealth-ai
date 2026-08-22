@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787336692",
+  "charter_hash": "c879eabeb8746942",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI official announcement date for o3 model release in April 2025",
+      "Count of OpenAI models released between January 1 and April 30, 2025",
+      "List of technical capabilities highlighted by OpenAI for o3 and o4-mini at launch",
+      "Percentage change in reasoning benchmark scores (e.g., AIME, GPQA) from previous frontier models to o3",
+      "Price per million tokens for OpenAI o3 API access announced in April 2025",
+      "Number of competitors releasing new reasoning-focused LLMs in Q1 2025",
+      "Share of market revenue attributed to inference costs versus training costs for large language models as reported by major AI labs in early 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3",
+      "4",
+      "2025"
+    ]
+  }
+}

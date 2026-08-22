@@ -1,0 +1,20 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1787337230",
+  "charter_hash": "bf65194665d36fb5",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "Why did Anthropic release Claude 4 as two models in May 2025, and what did the launch signal about the agentic-coding market?",
+      "hits": []
+    }
+  ],
+  "estate_answer": "No evidence was retrieved this round."
+}

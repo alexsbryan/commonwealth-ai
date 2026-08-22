@@ -157,7 +157,12 @@ impl SweArgs {
                     a.limit = val(&mut i)?.parse().ok();
                 }
                 "--only" => {
-                    a.only = Some(val(&mut i)?.split(',').map(|s| s.trim().to_string()).collect())
+                    a.only = Some(
+                        val(&mut i)?
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .collect(),
+                    )
                 }
                 "--token-cap" => a.token_cap = val(&mut i)?.parse().unwrap_or(a.token_cap),
                 "--wall-cap" => {
@@ -183,7 +188,10 @@ fn git(args: &[&str], cwd: Option<&Path>) -> Result<String, SweError> {
     if !out.status.success() {
         return Err(SweError::Git(
             args.join(" "),
-            String::from_utf8_lossy(&out.stderr).chars().take(2000).collect(),
+            String::from_utf8_lossy(&out.stderr)
+                .chars()
+                .take(2000)
+                .collect(),
         ));
     }
     Ok(String::from_utf8_lossy(&out.stdout).to_string())
@@ -203,7 +211,10 @@ fn container(args: &[&str]) -> Result<String, SweError> {
     if !out.status.success() {
         return Err(SweError::Container(
             args.join(" "),
-            String::from_utf8_lossy(&out.stderr).chars().take(2000).collect(),
+            String::from_utf8_lossy(&out.stderr)
+                .chars()
+                .take(2000)
+                .collect(),
         ));
     }
     Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
@@ -225,15 +236,14 @@ fn container(args: &[&str]) -> Result<String, SweError> {
 fn materialize_from_image(inst: &Instance, dest: &Path) -> Result<(), SweError> {
     let img = image_for(&inst.instance_id);
     let cid = container(&["create", "--platform", PLATFORM, &img, "sleep", "1"])?;
-    let copy = container(&[
-        "cp",
-        &format!("{cid}:/testbed/."),
-        &dest.to_string_lossy(),
-    ]);
+    let copy = container(&["cp", &format!("{cid}:/testbed/."), &dest.to_string_lossy()]);
     let _ = container(&["rm", "-f", &cid]);
     copy?;
     // The image is checked out at its build commit, not the instance's.
-    git(&["checkout", "--detach", "--quiet", &inst.base_commit], Some(dest))?;
+    git(
+        &["checkout", "--detach", "--quiet", &inst.base_commit],
+        Some(dest),
+    )?;
     Ok(())
 }
 
@@ -269,7 +279,11 @@ fn synth_problem(inst: &Instance, prompt_text: String, args: &SweArgs) -> Proble
     Problem {
         meta: ProblemMeta {
             id: inst.instance_id.clone(),
-            title: format!("{} @ {}", inst.repo, &inst.base_commit[..12.min(inst.base_commit.len())]),
+            title: format!(
+                "{} @ {}",
+                inst.repo,
+                &inst.base_commit[..12.min(inst.base_commit.len())]
+            ),
             category: Category::CodeTest,
             version: inst.version.clone(),
             notes: format!("SWE-bench Verified · difficulty {}", inst.difficulty),
@@ -305,12 +319,7 @@ fn synth_problem(inst: &Instance, prompt_text: String, args: &SweArgs) -> Proble
     }
 }
 
-fn render_prompt(
-    template: &str,
-    constraints: &str,
-    inst: &Instance,
-    verify_cmd: &str,
-) -> String {
+fn render_prompt(template: &str, constraints: &str, inst: &Instance, verify_cmd: &str) -> String {
     let constraints = constraints.replace("{verify_cmd}", verify_cmd);
     let short = &inst.base_commit[..12.min(inst.base_commit.len())];
     template
@@ -360,7 +369,10 @@ pub async fn run_command(argv: &[String]) -> Result<(), SweError> {
 
     let preds_dir = args.root.join("preds").join(&args.agent);
     std::fs::create_dir_all(&preds_dir)?;
-    let log_path = args.root.join("preds").join(format!("{}.runlog.jsonl", args.agent));
+    let log_path = args
+        .root
+        .join("preds")
+        .join(format!("{}.runlog.jsonl", args.agent));
 
     let total = instances.len();
     let mut wrote = 0usize;
@@ -377,7 +389,12 @@ pub async fn run_command(argv: &[String]) -> Result<(), SweError> {
             wrote += 1;
             continue;
         }
-        println!("[{}/{total}] {} ({}) …", idx + 1, inst.instance_id, inst.difficulty);
+        println!(
+            "[{}/{total}] {} ({}) …",
+            idx + 1,
+            inst.instance_id,
+            inst.difficulty
+        );
 
         // Under the bench root, not /var/folders: the container engine's
         // VM does not share the macOS temp root, and the workdir has to

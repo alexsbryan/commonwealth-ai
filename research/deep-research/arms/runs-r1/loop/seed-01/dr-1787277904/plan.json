@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787277904",
+  "charter_hash": "d8bc740c2695d265",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Google's acquisition price for Wiz in March 2025, USD",
+      "Wiz's enterprise value at the time of its IPO or most recent valuation prior to acquisition, USD (2025)",
+      "Number of cloud security vendors acquired by Big Tech companies between January 2023 and December 2024, count",
+      "Market share of AWS, Azure, and Google Cloud Platform in global IaaS market as of Q1 2025, percentage",
+      "Annual revenue growth rate of the cloud-native application protection platform (CNAPP) segment from 2020 to 2024, percentage change",
+      "Number of active customers for Wiz before the acquisition announcement, count",
+      "Total number of employees at Wiz immediately preceding the acquisition, count",
+      "Google's total capital expenditure on data centers and AI infrastructure in fiscal year 2024 compared to fiscal year 2023, USD"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2025"
+    ]
+  }
+}

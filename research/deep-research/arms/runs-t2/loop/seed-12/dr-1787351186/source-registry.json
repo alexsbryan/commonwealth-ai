@@ -1,0 +1,15 @@
+{
+  "icd": "source_registry",
+  "version": 1,
+  "run_id": "dr-1787351186",
+  "charter_hash": "1801528f54121ee6",
+  "sources": [
+    {
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    }
+  ]
+}

@@ -1,0 +1,761 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787260135",
+  "charter_hash": "7f31e60a98521c35",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+      "title": "Breaking Ground in Quantum Computing: QSA’s Trapped-Ion Advances – QSA",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nationalacademies.org/read/25196/chapter/9",
+      "title": "Read \"Quantum Computing: Progress and Prospects\" at NAP.edu",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.quantinuum.com/press-releases/quantinuum-proves-their-quantum-computers-will-scale-with-major-hardware-innovation",
+      "title": "Quantinuum Proves Their Quantum Computers Will Scale with Major Hardware Innovation",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.quantinuum.com/press-releases/quantinuum-launches-industry-first-trapped-ion-56-qubit-quantum-computer-that-challenges-the-worlds-best-supercomputers",
+      "title": "Quantinuum Launches Industry-First, Trapped-Ion 56-Qubit Quantum Computer, Breaking Key Benchmark Record",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.spinquanta.com/news-detail/quantum-computer-manufacturers",
+      "title": "Top 18 Quantum Computer Companies [2025 Updated]",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://quantum-journal.org/papers/q-2024-11-07-1516",
+      "title": "Benchmarking a trapped-ion quantum computer with 30 qubits – Quantum",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://thequantuminsider.com/2026/06/12/trapped-ion-quantum-computing-companies-technology-and-where-it-stands-in-2026",
+      "title": "Top Trapped-Ion Quantum Computing Companies in 2026",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ionq.com/roadmap",
+      "title": "IonQ | Roadmap",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://iontrap.duke.edu/category/uncategorized",
+      "title": "Uncategorized – Quantum Computing with Trapped Ions",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://qir.mit.edu/benchmarking",
+      "title": "Insights – Quantum Processor Benchmarking - QIR",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/h4wk-v31j",
+      "title": "Scalable, High-Fidelity All-Electronic Control of Trapped-Ion ...",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://entangledfuture.com/guides/trapped-ion-quantum-computing",
+      "title": "Trapped-Ion Quantum Computing 2026 | IonQ, Quantinuum",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://postquantum.com/quantum-research/oxford-qubit-gate-error",
+      "title": "Oxford Achieves 10⁻⁷-Level Qubit Gate Error, Shattering Quantum Fidelity Records",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://russfein.substack.com/p/qubit-modalities-trapped-ions",
+      "title": "Qubit Modalities: Trapped Ions - by Russ Fein",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.oxionics.com/announcements/oxford-ionics-breaks-global-quantum-performance-records",
+      "title": "Oxford Ionics breaks global quantum performance records • Oxford Ionics",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ionq.com/blog/accelerating-towards-fault-tolerance-unlocking-99-99-two-qubit-gate",
+      "title": "IonQ | Accelerating Towards Fault Tolerance: Unlocking 99.99% Two-Qubit Gate Fidelities",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2308.05071v2",
+      "title": "Benchmarking a trapped-ion quantum computer with 30 qubits",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/ionq-co_today-we-have-released-a-landmark-technical-activity-7386325381479370752-vFSa",
+      "title": "Achieved world's highest two-qubit gate performance with fidelity over 99.99% | IonQ posted on the topic | LinkedIn",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://quantum-journal.org/papers/q-2024-11-07-1516",
+      "title": "Benchmarking a trapped-ion quantum computer with 30 ...",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://iontrap.duke.edu/files/2025/03/forshit.pdf",
+      "title": "[PDF] Experimental Primer on the Trapped Ion Quantum Computer",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://tf.nist.gov/general/pdf/3181.pdf",
+      "title": "[PDF] Coherent coupling and non-destructive measurement of trapped-ion ...",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11349922",
+      "title": "Experimental realization of entangled coherent states in two ...",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://iontrap.physics.indiana.edu/papers/Donofrio2021.pdf",
+      "title": "Radial Two-Dimensional Ion Crystals in a Linear Paul Trap",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/abs/2007.04149",
+      "title": "Coherence properties of highly-excited motional states of a ...",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ui.adsabs.harvard.edu/abs/2024arXiv241103301R/abstract",
+      "title": "State-dependent control of the motional modes of trapped ...",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/PhysRevLett.132.133003",
+      "title": "Trapping Ion Coulomb Crystals in an Optical Lattice",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/list/cond-mat.str-el/new",
+      "title": "Strongly Correlated Electrons",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ictp-saifr.org/wfqm2025",
+      "title": "Workshop on Frontiers in Quantum Materials - ICTP – SAIFR",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nits.ac.in/research/conferences",
+      "title": "Conferences",
+      "score": 0.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.otso.com.au",
+      "title": "Hydrogen Energy Research | OTSO",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.patsnap.com/resources/blog/rd-blog/trapped-ion-quantum-computing-2026-patsnap-eureka",
+      "title": "Trapped Ion Quantum Computing 2026 — PatSnap Eureka | Patsnap",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://entangledfuture.com/guides/trapped-ion-quantum-computing",
+      "title": "Trapped-Ion Quantum Computing 2026 | IonQ, Quantinuum",
+      "score": 0.0,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://postquantum.com/quantum-modalities/trapped-ion-qubits",
+      "title": "Quantum Computing Modalities: Trapped-Ion QC",
+      "score": 0.0,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://iontrap.duke.edu/page/2",
+      "title": "Page 2 – Quantum Computing with Trapped Ions",
+      "score": 0.0,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://cacm.acm.org/research/toward-systematic-architectural-design-of-near-term-trapped-ion-quantum-computers",
+      "title": "Toward Systematic Architectural Design of Near-Term Trapped Ion Quantum Computers",
+      "score": 0.0,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ar5iv.labs.arxiv.org/html/1904.04178",
+      "title": "[1904.04178] Trapped-Ion Quantum Computing: Progress and Challenges",
+      "score": 0.0,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ionq.com/blog/achieving-remote-ion-ion-entanglement-paving-the-way-for-scalable-quantum",
+      "title": "IonQ | Achieving Remote Ion-Ion Entanglement: Paving the Way for Scalable Quantum Networking",
+      "score": 0.0,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/PRXQuantum.4.040313",
+      "title": "How to Wire a -Qubit Trapped-Ion Quantum Computer",
+      "score": 0.0,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9908934",
+      "title": "A high-fidelity quantum matter-link between ion-trap microchip modules",
+      "score": 0.0,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://russfein.substack.com/p/qubit-modalities-trapped-ions",
+      "title": "Qubit Modalities: Trapped Ions - by Russ Fein - The Quantum Leap",
+      "score": 0.0,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://inspirehep.net/files/4ec90af54b0c2e961032d2bda1c61987",
+      "title": "Application of trapped ions in quantum-computing: Fidelity, ...",
+      "score": 0.0,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nist.gov/programs-projects/quantum-networking-trapped-ions-optical-cavities",
+      "title": "Quantum Networking with Trapped Ions in Optical Cavities | NIST",
+      "score": 0.0,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/p3cy-8yjk",
+      "title": "High-fidelity entanglement of metastable trapped-ion qubits with integrated erasure conversion",
+      "score": 0.0,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.quantinuum.com/blog/quantinuum-announces-a-world-record-in-fidelity-for-quantum-computing-qubits",
+      "title": "Quantinuum announces a world record in fidelity for quantum computing qubits",
+      "score": 0.0,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://nano-qt.com/passive-quantum-interconnects-are-intrinsically-robust-to-motion-induced-errors",
+      "title": "Passive Quantum Interconnects Are Intrinsically Robust to ...",
+      "score": 0.0,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.patsnap.com/resources/blog/rd-blog/topological-qubit-error-correction-2026-patsnap-eureka",
+      "title": "Topological Qubit Error Correction 2026 — PatSnap Eureka | Patsnap",
+      "score": 0.0,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://multiwaresolutions.com/blog/quantum-error-correction-surface-codes-in-2026-d488-2026-06-09",
+      "title": "Quantum Error Correction: Surface Codes in 2026 - Multiware Solution",
+      "score": 0.0,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://quantumzeitgeist.com/what-is-the-surface-code",
+      "title": "Surface Code Explained: 7 Essential Ideas For 2026",
+      "score": 0.0,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://errorcorrectionzoo.org/list/quantum_realizations",
+      "title": "Realized quantum codes | Error Correction Zoo",
+      "score": 0.0,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ionq.com/blog/our-novel-efficient-approach-to-quantum-error-correction",
+      "title": "IonQ | IonQ's Novel, Efficient Approach to Quantum Error Correction",
+      "score": 0.0,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9946823",
+      "title": "Suppressing quantum errors by scaling a surface code logical ...",
+      "score": 0.0,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/tk99-76gb",
+      "title": "Ion-trap chip architecture optimized for the implementation of quantum error-correcting codes",
+      "score": 0.0,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2408.13687v1",
+      "title": "Quantum error correction below the surface code threshold",
+      "score": 0.0,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://tf.nist.gov/general/pdf/3330.pdf",
+      "title": "High-Stability Single-Ion Clock with 5.5 × 10",
+      "score": 0.0,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.quantummetrology.de/quaccs/research/multi-ion-clocks",
+      "title": "Quantum Clocks and Complex Systems - Results",
+      "score": 0.0,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://iontrap.duke.edu/files/2025/03/Accurate_measurement_of_the_12.6_GHz_clock_transition_in_trapped__sup_171_Yb_sup___ions.pdf",
+      "title": "Accurate Measurement Of The 12.6 GHz. \"clock\" Transition In ...",
+      "score": 0.0,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/386042163_Progress_on_cadmium-ion_and_ytterbium-ion_Microwave_Frequency_Standards_at_Tsinghua_University",
+      "title": "(PDF) Progress on cadmium-ion and ytterbium ...",
+      "score": 0.0,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/High-Stability-Single-Ion-Clock-with-5.5%C3%9710%5E%7B-19%7D-Marshall-Castillo/2150eeb98a1b60a82851c552e9c88eb1ad7923fb/figure/0",
+      "title": "Figure 1 from High-Stability Single-Ion Clock with 5.5×10",
+      "score": 0.0,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/pdf/2402.16807",
+      "title": "arXiv:2402.16807v3 [physics.atom-ph] 16 Jan 2025",
+      "score": 0.0,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2025.1597737/full",
+      "title": "Frequency shift properties of a calcium beam optical clock",
+      "score": 0.0,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.opticsjournal.net/Articles/GetArticlePDF/OJd28985dfbe606e6c",
+      "title": "Reducing statistical noise in frequency ratio measurement ...",
+      "score": 0.0,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nist.gov/document/112-sandia-styluspdf",
+      "title": "Micro-fabricated stylus ion trap",
+      "score": 0.0,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://escholarship.org/content/qt8vx3307d/qt8vx3307d.pdf",
+      "title": "UC Berkeley",
+      "score": 0.0,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/PhysRevLett.96.253003",
+      "title": "Microfabricated Surface-Electrode Ion Trap for Scalable Quantum Information Processing",
+      "score": 0.0,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.research-collection.ethz.ch/bitstreams/bb700c66-a055-4ca6-8542-998181c65022/download",
+      "title": "Segmented ion-trap fabrication using high precision ...",
+      "score": 0.0,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://aip.scitation.org/doi/abs/10.1063/5.0082740",
+      "title": "In situ detection of RF breakdown on microfabricated ...",
+      "score": 0.0,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2112.09723v1",
+      "title": "In situ detection of RF breakdown on microfabricated ...",
+      "score": 0.0,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2605.09580v2",
+      "title": "Estimating The Energy Consumption of Quantum Computing from A Full System Aspect",
+      "score": 0.0,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://russfein.substack.com/p/are-quantum-computers-energy-hogs",
+      "title": "Are Quantum Computers Energy Hogs? - by Russ Fein",
+      "score": 0.0,
+      "rank": 82,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.linkedin.com/posts/edward-parker-753b77159_estimating-the-energy-requirements-to-operate-activity-7331805568786919424-uT5Z",
+      "title": "New estimates for power and energy of a quantum computer | Edward Parker posted on the topic | LinkedIn",
+      "score": 0.0,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://patentpc.com/blog/quantum-computing-energy-consumption-how-sustainable-is-it-latest-data",
+      "title": "Quantum Computing Energy Consumption: How Sustainable Is It? (Latest Data) | PatentPC",
+      "score": 0.0,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.spinquanta.com/news-detail/what-is-cryogenic-quantum-computing-and-why-it-matters",
+      "title": "What Is Cryogenic Quantum Computing and Why It Matters | SpinQ",
+      "score": 0.0,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.abilityengineering.com/quantum-computing-cooling-system",
+      "title": "Cryogenic Cooling & Vacuum Systems for Quantum Computing Infrastructure - Cryogenic & Vacuum Equipment Experts | Ability Engineering",
+      "score": 0.0,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pennylane.ai/demos/tutorial_sc_qubits",
+      "title": "Quantum computing with superconducting qubits | PennyLane Demos",
+      "score": 0.0,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2308.05071v2",
+      "title": "Benchmarking a trapped-ion quantum computer with 30 qubits - arXiv",
+      "score": 0.0,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://postquantum.com/quantum-modalities/trapped-ion-qubits",
+      "title": "Quantum Computing Modalities: Trapped-Ion QC",
+      "score": 0.0,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://iontrap.duke.edu/publications/research-articles",
+      "title": "Research Articles – Quantum Computing with Trapped Ions",
+      "score": 0.0,
+      "rank": 91,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pubs.aip.org/aip/apr/article/6/2/021314/570103/Trapped-ion-quantum-computing-Progress-and",
+      "title": "Trapped-ion quantum computing: Progress and challenges",
+      "score": 0.0,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/PhysRevLett.102.170501",
+      "title": "Scalable, High-Speed Measurement-Based Quantum ...",
+      "score": 0.0,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ionq.com/resources/quantum-computing-101-introduction-evaluation-applications",
+      "title": "IonQ | Quantum Computing 101: Introduction, Evaluation, and Applications",
+      "score": 0.0,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions",
+      "title": "QSA's Trapped-Ion Advances",
+      "score": 0.0,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2601.08578v1",
+      "title": "Quantum Computing – Strategic Recommendations for the Industry",
+      "score": 0.0,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ionq.com/technology",
+      "title": "IonQ | Our Trapped Ion Technology",
+      "score": 0.0,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.aps.org/doi/10.1103/h4wk-v31j",
+      "title": "Scalable, High-Fidelity All-Electronic Control of Trapped-Ion Qubits",
+      "score": 0.0,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://linkelab.umd.edu/research",
+      "title": "Research | Linke Lab",
+      "score": 0.0,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/list/cond-mat/new",
+      "title": "Condensed Matter",
+      "score": 0.0,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2510.07590",
+      "title": "Nonlinear Coupling between Motional Modes in Trapped Ion Quantum ...",
+      "score": 0.0,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/list/math/new",
+      "title": "Mathematics",
+      "score": 0.0,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/368363526_A_high-fidelity_quantum_matter-link_between_ion-trap_microchip_modules",
+      "title": "(PDF) A high-fidelity quantum matter-link between ion-trap ...",
+      "score": 0.0,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://quantumcomputing.stackexchange.com/questions/23650/how-to-calculate-the-number-of-qubits-in-surface-code-for-given-physical-error",
+      "title": "How to calculate the number of qubits in surface code, for given physical ...",
+      "score": 0.0,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/48188629_Microfabricated_Ion_Traps",
+      "title": "(PDF) Microfabricated ion traps",
+      "score": 0.0,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/Segmented-ion-trap-fabrication-using-high-precision-Ragg-Decaroli/ba2ad3254f8be01a0cfd8255d397dbb00bc88632",
+      "title": "[PDF] Segmented ion-trap fabrication using high precision ...",
+      "score": 0.0,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/260515587_Energy-Efficient_Superconducting_Computing-Power_Budgets_and_Requirements",
+      "title": "Energy-Efficient Superconducting Computing—Power ...",
+      "score": 0.0,
+      "rank": 108,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://tf.nist.gov/general/pdf/2182.pdf",
+      "title": "Trapped Atomic Ions and Quantum Information Processing",
+      "score": 0.0,
+      "rank": 109,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

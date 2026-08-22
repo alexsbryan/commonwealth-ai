@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787328620",
+  "charter_hash": "520965a046ff7877",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Date the EU AI Act entered into force in 2024",
+      "Specific date when prohibitions on unacceptable risk AI systems apply starting August 2025",
+      "Specific date when obligations for general-purpose AI models and high-risk Annex III applications start applying in August 2026",
+      "Specific date when full compliance requirements for high-risk AI systems embedded in regulated products under Union harmonization legislation become applicable in August 2030 or 2027 as per final text amendments",
+      "List of prohibited AI practices defined by Article 5 that must be complied with immediately upon entry into force",
+      "Definition of General-Purpose AI (GPAI) model thresholds regarding compute power parameters used to determine regulatory scope (2024, 2027)",
+      "Percentage share of EU GDP estimated impact from compliance costs associated with the phased implementation timeline"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2027"
+    ]
+  }
+}

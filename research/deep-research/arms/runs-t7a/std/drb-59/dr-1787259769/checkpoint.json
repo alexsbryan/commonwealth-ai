@@ -1,0 +1,337 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787259769",
+  "charter_hash": "1911271c489f36f3",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787259769",
+    "question": "In ecology, how do birds achieve precise location and direction navigation during migration? What cues and disturbances influence this process?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-59/dr-1787259769",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "tavily",
+    "search_source": "Web",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": {
+      "run-id": "dr-1787259769",
+      "granted-at-unix": 1787259769,
+      "release-floor": "personal"
+    }
+  },
+  "question": "In ecology, how do birds achieve precise location and direction navigation during migration? What cues and disturbances influence this process?",
+  "frontier": [
+    "Magnetic field sensitivity threshold in migratory birds measured as the percentage change in heading direction per microtesla of magnetic field rotation",
+    "Sun compass deviation angle in starlings quantified as degrees from true north under controlled light conditions between 09:00 and 15:00 UTC",
+    "Geomagnetic anomaly detection rate in European robins expressed as the count of individuals altering migration path within a defined radius of artificial magnetic fields over a 24-hour period",
+    "Cue hierarchy weighting for celestial vs. terrestrial landmarks calculated as the ratio of time spent orienting toward stars versus ground features during twilight hours",
+    "Disorientation latency after exposure to radiofrequency electromagnetic interference measured in minutes until resumption of consistent migratory bearing",
+    "Migratory direction accuracy relative to target destination estimated as the median angular deviation from the ideal great-circle route across multiple tracking years"
+  ],
+  "frontier_question": "In ecology, how do birds achieve precise location and direction navigation during migration? What cues and disturbances influence this process?",
+  "figure_specifiers": [],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259769",
+      "charter_hash": "1911271c489f36f3",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259769",
+      "charter_hash": "1911271c489f36f3",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://en.wikipedia.org/wiki/Bird_migration",
+          "source_url": "https://en.wikipedia.org/wiki/Bird_migration",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Bird migration - Wikipedia Jump to content Main menu Main menu\nmove to sidebar hide Navigation Main page\nContents\nCurrent events\nRandom article\nAbout Wikipedia\nContact us Contribute Help\nLearn to edit\nCommunity portal\nRecent changes\nUpload file\nSpecial pages Search Search Appearance Donate Create account Log in Personal tools Donate Create account Log in Contents\nmove to sidebar hide (Top)\n1 Historical views 2 General patterns 3 Nocturnal migratory behaviour 4 Long-distance migration Toggle Long-distance migration subsection 4.1 In waders 4.2 In seabirds 4.3 Diurnal migration in large birds using thermals 5 Short-distance and altitudinal migration 6 Irruptions and dispersal 7 Physiology and control Toggle Physiology and control subsection 7.1 Timing 7.2 Orientation and navigation 7.3 Vagrancy 7.4 Migration conditioning 8 Adaptations 9 Global population trends 10 Evolutionary and ecological factors Toggle Evolutionary and ecological factors subsection 10.1 Climate change 11 Ecological effects 12 Study techniques 13 Threats and conservation Toggle Threats and conservation subsection 13.1 Stopover site conservation efforts 14 See also 15 References 16 Further reading 17 External links Toggle External links subsection 17.1 Online databases Toggle the table of contents Bird migration\n67 languages Afrikaans\nالعربية\nঅসমীয়া\nAsturianu\nAzərbaycanca\nБашҡортса\nБългарски\nবাংলা\nBosanski\nCatalà\nČeština\nCymraeg\nDansk\nDeutsch\nΕλληνικά\nEsperanto\nEspañol\nفارسی\nFrançais\nNordfriisk\nFrysk\nGàidhlig\nGalego\nગુજરાતી\nעברית\nहिन्दी\nHrvatski\nMagyar\nBahasa Indonesia\n日本語\nქართული\nTaqbaylit\nҚазақша\nಕನ್ನಡ\n한국어\nКыргызча\nLietuvių\nLatviešu\nМакедонски\nമലയാളം\nमराठी\nမြန်မာဘာသာ\nनेपाली\nNederlands\nNorsk nynorsk\nNorsk bokmål\nOccitan\nPolski\nPortuguês\nRumantsch\nRomână\nРусский\nSrpskohrvatski / српскохрватски\nSlovenščina\nСрпски / srpski\nSeeltersk\nSakizaya\nதமிழ்\nTürkçe\nТатарча / tatarça\nУкраїнська\nاردو\nTiếng Việt\nWalon\n吴语\n粵語\n中文 Edit links\nArticle Talk English Read Edit View history Tools Tools\nmove to sidebar hide Actions Read Edit View history General What links here\nRelated changes\nUpload file\nPermanent link\nPage information\nCite this page\nGet shortened URL\nSwitch to legacy parser Print/export Download as PDF\nPrintable version In other projects Wikimedia Commons\nWikidata item Appearance\nmove to sidebar hide From Wikipedia, the free encyclopedia\nSeasonal movement of birds\n\"Bird of passage\" redirects here. For other uses, see Bird of Passage (disambiguation).\nA flock of barnacle geese during autumn migration Examples of long-distance bird migration routes Bird migration is a seasonal movement of some birds between breeding and wintering grounds that occurs twice a year. It is typically between northern and southern regions. Migration carries inherent risks, including predation and other hazards en route.\nThe Arctic tern holds the long-distance migration record for birds, travelling between Arctic breeding grounds and the Antarctic each year. Some species of tubenoses, such as albatrosses, circle the Earth, flying over the southern oceans, while others such as Manx shearwaters migrate 14,000 km (8,700 mi) between their northern breeding grounds and the Southern Ocean. Shorter migrations are common, while longer ones are not. The shorter migrations include altitudinal migrations on mountains, including the Andes and Himalayas.\nThe timing of migration seems to be controlled primarily by changes in day length. Migrating birds navigate using celestial cues from the Sun and stars, the Earth's magnetic field, and mental maps.\nHistorical views\n[edit]\nMinoan fresco of swallows in springtime at Akrotiri, c. 1500 BC In the Pacific, traditional land-finding techniques used by Micronesians and ",
+          "ingested_into": null,
+          "tags": [
+            "bird",
+            "migration"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+          "source_url": "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "How Migrating Birds Use Quantum Effects to Navigate | Scientific American Skip to main content\nScientific American\nSeptember Issue\nNewsletters\nPodcasts\nGames\nExplore\nBiology\nChemistry\nEnvironment\nHealth\nMath\nMind & Brain\nTechnology\nSocial Sciences\nSpace & Physics\nLatest News\nIssue Archive\nSpecial Reports\nVideos\nBooks\nSubscribeSign In\nSeptember Issue\nNewsletters\nPodcasts\nGames\nExplore\nBiology\nChemistry\nEnvironment\nHealth\nMath\nMind & Brain\nTechnology\nSocial Sciences\nSpace & Physics\nLatest News\nIssue Archive\nSpecial Reports\nVideos\nBooks\nNew Issue: Orbital Catastrophe Ahead? Read Now\nApril 1, 2022\n14 min read\nAdd Us On GoogleAdd SciAm\nHow Migrating Birds Use Quantum Effects to Navigate\nNew research hints at the biophysical underpinnings of their ability to use Earth&rsquo;s magnetic field lines to find their way to their breeding and wintering grounds\nBy Peter J. Hore & Henrik Mouritsen Kyle Bean\nImagine you are a young Bar-tailed Godwit, a large, leggy shorebird with a long, probing bill hatched on the tundra of Alaska. As the days become shorter and the icy winter looms, you feel the urge to embark on one of the most impressive migrations on Earth: a nonstop transequatorial flight lasting at least seven days and nights across the Pacific Ocean to New Zealand 12,000 kilometers away. It&rsquo;s do or die. Every year tens of thousands of Bar-tailed Godwits complete this journey successfully. Billions of other young birds, including warblers and flycatchers, terns and sandpipers, set out on similarly spectacular and dangerous migrations every spring, skillfully navigating the night skies without any help from more experienced birds.\nPeople have long puzzled over the seasonal appearances and disappearances of birds. Aristotle thought that some birds such as swallows hibernated in the colder months and that others transformed into different species&mdash;redstarts turned into robins for the winter, he proposed. Only in the past century or so, with the advent of bird banding, satellite tracking and more widespread field studies, have researchers been able to connect bird populations that winter in one area and nest in another and show that some travel vast distances between the two locales every year. Remarkably, even juvenile long-haul travelers know where to go, and birds often take the same routes year after year. How do they find their way?\nMigrating birds use celestial cues to navigate, much as sailors of yore used the sun and stars to guide them. But unlike humans, birds also detect the magnetic field generated by Earth&rsquo;s molten core and use it to determine their position and direction. Despite more than 50 years of research into magnetoreception in birds, scientists have been unable to work out exactly how they use this information to stay on course. Recently we and others have made inroads into this enduring mystery. Our experimental evidence suggests something extraordinary: a bird&rsquo;s compass relies on subtle, fundamentally quantum effects in short-lived molecular fragments, known as radical pairs, formed photochemically in its eyes. That is, the creatures appear to be able to &ldquo;see&rdquo; Earth&rsquo;s magnetic field lines and use that information to chart a course between their breeding and wintering grounds.\nOn supporting science journalism\nIf youre enjoying this article, consider supporting our award-winning journalism by subscribing. By purchasing a subscription you are helping to ensure the future of impactful stories about the discoveries and ideas shaping our world today.\nA Mysterious Sense\nMigratory birds have an internal clock with an annual rhythm that tells them, among other things, when to migrate. They also inherit from their parents the directions in which they need to fly in the autumn and spring, and if the parents each have different genetically encoded directions, their offspring will end up with an intermediate direction. For example, if a southwest-migrating bird is crossed with a southeast",
+          "ingested_into": null,
+          "tags": [
+            "american",
+            "birds",
+            "effects",
+            "how",
+            "migrating",
+            "navigate"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+          "source_url": "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "How birds find their way CALS News Search for: Press tab to complete the suggestion.\nMenu\nFood Health Environment Climate Bioenergy Communities Skip to content UNIVERSITY of WISCONSIN MADISON More CALS CALS Home eCALS Grow Magazine UW-Madison About CALS News CALS News\nCollege of Agricultural & Life Sciences\nLogo Image-- CALS News\nCollege of Agricultural & Life Sciences\nFood Health Environment Climate Bioenergy Communities -- Troy Runge named CALS interim dean\nHow birds find their way\nOctober 30, 2012 | By Corliss Karasov, CALS Department of Forest & Wildlife Ecology Illustrations by Diane Doering, CALS Office of External Relations\nIt’s a great biological mystery—how millions of migratory birds make epic journeys between their breeding and wintering grounds every year, rarely losing their way.\nThey actually use some of the same tools we do—but theirs are inborn. “Migratory birds and humans need at least a map and a compass to find their way—a map for route and distance, and a compass to stay on course,” notes Stan Temple, an emeritus professor of forest and wildlife ecology.\n“Many young migratory birds are born with an innate map that gives them direction and distance to travel during migration,” says Temple. This is evident from the many young birds that make their first migration without their parents. They get a sense of direction—their compass—from environmental cues.\nOther birds, such as the young of swans, cranes and some other large birds, are born with the instinct to migrate but learn a migratory route from their parents during their first migration.\nWe have strong evidence of celestial cues, the earth’s magnetic fields and other environmental cues,” says Temple. “Birds use the most accurate navigational cues available at the time, often the sun and stars. When skies are overcast, birds may fall back on geomagnetic cues.”\nCelestial Navigation\nBirds can get a mind-boggling wealth of information from the positions of the sun and stars—patterns that constantly are changing throughout the day, throughout the seasons and from northern to southern hemispheres.\nHuman sea-goers use a clock, a compass, maps and a sextant to navigate by stars and sun. (The clock is essential.) Avian travelers are equipped with several internal clocks and a genetically programmed map.\nGeomagnetic Navigation\nMigratory birds can use the earth’s magnetic field as a compass. The earth’s magnetism is strongest at the poles and progressively weaker toward the equator. Birds may identify north-south directions by sensing differences in the strength of the earth’s magnetic field. Very recent studies have identified a region of the migrating bird’s brain that can detect magnetism.\nGeographic Mapping/Landmarks\nBirds learn to use landmarks—such as mountain ranges, shorelines and large lakes—from their first migration. Landmarks are most useful as a bird gets close to its destination.\nThis story was originally published in the fall 2012 issue of Grow magazine.\nPost navigation\nFarm and Industry Short Course Preview Days Nov. 28 & 29\nMichael Boettcher\nRecent Posts\nNatasha Rayne receives new Keith and Andrea Kelling Faculty Fellow Award UW–Madison Agricultural Research Station field days for 2026 season UW Organic Ag Research Field Day set for Aug. 18 New UW–Madison study finds that farmers market attendance is linked to stronger community participation, sense of community Dairy youth camp returns to UW–Madison Archives\nArchives Select Month August 2026 July 2026 June 2026 May 2026 April 2026 March 2026 February 2026 January 2026 December 2025 November 2025 October 2025 September 2025 August 2025 July 2025 June 2025 May 2025 April 2025 March 2025 February 2025 January 2025 December 2024 November 2024 October 2024 September 2024 August 2024 July 2024 June 2024 May 2024 April 2024 March 2024 February 2024 January 2024 December 2023 November 2023 October 2023 September 2023 August 2023 July 2023 June 2023 May 2023 Ap",
+          "ingested_into": null,
+          "tags": [
+            "birds",
+            "cals",
+            "find",
+            "how",
+            "news",
+            "way"
+          ]
+        }
+      ],
+      "fetch_failures": [
+        {
+          "url": "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+          "error": "fetch https://www.sciencedirect.com/science/article/pii/S1574954125002274: Execution error: HTTP 403 Forbidden for https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+          "absent": true
+        }
+      ],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259769",
+      "charter_hash": "1911271c489f36f3",
+      "round": 2,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://avesbiology.com/nav_orient.html",
+          "source_url": "https://avesbiology.com/nav_orient.html",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Avian Navigation and Orientation Avian Navigation and Orientation\nNon-compass orientation | Star compass | Sun compass | Polarized light | Magnetic cues | True navigation | Long- and short-range navigation | Literature cited Birds are often faced with the need to return to a particular location, such as a nest or roost site, a source of food or water, or, for migratory species, a breeding territory or wintering area. Such directed movement is called navigation or, more precisely, true navigation and involves the ability of a bird to locate its position, whether in a familiar or unfamiliar area, with respect to where it wants to go. Orientation, on the other hand, is more simply the ability to move in a given compass direction. True navigation, as first described by Kramer (1953, 1957), is a two-step process: (1) determining the correct direction of travel, and (2) being able to correctly identify that direction. In other words, birds must determine the direction that will take them toward their goal, just as we would when using a map, then, as we might using a compass, locate or identify that direction (Figure 1). Among birds, true navigation is typically accomplished only by &lsquo;experienced&rsquo; birds - birds that have become familiar, on a smaller scale, with a local area or, on a larger, migratory scale, have successfully completed a migratory journey at least once. Figure 1. The two-step navigation system proposed by Kramer (1953, 1957) (From: Wiltschko and Wiltschko 2009).  For some species, young, na&iuml;ve birds appear to be capable only of vector navigation, or the ability to maintain a particular orientation for a specified time or distance (Figure 2; Bingman and Cheng 2005). Differences between adult and juvenile birds have been revealed in experiments where they are captured during migration at the same location and then transported some distance from the normal migration route and released. Such experiments with European Starlings (Sturnus vulgaris; Perdeck 1958), Common Teal (Anas crecca; Wolff 1970), and White-crowned Sparrows (Zonotrichia leucophrys; Thorup et al. 2007) during fall migration have all demonstrated that adults typically compensate for the displacement and fly in the direction that will take them to their normal wintering grounds, whereas juveniles continue to fly in the direction they were moving prior to displacement (Fig. 3). These results indicate that, for these species, first-time migrants reach their wintering areas by an innate mechanism that influences the direction and distance of movement or, in other words, vector navigation. Figure 2. Example of the difference between true navigation and vector navigation by a hypothetical songbird migrant in Europe with a fall migration route from Norway to Spain (thin solid arrow). In this hypothetical experiment, migrants en route are captured and displaced (dashed arrow) from their traditional migratory path to a distant, unfamiliar site in eastern Europe and then released. True navigation (the thick solid arrow to Spain) would require the ability to determine the &lsquo;new&rsquo; location and adjust the migratory route to compensate for the displacement and still end up at the over-wintering site in Spain. Because vector navigation (the thick solid arrow to Italy) is only the ability to continue moving in a particularly direction for a certain distance or time, there would be no compensating to take into account the &lsquo;new&rsquo; location. So, migration would continue along the some orientation and for the same distance, but the hypothetical migrant would end up in Italy rather than Spain (From: Bingman and Cheng 2005). Figure 3. Thirty White-crowned Sparrows (15 adults and 15 juveniles) were displaced 3700 km from Seattle, Washington, USA, to Princeton, New Jersey, USA. The map on the left shows the displacement and breeding area (green), wintering area (cyan) and normal migration route (blue). The circle to the right shows the directi",
+          "ingested_into": null,
+          "tags": [
+            "avian",
+            "navigation",
+            "orientation"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Migratory birds can extract positional information from magnetic inclination and magnetic declination alone - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice Proc Biol Sci\n. 2024 Nov 13;291(2034):rspb20241363. doi: 10.1098/rspb.2024.1363 Search in PMC Search in PubMed View in NLM Catalog Add to search Migratory birds can extract positional information from magnetic inclination and magnetic declination alone\nFlorian Packmor\nFlorian Packmor\n1School of Environmental and Natural Sciences, Bangor University, Bangor, Gwynedd LL57 2UW, UK\n2Lower Saxon Wadden Sea National Park Authority, Wilhelmshaven 26382, Germany\nConceptualization, Data curation, Formal analysis, Investigation, Methodology, Project administration, Visualization, Writing – original draft\nFind articles by Florian Packmor 1,2,✉, Dmitry Kishkinev\nDmitry Kishkinev\n3School of Life Sciences, Keele University, Newcastle-under-Lyme, Staffordshire ST5 5BG, UK\nConceptualization, Methodology, Writing – review and editing\nFind articles by Dmitry Kishkinev 3, Thomas Zechmeister\nThomas Zechmeister\n4Biological Station Lake Neusiedl, Illmitz 7142, Austria\nResources, Writing – review and editing\nFind articles by Thomas Zechmeister 4, Henrik Mouritsen\nHenrik Mouritsen\n5Research group ‘Neurosensorik/Animal Navigation’, Institute of Biology and Environmental Sciences, University of Oldenburg, Oldenburg 26129, Germany\n6Research Center for Neurosensory Sciences, University of Oldenburg, Oldenburg 26129, Germany\nMethodology, Resources, Writing – review and editing\nFind articles by Henrik Mouritsen 5,6, Richard A Holland\nRichard A Holland\n1School of Environmental and Natural Sciences, Bangor University, Bangor, Gwynedd LL57 2UW, UK\nConceptualization, Formal analysis, Funding acquisition, Methodology, Project administration, Resources, Supervision, Writing – original draft\nFind articles by Richard A Holland 1,✉ Author information Article notes Copyright and License information 1School of Environmental and Natural Sciences, Bangor University, Bangor, Gwynedd LL57 2UW, UK\n2Lower Saxon Wadden Sea National Park Authority, Wilhelmshaven 26382, Germany\n3School of Life Sciences, Keele University, Newcastle-under-Lyme, Staffordshire ST5 5BG, UK\n4Biological Station Lake Neusiedl, Illmitz 7142, Austria\n5Research group ‘Neurosensorik/Animal Navigation’, Institute of Biology and Environmental Sciences, University of Oldenburg, Oldenburg 26129, Germany\n6Research Center for Neurosensory Sciences, University of Oldenburg, Oldenburg 26129, Germany\nElectronic supplementary material is available online at https://doi.org/10.6084/m9.figshare.c.7508090.\n✉\nCorresponding author.\nRoles\nFlorian Packmor: Conceptualization, Data curation, Formal analysis, Investigation, Methodology, Project administration, Visualization, Writing – original draft Dmitry Kishkinev: Conceptualization, Methodology, Writing – review and editing Thomas Zechmeister: Resources, Writing – review and editing Henrik Mouritsen: Methodology, Resources, Writing – review and editing Richard A Holland: Conceptualization, Formal analysis, Funding acquisitio",
+          "ingested_into": null,
+          "tags": [
+            "alone",
+            "birds",
+            "can",
+            "declination",
+            "extract",
+            "inclination"
+          ]
+        }
+      ],
+      "fetch_failures": [
+        {
+          "url": "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+          "error": "fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: Execution error: fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        }
+      ],
+      "dedup_refused": [
+        "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "Based on the provided evidence, birds achieve precise location and direction navigation during migration by utilizing a combination of innate biological mechanisms and environmental cues. [Source: ev-2]",
+    "They are equipped with internal clocks that allow them to interpret these changing patterns throughout the day and seasons to determine their position relative to hemispheres [Source: ev-3].",
+    "This sense allows them to identify north-south directions by sensing differences in the strength of the magnetic field, which is strongest at the poles and weaker toward the equator [Source: ev-3].",
+    "A specific region of the brain capable of detecting magnetism has been identified in recent studies [Source: ev-3].",
+    "They inherit genetically encoded directions from their parents; if parents have different directional instincts, offspring may exhibit intermediate migration paths [Source: ev-2].",
+    "While some species like swans learn routes from parents during a first migration, many others navigate independently using these innate cues [Source: ev-3].",
+    "*   **Day Length:** The timing of migration itself is primarily controlled by changes in day length, which acts as a cue for when to initiate movement between breeding and wintering grounds [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, birds achieve precise location and direction navigation during migration by utilizing a combination of innate biological mechanisms and environmental cues. [Source: ev-2]",
+      "actionable_query": "Based provided evidence birds achieve precise location direction navigation during migration utilizing combination innate biological mechanisms environmental cues",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "They are equipped with internal clocks that allow them to interpret these changing patterns throughout the day and seasons to determine their position relative to hemispheres [Source: ev-3].",
+      "actionable_query": "They equipped internal clocks allow them interpret changing patterns throughout day seasons determine position relative hemispheres",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "This sense allows them to identify north-south directions by sensing differences in the strength of the magnetic field, which is strongest at the poles and weaker toward the equator [Source: ev-3].",
+      "actionable_query": "sense allows them identify north-south directions sensing differences strength magnetic field strongest poles weaker toward equator",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "A specific region of the brain capable of detecting magnetism has been identified in recent studies [Source: ev-3].",
+      "actionable_query": "specific region brain capable detecting magnetism identified recent studies",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "They inherit genetically encoded directions from their parents; if parents have different directional instincts, offspring may exhibit intermediate migration paths [Source: ev-2].",
+      "actionable_query": "They inherit genetically encoded directions parents have different directional instincts offspring may exhibit intermediate migration paths",
+      "from_claim_id": "c10",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "While some species like swans learn routes from parents during a first migration, many others navigate independently using these innate cues [Source: ev-3].",
+      "actionable_query": "While some species like swans learn routes from parents during a migration, many others navigate independently using these innate cues .",
+      "from_claim_id": "c11",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "*   **Day Length:** The timing of migration itself is primarily controlled by changes in day length, which acts as a cue for when to initiate movement between breeding and wintering grounds [Source: ev-1].",
+      "actionable_query": "Day Length timing migration itself primarily controlled changes acts cue initiate movement breeding wintering grounds",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 3,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 7,
+      "fetched": 2,
+      "search_calls": 5
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://en.wikipedia.org/wiki/Bird_migration",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://avesbiology.com/nav_orient.html",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+      "error": "fetch https://www.sciencedirect.com/science/article/pii/S1574954125002274: Execution error: HTTP 403 Forbidden for https://www.sciencedirect.com/science/article/pii/S1574954125002274"
+    },
+    {
+      "url": "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+      "error": "fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: Execution error: fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    }
+  ],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

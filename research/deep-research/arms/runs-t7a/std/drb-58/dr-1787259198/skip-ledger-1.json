@@ -1,0 +1,561 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787259198",
+  "charter_hash": "7784c16c082bba48",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://www.embl.org/about/info/planetary-biology/projects/hgt",
+      "title": "HGT – Planetary Biology",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/ismecommun/article/4/1/ycae073/7671050",
+      "title": "Widespread horizontal gene transfer between plants and ...",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.technologynetworks.com/immunology/articles/horizontal-gene-transfer-meaning-methods-detection-and-outcomes-397911",
+      "title": "Horizontal Gene Transfer – Meaning, Methods and Detection | Technology Networks",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.08.25.505314.full",
+      "title": "Widespread horizontal gene transfer between plants and their microbiota",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://maxapress.com/data/article/tp/preview/pdf/TP-2023-0003.pdf",
+      "title": "Research progress on horizontal gene transfer and its ...",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mdpi.com/2075-1729/11/8/857",
+      "title": "Horizontal Gene Transfers in Plants",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://europepmc.org/article/med/35235827",
+      "title": "Major episodes of horizontal gene transfer drove the evolution of land plants. - Abstract",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3493653",
+      "title": "Widespread impact of horizontal gene transfer on plant colonization of land",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/232648417_Widespread_impact_of_horizontal_gene_transfer_on_plant_colonization_of_land",
+      "title": "Widespread impact of horizontal gene transfer on plant ...",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://thescholarship.ecu.edu/bitstreams/a19e875b-66b9-4fca-9ddc-585d665b3ab8/download",
+      "title": "Widespread impact of horizontal gene transfer on plant ...",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://hal.science/hal-05307487/document",
+      "title": "Mechanisms, detection, and impact of horizontal gene ...",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://genome.cshlp.org/content/24/5/831",
+      "title": "Widespread and frequent horizontal transfers of transposable elements in plants | Genome Research",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/gpb/article/22/5/qzae078/7876281",
+      "title": "Evolution of Plant Genome Size and Composition",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "title": "Horizontal gene transfer",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5575156",
+      "title": "Horizontally Acquired Genes Are Often Shared between Closely Related Bacterial Species",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pnas.org/doi/10.1073/pnas.0907584106",
+      "title": "The impact of long-distance horizontal gene transfer on prokaryotic genome size",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cd-genomics.com/resource-overview-plant-genomics-complexity-plant-genomes-functions.html",
+      "title": "Overview of Plant Genomics: The Complexity of Plant Genomes and Their Functions - CD Genomics",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S1674205222000491",
+      "title": "Major episodes of horizontal gene transfer drove the ...",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://nph.onlinelibrary.wiley.com/doi/10.1111/nph.19272",
+      "title": "Lateral gene transfer generates accessory genes that ...",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dspace.mit.edu/entities/publication/23743508-c0b7-43a2-9bc1-03479aabe1c2",
+      "title": "The impact of long-distance horizontal gene transfer on prokaryotic genome size",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/354845682_Variation_and_Evolution_of_Genome_Size_in_Gymnosperms",
+      "title": "(PDF) Variation and Evolution of Genome Size in Gymnosperms",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://reference-global.com/download/article/10.2478/sg-2021-0013.pdf",
+      "title": "[PDF] Variation and Evolution of Genome Size in Gymnosperms",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4246719",
+      "title": "Evolution of DNA Amounts Across Land Plants (Embryophyta) - PMC",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://bionumbers.hms.harvard.edu/bionumber.aspx?s=n&v=1&id=113543",
+      "title": "Average genome size - Plants - BNID 113543 - BioNumbers",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S2590346226001227",
+      "title": "A chromosome-level genome assembly of Platycladus orientalis and comparative genomics reveal pivotal roles of transposable elements in gene duplication and pseudogenization across gymnosperm giga-genomes",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://europepmc.org/articles/pmc11530473?pdf=render",
+      "title": "[PDF] Exploring the complexity of genome size reduction in angiosperms",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9357157",
+      "title": "HGT is widespread in insects and contributes to male courtship in lepidopterans",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/35853453",
+      "title": "HGT is widespread in insects and contributes to male courtship in lepidopterans - PubMed",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cell.com/cell/fulltext/S0092-8674(22)00719-X?dgcid=raven_jbs_aip_email",
+      "title": "HGT is widespread in insects and contributes to male courtship in lepidopterans",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/article/10.1186/s12915-016-0264-3",
+      "title": "Extensive horizontal gene transfers between plant pathogenic fungi",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4876562",
+      "title": "Extensive horizontal gene transfers between plant pathogenic fungi - PMC",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2014.00638/xml/nlm?isPublishedV2=false",
+      "title": "ANIMAL–MICROBIAL SYMBIOSES PROVIDE AMPLE OPPORTUNITY FOR HGT",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://bmcbiol.biomedcentral.com/articles/10.1186/s12915-016-0264-3",
+      "title": "Extensive horizontal gene transfers between plant pathogenic fungi | BMC Biology | Springer Nature Link",
+      "score": 0.0,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/10.1186/s12915-016-0264-3?fromPaywallRec=true",
+      "title": "Extensive horizontal gene transfers between plant pathogenic fungi | BMC Biology | Springer Nature Link",
+      "score": 0.0,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Endosymbiont",
+      "title": "Endosymbiont - Wikipedia",
+      "score": 0.0,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/mbe/article/25/3/559/1060663",
+      "title": "Integration of Horizontally Transferred Genes into Regulatory Interaction ...",
+      "score": 0.0,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "http://mccutcheonlab.org/s/17_husnik_nrm.pdf",
+      "title": "[PDF] Functional horizontal gene transfer from bacteria to eukaryotes",
+      "score": 0.0,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "title": "Horizontal gene transfer",
+      "score": 0.0,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mdpi.com/2413-4155/8/3/56",
+      "title": "A Review of Horizontal Gene Transfer for the Natural Functional Improvement of Microorganisms Relevant to Food Technology",
+      "score": 0.0,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41559-024-02357-0",
+      "title": "A global survey of prokaryotic genomes reveals the eco-evolutionary pressures driving horizontal gene transfer",
+      "score": 0.0,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13320244",
+      "title": "Comparative analysis of 163 ant genomes reveals recurrent ...",
+      "score": 0.0,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "http://mccutcheonlab.org/s/17_husnik_nrm.pdf",
+      "title": "[PDF] Functional horizontal gene transfer from bacteria to eukaryotes",
+      "score": 0.0,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+      "title": "Widespread of horizontal gene transfer events in eukaryotes",
+      "score": 0.0,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "title": "Horizontal gene transfer",
+      "score": 0.0,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.the-innovation.org/article/doi/10.59717/j.xinn-life.2026.100223",
+      "title": "Horizontal gene transfer in insects: Insights into origins, detection, and functional roles",
+      "score": 0.0,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://elifesciences.org/articles/25950",
+      "title": "Inter-species population dynamics enhance microbial horizontal gene transfer and spread of antibiotic resistance | eLife",
+      "score": 0.0,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedaily.com/releases/2026/04/260416071953.htm",
+      "title": "Scientists discover bacteria can “explode” to spread antibiotic resistance | ScienceDaily",
+      "score": 0.0,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12448838",
+      "title": "Mechanisms, detection, and impact of horizontal gene transfer in plant functional evolution",
+      "score": 0.0,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cell.com/molecular-plant/fulltext/S1674-2052(22)00049-1",
+      "title": "Major episodes of horizontal gene transfer drove the evolution of land plants",
+      "score": 0.0,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.science.org/doi/10.1126/sciadv.abj5056",
+      "title": "Functions predict horizontal gene transfer and the emergence of antibiotic resistance",
+      "score": 0.0,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S0022283625004693",
+      "title": "Impact of Horizontal Gene Transfer on Adaptations to Extreme Environments",
+      "score": 0.0,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://cgm.sjtu.edu.cn/hgt",
+      "title": "Horizontal gene transfer is ubiquitous in eukaryote genomes",
+      "score": 0.0,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.yourgenome.org/theme/timeline-the-past-present-and-future-of-sequencing-technologies",
+      "title": "Timeline: the past, present and future of DNA sequencing technologies",
+      "score": 0.0,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ebsco.com/research-starters/science/horizontal-gene-transfer",
+      "title": "Horizontal gene transfer | Science | Research Starters",
+      "score": 0.0,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms",
+      "title": "Mechanisms and Research Advances of Horizontal Gene ...",
+      "score": 0.0,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11530473",
+      "title": "Exploring the complexity of genome size reduction in angiosperms - PMC",
+      "score": 0.0,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://nph.onlinelibrary.wiley.com/doi/10.1111/nph.19544",
+      "title": "The global distribution of angiosperm genome size is shaped by climate",
+      "score": 0.0,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2018.00418/full",
+      "title": "The Sequenced Angiosperm Genomes and Genome Databases",
+      "score": 0.0,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.insect-genome.com/hgt",
+      "title": "INSECTBASE - HGT",
+      "score": 0.0,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://microbiologyclass.net/glossary-of-microbiology",
+      "title": "MICROBIOLOGY KEYWORDS A-Z GLOSSARY OF MICROBIOLOGY ...",
+      "score": 0.0,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/313536848_Lateral_gene_transfer_between_prokaryotes_and_eukaryotes",
+      "title": "(PDF) Lateral gene transfer between prokaryotes and eukaryotes",
+      "score": 0.0,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://royalsocietypublishing.org/rspb/article/277/1683/819/73019/Horizontal-gene-transfer-in-evolution-facts-and",
+      "title": "Horizontal gene transfer in evolution: facts and challenges | Proceedings B",
+      "score": 0.0,
+      "rank": 73,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/18158322",
+      "title": "Integration of horizontally transferred genes into regulatory interaction ...",
+      "score": 0.0,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://enviromicro-journals.onlinelibrary.wiley.com/doi/full/10.1111/1462-2920.16629",
+      "title": "Diverse fates of ancient horizontal gene transfers in extremophilic red ...",
+      "score": 0.0,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/article/10.1186/s13059-018-1526-x",
+      "title": "Ankyrin domain encoding genes from an ancient horizontal transfer are ...",
+      "score": 0.0,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://prizedwriting.ucdavis.edu/horizontal-gene-transfer-between-host-eukaryotes-and-their-bacterial-endosymbionts-analyses-and",
+      "title": "Horizontal Gene Transfer Between Host Eukaryotes and Their Bacterial Endosymbionts: Analyses and Problems | Prized Writing",
+      "score": 0.0,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://iipseries.org/assets/docupload/rsl2024282E40CC887C896.pdf",
+      "title": "ADVANCEMENT OF TECHNOLOGIES FOR PLANT ...",
+      "score": 0.0,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/gbe/article/11/10/2750/5554466",
+      "title": "Current and Promising Approaches to Identify Horizontal Gene Transfer ...",
+      "score": 0.0,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://research-repository.uwa.edu.au/files/31605052/49602.pdf",
+      "title": "[PDF] Next-Generation Sequencing — An Overview of the History, Tools, and ...",
+      "score": 0.0,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

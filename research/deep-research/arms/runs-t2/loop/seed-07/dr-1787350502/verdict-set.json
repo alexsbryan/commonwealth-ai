@@ -1,0 +1,69 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787350502",
+  "charter_hash": "2f5521d0abc66532",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The United States moved to force the sale or ban of TikTok due to national-security concerns regarding potential Chinese government access to US user data and its algorithm, as determined through CFIUS review [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This legal pressure was formalized when President Biden signed the Protecting Americans from Foreign Adversary Controlled Applications Act on 2024-04-24, which mandated that ByteDance divest TikTok's US operations within roughly 270 days (extendable by 90) or face a US ban [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This arrangement placed US user data in Oracle's cloud under US control, granted Oracle about a 12.5% stake alongside SoftBank and other investors, while allowing ByteDance to retain a majority interest; Vice President JD Vance led the White House negotiations for this structure, with final ownership completed through 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

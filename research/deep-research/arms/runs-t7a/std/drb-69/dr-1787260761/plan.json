@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787260761",
+  "charter_hash": "49d304d9f02b574b",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Official definition and technical specification of the Model Context Protocol (MCP) by Anthropic, including its architecture for connecting LLMs to tools (2)",
+      "List of core features and capabilities defined in the Google Agent2Agent (A2A) protocol documentation, specifically regarding agent discovery and communication standards",
+      "Comparison table or official statement detailing the architectural differences between MCP's client-server model and A2A's peer-to-peer agent interaction model",
+      "Specific use cases cited by Google where the A2A protocol is designed to solve interoperability issues that MCP does not address",
+      "Number of initial partners or organizations announced as supporting the A2A protocol at launch compared to the number of early adopters for MCP",
+      "Date of public release announcement for the Google A2A protocol versus the date of the Model Context Protocol open-source repository creation",
+      "List of specific technical limitations in current LLM tool-calling frameworks that the A2A documentation explicitly states it aims to resolve"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

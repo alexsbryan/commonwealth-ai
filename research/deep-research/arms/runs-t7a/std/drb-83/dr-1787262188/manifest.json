@@ -1,0 +1,82 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787262188",
+  "charter_hash": "479ce77955d9a805",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 3,
+      "search_calls": 12
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 3,
+      "fetched": 3,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://www.okta.com/company/careers/product/senior-product-manager-okta-device-access-8066241",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787262188"
+      },
+      {
+        "url": "https://www.amazon.jobs/en/jobs/10433598/senior-product-manager-tech-devices-services-new-initiatives",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787262188"
+      },
+      {
+        "url": "https://www.sunmi.com/en/news/486",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787262188"
+      }
+    ],
+    "failed": [
+      {
+        "url": "https://www.indeed.com/q-senior-product-manager-iot-connected-device-jobs.html",
+        "error": "fetch https://www.indeed.com/q-senior-product-manager-iot-connected-device-jobs.html: Execution error: HTTP 403 Forbidden for https://www.indeed.com/q-senior-product-manager-iot-connected-device-jobs.html"
+      }
+    ]
+  },
+  "budget": {
+    "spent": {
+      "web-search:web": 12,
+      "web-fetch:pages": 4
+    },
+    "remaining": {
+      "web-search:web": 0,
+      "web-fetch:pages": 8
+    }
+  },
+  "not_covered": [
+    "The retrieved evidence does not contain information regarding tablet-style payment or SaaS devices, their manufacturers (other than a general mention of SUNMI), specific models, configurations, images, detailed use cases beyond generic descriptions, market penetration statistics, price ranges, or installed base figures for any region [Source: ev-1] [Source: ev-2] [Source: ev-3].",
+    "Here is what can be stated based strictly on the available text:\n\n*   **SUNMI:** One manufacturer mentioned is SUNMI, which produces \"payment CPADs\" and \"all-in-one touchscreen terminals\" that integrate payment processing [Source: ev-3].",
+    "The evidence lists product categories such as CPad, Interactive Display, Mobile Payment, Desktop Kiosks, Network Accessories, and a SoftPOS Platform [Source: ev-3].",
+    "However, no specific device models, configurations, prices, or market data are provided in this chunk. [Source: ev-2]",
+    "*   **Okta:** Okta offers an identity platform with products like Adaptive Multifactor Authentication and Identity Governance for securing access to applications from any device (including via their Device Access team), but the text does not describe hardware tablets or SaaS-specific tablet devices manufactured by Okta [Source: ev-1].",
+    "*   **Amazon:** Amazon’s Devices & Services organization builds products leveraging AI, sensors, smart home devices, cloud services, and Alexa, including work towards net zero carbon by 2040 [Source: ev-2].",
+    "The job description mentions experience building and launching hardware products is a must for a specific role, but it does not list specific tablet models used for payments or SaaS in this context [Source: ev-2]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": {
+    "run-id": "dr-1787262188",
+    "granted-at-unix": 1787262188,
+    "release-floor": "personal"
+  },
+  "lock": {
+    "id": "dr-1787262188",
+    "acquired_at_unix": 1787262188,
+    "released_at_unix": 1787262340
+  }
+}

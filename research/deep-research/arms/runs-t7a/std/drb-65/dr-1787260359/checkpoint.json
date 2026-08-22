@@ -1,0 +1,398 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787260359",
+  "charter_hash": "eb22b805c469965b",
+  "written_after_round": 3,
+  "config": {
+    "run_id": "dr-1787260359",
+    "question": "As an agricultural engineering researcher focusing on 3D reconstruction and phenotypic analysis of crop grains, please develop a design report utilizing modern control theory, alongside other relevant theoretical methods and models, for the tasks of modeling, analysis, and design pertinent to my research area.",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-65/dr-1787260359",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "tavily",
+    "search_source": "Web",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": {
+      "run-id": "dr-1787260359",
+      "granted-at-unix": 1787260359,
+      "release-floor": "personal"
+    }
+  },
+  "question": "As an agricultural engineering researcher focusing on 3D reconstruction and phenotypic analysis of crop grains, please develop a design report utilizing modern control theory, alongside other relevant theoretical methods and models, for the tasks of modeling, analysis, and design pertinent to my research area.",
+  "frontier": [
+    "Global market size of agricultural robotics and precision agriculture in 2023",
+    "Number of peer-reviewed publications on computer vision for grain phenotyping between 2018 and 2023",
+    "Median accuracy percentage of deep learning models in wheat kernel classification tasks",
+    "Average cost per unit for industrial-grade structured light sensors used in plant phenotyping as of 2024",
+    "Share of global research funding allocated to automated crop monitoring systems from 2015 to 2022",
+    "Rate of adoption of machine learning algorithms in commercial grain grading facilities by region in 2021",
+    "Count of open-source software libraries specifically designed for 3D reconstruction of biological structures released since 2020",
+    "Percentage change in computational power required for real-time 3D point cloud processing over the last five years"
+  ],
+  "frontier_question": "As an agricultural engineering researcher focusing on 3D reconstruction and phenotypic analysis of crop grains, please develop a design report utilizing modern control theory, alongside other relevant theoretical methods and models, for the tasks of modeling, analysis, and design pertinent to my research area.",
+  "figure_specifiers": [
+    "3"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787260359",
+      "charter_hash": "eb22b805c469965b",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787260359",
+      "charter_hash": "eb22b805c469965b",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+          "source_url": "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "",
+          "ingested_into": null,
+          "tags": [
+            "analysis",
+            "automatic",
+            "crop",
+            "high",
+            "learning",
+            "machine"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice Plant Phenomics\n. 2025 Nov 11;7(4):100137. doi: 10.1016/j.plaphe.2025.100137 Search in PMC Search in PubMed View in NLM Catalog Add to search A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond\nJiajia Li\nJiajia Li\naDepartment of Electrical and Computer Engineering, Michigan State University, East Lansing, MI, USA\nFind articles by Jiajia Li a, Xinda Qi\nXinda Qi\naDepartment of Electrical and Computer Engineering, Michigan State University, East Lansing, MI, USA\nFind articles by Xinda Qi a, Seyed Hamidreza Nabaei\nSeyed Hamidreza Nabaei\nbDepartment of Systems and Information Engineering & Link Lab, University of Virginia, Charlottesville, VA, USA\nFind articles by Seyed Hamidreza Nabaei b, Meiqi Liu\nMeiqi Liu\ncDepartment of Statistics and Probability, Michigan State University, East Lansing, MI, USA\nFind articles by Meiqi Liu c, Dong Chen\nDong Chen\ndDepartment of Agricultural and Biological Engineering, Mississippi State University, Starkville, MS, USA\nFind articles by Dong Chen d, Qi Sun\nQi Sun\neTandon School of Engineering, New York University, Brooklyn, USA\nFind articles by Qi Sun e, Xin Zhang\nXin Zhang\ndDepartment of Agricultural and Biological Engineering, Mississippi State University, Starkville, MS, USA\nfSchool of Environmental, Civil, Agricultural and Mechanical Engineering, University of Georgia, GA, USA\nFind articles by Xin Zhang d,f, Xunyuan Yin\nXunyuan Yin\ngSchool of Chemistry, Chemical Engineering and Biotechnology, Nanyang Technological University, Singapore\nFind articles by Xunyuan Yin g, Zhaojian Li\nZhaojian Li\nhDepartment of Mechanical Engineering, Michigan State University, East Lansing, MI, USA\nFind articles by Zhaojian Li h,⁎ Author information Article notes Copyright and License information aDepartment of Electrical and Computer Engineering, Michigan State University, East Lansing, MI, USA\nbDepartment of Systems and Information Engineering & Link Lab, University of Virginia, Charlottesville, VA, USA\ncDepartment of Statistics and Probability, Michigan State University, East Lansing, MI, USA\ndDepartment of Agricultural and Biological Engineering, Mississippi State University, Starkville, MS, USA\neTandon School of Engineering, New York University, Brooklyn, USA\nfSchool of Environmental, Civil, Agricultural and Mechanical Engineering, University of Georgia, GA, USA\ngSchool of Chemistry, Chemical Engineering and Biotechnology, Nanyang Technological University, Singapore\nhDepartment of Mechanical Engineering, Michigan State University, East Lansing, MI, USA\n⁎\nCorresponding author. lizhaoj1@egr.msu.edu\nReceived 2025 Apr 30; Revised 2025 Oct 6; Accepted 2025 Nov 3; Collection date 2025 Dec.\n© 2025 The Authors\nThis is an open access article under the CC BY license (http://creativecommons.org/licenses/by/4.0/).\nPMC Copyright notice\nPMCID: PM",
+          "ingested_into": null,
+          "tags": [
+            "3dgs",
+            "beyond",
+            "classical",
+            "fields",
+            "gaussian",
+            "methods"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7184763",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7184763",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Analysing the phenotype development of soybean plants using low-cost 3D reconstruction - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice Sci Rep\n. 2020 Apr 27;10:7055. doi: 10.1038/s41598-020-63720-2 Search in PMC Search in PubMed View in NLM Catalog Add to search Analysing the phenotype development of soybean plants using low-cost 3D reconstruction\nRongsheng Zhu\nRongsheng Zhu\n1College of Arts and Sciences, Northeast Agricultural University, Harbin, 150030 China Find articles by Rongsheng Zhu 1,✉,#, Kai Sun\nKai Sun\n2College of Engineering, Northeast Agricultural University, Harbin, 150030 China Find articles by Kai Sun 2,#, Zhuangzhuang Yan\nZhuangzhuang Yan\n2College of Engineering, Northeast Agricultural University, Harbin, 150030 China Find articles by Zhuangzhuang Yan 2, Xuehui Yan\nXuehui Yan\n2College of Engineering, Northeast Agricultural University, Harbin, 150030 China Find articles by Xuehui Yan 2, Jianglin Yu\nJianglin Yu\n2College of Engineering, Northeast Agricultural University, Harbin, 150030 China Find articles by Jianglin Yu 2, Jia Shi\nJia Shi\n2College of Engineering, Northeast Agricultural University, Harbin, 150030 China Find articles by Jia Shi 2, Zhenbang Hu\nZhenbang Hu\n3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China Find articles by Zhenbang Hu 3, Hongwei Jiang\nHongwei Jiang\n3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China Find articles by Hongwei Jiang 3, Dawei Xin\nDawei Xin\n3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China Find articles by Dawei Xin 3, Zhanguo Zhang\nZhanguo Zhang\n1College of Arts and Sciences, Northeast Agricultural University, Harbin, 150030 China Find articles by Zhanguo Zhang 1, Yang Li\nYang Li\n1College of Arts and Sciences, Northeast Agricultural University, Harbin, 150030 China Find articles by Yang Li 1, Zhaoming Qi\nZhaoming Qi\n3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China Find articles by Zhaoming Qi 3, Chunyan Liu\nChunyan Liu\n3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China Find articles by Chunyan Liu 3, Xiaoxia Wu\nXiaoxia Wu\n3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China Find articles by Xiaoxia Wu 3, Qingshan Chen\nQingshan Chen\n3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China Find articles by Qingshan Chen 3,✉ Author information Article notes Copyright and License information 1College of Arts and Sciences, Northeast Agricultural University, Harbin, 150030 China 2College of Engineering, Northeast Agricultural University, Harbin, 150030 China 3College of Agricultural, Northeast Agricultural University, Harbin, 150030 China ✉\nCorresponding author.\n#\nContributed equally.\nReceived 2019 Sep 23; Accepted 2020 Apr 6; Collection date 2020.\n© The Author(s) 2020\nOpen Access This article is licensed under a Creative Commons Attribution 4.0 International License, which permits use, sharing, adaptation, distribution and reproduction in any medium or format, as long as you give appropriate credit ",
+          "ingested_into": null,
+          "tags": [
+            "analysing",
+            "cost",
+            "development",
+            "low",
+            "phenotype",
+            "plants"
+          ]
+        }
+      ],
+      "fetch_failures": [
+        {
+          "url": "https://www.mdpi.com/2073-4395/15/11/2518",
+          "error": "fetch https://www.mdpi.com/2073-4395/15/11/2518: Execution error: HTTP 403 Forbidden for https://www.mdpi.com/2073-4395/15/11/2518",
+          "absent": true
+        }
+      ],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787260359",
+      "charter_hash": "eb22b805c469965b",
+      "round": 2,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "The Role of Title, Metadata and Abstract in Identifying Clinically Relevant Journal Articles - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice AMIA Annu Symp Proc\n. 2005;2005:191–195.\nSearch in PMC Search in PubMed View in NLM Catalog Add to search The Role of Title, Metadata and Abstract in Identifying Clinically Relevant Journal Articles\nDina Demner-Fushman\nDina Demner-Fushman, MD, PhD 1Lister Hill National Center for Biomedical Communications, National Library of Medicine, NIH, DHHS, Bethesda, MD\nFind articles by Dina Demner-Fushman 1, Susan Hauser\nSusan Hauser, PhD 1Lister Hill National Center for Biomedical Communications, National Library of Medicine, NIH, DHHS, Bethesda, MD\nFind articles by Susan Hauser 1, George Thoma\nGeorge Thoma, PhD 1Lister Hill National Center for Biomedical Communications, National Library of Medicine, NIH, DHHS, Bethesda, MD\nFind articles by George Thoma 1 Author information Copyright and License information 1Lister Hill National Center for Biomedical Communications, National Library of Medicine, NIH, DHHS, Bethesda, MD\nThis is an Open Access article: verbatim copying and redistribution of this article are permitted in all media for any purpose\nPMC Copyright notice\nPMCID: PMC1560462 PMID: 16779028 Abstract\nAccess to current clinical information involves searches of bibliographic databases, such as MEDLINE®, and subsequent evaluation of retrieval results for relevance to a specific clinical situation and quality of the reported research. We establish the amount of information that needs to be provided by an information retrieval system to assist healthcare practitioners in identifying clinically relevant information and evaluating its potential strength of evidence. We find 92% of titles informative enough for a practitioner to correctly classify publications as clinical, but not sufficient for classification of research quality. We suggest automatic organization of retrieval results into strength of evidence categories to supplement title-based judgments and provide quick access to the abstracts of the most promising articles. We find information in the abstracts sufficient to identify articles potentially immediately useful for clinical decision support. These findings are important to the design of information retrieval systems supporting small, low-bandwidth handheld computers.\nIntroduction\nHealth care practitioners who would like to combine their personal expertise with the most recent clinical findings obtained in clinical studies need the journal literature, but do not have time to read all new publications. For example, physicians trained in epidemiology would need over 600 hours a month to read every new article published in their field [1]. On the other hand, only a small fraction of articles contains information that has a potential to influence clinical decisions [2]. Not surprisingly, practitioners of evidence-based medicine who initially advocated critical appraisal of the original research found in databases of primary literature now recommend secondary sources that summarize the literature [3]. However these valuable ",
+          "ingested_into": null,
+          "tags": [
+            "abstract",
+            "articles",
+            "clinically",
+            "identifying",
+            "journal",
+            "metadata"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+          "source_url": "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Write a Search Strategy - Evidence Synthesis in the Social Sciences - LibGuides at Arizona State University -- -- This script was causing tremendous slowdown in page load on the main homepage for some reason. It only started around January 1, 2025. Commented out for now. Does not appear to be needed on the site.-- Skip to main content Report an accessibility problem ASU Home My ASU Colleges and Schools Search ASU ASU Library Library Guides Ask a Librarian LibApps staff login Login to LibApps-- Arizona State University\nLibGuides\nEvidence Synthesis in the Social Sciences\nWrite a Search Strategy Search this guide Search Evidence Synthesis in the Social Sciences\nThis guide links resources, tools, scholarly articles, and other information to support those conducting and assisting with evidence synthesis in the social sciences. What is Evidence Synthesis? Types of Evidence Synthesis Reviews for Dissertations | Theses | Capstones Systematic Reviews Systematic Review Resources Question Formulation Protocol Development and Registration Identifying Sources for Searching Write a Search Strategy Translating Searches Running / Exporting Searches and Citation Management Critical Appraisal / Risk of Bias Assessment Other Review Types Toggle Dropdown Scoping Review Additional Resources Planning a Search Strategy Systematic review searches are designed to comprehensively locate all studies addressing the review question, with a focus on reproducibility and transparency.  These searches prioritize sensitivity&mdash;maximizing the retrieval of all relevant studies&mdash;to achieve a thorough overview of the evidence, unlike traditional searches, which focus on precision (reducing irrelevant results). This approach ensures no relevant studies are overlooked, even if it means retrieving some irrelevant records.\nYour initial search should be designed for a primary database (the one most likely to contain the most studies on your topic). It should be a single, multi-line search with all relevant terms, rather than running multiple separate searches. Then, adapted or translated for use in other databases. Steps to developing a search strategy: Identify a known set of studies:\nLocate between 3 and 5 relevant studies that meet many or all of the stated inclusion criteria and use these examples to identify search terms (keywords and their synonyms) and database-specific subject headings. You can also use them to determine whether the concepts of interest are mentioned in the title or abstract of the articles (as opposed to the full text) and what study designs are used in this field. These \"known articles\" can also eventually be used to test the search strategy that will be developed. Harvest terms: Locate terms relevant to each of your search concepts.\nBrainstorming by the research team: Collaborate with your team to generate ideas. Disciplinary thesaurus or encyclopedia: Consult specialized reference materials for terms in your field. Harvesting terms from known articles: Retrieve terms by scanning article records in databases, focusing on titles, abstracts, author keywords, and subject terms. Collect these terms into a working file (e.g., notepad, word processor, or spreadsheet) and organize them by concept, possibly using a table format for clarity. Database entries: Use database searches to identify additional terms related to your concepts. Verify search concepts: Verify that your intended search concepts appear in each of your known articles titles, abstracts, and author-supplied keywords. If several articles lack relevant terms in these fields, you should reconsider including that concept in your search strategy and reduce the number of search concepts to streamline your approach. Locate and apply subject headings: Databases often use controlled vocabulary (subject headings) to organize (index) articles on the same topic under one preferred term, regardless of what term the author provided. This helps group related records and index entire artic",
+          "ingested_into": null,
+          "tags": [
+            "arizona",
+            "evidence",
+            "libguides",
+            "sciences",
+            "search",
+            "social"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+          "source_url": "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Research Paper APIs for Scientific Literature in 2026 | IntuitionLabs\nIntuitionLabs is now a member of the Claude Partner Network – AI training and upskilling with Claude for pharma and biotech. Book a call.\nSolutions\nAI\nVeeva\nServices\nIndustries\nResources\nAbout\nContact\nBack to Articles\n|Published on 3/8/2026|45 min read|Next Article\nMore\nDownload PDFPDF\nIntuitionLabs\nresearch paper apis · scientific literature\nResearch Paper APIs for Scientific Literature in 2026\nMarch 8, 2026\n45 min read\nA comprehensive guide to research paper APIs and scientific literature databases in 2026. Learn how to programmatically access scholarly metadata and citations.\nIntuitionLabs Report\nContents\n01Executive Summary\n02Introduction and Background\n03Scholarly Metadata APIs\n04Full-Text and Open Access APIs\n05Citation and Analytics APIs\n06Bibliographic Data and Author Identifiers\n07Search and Retrieval APIs\n08Data Analysis and Evidence-based Findings\n09Use Cases and Case Studies\n10Discussion: Implications and Future Directions\n11Conclusion\n12References\nContents\n01Executive Summary\n02Introduction and Background\n03Scholarly Metadata APIs\n04Full-Text and Open Access APIs\n05Citation and Analytics APIs\n06Bibliographic Data and Author Identifiers\n07Search and Retrieval APIs\n08Data Analysis and Evidence-based Findings\n09Use Cases and Case Studies\n10Discussion: Implications and Future Directions\n11Conclusion\n12References\n01\nExecutive Summary\nThe landscape of scholarly research and scientific communication in 2026 is increasingly driven by open data and programmatic access to that data. A variety of Application Programming Interfaces (APIs) now allow researchers, librarians, and developers to retrieve metadata, full-text links, citation networks, and related information for scientific literature at unprecedented scale and speed. Open infrastructure projects and community initiatives have supplemented or replaced proprietary databases, making it easier to find, cite, link, and analyze academic content. Key APIs — such as Crossref’s REST API, Semantic Scholar’s Graph API, the OpenAlex API, PubMed’s E-utilities, arXiv’s API, and others — provide free or low-cost access to millions or even hundreds of millions of scholarly records. Commercial services like Elsevier’s Scopus API and Clarivate’s Web of Science API remain important, but often require subscriptions and have coverage limitations.\nThis report surveys the best and most widely used APIs for research papers, citations, and scientific literature as of early 2026. It provides historical context for the rise of digital scholarly databases, summarizes the current state of major data sources and APIs, compares their coverage and features, and highlights real-world use cases. We include extensive evidence such as service usage statistics, dataset sizes, and relevant research findings. Where applicable, we offer comparative tables of APIs and data sources. We also examine how these tools are used in practice (for example, in bibliometric analyses, systematic reviews, and novel scholarly applications) and discuss the implications of rapid growth in open citation data, machine learning tools, and changing publishing norms on the future of academic information access. All claims are backed by credible sources with inline citations.\n02\nIntroduction and Background\nScholarly communication has undergone a digital revolution over the past several decades. Beginning with Eugene Garfield’s mid-20th-century vision of citation indexing ([1]), researchers have long recognized the value of bibliographic citations as a way to connect and retrieve scientific knowledge. Garfield’s early work demonstrated that tracking cited references could enable new forms of literature search across disciplines ([1]). In 1963, the first edition of the Science Citation Index marked the launch of formal citation indexing for science. Over time, citation indexes expanded (e.g. Social Sciences Citation Index, Arts & Humaniti",
+          "ingested_into": null,
+          "tags": [
+            "2026",
+            "apis",
+            "intuitionlabs",
+            "literature",
+            "paper",
+            "research"
+          ]
+        }
+      ],
+      "fetch_failures": [
+        {
+          "url": "https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309",
+          "error": "fetch https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309: Execution error: HTTP 403 Forbidden for https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309",
+          "absent": true
+        }
+      ],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787260359",
+      "charter_hash": "eb22b805c469965b",
+      "round": 3,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://www.plantphenomics.org.au/resources/published-research",
+          "source_url": "https://www.plantphenomics.org.au/resources/published-research",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Australian Plant Phenomics Network | Published Research Follow us on Twitter Follow us on linkedIn Follow us on Vimeo About About APPN APPN and NCRIS What does APPN do? Governance Strategic Plan Plant Phenomics Our Infrastructure Our Services Access & Bookings About Plant Phenomics Our Nodes APPN Head Office Adelaide University Australian National University Charles Sturt University Department of Primary Industries & Regional Development, WA La Trobe University The University of Queensland The University of Sydney The University of Western Australia Western Sydney University Data Transforming data to knowledge FAIR Data APPN Data Publishing and Licensing Policy Plant Phenotyping Data Collection Resources Fact Sheets Published Research Impact Case Studies Educational Resources Jobs & Training Postgraduate Internship Awards Career Opportunities News News from our blog APPN in the media LinkedIn & X Newsletters Contact Published Research\nAPPN enables world-leading crop research every day. The project results and discoveries we support are published in leading scientific journals.\nHome Resources Published Research Research Publications\n2026 2025 2024 2023 2022 2021 2020 2019 2018 2017 2016 2015 2014 2013 2012 2011 2010 2009 Arbuscular Mycorrhizal Fungi Can Increase Nitrogen Use Efficiency in Aerobically Grown Rice Under Water‐Limited Conditions. Gill, A. R., Nguyen, T. D., Jewell, N., Brien, C., & Watts‐Williams, S. J. (2026). Journal of Sustainable Agriculture and Environment, 5(3). https://doi.org/10.1002/sae2.70190\nFrom plots to commercial fields: scalable, transferable cotton morphology and productivity estimation using functional growth proxies from UAV and PlanetScope time series. Devoto, F., Bange, M., Camino, C., Woodgate, W., Chapman, S. & Potgieter, A. (2026). Plant Phenomics, 8(3), Article 100220. https://doi.org/10.1016/j.plaphe.2026.100220\nKey Technological Levers of Indoor LED-Farming – Pilot Scale Study, Extrapolation to Commercial Scale, and Space Vantage Point. Hessel, V., Jost, R., Escribà-Gelonch, M., Benny, M. A., Osorio-Tejada, J., Rosenthal, E., Lewsey, M. G., & Johnson, K. L. (2026). Chemical Engineering Research & Design, 230, 816-837. https://doi.org/10.1016/j.cherd.2026.05.003\nGABA and ABA-mediated mitigation of salt stress–induced oxidative damage by modulating secondary metabolites, defense metabolism, and photosynthetic pathways in wheat. Kumari, S., Khatoon, S., Pratap, A., Rehman, M. T., & Khan, M. I. R. (2026). Plant Physiology and Biochemistry, 235, Article 111370. https://doi.org/10.1016/j.plaphy.2026.111370\nTranscriptome assemblies for two drug-type cannabis chemotypes by long-read RNA sequencing. Berkowitz, O., Jost, R., Ng, S., Bacic, A., Whelan, J. & Lewsey, G. M. The Plant Genome, 19(2), e70240. https://doi.org/10.1002/tpg2.70240\nClimate change and crop resilience: harnessing metabolomics for predicting stress tolerance. Pratap, A., Fazeli, A., Bandehagh, A. & Taylor, N. L. (2026). The New Phytologist. https://doi.org/10.1111/nph.71219\nLeaf Analyzer: A fully automated and open-source tool for high-throughput leaf trait measurement. Hu, T., Poire, R., & Way, D. (2026). Plant Phenomics, Article 100145. https://doi.org/10.1016/j.plaphe.2025.100145\nAPPN advanced field phenomics: high-resolution sensing for improved varieties and smarter agronomy. Salter, W., Cassidy, C., Burrell, A., Harwood, R., Collyer, B., Paine, H., Escobar, G. L. & Garnett, T. (2026). GRDC Grains Research Update – Wagga Wagga, Australia. https://grdc.com.au/resources-and-publications/grdc-update-papers/tab-content/grdc-update-papers/2026/02/appn-advanced-field-phenomics-high-resolution-sensing-for-improved-varieties-and-smarter-agronomy\nPotential protein biomarkers for heat tolerance in wheat at seedling and ear peep stages. Pratap, A., Siddique, K. H. M., & Taylor, N. L. (2026). Journal of Proteomics, Article 105526. https://doi.org/10.1016/j.jprot.2025.105526\nOzBarley: A genetic and phenotypic data resource capt",
+          "ingested_into": null,
+          "tags": [
+            "published",
+            "research"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+          "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "The evolution of plant phenomics: global insights, trends, and collaborations (2000-2021) - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice Front Plant Sci\n. 2024 Jul 22;15:1410738. doi: 10.3389/fpls.2024.1410738 Search in PMC Search in PubMed View in NLM Catalog Add to search The evolution of plant phenomics: global insights, trends, and collaborations (2000-2021)\nLana Awada\nLana Awada\n1 Centre for the Study of Science and Innovation Policy, Johnson Shoyama Graduate School of Public Policy, University of Saskatchewan, Saskatoon, SK, Canada Find articles by Lana Awada 1,*, Peter W B Phillips\nPeter W B Phillips\n1 Centre for the Study of Science and Innovation Policy, Johnson Shoyama Graduate School of Public Policy, University of Saskatchewan, Saskatoon, SK, Canada Find articles by Peter W B Phillips 1, Ana Maria Bodan\nAna Maria Bodan\n2 Canadian Hub for Applied and Social Research, University of Saskatchewan, Saskatoon, SK, Canada Find articles by Ana Maria Bodan 2 Author information Article notes Copyright and License information 1 Centre for the Study of Science and Innovation Policy, Johnson Shoyama Graduate School of Public Policy, University of Saskatchewan, Saskatoon, SK, Canada 2 Canadian Hub for Applied and Social Research, University of Saskatchewan, Saskatoon, SK, Canada Edited by: Tariq Aftab, Aligarh Muslim University, India\nReviewed by: Thiago Teixeira Santos, Brazilian Agricultural Research Corporation (EMBRAPA), Brazil\nJagadish Rane, Indian Council of Agricultural Research (ICAR), India\n✉\n*Correspondence: Lana Awada, lna174@mail.usask.ca Received 2024 Apr 1; Accepted 2024 Jul 8; Collection date 2024.\nCopyright © 2024 Awada, Phillips and Bodan\nThis is an open-access article distributed under the terms of the Creative Commons Attribution License (CC BY). The use, distribution or reproduction in other forums is permitted, provided the original author(s) and the copyright owner(s) are credited and that the original publication in this journal is cited, in accordance with accepted academic practice. No use, distribution or reproduction is permitted which does not comply with these terms.\nPMC Copyright notice\nPMCID: PMC11298374 PMID: 39104843 Abstract\nIntroduction\nPhenomics, an interdisciplinary field that investigates the relationships between genomics and environmental factors, has significantly advanced plant breeding by offering comprehensive insights into plant traits from molecular to physiological levels. This study examines the global evolution, geographic distribution, collaborative efforts, and primary research hubs in plant phenomics from 2000 to 2021, using data derived from patents and scientific publications. Methods\nThe study utilized data from the EspaceNet and Lens databases for patents, and Web of Science (WoS) and Scopus for scientific publications. The final datasets included 651 relevant patents and 7173 peer-reviewed articles. Data were geocoded to assign country-level geographical coordinates and underwent multiple processing and cleaning steps using Python, Excel, R, and ArcGIS. Social network analysis (SNA) was conducted to assess",
+          "ingested_into": null,
+          "tags": [
+            "evolution",
+            "global",
+            "insights",
+            "phenomics",
+            "plant",
+            "trends"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+          "source_url": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "",
+          "ingested_into": null,
+          "tags": [
+            "complex",
+            "deep",
+            "learning",
+            "phenomics",
+            "phenotyping",
+            "plant"
+          ]
+        },
+        {
+          "id": "ev-4",
+          "locator": "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+          "source_url": "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Client Challenge JavaScript is disabled in your browser. Please enable JavaScript to proceed.\nA required part of this site couldn’t load. This may be due to a browser extension, network issues, or browser settings. Please check your connection, disable any ad blockers, or try using a different browser.",
+          "ingested_into": null,
+          "tags": [
+            "data",
+            "developmental",
+            "generated",
+            "high",
+            "normalization",
+            "phenomics"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "A survey titled \"A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond,\" published in *Plant Phenomics* [Source: ev-2]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "A survey titled \"A survey on 3D reconstruction techniques in plant phenotyping: From classical methods to Neural Radiance Fields (NeRF), 3D Gaussian Splatting (3DGS), and beyond,\" published in *Plant Phenomics* [Source: ev-2].",
+      "actionable_query": "DGS), and beyond,\" published in *Plant Phenomics* . (3)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 3,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 2,
+      "fetched": 3,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 2,
+      "gaps_after": 1,
+      "fetched": 4,
+      "search_calls": 1
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7184763",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.plantphenomics.org.au/resources/published-research",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [
+    {
+      "url": "https://www.mdpi.com/2073-4395/15/11/2518",
+      "error": "fetch https://www.mdpi.com/2073-4395/15/11/2518: Execution error: HTTP 403 Forbidden for https://www.mdpi.com/2073-4395/15/11/2518"
+    },
+    {
+      "url": "https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309",
+      "error": "fetch https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309: Execution error: HTTP 403 Forbidden for https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309"
+    }
+  ],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json",
+    "draft-3.json",
+    "gap-list-3.json",
+    "fetch-list-3.json",
+    "skip-ledger-3.json",
+    "evidence-window-3.json"
+  ],
+  "aborted_at_round": null
+}

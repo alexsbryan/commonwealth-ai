@@ -113,7 +113,11 @@ impl Default for SourceScope {
 
 impl SourceScope {
     pub fn admits(&self, path: &str) -> bool {
-        if self.exclude_contains.iter().any(|e| path.contains(e.as_str())) {
+        if self
+            .exclude_contains
+            .iter()
+            .any(|e| path.contains(e.as_str()))
+        {
             return false;
         }
         self.include_prefixes.is_empty()
@@ -227,7 +231,10 @@ pub fn type_defs(symbols: &[ScipSymbolRecord], scope: &SourceScope) -> Vec<TypeD
 /// Not `Cargo.toml`: this is what the code actually reaches, including
 /// through re-exports Cargo cannot see. Same rationale as
 /// [`crate::arch_metrics`]'s observed graph.
-pub fn crate_dag(refs: &[ScipRefRecord], scope: &SourceScope) -> BTreeMap<String, BTreeSet<String>> {
+pub fn crate_dag(
+    refs: &[ScipRefRecord],
+    scope: &SourceScope,
+) -> BTreeMap<String, BTreeSet<String>> {
     let mut dag: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     for r in refs {
         if !scope.admits(&r.file_path) {
@@ -250,9 +257,7 @@ pub fn crate_dag(refs: &[ScipRefRecord], scope: &SourceScope) -> BTreeMap<String
 
 fn kin_of(name: &str, all: &BTreeSet<&str>) -> Vec<String> {
     all.iter()
-        .filter(|m| {
-            m.len() > name.len() && (m.ends_with(name) || m.starts_with(name))
-        })
+        .filter(|m| m.len() > name.len() && (m.ends_with(name) || m.starts_with(name)))
         .map(|m| m.to_string())
         .collect()
 }
@@ -373,7 +378,11 @@ pub fn dossier(
             of: users.len(),
             out_degree: dag
                 .get(krate)
-                .map(|s| s.iter().filter(|t| first_party.contains(t.as_str())).count())
+                .map(|s| {
+                    s.iter()
+                        .filter(|t| first_party.contains(t.as_str()))
+                        .count()
+                })
                 .unwrap_or(0),
             krate: krate.to_string(),
         })
@@ -562,7 +571,13 @@ mod tests {
         }
     }
 
-    fn rf(from_pkg: &str, from_desc: &str, to_pkg: &str, to_desc: &str, file: &str) -> ScipRefRecord {
+    fn rf(
+        from_pkg: &str,
+        from_desc: &str,
+        to_pkg: &str,
+        to_desc: &str,
+        file: &str,
+    ) -> ScipRefRecord {
         ScipRefRecord {
             caller_symbol: from_desc.into(),
             callee_symbol: to_desc.into(),
@@ -580,8 +595,18 @@ mod tests {
         // must not be counted as definitions of one.
         let syms = vec![
             sym("a", "types/ScoredChunk#", "sovereign/crates/a/src/t.rs", 1),
-            sym("a", "StartupOutcome#Failed#", "sovereign/crates/a/src/t.rs", 2),
-            sym("a", "impl#[Runtime]handle_message().", "sovereign/crates/a/src/t.rs", 3),
+            sym(
+                "a",
+                "StartupOutcome#Failed#",
+                "sovereign/crates/a/src/t.rs",
+                2,
+            ),
+            sym(
+                "a",
+                "impl#[Runtime]handle_message().",
+                "sovereign/crates/a/src/t.rs",
+                3,
+            ),
             sym("a", "workflow_cmd/HELP.", "sovereign/crates/a/src/t.rs", 4),
             sym("a", "crate/", "sovereign/crates/a/src/t.rs", 5),
         ];
@@ -606,7 +631,12 @@ mod tests {
     fn colocated_mod_tests_types_are_out_of_scope() {
         // The FILE is production; the descriptor says `mod tests`. A test
         // helper named `Evidence` must not enter the census.
-        let syms = vec![sym("crate_a", "thing/tests/Evidence#", "a/src/thing.rs", 400)];
+        let syms = vec![sym(
+            "crate_a",
+            "thing/tests/Evidence#",
+            "a/src/thing.rs",
+            400,
+        )];
         assert!(type_defs(&syms, &SourceScope::default()).is_empty());
     }
 
@@ -659,19 +689,60 @@ mod tests {
         let syms = vec![
             sym("core", "m/Verdict#", "sovereign/crates/core/src/m.rs", 10),
             sym("mesh", "n/Verdict#", "sovereign/crates/mesh/src/n.rs", 20),
-            sym("contracts", "c/Anchor#", "sovereign/crates/contracts/src/c.rs", 1),
+            sym(
+                "contracts",
+                "c/Anchor#",
+                "sovereign/crates/contracts/src/c.rs",
+                1,
+            ),
             sym("store", "s/Anchor#", "sovereign/crates/store/src/s.rs", 1),
         ];
         let defs = type_defs(&syms, &SourceScope::default());
         let refs = vec![
             // Both definitions are used by `cli`.
-            rf("cli", "f().", "core", "m/Verdict#", "sovereign/crates/cli/src/a.rs"),
-            rf("cli", "f().", "mesh", "n/Verdict#", "sovereign/crates/cli/src/a.rs"),
-            rf("eval", "g().", "core", "m/Verdict#", "sovereign/crates/eval/src/b.rs"),
+            rf(
+                "cli",
+                "f().",
+                "core",
+                "m/Verdict#",
+                "sovereign/crates/cli/src/a.rs",
+            ),
+            rf(
+                "cli",
+                "f().",
+                "mesh",
+                "n/Verdict#",
+                "sovereign/crates/cli/src/a.rs",
+            ),
+            rf(
+                "eval",
+                "g().",
+                "core",
+                "m/Verdict#",
+                "sovereign/crates/eval/src/b.rs",
+            ),
             // `contracts` is reachable from both users; `store` only from cli.
-            rf("cli", "f().", "contracts", "c/Anchor#", "sovereign/crates/cli/src/a.rs"),
-            rf("eval", "g().", "contracts", "c/Anchor#", "sovereign/crates/eval/src/b.rs"),
-            rf("cli", "f().", "store", "s/Anchor#", "sovereign/crates/cli/src/a.rs"),
+            rf(
+                "cli",
+                "f().",
+                "contracts",
+                "c/Anchor#",
+                "sovereign/crates/cli/src/a.rs",
+            ),
+            rf(
+                "eval",
+                "g().",
+                "contracts",
+                "c/Anchor#",
+                "sovereign/crates/eval/src/b.rs",
+            ),
+            rf(
+                "cli",
+                "f().",
+                "store",
+                "s/Anchor#",
+                "sovereign/crates/cli/src/a.rs",
+            ),
         ];
         let scope = SourceScope::default();
         let dag = crate_dag(&refs, &scope);
@@ -683,7 +754,10 @@ mod tests {
         assert_eq!(d.owner_candidates[0].covers, 2);
         assert_eq!(d.owner_candidates[0].of, 2);
         // `store` covers only one user, so it must not outrank contracts.
-        assert!(d.owner_candidates.iter().any(|c| c.krate == "store" && c.covers == 1));
+        assert!(d
+            .owner_candidates
+            .iter()
+            .any(|c| c.krate == "store" && c.covers == 1));
         assert!(d.gap.is_empty());
     }
 
@@ -691,15 +765,43 @@ mod tests {
     fn a_user_that_cannot_reach_the_owner_is_reported_as_a_gap() {
         let syms = vec![
             sym("core", "m/Verdict#", "sovereign/crates/core/src/m.rs", 10),
-            sym("archaeology", "n/Verdict#", "sovereign/crates/arch/src/n.rs", 20),
-            sym("contracts", "c/Anchor#", "sovereign/crates/contracts/src/c.rs", 1),
+            sym(
+                "archaeology",
+                "n/Verdict#",
+                "sovereign/crates/arch/src/n.rs",
+                20,
+            ),
+            sym(
+                "contracts",
+                "c/Anchor#",
+                "sovereign/crates/contracts/src/c.rs",
+                1,
+            ),
         ];
         let defs = type_defs(&syms, &SourceScope::default());
         let refs = vec![
-            rf("cli", "f().", "core", "m/Verdict#", "sovereign/crates/cli/src/a.rs"),
-            rf("archaeology", "h().", "archaeology", "n/Verdict#", "sovereign/crates/arch/src/n.rs"),
+            rf(
+                "cli",
+                "f().",
+                "core",
+                "m/Verdict#",
+                "sovereign/crates/cli/src/a.rs",
+            ),
+            rf(
+                "archaeology",
+                "h().",
+                "archaeology",
+                "n/Verdict#",
+                "sovereign/crates/arch/src/n.rs",
+            ),
             // Only `cli` reaches contracts. `archaeology` does not.
-            rf("cli", "f().", "contracts", "c/Anchor#", "sovereign/crates/cli/src/a.rs"),
+            rf(
+                "cli",
+                "f().",
+                "contracts",
+                "c/Anchor#",
+                "sovereign/crates/cli/src/a.rs",
+            ),
         ];
         let scope = SourceScope::default();
         let dag = crate_dag(&refs, &scope);
@@ -708,7 +810,11 @@ mod tests {
         assert_eq!(d.owner_candidates[0].krate, "contracts");
         assert_eq!(d.owner_candidates[0].covers, 1);
         assert_eq!(d.owner_candidates[0].of, 2);
-        assert_eq!(d.gap, vec!["archaeology"], "the unreachable user is the finding");
+        assert_eq!(
+            d.gap,
+            vec!["archaeology"],
+            "the unreachable user is the finding"
+        );
     }
 
     #[test]

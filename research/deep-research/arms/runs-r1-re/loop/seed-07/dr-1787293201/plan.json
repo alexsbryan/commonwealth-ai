@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787293201",
+  "charter_hash": "09ca74e5f857b456",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The number of US federal laws enacted in 2024 and 2025 mandating the divestiture or prohibition of TikTok, involving the United States Congress",
+      "The count of executive orders signed by President Donald Trump regarding TikTok between January 2025 and June 2025, involving the White House",
+      "The percentage change in TikTok's monthly active users in China from Q1 2023 to Q4 2024, involving ByteDance and China",
+      "The share of US national security agencies that issued formal warnings about data exfiltration risks associated with TikTok prior to December 2023, involving ODNI and FBI",
+      "The number of days until compliance specified in the \"Protecting Americans from Foreign Adversary Controlled Applications Act\" enacted April 2024, involved United States Congress",
+      "The total value in USD of any proposed acquisition offers for TikTok's US operations by potential buyers between January 2024 and June 2025 involving Oracle or other consortiums",
+      "The count of state-level laws passed regarding social media restrictions on minors under age 16 in states like Texas and Florida during 2023-2024 involving State Legislatures",
+      "The median time lag between data collection events in China and access requests by Chinese government entities as cited in congressional hearings 2024-2025 involving ByteDance"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2025"
+    ]
+  }
+}

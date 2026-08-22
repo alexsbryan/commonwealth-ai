@@ -1,0 +1,72 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787270397",
+  "charter_hash": "87efdab8229cedf1",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 9
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-04",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787270397"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "Based on the evidence provided, OpenAI released o3 and o4-mini in April 2025 to defend the reasoning-model frontier against DeepSeek's R1 cost shock and Anthropic's agentic-coding push [Source: ev-1].",
+    "This launch signaled a direction for frontier capability as tool-using reasoning at commodity prices [Source: ev-1].",
+    "Regarding the specific details of this direction:\n*   The models featured vision built directly into the model itself rather than being bolted on, along with native tool use (web search, code interpreter) trained into the model [Source: ev-1].",
+    "*   The release utilized an API-first strategy where developers had access from day one; specifically, o3 was not available in the ChatGPT app at launch, whereas o4-mini was [Source: ev-1].",
+    "*   OpenAI employed \"budget forcing,\" which involves a fixed maximum thought budget with task-adaptive dynamic compute that allows harder questions to think longer [Source: ev-1].",
+    "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+    "The launch signaled a direction for frontier reasoning models characterized by native integration of vision and tool use (web search, code interpreter) directly into the model architecture rather than bolting them on [Source: ev-1].",
+    "It also established an API-first availability strategy where developers had access from day one, with o3 initially excluded from the ChatGPT app while o4-mini was included [Source: ev-1].",
+    "The release highlighted OpenAI's adoption of \"budget forcing,\" which uses task-adaptive dynamic compute to allow harder questions to think longer within a fixed maximum thought budget [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787270397",
+    "acquired_at_unix": 1787270397,
+    "released_at_unix": 1787270518
+  }
+}

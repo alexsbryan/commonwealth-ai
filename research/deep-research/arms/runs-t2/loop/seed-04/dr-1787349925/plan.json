@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787349925",
+  "charter_hash": "dcdccad9e474d1f7",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI o3 and o4-mini official release date in April 2025",
+      "Number of parameters or model size metrics for OpenAI o3 if disclosed by OpenAI",
+      "Percentage improvement in benchmark scores (e.g., AIME, GPQA) for o3 compared to o1",
+      "Price per million tokens for OpenAI o3 API access at launch",
+      "Price per million tokens for OpenAI Anthropic Claude 3.7 Sonnet API access in April 2025",
+      "Count of major frontier reasoning models released by competitors between January 2024 and April 2025",
+      "Median latency reduction percentage reported for o4-mini versus o3",
+      "Share of enterprise adoption rate for OpenAI o-series models in Q1 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3",
+      "4",
+      "2025"
+    ]
+  }
+}

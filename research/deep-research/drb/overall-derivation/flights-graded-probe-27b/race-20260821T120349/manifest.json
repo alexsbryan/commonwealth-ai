@@ -1,0 +1,40 @@
+{
+  "order": "deep-research-t7a",
+  "created_at": "20260821T120349",
+  "resumed_from": null,
+  "retry": null,
+  "judge": {
+    "pin": "Qwen3.8-27B-UD-Q6_K_XL",
+    "caveat": "different model from the official judges (gemini-2.5-pro / GPT-5.5 era)"
+  },
+  "arms": {
+    "graded": {
+      "tasks": 9,
+      "scored": 9,
+      "source": "fresh"
+    }
+  },
+  "cleaning": "article_1 uncleaned in both arms (named caveat \u2014 the report IS the deliverable; the official cleaned targets are not shipped)",
+  "inputs": {
+    "clone_pin": "469cce54ea7f6a63c163d3d9fec879cf289ec484",
+    "subset_articles_sha": "b1ce57831916bd0e487b8816d3ef6b3fe3c3cb1ce73e26cdce4d6e9da4f3b0e7"
+  },
+  "landed_arm": "graded",
+  "skipped": {
+    "ids": [
+      95
+    ],
+    "reason": "never-ran \u2014 the pre-registered cumulative-search cap stop (task boundary; per-task allowance never reduced)"
+  },
+  "landed_dirs": {
+    "56": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-56/dr-shadow",
+    "58": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-58/dr-shadow",
+    "59": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-59/dr-shadow",
+    "62": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-62/dr-shadow",
+    "65": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-65/dr-shadow",
+    "69": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-69/dr-shadow",
+    "78": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-78/dr-shadow",
+    "83": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-83/dr-shadow",
+    "90": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-graded-shadow/drb-90/dr-shadow"
+  }
+}

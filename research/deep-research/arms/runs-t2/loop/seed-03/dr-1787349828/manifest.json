@@ -1,0 +1,66 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787349828",
+  "charter_hash": "f71523d15ad32954",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 3,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 3,
+      "gaps_before": 3,
+      "gaps_after": 3,
+      "fetched": 0,
+      "search_calls": 3
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-03",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787349828"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 10,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 2
+    }
+  },
+  "not_covered": [
+    "NASA ordered Boeing's Starliner to return uncrewed from its first crewed flight because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during the docking approach, and NASA determined that these thrusters could not be guaranteed safe for the deorbit burn [Source: ev-1].",
+    "The agency noted that the thrusters could not be ground-tested in their specific flight condition, making a crewed return unsafe [Source: ev-1].",
+    "This decision had several significant implications for the program:\n*   **Extended Crew Stay:** Astronauts Butch Wilmore and Suni Williams remained on the International Space Station until March 18, 2025, when they returned aboard a SpaceX Crew Dragon; this resulted in roughly 9.5 months aloft compared to the planned ~8 days [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787349828",
+    "acquired_at_unix": 1787349828,
+    "released_at_unix": 1787349925
+  }
+}

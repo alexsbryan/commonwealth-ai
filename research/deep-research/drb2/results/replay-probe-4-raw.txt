@@ -1,0 +1,28 @@
+{
+    "results": [
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'Taspen - JP' is a mandatory Pay-As-You-Go Defined Benefit (PAYG DB) scheme for public sector employees.",
+            "score": 1,
+            "reason": "The article explicitly identifies Taspen - JP as a PAYG DB scheme and states its coverage is mandatory for civil servants and public sector employees. No blocked references are cited in the supporting sentences.",
+            "evidence": "**Type:** Pay-As-You-Go Define Benefit (PAYG DB)\n**Coverage:** Mandatory for all civil servants and public sector employees"
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'Taspes - THT' is a mandatory Asset-backed Defined Contribution (Asset-backed DC) scheme for public sector employees.",
+            "score": 0,
+            "reason": "The article does not mention any scheme named 'Taspen - THT'. It lists Taspen - JP but omits the THT component entirely. Therefore, it does not satisfy the rubric item.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'BPJS - JP' is a mandatory Pay-At-You-Go Defined Benefit (PAG DB) scheme for employees of large and medium-sized private enterprises.",
+            "score": 0,
+            "reason": "The article states that BPJS Ketenagakerjaan - JP is an **Asset-backed** Defined Contribution/DB hybrid or specifically labels it as \"Asset-backed Defined Benefit\" in one section but generally describes it with contribution rates typical of DC schemes. Crucially, the rubric requires it to be explicitly stated as a **Pay-As-You-Go (PAYG)** scheme. The text says: \"Type:** Asset-backed Defined Benefit (Asset-backed DB)\". Since PAYG is not specified for this plan, and instead 'Asset-backed' is used, the specific requirement to state it is PAYG is not met.",
+            "evidence": ""
+        },
+        {
+            "rubric_item": "Explicitly state that Indonesia's 'BPS - JHT' is a mandatory Asse-backd Defined Contribution (Assed-back DC) sheme for employees of large, medium, and small-sized private enterprises, and voluntary for micro-enterprise employees.",
+            "score": 0,
+            "reason": "The article states BPJS Ketenagakerjaan JHT is \"Mandatory for all private sector employees\". It does **not** explicitly distinguish between large/medium/small as mandatory versus micro-enterprises being voluntary. In fact, it claims it is mandatory for *all* private sector employees without the specific nuance required by the rubric regarding micro-enterprises.",
+            "evidence": ""
+        }
+    ]
+}

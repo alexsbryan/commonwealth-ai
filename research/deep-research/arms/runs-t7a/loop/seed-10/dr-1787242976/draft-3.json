@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787242976",
+  "charter_hash": "0d92e594303284df",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, here is why OpenAI released GPT-5 in August 2025 and how it changed their sales strategy:\n\n**Why OpenAI Released GPT-5**\nOpenAI released GPT-5 (along with GPT-5 mini) on **August 7, 2025**, as part of a deliberate strategic shift to **\"give-away-the-frontier\" pricing**. This approach involved making the model available immediately to free users. The release was designed to consolidate OpenAI’s strategy around one unified model combined with aggressive distribution via the free tier [Source: ev-1]. By doing so, the company effectively ended the previous market split between reasoning and non-reasoning models [Source: ev-1]. Furthermore, this launch shifted the competitive battleground from benchmark demos to \"default agency,\" focusing on providing models that act rather than just answer questions [Source: ev-1].\n\n**Changes to How the Company Sells Its Models**\nThe release fundamentally changed OpenAI's sales and product structure in several key ways:\n\n*   **Unified Product:** GPT-5 retired separate o-series products (specifically o3, o4-mini, o3-mini, and o3-pro) by folding them into GPT-5's internal \"reasoning modes.\" This eliminated the need for a model picker. The marketing pitch consequently shifted from selling distinct \"reasoning models\" to offering a single model that simply \"thinks\" [Source: ev-1].\n*   **Pricing Structure:** Prices collapsed significantly compared to previous offerings, described as being a fraction of the former o-series prices. While consumer subscription tiers remained at $20/month for Plus and $200/month for Pro, API pricing was set at $1.25 per million input tokens and $10 per million output tokens for GPT-5. GPT-5 mini was priced even lower at $0.25 per million input tokens and$2 per million output tokens [Source: ev-1].\n*   **Integrated Features:** The model introduced integrated capabilities that previously might have required separate tools or models, including native image generation (without a separate image model), deep research integration, file upload, web search out of the box, and a 5-million-token context window [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-10",
+      "custody": "public-web"
+    }
+  ]
+}

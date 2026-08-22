@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787262340",
+  "charter_hash": "7a9a364495f9f05b",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of reported traffic accidents involving vehicles equipped with Advanced Driver-Assistance Systems (ADAS) in the United States from 2015 to 2023",
+      "Percentage change in total vehicle miles traveled by ADAS-equipped cars versus non-ADAS cars in California from 2018 to 2022",
+      "Share of liability attributed to driver error in court rulings for crashes involving lane-departure warning systems between 2016 and 2024",
+      "Median settlement amount in personal injury lawsuits alleging malfunctioning adaptive cruise control features from 2017 to 2023",
+      "Count of state statutes explicitly defining legal responsibility for accidents caused by Level 2 automated driving functions as of January 2024",
+      "Rate of false-positive activations per mile driven for forward collision avoidance systems across major vehicle manufacturers based on NHTSA data from 2020 to 2025",
+      "Percentage of jurisdictions that have amended traffic laws to include specific provisions for driver-inattention while ADAS is active since 2019",
+      "Average cost of litigation defense for automakers facing product liability claims related to ADAS failures between 2018 and 2023"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

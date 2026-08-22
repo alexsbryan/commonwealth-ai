@@ -1,0 +1,202 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787337230",
+  "charter_hash": "bf65194665d36fb5",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Anthropic released the Claude 4 family, consisting of two models—Claude Opus 4 and Claude Sonnet 4—on May 8, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 2, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This dual-model strategy was designed to address different market segments within agentic coding: Opus 4 served as the flagship model with pricing at $15 per million input tokens and $75 per million output tokens, while Sonnet 4 acted as a fast workhorse priced at $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "By positioning Sonnet 4 as the developer-default coding model, Anthropic aimed to make advanced capabilities accessible for routine development tasks alongside its top-tier offering. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "The launch signaled that the agentic-coding market had reached a critical inflection point defined by reliability and enterprise adoption rather than just raw capability. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The headline feature was \"computer use 2.0,\" which offered browser control roughly twice as reliable as the previous generation (the 3.x series), directly addressing the need for trustworthy autonomous agents in professional environments [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2.0, 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "This release positioned Claude 4 against competitors like OpenAI’s o-series during an \"enterprise agentic-coding gold rush,\" with Anthropic marketing it as the safest and most reliable coding agent [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "The commercial success of this strategy, driven largely by the adoption of Claude Code, led to record API usage and culminated in a large funding round in late September 2025 at a reported valuation of approximately $183 billion, cementing Anthropic's position as a leader in the coding-agent market [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "183"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Anthropic released the Claude 4 family, consisting of two models—Claude Opus 4 and Claude Sonnet 4—on May 8, 2025 [Source: ev-1].",
+      "actionable_query": "—on May . (4, 2, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "This dual-model strategy was designed to address different market segments within agentic coding: Opus 4 served as the flagship model with pricing at $15 per million input tokens and $75 per million output tokens, while Sonnet 4 acted as a fast workhorse priced at $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "actionable_query": "served as the flagship model with pricing at $ per million input tokens and $ acted as a fast workhorse priced at $ per million input tokens (4, 2, 2025)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "By positioning Sonnet 4 as the developer-default coding model, Anthropic aimed to make advanced capabilities accessible for routine development tasks alongside its top-tier offering. [Source: ev-1]",
+      "actionable_query": "as the developer-default coding model, Anthropic aimed to make advanced capabilities accessible for routine development tasks alongside its  (4, 2, 2025)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The launch signaled that the agentic-coding market had reached a critical inflection point defined by reliability and enterprise adoption rather than just raw capability. [Source: ev-1]",
+      "actionable_query": "launch signaled agentic-coding market reached critical inflection point defined reliability enterprise adoption rather just raw capability",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "The headline feature was \"computer use 2.0,\" which offered browser control roughly twice as reliable as the previous generation (the 3.x series), directly addressing the need for trustworthy autonomous agents in professional environments [Source: ev-1].",
+      "actionable_query": "The headline feature was \"computer use \" which offered browser control roughly twice as reliable as the previous generation (the x series),  (4, 2, 2025)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "The commercial success of this strategy, driven largely by the adoption of Claude Code, led to record API usage and culminated in a large funding round in late September 2025 at a reported valuation of approximately $183 billion, cementing Anthropic's position as a leader in the coding-agent market [Source: ev-1].",
+      "actionable_query": "2025 commercial success strategy driven largely adoption Claude Code led record API usage culminated large funding round late September reported valuation approximately billion cementing Anthropic's",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787242314",
+  "charter_hash": "63e56e6c3d32832c",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The EU AI Act entered into force in phases to ensure that obligations land as institutional capacity and technology mature, with the schedule also serving as a compliance roadmap for global providers [Source: ev-1].\n\nThe specific deadlines require the following:\n*   **2025-02-02**: Prohibited practices (classified as \"unacceptable risk\") apply. These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].\n*   **2025-08-02**: Obligations for general-purpose AI (GPAI) models begin applying [Source: ev-1].\n*   **2026-08-02**: High-risk system obligations apply [Source: ev-1].\n*   **2027-08-02**: A subset of high-risk system obligations applies [Source: ev-1].\n\nThe Act was published in the EU Official Journal on 2024-07-12 and entered into force on 2024-",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web"
+    }
+  ]
+}

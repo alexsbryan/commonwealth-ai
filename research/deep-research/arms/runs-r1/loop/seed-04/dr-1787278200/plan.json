@@ -1,0 +1,29 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787278200",
+  "charter_hash": "cdfd01180cde1e9e",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of OpenAI model releases in April 2025, entity: OpenAI",
+      "Date of official announcement for o3 and o4-mini, entity: OpenAI",
+      "Listed primary capabilities or benchmarks improved in o3 compared to previous models (o1), entity: OpenAI",
+      "Price per million tokens for o3 input and output, entity: OpenAI",
+      "Price per million tokens for o4-mini input and output, entity: OpenAI",
+      "Percentage improvement in reasoning benchmark scores (e.g., AIME, GPQA) for o3 versus o1, entity: OpenAI",
+      "Count of third-party developers integrating o3 within the first week of release, entity: API partners",
+      "Share of global AI research funding allocated to reasoning-focused architectures in 2024 vs 2025 Q1, entity: Venture Capital Firms",
+      "Median latency reduction percentage reported by users switching from o1 to o3, entity: Developer Community Reports",
+      "Number of competing frontier models released with specific \"reasoning\" modes between January and April 2025 by Anthropic or Google DeepMind, entity: Competitors"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3",
+      "4",
+      "2025"
+    ]
+  }
+}

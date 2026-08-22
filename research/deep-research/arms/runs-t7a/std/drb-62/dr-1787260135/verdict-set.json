@@ -1,0 +1,341 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787260135",
+  "charter_hash": "7f31e60a98521c35",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, scaling ion trap quantum computers from laboratory prototypes to large-scale systems involves addressing specific engineering challenges in electromagnetic design, thermal management, and photonic integration [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The most effective approaches identified for achieving this scale include modular architectures like the Quantum CCD (Charge-Coupled Device) system and a transition from free-space laser delivery to integrated optical waveguides. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "**Modular Architectures: Quantum CCD Systems**\nA primary strategy for overcoming the limitations of single-well traps is the use of modular designs that divide qubits into multiple individual potential wells rather than one large chain [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "In a standard 1D or 2D ion crystal within a single well, all ions interact constantly; as the number of ions increases, controlling these interactions becomes difficult, degrading performance [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "The Quantum CCD architecture solves this by using chips with multiple isolated wells, each holding only a few qubits at a time [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "This approach allows for better control and has been implemented in commercial systems such as Quantinuum’s H2 processor, which utilizes this design to manage its 16-qubit array [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "While superconducting systems like IBM’s Eagle have reached higher counts (500 qubits), ion trap systems currently operate in the range of 10–30 accessible cloud qubits or up to ~100+ ions in academic quantum simulation experiments [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://m-malinowski.github.io/2024/02/06/scaling-ions.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "**Photonic Integration and Light Delivery**\nThe most significant bottleneck for scaling trapped-ion systems is laser delivery. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "A fully controllable N-qubit system typically requires approximately *N* individually controllable laser beams [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "Traditional free-space optical propagation is not scalable for large numbers of qubits due to cross-talk issues and the physical constraints of avoiding the ion trap chip, a challenge that neutral atom platforms face later (at hundreds/thousands of qubits) but ion traps encounter at much lower scales (tens/low hundreds) [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "To reach \"proper\" large scales, evidence indicates that free-space delivery must be replaced by guided laser propagation using integrated optics [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "The most mature proposed architecture involves coupling lasers to optical fibers, routing them through on-chip waveguides within the ion trap, and emitting light onto ions via grating couplers [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "This approach has been validated experimentally:\n*   In 2016, researchers at MIT Lincoln Labs demonstrated single-qubit gates in Sr+ using integrated optics [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://m-malinowski.github.io/2024/02/06/scaling-ions.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "*   In 2020, a team at ETH Zurich (led by Karan Mehta) achieved two-qubit gates in Ca+ with ~99.3% fidelity using this same integrated optics method [Source: ev-4].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-3",
+        "ev-4"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-3",
+          "url": "https://pennylane.ai/demos/tutorial_trapped_ions",
+          "chunk_id": "ev-3"
+        },
+        {
+          "evidence_id": "ev-4",
+          "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+          "chunk_id": "ev-4"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+          "https://pennylane.ai/demos/tutorial_trapped_ions"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c15",
+      "text": "**Engineering Support for Scaling Challenges**\nBeyond specific architectural changes, scaling requires advanced multiphysics simulation to manage the complex physical environment of large-scale processors [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "Key engineering challenges that must be solved include modeling trapping potentials, managing electric field noise and heating, and optimizing optical delivery and photonic interconnects [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "Tools such as Ansys Maxwell, HFSS, SIwave, Icepak, and Lumerical are cited as methods used to address these electromagnetic, thermal, and photonic design hurdles necessary for scalable ion trap architectures [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "**Feasibility Assessment**\nThe evidence suggests that while trapped ions face distinct laser-delivery scaling barriers compared to neutral atoms or superconducting qubits, they are not inherently \"harder\" to scale in a fundamental sense; rather, the solution requires shifting from free-space optics to chip-scale integrated photonics [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "The feasibility of this approach is supported by recent experimental successes demonstrating high-fidelity gates (99.3% for two-qubit operations) using waveguide-based delivery [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://m-malinowski.github.io/2024/02/06/scaling-ions.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "Additionally, the inherent advantages of trapped-ion qubits—such as long coherence times (seconds to minutes), identical qubits eliminating fabrication variability, and single-qubit gate fidelities exceeding 99.9%—provide a strong foundation that makes these engineering solutions viable for solving real-world problems once scaling barriers are overcome [Source: ev-1] [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "**Note on Specific Metrics:**\n*   Honeywell achieved a quantum volume of 128, noted as the largest in the market at the time of the PennyLane demo publication [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://pennylane.ai/demos/tutorial_trapped_ions"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c22",
+      "text": "*   The specific figure \"3\" from [ev-1] appears in navigation or metadata context rather than as a distinct technical metric within the provided text snippet regarding scaling strategies. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": []
+}

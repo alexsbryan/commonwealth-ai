@@ -834,11 +834,11 @@ mod tests {
     #[test]
     fn declared_ask_terms_and_separator_variants_still_pass() {
         for spelling in [
-            "capex",                 // declared ask_term
-            "capital expenditures",  // declared ask_term
-            "capital_expenditures",  // canonical id
-            "Capital Expenditures",  // id modulo the resolver's normalization
-            "gross margin",          // another concept's ask_term
+            "capex",                // declared ask_term
+            "capital expenditures", // declared ask_term
+            "capital_expenditures", // canonical id
+            "Capital Expenditures", // id modulo the resolver's normalization
+            "gross margin",         // another concept's ask_term
         ] {
             if let Some(r) = concept_vocabulary_refusal("concept", spelling) {
                 panic!("{spelling:?} must stay acceptable: {r}");

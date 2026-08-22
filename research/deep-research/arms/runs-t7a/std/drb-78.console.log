@@ -1,0 +1,48 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: consent grant for run dr-1787262042 — release floor personal (recorded in the manifest)
+deep-research: run dr-1787262042 — Parkinson's disease has a profound impact on patients. What are the potential health warning signs associated with different stages of the disease? As family members, which specific signs should alert us to intervene or seek medical advice regarding the patient's condition? Furthermore, for patients who have undergone Deep Brain Stimulation (DBS) surgery, what daily life adjustments and support strategies can be implemented to improve their comfort and overall well-being?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-78/dr-1787262042
+deep-research: web backend tavily
+deep-research: search source web
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787262042] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787262042] Dedupe: no duplicates found (2 rows)
+[dr-estate-dr-1787262042] Dedupe preserved 2 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787262042] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787262042] Building FTS content index (2/3)...
+[dr-estate-dr-1787262042] FTS content index done
+[dr-estate-dr-1787262042] Building FTS title index (3/3)...
+[dr-estate-dr-1787262042] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787262042 built — 2 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-78/dr-1787262042/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787262042", charter_hash: "e92111801f41e19c", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 2, search_calls: 12 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 7, fetched: 2, search_calls: 0 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://www.neurosurgeryone.com/condition/parkinsons", custody: "public-web", ingested_into: Some("dr-estate-dr-1787262042") }, FetchedSource { url: "https://www.nia.nih.gov/health/parkinsons-disease/parkinsons-disease-causes-symptoms-and-treatments", custody: "public-web", ingested_into: Some("dr-estate-dr-1787262042") }], failed: [FailedSource { url: "https://www.mayoclinic.org/diseases-conditions/parkinsons-disease/symptoms-causes/syc-20376055", error: "fetch https://www.mayoclinic.org/diseases-conditions/parkinsons-disease/symptoms-causes/syc-20376055: Execution error: HTTP 403 Forbidden for https://www.mayoclinic.org/diseases-conditions/parkinsons-disease/symptoms-causes/syc-20376055" }, FailedSource { url: "https://www.facebook.com/communitymedicalcenters/posts/before-dbs-surgery-parkinsons-controlled-glendas-daily-lifeafter-deep-brain-stim/1505295098263252", error: "fetch https://www.facebook.com/communitymedicalcenters/posts/before-dbs-surgery-parkinsons-controlled-glendas-daily-lifeafter-deep-brain-stim/1505295098263252: Execution error: HTTP 400 Bad Request for https://www.facebook.com/communitymedicalcenters/posts/before-dbs-surgery-parkinsons-controlled-glendas-daily-lifeafter-deep-brain-stim/1505295098263252" }] }, budget: BudgetTotals { spent: {"web-search:web": 12, "web-fetch:pages": 4}, remaining: {"web-search:web": 0, "web-fetch:pages": 8} }, not_covered: ["Parkinson’s disease is a brain disorder that causes unintended or uncontrollable movements, including shaking, stiffness, and difficulty with balance and coordination [Source: ev-2].", "Symptoms usually begin gradually and worsen over time, potentially leading to difficulties in walking and talking as the disease progresses [Source: ev-2].", "Additional health warning signs associated with the condition include mental and behavioral changes, sleep problems, depression, memory difficulties, and fatigue [Source: ev-2].", "While virtually anyone could be at risk, research suggests the disease affects more men than women for unclear reasons [Source: ev-2].", "Age is a clear risk factor; although most people develop the disease after age 60, about 5% to 10% experience onset before the age of 50 [Source: ev-2].", "Early-onset forms are often inherited and some have been linked to specific alterations in genes [Source: ev-2].", "The provided evidence does not contain information regarding specific signs that alert family members to intervene or seek medical advice beyond the general progression of symptoms described. [Source: ev-2]", "Furthermore, the provided evidence lists Deep Brain Stimulation as a treatment option but does not specify daily life adjustments or support strategies for patients who have undergone this surgery [Source: ev-1] [Source: ev-2]."], reframe: None, alignment: None, residue: [], consent: Some(ConsentGrant { run_id: "dr-1787262042", granted_at_unix: 1787262042, release_floor: Personal }), lock: LockRecord { id: "dr-1787262042", acquired_at_unix: 1787262042, released_at_unix: Some(1787262187) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2-degenerate.json", "draft-2.json", "gap-list-2.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-78/dr-1787262042/report.md
+rounds: 2 | gaps after last round: 7 | searches: 12 | fetched sources: 2
+open questions (could-not-judge):
+  - Parkinson’s disease is a brain disorder that causes unintended or uncontrollable movements, including shaking, stiffness, and difficulty with balance and coordination [Source: ev-2].
+  - Symptoms usually begin gradually and worsen over time, potentially leading to difficulties in walking and talking as the disease progresses [Source: ev-2].
+  - Additional health warning signs associated with the condition include mental and behavioral changes, sleep problems, depression, memory difficulties, and fatigue [Source: ev-2].
+  - While virtually anyone could be at risk, research suggests the disease affects more men than women for unclear reasons [Source: ev-2].
+  - Age is a clear risk factor; although most people develop the disease after age 60, about 5% to 10% experience onset before the age of 50 [Source: ev-2].
+  - Early-onset forms are often inherited and some have been linked to specific alterations in genes [Source: ev-2].
+  - The provided evidence does not contain information regarding specific signs that alert family members to intervene or seek medical advice beyond the general progression of symptoms described. [Source: ev-2]
+  - Furthermore, the provided evidence lists Deep Brain Stimulation as a treatment option but does not specify daily life adjustments or support strategies for patients who have undergone this surgery [Source: ev-1] [Source: ev-2].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2-degenerate.json
+  draft-2.json
+  gap-list-2.json
+  verdict-set.json
+  report.md
+  manifest.json

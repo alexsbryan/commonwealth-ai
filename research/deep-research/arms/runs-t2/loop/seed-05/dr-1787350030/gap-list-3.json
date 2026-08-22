@@ -1,0 +1,415 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787350030",
+  "charter_hash": "e49a6f17e13e8fe9",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The EU's AI Act entered into force in phases between 2024 and 2027 because this deliberate schedule allows obligations to land as institutional capacity and technology mature [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "2027",
+          "EU's AI Act",
+          "phases"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "Additionally, the phased timeline serves as a compliance roadmap that is exported globally through the \"Brussels effect\" [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The different deadlines require the following specific actions based on risk tiers and model categories:\n*   **Prohibited practices:** Practices classified as \"unacceptable risk,\" such as social scoring and certain manipulative or exploitation-of-vulnerability uses, are banned outright starting from February 2, 2025 (2025-02-02) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "Violations of these prohibited practices carry fines reaching €35 million or 7% of global annual turnover, whichever is higher [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 7%"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "This includes social scoring and manipulative uses of vulnerabilities [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "*   **General-purpose AI (GPAI):** Model obligations apply from August , .[Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "A Code of Practice was drafted in - to guide compliance [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Most other breaches carry fines up to €15 million or 3% of global annual turnover [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3%"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "*   **High-risk systems:** Obligations begin applying on August , .8, with a specific subset applying later on August , .7 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 8, 7"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "The Act itself entered into force on August , .4 after being published on July , .2, and is implemented under the leadership of the European AI Office established in Brussels [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "The EU AI Act entered into force in phases between 2024 and 2027 because this deliberate schedule allows obligations to land as institutional capacity and technology mature [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "2027",
+          "EU AI Act",
+          "phases"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "A GPAI Code of Practice was drafted between 2024-2025 to interpret these obligations as a safe zone [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "2025"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "The Act was published on July 12, 24 (correction: 2024) and entered into force on August 1, 204 (correction: 2024), establishing the European AI Office in Brussels to lead implementation [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1, 204"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "**General-purpose AI (GPAI):** Model obligations apply from August , . [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "**High-risk systems:** Obligations begin applying on August , .8, with a specific subset applying later on August , .7 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 8, 7"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "The EU AI Act entered into force in phases between 2024 and 2027 because this deliberate schedule allows obligations to land as institutional capacity and technology mature [Source: ev-1].",
+      "actionable_query": "2024 2027 Act entered force phases because deliberate schedule allows obligations land institutional capacity technology mature",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "Additionally, the phased timeline serves as a compliance roadmap that is exported globally through the \"Brussels effect\" [Source: ev-1].",
+      "actionable_query": "Additionally phased timeline serves compliance roadmap exported globally through Brussels effect",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The different deadlines require the following specific actions based on risk tiers and model categories:\n*   **Prohibited practices:** Practices classified as \"unacceptable risk,\" such as social scoring and certain manipulative or exploitation-of-vulnerability uses, are banned outright starting from February 2, 2025 (2025-02-02) [Source: ev-1].",
+      "actionable_query": "The different deadlines require the following specific actions based on risk tiers and model categories: * **Prohibited practices:** Practic (2024, 2027)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "Violations of these prohibited practices carry fines reaching €35 million or 7% of global annual turnover, whichever is higher [Source: ev-1].",
+      "actionable_query": "Violations of these prohibited practices carry fines reaching € million or of global annual turnover, whichever is higher . (2024, 2027)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "A GPAI Code of Practice was drafted between 2024-2025 to interpret these obligations as a safe zone [Source: ev-1].",
+      "actionable_query": "2024 GPAI Code Practice drafted interpret obligations safe zone",
+      "from_claim_id": "c12",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Most other breaches carry fines up to €15 million or 3% of global annual turnover [Source: ev-1].",
+      "actionable_query": "Most other breaches carry fines up to € million or of global annual turnover . (2024, 2027)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "The Act was published on July 12, 24 (correction: 2024) and entered into force on August 1, 204 (correction: 2024), establishing the European AI Office in Brussels to lead implementation [Source: ev-1].",
+      "actionable_query": "The Act was published on July ) and entered into force on August ), establishing the European AI Office in Brussels to lead implementation . (2024, 2027)",
+      "from_claim_id": "c13",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "This includes social scoring and manipulative uses of vulnerabilities [Source: ev-1].",
+      "actionable_query": "includes social scoring manipulative uses vulnerabilities",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "**General-purpose AI (GPAI):** Model obligations apply from August , . [Source: ev-1]",
+      "actionable_query": "General-purpose GPAI Model obligations apply August",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "A Code of Practice was drafted in - to guide compliance [Source: ev-1].",
+      "actionable_query": "Code Practice drafted guide compliance",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "**High-risk systems:** Obligations begin applying on August , .8, with a specific subset applying later on August , .7 [Source: ev-1].",
+      "actionable_query": "**High-risk systems:** Obligations begin applying on August , . with a specific subset applying later on August , . . (2024, 2027)",
+      "from_claim_id": "c15",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "The Act itself entered into force on August , .4 after being published on July , .2, and is implemented under the leadership of the European AI Office established in Brussels [Source: ev-1].",
+      "actionable_query": "The Act itself entered into force on August , . after being published on July , . and is implemented under the leadership of the European AI (2024, 2027)",
+      "from_claim_id": "c10",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

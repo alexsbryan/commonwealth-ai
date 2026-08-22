@@ -1,0 +1,111 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787336692",
+  "charter_hash": "c879eabeb8746942",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3, 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The launch signaled a shift in frontier reasoning models toward integrating vision directly into the model architecture rather than bolting it on, alongside native tool use (such as web search and code interpreter) that is trained into the model itself [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "It also marked OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "The launch reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini’s pricing of $1.10 per million input tokens and $4.40 per million output tokens, compared to o3’s $10/$40 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4, 3, 10/$40"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+      "actionable_query": "-mini on April . (3, 4, 2025)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The launch signaled a shift in frontier reasoning models toward integrating vision directly into the model architecture rather than bolting it on, alongside native tool use (such as web search and code interpreter) that is trained into the model itself [Source: ev-1].",
+      "actionable_query": "launch signaled shift frontier reasoning models toward integrating vision directly model architecture rather bolting alongside native tool use web search code interpreter trained itself",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "It also marked OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+      "actionable_query": "It also marked OpenAI’s private chain-of-thought policy, where reasoning tokens are not exposed to API callers . (3, 4, 2025)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The launch reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini’s pricing of $1.10 per million input tokens and $4.40 per million output tokens, compared to o3’s $10/$40 [Source: ev-1].",
+      "actionable_query": "-mini’s pricing of $ per million input tokens and $ ’s $ . (3, 4, 2025)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

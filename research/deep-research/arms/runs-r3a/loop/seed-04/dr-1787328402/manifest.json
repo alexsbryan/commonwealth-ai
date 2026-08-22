@@ -1,0 +1,82 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787328402",
+  "charter_hash": "8322a2844f287ac0",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 11,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 11,
+      "gaps_after": 11,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-04",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787328402"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "OpenAI released o3 and o4-mini on 2025-04-16 [Source: ev-1].",
+    "The launch signaled that the direction of frontier reasoning models was shifting toward tool-using reasoning at commodity prices [Source: ev-1].",
+    "This strategic move was intended to defend OpenAI’s position against DeepSeek's R1 cost shock and Anthropic's agentic-coding push while GPT-5 had not yet shipped [Source: ev-1].",
+    "These models featured native tool use, including web search and code interpreter, which was trained into the model [Source: ev-1].",
+    "They utilized a technique called budget forcing, employing a fixed maximum thought budget with task-adaptive dynamic compute so that harder questions required longer thinking times [Source: ev-1].",
+    "The launch introduced OpenAI's first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+    "o3 set a record on the ARC-AGI benchmark, achieving 87.5% on ARC-AGI-1 at high compute [Source: ev-1].",
+    "Pricing for o3 was $10 per million input tokens and $40 per million output tokens [Source: ev-1].",
+    "Pricing for o4-mini was $1.10 per million input tokens and 4.40 dollars per million output tokens [Note: The evidence lists \"1.10 / 4.40\" in the context of pricing; interpreting standard token pricing formats implies dollars] [Source: ev-1].",
+    "Notably, o3 was not included in the ChatGPT app at launch, whereas o4-mini was [Source: ev-1].",
+    "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+    "The launch signaled that the direction of frontier reasoning models was shifting toward \"tool-using reasoning at commodity prices\" [Source: ev-1].",
+    "*   **Native Tool Use:** They featured native tool use, including web search and code interpreter, which was trained into the model [Source: ev-1].",
+    "*   **Budget Forcing:** The models utilized a technique called \"budget forcing,\" employing a fixed maximum thought budget with task-adaptive (dynamic) compute so that harder questions required longer thinking times [Source: ev-1].",
+    "*   **Private Chain-of-Thought:** This launch introduced OpenAI's first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1].",
+    "The launch also demonstrated significant performance improvements. [Source: ev-1]",
+    "o3 set a record on the ARC-AGI benchmark, achieving approximately 87.5% on ARC-AGI-1 at high compute [Source: ev-1].",
+    "Pricing for these models was structured as follows:\n*   **o3:** $10 per million input tokens and $40 per million output tokens [Source: ev-1].",
+    "*   **o4-mini:** $1.10 per million input tokens and $$4.40$ per million output tokens [Note: The evidence lists \"1.10 / 4.40\" in the context of pricing; interpreting standard token pricing formats implies dollars] [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787328402",
+    "acquired_at_unix": 1787328402,
+    "released_at_unix": 1787328620
+  }
+}

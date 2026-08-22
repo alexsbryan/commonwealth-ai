@@ -1,0 +1,29 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787243181",
+  "charter_hash": "d20d0e4dc4cf0ced",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://estate.example/seed-11",
+      "source_url": "https://estate.example/seed-11",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Nvidia closed above a $4 trillion market cap on 2025-07-09 — the first company in history to close above $4T (Apple had touched $4T intraday the day before, 2025-07-08). The trajectory: $1T (mid-2023), $2T (Feb 2024), $3T (June 2024), $4T (July 2025) — with a multi-hundred-billion-dollar run in the first half of July 2025. The drivers were Blackwell accelerator demand (GB200/GB300 rack systems), the Stargate project's ~$500B AI-infrastructure plan, and hyperscaler capex guidance raised repeatedly through 2025 (Microsoft, Meta, Google, Amazon), with Nvidia holding a dominant share of the AI-accelerator market. Nvidia's share price crossed about $160; CEO Jensen Huang framed the moment as the transition from training to inference demand — \"AI factories\" selling compute as a commodity. The milestone measured the AI-capex supercycle: the market priced AI infrastructure as the largest new capital cycle since the internet, and Nvidia as its toll-booth. The risk backdrop was concentration — Nvidia's weight in the S&P 500 reached record levels, and the $4T club's membership rotated among Nvidia, Apple, and Microsoft through 2025.\n",
+      "ingested_into": null,
+      "tags": [
+        "2025",
+        "crosses",
+        "nvidia",
+        "trillion"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-11"
+  ],
+  "derived_custody": "public-web"
+}

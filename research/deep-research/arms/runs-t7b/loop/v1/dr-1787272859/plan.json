@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787272859",
+  "charter_hash": "409ded03c13dfa76",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Share of neighborhoods in major US cities classified as gentrified between 1980 and 2024",
+      "Median home price growth rate by city from 1980 to 2024",
+      "Gini coefficient for income inequality in top 50 US metropolitan areas annually from 1983 to 2023",
+      "Percentage change in median household rent versus median wage ratio per city from 1990 to 2020",
+      "Count of households displaced due to housing costs or redevelopment projects in specified cities during the last decade",
+      "Average annual percentage increase in property values in previously low-income census tracts compared to high-income tracts from 1985 to 2015",
+      "Share of population living below 30% Area Median Income (AMI) threshold by city over time from 1984 to 2022"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "1980",
+      "2024"
+    ]
+  }
+}

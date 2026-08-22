@@ -1,0 +1,27 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787253628",
+  "charter_hash": "cfd0bf5480bc813d",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median household income by city for 1980, 2000, and 2024 from the U.S. Census Bureau",
+      "Gini coefficient or top-to-bottom income ratio (P90/P10) by metropolitan statistical area for 1985, 2005, and 2023",
+      "Average rent in dollars per square foot for central city neighborhoods between 1980 and 2024",
+      "Change in median home price as a percentage of local average wage for major U.S. cities from 1980 to 2024",
+      "Number of households displaced due to rising rents or eviction filings by county annually from 1990 to 2023",
+      "Percentage change in the share of low-income residents leaving gentrifying census tracts between baseline year (e.g., 1990) and follow-up year (e.g., 2020)",
+      "Affordability index defined as the ratio of median housing cost to median household income for each city in 1985, 1995, 2015, and 2025",
+      "Count of new luxury apartment units constructed per square mile in central cities versus suburbs during 1981-1990, 1991-2000, 2001-2010, and 2011-2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "1980",
+      "2024"
+    ]
+  }
+}

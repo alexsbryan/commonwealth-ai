@@ -1,0 +1,103 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787337552",
+  "charter_hash": "e4324e1e3f375dbb",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Number of privacy experts and security researchers who publicly criticized Microsoft Recall in April 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Percentage change in Microsoft stock price from March 1, 2024 to June 30, 2025 reflecting market reaction to the controversy",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Count of major media outlets publishing investigative reports on Windows Recall data storage vulnerabilities between May and July 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1"
+    ],
+    "threshold": 8.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

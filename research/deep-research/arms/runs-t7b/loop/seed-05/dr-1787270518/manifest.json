@@ -1,0 +1,73 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787270518",
+  "charter_hash": "8253a2eebd49352b",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 9,
+      "fetched": 0,
+      "search_calls": 5
+    },
+    {
+      "round": 3,
+      "gaps_before": 9,
+      "gaps_after": 9,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-05",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787270518"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "The EU's AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1].",
+    "This schedule also serves as a compliance roadmap for providers worldwide [Source: ev-1].",
+    "Regarding what the different deadlines require, the evidence specifies the following application dates for specific risk tiers and categories:\n*   **Prohibited practices** (classified as \"unacceptable risk\") apply from 2025-02-02 [Source: ev-1].",
+    "These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+    "*   **General-purpose AI (GPAI) model obligations** apply from 2025/08/02 [Source: ev-1].",
+    "Duties in this category are scaled by systemic-risk status, with a threshold of $10^{26}$ FLOPs mentioned [Source: ev-1].",
+    "*   **High-risk system obligations** generally apply from 2026/08/02, though a subset applies earlier from 2027/08/02 according to the provided text structure (note: standard legal interpretation usually places later dates for legacy systems, but I am strictly following the source which lists \"high-risk... [Source: ev-1]",
+    "from 2026-08-02, with a subset applying from 2027-08-02\") [Source: ev-1].",
+    "The evidence does not provide specific details on what is required by the deadlines for \"limited\" or \"minimal\" risk tiers beyond noting they exist in the hierarchy. [Source: ev-1]",
+    "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787270518",
+    "acquired_at_unix": 1787270518,
+    "released_at_unix": 1787270662
+  }
+}

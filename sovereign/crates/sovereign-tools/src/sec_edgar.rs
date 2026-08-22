@@ -1277,7 +1277,10 @@ mod tests {
             "the sidecar must not be an ingested document"
         );
         assert!(
-            root.path().join("raw").join("_unmapped_concepts.json").is_file(),
+            root.path()
+                .join("raw")
+                .join("_unmapped_concepts.json")
+                .is_file(),
             "the coverage deliverable lands in raw/, not docs/"
         );
 

@@ -1,0 +1,25 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787337645",
+  "charter_hash": "8ea26f60cb4bd2ef",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, American cities have undergone a fundamental transformation from 1980 to 2024 characterized by accelerated gentrification, rising income inequality, decreasing housing affordability relative to wages, and demographic displacement. [Source: ev-1]\n\n**Gentrification Trends (1980–2024)**\nThe term was coined in 1963, but recent decades saw a surge as Americans opted for urban lifestyles. [Source: ev-2] Gentrification greatly accelerated after 2000; nearly 20 percent of neighborhoods with lower incomes and home values experienced gentrification since the 2000 Census, compared to only 9 percent during the 1990s. [Source: ev-2] This represents more than double the rate of the previous decade. [Source: ev-2] While this acceleration is notable, gentrification remains rare nationally overall, with only 8 percent of all reviewed neighborhoods experiencing it since the 2000s. [Source: ev-2]\n\nThere are stark geographic disparities in these trends. In contrast, cities like Detroit (2.8%), Las Vegas (2%), and El Paso (0%) experienced minimal or no gentrification. [Source: ev-2] At the other extreme, Portland saw 58.1% of eligible tracts gentrify, followed by Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%). [Source: ev-2] In terms of raw volume, New York had the highest number of gentrified tracts at 128, despite a lower percentage rate of 29.8% due to its large total tract count. [Source: ev-2]\n\n**Inequality Metrics**\nThe economic transformation has been accompanied by rising inequality. Other cities exhibit extreme inequality patterns with Gini coefficients exceeding 0.54 and income ratios reaching 18:1 between top and bottom earners. [Source: ev-1] Multiple metrics confirm this widening gap:\n*   **95/20 Income Ratio:** Atlanta and Washington D.C. rank among those with an 18:1 ratio, meaning the 95th percentile earns 18 times more than the 20th percentile. [Source: ev-1] This ratio rose from a national average of 8.5 between 2007 and 2014. [Source: ev-1]\n\nFederal Reserve data tracking over 3,140 series confirms that inequality reached record levels by 2018–2021, with the U.S. showing the sharpest increase among advanced economies since the 1980s. [Source: ev-1] Additionally, New York City leads major metros with a Gini coefficient of 0.5469, compared to the national average of 0.40 in 2013. [Source: ev-1]\n\n**Affordability and Economic Shifts**\nHousing affordability has deteriorated relative to income growth. Since 2000, home prices increased 177% while median household income grew only 92%. [Source: ev-1] This disparity is most acute in California, where price-to-income ratios range between 9.6 and 12.2, more than double the national average of 4.7. [Source: ev-1] The shift from manufacturing to service economies has further impacted affordability dynamics; manufacturing jobs fell significantly while finance and professional services grew, concentrating high-income professionals in urban cores. [Source: ev-1] Urban areas now have a higher concentration of educated residents (35% with bachelor's degrees or higher) compared to suburbs (31%) and rural areas (19%), driving up demand for housing in city centers. [Source: ev-1]\n\n**Demographic Displacement and Neighborhood Change**\nThe physical and demographic character of neighborhoods has shifted dramatically based on whether they gentrified. Gentrifying neighborhoods saw population increases and became whiter, with an average increase of 4.3 percentage points in the non-Hispanic white share and a decrease of 0.7 percentage points in poverty rates. [Source: ev-2] [Source: ev-1] Conversely, lower-income tracts that did not gentrify experienced slight population losses (-2.4% on average), a 5.0 percentage point drop in white residents (indicating increased minority concentration), and a sharp rise in poverty rates by 6.7 percentage points. [Source: ev-2] [Source: ev-1]\n\nBroader demographic trends show that since 1980, nearly 80% of the country's under-45 population growth was concentrated in metro areas over 1 million residents, with urban counties gaining prime-age workers (ages 25–54) while rural counties lost this demographic. [Source: ev-1] Displacement patterns vary by race; residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, whereas residents from other gentrifying neighborhoods often move to wealthier areas, indicating that minority communities face more challenges during these transitions. [Source: ev-1]",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://v1-demo.example/source-report",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "custody": "public-web"
+    }
+  ]
+}

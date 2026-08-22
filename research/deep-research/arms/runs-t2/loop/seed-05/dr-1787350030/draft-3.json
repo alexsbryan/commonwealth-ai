@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787350030",
+  "charter_hash": "e49a6f17e13e8fe9",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The EU's AI Act entered into force in phases between 2024 and 2027 because this deliberate schedule allows obligations to land as institutional capacity and technology mature [Source: ev-1]. Additionally, the phased timeline serves as a compliance roadmap that is exported globally through the \"Brussels effect\" [Source: ev-1].\n\nThe different deadlines require the following specific actions based on risk tiers and model categories:\n*   **Prohibited practices:** Practices classified as \"unacceptable risk,\" such as social scoring and certain manipulative or exploitation-of-vulnerability uses, are banned outright starting from February 2, 2025 (2025-02-02) [Source: ev-1]. Violations of these prohibited practices carry fines reaching €35 million or 7% of global annual turnover, whichever is higher [Source: ev-1]. This includes social scoring and manipulative uses of vulnerabilities [Source: ev-1].\n*   **General-purpose AI (GPAI):** Model obligations apply from August , . [Source: ev-1] A Code of Practice was drafted in - to guide compliance [Source: ev-1]. Most other breaches carry fines up to €15 million or 3% of global annual turnover [Source: ev-1].\n*   **High-risk systems:** Obligations begin applying on August , .8, with a specific subset applying later on August , .7 [Source: ev-1].\n\nThe Act itself entered into force on August , .4 after being published on July , .2, and is implemented under the leadership of the European AI Office established in Brussels [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web"
+    }
+  ]
+}

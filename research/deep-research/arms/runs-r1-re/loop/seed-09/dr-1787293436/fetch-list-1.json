@@ -1,0 +1,139 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787293436",
+  "charter_hash": "933fd76feced166e",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did Anthropic release Claude 4 as two models in May 2025, and what did the launch signal about the agentic-coding market?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Anthropic Claude 4 release date and model names May 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Number of distinct models in the Anthropic Claude 4 family released in May 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Pricing per million input tokens for Anthropic Claude Opus 4 vs Sonnet 4",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Context window size comparison between Anthropic Claude Opus 4 and Sonnet 4",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Benchmark scores on SWE-bench Verified for Anthropic Claude Opus 3.7 Sonnet versus Anthropic Claude Sonnet 4",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Market share percentage of AI coding assistants among developers using agentic tools Q1 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Growth rate of enterprise adoption for autonomous software engineering agents from January to May 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 9.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787278514",
+  "charter_hash": "b8b030847faecc6b",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Number of Windows devices affected by the CrowdStrike Falcon sensor update globally in July 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Percentage of global commercial airline flights canceled or delayed due to IT outages on July 19, 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Estimated total economic cost of the global IT outage caused by the CrowdStrike incident in USD for Q3 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Count of major US hospitals that reported patient care disruptions or system failures between July 18 and July 25, 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Median duration of downtime experienced by Microsoft Azure customers during the CrowdStrike outage window from July 19 to July 21, 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Number of countries where government services were impacted by the CrowdStrike software failure in July 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q7",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 11.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

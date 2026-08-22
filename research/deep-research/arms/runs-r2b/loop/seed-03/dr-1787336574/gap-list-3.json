@@ -1,0 +1,188 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787336574",
+  "charter_hash": "6983ecf0c4d70cd2",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the five reaction-control system (RCS) thruster anomalies identified during docking could not be guaranteed safe for the deorbit burn, as these thrusters could not be ground-tested in their flight condition [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This decision meant that astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned, returning on a Crew-9 Dragon roughly 9.5 months after launch instead of the planned ~8 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9, 9.5, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "Additionally, under the fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1.5, 4.2, 2.6"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "This decision had several significant implications for the program and the astronauts involved:\n*   **Extended Mission Duration:** Astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "No, the text says September 6, and landed at White Sands on September 7 (implied year context is late 2024 based on launch date) without crew [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 6, 7"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*Note: The evidence states \"undocked 2024-09-06\"*. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "09",
+          "06"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "*   **Financial and Operational Impact:** Under a fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1.5, 4.2, 2.6"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "This decision had several significant implications for the program and the astronauts involved:\n*   **Extended Mission Duration:** Astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned. [Source: ev-1]",
+      "actionable_query": "decision several significant implications program astronauts involved Extended Mission Duration Butch Wilmore Suni Williams remained aboard International Space Station far longer planned",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "No, the text says September 6, and landed at White Sands on September 7 (implied year context is late 2024 based on launch date) without crew [Source: ev-1].",
+      "actionable_query": "No, the text says September and landed at White Sands on September (implied year context is late based on launch date) without crew . (1, mean)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "*Note: The evidence states \"undocked 2024-09-06\"*. [Source: ev-1]",
+      "actionable_query": "Note evidence states undocked",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "*   **Financial and Operational Impact:** Under a fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1].",
+      "actionable_query": "* **Financial and Operational Impact:** Under a fixed-price contract from NASA’s Commercial Crew program, Boeing had already incurred cumula",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the five reaction-control system (RCS) thruster anomalies identified during docking could not be guaranteed safe for the deorbit burn, as these thrusters could not be ground-tested in their flight condition [Source: ev-1].",
+      "actionable_query": "NASA ordered Boeing's Starliner to return uncrewed because the reaction-control system (RCS) thruster anomalies identified during docking co (1, mean)",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "This decision meant that astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned, returning on a Crew-9 Dragon roughly 9.5 months after launch instead of the planned ~8 days [Source: ev-1].",
+      "actionable_query": "This decision meant that astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned, (1, mean)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

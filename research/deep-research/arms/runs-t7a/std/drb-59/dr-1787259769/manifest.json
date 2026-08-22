@@ -1,0 +1,104 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787259769",
+  "charter_hash": "1911271c489f36f3",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 3,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 7,
+      "fetched": 2,
+      "search_calls": 5
+    },
+    {
+      "round": 3,
+      "gaps_before": 7,
+      "gaps_after": 7,
+      "fetched": 5,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bird_migration",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787259769"
+      },
+      {
+        "url": "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787259769"
+      },
+      {
+        "url": "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787259769"
+      },
+      {
+        "url": "https://avesbiology.com/nav_orient.html",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787259769"
+      },
+      {
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787259769"
+      }
+    ],
+    "failed": [
+      {
+        "url": "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+        "error": "fetch https://www.sciencedirect.com/science/article/pii/S1574954125002274: Execution error: HTTP 403 Forbidden for https://www.sciencedirect.com/science/article/pii/S1574954125002274"
+      },
+      {
+        "url": "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+        "error": "fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: Execution error: fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+      }
+    ]
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 7,
+      "web-search:web": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 5,
+      "web-search:web": 0
+    }
+  },
+  "not_covered": [
+    "Based on the provided evidence, birds achieve precise location and direction navigation during migration by utilizing a combination of innate biological mechanisms and environmental cues.[Source: ev-2]",
+    "They are equipped with internal clocks that allow them to interpret these changing patterns throughout the day and seasons to determine their position relative to hemispheres [Source: ev-3].",
+    "This sense allows them to identify north-south directions by sensing differences in the strength of the magnetic field, which is strongest at the poles and weaker toward the equator [Source: ev-3].",
+    "A specific region of the brain capable of detecting magnetism has been identified in recent studies [Source: ev-3].",
+    "They inherit genetically encoded directions from their parents; if parents have different directional instincts, offspring may exhibit intermediate migration paths [Source: ev-2].",
+    "While some species like swans learn routes from parents during a first migration, many others navigate independently using these innate cues [Source: ev-3].",
+    "*   **Day Length:** The timing of migration itself is primarily controlled by changes in day length, which acts as a cue for when to initiate movement between breeding and wintering grounds [Source: ev-1].",
+    "Based on the provided evidence, birds achieve precise location and direction navigation during migration by utilizing a combination of innate biological mechanisms and environmental cues. [Source: ev-2]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": {
+    "run-id": "dr-1787259769",
+    "granted-at-unix": 1787259769,
+    "release-floor": "personal"
+  },
+  "lock": {
+    "id": "dr-1787259769",
+    "acquired_at_unix": 1787259769,
+    "released_at_unix": 1787260134
+  }
+}

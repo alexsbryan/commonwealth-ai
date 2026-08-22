@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787293351",
+  "charter_hash": "c03978e200bf7655",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The specific legal standard and market share threshold used by the US District Court to define the relevant antitrust market for general web search services",
+      "The percentage of global or US general web search queries handled by Google in 2023 as cited in the court's findings",
+      "The number of exclusive default distribution agreements signed between Google and major browser vendors like Apple, Samsung, and Mozilla prior to 2019",
+      "The annual payment amount in dollars made by Google to Apple Inc. for maintaining its position as the default search engine on Safari devices from 2015 to 2024",
+      "The count of distinct remedies ordered by Judge Amit Mehta regarding divestiture of Chrome browser versus ad network assets",
+      "The specific deadline date set by the court for Google to comply with structural separation requirements if any were mandated"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787252198",
+  "charter_hash": "c6a95ea52d2e3f16",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did OpenAI release o3 and o4-mini in April 2025, and what did the launch signal about the direction of frontier reasoning models?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Official OpenAI blog post or press release date for the launch of o3 and o4-mini",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "List of technical specifications (parameter count, context window) disclosed by OpenAI for o3 and o4-mini in April 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Comparison table of benchmark scores (e.g., AIME, GPQA Diamond, SWE-bench Verified) between o1/o3-pro and o3/o4-mini published by OpenAI",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Number of API requests processed per day on OpenAI's platform immediately following the April 2025 launch compared to pre-launch baseline",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Price per million input tokens for o3 versus o1-preview as listed on OpenAI pricing page in May 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Percentage change in daily active users or enterprise adoption rate for reasoning models reported by third-party analytics firms like SemiAnalysis or Epoch AI post-April 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "Count of competing frontier model releases from Anthropic (Claude), Google (Gemini), and Meta (Llama) between January 2025 and June 2025 with specific focus on reasoning capabilities",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "Median latency reduction percentage advertised by OpenAI for o4-mini relative to o3 in official documentation",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q10",
+      "text": "Share of total inference compute allocated to \"reasoning\" vs. standard generation tasks at major cloud providers as estimated by industry reports Q1-Q2 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q6",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q8",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 11.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

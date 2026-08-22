@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787252817",
+  "charter_hash": "f21e0ab8656a46d6",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of US federal court rulings declaring TikTok's ban unconstitutional in 2024",
+      "Percentage share of total US social media users aged 13-54 using TikTok as reported by Pew Research Center in 2023",
+      "Count of days until the original statutory deadline for TikTok divestiture under the Protecting Americans from Foreign Adversary Controlled Applications Act (PAFACA) passed on April 5, 2025",
+      "Name and date of the executive order signed by President Trump suspending enforcement of PAFACA in January 2025",
+      "Share of TikTok's global user base located within China compared to international markets according to company financial disclosures or third-party estimates in 2024",
+      "Number of state attorneys general who filed lawsuits challenging the constitutionality of the TikTok ban between June 2024 and December 2024",
+      "Percentage change in daily active users for TikTok in the United States following the initial court injunctions in late 2023 through early 2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2025"
+    ]
+  }
+}

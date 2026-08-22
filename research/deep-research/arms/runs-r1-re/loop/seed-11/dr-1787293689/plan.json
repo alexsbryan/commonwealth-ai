@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787293689",
+  "charter_hash": "ae902c441ad6eebb",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's market capitalization on July 30, 2025",
+      "Global data center capex forecast for 2025 by major hyperscalers (Microsoft, Amazon, Google, Meta)",
+      "Year-over-year growth rate of Nvidia's Data Center segment revenue in Q1 FY2026",
+      "Share of global AI accelerator market held by Nvidia in 2024 and projected share in 2025",
+      "Total addressable market size estimate for generative AI infrastructure spending through 2030",
+      "Quarterly earnings call guidance from Microsoft regarding Azure AI infrastructure investment increase percentage"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

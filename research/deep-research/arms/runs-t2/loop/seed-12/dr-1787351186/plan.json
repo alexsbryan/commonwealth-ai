@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787351186",
+  "charter_hash": "1801528f54121ee6",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of Windows 11 PCs shipped with Recall enabled by default in early 2024",
+      "Percentage change in Microsoft stock price following the initial public backlash against Recall in May 2024",
+      "Count of security researchers who published detailed technical analyses or proof-of-concept exploits for Recall vulnerabilities between April and June 2024",
+      "Share of users who opted out of or disabled Recall within one month of its general availability rollout",
+      "Number of privacy-related lawsuits filed against Microsoft specifically citing the Recall feature as a cause of action in 2024",
+      "Median time taken to retrieve sensitive personal data from local Recall databases according to independent security audits conducted in mid-2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}
