@@ -507,23 +507,14 @@ mod tests {
         }
     }
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn rejects_non_http_url() {
         let tool = ProbeUrlTool::new();
         let err = tool
-            .execute(&json!({"url": "file:///etc/passwd"}), &ctx())
+            .execute(
+                &json!({"url": "file:///etc/passwd"}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap_err();
         assert!(format!("{err}").contains("http(s)"));
@@ -560,7 +551,7 @@ mod tests {
                 &json!({
                     "url": "https://example.com/{api_token}",
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();

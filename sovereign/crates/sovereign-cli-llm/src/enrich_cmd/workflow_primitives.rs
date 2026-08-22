@@ -625,18 +625,6 @@ mod tests {
     use super::*;
     use sovereign_core::traits::Tool;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// `pipeline_compose` routes a typed input to the bespoke compose, no daemon:
     /// a literary_atlas seed prompt from a constructed chapter yields a non-empty
     /// system + user.
@@ -652,7 +640,7 @@ mod tests {
         let out = PipelineComposeTool
             .declared().execute(
                 &serde_json::json!({ "pipeline": "literary_atlas", "phase": "seed", "input": chapter.clone() }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -673,7 +661,7 @@ mod tests {
                     "phase": "questions",
                     "input": { "chapter": chapter, "exemplars": [] }
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -687,7 +675,7 @@ mod tests {
             .declared()
             .execute(
                 &serde_json::json!({ "pipeline": "no-such", "phase": "seed", "input": {} }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());
@@ -707,7 +695,7 @@ mod tests {
                     "phase": "configure",
                     "response": "{\"configurations\": []}"
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -717,14 +705,14 @@ mod tests {
         assert!(PipelineParseTool
             .declared().execute(
                 &serde_json::json!({ "pipeline": "no-such", "phase": "configure", "response": "{}" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());
         assert!(PipelineParseTool
             .declared().execute(
                 &serde_json::json!({ "pipeline": "literary_atlas", "phase": "bogus", "response": "{}" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());
@@ -736,14 +724,14 @@ mod tests {
     async fn atlas_chapters_validates_corpus() {
         assert!(AtlasChaptersTool
             .declared()
-            .execute(&serde_json::json!({}), &ctx())
+            .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
         assert!(AtlasChaptersTool
             .declared()
             .execute(
                 &serde_json::json!({ "corpus": "definitely-not-real-zzz" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());
@@ -756,7 +744,7 @@ mod tests {
     async fn atlas_seed_missing_corpus_errors_absent_seed_is_null() {
         assert!(AtlasSeedTool
             .declared()
-            .execute(&serde_json::json!({}), &ctx())
+            .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
         // A corpus with no seed cache → null (the canonical "no seed" signal).
@@ -764,7 +752,7 @@ mod tests {
             .declared()
             .execute(
                 &serde_json::json!({ "corpus": "definitely-not-real-zzz" }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -781,7 +769,7 @@ mod tests {
             .declared()
             .execute(
                 &serde_json::json!({ "phase": "questions", "query": "x" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err()); // missing corpus
@@ -789,14 +777,14 @@ mod tests {
             .declared()
             .execute(
                 &serde_json::json!({ "corpus": "x", "phase": "bogus", "query": "y" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err()); // bad phase
         assert!(ExemplarSelectTool
             .declared().execute(
                 &serde_json::json!({ "corpus": "definitely-not-real-zzz", "phase": "questions", "query": "y" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err()); // unknown corpus

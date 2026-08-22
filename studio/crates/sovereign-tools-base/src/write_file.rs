@@ -96,18 +96,6 @@ impl Tool for WriteFileTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// Definition of done: writes a model's text output verbatim (not JSON-quoted),
     /// creates missing parent dirs, overwrites idempotently, and fails loud on a
     /// missing param. CI-safe — temp dir, no daemon.
@@ -125,7 +113,10 @@ mod tests {
             "content": serde_json::Value::String(summary.to_string()),
         });
 
-        WriteFileTool.execute(&params, &ctx()).await.unwrap();
+        WriteFileTool
+            .execute(&params, &ToolContext::default())
+            .await
+            .unwrap();
 
         // The text is written verbatim — no surrounding quotes, no escaping — and
         // the missing parent dir was created.
@@ -134,13 +125,16 @@ mod tests {
 
         // Missing required params are loud errors.
         assert!(WriteFileTool
-            .execute(&serde_json::json!({ "content": "x" }), &ctx())
+            .execute(
+                &serde_json::json!({ "content": "x" }),
+                &ToolContext::default()
+            )
             .await
             .is_err());
         assert!(WriteFileTool
             .execute(
                 &serde_json::json!({ "path": out.to_string_lossy() }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());

@@ -22,12 +22,11 @@
 
 use std::collections::HashSet;
 
-
 use corpus_engine::CorpusIndex;
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct CorpusSearchTool;
 
@@ -45,11 +44,7 @@ impl CorpusSearchTool {
     }
 
     /// The executable half of `corpus_search`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let query_text = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
         let top_k = parse_top_k(params).unwrap_or(10);
@@ -218,20 +213,8 @@ fn default_index_dir() -> std::path::PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sovereign_core::traits::Tool;
     use crate::corpus_store::CorpusStoreTool;
-
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
+    use sovereign_core::traits::Tool;
 
     /// Definition of done: store a corpus, then `corpus_search` it by one of the
     /// stored vectors and get that chunk back, ranked first, with a REAL score
@@ -266,7 +249,7 @@ mod tests {
         });
         CorpusStoreTool
             .declared()
-            .execute(&store_params, &ctx())
+            .execute(&store_params, &ToolContext::default())
             .await
             .unwrap();
 
@@ -278,7 +261,7 @@ mod tests {
             "index_dir": index_dir.to_string_lossy()
         });
         let out = CorpusSearchTool
-            .run(&search_params, &ctx())
+            .run(&search_params, &ToolContext::default())
             .await
             .unwrap();
         let arr = match out {
@@ -320,7 +303,10 @@ mod tests {
             "embedding": [0.1, 0.2, 0.3],
             "index_dir": dir.path().join("indexes").to_string_lossy()
         });
-        let err = CorpusSearchTool.run(&params, &ctx()).await.unwrap_err();
+        let err = CorpusSearchTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("not found"), "{msg}");
         assert!(
@@ -361,7 +347,11 @@ mod tests {
                 "index_dir": index_dir.to_string_lossy(),
                 "build_indexes": false
             });
-            CorpusStoreTool.declared().execute(&p, &ctx()).await.unwrap();
+            CorpusStoreTool
+                .declared()
+                .execute(&p, &ToolContext::default())
+                .await
+                .unwrap();
         }
 
         // single=true → ONE object (not an array), and it's alpha (its own vector).
@@ -373,7 +363,7 @@ mod tests {
                     "single": true,
                     "index_dir": index_dir.to_string_lossy()
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -397,7 +387,7 @@ mod tests {
                     "top_k": "5",
                     "index_dir": index_dir.to_string_lossy()
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();

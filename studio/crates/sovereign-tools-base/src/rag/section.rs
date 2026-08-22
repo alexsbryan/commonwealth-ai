@@ -188,18 +188,6 @@ fn emit_section(
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     fn as_array(out: StepOutput) -> Vec<serde_json::Value> {
         match out {
             StepOutput::Json(serde_json::Value::Array(a)) => a,
@@ -217,7 +205,10 @@ mod tests {
                     Chapter 2\n\nThe Assistant Commissioner left Scotland Yard at dusk.";
         let arr = as_array(
             SectionTool
-                .execute(&serde_json::json!({ "text": book }), &ctx())
+                .execute(
+                    &serde_json::json!({ "text": book }),
+                    &ToolContext::default(),
+                )
                 .await
                 .unwrap(),
         );
@@ -238,7 +229,7 @@ mod tests {
             SectionTool
                 .execute(
                     &serde_json::json!({ "text": md, "boundary": r"(?m)^#\s+.*$" }),
-                    &ctx(),
+                    &ToolContext::default(),
                 )
                 .await
                 .unwrap(),
@@ -255,7 +246,10 @@ mod tests {
         let note = "Just a flat note with no headings at all. It has two sentences.";
         let arr = as_array(
             SectionTool
-                .execute(&serde_json::json!({ "text": note }), &ctx())
+                .execute(
+                    &serde_json::json!({ "text": note }),
+                    &ToolContext::default(),
+                )
                 .await
                 .unwrap(),
         );
@@ -274,7 +268,7 @@ mod tests {
             SectionTool
                 .execute(
                     &serde_json::json!({ "text": book, "paragraph_chunks": true }),
-                    &ctx(),
+                    &ToolContext::default(),
                 )
                 .await
                 .unwrap(),
@@ -299,12 +293,15 @@ mod tests {
     #[tokio::test]
     async fn bad_boundary_regex_is_a_loud_error() {
         assert!(SectionTool
-            .execute(&serde_json::json!({ "text": "x", "boundary": "(" }), &ctx())
+            .execute(
+                &serde_json::json!({ "text": "x", "boundary": "(" }),
+                &ToolContext::default()
+            )
             .await
             .is_err());
         // Neither `path` nor `text` is also a loud error.
         assert!(SectionTool
-            .execute(&serde_json::json!({}), &ctx())
+            .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
     }

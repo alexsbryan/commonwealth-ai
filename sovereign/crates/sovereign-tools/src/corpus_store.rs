@@ -19,12 +19,11 @@
 //! replaces its chunks rather than doubling them — the right semantic for the
 //! per-item ingest model. Effect is `Write` (a real side effect, never cached).
 
-
 use corpus_engine::{CorpusIndex, InsertChunk};
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct CorpusStoreTool;
 
@@ -42,11 +41,7 @@ impl CorpusStoreTool {
     }
 
     /// The executable half of `corpus_store`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let title = params
             .get("title")
@@ -302,18 +297,6 @@ fn default_index_dir() -> std::path::PathBuf {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// Definition of done: store → search returns the chunk; re-store is
     /// idempotent (overwrites, doesn't duplicate). CI-safe — temp index dir,
     /// deterministic embeddings, FTS flat-scan search (no daemon/weights).
@@ -346,7 +329,10 @@ mod tests {
             "build_indexes": false
         });
 
-        let out = CorpusStoreTool.run(&params, &ctx()).await.unwrap();
+        let out = CorpusStoreTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("stored 3"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -373,7 +359,10 @@ mod tests {
 
         // Idempotent: re-storing the same document replaces, not duplicates —
         // the row count stays 3, not 6.
-        CorpusStoreTool.run(&params, &ctx()).await.unwrap();
+        CorpusStoreTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap();
         let index2 = CorpusIndex::open(&index_dir.join("conrad")).await.unwrap();
         assert_eq!(
             index2.chunk_count().await.unwrap(),

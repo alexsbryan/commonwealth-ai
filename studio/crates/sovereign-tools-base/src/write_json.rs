@@ -117,18 +117,6 @@ impl Tool for WriteJsonTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// Definition of done: the terminal leaf of `chunk → atoms → write_json`
     /// persists the atoms collection to a path, round-trips the structure,
     /// pretty-prints by default, creates parent dirs, honours `pretty = false`,
@@ -150,7 +138,10 @@ mod tests {
             "json": atoms.to_string(), // a string, as templating delivers it
         });
 
-        let res = WriteJsonTool.execute(&params, &ctx()).await.unwrap();
+        let res = WriteJsonTool
+            .execute(&params, &ToolContext::default())
+            .await
+            .unwrap();
         match res {
             StepOutput::Text(t) => assert!(t.contains("secret-agent.atoms.json"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -176,7 +167,7 @@ mod tests {
                     "json": atoms.to_string(),
                     "pretty": false
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -192,7 +183,7 @@ mod tests {
         WriteJsonTool
             .execute(
                 &serde_json::json!({ "path": inline.to_string_lossy(), "json": { "ok": true } }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -207,20 +198,23 @@ mod tests {
         let err = WriteJsonTool
             .execute(
                 &serde_json::json!({ "path": flat.to_string_lossy(), "json": "not json {{{" }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await;
         assert!(err.is_err(), "malformed JSON must fail loudly");
 
         // Missing required params are loud errors too.
         assert!(WriteJsonTool
-            .execute(&serde_json::json!({ "json": "[]" }), &ctx())
+            .execute(
+                &serde_json::json!({ "json": "[]" }),
+                &ToolContext::default()
+            )
             .await
             .is_err());
         assert!(WriteJsonTool
             .execute(
                 &serde_json::json!({ "path": out.to_string_lossy() }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());

@@ -118,18 +118,6 @@ mod tests {
 
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn lists_bundled_recipes() {
         // Use a fresh HOME so no local registry leaks in. HOME is
@@ -139,7 +127,7 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", home.path());
         let out = RegistryBrowseTool
-            .execute(&serde_json::json!({}), &ctx())
+            .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .unwrap();
         match out {
@@ -162,7 +150,10 @@ mod tests {
         let home = tempfile::tempdir().unwrap();
         std::env::set_var("HOME", home.path());
         let out = RegistryBrowseTool
-            .execute(&serde_json::json!({"filter": "wikipedia"}), &ctx())
+            .execute(
+                &serde_json::json!({"filter": "wikipedia"}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         match out {

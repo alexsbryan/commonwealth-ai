@@ -15,11 +15,10 @@
 //! per-item error (panic-safe — a bad PDF fails its own item, not the run). No
 //! size cap: the output feeds the chunker, not a prompt.
 
-
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ExtractTool;
 
@@ -37,11 +36,7 @@ impl ExtractTool {
     }
 
     /// The executable half of `extract`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let path = params
             .get("path")
             .and_then(|v| v.as_str())
@@ -56,18 +51,6 @@ impl ExtractTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// txt + md extract to text; a missing path and an unsupported extension are
     /// loud errors (not panics).
     #[tokio::test]
@@ -81,7 +64,7 @@ mod tests {
         let out = ExtractTool
             .run(
                 &serde_json::json!({ "path": txt.to_string_lossy() }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -92,14 +75,17 @@ mod tests {
 
         // Markdown extracts (the body text comes back).
         let md_out = ExtractTool
-            .run(&serde_json::json!({ "path": md.to_string_lossy() }), &ctx())
+            .run(
+                &serde_json::json!({ "path": md.to_string_lossy() }),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         assert!(matches!(md_out, StepOutput::Text(t) if t.contains("body text")));
 
         // Missing path → loud error.
         assert!(ExtractTool
-            .run(&serde_json::json!({}), &ctx())
+            .run(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
         // Unsupported extension → loud error (not a panic).
@@ -108,7 +94,7 @@ mod tests {
         assert!(ExtractTool
             .run(
                 &serde_json::json!({ "path": bin.to_string_lossy() }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());

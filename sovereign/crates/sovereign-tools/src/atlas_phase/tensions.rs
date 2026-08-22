@@ -12,7 +12,6 @@
 //! deterministic leaf.) The LLM classification pass that promotes candidates to
 //! real `Tension` edges is a separate `model:` step.
 
-
 use corpus_engine::enrichment::atlas::{
     analysis::tensions::{
         drop_same_named_speaker_pairs, select_candidates, CandidateSelectionInput,
@@ -24,8 +23,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
 use crate::atlas_phase::atlas_dir_for;
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 pub struct AtlasTensionsTool;
 
@@ -43,11 +42,7 @@ impl AtlasTensionsTool {
     }
 
     /// The executable half of `atlas_tensions`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = params
             .get("corpus")
             .and_then(|v| v.as_str())
@@ -105,18 +100,6 @@ impl AtlasTensionsTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// The leaf wraps the real graph-strategy candidate selector: read atoms →
     /// `select_candidates` + de-noise → write `tension_candidates.json`, on the
     /// canonical atlas paths. Hermetic: a fresh atlas with no atoms yields zero
@@ -137,7 +120,10 @@ mod tests {
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasTensionsTool.run(&params, &ctx()).await.unwrap();
+        let out = AtlasTensionsTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("0 candidate"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -154,6 +140,9 @@ mod tests {
         // A missing atlas is a loud error.
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasTensionsTool.run(&bad, &ctx()).await.is_err());
+        assert!(AtlasTensionsTool
+            .run(&bad, &ToolContext::default())
+            .await
+            .is_err());
     }
 }

@@ -139,18 +139,6 @@ mod tests {
     use super::*;
     use sovereign_core::traits::Tool;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[test]
     fn solve_descriptor_names_it_the_standard_engine() {
         let tool = SolveTool(Arc::new(SolveJobs::new(1)));
@@ -172,7 +160,7 @@ mod tests {
         let tool = SolveStatusTool(Arc::new(SolveJobs::new(1)));
         let out = tool
             .declared()
-            .execute(&json!({"job_id": "nope"}), &ctx())
+            .execute(&json!({"job_id": "nope"}), &ToolContext::default())
             .await
             .unwrap();
         match out {

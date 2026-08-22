@@ -541,18 +541,6 @@ impl Tool for WorkflowTestTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn write_scopes_under_workflows_dir_then_validate_passes() {
         let home = tempfile::tempdir().unwrap();
@@ -562,7 +550,10 @@ mod tests {
         let toml = "[workflow]\nname = \"t\"\n[source]\ntype = \"inline\"\nitems = [\"x\"]\n[[step]]\nid = \"a\"\nuses = \"transform:json\"\n";
         let write = WorkflowWriteTool::with_workflows_dir(root.clone());
         let out = write
-            .execute(&serde_json::json!({"path": "t", "content": toml}), &ctx())
+            .execute(
+                &serde_json::json!({"path": "t", "content": toml}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         match out {
@@ -577,7 +568,10 @@ mod tests {
         // A malformed workflow fails validation loudly.
         let validate = WorkflowValidateTool::new();
         let bad = validate
-            .execute(&serde_json::json!({"content": "not a workflow"}), &ctx())
+            .execute(
+                &serde_json::json!({"content": "not a workflow"}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         if let StepOutput::Json(v) = bad {
@@ -596,7 +590,7 @@ mod tests {
         let err = write
             .execute(
                 &serde_json::json!({"path": "/tmp/evil.toml", "content": ""}),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();
@@ -626,7 +620,7 @@ mod tests {
                         ]
                     }
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -677,7 +671,7 @@ mod tests {
                         { "id": "a", "uses": "transform:json" }
                     ]
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -727,7 +721,7 @@ mod tests {
                         ]
                     }
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -767,7 +761,7 @@ mod tests {
                     "path": "/tmp/evil.toml",
                     "workflow": { "workflow": { "name": "x" }, "step": [{ "id": "a", "uses": "transform:json" }] }
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();

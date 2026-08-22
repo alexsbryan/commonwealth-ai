@@ -605,18 +605,6 @@ mod tests {
     use super::*;
     use sovereign_core::traits::Tool;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// The `atlas_cluster` leaf validates its `corpus` before any IO: missing or
     /// unknown corpus fails loudly. (The happy path needs the daemon + a resolved
     /// Phase-1 cache — exercised by the integration run, not a unit test.)
@@ -624,14 +612,14 @@ mod tests {
     async fn atlas_cluster_leaf_validates_corpus() {
         assert!(AtlasClusterTool
             .declared()
-            .execute(&serde_json::json!({}), &ctx())
+            .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
         assert!(AtlasClusterTool
             .declared()
             .execute(
                 &serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());

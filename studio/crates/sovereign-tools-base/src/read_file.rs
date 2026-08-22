@@ -80,18 +80,6 @@ impl Tool for ReadFileTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// Returns a file's text as a Text artifact and fails loud on a missing file.
     #[tokio::test]
     async fn read_file_surfaces_text() {
@@ -100,7 +88,10 @@ mod tests {
         std::fs::write(&p, "# Standup\nShipped the substrate.").unwrap();
 
         let out = ReadFileTool
-            .execute(&serde_json::json!({ "path": p.to_string_lossy() }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": p.to_string_lossy() }),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         match out {
@@ -110,7 +101,10 @@ mod tests {
 
         // A missing file is a loud error.
         assert!(ReadFileTool
-            .execute(&serde_json::json!({ "path": "/no/such/file.md" }), &ctx())
+            .execute(
+                &serde_json::json!({ "path": "/no/such/file.md" }),
+                &ToolContext::default()
+            )
             .await
             .is_err());
     }

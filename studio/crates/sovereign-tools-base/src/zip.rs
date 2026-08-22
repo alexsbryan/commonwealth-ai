@@ -88,18 +88,6 @@ fn collection(params: &serde_json::Value, key: &str) -> Result<Vec<serde_json::V
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn zip_pairs_collections_by_position() {
         // Arrays (value-spliced form) + custom keys.
@@ -111,7 +99,7 @@ mod tests {
                     "a_key": "chapter",
                     "b_key": "exemplars"
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -129,7 +117,7 @@ mod tests {
         let out2 = ZipTool
             .execute(
                 &serde_json::json!({ "a": "[1,2,3]", "b": "[\"x\",\"y\"]" }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -143,7 +131,10 @@ mod tests {
 
         // A non-collection param is a loud error.
         assert!(ZipTool
-            .execute(&serde_json::json!({ "a": 5, "b": [] }), &ctx())
+            .execute(
+                &serde_json::json!({ "a": 5, "b": [] }),
+                &ToolContext::default()
+            )
             .await
             .is_err());
     }
