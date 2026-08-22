@@ -1367,7 +1367,7 @@ async fn run_native_role_aware(
                 // "your edit broke X; try a different approach."
                 // Run only on Smoke (Build doesn't enumerate tests).
                 if matches!(kind, PrimitiveKind::Smoke) {
-                    let parsed = crate::witness::test_result_parser::parse_pytest_text(tail);
+                    let parsed = commonwealth_tdd::shared::parser::parse_pytest_text(tail);
                     let new_failed: HashSet<String> = parsed.failed_names.iter().cloned().collect();
                     let regressed: Vec<String> = match &last_failed_set {
                         Some(prev) => new_failed.difference(prev).cloned().collect(),

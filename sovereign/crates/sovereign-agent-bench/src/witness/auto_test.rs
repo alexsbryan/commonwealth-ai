@@ -19,7 +19,9 @@ use thiserror::Error;
 use tracing::{info, warn};
 
 use crate::problem::Problem;
-use crate::witness::test_result_parser::{parse_test_output, TestParseResult};
+use commonwealth_tdd::TestParseResult;
+
+use crate::witness::test_result_parser::parse_test_output;
 
 #[derive(Debug, Clone)]
 pub struct AutoWitnessOutcome {

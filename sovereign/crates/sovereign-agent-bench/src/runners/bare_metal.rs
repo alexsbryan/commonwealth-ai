@@ -128,7 +128,7 @@ fn shape_summary(action: &EditAction) -> String {
         EditAction::RewriteFunction { name } => format!("rewrite {name}"),
         EditAction::PatchLines { start, end } => format!("patch {start}-{end}"),
         EditAction::InsertBefore { line } => format!("insert@{line}"),
-        EditAction::WriteFile => "write_file".to_string(),
+        EditAction::WriteFile { .. } => "write_file".to_string(),
     }
 }
 
