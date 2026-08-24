@@ -97,6 +97,10 @@ mod project_cmd;
 #[cfg(feature = "workbench")]
 mod redirect_cmd;
 #[cfg(feature = "workbench")]
+mod refactor_cmd;
+#[cfg(feature = "workbench")]
+mod refactor_wire;
+#[cfg(feature = "workbench")]
 mod suggest_seams_cmd;
 #[cfg(feature = "workbench")]
 mod tools_cmd;
@@ -208,6 +212,7 @@ mod in_process_verb_tests {
             "map",
             "redirect",
             "check-spec",
+            "refactor",
         ] {
             assert!(
                 InProcessCodeVerb::parse(sub).is_none(),

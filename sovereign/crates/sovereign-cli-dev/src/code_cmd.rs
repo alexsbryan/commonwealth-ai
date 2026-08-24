@@ -63,6 +63,8 @@ pub async fn run_code(args: &[String]) -> i32 {
         "map" => crate::code_map::cmd_map(&args[1..]).await,
         "facts" => cmd_facts(&args[1..]).await,
         "check-spec" => cmd_check_spec(&args[1..]).await,
+        "refactor" => crate::refactor_cmd::run(&args[1..]).await,
+        "wire-check" => crate::refactor_wire::run(&args[1..]).await,
         other => {
             eprintln!("Unknown code subcommand: {other}");
             sovereign_cli_shared::help::print(&HELP);
@@ -1367,6 +1369,21 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
                 "Architecture posture: god-crate fan-in, coupling carriers, declared↔observed \
                  deltas, layer-map violations, temporal coupling; persists for arch_posture \
                  (--no-git skips history; --root <path> overrides the workspace root)",
+            ),
+            (
+                "refactor <plan|gate|status|label|next|close>",
+                "The refactor factory. `plan <spec.toml>` seeds, checks, classifies error \
+                 classes; `gate` adjudicates all five work-table kinds and prints the \
+                 ranked schedule. The ledger half: `status` the burn-down, `label` one \
+                 judgement, `next` cuts a locked order, `close` re-runs the detector and \
+                 reports what it can no longer see — nothing marks work done by hand",
+            ),
+            (
+                "wire-check <spec.toml>",
+                "Refactor-factory stage 6: serialise before/after fixtures for the spec's \
+                 target across its declared [safety] surfaces and diff the bytes. Exit 0 \
+                 only when every surface is PROVEN; an undeclared or unjudgeable surface \
+                 is never a pass",
             ),
             (
                 "converge <census|noun|status>",

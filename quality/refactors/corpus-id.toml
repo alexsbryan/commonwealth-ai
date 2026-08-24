@@ -1,0 +1,49 @@
+# First subject of the refactor factory (quality/REFACTOR_FACTORY.md).
+#
+# Seat ruling 2026-08-23 (rf-1 order): corpus_id goes first not because it
+# matters most but because it is the only high-reach atom whose representation
+# AND wire form both already match — `#[serde(transparent)]` at
+# kernel-types/src/ids.rs, with the wire fixture named under [safety] passing
+# in the same file. 369 String declarations, 0 CorpusId declarations at the
+# time this spec was written (scripts/factory-scale.py at 63c72af8).
+#
+# A refactor is DATA (ARCH §6). This file is consumed by
+# `svrn code refactor plan` — read-only stages 1-2 — and later by
+# prepare/apply (rf-3, rf-4).
+
+id     = "corpus-id"
+kind   = "newtype"
+target = "kernel_types::CorpusId"
+
+[discover]
+# The edit that makes rustc enumerate: retype every `corpus_id: String` field
+# declaration to the target and read the diagnostics. The compiler is the
+# exhaustive site enumerator; SCIP gives the pre-flight estimate only.
+seed = { field = "corpus_id", from = "String" }
+
+[safety]
+# PROVEN before apply, never asserted. `plan` verifies the declaration against
+# the source (the serde attribute on the definition) and runs the fixture.
+wire     = "transparent"
+surfaces = ["json", "sqlite"]
+fixture  = { package = "kernel-types", test = "corpus_id_is_transparent_on_the_wire" }
+
+[prepare]
+# Error-class count is a property of the TARGET TYPE, not the codebase.
+# These impls delete whole classes before any call site is touched (rf-3).
+impls = [
+    "AsRef<str>",
+    "Borrow<str>",
+    "PartialEq<str>",
+    "From<CorpusId> for String",
+    "FromStr",
+]
+
+[rules]
+# (expected <- found) -> edit. Shared across every string newtype: atom 2
+# inherits this table. Rules accumulate; marginal cost per atom falls.
+"&str <- &CorpusId"   = "append .as_str()"
+"String <- CorpusId"  = "append .into_string()"
+"String <- &CorpusId" = "append .as_str().to_string()"
+"CorpusId <- String"  = "wrap CorpusId::new(_)? — fallible, Option (residue when absence is not expressible)"
+"CorpusId <- &str"    = "wrap CorpusId::new(_.to_string())? — fallible, Option"

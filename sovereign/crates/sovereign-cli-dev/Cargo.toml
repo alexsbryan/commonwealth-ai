@@ -100,6 +100,11 @@ arch-layers = { workspace = true, optional = true }
 corpus-engine-archaeology = { workspace = true, optional = true }
 corpus-engine-atos = { workspace = true, optional = true }
 corpus-engine-watchers = { workspace = true, optional = true }
+# `refactor_wire` (the factory's stage-6 encoding gate) serialises fixtures
+# of the kernel's id types through the ONE wire decider, `kernel_types::wire`
+# (§10.6). `wire-fixture` is what turns that module on outside kernel-types'
+# own tests.
+kernel-types = { workspace = true, features = ["wire-fixture"], optional = true }
 
 # ── Third-party ──
 # Everything here except axum/tower-http is already a dependency of
@@ -152,6 +157,7 @@ workbench = [
     "dep:corpus-engine-archaeology",
     "dep:corpus-engine-atos",
     "dep:corpus-engine-watchers",
+    "dep:kernel-types",
     "dep:axum",
     "dep:tower-http",
     # `svrn code index` — the workbench's `code` router serves it, and so does

@@ -357,7 +357,12 @@ pub(crate) async fn run(args: &[String]) -> i32 {
     }
 }
 
-fn resolve_corpus(explicit: Option<String>, indexes_dir: &std::path::Path) -> Result<String, i32> {
+// `pub(crate)` since rf-1: `refactor_cmd::schedule` resolves the corpus the
+// same way rather than growing a fourth copy of this lookup (ARCH §10.6).
+pub(crate) fn resolve_corpus(
+    explicit: Option<String>,
+    indexes_dir: &std::path::Path,
+) -> Result<String, i32> {
     if let Some(c) = explicit {
         return Ok(c);
     }
