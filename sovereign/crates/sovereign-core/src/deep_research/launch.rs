@@ -189,7 +189,11 @@ pub async fn prepare(opts: LaunchOptions) -> Result<Launch, String> {
         // acquisition consts (the charter records them).
         content_coverage_floor: DEFAULT_CONTENT_COVERAGE_FLOOR,
         prose_line_floor: DEFAULT_PROSE_LINE_FLOOR,
-        evidence_window_max_chunks: 20,
+        // Greedy (2026-08-24): the window holds SOURCES, and the
+        // composer retrieves from it rather than reading it whole, so a
+        // bigger window is a bigger pool and not a bigger prompt. 20 was
+        // sized when the loop could only deliver 4-10 sources anyway.
+        evidence_window_max_chunks: 100,
         estate_corpus_ids: opts.estate_corpus_ids,
         web_backend: web_backend.clone(),
         search_source: opts.search_source,

@@ -51,6 +51,10 @@
 //!   admission-summary.json— per task/round parity + phantom counts,
 //!                           before/after admitted sets, threshold
 //!                           moves, gold rows' fate, the k sweep
+//!   label-input.jsonl     — the labeling SURFACE: one line per row
+//!                           carrying the charter question, the round
+//!                           queries and the snippet the CSVs drop;
+//!                           row order matches admission-rows.csv
 //!   admission-labels.csv  — the labeling sheet for the seat (label
 //!                           column EMPTY; 3-class on-topic /
 //!                           adjacent / off)
@@ -276,6 +280,15 @@ fn run(root: &Path, out: &Path, stage: &str) -> Result<(), String> {
     let mut labels_csv = String::from(
         "task,url,title,rank,logged_score,replayed_score,label,round,snippet_source\n",
     );
+    // The labeling SURFACE (acquisition tune, 2026-08-24): the two CSVs
+    // carry the decision columns but drop the three fields a labeler —
+    // human or model — actually judges topicality from (the charter
+    // question, the round's queries, the hit's snippet). Emitting them
+    // here keeps ONE reconstruction (§10.6): the rank interleave of
+    // fetch-list ∪ skip-ledger is pinned by the parity gate above, and a
+    // second implementation in the labeling script would be a second
+    // decider. Row order matches admission-rows.csv line-for-line.
+    let mut label_input = String::new();
     let mut summary = serde_json::json!({});
     let mut parity_failures = 0usize;
     let mut total_phantoms = 0usize;
@@ -304,6 +317,7 @@ fn run(root: &Path, out: &Path, stage: &str) -> Result<(), String> {
             .as_f64()
             .unwrap_or(0.0);
         let run_id = charter["run_id"].as_str().unwrap_or_default().to_string();
+        let question = charter["question"].as_str().unwrap_or_default().to_string();
         fetch_allowance = charter["charter"]["budget"]["web_fetch_pages"]
             .as_u64()
             .unwrap_or(12) as u32;
@@ -466,6 +480,27 @@ fn run(root: &Path, out: &Path, stage: &str) -> Result<(), String> {
                     entry,
                     r.snippet_source,
                 ));
+                label_input.push_str(
+                    &serde_json::to_string(&serde_json::json!({
+                        "task": task,
+                        "round": entry,
+                        "rank": r.rank,
+                        "question": question,
+                        "queries": r.query_texts,
+                        "url": r.url,
+                        "title": r.title,
+                        "snippet": r.snippet,
+                        "snippet_source": r.snippet_source,
+                        "query_source": r.query_source,
+                        "logged_score": r.recorded_score,
+                        "replayed_score": replayed_score,
+                        "recorded_decision": if r.recorded_admitted { "admit" } else { "skip" },
+                        "replayed_decision": after_decision,
+                        "gold": is_gold(&task.to_string(), &r.url),
+                    }))
+                    .unwrap(),
+                );
+                label_input.push('\n');
                 if is_gold(&task.to_string(), &r.url) {
                     gold_fate.push(serde_json::json!({
                         "task": task,
@@ -514,6 +549,8 @@ fn run(root: &Path, out: &Path, stage: &str) -> Result<(), String> {
         .map_err(|e| format!("admission-rows.csv: {e}"))?;
     std::fs::write(out.join("admission-labels.csv"), labels_csv)
         .map_err(|e| format!("admission-labels.csv: {e}"))?;
+    std::fs::write(out.join("label-input.jsonl"), label_input)
+        .map_err(|e| format!("label-input.jsonl: {e}"))?;
     std::fs::write(
         out.join("admission-summary.json"),
         serde_json::to_string_pretty(&full).unwrap(),
@@ -781,10 +818,24 @@ fn run_fetch_stage(materials: &[FetchMaterial], allowance: u32, out: &Path) -> R
                                 )
                             }
                             Recorded::Failure(err) => {
-                                let attempts = match classify_fetch_error(&err) {
-                                    RetryClass::Permanent(_) => 1u32,
-                                    RetryClass::Transient => 3,
-                                };
+                                // ONE page per URL, whatever the retry
+                                // ladder does — mirroring the production
+                                // gate in `fetch::fetch_round` since the
+                                // acquisition tune of 2026-08-24 (red:
+                                // `one_dead_url_does_not_eat_the_rounds_fetch_allowance`).
+                                //
+                                // KNOWN DEBT (§10.6): this harness
+                                // re-implements production's walk and
+                                // spend model instead of calling
+                                // `fetch_round` behind a replay port, so
+                                // the accounting rule lives in two
+                                // places and they can drift silently.
+                                // They agree as of this edit. The fix is
+                                // a `ResearchPort` that answers
+                                // `web_fetch` from the recorded chunk or
+                                // the recorded error; then this whole
+                                // branch is deleted.
+                                let attempts = 1u32;
                                 spent_round += attempts as usize;
                                 attempts_recorded += 1;
                                 dead.insert(r.url.clone());

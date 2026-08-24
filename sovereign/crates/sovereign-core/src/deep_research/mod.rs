@@ -24,6 +24,7 @@ pub mod icd;
 pub mod launch;
 pub mod port;
 pub mod render;
+pub mod search;
 pub mod state;
 pub mod synthesize;
 
@@ -349,6 +350,47 @@ fn config_mismatch(a: &RunConfig, b: &RunConfig) -> Option<&'static str> {
     }
     None
 }
+
+/// How many claim judgements may be in flight at once.
+///
+/// The audit was strictly serial until 2026-08-24, and the measurement
+/// that justified leaving it that way turned out not to hold: the
+/// decision log for run dr-1787535219 records **1,351 inference calls,
+/// 0 sheds and 0 errors** across a 63-minute compose+audit phase, so the
+/// daemon was never contended. `sovereign-server`'s
+/// `max_concurrent_turns` defaults to **4** — four slots, one of them
+/// used.
+///
+/// Set to that ceiling and no higher. Past `max_concurrent_turns` the
+/// REST path sheds `503 + Retry-After`, which would trade latency for
+/// retries; `complete_with_shed_retry` would absorb it, but generating
+/// sheds on purpose is not a speedup. If the daemon's ceiling is raised,
+/// this is the one line that follows it.
+///
+/// Ordering is preserved by construction (`buffered`, not
+/// `buffer_unordered`) — the verdict set and the gap list are built from
+/// the audit sequence, so the output is byte-identical to the serial
+/// loop's and only the wall clock changes.
+///
+/// SET TO 1 ON 2026-08-24, AND THE PREMISE ABOVE IS WHAT WAS WRONG.
+/// "Four slots, one used" describes the REQUEST pipeline, not the GPU
+/// underneath it. Measured over the 1,136 primary-slot calls of the task-69
+/// flight, latency scales with co-residency and throughput does not move:
+///
+///   in flight   median latency   throughput
+///       1            1.7s        0.59 calls/s
+///       2            4.2s        0.48
+///       3            5.8s        0.52
+///       4            7.3s        0.55
+///
+/// Confirmed against a direct probe of one judge-shaped call on an idle
+/// daemon: 1.97s solo, against a 5.8s median at three in flight. A 27B on
+/// one GPU is saturated by a single request; concurrency buys nothing here
+/// and costs three extra KV contexts on the largest slot. Keep the
+/// `buffered` shape — it is what preserves order — and stop paying for
+/// depth that does not exist. If the primary slot ever moves somewhere with
+/// real parallelism, re-measure this table before raising it.
+pub(crate) const AUDIT_CONCURRENCY: usize = 1;
 
 /// drb1-t5: the composed-report deliverable. DEFAULT OFF — a shipped
 /// default-off switch carries its `sovereign/DEFAULTS_LEDGER.md` row and
@@ -1548,39 +1590,52 @@ impl Controller {
         window: &EvidenceWindow,
     ) -> Result<(Vec<ClaimAudit>, GapList), String> {
         let chunks = Self::audit_chunks(window);
-        let mut audits = Vec::new();
+
+        // Dedup FIRST, then judge. The `seen` set is the strict-subset
+        // identity and it must be applied in source order — draft claims
+        // before prior-gap claims — so the deduped list is built here and
+        // the judging below reads it, rather than the two being
+        // interleaved.
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+        let mut to_judge: Vec<String> = Vec::new();
         for claim in split_claims(&draft.text) {
             let key = claim.trim().to_string();
             if seen.insert(key.clone()) {
-                audits.push(
-                    assess_claim(
-                        &self.provider,
-                        &key,
-                        &chunks,
-                        &self.containment,
-                        self.config.posture,
-                        self.tau,
-                    )
-                    .await,
-                );
+                to_judge.push(key);
             }
         }
         for gap_text in &self.prior_gap_texts {
             if seen.insert(gap_text.clone()) {
-                audits.push(
-                    assess_claim(
-                        &self.provider,
-                        gap_text,
-                        &chunks,
-                        &self.containment,
-                        self.config.posture,
-                        self.tau,
-                    )
-                    .await,
-                );
+                to_judge.push(gap_text.clone());
             }
         }
+
+        // Judge with bounded overlap. `buffered` — NOT
+        // `buffer_unordered` — because the audit order is the verdict
+        // set's order and the gap list is built from it: an unordered
+        // join would reshuffle the deliverable. `buffered` keeps the
+        // output sequence identical to the serial loop's while letting
+        // AUDIT_CONCURRENCY judgements be in flight at once, so this is
+        // a pure latency change with byte-identical output.
+        use futures::StreamExt as _;
+        // One span index for the whole pass — the spans belong to the
+        // chunks, not to the claims (see `audit::SpanCache`).
+        let span_cache = audit::SpanCache::default();
+        let audits: Vec<ClaimAudit> =
+            futures::stream::iter(to_judge.into_iter().map(|key| {
+                let provider = &self.provider;
+                let chunks = &chunks;
+                let containment = &self.containment;
+                let posture = self.config.posture;
+                let tau = self.tau;
+                let spans = &span_cache;
+                async move {
+                    assess_claim(provider, &key, chunks, containment, posture, tau, spans).await
+                }
+            }))
+            .buffered(AUDIT_CONCURRENCY)
+            .collect()
+            .await;
         let gap_list = audit::build_gap_list(
             &self.config.run_id,
             &self.charter_hash,
@@ -2002,12 +2057,43 @@ impl Controller {
         // frontier (the plan's queries_preplanned); rounds 2+ are
         // gap-targeted follow-ups.
         let frontier: &[String] = if round == 1 { &self.frontier } else { &[] };
+        // AIQ planner rule 3, ported (acquisition tune 2026-08-24): the
+        // gaps are reformulated into SELF-CONTAINED search queries before
+        // they are minted. Round 1's queries were already model-formed
+        // (`plan_subquestions`) and are the ones that retrieve well; the
+        // gap rounds were a string template over draft prose and are the
+        // ones that collapse. This gives them the same surface.
+        //
+        // A refusal is NOT a failure of the round — it falls back to the
+        // deterministic template, which is exactly the prior behaviour,
+        // and the fallback is recorded on every query's `formed_by`
+        // ("gap-template" vs "gap-model") rather than being silent.
+        let gap_texts: Vec<String> = gaps.iter().map(|g| g.text.clone()).collect();
+        let reformed: Option<Vec<String>> = if gap_texts.is_empty() {
+            None
+        } else {
+            match self.port.gap_queries(&self.question, &gap_texts).await {
+                Ok(q) => Some(q),
+                Err(e) => {
+                    tracing::warn!(
+                        target: "deep_research",
+                        run_id = %self.config.run_id,
+                        round,
+                        gaps = gap_texts.len(),
+                        error = %e,
+                        "acquisition: gap-query reformulation refused —                          falling back to the deterministic template                          (recorded as formed_by=gap-template)"
+                    );
+                    None
+                }
+            }
+        };
         let mut fetch_list = acquisition::form_queries(
             &self.config.run_id,
             &self.charter_hash,
             round,
             &gaps,
             frontier,
+            reformed.as_deref(),
         );
 
         // R4 search through the ONE decider (web-search family). The
@@ -2057,54 +2143,26 @@ impl Controller {
             );
             fetch_list.queries.truncate(search_cap);
         }
-        let mut all_hits = Vec::new();
-        for query in &fetch_list.queries {
-            let verdict = self
-                .decider
-                .allow(FAMILY_WEB_SEARCH, &source_key, 1, now_unix())
-                .await?;
-            if !verdict.allowed() {
-                continue;
-            }
-            self.search_calls += 1;
-            let hits = match self.config.search_source {
-                SearchSource::Mock | SearchSource::Web => self
-                    .port
-                    .web_search(&self.config.web_backend, &query.text, 10)
-                    .await
-                    .map_err(|e| format!("web search: {e}"))?,
-                SearchSource::Corpus => self
-                    .port
-                    .estate_search(&self.config.estate_corpus_ids, &query.text, 10)
-                    .await
-                    .map_err(|e| format!("corpus search: {e}"))?,
-            };
-            if hits.is_empty() {
-                // GAP-3: a searched-but-absent query is report content
-                // — the residue records it here, at the moment the
-                // empty result is known (never reconstructed later
-                // from the triage ledger, where the absence is lost).
-                self.residue.push(ResidueRow {
-                    query: query.text.clone(),
-                    round,
-                });
-            }
-            for h in hits {
-                all_hits.push(icd::SearchHit {
-                    id: h.id.clone(),
-                    query_id: query.id.clone(),
-                    url: h.url,
-                    title: h.title,
-                    snippet: h.snippet,
-                    // The body carries through (t1h — the triage
-                    // decider reads it over the snippet cut).
-                    content: h.content,
-                    engine: self.config.search_source.as_str().to_string(),
-                    score: h.score,
-                    custody: h.custody.as_str().to_string(),
-                });
-            }
-        }
+        // R4 the search walk itself — waves through the ONE decider
+        // (`search::search_round`, the sibling of the R6 fetch walk).
+        let leg = search::SearchPolicy {
+            source: self.config.search_source,
+            source_key: source_key.clone(),
+            web_backend: self.config.web_backend.clone(),
+            estate_corpus_ids: self.config.estate_corpus_ids.clone(),
+        };
+        let searched = search::search_round(
+            self.port.as_ref(),
+            &mut self.decider,
+            round,
+            &fetch_list.queries,
+            now_unix(),
+            &leg,
+        )
+        .await?;
+        self.search_calls += searched.calls;
+        self.residue.extend(searched.residue);
+        let all_hits = searched.hits;
 
         // R5 triage: ranker never excluder (code-set K + ε-quota; the
         // skip ledger is the F25 record).
@@ -2211,12 +2269,24 @@ impl Controller {
         }
 
         // R7 enrich: derived tags + the custody join.
+        //
+        // The join reads `candidates`, NOT `ranked` (acquisition tune,
+        // 2026-08-24). `candidates` IS the walk queue the fetch leg was
+        // handed, so every chunk in the window came from a row in it;
+        // `ranked` is only the K ∪ ε tier, and drb1-t2 decoupled the two
+        // when it made the walk permissive. Joining on the tier dropped
+        // the title of every chunk fetched past rank K + ε, and
+        // `derive_tags` answers an empty title with its no-signal
+        // fallback — the chunk's sole tag becomes its own URL. Latent at
+        // the DRB-I settings (round cap 4 < the 6-row tier) and live the
+        // moment the fetch allowance rises. Red:
+        // `below_tier_chunks_keep_their_source_title_in_enrichment`.
         let titles: Vec<(String, String)> = window
             .chunks
             .iter()
             .map(|c| {
                 let t = triaged
-                    .ranked
+                    .candidates
                     .iter()
                     .find(|h| h.url == c.source_url)
                     .map(|h| h.title.clone())
@@ -2571,6 +2641,38 @@ mod tests {
     /// A port that answers "nothing" — start() never reaches the
     /// network, so defaults are honest.
     struct NoopPort;
+    /// The audit judges claims with bounded overlap (`AUDIT_CONCURRENCY`)
+    /// rather than strictly serially. The whole safety argument for that
+    /// is ORDER: the verdict set and the gap list are built from the
+    /// audit sequence, so `buffered` (ordered) is correct and
+    /// `buffer_unordered` would silently reshuffle the deliverable.
+    ///
+    /// This pins the property directly on the combinator, at the
+    /// concurrency the audit actually uses, with per-item delays that
+    /// GUARANTEE out-of-order completion — item 0 sleeps longest, so a
+    /// reshuffling combinator cannot pass by luck. Watched red with
+    /// `buffer_unordered` substituted: the assertion fails on the first
+    /// element.
+    #[tokio::test]
+    async fn buffered_preserves_order_even_when_later_items_finish_first() {
+        use futures::StreamExt as _;
+        let n = AUDIT_CONCURRENCY * 3;
+        let out: Vec<usize> = futures::stream::iter((0..n).map(|i| async move {
+            // Item 0 waits longest; the last waits least.
+            tokio::time::sleep(std::time::Duration::from_millis(((n - i) * 4) as u64)).await;
+            i
+        }))
+        .buffered(AUDIT_CONCURRENCY)
+        .collect()
+        .await;
+        assert_eq!(
+            out,
+            (0..n).collect::<Vec<_>>(),
+            "the audit's combinator must yield in source order — the verdict set and \
+             the gap list are built from this sequence"
+        );
+    }
+
     #[async_trait::async_trait]
     impl ResearchPort for NoopPort {
         async fn estate_listing(&self, _ids: &[String]) -> Result<EstateListing, String> {
@@ -2897,6 +2999,126 @@ mod tests {
             !fetch_list.search_hits.is_empty(),
             "round-1 hits must reach the fetch list"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// RED-first (acquisition tune, 2026-08-24): every chunk that
+    /// reaches the evidence window carries its SOURCE TITLE into
+    /// enrichment — including a chunk fetched from below the K ∪ ε
+    /// tier.
+    ///
+    /// THE SHAPE. drb1-t2 made the fetch walk queue `triaged.candidates`
+    /// (every non-noise ranked row, budget deciding the depth) but left
+    /// the R7 title join reading `triaged.ranked` (the K ∪ ε tier, 6
+    /// rows at the production defaults). The two disagree the moment
+    /// `round_fetch_cap` exceeds the tier — the walk fetches rank 7 and
+    /// beyond, the join misses them, `enrich_window` receives an empty
+    /// title, and `derive_tags` falls back to its no-signal branch: the
+    /// chunk's only tag becomes the raw source URL. Silent — the chunk
+    /// is in the window, the run is green, and the enrichment that the
+    /// audit and the compose legs read is degraded for exactly the
+    /// sources the permissive walk was built to reach.
+    ///
+    /// WHY IT IS LATENT AND WHY IT MATTERS NOW. At the DRB-I settings
+    /// (`web_fetch_allowance` 12, `max_rounds` 3) the round cap is
+    /// ceil(12/3) = 4, which is BELOW the 6-row tier, so the walk never
+    /// gets there and the bug cannot fire. Every measured lever for
+    /// closing the acquisition gap raises that allowance, and the first
+    /// one that pushes the round cap past 6 activates this. It is fixed
+    /// ahead of the raise, not after it.
+    ///
+    /// WATCH IT FAIL: with the join on `ranked`, the eight deck hits
+    /// fetch under a cap of ceil(40/3) = 14 and the rows past the tier
+    /// arrive tagged `["https://gym.example/cityN"]` instead of
+    /// `["city", "page"]`.
+    #[tokio::test]
+    async fn below_tier_chunks_keep_their_source_title_in_enrichment() {
+        use super::gym::{Deck, MockBackendImpl, MockDraftSurface};
+
+        // Eight hits, each reachable by its own query — the frontier
+        // fans wide enough that the walk must go past rank 6.
+        let frontier_lines: Vec<String> = (0..8)
+            .map(|i| format!("What does source {i} report about topic t{i}?"))
+            .collect();
+        let mut deck_toml = String::from("version = 1\n");
+        let mut bodies: Vec<(String, String)> = Vec::new();
+        for i in 0..8 {
+            deck_toml.push_str(&format!(
+                "[[hit]]\n\
+                 match = [\"t{i}\"]\n\
+                 url = \"https://gym.example/city{i}\"\n\
+                 title = \"city page {i}\"\n\
+                 snippet = \"About topic t{i}.\"\n\
+                 body = \"city{i}.md\"\n"
+            ));
+            bodies.push((
+                format!("city{i}.md"),
+                format!("Source {i} reports that topic t{i} rose by {i}0 percent."),
+            ));
+        }
+        let body_refs: Vec<(&str, &str)> = bodies
+            .iter()
+            .map(|(k, v)| (k.as_str(), v.as_str()))
+            .collect();
+        let deck = Deck::parse(&deck_toml, &body_refs).expect("title-join deck builds");
+
+        let port = MockBackendImpl::new(
+            deck.clone(),
+            MockDraftSurface::Scripted(frontier_lines.join("\n")),
+        );
+        let dir = std::env::temp_dir().join(format!("dr-titlejoin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let run_dir = dir.join("runs").join("dr-titlejoin");
+        let mut cfg = demo_config(run_dir.clone());
+        cfg.web_backend = MockBackendImpl::BACKEND_ID.to_string();
+        // The allowance that puts the round cap (ceil(40/3) = 14) past
+        // the K ∪ ε tier (5 + ceil(5 * 0.1) = 6) — the condition the
+        // bug needs, and the condition every acquisition raise creates.
+        cfg.web_search_allowance = 40;
+        cfg.web_fetch_allowance = 40;
+        cfg.question = "What changed across the eight sources?".to_string();
+        cfg.run_id = "dr-titlejoin".to_string();
+
+        run(
+            cfg,
+            Arc::new(port),
+            Arc::new(NoProvider),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .await
+        .expect("the loop drives to a terminal state");
+
+        let window: super::icd::EvidenceWindow = serde_json::from_str(
+            &std::fs::read_to_string(run_dir.join("evidence-window-1.json"))
+                .expect("evidence-window-1.json exists"),
+        )
+        .expect("evidence-window-1.json parses");
+        assert!(
+            window.chunks.len() > super::acquisition::DEFAULT_CODE_SET_K + 1,
+            "the instrument needs a walk PAST the tier — {} chunks is not \
+             past the {}-row K ∪ ε tier, so this test cannot see the bug \
+             it exists to catch (§18.1: validate the instrument first)",
+            window.chunks.len(),
+            super::acquisition::DEFAULT_CODE_SET_K + 1
+        );
+        for chunk in &window.chunks {
+            assert_ne!(
+                chunk.tags,
+                vec![chunk.source_url.clone()],
+                "chunk {} ({}) carries the no-signal tag fallback — its \
+                 title never reached enrichment, so the R7 join missed a \
+                 row the fetch walk admitted",
+                chunk.id,
+                chunk.source_url
+            );
+            assert!(
+                chunk.tags.iter().any(|t| t == "city" || t == "page"),
+                "chunk {} ({}) lost its source title in enrichment: tags {:?}",
+                chunk.id,
+                chunk.source_url,
+                chunk.tags
+            );
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 

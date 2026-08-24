@@ -404,9 +404,46 @@ impl ResearchPort for LiveResearchPort {
                 .await
                 .map_err(|e| format!("fetch {url}: {e}"));
         }
-        sovereign_tools_base::web::extract::fetch_and_extract(&self.client, url)
-            .await
-            .map_err(|e| format!("fetch {url}: {e}"))
+        // The research cap, not the snippet cap (2026-08-24). The shared
+        // extractor defaulted to 4,000 characters — a chat-tool budget —
+        // and this leg took it silently, so `fetch::CHUNK_CONTENT_CAP`
+        // (12,000), the cap deep-research DECLARES for an evidence chunk,
+        // could never bind: a tighter constant three layers away had
+        // already decided. Measured over the 45 pages a logged DRB-I
+        // flight fetched: median page 22,293 chars, 88% over 4,000, and
+        // the cap kept 156,407 of 1,409,433 available characters (11%).
+        // We had already paid the fetch for all of it.
+        //
+        // Truncation is now VISIBLE. The trait returns a bare String, so
+        // the fact rides the marker the evidence layer already knows
+        // (`fetch::TRUNCATION_MARKER`, which `cap_content` appends for
+        // the same reason) and the dropped count rides the log. A cap
+        // that silently eats 89% of the evidence is the shape of bug
+        // this subsystem keeps rediscovering; it does not get to be
+        // silent again.
+        let out = sovereign_tools_base::web::extract::fetch_and_extract_capped(
+            &self.client,
+            url,
+            crate::deep_research::fetch::CHUNK_CONTENT_CAP,
+        )
+        .await
+        .map_err(|e| format!("fetch {url}: {e}"))?;
+        if out.truncated {
+            tracing::debug!(
+                target: "deep_research",
+                url = %url,
+                kept = out.text.chars().count(),
+                page_chars = out.full_chars,
+                dropped = out.dropped_chars(),
+                "fetch truncated at the evidence chunk cap"
+            );
+            return Ok(format!(
+                "{}{}",
+                out.text,
+                crate::deep_research::fetch::TRUNCATION_MARKER
+            ));
+        }
+        Ok(out.text)
     }
 
     async fn terminal_poll(&self) -> Result<(), String> {
@@ -474,6 +511,176 @@ impl ResearchPort for LiveResearchPort {
                     .embed(t)
                     .await
                     .map_err(|e| format!("embed: {e}"))?,
+            );
+        }
+        Ok(out)
+    }
+
+    async fn gap_queries(&self, question: &str, gaps: &[String]) -> Result<Vec<String>, String> {
+        if gaps.is_empty() {
+            return Ok(Vec::new());
+        }
+        // ONE CALL PER GAP, not one call per round. The batched form was
+        // measured first and lost its count on exactly the rounds that
+        // need this most: replaying the logged t7a flight's gap lists
+        // through a batched prompt, 11 of 15 rounds returned the right
+        // number of lines and 4 did not — and the misses were the LONG
+        // lists (13, 19 and 21 gaps), including both rounds of task 90,
+        // the worst-yielding task in the flight. Asking a 4B to emit
+        // exactly 21 lines in order is asking it to count; asking it to
+        // rewrite one sentence is the narrow role it is good at. Per-gap
+        // also makes the fallback granular — one unusable rewrite costs
+        // that gap its reformulation instead of discarding twenty good
+        // ones alongside it.
+        //
+        // `buffered`, NOT `buffer_unordered`: the caller matches these
+        // back to gaps BY INDEX, so order is the contract (the same
+        // reason `audit_pass` uses it). AUDIT_CONCURRENCY tracks the
+        // daemon's `max_concurrent_turns`; past it the REST path sheds.
+        use futures::StreamExt as _;
+        // Owned, so the per-gap futures borrow nothing from the caller's
+        // slice (a borrowing closure here is not general enough over the
+        // lifetimes the stream needs).
+        // The gap text is DRAFT prose, so it carries the draft's citation
+        // apparatus — `[Source: ev-1]` spans and bare `ev-N` ids. Left in,
+        // they ride into the rewrite and out the other side ("ev-2
+        // liability allocation accidents"), which is the same leak
+        // `template_query` strips on the deterministic path. Strip once,
+        // here, before the model ever sees them — reusing the existing
+        // decider (`containment::strip_citation_spans`) rather than
+        // minting a second one (§19, §10.6).
+        let owned: Vec<String> = gaps
+            .iter()
+            .map(|g| {
+                let cleaned = crate::deep_research::containment::strip_citation_spans(g);
+                cleaned
+                    .split_whitespace()
+                    .filter(|w| {
+                        let core = w.trim_matches(|c: char| !c.is_alphanumeric() && c != '-');
+                        !(core.starts_with("ev-")
+                            && core[3..].chars().all(|c| c.is_ascii_digit())
+                            && core.len() > 3)
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            })
+            .collect();
+        let results: Vec<Result<String, String>> =
+            futures::stream::iter(owned.into_iter().map(|gap| {
+                let question = question.to_string();
+                async move {
+                    let prompt = format!(
+                        "A research report made this statement and could not support it:\n\n\
+                     {gap}\n\n\
+                     Write ONE web search query that would find evidence for it.\n\n\
+                     Rules:\n\
+                     - Name the subject in full. Your query is read with no other \
+                     context, so replace every pronoun and every phrase like \"this \
+                     system\" or \"the protocol\" with the thing it refers to.\n\
+                     - Ask for one thing.\n\
+                     - Keep any specific figure, date or proper name the statement \
+                     carries.\n\
+                     - Write what you would type into a search box, not a sentence \
+                     from a report.\n\
+                     - Output the query and nothing else.\n\n\
+                     Research question, for context only: {question}"
+                    );
+                    complete_with_shed_retry(
+                        &*self.provider,
+                        &CompletionRequest {
+                            prompt,
+                            system_message: None,
+                            preferred_speed: Speed::Fast,
+                            max_tokens: None,
+                            temperature: Some(0.3),
+                            // Constrained to a one-field object, and thinking
+                            // off. Measured: the 4B prefixed its answer with
+                            // its own reasoning ("The user wants me to write a
+                            // web search query...", "Thinking Process:") on 4
+                            // of 46 rewrites, and a preamble blocklist is
+                            // whack-a-mole — a new opener defeats it (§0).
+                            // Under a schema the preamble cannot be emitted at
+                            // all: valid JSON has nowhere to put it (§7.6 —
+                            // never ask a model to guarantee what code can
+                            // enforce).
+                            structured_output: Some(serde_json::json!({
+                                "type": "object",
+                                "properties": { "query": { "type": "string" } },
+                                "required": ["query"]
+                            })),
+                            think_budget: Some(0),
+                            enable_thinking: Some(false),
+                            url_allowlist: None,
+                            ..Default::default()
+                        },
+                        "gap-queries",
+                    )
+                    .await
+                    .map(|r| {
+                        // The Fast slot is a 4B and it leaks its reasoning
+                        // preamble ("The user wants me to write a web search
+                        // query...", "Thinking Process:") ahead of the answer
+                        // — the documented small-model shape this workspace
+                        // has hit before. Reuse the runtime's stripper rather
+                        // than pattern-matching preambles here.
+                        // The schema's object first; the line form is the
+                        // fallback for a provider that could not honour it
+                        // (recorded by falling through to the gap's own text
+                        // downstream, never silently).
+                        if let Ok(v) = serde_json::from_str::<serde_json::Value>(r.text.trim()) {
+                            if let Some(q) = v.get("query").and_then(|q| q.as_str()) {
+                                if !q.trim().is_empty() {
+                                    return q.trim().trim_matches('"').to_string();
+                                }
+                            }
+                        }
+                        let text = crate::title::strip_thinking_response(&r.text);
+                        text.lines()
+                            .map(|l| {
+                                l.trim()
+                                    .trim_start_matches(['-', '*', ' '])
+                                    .trim_start_matches(|c: char| {
+                                        c.is_ascii_digit() || c == '.' || c == ')'
+                                    })
+                                    .trim()
+                                    .trim_matches('"')
+                                    .to_string()
+                            })
+                            .find(|l| !l.is_empty())
+                            .unwrap_or_default()
+                    })
+                    .map_err(|e| format!("gap-queries ask: {e}"))
+                }
+            }))
+            .buffered(crate::deep_research::AUDIT_CONCURRENCY)
+            .collect()
+            .await;
+
+        // A gap whose rewrite failed or came back empty keeps its OWN
+        // text at that index; the caller's `query_refusal` gate then
+        // decides whether that is dispatchable. Never a silent
+        // substitution — `formed_by` on the fetch list carries which
+        // shape produced each query.
+        let mut out = Vec::with_capacity(gaps.len());
+        let mut failed = 0usize;
+        for (i, r) in results.into_iter().enumerate() {
+            match r {
+                Ok(q) if !q.trim().is_empty() => out.push(q),
+                _ => {
+                    failed += 1;
+                    out.push(gaps[i].clone());
+                }
+            }
+        }
+        if failed == gaps.len() {
+            return Err(format!("all {failed} gap-query rewrites failed"));
+        }
+        if failed > 0 {
+            tracing::warn!(
+                target: "deep_research",
+                gaps = gaps.len(),
+                failed,
+                "gap-queries: some rewrites failed — those gaps keep their own text"
             );
         }
         Ok(out)

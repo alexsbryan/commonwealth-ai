@@ -122,6 +122,7 @@ fn fetch_list_with_hits(hit_urls: &[&str]) -> FetchList {
             eps_quota: 0.0,
             admission_rule: "score-then-insertion".to_string(),
         },
+        refused_queries: Vec::new(),
     }
 }
 

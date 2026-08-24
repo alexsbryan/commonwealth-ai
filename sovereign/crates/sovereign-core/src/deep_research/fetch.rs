@@ -38,7 +38,22 @@ use crate::types::{join_custody, Custody};
 /// The per-chunk content cap — a fetched page larger than this is
 /// truncated with a visible marker (glassbox: truncation is declared,
 /// never silent).
-pub const CHUNK_CONTENT_CAP: usize = 12_000;
+pub const CHUNK_CONTENT_CAP: usize = 50_000;
+
+// 50,000 (raised from 12,000 on 2026-08-24). The compose leg is a
+// RETRIEVAL system, not a prompt-stuffer: `synthesize` slices every chunk
+// into 1,400-char passages, embeds them, and hands the section writer the
+// top `SECTION_PASSAGES` (8) by cosine with at most `PER_SOURCE_CAP` (3)
+// from any one source. So the section prompt is 8 x 1,400 chars NO MATTER
+// how large a chunk is — growing this cap grows the pool the ranker
+// chooses from, and costs storage and embedding, never context.
+//
+// It was starving that ranker. At the old effective cap of 4,000 (the
+// shared extractor's chat-snippet default, which bound before this
+// constant ever did) a source yields 4 passages and the ranker picks 3 of
+// 4 — no selection at all. Measured over the 45 pages a logged DRB-I
+// flight fetched: median page 22,293 chars, mean 32,777, max 101,653.
+// At 50,000 the median page is kept WHOLE and the ranker picks 3 of ~19.
 
 /// The visible truncation marker appended to over-cap content.
 pub const TRUNCATION_MARKER: &str = "\n\n[truncated: content exceeds the evidence chunk cap]";
@@ -144,6 +159,64 @@ impl Default for FetchPolicy {
 /// drb1-r1 Item 2: the transient retry ceiling (3 total attempts).
 const MAX_RETRIES: u32 = 2;
 
+/// Pages fetched concurrently within a round.
+///
+/// AIQ's `max_research_concurrency` is 6 and its budget is up to 100 source
+/// calls per job; ours walked the queue ONE page at a time, which is fine at
+/// a 4-page round share and is the wall-clock term at a hundred. This is
+/// network I/O against many different hosts, not daemon inference, so it does
+/// not share `AUDIT_CONCURRENCY`'s ceiling (that number tracks the daemon's
+/// `max_concurrent_turns`).
+///
+/// The concurrency is deliberately confined to the NETWORK. The budget
+/// decider stays sequential — it is the single mutable owner of the run's
+/// allowance, and a spend that races is a spend that cannot be audited.
+const FETCH_CONCURRENCY: usize = 6;
+
+/// One URL's fetch, retries included. Pure I/O against the port: it touches
+/// no budget, no dedup set and no window, which is what makes it safe to run
+/// several at once. Returns the body (when one arrived), the last error, the
+/// retry count used, and the URL's health.
+async fn fetch_with_retries(
+    port: &dyn ResearchPort,
+    url: &str,
+) -> (Option<String>, Option<String>, u32, UrlHealth) {
+    let mut body = None;
+    let mut last_error = None;
+    let mut retry_count_used = 0u32;
+    let mut health = UrlHealth::Dead;
+    for retry_count in 0..=MAX_RETRIES {
+        match port.web_fetch(url).await {
+            Ok(b) => {
+                body = Some(b);
+                break;
+            }
+            Err(e) => {
+                last_error = Some(e);
+                retry_count_used = retry_count;
+                let class = classify_fetch_error(last_error.as_deref().unwrap_or_default());
+                if let RetryClass::Permanent(h) = class {
+                    health = h;
+                    break;
+                }
+                health = UrlHealth::Dead;
+                if retry_count < MAX_RETRIES {
+                    let backoff_ms = 1000 * 2_u64.pow(retry_count);
+                    tracing::debug!(
+                        target: "deep_research",
+                        url = %url,
+                        retry_count,
+                        next_backoff_ms = backoff_ms,
+                        "fetch failed, retrying with backoff"
+                    );
+                    tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+                }
+            }
+        }
+    }
+    (body, last_error, retry_count_used, health)
+}
+
 /// Fetch the round's candidate queue into the evidence window.
 /// `at_unix` is the run's round timestamp (journaled into the budget
 /// ledger). Returns the raw window (pre-tags) plus the registry rows;
@@ -232,49 +305,67 @@ pub async fn fetch_round(
     // shape: the failed top pick's query gets first claim on the freed
     // budget, instead of the round-global next rank starving it).
     let mut queue: Vec<SearchHit> = candidates.to_vec();
-    while !queue.is_empty() {
-        // The round's fetch share (the r2b split over the fetch
-        // family): the gap rounds keep their ammunition. The decider's
-        // global allowance still binds underneath.
-        if spent_round >= policy.round_fetch_cap {
+    // The walk runs in WAVES (2026-08-24): the gates and the budget are
+    // decided sequentially, then the wave's pages are fetched
+    // concurrently, then the results are processed in queue order. The
+    // decider never sees concurrency — it is the single mutable owner of
+    // the allowance, and a spend that races is a spend that cannot be
+    // audited. What overlaps is only the network wait.
+    //
+    // Ordering is preserved: results are zipped back onto the wave in the
+    // order the queue admitted them, so the window's `ev-N` ids and the
+    // registry rows come out exactly as the sequential walk produced them.
+    'walk: loop {
+        if queue.is_empty() || spent_round >= policy.round_fetch_cap {
             break;
         }
-        let hit = queue.remove(0);
-        // Dedup gate: an already-fetched URL is refused — no decider
-        // call (spends nothing), no port call, recorded on the window.
-        if fetched.iter().any(|u| u == &hit.url) {
-            if !refused.contains(&hit.url) {
-                refused.push(hit.url.clone());
+        // ---- Phase A: admit a wave. Gates + budget, no network.
+        let mut wave: Vec<SearchHit> = Vec::new();
+        while wave.len() < FETCH_CONCURRENCY
+            && !queue.is_empty()
+            && spent_round < policy.round_fetch_cap
+        {
+            let hit = queue.remove(0);
+            // Dedup gate: an already-fetched URL is refused — no decider
+            // call (spends nothing), no port call, recorded on the window.
+            if fetched.iter().any(|u| u == &hit.url)
+                || wave.iter().any(|h: &SearchHit| h.url == hit.url)
+            {
+                if !refused.contains(&hit.url) {
+                    refused.push(hit.url.clone());
+                }
+                continue;
             }
-            continue;
-        }
-        // Dead-URL gate (order deep-research-t6b, pre-window slice): a
-        // URL whose fetch FAILED earlier in this run is refused — no
-        // decider call (refusals spend no budget), no port call, the
-        // URL recorded on the window's dedup_refused with the
-        // fetched-dedup refusals. t1d's dedup only refused
-        // already-FETCHED URLs; the task-56 shape re-admitted the same
-        // 4 failing PDF URLs every round and re-spent the allowance
-        // (12/12 spent on 4 unique URLs, every fetch an error).
-        if decider.is_fetch_dead(&hit.url) {
-            if !refused.contains(&hit.url) {
-                refused.push(hit.url.clone());
+            // Dead-URL gate (order deep-research-t6b, pre-window slice): a
+            // URL whose fetch FAILED earlier in this run is refused — no
+            // decider call (refusals spend no budget), no port call, the
+            // URL recorded on the window's dedup_refused with the
+            // fetched-dedup refusals. t1d's dedup only refused
+            // already-FETCHED URLs; the task-56 shape re-admitted the same
+            // 4 failing PDF URLs every round and re-spent the allowance
+            // (12/12 spent on 4 unique URLs, every fetch an error).
+            if decider.is_fetch_dead(&hit.url) {
+                if !refused.contains(&hit.url) {
+                    refused.push(hit.url.clone());
+                }
+                continue;
             }
-            continue;
-        }
-        // drb1-r1 Item 2 + drb1-t2: fetch retry with exponential
-        // backoff, bounded by the error's retry class — permanent
-        // classes (binary refusal, HTTP failure status) get ONE
-        // attempt; transient/unknown keep the 3-attempt ceiling. Each
-        // attempt consumes budget via decider.allow().
-        let mut body = None;
-        let mut last_error = None;
-        let mut retry_count_used = 0u32;
-        let mut health = UrlHealth::Dead;
-
-        for retry_count in 0..=MAX_RETRIES {
-            // The ONE decider gate — no Allow, no fetch. Each retry
-            // attempt must consume budget separately.
+            // The ONE decider gate — no Allow, no fetch. ONE unit per URL,
+            // charged before the retry ladder (acquisition tune,
+            // 2026-08-24). It used to be one unit per ATTEMPT, which billed
+            // the `web-fetch:pages` key three pages for a dead URL that
+            // delivered none — the ledger's key says pages and the charter
+            // field is `web_fetch_pages`, so the attempt was never the unit
+            // (§10.6: one name, one meaning). Worse, `spent_round` moved
+            // with it, so a single dead URL could exhaust the whole round
+            // cap and file the untouched candidates behind it as
+            // `round-fetch-cap` — spend they never received. Measured on the
+            // logged t7a flight: task 56 spent 9 of 12 pages on four dead
+            // PDFs for one chunk; 16 of the flight's 61 spent pages were
+            // retries. Retries are still bounded (MAX_RETRIES) and a dead
+            // URL is still recorded dead for the run, so what the ladder
+            // costs now is wall clock, not the page budget. Red:
+            // `one_dead_url_does_not_eat_the_rounds_fetch_allowance`.
             let verdict = decider
                 .allow(FAMILY_WEB_FETCH, KEY_FETCH_PAGES, 1, at_unix)
                 .await?;
@@ -283,150 +374,163 @@ pub async fn fetch_round(
                     url: hit.url.clone(),
                     error: "budget-refused".to_string(),
                     absent: true,
-                    retries: retry_count_used,
+                    retries: 0,
                     health: UrlHealth::BudgetRefused,
                 });
-                break;
+                // Next candidate — a refusal is this URL's whole story. The
+                // pre-fix `break` fell through to the no-body arm below and
+                // unwrapped a `last_error` that a first-attempt refusal
+                // never sets.
+                continue;
             }
             spent_round += 1;
-
-            match port.web_fetch(&hit.url).await {
-                Ok(b) => {
-                    body = Some(b);
-                    break;
-                }
-                Err(e) => {
-                    last_error = Some(e);
-                    retry_count_used = retry_count;
-                    let class = classify_fetch_error(last_error.as_deref().unwrap_or_default());
-                    if let RetryClass::Permanent(h) = class {
-                        health = h;
-                        break;
-                    }
-                    health = UrlHealth::Dead;
-                    if retry_count < MAX_RETRIES {
-                        let backoff_ms = 1000 * 2_u64.pow(retry_count);
-                        tracing::debug!(
-                            target: "deep_research",
-                            url = %hit.url,
-                            retry_count,
-                            next_backoff_ms = backoff_ms,
-                            "fetch failed, retrying with backoff"
-                        );
-                        tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
-                    }
-                }
+            wave.push(hit);
+        }
+        if wave.is_empty() {
+            if queue.is_empty() {
+                break 'walk;
             }
+            continue 'walk;
         }
 
-        let Some(body) = body else {
-            // All retries exhausted — record as failure and mark URL
-            // dead. The URL is dead for the rest of the run: a later
-            // round's fetch list re-admitting it is refused with no
-            // decider call and no re-spend (the task-56 shape). A
-            // dead-record persistence failure does not abort the
-            // round — the failure row still records the fetch error;
-            // the in-memory gate holds for the live run.
-            let error = last_error.unwrap();
-            if let Err(j) = decider.record_fetch_dead(&hit.url) {
-                tracing::warn!(
+        // ---- Phase B: the network, concurrently. `fetch_with_retries`
+        // touches no budget, no dedup set and no window, so several may
+        // run at once. `buffered`, NOT `buffer_unordered` — Phase C zips
+        // these back onto `wave` by position.
+        use futures::StreamExt as _;
+        let wave_urls: Vec<String> = wave.iter().map(|h| h.url.clone()).collect();
+        let results: Vec<(Option<String>, Option<String>, u32, UrlHealth)> = futures::stream::iter(
+            // OWNED items, not `.iter()`. A borrowed item gives the
+            // closure a higher-ranked lifetime, and the resulting
+            // stream future then fails the `Send` check where the
+            // whole run is spawned (`sovereign-desktop`'s
+            // deep_research_commands: "implementation of `Send` is
+            // not general enough" naming `&dyn ResearchPort`). The
+            // shipping audit leg has always iterated owned keys —
+            // this matches it.
+            wave_urls
+                .into_iter()
+                .map(|url| async move { fetch_with_retries(port, &url).await }),
+        )
+        .buffered(FETCH_CONCURRENCY)
+        .collect()
+        .await;
+
+        // ---- Phase C: process in wave order. Sequential again.
+        for (hit, (body, last_error, retry_count_used, health)) in
+            wave.into_iter().zip(results.into_iter())
+        {
+            let Some(body) = body else {
+                // All retries exhausted — record as failure and mark URL
+                // dead. The URL is dead for the rest of the run: a later
+                // round's fetch list re-admitting it is refused with no
+                // decider call and no re-spend (the task-56 shape). A
+                // dead-record persistence failure does not abort the
+                // round — the failure row still records the fetch error;
+                // the in-memory gate holds for the live run.
+                // Always Some: the gate above `continue`s on refusal, so
+                // reaching here means the ladder ran at least once.
+                let error = last_error.expect("a fetch attempt ran before the no-body arm");
+                if let Err(j) = decider.record_fetch_dead(&hit.url) {
+                    tracing::warn!(
+                        url = %hit.url,
+                        error = %j,
+                        "deep-research: fetch-dead record failed — the URL is dead in memory only"
+                    );
+                }
+                failures.push(FetchFailure {
+                    url: hit.url.clone(),
+                    error: error.clone(),
+                    absent: true,
+                    retries: retry_count_used,
+                    health,
+                });
+                // The fallback promotion (drb1-t2): the failed pick's
+                // query gets its next candidate first.
+                promote_next_same_query(&mut queue, &hit.query_id);
+                continue;
+            };
+
+            // drb1-t2 — content admission (fetch-then-judge). Estate
+            // retrievals are exempt: their admission already happened on
+            // the estate's own search surface (the index scored the chunk
+            // into the round); the content gate exists for pages the loop
+            // could not see before fetching. Web pages (HTML or
+            // extracted-PDF text) are judged on content.
+            let capped = cap_content(&body);
+            let stype = source_type_of(&hit.url);
+            let verdict = if stype == SourceType::Estate {
+                None
+            } else {
+                Some(judge_content(
+                    &query_text(&hit),
+                    &hit.title,
+                    &capped,
+                    &hit.url,
+                    policy.content_coverage_floor,
+                    policy.prose_line_floor,
+                ))
+            };
+            let admitted = verdict.as_ref().is_none_or(|v| v.admits);
+            fetched.push(hit.url.clone());
+            if admitted {
+                // Custody stamped HERE, by code, FROM THE HIT'S STAMP (t1g
+                // rung 2): the port stamps custody at the source (estate
+                // hits are `personal` — a local corpus is the operator's
+                // own data), and the window chunk keeps that stamp — an
+                // estate chunk is never re-stamped public-web. The single
+                // production construction site (acquire_round) always
+                // stamps; an empty stamp is `Unknown` at the join — the
+                // audit refuses per-claim on unknown chunks, never a
+                // silent default.
+                index += 1;
+                chunks.push(WindowChunk {
+                    id: format!("ev-{index}"),
+                    locator: hit.url.clone(),
+                    source_url: hit.url.clone(),
+                    custody: hit.custody.clone(),
+                    provenance_class: "known".to_string(),
+                    // drb1-t5: scrub C0 control bytes at the ONE production
+                    // construction site. T2 made PDF fetching real, and PDF
+                    // extraction leaves interior NULs in the text: measured
+                    // 2026-08-22, 4 of task 56's chunks carried 7-17 NULs
+                    // each and the estate held nearly every codepoint in
+                    // 0..32. The embed backend refuses a whole batch on one
+                    // of them ("Embed tokenization failed: input contains an
+                    // interior NUL at byte 785"), so a single bad PDF takes
+                    // down the binder, the writer's retrieval, and the page.
+                    content: super::scrub_control(&capped),
+                    ingested_into: None,
+                    tags: Vec::new(),
+                });
+            } else {
+                let v = verdict.expect("admitted false implies verdict is Some");
+                content_refused.push(ContentRefusal {
+                    url: hit.url.clone(),
+                    title: hit.title.clone(),
+                    coverage: v.coverage,
+                    prose_line: v.prose_line,
+                    reason: v.reason.clone(),
+                });
+                tracing::debug!(
+                    target: "deep_research",
                     url = %hit.url,
-                    error = %j,
-                    "deep-research: fetch-dead record failed — the URL is dead in memory only"
+                    coverage = v.coverage,
+                    prose_line = v.prose_line,
+                    reason = %v.reason,
+                    "drb1-t2: fetched page content-refused (recorded, never silently un-ledgered)"
                 );
             }
-            failures.push(FetchFailure {
-                url: hit.url.clone(),
-                error: error.clone(),
-                absent: true,
-                retries: retry_count_used,
-                health,
-            });
-            // The fallback promotion (drb1-t2): the failed pick's
-            // query gets its next candidate first.
-            promote_next_same_query(&mut queue, &hit.query_id);
-            continue;
-        };
-
-        // drb1-t2 — content admission (fetch-then-judge). Estate
-        // retrievals are exempt: their admission already happened on
-        // the estate's own search surface (the index scored the chunk
-        // into the round); the content gate exists for pages the loop
-        // could not see before fetching. Web pages (HTML or
-        // extracted-PDF text) are judged on content.
-        let capped = cap_content(&body);
-        let stype = source_type_of(&hit.url);
-        let verdict = if stype == SourceType::Estate {
-            None
-        } else {
-            Some(judge_content(
-                &query_text(&hit),
-                &hit.title,
-                &capped,
-                &hit.url,
-                policy.content_coverage_floor,
-                policy.prose_line_floor,
-            ))
-        };
-        let admitted = verdict.as_ref().is_none_or(|v| v.admits);
-        fetched.push(hit.url.clone());
-        if admitted {
-            // Custody stamped HERE, by code, FROM THE HIT'S STAMP (t1g
-            // rung 2): the port stamps custody at the source (estate
-            // hits are `personal` — a local corpus is the operator's
-            // own data), and the window chunk keeps that stamp — an
-            // estate chunk is never re-stamped public-web. The single
-            // production construction site (acquire_round) always
-            // stamps; an empty stamp is `Unknown` at the join — the
-            // audit refuses per-claim on unknown chunks, never a
-            // silent default.
-            index += 1;
-            chunks.push(WindowChunk {
-                id: format!("ev-{index}"),
-                locator: hit.url.clone(),
-                source_url: hit.url.clone(),
-                custody: hit.custody.clone(),
-                provenance_class: "known".to_string(),
-                // drb1-t5: scrub C0 control bytes at the ONE production
-                // construction site. T2 made PDF fetching real, and PDF
-                // extraction leaves interior NULs in the text: measured
-                // 2026-08-22, 4 of task 56's chunks carried 7-17 NULs
-                // each and the estate held nearly every codepoint in
-                // 0..32. The embed backend refuses a whole batch on one
-                // of them ("Embed tokenization failed: input contains an
-                // interior NUL at byte 785"), so a single bad PDF takes
-                // down the binder, the writer's retrieval, and the page.
-                content: super::scrub_control(&capped),
-                ingested_into: None,
-                tags: Vec::new(),
-            });
-        } else {
-            let v = verdict.expect("admitted false implies verdict is Some");
-            content_refused.push(ContentRefusal {
+            // The registry (drb1-t2, AIQ §1.4): every FETCHED source —
+            // admitted or content-refused — is a citation-whitelist row.
+            registry_rows.push(SourceRegistryRow {
                 url: hit.url.clone(),
                 title: hit.title.clone(),
-                coverage: v.coverage,
-                prose_line: v.prose_line,
-                reason: v.reason.clone(),
+                source_type: stype,
+                round,
+                admitted,
             });
-            tracing::debug!(
-                target: "deep_research",
-                url = %hit.url,
-                coverage = v.coverage,
-                prose_line = v.prose_line,
-                reason = %v.reason,
-                "drb1-t2: fetched page content-refused (recorded, never silently un-ledgered)"
-            );
         }
-        // The registry (drb1-t2, AIQ §1.4): every FETCHED source —
-        // admitted or content-refused — is a citation-whitelist row.
-        registry_rows.push(SourceRegistryRow {
-            url: hit.url.clone(),
-            title: hit.title.clone(),
-            source_type: stype,
-            round,
-            admitted,
-        });
     }
 
     // Tier members the walk never reached (the round cap or the
@@ -640,6 +744,7 @@ mod tests {
                 admission_rule: crate::deep_research::acquisition::ADMISSION_RULE_SCORE_THEN_FIGURE
                     .to_string(),
             },
+            refused_queries: Vec::new(),
         }
     }
 
@@ -807,7 +912,11 @@ mod tests {
     /// dedup only refused already-FETCHED URLs — failed URLs were never
     /// in `fetched_sources` and were re-admitted forever.
     ///
-    /// Now green: round 1 spends 4 and records each failing URL dead;
+    /// Now green (and green on the ORIGINAL number again since the
+    /// acquisition tune of 2026-08-24 — drb1-r1's per-attempt billing
+    /// had moved the spend to 12 and the assertions were edited to
+    /// follow it, leaving this comment as the only record of the
+    /// intent): round 1 spends 4 and records each failing URL dead;
     /// rounds 2-3 refuse the dead URLs with NO decider call and NO
     /// port call (the spend stays at 4; the ledger's refused_urls
     /// carries the dead set); a restore replays the dead set — a
@@ -858,8 +967,13 @@ mod tests {
             );
             assert_eq!(round1.fetch_failures.len(), 4);
             assert!(round1.dedup_refused.is_empty(), "round 1 refusals are none");
-            // Each URL was attempted 3 times, spending 3 from allowance
-            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 0);
+            // Four dead URLs cost four pages — the doc comment's
+            // pre-registered number, restored. drb1-r1's retry ladder
+            // billed per attempt (4 x 3 = 12, allowance drained to 0)
+            // and these assertions were edited to match it while the
+            // doc kept describing the intent; the acquisition tune bills
+            // the page again (§10.6).
+            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
 
             for round in 2..=3 {
                 let w = fetch_round(
@@ -887,9 +1001,9 @@ mod tests {
                     "round {round} refuses every dead URL, recorded on the window"
                 );
             }
-            // drb1-r1 Item 2: With retry logic, all 12 spends happened in round 1
-            // (4 URLs × 3 attempts each), so remaining is 0.
-            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 0);
+            // Rounds 2-3 refuse the dead URLs with no decider call, so
+            // the spend stays at round 1's four pages.
+            assert_eq!(decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
             assert!(
                 port.calls.lock().unwrap().len() == 12,
                 "with retry logic, port called 12 times total (4 URLs × 3 attempts)"
@@ -911,8 +1025,7 @@ mod tests {
                 urls.iter().all(|u| restored.is_fetch_dead(u)),
                 "restore replays the dead set"
             );
-            // drb1-r1 Item 2: All 12 budget spent in round 1 (4 URLs × 3 retries)
-            assert_eq!(restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 0);
+            assert_eq!(restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES), 8);
             let w = fetch_round(
                 &port,
                 &mut restored,
@@ -930,12 +1043,11 @@ mod tests {
             .window;
             assert!(w.chunks.is_empty() && w.fetch_failures.is_empty());
             assert_eq!(w.dedup_refused, urls);
-            // drb1-r1 Item 2: With retry logic, round 1 spent all 12, remaining is 0.
-            // The resumed round refuses dead URLs without spending, so remaining stays 0.
             assert_eq!(
                 restored.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES),
-                0,
-                "the resumed run spends nothing on dead URLs (remaining stays 0)"
+                8,
+                "the resumed run spends nothing on dead URLs (remaining holds \
+                 at round 1's four pages)"
             );
         });
     }
@@ -1049,6 +1161,7 @@ mod tests {
                 admission_rule: crate::deep_research::acquisition::ADMISSION_RULE_SCORE_THEN_FIGURE
                     .to_string(),
             },
+            refused_queries: Vec::new(),
         }
     }
 
@@ -1462,6 +1575,170 @@ mod tests {
                 "the .pdf url's registry row names its fetch surface"
             );
             assert!(out.registry_rows.iter().all(|r| !r.title.is_empty()));
+        });
+    }
+
+    /// A port whose every fetch fails TRANSIENTLY — the class that
+    /// earns the full retry ladder (`classify_fetch_error` reads no
+    /// HTTP status and no binary payload here, so it returns
+    /// `RetryClass::Transient`).
+    struct AlwaysTransientFailPort {
+        calls: Arc<Mutex<Vec<String>>>,
+    }
+
+    #[async_trait::async_trait]
+    impl ResearchPort for AlwaysTransientFailPort {
+        async fn estate_listing(&self, _c: &[String]) -> Result<EstateListing, String> {
+            unimplemented!("unreachable")
+        }
+        async fn estate_search(
+            &self,
+            _c: &[String],
+            _q: &str,
+            _l: usize,
+        ) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_search(&self, _b: &str, _q: &str, _l: usize) -> Result<Vec<PortHit>, String> {
+            unimplemented!("unreachable")
+        }
+        async fn web_fetch(&self, url: &str) -> Result<String, String> {
+            self.calls.lock().unwrap().push(url.to_string());
+            Err("connection reset by peer".to_string())
+        }
+        async fn terminal_poll(&self) -> Result<(), String> {
+            Ok(())
+        }
+        async fn draft(
+            &self,
+            _leg: DraftLeg,
+            _p: &str,
+            _s: Option<&str>,
+            _u: &[String],
+        ) -> Result<String, String> {
+            unimplemented!("unreachable")
+        }
+    }
+
+    /// RED-first (acquisition tune, 2026-08-24): ONE dead URL must not
+    /// consume a whole round's fetch allowance.
+    ///
+    /// THE UNITS MISMATCH. The budget's family and key are
+    /// `web-fetch:pages` and the charter field is `web_fetch_pages` —
+    /// the declared resource is PAGES. The retry ladder charged one unit
+    /// per ATTEMPT ("Each retry attempt must consume budget
+    /// separately"), so a URL that fails its 3 attempts billed 3 pages
+    /// for the 0 pages it delivered. Two counters, two meanings, one
+    /// name (§10.6).
+    ///
+    /// THE HARM, MEASURED. On the logged t7a flight, task 56 spent 9 of
+    /// its 12 pages and put ONE chunk in the window: four dead PDF URLs
+    /// at up to 3 attempts each ate the allowance, and rounds 1 and 3
+    /// produced no evidence at all. Across the nine-task flight, 16 of
+    /// 61 spent pages went to dead-URL retries.
+    ///
+    /// THE SHAPE HERE is that pathology minimised: three candidates, a
+    /// round cap of three, every URL dead. Attempt-billing spends the
+    /// whole cap on candidate ONE — the walk breaks on
+    /// `spent_round >= round_fetch_cap` before it ever reaches
+    /// candidates two and three, which are then filed `round-fetch-cap`
+    /// as though the budget had been spent on them. Page-billing
+    /// attempts all three.
+    ///
+    /// Retries stay bounded and still happen — MAX_RETRIES caps the
+    /// ladder and `record_fetch_dead` keeps a dead URL from being
+    /// re-attempted in a later round. What changes is only WHO PAYS for
+    /// the retry: the wall clock, not the page budget.
+    ///
+    /// WATCH IT FAIL: at HEAD the port sees 3 calls, all for
+    /// `article-0`, and the window files `article-1` / `article-2` as
+    /// `round-fetch-cap`.
+    #[test]
+    fn one_dead_url_does_not_eat_the_rounds_fetch_allowance() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let urls: Vec<String> = (0..3)
+                .map(|i| format!("https://site.example/article-{i}"))
+                .collect();
+            let hits: Vec<SearchHit> = urls
+                .iter()
+                .enumerate()
+                .map(|(i, u)| {
+                    let mut h = query_hit(
+                        &format!("h{}", i + 1),
+                        "q1",
+                        u,
+                        "Payment Tablet Devices SaaS Article",
+                    );
+                    h.score = 0.9 - i as f64 * 0.1;
+                    h
+                })
+                .collect();
+            let triaged = triage_hits("r", "h", 1, hits, 5, 0.1);
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let port = AlwaysTransientFailPort {
+                calls: calls.clone(),
+            };
+            let fetch_list = fetch_list_queries("payment tablet devices SaaS");
+            let tmp = tempfile::tempdir().unwrap();
+            let ledger_path = tmp.path().join("budget-ledger.json");
+            let mut decider = SpendDecider::new(
+                "r-t2",
+                "h",
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 12u32)]),
+                &ledger_path,
+            )
+            .unwrap();
+            let policy = FetchPolicy {
+                // ceil(9 / 3 rounds) — the r2b round share the DRB-I
+                // settings produce, and the number one dead URL ate.
+                round_fetch_cap: 3,
+                content_coverage_floor: DEFAULT_CONTENT_COVERAGE_FLOOR,
+                prose_line_floor: DEFAULT_PROSE_LINE_FLOOR,
+            };
+            let out = fetch_round(
+                &port,
+                &mut decider,
+                "r-t2",
+                "h",
+                1,
+                &fetch_list,
+                &triaged.candidates,
+                &[],
+                1234,
+                &policy,
+            )
+            .await
+            .expect("the round lands");
+
+            let attempted: std::collections::HashSet<String> =
+                calls.lock().unwrap().iter().cloned().collect();
+            assert_eq!(
+                attempted.len(),
+                3,
+                "every candidate must get its attempt — one dead URL's \
+                 retries billed the whole round cap and starved the rest \
+                 (port saw {:?})",
+                calls.lock().unwrap()
+            );
+            let capped: Vec<&FetchFailure> = out
+                .window
+                .fetch_failures
+                .iter()
+                .filter(|f| f.error == "round-fetch-cap")
+                .collect();
+            assert!(
+                capped.is_empty(),
+                "no candidate may be filed round-fetch-cap while the \
+                 allowance held pages for it: {:?}",
+                capped.iter().map(|f| &f.url).collect::<Vec<_>>()
+            );
+            let spent: u32 = 12 - decider.remaining(FAMILY_WEB_FETCH, KEY_FETCH_PAGES);
+            assert_eq!(
+                spent, 3,
+                "three dead URLs cost three pages — the ledger's unit is \
+                 the page, not the attempt"
+            );
         });
     }
 

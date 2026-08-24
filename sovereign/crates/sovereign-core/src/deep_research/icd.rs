@@ -506,6 +506,27 @@ pub struct FetchList {
     pub queries: Vec<FormedQuery>,
     pub search_hits: Vec<SearchHit>,
     pub triage: TriageOutcome,
+    /// Queries the loop FORMED and then declined to dispatch (the
+    /// acquisition tune of 2026-08-24). A formed query that is not a
+    /// query — the empty string, a bare `###` — must not spend a search,
+    /// and must not simply vanish either: the artifact records what was
+    /// withheld and why (§18.3, absence is reported never defaulted).
+    /// `#[serde(default)]` so every flight recorded before this field
+    /// existed still deserializes.
+    #[serde(default)]
+    pub refused_queries: Vec<RefusedQuery>,
+}
+
+/// A query the loop formed and refused to dispatch, with the reason the
+/// one decider gave (`acquisition::query_refusal`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefusedQuery {
+    pub text: String,
+    pub reason: String,
+    /// The gap it came from, when it came from one.
+    #[serde(default)]
+    pub from_gap_id: Option<String>,
+    pub formed_by: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

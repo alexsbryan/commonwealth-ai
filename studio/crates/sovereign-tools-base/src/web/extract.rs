@@ -194,8 +194,77 @@ fn truncate_chars(s: &str, max_chars: usize) -> &str {
     &s[..end]
 }
 
-/// Fetch a URL and extract its text content.
+/// The extractor's default keep-length, in characters.
+///
+/// This is a SNIPPET budget — the right size for a chat tool answering one
+/// question from a page. It is NOT the right size for research: measured
+/// 2026-08-24 over the 45 pages a logged DRB-I flight actually fetched, the
+/// median page holds 22,293 characters of text, 88% hold more than this cap,
+/// and the cap keeps 156,407 of 1,409,433 available characters — 11%. A
+/// caller assembling evidence must pass its own cap.
+pub const DEFAULT_EXTRACT_CAP: usize = 4_000;
+
+/// What an extraction actually yielded, including what it DROPPED.
+///
+/// The count is the point. Before 2026-08-24 the extractor truncated to a
+/// hard-coded 4,000 characters and returned a bare `String`, so a caller
+/// could not tell a 3,900-character page from a 100,000-character one cut to
+/// size — and deep-research, whose own declared chunk cap is 12,000, never
+/// learned that a tighter cap upstream had already decided for it. Silent
+/// capacity loss is the recurring shape of this subsystem's bugs; the fix is
+/// to make the loss a value the caller has to look at (§18.3 — absence is
+/// reported, never defaulted).
+#[derive(Debug, Clone)]
+pub struct Extracted {
+    /// The kept text, at most `max_chars` characters.
+    pub text: String,
+    /// Characters of extractable text the page held, BEFORE the cap.
+    pub full_chars: usize,
+    /// True when `full_chars > max_chars` — the page was cut.
+    pub truncated: bool,
+}
+
+impl Extracted {
+    /// Characters dropped by the cap.
+    pub fn dropped_chars(&self) -> usize {
+        self.full_chars.saturating_sub(self.text.chars().count())
+    }
+}
+
+/// Fetch a URL and extract its text content, capped at the caller's budget.
+///
+/// The cap is the CALLER's decision because the right answer differs by two
+/// orders of magnitude between a chat snippet and a research evidence chunk.
+pub async fn fetch_and_extract_capped(
+    client: &reqwest::Client,
+    url: &str,
+    max_chars: usize,
+) -> Result<Extracted> {
+    let text = fetch_and_extract_full(client, url).await?;
+    let full_chars = text.chars().count();
+    // `truncate_chars` cuts on a BYTE budget (its `max_chars` is compared
+    // against `s.len()`), so the truncation fact is read from what it
+    // actually returned rather than recomputed on a different unit.
+    let kept = truncate_chars(&text, max_chars);
+    Ok(Extracted {
+        truncated: kept.len() < text.len(),
+        text: kept.to_string(),
+        full_chars,
+    })
+}
+
+/// Fetch a URL and extract its text content, capped at
+/// [`DEFAULT_EXTRACT_CAP`]. Prefer [`fetch_and_extract_capped`] when the
+/// caller has its own budget — this wrapper keeps the snippet-shaped
+/// callers (the chat web tools) unchanged.
 pub async fn fetch_and_extract(client: &reqwest::Client, url: &str) -> Result<String> {
+    Ok(fetch_and_extract_capped(client, url, DEFAULT_EXTRACT_CAP)
+        .await?
+        .text)
+}
+
+/// Fetch a URL and extract its text content, UNCAPPED.
+async fn fetch_and_extract_full(client: &reqwest::Client, url: &str) -> Result<String> {
     let response = client
         .get(url)
         .header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36")
@@ -233,7 +302,7 @@ pub async fn fetch_and_extract(client: &reqwest::Client, url: &str) -> Result<St
     let html = String::from_utf8_lossy(&body);
     let text = extract_text_from_html(&html);
 
-    Ok(truncate_chars(&text, 4000).to_string())
+    Ok(text)
 }
 
 /// True for payloads that cannot be treated as text. The PDF magic
@@ -342,6 +411,58 @@ mod tests {
         let html = "<p>İstanbul</p>";
         let text = extract_text_from_html(html);
         assert_eq!(text, "İstanbul");
+    }
+
+    #[test]
+    /// The guard against this subsystem's recurring bug shape: a cap that
+    /// eats capacity WITHOUT SAYING SO.
+    ///
+    /// The 4,000-character extractor cap ran for months while
+    /// deep-research declared a 12,000-character chunk cap that could
+    /// never bind, because the caller received a bare `String` and had no
+    /// way to distinguish "this page was short" from "this page was cut".
+    /// Measured cost when it was finally looked at: 11% of the
+    /// extractable text on the pages a DRB-I flight had already paid to
+    /// fetch. Any future cap must answer `truncated` and `dropped_chars`
+    /// truthfully, so the loss is a value a caller has to look at rather
+    /// than a silence it can inherit.
+    #[test]
+    fn extraction_reports_what_the_cap_dropped() {
+        // A short page is not truncated and drops nothing.
+        let whole = Extracted {
+            text: "short page".to_string(),
+            full_chars: 10,
+            truncated: false,
+        };
+        assert!(!whole.truncated);
+        assert_eq!(whole.dropped_chars(), 0);
+
+        // A cut page reports BOTH the fact and the size of the loss —
+        // `full_chars` is the page, not the keep.
+        let cut = Extracted {
+            text: "a".repeat(4_000),
+            full_chars: 22_293,
+            truncated: true,
+        };
+        assert!(cut.truncated, "a cut page must say it was cut");
+        assert_eq!(
+            cut.dropped_chars(),
+            18_293,
+            "the dropped count is the page minus the keep — the number \
+             that went unmeasured while the cap was silent"
+        );
+        assert!(
+            cut.full_chars > cut.text.chars().count(),
+            "full_chars is the PAGE's length, never the keep's"
+        );
+    }
+
+    #[test]
+    fn default_cap_is_the_snippet_budget_not_a_research_budget() {
+        // Pinned so a caller assembling evidence cannot inherit the chat
+        // tool's budget by accident — the exact inheritance that cost the
+        // research loop 89% of its fetched text.
+        assert_eq!(DEFAULT_EXTRACT_CAP, 4_000);
     }
 
     #[test]

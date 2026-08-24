@@ -183,6 +183,33 @@ pub trait ResearchPort: Send + Sync {
         Ok(clause_split(question))
     }
 
+    /// GAP QUERIES (acquisition tune, 2026-08-24 — AIQ planner rule 3,
+    /// aiq-teardown.md 6.2): reformulate the round's open gaps into
+    /// SELF-CONTAINED web search queries.
+    ///
+    /// WHY THIS EXISTS. The gap query was a string template over a claim
+    /// sentence (mod.rs `template_query`: strip citation spans, strip
+    /// disallowed figures, take 140 chars). A claim sentence is draft
+    /// PROSE, so the template's output is a slice of the loop's own
+    /// draft rather than a question — measured on the logged t7a flight,
+    /// 49% of rounds-2+ gap queries carry a mechanical draft-fragment
+    /// tell, and the round-1 queries (which ARE model-formed, by
+    /// `plan_subquestions`) are the ones that retrieve well. This method
+    /// gives the gap rounds the surface round 1 already had.
+    ///
+    /// One query per gap, positionally — the caller matches them back by
+    /// index, so a port that returns a different count is refused rather
+    /// than misaligned.
+    ///
+    /// The DEFAULT is `Err` and NOT the template (§18.3: absence is
+    /// reported, never defaulted). A caller that cannot reformulate
+    /// falls back to the deterministic template and RECORDS the
+    /// fallback in the artifact — the run never silently reverts to the
+    /// shape this replaces.
+    async fn gap_queries(&self, _question: &str, _gaps: &[String]) -> Result<Vec<String>, String> {
+        Err("port provides no gap-query surface".to_string())
+    }
+
     /// STEER 2 (directive 3c5d8b53): the pre-acquisition alignment
     /// decision — shown the plan and its acceptance shapes, the port
     /// decides: proceed, or redirect the question BEFORE any
