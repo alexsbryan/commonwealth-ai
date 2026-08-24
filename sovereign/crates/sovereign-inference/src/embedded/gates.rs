@@ -566,15 +566,29 @@ mod tests {
 
     #[test]
     fn recurrent_arch_rejects_pure_attention_and_unknown() {
-        // `qwen35` (dense hybrid) deliberately does NOT match — the
-        // string ladder can't see hybrids; libllama's is_hybrid()
-        // flag covers them (see prefix_cache_gate clause 0).
-        for arch in ["qwen3", "qwen35", "llama", "gemma3", "phi4", ""] {
+        for arch in ["qwen3", "llama", "gemma3", "phi4", ""] {
             assert!(
                 !is_recurrent_arch(arch),
                 "{arch} must NOT classify recurrent"
             );
         }
+    }
+
+    /// `qwen35` moved from the reject list to a deliberate match in
+    /// `f807e0d5f` (operator directive `be605da4`, 2026-08-17): the 3.8
+    /// generation carries Gated DeltaNet in the DENSE stack, so the
+    /// hazard is real and the ladder was widened to name it.
+    ///
+    /// This is stated as its own test because the move is easy to read
+    /// as a regression and is not one: the arch is now caught by BOTH
+    /// libllama's flags and the ladder where it used to be caught by
+    /// libllama alone. Strictly more veto, never less.
+    #[test]
+    fn dense_qwen35_is_a_deliberate_ladder_match_not_a_ladder_bug() {
+        assert!(
+            is_recurrent_arch("qwen35"),
+            "dense Qwen3.5+ carries Gated DeltaNet — the ladder names it since f807e0d5f"
+        );
     }
 
     // ── prefix_cache_gate ────────────────────────────────────────
@@ -627,22 +641,29 @@ mod tests {
     }
 
     #[test]
-    fn prefix_cache_unsafe_for_hybrid_dense_model_arch_ladder_misses() {
-        // 2026-06-09 P0: dense Qwen3.5 gguf arch is plain `qwen35` —
-        // no "moe", so the string ladder misses it — but libllama's
-        // is_hybrid() knows. Decode Error -1 on every lcp>0 prefill
-        // without this clause.
+    fn prefix_cache_unsafe_when_only_libllama_sees_the_hybrid() {
+        // 2026-06-09 P0: a dense hybrid whose gguf arch string looks
+        // like plain attention. The ladder cannot see hybrids at all —
+        // only libllama's is_hybrid() knows. Without this clause, every
+        // lcp>0 prefill returns Decode Error -1.
+        //
+        // The arch here is a ladder-clearing string ON PURPOSE. This
+        // test's whole subject is "libllama's flag ALONE vetoes", so it
+        // must be stated on an arch the ladder misses — using `qwen35`
+        // stopped expressing that in f807e0d5f, when the ladder was
+        // widened to name `qwen35` deliberately (see
+        // `dense_qwen35_is_a_deliberate_ladder_match_not_a_ladder_bug`).
         let g = prefix_cache_gate(
-            &slot("qwen35", true, PartialKvVerdict::Refused),
+            &slot("gemma3", true, PartialKvVerdict::Refused),
             false,
             false,
             no_env,
         );
-        assert!(!g.safe);
+        assert!(!g.safe, "libllama's flag alone must veto");
         assert!(g.model_says_recurrent);
         assert!(
             !g.arch_says_recurrent,
-            "ladder must NOT be what catches this"
+            "the ladder must NOT be what catches this — that is the point of the case"
         );
     }
 
@@ -724,12 +745,14 @@ mod tests {
         assert_eq!(ladder_vetoes.measured, "could-not-judge");
 
         // The June 2026 shape, on the path that has no measurement to
-        // fall back on: dense `qwen35` clears the LADDER and is caught
-        // only by libllama's flags. Turning the probe off must not
-        // reopen that hole — this is the one case where the fallback
+        // fall back on: a hybrid whose arch string clears the LADDER and
+        // is caught only by libllama's flags. Turning the probe off must
+        // not reopen that hole — this is the one case where the fallback
         // being an OR rather than the ladder alone is load-bearing.
+        // The arch is ladder-clearing on purpose, for the same reason as
+        // `prefix_cache_unsafe_when_only_libllama_sees_the_hybrid`.
         let dense_hybrid =
-            prefix_cache_gate(&slot("qwen35", true, none.clone()), false, false, no_env);
+            prefix_cache_gate(&slot("gemma3", true, none.clone()), false, false, no_env);
         assert!(
             !dense_hybrid.safe,
             "probe off must still veto a dense hybrid — libllama's flags are part \
@@ -739,6 +762,13 @@ mod tests {
             !dense_hybrid.arch_says_recurrent,
             "ladder misses it (that is the point)"
         );
+
+        // And the arch the ladder now DOES name still vetoes on this
+        // path, from the ladder rather than from libllama.
+        let ladder_names_dense_qwen35 =
+            prefix_cache_gate(&slot("qwen35", false, none.clone()), false, false, no_env);
+        assert!(!ladder_names_dense_qwen35.safe);
+        assert!(ladder_names_dense_qwen35.arch_says_recurrent);
 
         let ladder_clears = prefix_cache_gate(&slot("llama", false, none), false, false, no_env);
         assert!(ladder_clears.safe);
