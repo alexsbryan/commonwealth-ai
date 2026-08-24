@@ -59,16 +59,26 @@ pub enum Resolution {
     Unbuilt,
     /// Declared — but not here, and the canonical path does not re-export it.
     Elsewhere { sites: Vec<String> },
-    /// Not a type path at all. Three register rows are like this on purpose
-    /// (`Command`'s canonical is a TOML contract file; `WireMessage`'s is a
-    /// crate). Reported as its own verdict rather than counted as a failure.
-    NotATypePath { reason: &'static str },
+    /// Not a Rust type path. Two register rows are like this on purpose —
+    /// `Command`'s canonical is a TOML contract file and `WireMessage`'s is a
+    /// whole crate — so the question "does it exist" is still answerable and
+    /// is still asked. A contract file that was deleted is exactly as broken
+    /// as a module that was never written.
+    NotATypePath { what: &'static str, exists: bool },
 }
 
 impl Resolution {
-    /// May this destination be written into a label or cut into an order?
-    pub fn is_usable(&self) -> bool {
-        matches!(self, Self::Defined { .. } | Self::ReExported { .. })
+    /// Is there something at the canonical path today?
+    ///
+    /// This is the one question `home` declares an answer to, so it is also
+    /// the one that decides whether a destination may be written into a label
+    /// or cut into an order.
+    pub fn exists(&self) -> bool {
+        match self {
+            Self::Defined { .. } | Self::ReExported { .. } => true,
+            Self::NotATypePath { exists, .. } => *exists,
+            Self::Unbuilt | Self::Elsewhere { .. } => false,
+        }
     }
 
     /// One line, for the health block and for a refusal message.
@@ -84,7 +94,8 @@ impl Resolution {
                 }
                 s
             }
-            Self::NotATypePath { reason } => format!("not-a-type   {reason}"),
+            Self::NotATypePath { what, exists: true } => format!("present      {what}"),
+            Self::NotATypePath { what, exists: false } => format!("ABSENT       {what}"),
         }
     }
 }
@@ -142,14 +153,22 @@ impl Workspace {
     /// Resolve one register `canonical` against the tree.
     pub fn resolve(&self, canonical: &str) -> Resolution {
         if canonical.contains('/') || canonical.ends_with(".toml") {
+            // A repo-relative contract file. `Command`'s totality says the CLI
+            // contract is generative — the parser, dispatch and help text are
+            // produced from it — so the file IS the home and its absence is a
+            // real failure, not a category the check skips.
             return Resolution::NotATypePath {
-                reason: "a contract file, not a Rust path",
+                what: "a contract file, not a Rust path",
+                exists: self.root.join(canonical).is_file(),
             };
         }
         let parts: Vec<&str> = canonical.split("::").collect();
         if parts.len() < 2 {
+            // A whole crate as the home — `WireMessage` names `sovereign_wire`
+            // because the noun is a FAMILY of wire messages, not one type.
             return Resolution::NotATypePath {
-                reason: "a crate name, not a type path",
+                what: "a crate name, not a type path",
+                exists: self.crates.contains_key(canonical),
             };
         }
         let (crate_name, ty) = (parts[0], *parts.last().expect("len >= 2"));
@@ -209,9 +228,51 @@ impl Workspace {
 /// This is the health line `status` prints. It is a MEASUREMENT taken fresh on
 /// every invocation, never a stored count — same interlock as the burn-down it
 /// sits beside (`REFACTOR_LEDGER.md` §"Closure is an absence, not a record").
+///
+/// # The check is symmetric, and the asymmetric version would have missed it
+///
+/// An earlier draft asked only "does every canonical resolve?" and carried the
+/// exceptions as a hardcoded list in a test. That list is a second decider for
+/// a question the register already answers (ARCH §10.6), and it can only catch
+/// drift in one direction. The drift that actually happened ran the other way:
+/// seven homes were MINTED and the register went on calling them targets. So
+/// the row declares `home` and this compares it to the tree, and a `planned`
+/// row that has quietly acquired a home fails exactly as loudly as a `minted`
+/// row that lost one.
 pub struct RegisterHealth {
-    /// `(name, canonical, resolution)`, in register order.
-    pub rows: Vec<(String, String, Resolution)>,
+    pub rows: Vec<Row>,
+}
+
+/// One register row, and what the tree says about its canonical.
+pub struct Row {
+    pub name: String,
+    pub canonical: String,
+    /// What the register declares.
+    pub declared: super::labels::Home,
+    /// What the working tree shows.
+    pub found: Resolution,
+}
+
+impl Row {
+    /// Does the tree agree with the declaration?
+    pub fn agrees(&self) -> bool {
+        matches!(
+            (self.declared, self.found.exists()),
+            (super::labels::Home::Minted, true) | (super::labels::Home::Planned, false)
+        )
+    }
+
+    /// The repair, named. A disagreement is never reported without one.
+    pub fn remedy(&self) -> &'static str {
+        match self.declared {
+            super::labels::Home::Minted => {
+                "declared minted but nothing is there — repair `canonical`, or set home = \"planned\""
+            }
+            super::labels::Home::Planned => {
+                "declared planned but the home EXISTS — set home = \"minted\" (this is the drift that broke the register)"
+            }
+        }
+    }
 }
 
 impl RegisterHealth {
@@ -222,55 +283,78 @@ impl RegisterHealth {
             rows: register
                 .into_iter()
                 .map(|r| {
-                    let res = ws.resolve(&r.canonical);
-                    (r.name, r.canonical, res)
+                    let found = ws.resolve(&r.canonical);
+                    Row {
+                        name: r.name,
+                        canonical: r.canonical,
+                        declared: r.home,
+                        found,
+                    }
                 })
                 .collect(),
         })
     }
 
-    /// The rows no worker could `use`. A non-empty list is not a warning: it
-    /// is a set of destinations that must not be cut into an order.
-    pub fn unusable(&self) -> Vec<&(String, String, Resolution)> {
+    /// Rows where the register and the tree disagree. A non-empty list is not
+    /// a warning: every one of these is a `dest` that must not be cut into an
+    /// order until it is settled.
+    pub fn disagreements(&self) -> Vec<&Row> {
+        self.rows.iter().filter(|r| !r.agrees()).collect()
+    }
+
+    fn minted(&self) -> usize {
         self.rows
             .iter()
-            .filter(|(_, _, r)| !r.is_usable() && !matches!(r, Resolution::NotATypePath { .. }))
-            .collect()
+            .filter(|r| r.declared == super::labels::Home::Minted)
+            .count()
     }
 
     pub fn render(&self) -> String {
         use std::fmt::Write as _;
         let mut out = String::new();
-        let usable = self.rows.iter().filter(|(_, _, r)| r.is_usable()).count();
-        let unusable = self.unusable();
+        let bad = self.disagreements();
         let _ = writeln!(
             out,
-            " register destinations:      {usable} of {} usable",
-            self.rows.len()
+            " register homes:            {} minted / {} planned, of {}{}",
+            self.minted(),
+            self.rows.len() - self.minted(),
+            self.rows.len(),
+            if bad.is_empty() {
+                " — tree agrees"
+            } else {
+                ""
+            }
         );
-        if unusable.is_empty() {
+        if bad.is_empty() {
             return out;
         }
         let _ = writeln!(
             out,
-            "   (a destination that does not resolve cannot be cut into an order —\n    \
-             UNBUILT is a home nobody minted; ELSEWHERE is a home the register lost)"
+            "   {} row(s) where the register and the working tree disagree:",
+            bad.len()
         );
-        for (name, canonical, res) in unusable {
-            let _ = writeln!(out, "   {name:<16} {canonical}");
-            let _ = writeln!(out, "   {:<16} {}", "", res.render());
+        for r in bad {
+            let _ = writeln!(out, "   {:<16} {}", r.name, r.canonical);
+            let _ = writeln!(out, "   {:<16} tree says: {}", "", r.found.render());
+            let _ = writeln!(out, "   {:<16} {}", "", r.remedy());
         }
         out
     }
 
     pub fn json(&self) -> serde_json::Value {
         serde_json::json!({
-            "usable": self.rows.iter().filter(|(_, _, r)| r.is_usable()).count(),
+            "minted": self.minted(),
+            "planned": self.rows.len() - self.minted(),
             "total": self.rows.len(),
-            "unusable": self.unusable().iter().map(|(n, c, r)| serde_json::json!({
-                "name": n,
-                "canonical": c,
-                "resolution": r.render(),
+            "disagreements": self.disagreements().iter().map(|r| serde_json::json!({
+                "name": r.name,
+                "canonical": r.canonical,
+                "declared": match r.declared {
+                    super::labels::Home::Minted => "minted",
+                    super::labels::Home::Planned => "planned",
+                },
+                "tree": r.found.render(),
+                "remedy": r.remedy(),
             })).collect::<Vec<_>>(),
         })
     }
@@ -432,7 +516,7 @@ mod tests {
             "corpus_engine::index::EvidenceSet",
         ] {
             let r = ws.resolve(canonical);
-            assert!(r.is_usable(), "{canonical}: {}", r.render());
+            assert!(r.exists(), "{canonical}: {}", r.render());
         }
     }
 
@@ -458,7 +542,7 @@ mod tests {
     fn the_stale_canonical_this_check_was_built_for_is_refused() {
         let ws = workspace();
         let r = ws.resolve("sovereign_contracts::verdict::Verdict");
-        assert!(!r.is_usable(), "the control must not resolve: {}", r.render());
+        assert!(!r.exists(), "the control must not resolve: {}", r.render());
         assert!(
             matches!(r, Resolution::Elsewhere { .. }),
             "Verdict is declared elsewhere in this workspace, so the verdict must \
@@ -493,62 +577,107 @@ mod tests {
         ));
     }
 
-    /// THE RATCHET. Every register row's canonical must be usable, except the
-    /// ones listed here — each a home the program has not minted yet, with the
-    /// reason it is still open. Adding a name to this list is a visible diff in
-    /// review; that is the point. A row that silently stops resolving fails
-    /// here instead of reaching a worker as an import that cannot compile.
+    /// THE RATCHET, and it runs in both directions.
+    ///
+    /// Every row declares `home`; the tree is the arbiter. A `minted` row whose
+    /// canonical stops resolving fails — that is the direction any check would
+    /// have caught. A `planned` row whose canonical has quietly acquired a home
+    /// fails too, and THAT is the direction that actually broke this register:
+    /// seven nouns were minted in kernel-types across three rungs while their
+    /// rows went on naming `sovereign_contracts::…` paths that never existed.
+    ///
+    /// There is no exception list. An earlier draft carried one as a const here,
+    /// which is a second decider for a question `quality/CONCEPTS.toml` already
+    /// answers (ARCH §10.6) — and being a test-local const, it could only ever
+    /// encode the one direction its author thought of.
     #[test]
-    fn every_register_canonical_resolves_or_is_a_declared_open_home() {
-        const OPEN_HOMES: &[(&str, &str)] = &[
-            ("Measurement", "phase 1 — sovereign_eval::measurement is unminted"),
-            ("Baseline", "phase 1 — same module as Measurement"),
-            ("WireMessage", "canonical is a crate, not a type path"),
-            ("SharingPolicy", "phase 4 — the recipe field is not yet a type"),
-            ("Capabilities", "phase 5 — Runtime's 15 optional fields are unfolded"),
-            ("Record", "phase 6 — the sovereign-record crate does not exist"),
-            ("Endpoint", "phase 6 — sovereign_mesh::endpoint is unminted"),
-            ("Gap", "phase 6 — the family is real; no canonical home adjudicated"),
-            ("Command", "canonical is a TOML contract file, not a type path"),
-            // Two rows the register files under `holds` (architectural
-            // completeness, no work planned) whose noun does not exist as a
-            // type: grounding carries `GateClaim` and a bare `claim: String`,
-            // and commonwealth-core's mesh member type is `MemberRecord`.
-            // Their status is the open question, not their canonical.
-            ("Claim", "status=holds is wrong — grounding has GateClaim, not Claim"),
-            ("Peer", "status=holds is wrong — the mesh member type is MemberRecord"),
-        ];
-
+    fn every_register_home_matches_the_working_tree() {
         let root = super::super::census::repo_root().expect("repo root");
-        let ws = Workspace::scan(&root).expect("workspace scan");
-        let register = super::super::labels::load_register(&root).expect("register");
-
-        let mut unexpected = Vec::new();
-        let mut resolved_but_listed = Vec::new();
-        for row in &register {
-            let r = ws.resolve(&row.canonical);
-            let listed = OPEN_HOMES.iter().any(|(n, _)| *n == row.name);
-            match (r.is_usable(), listed) {
-                (false, false) => {
-                    unexpected.push(format!("{} -> {} : {}", row.name, row.canonical, r.render()))
-                }
-                // A listed home that started resolving is good news, and the
-                // list must shrink to record it (ARCH §18.3 — never defaulted).
-                (true, true) => resolved_but_listed.push(row.name.clone()),
-                _ => {}
-            }
-        }
+        let health = RegisterHealth::survey(&root).expect("survey");
+        let bad = health.disagreements();
         assert!(
-            unexpected.is_empty(),
-            "register canonicals that no worker can `use`, and that are not \
-             declared open homes:\n  {}\n\nEither repair the canonical, or add \
-             the row to OPEN_HOMES with the reason its home is still open.",
-            unexpected.join("\n  ")
+            bad.is_empty(),
+            "the register and the tree disagree on {} row(s):\n{}",
+            bad.len(),
+            bad.iter()
+                .map(|r| format!(
+                    "  {} -> {}\n    tree says: {}\n    {}",
+                    r.name,
+                    r.canonical,
+                    r.found.render(),
+                    r.remedy()
+                ))
+                .collect::<Vec<_>>()
+                .join("\n")
         );
+    }
+
+    /// Both directions of the ratchet, exercised on constructed rows rather
+    /// than on the live register — so the property is pinned even on a tree
+    /// where every row happens to agree (ARCH §18.1: a check with no failing
+    /// input you can name is not a check).
+    #[test]
+    fn a_disagreement_is_caught_whichever_way_it_points() {
+        use super::super::labels::Home;
+        let minted_but_absent = Row {
+            name: "Ghost".into(),
+            canonical: "kernel_types::ghost::Ghost".into(),
+            declared: Home::Minted,
+            found: Resolution::Unbuilt,
+        };
+        assert!(!minted_but_absent.agrees());
+        assert!(minted_but_absent.remedy().contains("nothing is there"));
+
+        let planned_but_present = Row {
+            name: "Verdict".into(),
+            canonical: "kernel_types::judgement::Verdict".into(),
+            declared: Home::Planned,
+            found: Resolution::Defined {
+                file: "kernel-types/src/judgement.rs".into(),
+                line: 91,
+            },
+        };
         assert!(
-            resolved_but_listed.is_empty(),
-            "these homes now resolve — remove them from OPEN_HOMES: {}",
-            resolved_but_listed.join(", ")
+            !planned_but_present.agrees(),
+            "a planned home that already exists is the drift that broke the register"
+        );
+        assert!(planned_but_present.remedy().contains("EXISTS"));
+
+        // And the two agreeing shapes stay quiet.
+        for (declared, found) in [
+            (Home::Minted, Resolution::ReExported { file: "x.rs".into() }),
+            (Home::Planned, Resolution::Unbuilt),
+        ] {
+            let r = Row {
+                name: "X".into(),
+                canonical: "a::b::X".into(),
+                declared,
+                found,
+            };
+            assert!(r.agrees(), "{:?} must agree", r.declared);
+        }
+    }
+
+    /// A contract file is a home too, and a deleted one is exactly as broken as
+    /// a module nobody wrote. `Command`'s canonical is `cli-contract.toml` and
+    /// its totality calls the contract GENERATIVE, so its absence is a failure
+    /// rather than a category the check declines to judge.
+    #[test]
+    fn a_non_type_home_still_answers_whether_it_exists() {
+        let ws = workspace();
+        let present = ws.resolve("sovereign/docs/cli-contract.toml");
+        assert!(present.exists(), "{}", present.render());
+        assert!(matches!(present, Resolution::NotATypePath { .. }));
+
+        let absent = ws.resolve("sovereign/docs/no-such-contract.toml");
+        assert!(!absent.exists(), "{}", absent.render());
+
+        // A crate as a home: `sovereign_wire` is planned and not yet a crate.
+        let crate_home = ws.resolve("sovereign_wire");
+        assert!(!crate_home.exists(), "{}", crate_home.render());
+        assert!(
+            ws.resolve("kernel_types").exists(),
+            "an existing crate named as a home must read as present"
         );
     }
 }

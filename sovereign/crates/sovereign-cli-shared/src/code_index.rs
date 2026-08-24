@@ -354,32 +354,51 @@ pub async fn rebuild_code_corpus(
     std::fs::create_dir_all(data_dir)
         .map_err(|e| format!("cannot create data dir {}: {e}", data_dir.display()))?;
 
-    // A `rebuild` is a rebuild. Clear prior LanceDB state so
-    // `create_empty_table` doesn't trip with `Table 'chunks' already
-    // exists`. Keep the SCIP graph DB (`scip_graph.db*`) intact —
-    // it's owned by the daemon's Reindexer on a parallel cadence,
-    // and wiping it here would race with a just-nudged rebuild.
+    // A `rebuild` rebuilds THE CHUNK TABLE. Clear the ingest's own artifacts so
+    // `create_empty_table` doesn't trip with `Table 'chunks' already exists`,
+    // and leave every other occupant of the directory alone — see
+    // `clear_ingest_artifacts` for what that cost when it was the other way
+    // round. `svrn corpus remove <id>` is the verb for "delete the corpus".
     //
     // Two targets: the canonical `<corpus>/` directory AND every
-    // `<corpus>-partition-*/` sibling. The engine writes new ingests
-    // into a partition directory and only renames to canonical at
-    // finalize; a stale partition from a prior run would make
-    // `create_empty_table` collide on the second pass.
+    // `<corpus>-partition-*/` sibling. The engine writes new ingests into a
+    // partition directory and only renames to canonical at finalize; a stale
+    // partition from a prior run would make `create_empty_table` collide on
+    // the second pass.
     let target = data_dir.join(corpus_id);
+    let mut preserved: Vec<String> = Vec::new();
     if target.exists() {
-        clear_lancedb_artifacts(&target).map_err(|e| {
+        let kept = clear_ingest_artifacts(&target).map_err(|e| {
             format!(
-                "cannot clear existing LanceDB index at {}: {e}",
+                "cannot clear existing chunk table at {}: {e}",
                 target.display()
             )
         })?;
+        preserved.extend(kept.names);
     }
-    clear_partitions_for(data_dir, corpus_id).map_err(|e| {
+    let kept = clear_partitions_for(data_dir, corpus_id).map_err(|e| {
         format!(
             "cannot clear partition dirs under {}: {e}",
             data_dir.display()
         )
     })?;
+    preserved.extend(kept.names);
+
+    // Say what survived. A rebuild regenerates chunk ids, so anything keyed to
+    // the old ones is now stale — and the subsystem that owns it is the only
+    // thing entitled to decide what that means. Reporting is the contract;
+    // deleting on its behalf is what this code used to do.
+    if !preserved.is_empty() {
+        eprintln!(
+            "Preserved {} entr{} not owned by the ingest (chunk ids are regenerated, so \
+             anything keyed to the old ones may now be stale):",
+            preserved.len(),
+            if preserved.len() == 1 { "y" } else { "ies" }
+        );
+        for name in &preserved {
+            eprintln!("  {name}");
+        }
+    }
 
     // Vector ANN enabled — every corpus on this node shares one
     // embedding model so the `embedding_dimensions` is consistent
@@ -450,71 +469,134 @@ vector = true
         .map_err(|e| format!("ingest failed: {e}"))
 }
 
-/// Remove every entry in `dir` that belongs to the LanceDB index
-/// (the `_corpus_meta.json`, the `.lance` table dirs, the `_indices`
-/// directory, any FTS/vector build scratch). Preserve anything named
-/// `scip_graph.db*` — the daemon's Reindexer owns those.
+/// The entries a code-corpus ingest creates. Everything else in a corpus
+/// directory belongs to some other subsystem.
 ///
-/// If the directory ends up empty after clearing, remove the directory
-/// itself. Reason: `finalise_solo_ingest` promotes
-/// `<corpus>-partition-<node>/` to canonical `<corpus>/` via rename,
-/// and that rename is skipped when the canonical path already
-/// exists — even if empty. An empty leftover would silently leave
-/// the fresh ingest stranded in the partition path.
+/// This list is the whole point of the module's clearing logic, and it is an
+/// ALLOWLIST on purpose. It used to be a denylist — "delete everything that is
+/// not `scip_graph.db*`" — which is not a property anyone can hold in their
+/// head as the directory gains occupants. Measured on this host 2026-08-24, a
+/// mature corpus directory also holds `_enrichment_state.json`,
+/// `_raptor_checkpoint`, `raptor_summaries.lance`, `atlas/`,
+/// `field_skeleton.json`, `triage-candidates.json`, `_doc_freshness.json`,
+/// `code_intel_cache.json`, a whole second graph db (`wikipedia_graph.db`),
+/// and in one case a hand-made `_corpus_meta.json.bak-predeup`. A rebuild
+/// deleted all of it.
+const INGEST_ARTIFACTS: &[&str] = &[
+    // The corpus descriptor the ingest writes on finalise.
+    "_corpus_meta.json",
+    // The table `create_empty_table` collides on. Removing the directory takes
+    // its `_indices` / FTS / vector build scratch with it.
+    "chunks.lance",
+    // A top-level index dir from older layouts; harmless when absent.
+    "_indices",
+];
+
+/// What a clear left behind. Reported, never silent.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct Preserved {
+    /// Entry names that were not the ingest's to delete, sorted.
+    pub names: Vec<String>,
+    /// True when the directory itself was removed because nothing survived.
+    pub dir_removed: bool,
+}
+
+/// Remove the ingest's own artifacts from `dir`, preserving everything else.
 ///
-/// Returns the first IO error encountered; partial cleanup is fine
-/// since the next `create_empty_table` will still succeed against
-/// whatever's left as long as the `chunks` table itself is gone.
-fn clear_lancedb_artifacts(dir: &std::path::Path) -> std::io::Result<()> {
-    let mut any_kept = false;
+/// # Why this is an allowlist
+///
+/// A code-index rebuild is a rebuild OF THE CHUNK TABLE. It is not a request
+/// to empty the corpus directory, and the two were the same function until
+/// 2026-08-24, when a branch switch changed 570 files, tripped the
+/// "past the 500-file mark a rebuild is usually faster" heuristic in
+/// [`run_incremental`], and destroyed a 7.8-hour code-intel enrichment pass
+/// that had finished three hours earlier. Nothing warned, because deleting
+/// data the caller never mentioned was the implementation's normal behaviour.
+///
+/// A speed heuristic must never be able to choose a destructive path. After
+/// this change the heuristic is free to pick whichever route is faster,
+/// because both routes cost the same thing: re-embedding chunks.
+///
+/// If the caller genuinely wants the directory gone, that verb already exists
+/// and is explicit — `svrn corpus remove <id>` (ARCH §19: the inventory
+/// outranks the plan).
+///
+/// # The empty-directory rule, and why it is computed rather than tracked
+///
+/// `finalise_solo_ingest` promotes `<corpus>-partition-<node>/` to canonical
+/// `<corpus>/` by rename, and that rename is SKIPPED when the canonical path
+/// already exists — even if empty. So a directory with nothing left in it must
+/// go, or the fresh ingest is stranded in the partition path. That is decided
+/// by re-reading the directory afterwards, not by a flag set during the walk:
+/// a flag has to be updated every time the allowlist changes, and this does
+/// not.
+pub(crate) fn clear_ingest_artifacts(dir: &std::path::Path) -> std::io::Result<Preserved> {
+    let mut preserved = Preserved::default();
     for entry in std::fs::read_dir(dir)? {
         let entry = entry?;
         let name = entry.file_name();
-        let name_str = name.to_string_lossy();
-        if name_str.starts_with("scip_graph.db") {
-            any_kept = true;
-            continue;
-        }
-        let path = entry.path();
-        if path.is_dir() {
-            std::fs::remove_dir_all(&path)?;
+        let name_str = name.to_string_lossy().to_string();
+        if INGEST_ARTIFACTS.contains(&name_str.as_str()) {
+            let path = entry.path();
+            if path.is_dir() {
+                std::fs::remove_dir_all(&path)?;
+            } else {
+                std::fs::remove_file(&path)?;
+            }
         } else {
-            std::fs::remove_file(&path)?;
+            preserved.names.push(name_str);
         }
     }
-    if !any_kept {
-        // Swallow the error — a racing observer could have created
-        // a file between our last read and this rmdir. The next
-        // ingest step will create a fresh partition either way.
-        let _ = std::fs::remove_dir(dir);
+    preserved.names.sort();
+    if std::fs::read_dir(dir)?.next().is_none() {
+        // Swallow the error — a racing observer could have created a file
+        // between the read and this rmdir. The next ingest step creates a
+        // fresh partition either way.
+        preserved.dir_removed = std::fs::remove_dir(dir).is_ok();
     }
-    Ok(())
+    Ok(preserved)
 }
 
-/// Remove every `<corpus_id>-partition-*` directory under `root`.
-/// Called before a full rebuild so stale partition-of-self /
-/// partition-of-peer dirs don't collide with the fresh ingest's
-/// `create_empty_table` call.
+/// Clear the ingest's artifacts from every `<corpus_id>-partition-*` directory
+/// under `root`, so a stale partition-of-self / partition-of-peer does not
+/// collide with the fresh ingest's `create_empty_table` call.
 ///
-/// Non-partition siblings (other corpora, arbitrary files) are
-/// untouched. A missing `root` is not an error — first-ever
-/// rebuild on a machine with no indexes yet is a normal state.
-fn clear_partitions_for(root: &std::path::Path, corpus_id: &str) -> std::io::Result<()> {
+/// This used to `remove_dir_all` the whole partition. That is what actually
+/// destroyed the code-intel enrichment on 2026-08-24: for a SCIP-indexed code
+/// corpus the canonical directory holds `scip_graph.db`, which kept it alive,
+/// which meant `finalise_solo_ingest` never promoted — so the corpus's chunks,
+/// and the enrichment rows written alongside them, lived in
+/// `<corpus>-partition-local/` permanently. The "transient shard" the old code
+/// believed it was deleting was the corpus.
+///
+/// Non-partition siblings (other corpora, arbitrary files) are untouched. A
+/// missing `root` is not an error — a first-ever rebuild on a machine with no
+/// indexes is a normal state.
+pub(crate) fn clear_partitions_for(
+    root: &std::path::Path,
+    corpus_id: &str,
+) -> std::io::Result<Preserved> {
     let prefix = format!("{corpus_id}-partition-");
     let entries = match std::fs::read_dir(root) {
         Ok(e) => e,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Preserved::default()),
         Err(e) => return Err(e),
     };
+    let mut all = Preserved::default();
     for entry in entries {
         let entry = entry?;
         let name = entry.file_name();
         let name_str = name.to_string_lossy();
-        if name_str.starts_with(&prefix) {
-            std::fs::remove_dir_all(entry.path())?;
+        if !name_str.starts_with(&prefix) || !entry.path().is_dir() {
+            continue;
+        }
+        let kept = clear_ingest_artifacts(&entry.path())?;
+        for n in kept.names {
+            all.names.push(format!("{name_str}/{n}"));
         }
     }
-    Ok(())
+    all.names.sort();
+    Ok(all)
 }
 
 pub fn tempfile_dir() -> std::io::Result<PathBuf> {
@@ -582,4 +664,205 @@ pub async fn build_daemon_embed_fn() -> std::result::Result<(EmbedFn, String), S
         Arc::new(RemoteApiProvider::new(&endpoint, None, &embed_model, 8192));
     let f = sovereign_core::embed_fn::inference_to_embed_fn(provider);
     Ok((f, embed_model))
+}
+
+#[cfg(test)]
+mod clearing_tests {
+    use super::*;
+    use std::fs;
+    use std::path::Path;
+
+    /// Build a corpus directory holding what a real one holds. The occupant
+    /// list is not invented — it is `ls -A` over this host's `sep`,
+    /// `wikipedia`, `conversations-anthropic` and `commonwealth-ai` corpora
+    /// on 2026-08-24.
+    fn populated_corpus(dir: &Path) {
+        fs::create_dir_all(dir).unwrap();
+        // The ingest's own.
+        fs::write(dir.join("_corpus_meta.json"), "{}").unwrap();
+        fs::create_dir_all(dir.join("chunks.lance/data")).unwrap();
+        fs::write(dir.join("chunks.lance/data/0.lance"), "x").unwrap();
+        // Everybody else's.
+        fs::write(dir.join("code_intel_cache.json"), "{}").unwrap();
+        fs::write(dir.join("_enrichment_state.json"), "{}").unwrap();
+        fs::write(dir.join("raptor_summaries.meta.json"), "{}").unwrap();
+        fs::create_dir_all(dir.join("raptor_summaries.lance")).unwrap();
+        fs::create_dir_all(dir.join("atlas")).unwrap();
+        fs::write(dir.join("atlas/atoms.jsonl"), "{}").unwrap();
+        fs::write(dir.join("field_skeleton.json"), "{}").unwrap();
+        fs::write(dir.join("triage-candidates.json"), "[]").unwrap();
+        fs::write(dir.join("_corpus_meta.json.bak-predeup"), "{}").unwrap();
+        fs::write(dir.join("scip_graph.db"), "x").unwrap();
+        fs::write(dir.join(".rebuild.lock"), "").unwrap();
+    }
+
+    /// THE REGRESSION. On 2026-08-24 a branch switch changed 570 files, tripped
+    /// the "past the 500-file mark a rebuild is usually faster" heuristic, and
+    /// the resulting rebuild deleted `code_intel_cache.json` — 19,855 symbol
+    /// summaries, 7.8 hours of local inference, finished three hours earlier.
+    /// The pass was regenerable; nothing warned, and that is the part this
+    /// pins. Switching branches must cost a re-index, never the enrichment.
+    #[test]
+    fn a_rebuild_does_not_delete_the_code_intel_enrichment() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("commonwealth-ai");
+        populated_corpus(&dir);
+
+        let kept = clear_ingest_artifacts(&dir).unwrap();
+
+        assert!(
+            dir.join("code_intel_cache.json").exists(),
+            "the 7.8-hour cache must survive a chunk-table rebuild"
+        );
+        assert!(kept.names.contains(&"code_intel_cache.json".to_string()));
+        assert!(!kept.dir_removed);
+    }
+
+    /// The ingest's artifacts go, and nothing else does. Stated as the full
+    /// partition of the directory so a new occupant cannot be quietly added to
+    /// the wrong side.
+    #[test]
+    fn only_the_ingests_own_artifacts_are_removed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("corpus");
+        populated_corpus(&dir);
+
+        let kept = clear_ingest_artifacts(&dir).unwrap();
+
+        for gone in ["_corpus_meta.json", "chunks.lance"] {
+            assert!(!dir.join(gone).exists(), "{gone} must be cleared");
+        }
+        let expected = [
+            ".rebuild.lock",
+            "_corpus_meta.json.bak-predeup",
+            "_enrichment_state.json",
+            "atlas",
+            "code_intel_cache.json",
+            "field_skeleton.json",
+            "raptor_summaries.lance",
+            "raptor_summaries.meta.json",
+            "scip_graph.db",
+            "triage-candidates.json",
+        ];
+        assert_eq!(
+            kept.names,
+            expected.iter().map(|s| s.to_string()).collect::<Vec<_>>()
+        );
+        for survivor in expected {
+            assert!(dir.join(survivor).exists(), "{survivor} must survive");
+        }
+        // The nested file proves the directory was preserved whole, not
+        // emptied and left as a shell.
+        assert!(dir.join("atlas/atoms.jsonl").exists());
+    }
+
+    /// A second graph db in the same directory used to be deleted because the
+    /// exemption was spelled `scip_graph.db` and nothing else. `wikipedia`
+    /// carries `wikipedia_graph.db` beside its chunks.
+    #[test]
+    fn a_sibling_graph_db_that_is_not_scip_survives() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("wikipedia");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("_corpus_meta.json"), "{}").unwrap();
+        fs::create_dir_all(dir.join("chunks.lance")).unwrap();
+        for f in ["wikipedia_graph.db", "wikipedia_graph.db-wal"] {
+            fs::write(dir.join(f), "x").unwrap();
+        }
+
+        clear_ingest_artifacts(&dir).unwrap();
+
+        for f in ["wikipedia_graph.db", "wikipedia_graph.db-wal"] {
+            assert!(dir.join(f).exists(), "{f} must survive");
+        }
+    }
+
+    /// The promotion rule, both ways. `finalise_solo_ingest` renames
+    /// `<corpus>-partition-<node>/` to canonical `<corpus>/` and SKIPS the
+    /// rename when the canonical path exists — even empty. So a directory with
+    /// nothing left must go, or the fresh ingest is stranded in the partition.
+    #[test]
+    fn the_directory_goes_only_when_nothing_survived() {
+        let tmp = tempfile::tempdir().unwrap();
+
+        let bare = tmp.path().join("bare");
+        fs::create_dir_all(bare.join("chunks.lance")).unwrap();
+        fs::write(bare.join("_corpus_meta.json"), "{}").unwrap();
+        let kept = clear_ingest_artifacts(&bare).unwrap();
+        assert!(kept.names.is_empty());
+        assert!(
+            kept.dir_removed,
+            "an emptied directory must not block the rename"
+        );
+        assert!(!bare.exists());
+
+        let occupied = tmp.path().join("occupied");
+        fs::create_dir_all(occupied.join("chunks.lance")).unwrap();
+        fs::write(occupied.join("code_intel_cache.json"), "{}").unwrap();
+        let kept = clear_ingest_artifacts(&occupied).unwrap();
+        assert!(!kept.dir_removed);
+        assert!(occupied.exists());
+    }
+
+    /// The partition path is the one that actually did the damage. For a
+    /// SCIP-indexed code corpus the canonical directory holds `scip_graph.db`,
+    /// so it never empties, so `finalise_solo_ingest` never promotes — and the
+    /// corpus lives in `<id>-partition-local/` permanently. `remove_dir_all` on
+    /// that is not "clearing a stale shard", it is deleting the corpus.
+    #[test]
+    fn a_partition_holding_the_corpus_is_cleared_not_nuked() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let part = root.join("commonwealth-ai-partition-local");
+        populated_corpus(&part);
+        // An unrelated corpus and a same-prefix non-partition must be untouched.
+        fs::create_dir_all(root.join("commonwealth")).unwrap();
+        fs::write(root.join("commonwealth/_corpus_meta.json"), "{}").unwrap();
+        fs::create_dir_all(root.join("commonwealth-ai")).unwrap();
+        fs::write(root.join("commonwealth-ai/scip_graph.db"), "x").unwrap();
+
+        let kept = clear_partitions_for(root, "commonwealth-ai").unwrap();
+
+        assert!(part.exists(), "the partition directory must survive");
+        assert!(
+            !part.join("chunks.lance").exists(),
+            "its chunk table is cleared"
+        );
+        assert!(part.join("code_intel_cache.json").exists());
+        assert!(part.join("atlas/atoms.jsonl").exists());
+        assert!(
+            kept.names
+                .iter()
+                .any(|n| n.ends_with("/code_intel_cache.json")),
+            "preserved names are qualified by partition: {:?}",
+            kept.names
+        );
+        // Blast radius: neither sibling was in scope.
+        assert!(root.join("commonwealth/_corpus_meta.json").exists());
+        assert!(root.join("commonwealth-ai/scip_graph.db").exists());
+    }
+
+    /// A partition that held only ingest output is removed outright — that is
+    /// the case the old `remove_dir_all` was written for, and it still works.
+    #[test]
+    fn a_partition_holding_only_ingest_output_is_removed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let part = root.join("c-partition-peer");
+        fs::create_dir_all(part.join("chunks.lance")).unwrap();
+        fs::write(part.join("_corpus_meta.json"), "{}").unwrap();
+
+        let kept = clear_partitions_for(root, "c").unwrap();
+
+        assert!(!part.exists(), "a stale peer shard must not linger");
+        assert!(kept.names.is_empty());
+    }
+
+    /// A missing indexes root is a normal first-run state, not an error.
+    #[test]
+    fn a_missing_root_is_not_an_error() {
+        let tmp = tempfile::tempdir().unwrap();
+        let kept = clear_partitions_for(&tmp.path().join("nope"), "c").unwrap();
+        assert_eq!(kept, Preserved::default());
+    }
 }

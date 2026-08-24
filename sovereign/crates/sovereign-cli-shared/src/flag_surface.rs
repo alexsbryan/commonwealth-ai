@@ -53,7 +53,10 @@ pub fn parse<T: clap::Parser>(args: &[String]) -> Result<T, String> {
 /// Strip the prefix `clap` renders so the caller's is the only one.
 fn bare(e: clap::Error) -> String {
     let s = e.to_string();
-    s.strip_prefix("error: ").unwrap_or(&s).trim_end().to_string()
+    s.strip_prefix("error: ")
+        .unwrap_or(&s)
+        .trim_end()
+        .to_string()
 }
 
 #[cfg(test)]

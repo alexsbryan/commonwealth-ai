@@ -87,6 +87,10 @@ pub enum DetectorId {
     /// Provenance carried through an untyped `metadata` map instead of a
     /// typed `Origin` / `Custody` / `Attribution` field.
     ProvenanceChannel,
+    /// A struct holding many fields that each carry their own guard, so no
+    /// invariant can span them. The composition-root smell the god-object
+    /// measure is blind to.
+    UnownedCell,
 }
 
 impl DetectorId {
@@ -98,17 +102,19 @@ impl DetectorId {
             DetectorId::Behaviour => "behaviour",
             DetectorId::ArgLoop => "arg-loop",
             DetectorId::ProvenanceChannel => "provenance-channel",
+            DetectorId::UnownedCell => "unowned-cell",
         }
     }
 
     /// Every detector, in the order `status` reports them.
-    pub const ALL: [DetectorId; 6] = [
+    pub const ALL: [DetectorId; 7] = [
         DetectorId::FieldAtom,
         DetectorId::Shape,
         DetectorId::Name,
         DetectorId::Behaviour,
         DetectorId::ArgLoop,
         DetectorId::ProvenanceChannel,
+        DetectorId::UnownedCell,
     ];
 }
 
@@ -841,6 +847,265 @@ impl Detector for ProvenanceChannelDetector {
     }
 }
 
+// ── 7. Unowned cells ─────────────────────────────────────────────────────────
+
+/// Types that make a field independently mutable.
+///
+/// Each carries its own interior mutability, so a field declared with one can
+/// be written without holding any guard the struct's OTHER fields are under.
+/// Two such fields therefore cannot be read together atomically — which is the
+/// same statement as *no invariant may span them*.
+///
+/// `Arc<T>` is deliberately absent: sharing a handle is not independent
+/// mutation. `Arc<Mutex<T>>` is caught by the `Mutex` row, and a bare
+/// `Arc<Config>` is exactly the immutable shared state this detector should
+/// stay quiet about.
+const CELL_KINDS: &[(&str, &str)] = &[
+    (r"\bArcSwap", "ArcSwap"),
+    (r"\bRwLock\s*<", "RwLock"),
+    (r"\bMutex\s*<", "Mutex"),
+    (r"\bAtomic[A-Z]\w*", "Atomic"),
+    (r"\bSemaphore", "Semaphore"),
+    (r"\bOnceCell\s*<|\bOnceLock\s*<", "OnceCell"),
+    (r"\bmpsc::Sender", "mpsc-tx"),
+];
+
+/// Below this many cells a struct is a counter set, not a composition root.
+///
+/// # The number is measured, not preferred
+///
+/// Ranked over this tree, the band immediately under the floor is
+/// single-kind counter structs — `HealthTracker` (6 `Atomic`) and
+/// `VerifyStats` (6 `Atomic`) — where the fields genuinely are independent
+/// tallies and there IS no invariant to span them. At 8 and above every hit is
+/// a runtime root or a manager. A floor errs toward under-reporting, which is
+/// the safe direction for the same reason [`Site::key`] gives: it can miss a
+/// subject, never invent one.
+const CELL_FLOOR: usize = 8;
+
+/// Fields declared at the top level of a struct body, each paired with the
+/// source text of its own declaration.
+///
+/// `open` is the byte offset of the `{` that opens the body. Depth is tracked
+/// over all three bracket pairs so an attribute like `#[serde(default = "..")]`
+/// or a nested type cannot be mistaken for a field, and a field is only
+/// recognised at the start of a line — the shape rustfmt guarantees.
+fn struct_fields(src: &str, open: usize) -> Vec<(usize, String, String)> {
+    let bytes = src.as_bytes();
+    let mut depth = 0usize;
+    let mut end = src.len();
+    // Byte scan, not `char_indices().skip(open)`: `open` is a BYTE offset, so
+    // skipping that many CHARS starts mid-body on any file containing a
+    // multi-byte character earlier on — which underflowed `depth` on the first
+    // `}` and panicked the whole run. Braces are ASCII, so bytes are exact and
+    // a UTF-8 continuation byte can never be mistaken for one.
+    for (i, b) in bytes.iter().enumerate().skip(open) {
+        match b {
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    end = i;
+                    break;
+                }
+            }
+            _ => {}
+        }
+    }
+    let body_start = open + 1;
+    if body_start >= end {
+        return Vec::new();
+    }
+
+    // Two guards, because either alone lets a continuation line through.
+    // `^ {4}` is rustfmt's field indent under this workspace's stock config
+    // (`rustfmt.toml` is deliberately defaults-only), so a wrapped type's
+    // continuation sits deeper and is skipped. `[^:]` after the colon rejects
+    // a path segment: without it the second line of
+    //     peer: std::sync::RwLock<
+    //         std::collections::HashMap<NodeId, u64>,
+    // reads as a field named `std`, which is how this was caught.
+    let field_re = Regex::new(r"^ {4}(?:pub(?:\s*\([^)]*\))?\s+)?([a-z_][a-z0-9_]*)\s*:[^:]")
+        .expect("static shape");
+
+    // Positions where a field declaration begins: line start, all depths zero.
+    let mut starts: Vec<(usize, String)> = Vec::new();
+    let (mut curly, mut paren, mut brack) = (0usize, 0usize, 0usize);
+    let mut line_start = body_start;
+    for i in body_start..end {
+        match bytes[i] {
+            b'{' => curly += 1,
+            b'}' => curly = curly.saturating_sub(1),
+            b'(' => paren += 1,
+            b')' => paren = paren.saturating_sub(1),
+            b'[' => brack += 1,
+            b']' => brack = brack.saturating_sub(1),
+            b'\n' => {
+                line_start = i + 1;
+                continue;
+            }
+            _ => {}
+        }
+        if i != line_start || curly + paren + brack != 0 {
+            continue;
+        }
+        let line_end = src[i..end].find('\n').map_or(end, |o| i + o);
+        if let Some(c) = field_re.captures(&src[i..line_end]) {
+            starts.push((i, c[1].to_string()));
+        }
+    }
+
+    starts
+        .iter()
+        .enumerate()
+        .map(|(n, (pos, name))| {
+            let stop = starts.get(n + 1).map_or(end, |(p, _)| *p);
+            (*pos, name.clone(), src[*pos..stop].to_string())
+        })
+        .collect()
+}
+
+/// One struct, as this detector sees it.
+pub struct CellScan {
+    pub name: String,
+    pub line: i32,
+    pub fields: usize,
+    pub kinds: BTreeMap<&'static str, usize>,
+}
+
+impl CellScan {
+    pub fn cells(&self) -> usize {
+        self.kinds.values().sum()
+    }
+
+    /// `18 RwLock, 14 Atomic, …` — the evidence, in a fixed order so two runs
+    /// of the same tree render the same string.
+    pub fn mix(&self) -> String {
+        self.kinds
+            .iter()
+            .map(|(k, n)| format!("{n} {k}"))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+pub struct UnownedCellDetector;
+
+impl UnownedCellDetector {
+    /// The cell kind carried by one field declaration, in `CELL_KINDS` order.
+    /// A field counts ONCE however many guards its type nests — `RwLock<Vec<
+    /// Mutex<T>>>` is one field somebody can write alone, not two.
+    fn cell_kind(decl: &str) -> Option<&'static str> {
+        CELL_KINDS.iter().find_map(|(pat, label)| {
+            Regex::new(pat)
+                .ok()
+                .filter(|re| re.is_match(decl))
+                .map(|_| *label)
+        })
+    }
+
+    /// Every named-field struct in one file, already stripped of comments and
+    /// `#[cfg(test)]` scopes by the caller.
+    ///
+    /// Split out from [`Detector::fire`] because the floor, the parser and the
+    /// kind table are the whole instrument, and an instrument that can only be
+    /// exercised by walking a real tree is one nobody pins (§18.1).
+    pub fn scan_text(text: &str) -> Vec<CellScan> {
+        let decl_re =
+            Regex::new(r"(?m)^(?:pub(?:\s*\([^)]*\))?\s+)?struct\s+([A-Z]\w*)\s*(?:<[^>]*>\s*)?\{")
+                .expect("static shape");
+        let mut out = Vec::new();
+        for m in decl_re.captures_iter(text) {
+            let whole = m.get(0).expect("group 0 always present");
+            let fields = struct_fields(text, whole.end() - 1);
+            if fields.is_empty() {
+                continue;
+            }
+            let mut kinds: BTreeMap<&'static str, usize> = BTreeMap::new();
+            for (_, _, decl) in &fields {
+                if let Some(k) = Self::cell_kind(decl) {
+                    *kinds.entry(k).or_insert(0) += 1;
+                }
+            }
+            out.push(CellScan {
+                name: m[1].to_string(),
+                line: text[..whole.start()].lines().count() as i32 + 1,
+                fields: fields.len(),
+                kinds,
+            });
+        }
+        out
+    }
+}
+
+#[async_trait::async_trait]
+impl Detector for UnownedCellDetector {
+    fn id(&self) -> DetectorId {
+        DetectorId::UnownedCell
+    }
+
+    fn settings_digest(&self) -> String {
+        format!("floor={CELL_FLOOR};kinds={}", CELL_KINDS.len())
+    }
+
+    fn control(&self) -> ControlSite {
+        ControlSite {
+            // Verified present 2026-08-24: 60 fields, 40 of them cells
+            // (18 RwLock, 14 Atomic, 4 ArcSwap, 3 Mutex, 1 Semaphore).
+            file: "commonwealth/crates/commonwealth-api/src/state.rs",
+            token: "AppStateInner",
+            why: "AppStateInner is the mesh daemon's composition root and the \
+                  worst holding on this tree by a factor of two. If it has \
+                  gone quiet either the root was genuinely given an owner \
+                  (pick a new control) or the parser stopped seeing struct \
+                  fields at all.",
+        }
+    }
+
+    async fn fire(&self, ctx: &DetectorCtx<'_>) -> Result<FireReport, String> {
+        let files = census::walk_rs_files(ctx.root, census::EXCLUDE_DIRS_DECL);
+        let mut sites = Vec::new();
+        for path in &files {
+            let Ok(raw) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            // Comments blanked (a doc comment describing `RwLock` is prose
+            // about the pattern, not the pattern — the same false positive
+            // `strip_comments` was written for) and `#[cfg(test)]` scopes
+            // dropped (a test double's counters are not a runtime root).
+            let text = census::strip_test_scope(&census::strip_comments(&raw));
+            let rel = rel_path(ctx.root, path);
+            for scan in Self::scan_text(&text) {
+                if scan.cells() < CELL_FLOOR {
+                    continue;
+                }
+                sites.push(Site {
+                    detector: DetectorId::UnownedCell,
+                    line: scan.line,
+                    file: rel.clone(),
+                    locus: rel.clone(),
+                    note: format!(
+                        "{} of {} fields carry their own guard ({}) — no two can be \
+                         read under one guard, so no invariant may span them",
+                        scan.cells(),
+                        scan.fields,
+                        scan.mix()
+                    ),
+                    token: scan.name,
+                });
+            }
+        }
+        sites.sort_by(|a, b| (&a.file, &a.token).cmp(&(&b.file, &b.token)));
+
+        Ok(FireReport::new(
+            self.id(),
+            sites,
+            self.control(),
+            self.settings_digest(),
+        ))
+    }
+}
+
 /// Every detector, constructed. The one place the set is enumerated.
 pub fn all() -> Vec<Box<dyn Detector>> {
     vec![
@@ -850,6 +1115,7 @@ pub fn all() -> Vec<Box<dyn Detector>> {
         Box::new(BehaviourDetector),
         Box::new(ArgLoopDetector),
         Box::new(ProvenanceChannelDetector),
+        Box::new(UnownedCellDetector),
     ]
 }
 
@@ -877,7 +1143,7 @@ mod tests {
 
     #[test]
     fn the_id_set_is_closed_and_every_id_renders() {
-        assert_eq!(DetectorId::ALL.len(), 6);
+        assert_eq!(DetectorId::ALL.len(), 7);
         for id in DetectorId::ALL {
             assert!(!id.as_str().is_empty());
         }
@@ -1036,5 +1302,162 @@ mod tests {
         assert!(c.file.is_empty(), "a control was pinned — update this test");
         let r = FireReport::new(DetectorId::Behaviour, Vec::new(), c, "t");
         assert_eq!(r.control.verdict(), Verdict::CouldNotJudge);
+    }
+
+    // ── unowned cells ────────────────────────────────────────────────────────
+
+    fn scan_one(src: &str) -> CellScan {
+        let mut v = UnownedCellDetector::scan_text(src);
+        assert_eq!(v.len(), 1, "expected exactly one struct in fixture");
+        v.remove(0)
+    }
+
+    #[test]
+    fn a_field_is_a_cell_when_its_type_carries_its_own_guard() {
+        let s = scan_one(
+            "pub struct Root {\n\
+             \x20   a: RwLock<u64>,\n\
+             \x20   b: std::sync::atomic::AtomicBool,\n\
+             \x20   c: ArcSwap<Config>,\n\
+             \x20   d: Mutex<Vec<u8>>,\n\
+             \x20   e: tokio::sync::Semaphore,\n\
+             }\n",
+        );
+        assert_eq!(s.fields, 5);
+        assert_eq!(s.cells(), 5);
+        assert_eq!(s.mix(), "1 ArcSwap, 1 Atomic, 1 Mutex, 1 RwLock, 1 Semaphore");
+    }
+
+    /// The distinction the whole detector rests on: a shared handle is not
+    /// independent mutation. `Arc<Config>` is exactly the immutable shared
+    /// state a clean root SHOULD be full of.
+    #[test]
+    fn a_shared_handle_is_not_a_cell() {
+        let s = scan_one(
+            "pub struct Root {\n\
+             \x20   cfg: Arc<Config>,\n\
+             \x20   engine: Arc<dyn Engine>,\n\
+             \x20   started: std::time::Instant,\n\
+             \x20   name: String,\n\
+             }\n",
+        );
+        assert_eq!(s.fields, 4);
+        assert_eq!(s.cells(), 0);
+    }
+
+    /// Nested guards are still one field somebody can write alone. Counting
+    /// them twice would inflate every root that holds a collection of locks.
+    #[test]
+    fn nested_guards_count_the_field_once() {
+        let s = scan_one("struct R {\n    a: RwLock<Vec<Mutex<u8>>>,\n}\n");
+        assert_eq!(s.cells(), 1);
+    }
+
+    /// Attributes carry parens and quoted text; a naive line scan reads
+    /// `default = "x"` as a field named `default`.
+    #[test]
+    fn an_attribute_is_not_a_field() {
+        let s = scan_one(
+            "struct R {\n\
+             \x20   #[serde(default, rename = \"aa\")]\n\
+             \x20   a: RwLock<u64>,\n\
+             \x20   #[serde(skip)]\n\
+             \x20   b: Mutex<u64>,\n\
+             }\n",
+        );
+        assert_eq!(s.fields, 2);
+        assert_eq!(s.cells(), 2);
+    }
+
+    /// A field whose type spans lines must not have its continuation lines
+    /// read as further fields.
+    #[test]
+    fn a_multiline_field_type_is_one_field() {
+        let s = scan_one(
+            "struct R {\n\
+             \x20   peer: std::sync::RwLock<\n\
+             \x20       std::collections::HashMap<NodeId, u64>,\n\
+             \x20   >,\n\
+             \x20   n: AtomicUsize,\n\
+             }\n",
+        );
+        assert_eq!(s.fields, 2);
+        assert_eq!(s.cells(), 2);
+    }
+
+    /// Prose about the pattern is not the pattern — the same false positive
+    /// `census::strip_comments` exists to kill, restated as a bar here because
+    /// `fire` is the only place the two are composed.
+    #[test]
+    fn a_doc_comment_naming_a_guard_is_not_a_cell() {
+        let raw = "struct R {\n\
+                   \x20   /// Protected by an RwLock elsewhere. Not a Mutex here.\n\
+                   \x20   plain: u64,\n\
+                   }\n";
+        let s = scan_one(&census::strip_comments(raw));
+        assert_eq!(s.fields, 1);
+        assert_eq!(s.cells(), 0, "the comment's `RwLock` was counted");
+    }
+
+    /// Found by running the detector over the real tree, which panicked on the
+    /// first file carrying a non-ASCII character: `open` is a byte offset and
+    /// the body scan was skipping that many chars, so it started mid-body and
+    /// underflowed the brace depth. Unicode in doc comments and note text is
+    /// ordinary here, so this is the common case, not an exotic one.
+    #[test]
+    fn a_multibyte_character_before_the_struct_does_not_desync_the_scan() {
+        let src = "/// Grounding — a decision, not a guess. £ ✓\n\
+                   struct R {\n\
+                   \x20   a: RwLock<u64>,\n\
+                   \x20   b: Mutex<u64>,\n\
+                   }\n";
+        let s = scan_one(src);
+        assert_eq!(s.fields, 2);
+        assert_eq!(s.cells(), 2);
+    }
+
+    #[test]
+    fn a_tuple_struct_and_an_empty_struct_are_not_subjects() {
+        assert!(UnownedCellDetector::scan_text("pub struct Id(String);\n").is_empty());
+        assert!(UnownedCellDetector::scan_text("pub struct Marker {}\n").is_empty());
+    }
+
+    /// The floor is the instrument's only knob, so it gets a failing input on
+    /// each side of it rather than a single happy-path assertion (§18.1).
+    #[test]
+    fn the_floor_admits_at_the_boundary_and_refuses_below_it() {
+        let field = |i: usize| format!("    f{i}: RwLock<u64>,\n");
+        let build = |n: usize| {
+            format!(
+                "struct R {{\n{}}}\n",
+                (0..n).map(field).collect::<String>()
+            )
+        };
+        let at = scan_one(&build(CELL_FLOOR));
+        assert_eq!(at.cells(), CELL_FLOOR);
+        assert!(at.cells() >= CELL_FLOOR, "boundary must fire");
+
+        let below = scan_one(&build(CELL_FLOOR - 1));
+        assert!(below.cells() < CELL_FLOOR, "one under the floor must not");
+    }
+
+    #[test]
+    fn the_unowned_cell_digest_names_every_knob_that_moves_the_number() {
+        let d = UnownedCellDetector.settings_digest();
+        for knob in ["floor", "kinds"] {
+            assert!(d.contains(knob), "digest {d:?} omits {knob}");
+        }
+    }
+
+    /// Registration is what makes a detector reachable from `status`, `order`
+    /// and the ledger. A detector that exists but is not in both lists is
+    /// invisible in exactly the way this program is meant to prevent.
+    #[test]
+    fn every_detector_id_is_constructed_by_all() {
+        let built: Vec<DetectorId> = all().iter().map(|d| d.id()).collect();
+        for id in DetectorId::ALL {
+            assert!(built.contains(&id), "{} is not in all()", id.as_str());
+        }
+        assert_eq!(built.len(), DetectorId::ALL.len());
     }
 }

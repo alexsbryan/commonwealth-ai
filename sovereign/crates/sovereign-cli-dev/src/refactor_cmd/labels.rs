@@ -334,10 +334,32 @@ impl LabelStore {
 pub struct ConceptRow {
     pub name: String,
     pub canonical: String,
+    /// `minted` — the canonical path exists today. `planned` — it does not.
+    ///
+    /// REQUIRED, and deliberately not `#[serde(default)]`: a row that forgets
+    /// it must fail to parse rather than default to one of the two answers.
+    /// Defaulting to `minted` would claim a home nobody built; defaulting to
+    /// `planned` would excuse a home that went missing. Absence is reported,
+    /// never defaulted (ARCH §18.3).
+    pub home: Home,
     #[serde(default)]
     pub disposition: Option<String>,
     #[serde(default)]
     pub in_program: bool,
+}
+
+/// Whether the register's `canonical` names something that exists.
+///
+/// Separate from `status` on purpose — see the `home` field's note in
+/// `quality/CONCEPTS.toml`. `status` measures migration progress; this
+/// measures whether there is anywhere to migrate to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Home {
+    /// A worker can `use` this path today.
+    Minted,
+    /// Nothing is there yet.
+    Planned,
 }
 
 #[derive(Debug, serde::Deserialize)]

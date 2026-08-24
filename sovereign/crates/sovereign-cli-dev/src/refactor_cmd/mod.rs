@@ -709,7 +709,7 @@ async fn label_from_register(args: &[String]) -> i32 {
             continue;
         };
         let resolution = workspace.resolve(&row.canonical);
-        if !resolution.is_usable() {
+        if !resolution.exists() {
             skipped.push(format!(
                 "{} — canonical {} is not a path a worker can `use`: {}",
                 row.name,
@@ -866,7 +866,7 @@ async fn next_cmd(args: &[String]) -> i32 {
     match destination::Workspace::scan(&root) {
         Ok(ws) => {
             let r = ws.resolve(&chosen.destination);
-            if !r.is_usable() {
+            if !r.exists() {
                 eprintln!(
                     "refused: destination {} is not a path a worker can `use`.\n  \
                      {}\n  \
