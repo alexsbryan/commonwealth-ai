@@ -8,7 +8,7 @@
 //! always-on guarantee). The evidence is assembled into the prompt by
 //! this code, never by the model.
 
-use super::estate::ResearchPort;
+use super::estate::{DraftLeg, ResearchPort};
 use super::icd::{Draft, DraftCitation, EvidenceWindow, UrlConstraintPolicy};
 
 /// Assemble the round's evidence text (chunk id → content) for the
@@ -558,7 +558,7 @@ pub async fn compose_report(
              has natural parts. No preamble and no commentary about the evidence itself."
         );
         let body = port
-            .draft(&prompt, Some(system), &allowed)
+            .draft(DraftLeg::Section, &prompt, Some(system), &allowed)
             .await
             .map_err(|e| format!("section draft: {e}"))?;
         sections.push(body);
@@ -588,7 +588,10 @@ pub async fn compose_report(
          handles already used above where a claim needs one. Developed paragraphs, no \
          checklists, and no new facts beyond what the report states."
     );
-    match port.draft(&synth_prompt, Some(system), &allowed).await {
+    match port
+        .draft(DraftLeg::Synthesis, &synth_prompt, Some(system), &allowed)
+        .await
+    {
         Ok(t) => sections.push(t),
         Err(e) => tracing::warn!(
             target: "deep_research", error = %e,
@@ -738,7 +741,7 @@ pub async fn draft_round(
     }
     let urls = allowed_urls(evidence);
     let text = port
-        .draft(&prompt, Some(&system), &urls)
+        .draft(DraftLeg::Round, &prompt, Some(&system), &urls)
         .await
         .map_err(|e| format!("draft failed: {e}"))?;
     let citations: Vec<DraftCitation> = evidence
@@ -815,6 +818,7 @@ mod tests {
         }
         async fn draft(
             &self,
+            _leg: DraftLeg,
             prompt: &str,
             _s: Option<&str>,
             _a: &[String],

@@ -87,6 +87,30 @@ pub struct PortHit {
 }
 
 /// The loop's provider boundary (implemented by the CLI verb).
+/// Which of the loop's drafting jobs is asking for a completion.
+///
+/// A closed set, so it is an enum and not a string (§2.1). Each variant
+/// is named for the WORK, never for a model or a speed class — the port
+/// owns that mapping and owns it once, so "which slot drafts a section"
+/// is answerable in one place instead of being spread across the call
+/// sites that happen to know.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DraftLeg {
+    /// Decomposing the question into sub-questions. Short output, and the
+    /// only leg whose result shapes every later leg.
+    Plan,
+    /// One round draft over the round's evidence window — the claim
+    /// source the audit then judges.
+    Round,
+    /// One section of the composed deliverable: a large evidence block in,
+    /// several hundred words out. The loop's highest-volume drafting leg
+    /// (one call per planned sub-question).
+    Section,
+    /// The closing synthesis over the sections already drafted. Reads the
+    /// report so far rather than the evidence.
+    Synthesis,
+}
+
 #[async_trait::async_trait]
 pub trait ResearchPort: Send + Sync {
     /// R2 estate listing: corpus metadata for the survey's F16
@@ -123,8 +147,16 @@ pub trait ResearchPort: Send + Sync {
     /// enabled over `allowed_urls` (sovereign-inference
     /// `UrlAllowlistConstraint` at the CLI layer). The model cannot emit
     /// a citation outside the allowed set — structurally.
+    ///
+    /// `leg` names WHICH of the loop's drafting jobs is asking. The loop
+    /// names the work; the port decides which slot serves it. That split
+    /// is deliberate: a leg is a fact about the research loop, a speed
+    /// class is a fact about this deployment, and the loop must not know
+    /// the second (§6, config-as-data — the mapping is the port's, and
+    /// there is exactly one of it).
     async fn draft(
         &self,
+        leg: DraftLeg,
         prompt: &str,
         system_message: Option<&str>,
         allowed_urls: &[String],

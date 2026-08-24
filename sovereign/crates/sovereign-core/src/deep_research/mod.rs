@@ -2595,7 +2595,13 @@ mod tests {
         async fn terminal_poll(&self) -> Result<(), String> {
             Ok(())
         }
-        async fn draft(&self, _p: &str, _s: Option<&str>, _a: &[String]) -> Result<String, String> {
+        async fn draft(
+            &self,
+            _leg: crate::deep_research::estate::DraftLeg,
+            _p: &str,
+            _s: Option<&str>,
+            _a: &[String],
+        ) -> Result<String, String> {
             Ok(String::new())
         }
     }

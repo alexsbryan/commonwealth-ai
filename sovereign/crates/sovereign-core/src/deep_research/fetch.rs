@@ -27,6 +27,7 @@
 
 use super::acquisition::{admitted_ids, judge_content};
 use super::budget::{SpendDecider, FAMILY_WEB_FETCH, KEY_FETCH_PAGES};
+use super::estate::DraftLeg;
 use super::estate::ResearchPort;
 use super::icd::{
     ContentRefusal, EvidenceWindow, FetchFailure, FetchList, SearchHit, SourceRegistryRow,
@@ -551,7 +552,13 @@ mod tests {
         async fn terminal_poll(&self) -> Result<(), String> {
             Ok(())
         }
-        async fn draft(&self, _p: &str, _s: Option<&str>, _u: &[String]) -> Result<String, String> {
+        async fn draft(
+            &self,
+            _leg: DraftLeg,
+            _p: &str,
+            _s: Option<&str>,
+            _u: &[String],
+        ) -> Result<String, String> {
             unimplemented!("unreachable")
         }
         async fn alignment_decision(
@@ -597,7 +604,13 @@ mod tests {
         async fn terminal_poll(&self) -> Result<(), String> {
             Ok(())
         }
-        async fn draft(&self, _p: &str, _s: Option<&str>, _u: &[String]) -> Result<String, String> {
+        async fn draft(
+            &self,
+            _leg: DraftLeg,
+            _p: &str,
+            _s: Option<&str>,
+            _u: &[String],
+        ) -> Result<String, String> {
             unimplemented!("unreachable")
         }
         async fn alignment_decision(
@@ -1196,6 +1209,7 @@ mod tests {
                 }
                 async fn draft(
                     &self,
+                    _leg: DraftLeg,
                     _p: &str,
                     _s: Option<&str>,
                     _u: &[String],
@@ -1580,6 +1594,7 @@ mod tests {
                 }
                 async fn draft(
                     &self,
+                    _leg: DraftLeg,
                     _p: &str,
                     _s: Option<&str>,
                     _u: &[String],

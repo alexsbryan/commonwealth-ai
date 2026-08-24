@@ -49,7 +49,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use oicp_client::RemoteApiProvider;
 use sovereign_core::deep_research::estate::{
-    AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    AlignmentDecision, DraftLeg, EstateListing, PortHit, ResearchPort,
 };
 use sovereign_core::deep_research::fetch::{cap_content, derive_custody};
 use sovereign_core::deep_research::gym::{Deck, MockBackendImpl, MockDraftSurface};
@@ -88,6 +88,7 @@ impl ResearchPort for DaemonPort {
     }
     async fn draft(
         &self,
+        leg: DraftLeg,
         prompt: &str,
         system_message: Option<&str>,
         allowed_urls: &[String],

@@ -28,7 +28,8 @@ use sovereign_contracts::types::{CompletionRequest, CompletionResponse, Speed};
 
 use super::acquisition::web_hit_relevance;
 use super::estate::{
-    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
+    estate_snippet, read_staged_alignment, AlignmentDecision, DraftLeg, EstateListing, PortHit,
+    ResearchPort,
 };
 use super::gym::{CorpusSurface, Deck, MockBackendImpl, MockDraftSurface, ProviderEmbed};
 use super::icd::{CorpusEntry, Plan};
@@ -430,16 +431,23 @@ impl ResearchPort for LiveResearchPort {
 
     async fn draft(
         &self,
+        leg: DraftLeg,
         prompt: &str,
         system_message: Option<&str>,
         allowed_urls: &[String],
     ) -> Result<String, String> {
+        let speed = slot_for(leg);
+        tracing::debug!(
+            target: "deep_research",
+            ?leg, ?speed, prompt_chars = prompt.len(),
+            "deep-research: drafting leg dispatched"
+        );
         let resp = complete_with_shed_retry(
             &*self.provider,
             &CompletionRequest {
                 prompt: prompt.to_string(),
                 system_message: system_message.map(|s| s.to_string()),
-                preferred_speed: Speed::Slow,
+                preferred_speed: speed,
                 max_tokens: None,
                 temperature: Some(0.4),
                 structured_output: None,
@@ -751,6 +759,36 @@ async fn complete_with_shed_retry(
                 tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
             }
         }
+    }
+}
+
+/// Which slot serves each drafting leg — the ONE mapping, so the answer
+/// to "what drafts a section?" lives in one place instead of at each call
+/// site (§10.6).
+///
+/// Measured on this host 2026-08-24, same prompt (3,130 chars of evidence,
+/// 300-380 words asked), temperature 0, 3 reps each: the 4B fast slot
+/// median **13.46s at 34.62 tok/s**; the 27B primary **68.95s at 7.47
+/// tok/s** on its first rep. Roughly 5x, and the 4B held the asked word
+/// count (369 words) byte-identically across all three reps.
+///
+/// Why the split is not "everything Fast": `Plan` shapes every later leg
+/// — a worse decomposition costs more than it saves, and it is ONE call
+/// per run rather than one per section. `Synthesis` reads the whole
+/// report and is the Insight-dimension lever (the highest-weighted RACE
+/// dimension), also one call. The two high-volume legs move; the two
+/// single-call legs that set the ceiling stay.
+///
+/// This is a mapping, not a policy — if a measurement says `Synthesis`
+/// survives the 4B, this is the one line that changes.
+fn slot_for(leg: DraftLeg) -> Speed {
+    match leg {
+        // One call per run, and it decides the shape of everything after.
+        DraftLeg::Plan => Speed::Slow,
+        // One call per run, over the drafted report rather than evidence.
+        DraftLeg::Synthesis => Speed::Slow,
+        // One call per sub-question — the volume legs.
+        DraftLeg::Round | DraftLeg::Section => Speed::Fast,
     }
 }
 

@@ -70,6 +70,7 @@ impl sovereign_core::deep_research::estate::ResearchPort for CountingPort {
 
     async fn draft(
         &self,
+        _leg: sovereign_core::deep_research::estate::DraftLeg,
         _prompt: &str,
         _model: Option<&str>,
         _window_urls: &[String],

@@ -33,8 +33,8 @@
 //! named, not silent.
 
 use super::estate::{
-    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
-    FRONTIER_MAX,
+    estate_snippet, read_staged_alignment, AlignmentDecision, DraftLeg, EstateListing, PortHit,
+    ResearchPort, FRONTIER_MAX,
 };
 use super::icd::CorpusEntry;
 use super::icd::Plan;
@@ -705,6 +705,7 @@ impl ResearchPort for MockBackendImpl {
 
     async fn draft(
         &self,
+        _leg: DraftLeg,
         _prompt: &str,
         _system_message: Option<&str>,
         _allowed_urls: &[String],
@@ -712,7 +713,9 @@ impl ResearchPort for MockBackendImpl {
         match &self.draft_surface {
             MockDraftSurface::Scripted(text) => Ok(text.clone()),
             MockDraftSurface::Delegated(inner) => {
-                inner.draft(_prompt, _system_message, _allowed_urls).await
+                inner
+                    .draft(_leg, _prompt, _system_message, _allowed_urls)
+                    .await
             }
         }
     }
@@ -1396,7 +1399,7 @@ mod tests {
             MockDraftSurface::Scripted("The canned draft.".to_string()),
         );
         let port: &dyn ResearchPort = &port;
-        let text = port.draft("p", None, &[]).await.unwrap();
+        let text = port.draft(DraftLeg::Round, "p", None, &[]).await.unwrap();
         assert_eq!(text, "The canned draft.");
         assert!(port.terminal_poll().await.is_ok());
     }
