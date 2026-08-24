@@ -107,6 +107,44 @@ fn flush_paragraph(paragraph: &mut Vec<String>, span: &Option<String>, claims: &
     }
 }
 
+/// Markdown heading lines are STRUCTURE, not assertions — they are
+/// replaced with a blank line (already a paragraph boundary here) before
+/// the sentence splitter runs.
+///
+/// Two defects on the first live composed flight (2026-08-23, run
+/// dr-1787534265) traced to this being absent:
+///   1. The deliverable's own H1 is `# {question}`, and a research question
+///      ends in `?` — sentence-final punctuation. The title was extracted as
+///      a claim, judged, and the rendered report led with
+///      `# <the user's question> **[refuted by the evidence]**`. A question
+///      is not an assertion and cannot be refuted.
+///   2. `compose_report` emits `### Heading\nFirst sentence.` with no blank
+///      line between, so the heading was absorbed into the following
+///      sentence and appeared inside claim text in the Verification list.
+///      `synthesize.rs::count_header_swallows` exists to detect this shape
+///      on the drafting side; nothing enforced it on the audit side.
+///
+/// Only ATX headings at line start count (`#` through `######` followed by
+/// space or end-of-line). A `#` mid-line — "issue #42", a C preprocessor
+/// line inside prose — is untouched.
+fn blank_out_heading_lines(draft: &str) -> String {
+    draft
+        .split('\n')
+        .map(|line| {
+            let t = line.trim_start();
+            let hashes = t.len() - t.trim_start_matches('#').len();
+            let is_atx =
+                (1..=6).contains(&hashes) && t[hashes..].chars().next().is_none_or(|c| c == ' ');
+            if is_atx {
+                ""
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn split_claims(draft: &str) -> Vec<String> {
     let mut claims = Vec::new();
     let mut current = String::new();
@@ -118,6 +156,7 @@ pub fn split_claims(draft: &str) -> Vec<String> {
     let mut paragraph_span: Option<String> = None;
     // Iterate char-wise, splitting on sentence-final punctuation
     // (., !, ?) followed by whitespace or end.
+    let draft = blank_out_heading_lines(draft);
     let chars: Vec<char> = draft.chars().collect();
     let mut i = 0;
     while i < chars.len() {
@@ -237,6 +276,168 @@ pub fn empty_round_reason(window: &EvidenceWindow) -> Option<EmptyRoundReason> {
     }
 }
 
+// ---------------------------------------------------------------------
+// drb1-t5 — the support binder.
+//
+// Its predecessor located a claim's support with
+// `chunk.content.contains(specific)`. That is brittle string matching:
+// measured over the logged t7a flight, 125 of 137 claims (91%) bound to
+// ZERO origins while 136 of 137 carried their own `[Source: ev-N]`
+// marker — research prose paraphrases its sources, and
+// `containment.rs` already conceded the class ("figureless claims merge
+// nothing"). It is the same keyword-matcher failure the router replaced
+// three times before (`current_info_classifier`, `scope_classifier`,
+// `claim_class_classifier`).
+//
+// The replacement composes three stages, each asked ONLY what it can
+// answer:
+//
+//   1. figures  — a claim's digits must appear verbatim in the chunk.
+//                 A number is a feature of the claim's FORM, not its
+//                 vocabulary, so code enforces it (§7.6). Honesty-
+//                 critical and never delegated to a model.
+//   2. locate   — embedding argmax over the chunk's spans. This is the
+//                 house method for open text (§2.4, principle 9) and it
+//                 replaces `contains()`. It answers only "which part of
+//                 this chunk is about this claim".
+//   3. decide   — the located span goes to the calibrated judge.
+//                 Similarity CANNOT see negation: "affects more men
+//                 than women" and "affects more women than men" are
+//                 neighbours in embedding space, so a cosine threshold
+//                 alone would bind a CONTRADICTING chunk as support and
+//                 manufacture grounding — the exact failure the
+//                 corroboration floor exists to prevent.
+//
+// A chunk becomes an origin only when all three agree.
+// ---------------------------------------------------------------------
+
+/// Span length for stage 2. Long enough to carry a claim's context,
+/// short enough that the judge in stage 3 reads one idea.
+const LOCATE_SPAN_CHARS: usize = 900;
+const LOCATE_SPAN_OVERLAP: usize = 250;
+
+/// Stage-2 floor: below this cosine, no part of the chunk is "about"
+/// the claim and stage 3 is never asked.
+const MIN_LOCATE_SIM: f32 = 0.35;
+
+/// Stage-3 floor on the calibrated support probability
+/// (`1.0 - claim_violation_joint`).
+///
+/// PROVISIONAL, and named as such: it is stricter than "does not
+/// violate" on purpose — a chunk that is merely SILENT on a claim sits
+/// near 0.5 and must not count as support. The calibration this owes is
+/// the standing honesty banks (P4-v0, R-12), which measure both
+/// directions: recovered true claims AND admitted fabrications (§18.6 —
+/// a judge change reported only in the direction it was meant to fix is
+/// not a measurement).
+const SUPPORT_FLOOR: f64 = 0.65;
+
+/// Split a chunk into overlapping spans for stage 2.
+fn locate_spans(content: &str) -> Vec<String> {
+    let t: String = super::scrub_control(content)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if t.is_empty() {
+        return Vec::new();
+    }
+    let chars: Vec<char> = t.chars().collect();
+    let step = LOCATE_SPAN_CHARS.saturating_sub(LOCATE_SPAN_OVERLAP).max(1);
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let end = (i + LOCATE_SPAN_CHARS).min(chars.len());
+        let span: String = chars[i..end].iter().collect();
+        if span.chars().count() > 150 || out.is_empty() {
+            out.push(span);
+        }
+        if end == chars.len() {
+            break;
+        }
+        i += step;
+    }
+    out
+}
+
+/// Stage 1 — every figure the claim asserts must be present verbatim.
+/// Citation handles are stripped first so `[Source: ev-2]` never
+/// contributes a bare "2" (the fold's own anti-leak precedent).
+fn claim_figures_present(claim: &str, content: &str) -> bool {
+    let stripped = super::containment::strip_citation_spans(claim);
+    super::figure_tokens(&stripped)
+        .iter()
+        .all(|f| content.contains(f.as_str()))
+}
+
+/// How a chunk's support was located — recorded, never inferred, so a
+/// degraded run is visible rather than silently scored (§18.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocatedBy {
+    /// Stage 2 ran: an embedded span cleared `MIN_LOCATE_SIM`.
+    Embedding,
+    /// The provider has no embedding surface; stage 2 could not run and
+    /// the binder fell back to verbatim specifics. NAMED in the record.
+    VerbatimFallback,
+}
+
+/// Stages 2+3 for one chunk. `Ok(None)` = located but unsupported;
+/// `Err` = the embedding surface is unavailable (the caller degrades and
+/// names it).
+async fn chunk_supports(
+    provider: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    claim_vec: &[f32],
+    content: &str,
+    posture: ShardingPrivacy,
+) -> Result<bool, String> {
+    let spans = locate_spans(content);
+    if spans.is_empty() {
+        return Ok(false);
+    }
+    let vecs = provider
+        .embed_batch(&spans)
+        .await
+        .map_err(|e| format!("span embed: {e}"))?;
+    if vecs.iter().any(|v| v.is_empty()) {
+        // Same rule as the claim vector: absence is reported, never
+        // scored as a miss.
+        return Err("zero-dimension span embedding".to_string());
+    }
+    let mut best: Option<(f32, usize)> = None;
+    for (i, v) in vecs.iter().enumerate() {
+        let sim = super::cosine(claim_vec, v);
+        match best {
+            Some((b, _)) if sim <= b => {}
+            _ => best = Some((sim, i)),
+        }
+    }
+    let Some((sim, idx)) = best else {
+        return Ok(false);
+    };
+    let span = &spans[idx];
+    if sim < MIN_LOCATE_SIM {
+        tracing::debug!(
+            target: "deep_research",
+            sim, floor = MIN_LOCATE_SIM,
+            "t5 binder: no span is about this claim — stage 3 not asked"
+        );
+        return Ok(false);
+    }
+    let violation =
+        claim_violation_joint(provider, claim, std::slice::from_ref(span), 1, 0, posture).await;
+    let Some(violation) = violation else {
+        return Ok(false);
+    };
+    let support = 1.0 - violation;
+    tracing::debug!(
+        target: "deep_research",
+        sim, support, floor = SUPPORT_FLOOR,
+        supported = support >= SUPPORT_FLOOR,
+        "t5 binder: located span judged"
+    );
+    Ok(support >= SUPPORT_FLOOR)
+}
+
 pub async fn assess_claim(
     provider: &Arc<dyn InferenceProvider>,
     claim: &str,
@@ -352,10 +553,66 @@ pub async fn assess_claim(
     let mut supporting: Vec<String> = Vec::new();
     let mut supporting_urls: Vec<String> = Vec::new();
     let mut unknown_supporting: Vec<String> = Vec::new();
+
+    // drb1-t5: embed the claim ONCE for stage 2. A provider with no
+    // embedding surface degrades to the verbatim path and the
+    // degradation is NAMED, never silently scored (§18.3).
+    // A ZERO-DIMENSION vector is an absence wearing the shape of a
+    // value: a provider saying "I do not embed" by returning `Ok(vec![])`.
+    // Scoring it as a similarity would silently convert "unavailable"
+    // into "unsupported" — the substitution §18.3 forbids. It degrades,
+    // and the degradation is named.
+    let claim_vec = match provider.embed(claim).await {
+        Ok(v) if !v.is_empty() => Some(v),
+        Ok(_) => {
+            tracing::warn!(
+                target: "deep_research",
+                "t5 binder: provider returned a zero-dimension embedding — \
+                 DEGRADED to verbatim specifics (absence, not a low score)"
+            );
+            None
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "deep_research",
+                error = %e,
+                "t5 binder: no embedding surface — DEGRADED to verbatim specifics"
+            );
+            None
+        }
+    };
+    let located_by = if claim_vec.is_some() {
+        LocatedBy::Embedding
+    } else {
+        LocatedBy::VerbatimFallback
+    };
+
     for chunk in chunks {
-        let carries = witnessable_specifics
-            .iter()
-            .any(|s| chunk.content.contains(s));
+        // Stage 1 runs in BOTH modes and is honesty-critical: every
+        // figure the claim asserts must be verbatim in this chunk. A
+        // figureless claim passes this stage vacuously.
+        if !claim_figures_present(claim, &chunk.content) {
+            continue;
+        }
+        let carries = match claim_vec.as_deref() {
+            Some(cv) => match chunk_supports(provider, claim, cv, &chunk.content, posture).await {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "deep_research",
+                        error = %e,
+                        chunk = %chunk.id,
+                        "t5 binder: stage 2/3 unavailable for this chunk — verbatim fallback, named"
+                    );
+                    witnessable_specifics
+                        .iter()
+                        .any(|s| chunk.content.contains(s))
+                }
+            },
+            None => witnessable_specifics
+                .iter()
+                .any(|s| chunk.content.contains(s)),
+        };
         if carries {
             if chunk.custody_known {
                 supporting.push(chunk.id.clone());
@@ -365,6 +622,13 @@ pub async fn assess_claim(
             }
         }
     }
+    tracing::debug!(
+        target: "deep_research",
+        located_by = ?located_by,
+        supporting = supporting.len(),
+        origins = supporting_urls.len(),
+        "t5 binder: support located"
+    );
     let no_known_support = supporting.is_empty() && !unknown_supporting.is_empty();
     if no_known_support {
         return ClaimAudit {
@@ -689,6 +953,56 @@ mod tests {
     use std::pin::Pin;
 
     #[test]
+    /// RED before `blank_out_heading_lines`. The deliverable's H1 is
+    /// `# {question}`; a question ends in `?`, so the splitter emitted the
+    /// user's own question as a claim and `render.rs` stamped a verdict on
+    /// it. First live composed flight shipped a report titled
+    /// `# Is there a general method ...? **[refuted by the evidence]**`.
+    #[test]
+    fn the_report_title_is_never_extracted_as_a_claim() {
+        let draft = "# Is there a general method for solving asymmetric auctions?\n\n\
+                     Bidders draw values independently. [Source: ev-1]\n";
+        let claims = split_claims(draft);
+        assert!(
+            !claims.iter().any(|c| c.contains("general method")),
+            "the question must not be a claim, got: {claims:?}"
+        );
+        assert_eq!(claims.len(), 1, "only the body sentence is a claim");
+        assert!(claims[0].contains("Bidders draw values independently"));
+    }
+
+    /// RED before the fix. `compose_report` writes `### Heading` immediately
+    /// followed by the first sentence with no blank line, so the heading was
+    /// absorbed into that sentence and surfaced inside the Verification
+    /// list as claim text.
+    #[test]
+    fn a_markdown_heading_is_never_swallowed_into_the_following_sentence() {
+        let draft = "### Focus on Agent Interoperability Protocols\n\
+                     Instead of auction mechanics, the evidence details A2A. [Source: ev-2]\n";
+        let claims = split_claims(draft);
+        assert_eq!(
+            claims.len(),
+            1,
+            "one sentence, not a heading+sentence: {claims:?}"
+        );
+        assert!(
+            !claims[0].contains("Focus on Agent Interoperability"),
+            "heading leaked into the claim: {}",
+            claims[0]
+        );
+        assert!(claims[0].contains("Instead of auction mechanics"));
+    }
+
+    /// A `#` that is not an ATX heading is prose and stays. Guards against
+    /// the fix eating issue refs and the like.
+    #[test]
+    fn a_hash_mid_line_is_prose_not_a_heading() {
+        let draft = "The regression is tracked as issue #42 in the tracker. [Source: ev-3]\n";
+        let claims = split_claims(draft);
+        assert_eq!(claims.len(), 1);
+        assert!(claims[0].contains("issue #42"), "got: {}", claims[0]);
+    }
+
     fn sentence_splitter_attaches_spans() {
         let draft = "The Meridian Bridge was completed in 1873 [Source: https://example.com/a]. Its span is 240 meters [Source: https://example.com/b]. A final sentence with no citation.";
         let claims = split_claims(draft);
@@ -1803,5 +2117,167 @@ mod tests {
             tags: Vec::new(),
         });
         assert_eq!(empty_round_reason(&populated), None);
+    }
+
+    // ---- drb1-t5: the three-stage binder ---------------------------
+
+    /// A provider that DOES embed (so stage 2 runs and locates a span)
+    /// and whose forced choice is scripted, so stage 3's decision is the
+    /// only variable. `a`/`b` are the support/against sides of the
+    /// calibrated A/B: support = a/(a+b).
+    struct PolarityScripted {
+        extract: &'static str,
+        a: f64,
+        b: f64,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for PolarityScripted {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            let text = if r.structured_output.is_some() {
+                format!(r#"{{"A": {}, "B": {}}}"#, self.a, self.b)
+            } else {
+                self.extract.to_string()
+            };
+            Ok(crate::types::CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "test".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<Pin<Box<dyn Stream<Item = crate::error::Result<String>> + Send>>>
+        {
+            unimplemented!()
+        }
+        /// A REAL vector — stage 2 can run. Every text embeds
+        /// identically, so cosine is 1.0 and the span always locates:
+        /// the test isolates stage 3.
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            Ok(vec![1.0, 0.0, 0.0, 0.0])
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    /// THE honesty red for T5. Similarity cannot see negation: a chunk
+    /// that CONTRADICTS the claim sits right next to it in embedding
+    /// space, so stage 2 will happily locate a span. Stage 3 is what
+    /// stops it from becoming an origin — without it the binder would
+    /// manufacture the grounding the corroboration floor exists to
+    /// prevent.
+    #[tokio::test]
+    async fn a_contradicting_chunk_never_binds_as_support() {
+        let claim = "The Apollo 11 crew landed on the Moon. [Source: c1]";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(PolarityScripted {
+            extract: "Apollo 11",
+            a: 0.0,
+            b: 1.0, // the judge says: not supported
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_ne!(
+            audit.verdict,
+            Verdict::Passed,
+            "a located-but-unsupported span must not pass the claim"
+        );
+        let origins = audit
+            .corroboration
+            .as_ref()
+            .map(|c| c.origins.len())
+            .unwrap_or(0);
+        assert_eq!(
+            origins, 0,
+            "stage 3 refused, so the chunk contributes NO origin (got {origins})"
+        );
+    }
+
+    /// The mirror: the same located span, the same claim, but the judge
+    /// says supported — the chunk becomes an origin. Without this the
+    /// test above would pass for the wrong reason (a binder that never
+    /// binds anything).
+    #[tokio::test]
+    async fn a_supported_located_span_does_bind_as_an_origin() {
+        let claim = "The Apollo 11 crew landed on the Moon. [Source: c1]";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(PolarityScripted {
+            extract: "Apollo 11",
+            a: 1.0,
+            b: 0.0, // the judge says: supported
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        let origins = audit
+            .corroboration
+            .as_ref()
+            .map(|c| c.origins.len())
+            .unwrap_or(0);
+        assert_eq!(
+            origins, 1,
+            "the supported span binds its chunk as exactly one origin"
+        );
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "and ONE origin still caps at the corroboration floor — the floor is untouched by T5"
+        );
+    }
+
+    /// Stage 1 is honesty-critical and runs before any model call: a
+    /// claim asserting a figure the chunk does not carry cannot bind to
+    /// it, however similar the prose looks and however agreeable the
+    /// judge is.
+    #[tokio::test]
+    async fn a_figure_absent_from_the_chunk_blocks_the_bind() {
+        let claim =
+            "The Apollo 11 mission launched on July 16, 1969 with 7 astronauts. [Source: c1]";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(PolarityScripted {
+            extract: "7 astronauts",
+            a: 1.0,
+            b: 0.0, // even with the judge saying yes
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+        )
+        .await;
+        assert_ne!(
+            audit.verdict,
+            Verdict::Passed,
+            "a claim asserting a figure absent from the evidence must never pass"
+        );
     }
 }

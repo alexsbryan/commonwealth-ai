@@ -491,3 +491,86 @@ impl tracing::Subscriber for WarnCapture {
     fn enter(&self, _span: &tracing::span::Id) {}
     fn exit(&self, _span: &tracing::span::Id) {}
 }
+
+// ---------------------------------------------------------------------
+// drb1-t5 (§18.3): the flag must not report an absence as a count.
+// Measured 2026-08-22 over the logged t7a flight: 63 of the 72 claims
+// stamped "single-origin support" carried an EMPTY corroboration.origins.
+// ---------------------------------------------------------------------
+
+const FLAG_NO_ORIGIN: &str = "open question: no supporting origin located (corroboration floor)";
+
+/// An empty window — the render path needs one to resolve citations
+/// against; these two goldens exercise the FLAG producer, not citation
+/// resolution.
+fn empty_window() -> EvidenceWindow {
+    EvidenceWindow {
+        icd: "evidence_window".to_string(),
+        version: 1,
+        run_id: "run-t5".to_string(),
+        charter_hash: "h".to_string(),
+        round: 1,
+        chunks: Vec::new(),
+        fetch_failures: Vec::new(),
+        dedup_refused: Vec::new(),
+        content_refused: Vec::new(),
+        derived_custody: Custody::PublicWeb.as_str().to_string(),
+    }
+}
+
+#[test]
+fn zero_origin_claim_is_never_flagged_single_origin() {
+    let audits = vec![ClaimAudit {
+        claim: "Parkinson's disease causes tremor and rigidity.".to_string(),
+        verdict: Verdict::CouldNotJudge,
+        action: GateAction::CorroborationFloor,
+        witness: WitnessRecord::default(),
+        supporting_chunk_ids: Vec::new(),
+        empty_evidence_window: false,
+        reason: Some("corroboration floor: 0 supporting chunk(s) from 0 distinct origin(s)".into()),
+        corroboration: Some(CorroborationRecord {
+            origins: Vec::new(),
+            support_chunks: 0,
+            floor: 2,
+            passes_floor: false,
+        }),
+    }];
+    let window = empty_window();
+    let claims = final_claims(&audits, &window);
+    assert_eq!(claims.len(), 1);
+    assert_eq!(
+        claims[0].flag.as_deref(),
+        Some(FLAG_NO_ORIGIN),
+        "a zero-origin floor cap must name the absence, not claim one origin"
+    );
+    assert_ne!(
+        claims[0].flag.as_deref(),
+        Some(FLAG_SINGLE_ORIGIN),
+        "§18.3: absence is reported, never defaulted to a count"
+    );
+}
+
+#[test]
+fn one_origin_claim_still_flags_single_origin() {
+    let audits = vec![ClaimAudit {
+        claim: "A claim resting on exactly one located origin.".to_string(),
+        verdict: Verdict::CouldNotJudge,
+        action: GateAction::CorroborationFloor,
+        witness: WitnessRecord::default(),
+        supporting_chunk_ids: vec!["ev-2".to_string()],
+        empty_evidence_window: false,
+        reason: Some("corroboration floor: 1 supporting chunk(s) from 1 distinct origin(s)".into()),
+        corroboration: Some(CorroborationRecord {
+            origins: vec!["https://example.org/a".to_string()],
+            support_chunks: 1,
+            floor: 2,
+            passes_floor: false,
+        }),
+    }];
+    let claims = final_claims(&audits, &empty_window());
+    assert_eq!(
+        claims[0].flag.as_deref(),
+        Some(FLAG_SINGLE_ORIGIN),
+        "one located origin IS single-origin — the honest arm is unchanged"
+    );
+}

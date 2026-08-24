@@ -147,6 +147,23 @@ impl ConfigDiff {
         if old.models.embed != new.models.embed {
             d.models_changed.push("models.embed");
         }
+        if old.models.code != new.models.code {
+            d.models_changed.push("models.code");
+        }
+        if old.models.context_size != new.models.context_size {
+            // Hot-reloadable, NOT restart-required: the provider factory
+            // reads `effective_context_size()` and rebuilds every slot from
+            // scratch, so the swap picks the new window up. It was simply
+            // absent from this diff, which made `is_noop()` true and the
+            // rebuild never fire — so `svrn model context <n>` wrote the
+            // config, reported "no config changes detected — nothing to
+            // reload", and left the daemon serving the old window. Measured
+            // 2026-08-23: a run raised to 65,536 kept refusing prompts at
+            // 32,764 until the daemon was restarted by hand, and the CLI
+            // said it had applied (§18.3 — a success message for work that
+            // did not happen).
+            d.models_changed.push("models.context_size");
+        }
         if old.daemon.client_port != new.daemon.client_port {
             d.restart_required.push("daemon.client_port");
         }
@@ -259,6 +276,7 @@ mod tests {
         let path = dir.path().join("config.toml");
         let cfg = SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from(primary),
                 fast: Some(PathBuf::from("/m/fast.gguf")),
@@ -287,6 +305,7 @@ mod tests {
     fn config_diff_flags_iroh_changes_as_restart_required() {
         let base = SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/m/primary.gguf"),
                 fast: None,
@@ -445,6 +464,101 @@ mod tests {
             1,
             "factory must be invoked exactly once"
         );
+    }
+
+    /// RED before the `models.context_size` arm was added to `ConfigDiff`.
+    ///
+    /// `svrn model context 65536` wrote the config, then reported "no config
+    /// changes detected — nothing to reload" while the daemon kept serving
+    /// 32,764 — a success message for work that did not happen (§18.3).
+    /// The window IS hot-reloadable: `build_provider` reads
+    /// `effective_context_size()` and rebuilds every slot. The diff simply
+    /// never looked at the field, so `is_noop()` short-circuited the rebuild.
+    #[tokio::test]
+    async fn reload_applies_a_context_size_change_without_a_restart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+        assert_eq!(initial.models.context_size, None, "fixture starts at auto");
+
+        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
+        daemon.set_setup_config(initial.clone()).await;
+        let counter = Arc::new(AtomicUsize::new(0));
+        daemon
+            .set_provider_factory(Arc::new(StubFactory {
+                build_count: Arc::clone(&counter),
+            }))
+            .await;
+        daemon
+            .set_inference_provider(Arc::new(StubProvider { version: 0 }))
+            .await;
+
+        let mut modified = initial;
+        modified.models.context_size = Some(65_536);
+        modified.save_to(&path).unwrap();
+
+        let base = spawn(Arc::clone(&daemon)).await;
+        let resp = reqwest::Client::new()
+            .post(format!("{base}/v1/admin/reload"))
+            .json(&serde_json::json!({ "config_path": path }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: ReloadResponse = resp.json().await.unwrap();
+        assert_eq!(
+            body.reloaded_fields,
+            vec!["models.context_size".to_string()],
+            "the window must be REPORTED as reloaded, not silently ignored"
+        );
+        assert!(
+            !body.restart_required,
+            "the factory rebuilds every slot from cfg — no restart is needed"
+        );
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "a context change must actually rebuild the provider"
+        );
+    }
+
+    /// The code slot had the same hole: `build_provider` passes
+    /// `cfg.models.code` to the loader, but the diff never compared it, so
+    /// `svrn model set code <file>` on a running daemon was a no-op that
+    /// reported success.
+    #[tokio::test]
+    async fn reload_applies_a_code_slot_change_without_a_restart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = write_cfg(&tmp, "/m/primary.gguf");
+        let initial = SetupConfig::load_from(&path).unwrap();
+
+        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
+        daemon.set_setup_config(initial.clone()).await;
+        let counter = Arc::new(AtomicUsize::new(0));
+        daemon
+            .set_provider_factory(Arc::new(StubFactory {
+                build_count: Arc::clone(&counter),
+            }))
+            .await;
+        daemon
+            .set_inference_provider(Arc::new(StubProvider { version: 0 }))
+            .await;
+
+        let mut modified = initial;
+        modified.models.code = Some(PathBuf::from("/m/coder.gguf"));
+        modified.save_to(&path).unwrap();
+
+        let base = spawn(Arc::clone(&daemon)).await;
+        let resp = reqwest::Client::new()
+            .post(format!("{base}/v1/admin/reload"))
+            .json(&serde_json::json!({ "config_path": path }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), 200);
+        let body: ReloadResponse = resp.json().await.unwrap();
+        assert_eq!(body.reloaded_fields, vec!["models.code".to_string()]);
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
     }
 
     #[tokio::test]

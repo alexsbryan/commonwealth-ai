@@ -141,7 +141,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/mesh_http.rs", Class::Mesh, 15),
     ("sovereign/crates/sovereign-mesh/src/rpc_warm_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/worker_http.rs", Class::Mesh, 6),
-    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 5),
+    // 5 -> 7 (2026-08-23): the two reload-diff regression tests
+    // (`reload_applies_a_context_size_change_without_a_restart`,
+    // `reload_applies_a_code_slot_change_without_a_restart`) each build a
+    // client to POST /v1/admin/reload. Inline `#[cfg(test)]` lives in a
+    // src/ file, so the census counts it; the class is unchanged — this is
+    // loopback admin traffic to our own daemon, never third-party egress.
+    ("sovereign/crates/sovereign-mesh/src/admin_http.rs", Class::Mesh, 7),
     ("sovereign/crates/sovereign-mesh/src/project_http.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),

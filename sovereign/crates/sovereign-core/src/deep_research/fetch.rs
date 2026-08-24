@@ -386,7 +386,16 @@ pub async fn fetch_round(
                 source_url: hit.url.clone(),
                 custody: hit.custody.clone(),
                 provenance_class: "known".to_string(),
-                content: capped,
+                // drb1-t5: scrub C0 control bytes at the ONE production
+                // construction site. T2 made PDF fetching real, and PDF
+                // extraction leaves interior NULs in the text: measured
+                // 2026-08-22, 4 of task 56's chunks carried 7-17 NULs
+                // each and the estate held nearly every codepoint in
+                // 0..32. The embed backend refuses a whole batch on one
+                // of them ("Embed tokenization failed: input contains an
+                // interior NUL at byte 785"), so a single bad PDF takes
+                // down the binder, the writer's retrieval, and the page.
+                content: super::scrub_control(&capped),
                 ingested_into: None,
                 tags: Vec::new(),
             });

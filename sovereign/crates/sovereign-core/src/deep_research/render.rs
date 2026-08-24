@@ -40,6 +40,12 @@ const FLAG_NO_CITATION_HANDLE: &str =
 const FLAG_UNRESOLVABLE_HANDLE: &str =
     "open question: the citation handle does not name a window chunk (ref-required)";
 const FLAG_SINGLE_ORIGIN: &str = "open question: single-origin support (corroboration floor)";
+/// drb1-t5 (§18.3): a floor-capped claim whose support set located ZERO
+/// origins is not "single-origin" — measured 2026-08-22 across the t7a
+/// flight, 63 of the 72 claims stamped FLAG_SINGLE_ORIGIN carried an
+/// empty `corroboration.origins`. The flag reported an absence as a
+/// count. Absence gets its own name and stays walled.
+const FLAG_NO_ORIGIN: &str = "open question: no supporting origin located (corroboration floor)";
 const FLAG_SPECIFICS_ABSENT: &str = "open question: extracted specifics absent from the evidence";
 const FLAG_NOT_JUDGEABLE: &str = "open question: not judgeable from the evidence";
 const FLAG_NOT_EVALUATED: &str = "not evaluated: no evidence window was retrieved";
@@ -99,7 +105,16 @@ pub fn final_claims(audits: &[ClaimAudit], window: &EvidenceWindow) -> Vec<Final
                 Verdict::CouldNotJudge
                     if a.corroboration.as_ref().is_some_and(|r| !r.passes_floor) =>
                 {
-                    Some(FLAG_SINGLE_ORIGIN.to_string())
+                    // §18.3: report the absence, never a count the record
+                    // does not carry. ONE origin is single-origin; ZERO
+                    // origins is an unlocated support set, and saying
+                    // "single-origin" of it is a false record.
+                    let located = a.corroboration.as_ref().map_or(0, |r| r.origins.len());
+                    if located >= 1 {
+                        Some(FLAG_SINGLE_ORIGIN.to_string())
+                    } else {
+                        Some(FLAG_NO_ORIGIN.to_string())
+                    }
                 }
                 Verdict::CouldNotJudge if a.witness.all_absent => {
                     Some(FLAG_SPECIFICS_ABSENT.to_string())
@@ -158,7 +173,8 @@ fn grade_recorded_flag(flag: Option<&str>, claim_id: &str) -> FlagGrade {
             FLAG_SPECIFICS_ABSENT
             | FLAG_NO_CITATION_HANDLE
             | FLAG_UNRESOLVABLE_HANDLE
-            | FLAG_NOT_JUDGEABLE,
+            | FLAG_NOT_JUDGEABLE
+            | FLAG_NO_ORIGIN,
         ) => FlagGrade::Walled,
         Some(unknown) => {
             tracing::warn!(
@@ -631,6 +647,77 @@ pub struct ManifestInput {
 }
 
 /// The run-close manifest ICD.
+
+/// drb1-t5: annotate a COMPOSED report with its verdicts.
+///
+/// The claim-ledger render rebuilt the page out of audited claim rows,
+/// so a claim that could not be verified took the answer down with it —
+/// measured on the logged t7a flight, 127 of 137 claims landed
+/// could-not-judge and every `## Findings` section rendered empty.
+///
+/// Here the article IS the deliverable and the verdicts ANNOTATE it. The
+/// honesty property is unchanged and is still enforced, not instructed:
+/// a refuted claim is marked in place so it cannot stand as an
+/// assertion, and everything the gate could not verify is named in a
+/// closing section. Nothing is silently dropped (§18.3).
+pub fn annotate_composed(report: &str, claims: &[FinalClaim]) -> String {
+    let mut out = report.to_string();
+
+    // Refuted claims are marked WHERE THEY STAND — an unmarked refuted
+    // sentence would be the page asserting something the evidence
+    // contradicts.
+    for c in claims.iter().filter(|c| c.verdict == Verdict::Failed) {
+        let needle = c.text.trim();
+        if needle.len() < 12 {
+            continue;
+        }
+        if let Some(at) = out.find(needle) {
+            let end = at + needle.len();
+            out.insert_str(end, " **[refuted by the evidence]**");
+        }
+    }
+
+    let passed = claims
+        .iter()
+        .filter(|c| c.verdict == Verdict::Passed)
+        .count();
+    let refuted = claims
+        .iter()
+        .filter(|c| c.verdict == Verdict::Failed)
+        .count();
+    let open: Vec<&FinalClaim> = claims
+        .iter()
+        .filter(|c| c.verdict == Verdict::CouldNotJudge)
+        .collect();
+
+    out.push_str("\n\n## Verification\n\n");
+    out.push_str(&format!(
+        "Of {} claims extracted from this report, {passed} verified against two or more \
+         independent sources, {refuted} were refuted by the evidence and are marked in place, \
+         and {} could not be verified from the evidence gathered.\n",
+        claims.len(),
+        open.len()
+    ));
+    if !open.is_empty() {
+        out.push_str(
+            "\nThe following statements rest on evidence the gate could not confirm. They are \
+             reported rather than removed, and should be read as unverified:\n\n",
+        );
+        for c in open.iter().take(40) {
+            let t = c.text.trim();
+            let short: String = t.chars().take(220).collect();
+            out.push_str(&format!("- {short}\n"));
+        }
+        if open.len() > 40 {
+            out.push_str(&format!(
+                "- …and {} further unverified statements, all recorded in the verdict set.\n",
+                open.len() - 40
+            ));
+        }
+    }
+    out
+}
+
 pub fn build_manifest(input: ManifestInput) -> Manifest {
     Manifest {
         icd: "manifest".to_string(),
@@ -1097,5 +1184,84 @@ mod tests {
             &[],
         );
         assert!(report.contains("[could-not-judge]"), "{report}");
+    }
+
+    // ---- drb1-t5: the composed deliverable's annotations ------------
+
+    fn composed_claim(text: &str, v: Verdict) -> FinalClaim {
+        FinalClaim {
+            id: "c1".to_string(),
+            text: text.to_string(),
+            verdict: v,
+            status: format!("{v:?}"),
+            evidence_ids: Vec::new(),
+            citations: Vec::new(),
+            flag: None,
+            corroboration: None,
+        }
+    }
+
+    /// A refuted claim must be marked WHERE IT STANDS. Appending it to a
+    /// list at the bottom would leave the sentence asserting, in the
+    /// body of the page, something the evidence contradicts.
+    #[test]
+    fn annotate_marks_a_refuted_claim_in_place() {
+        let report = "## Findings\n\nThe bridge opened in 1911 and carries six lanes.\n";
+        let claims = vec![composed_claim(
+            "The bridge opened in 1911 and carries six lanes.",
+            Verdict::Failed,
+        )];
+        let out = annotate_composed(report, &claims);
+        let at = out.find("six lanes.").expect("the sentence survives");
+        assert!(
+            out[at..].starts_with("six lanes. **[refuted by the evidence]**"),
+            "the mark sits on the sentence, got: {}",
+            &out[at..at.saturating_add(80).min(out.len())]
+        );
+    }
+
+    /// Everything the gate could not verify is NAMED. The article is not
+    /// rebuilt around the verdicts, but no unverified claim is passed
+    /// off as established either.
+    #[test]
+    fn annotate_names_every_unverified_claim() {
+        let report = "## Findings\n\nAlpha holds. Beta holds.\n";
+        let claims = vec![
+            composed_claim("Alpha holds.", Verdict::CouldNotJudge),
+            composed_claim("Beta holds.", Verdict::Passed),
+        ];
+        let out = annotate_composed(report, &claims);
+        assert!(
+            out.contains("## Verification"),
+            "the page carries its own audit"
+        );
+        assert!(
+            out.contains("1 verified"),
+            "the passed count is stated, got: {out}"
+        );
+        assert!(
+            out.contains("could not be verified"),
+            "the unverified count is stated"
+        );
+        assert!(
+            out.contains("- Alpha holds."),
+            "the unverified claim is named, not silently kept"
+        );
+        assert!(
+            !out.contains("- Beta holds."),
+            "a verified claim is not listed as unverified"
+        );
+    }
+
+    /// The article survives annotation: composing does not truncate.
+    #[test]
+    fn annotate_keeps_the_whole_article() {
+        let report = "## A\n\nbody one.\n\n## B\n\nbody two.\n";
+        let out = annotate_composed(report, &[]);
+        assert!(out.starts_with(report), "the article is prefix-preserved");
+        assert!(
+            out.contains("Of 0 claims"),
+            "an empty claim set is still reported"
+        );
     }
 }
