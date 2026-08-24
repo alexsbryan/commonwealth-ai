@@ -101,7 +101,13 @@ instead of a viewport jump — the editor never scrolls uninvited. The
 first Tab takes you there; the ones after that accept and advance.
 
 Two edits is not a coincidence, but one is. One edit never fires
-anything. Short or ambiguous patterns need three.
+anything. Nor does a *short* pattern, however many times you repeat it:
+a rewrite has to be at least five characters before it will speak. That
+bar is why `cat` → `dog` stays quiet and `console.log(` does not, and
+it is deliberate — short rules matched far more wrong sites than they
+were worth. When the edit was an insertion or a deletion rather than a
+rewrite, a short pattern is not dropped but re-anchored to the
+surrounding line, which is both safer and more specific.
 
 ## 3 — The model engine, for the cases a rule can't express
 
@@ -205,7 +211,13 @@ number to move.
 
 - **Rule engine** — 120 cases mined from this repository's real commit
   history plus hand-written probes (`gym/next-edit/`). Latest run:
-  120/120, zero malformed or wrong edits, p95 **6 ms**.
+  **zero malformed or wrong edits across all 120**, and every one of the
+  25 negatives correctly silent. Well inside the 150 ms latency bar.
+  Two authored cases (`a03-guards-support3`, `a15-tabs-4char-bar`) and
+  part of the harvest recall still encode the *previous* firing policy
+  — they were written against a support tier that measurement retired
+  (see `MIN_RULE_CHARS` in `next_edit.rs`), so the bank reads red on
+  those until the fixtures are re-cut.
 - **Model engine** — 60 hand-written cases across 11 languages
   (`gym/next-edit/gen/`), including 20 negatives where the correct
   answer is silence. Latest run: 30/30 fired-and-correct, **zero** wrong

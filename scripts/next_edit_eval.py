@@ -87,7 +87,20 @@ def run_case(endpoint: str, case: dict, timeout: float) -> dict:
         r["recall_missed"] = len(expect.get("sites", []))
         return r
 
-    find, replace = expect["rule_find"], expect["rule_replace"]
+    # Structural well-formedness (G1) is a claim about the rule that
+    # ACTUALLY fired, not the one this fixture predicted. `should_fire`
+    # is a router: a `find` under MIN_RULE_CHARS is declined and the
+    # case falls through to the insertion/deletion lane, which
+    # re-induces a longer, line-anchored rule from the same history.
+    # Those edits are perfectly well-formed under the rule that fired.
+    # Scoring them against `expect["rule_find"]` reported them as
+    # malformed and charged a routed case to the correctness gate.
+    # Whether the rule was the one we wanted is a QUEUE question, and
+    # `queue_ok`/`recall_missed` below already answer it.
+    find = dbg.get("rule_find") or expect["rule_find"]
+    replace = dbg.get("rule_replace") if dbg.get("rule_find") else None
+    if replace is None:
+        replace = expect["rule_replace"]
     flen = u16len(find)
     got = []
     prev_sorted_end = None
@@ -196,7 +209,13 @@ def main() -> None:
     walls = [r["wall_ms"] for r in results if r["wall_ms"] >= 0]
     g4 = pct(walls, .95) <= 150 if walls else False
 
-    print(f"\ngates: G1 correctness {'PASS' if g1 else 'FAIL'} (malformed={malformed_total})"
+    # G1 has two arms; printing only the malformed count made a run that
+    # failed on the authored-queue arm read as "FAIL (malformed=0)".
+    authored_fire = [r for r in authored if next(
+        c for c in cases if c["id"] == r["id"])["expect"]["fire"]]
+    a_ok = sum(r["queue_ok"] for r in authored_fire)
+    print(f"\ngates: G1 correctness {'PASS' if g1 else 'FAIL'}"
+          f" (malformed={malformed_total}, authored queue {a_ok}/{len(authored_fire)})"
           f" · G2 contract-recall {'PASS' if g2 else 'FAIL'}"
           f" ({sum(r['fire_ok'] and r['queue_ok'] for r in hpos)}/{len(hpos)})"
           f" · G3 restraint {'PASS' if g3 else 'FAIL'}"
