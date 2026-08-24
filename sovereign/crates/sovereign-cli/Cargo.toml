@@ -37,6 +37,12 @@ sovereign-contracts = { workspace = true }
 kernel-types = { workspace = true }
 sovereign-agent-bench = { workspace = true, optional = true }
 sovereign-cli-shared = { workspace = true }
+# Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
+# hand-rolled `while i < args.len()` loops: the dispatcher's own `--help` /
+# `--version` globals and `notes retrieval-audit`. Rendering goes through
+# `sovereign_cli_shared::flag_surface::parse`, which owns the one prefix rule.
+# ~11 transitive crates on top of the 871 this binary already links.
+clap = { workspace = true }
 # The LLM sibling, LINKED rather than exec'd — the `awareness` feature only.
 # `awareness_cmd` used to live in THIS crate while importing
 # `crate::enrich_cmd::inference_client`, which lives over there; that import

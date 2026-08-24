@@ -154,6 +154,78 @@ impl CorpusId {
     }
 }
 
+// ── [prepare]: the five impls the corpus-id spec declares ────────────────
+//
+// Error-class count is a property of the TARGET TYPE, not of the codebase.
+// Each of these deletes a whole class of E0308/E0277 before a single call
+// site is touched, which is the difference between a ~40-line edit here and
+// an edit at every one of 6,710 `corpus_id` occurrences. Declared in
+// quality/refactors/corpus-id.toml [prepare]; measured on the first order
+// (rf-field-atom-kernel-types-corpusid) as 30 errors across two classes.
+//
+// None of them weakens the invariant: every one hands out the slug that a
+// `CorpusId` already proved non-empty at construction. There is deliberately
+// no `From<String> for CorpusId` — that direction is FALLIBLE (empty is
+// refused), so it stays `CorpusId::new(..) -> Option`, and a caller must say
+// what it means by an absent corpus rather than having one defaulted in.
+
+impl AsRef<str> for CorpusId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl std::borrow::Borrow<str> for CorpusId {
+    fn borrow(&self) -> &str {
+        &self.0
+    }
+}
+
+impl PartialEq<str> for CorpusId {
+    fn eq(&self, other: &str) -> bool {
+        self.0 == other
+    }
+}
+
+impl PartialEq<&str> for CorpusId {
+    fn eq(&self, other: &&str) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<CorpusId> for str {
+    fn eq(&self, other: &CorpusId) -> bool {
+        other.0 == *self
+    }
+}
+
+impl From<CorpusId> for String {
+    fn from(id: CorpusId) -> String {
+        id.0
+    }
+}
+
+impl std::str::FromStr for CorpusId {
+    /// The empty id, named. `FromStr` cannot return `Option`, so the refusal
+    /// travels as a typed error rather than as a silently-defaulted value.
+    type Err = EmptyCorpusId;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        CorpusId::new(s).ok_or(EmptyCorpusId)
+    }
+}
+
+/// A corpus id was empty or whitespace-only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EmptyCorpusId;
+
+impl fmt::Display for EmptyCorpusId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("corpus id is empty")
+    }
+}
+
+impl std::error::Error for EmptyCorpusId {}
+
 impl fmt::Display for CorpusId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)
@@ -187,11 +259,16 @@ mod tests {
     fn node_id_serialises_as_a_16_byte_array_not_a_string() {
         // The derive puts a tuple struct of [u8;16] on the wire as an array.
         // Stored mesh records depend on it; a switch to hex here would be a
-        // silent data break.
+        // silent data break. Asserted through the ONE wire decider
+        // (`crate::wire`, §10.6) — the same computation the refactor
+        // factory's differ runs, so this test and that gate cannot drift.
         let id = NodeId::from_u128(1);
-        let j = serde_json::to_string(&id).unwrap();
-        assert!(j.starts_with("[0,0,0"), "unexpected wire form: {j}");
-        assert_eq!(serde_json::from_str::<NodeId>(&j).unwrap(), id);
+        let f = crate::wire::WireFixture::json(&id.to_string(), &id).unwrap();
+        assert!(
+            !f.is_transparent(),
+            "adopting NodeId at a String site must NOT be wire-transparent"
+        );
+        assert!(f.after.starts_with("[0,0,0"), "unexpected wire form: {}", f.after);
     }
 
     #[test]
@@ -215,12 +292,11 @@ mod tests {
     #[test]
     fn corpus_id_is_transparent_on_the_wire() {
         // Existing rows persist `corpus_id` as a plain string; adopting the
-        // newtype must not be a data migration.
+        // newtype must not be a data migration. Asserted through the ONE
+        // wire decider (`crate::wire`, §10.6).
         let c = CorpusId::new("wikipedia").unwrap();
-        assert_eq!(serde_json::to_string(&c).unwrap(), "\"wikipedia\"");
-        assert_eq!(
-            serde_json::from_str::<CorpusId>("\"wikipedia\"").unwrap(),
-            c
-        );
+        let f = crate::wire::WireFixture::json(c.as_str(), &c).unwrap();
+        assert!(f.is_transparent(), "{} != {}", f.before, f.after);
+        assert_eq!(f.before, "\"wikipedia\"");
     }
 }

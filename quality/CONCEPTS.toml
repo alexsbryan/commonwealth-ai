@@ -169,7 +169,7 @@ today       = "2026-08-16: keyed by lane id; comparability is operator memory. `
 
 [[concept]]
 name        = "Attribution"
-canonical   = "sovereign_contracts::attribution::Attribution"
+canonical   = "kernel_types::attribution::Attribution"
 disposition = "converge"
 totality    = """
 ONE answer to 'which engine computed this text': model identity, build,
@@ -196,7 +196,7 @@ today       = "2026-08-17: ModelInfo is byte-duplicated (commonwealth-core/model
 
 [[concept]]
 name        = "Verdict"
-canonical   = "sovereign_contracts::verdict::Verdict"
+canonical   = "kernel_types::judgement::Verdict"
 disposition = "converge the gate family; distinct (rename) the rest"
 totality    = """
 Four states, one definition, workspace-wide: Passed | Failed(Reason) |
@@ -231,7 +231,7 @@ type's serde form should speak that vocabulary or the alias be recorded."""
 
 [[concept]]
 name        = "Judgement"
-canonical   = "sovereign_contracts::judgement::Judgement"
+canonical   = "kernel_types::judgement::Judgement"
 disposition = "converge per question: three cores, two renames"
 totality    = """
 A Judgement is MINTABLE ONLY BY A CALIBRATED JUDGE — private constructor,
@@ -353,7 +353,7 @@ today       = "2026-08-17 re-verification REVERSED v1's diagnosis: the enum (src
 
 [[concept]]
 name        = "Origin"
-canonical   = "sovereign_contracts::evidence::Origin"
+canonical   = "kernel_types::origin::Origin"
 disposition = "converge"
 totality    = """
 Every field non-optional, and the SOURCE IS A CLOSED SUM — Corpus{corpus,
@@ -388,7 +388,7 @@ today       = "2026-08-17: provenance rides ScoredChunk.metadata: HashMap<String
 
 [[concept]]
 name        = "Custody"
-canonical   = "sovereign_contracts::types::custody::Custody"
+canonical   = "kernel_types::custody::Custody"
 disposition = "converge"
 totality    = """
 The chunk-level custody class — where this content stands (PublicWeb |
@@ -491,7 +491,7 @@ a golden equivalence test."""
 
 [[concept]]
 name        = "EvidenceSet"
-canonical   = "sovereign_contracts::evidence::EvidenceSet"
+canonical   = "corpus_engine::index::EvidenceSet"
 disposition = "converge"
 totality    = """
 TWO seals, both carried: the CHUNK SET composition read, and the CORPUS
@@ -852,7 +852,7 @@ today      = "Added in v2 for completeness: the enrichment ontology is a major n
 
 [[concept]]
 name       = "Tool"
-canonical  = "sovereign_tools::ToolRegistry"
+canonical  = "sovereign_contracts::registry::ToolRegistry"
 disposition = "converge"
 totality   = "One manifest of tool identity, effect and scope; a tool exists iff the registry lists it. Tool OUTPUT that reaches a model enters the evidence system as Origin::ToolOutput — see the Origin row."
 gloss      = '''one manifest of tool identity, effect and scope (`ToolRegistry`).'''

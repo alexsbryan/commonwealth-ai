@@ -35,6 +35,10 @@ name = "sovereign-cli-llm"
 path = "src/main.rs"
 
 [dependencies]
+# Flag surfaces are declared as structs (`#[derive(clap::Parser)]`), not
+# parsed by hand. Already in this crate's build graph via sovereign-eval,
+# so this edge is free — it makes the existing dependency explicit.
+clap = { workspace = true }
 sovereign-core = { workspace = true }
 # The enrichment store below every host that reads it — `enrich_cmd::{config,
 # paths, catalog}` are re-exports of this crate (rung nc-16-shared-capability).

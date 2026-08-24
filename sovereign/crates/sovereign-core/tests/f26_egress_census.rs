@@ -229,6 +229,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/doctor.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/doc_fetcher.rs", Class::InboundOnly, 1),
+    // refactor_cmd/label_model: the name-group adjudication pass. One client,
+    // pinned to the local daemon — it posts Rust source snippets and the
+    // code-intel descriptions of the types under judgement, which are estate
+    // content, so LocalDaemon is the class that keeps them on the machine. A
+    // future `--daemon-url` pointing off-box would be the review moment, not
+    // a count change.
+    ("sovereign/crates/sovereign-cli-dev/src/refactor_cmd/label_model.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/design_session.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/code_capability_graph.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/run.rs", Class::LocalDaemon, 1),

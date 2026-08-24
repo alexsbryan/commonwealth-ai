@@ -58,6 +58,12 @@ use sovereign_inference::embedded::EmbedOnlyProvider;
 
 const DEFAULT_BANK_DIR: &str = "sovereign/bench/routing/calibration";
 
+/// The command as a user types it — reached through the dispatcher, so it is
+/// never the binary's own name. Verbatim in the first line of [`HELP`] and in
+/// its USAGE block; a const so the `Usage:` line clap renders above that help
+/// cannot contradict it.
+const COMMAND: &str = "sovereign router fit";
+
 const HELP: &str = "\
 sovereign router fit — calibrate the router's embedding thresholds
 
@@ -120,77 +126,123 @@ pub async fn run(args: &[String]) -> i32 {
     }
 }
 
+/// The flag surface, as a struct. THE FIELD LIST IS THE FLAG LIST — `clap`
+/// derives `--baseline-dir` from `baseline_dir`, the value coercion from the
+/// field type (`Option<PathBuf>` parses a path, `bool` is a presence flag,
+/// `Vec<String>` accumulates a repeatable flag), and the value domain of
+/// `--objective` from [`canonical_objective`]. Adding a flag here is adding a
+/// field: there is no parse loop to extend and no second table to keep in sync.
+///
+/// `disable_help_flag` because `--help` is served by [`HELP`] through the
+/// dispatcher in [`run`], which is unchanged.
+///
+/// The fields are the RAW flags. Anything derived from more than one of them —
+/// the objective, the output format — is a method below, so the derived value
+/// has exactly one definition and cannot drift from the flags it reads.
+#[derive(clap::Parser, Debug)]
+#[command(
+    // The `Usage:` line inside a parse error says what the user TYPED; without
+    // it clap names the binary (`sovereign-cli-llm`), which is not a command
+    // anyone runs. `COMMAND` rather than a literal so it cannot drift from the
+    // USAGE block in `HELP`, which is printed directly beneath it.
+    name = COMMAND,
+    no_binary_name = true,
+    disable_help_flag = true
+)]
 struct Opts {
+    #[arg(long)]
     bank: Option<PathBuf>,
+    /// Repeatable. `Vec<String>` is what makes `--axis a --axis b` accumulate;
+    /// the flag is named explicitly because the field is plural and the flag
+    /// is not.
+    #[arg(long = "axis")]
     axes: Vec<String>,
-    objective: Objective,
+    #[arg(
+        long = "objective",
+        default_value = "safe-recall",
+        value_parser = canonical_objective
+    )]
+    objective_name: String,
+    #[arg(long, default_value_t = 0)]
+    max_false_positives: usize,
+    #[arg(long, default_value_t = 1.0)]
+    min_precision: f64,
+    #[arg(long)]
     embed_model: Option<PathBuf>,
-    json: bool,
+    #[arg(long, default_value = "human")]
+    format: String,
+    #[arg(long)]
     save_baseline: bool,
+    #[arg(long)]
     baseline_dir: Option<PathBuf>,
+    #[arg(long)]
     no_drift: bool,
+    #[arg(long)]
     explain: bool,
 }
 
-fn parse_opts(args: &[String]) -> Result<Opts, String> {
-    let mut bank = None;
-    let mut axes: Vec<String> = Vec::new();
-    let mut embed_model = None;
-    let mut json = false;
-    let mut objective_name = "safe-recall".to_string();
-    let mut max_fp: usize = 0;
-    let mut min_precision: f64 = 1.0;
-    let mut save_baseline = false;
-    let mut baseline_dir = None;
-    let mut no_drift = false;
-    let mut explain = false;
+/// The `--objective` value domain, enforced at PARSE time so that
+/// [`Opts::objective`] can be total. It returns the canonical spelling, which
+/// is what collapses the two aliases the hand-rolled match accepted (`safe`,
+/// `coverage`) before anything downstream sees them.
+///
+/// This stays a string rather than becoming a `clap::ValueEnum`: the objective
+/// SET already has an owner, [`Objective`] in `sovereign_core`, and a local
+/// enum mirroring it would be a second place to edit when an objective is added
+/// — the opposite of what this conversion is for (ARCH §10.6, one decider).
+/// Keeping the match here also keeps the original message verbatim: clap wraps
+/// it, it does not replace it.
+fn canonical_objective(name: &str) -> Result<String, String> {
+    match name {
+        "safe-recall" | "safe" => Ok("safe-recall".into()),
+        "accuracy" => Ok("accuracy".into()),
+        "max-coverage" | "coverage" => Ok("max-coverage".into()),
+        other => Err(format!(
+            "unknown objective '{other}' (safe-recall | accuracy | max-coverage)"
+        )),
+    }
+}
 
-    let mut it = args.iter();
-    while let Some(a) = it.next() {
-        match a.as_str() {
-            "--bank" => bank = Some(PathBuf::from(next(&mut it, "--bank")?)),
-            "--axis" => axes.push(next(&mut it, "--axis")?),
-            "--save-baseline" => save_baseline = true,
-            "--no-drift" => no_drift = true,
-            "--explain" => explain = true,
-            "--baseline-dir" => {
-                baseline_dir = Some(PathBuf::from(next(&mut it, "--baseline-dir")?))
-            }
-            "--objective" => objective_name = next(&mut it, "--objective")?,
-            "--max-false-positives" => {
-                max_fp = next(&mut it, "--max-false-positives")?
-                    .parse()
-                    .map_err(|e| format!("--max-false-positives: {e}"))?
-            }
-            "--min-precision" => {
-                min_precision = next(&mut it, "--min-precision")?
-                    .parse()
-                    .map_err(|e| format!("--min-precision: {e}"))?
-            }
-            "--embed-model" => embed_model = Some(PathBuf::from(next(&mut it, "--embed-model")?)),
-            "--format" => json = next(&mut it, "--format")? == "json",
-            other => return Err(format!("unexpected argument '{other}'")),
+impl Opts {
+    /// Total, not `Result`: [`canonical_objective`] runs as the value parser,
+    /// so an `Opts` cannot exist holding a name this match does not know. The
+    /// guarantee is carried by the type rather than by a fallible second pass
+    /// (ARCH §7).
+    fn objective(&self) -> Objective {
+        match self.objective_name.as_str() {
+            "accuracy" => Objective::Accuracy,
+            "max-coverage" => Objective::MaxCoverage {
+                min_precision: self.min_precision,
+            },
+            // `canonical_objective` emits exactly three names; this arm is
+            // "safe-recall" and nothing else.
+            _ => Objective::SafeRecall {
+                max_false_positives: self.max_false_positives,
+            },
         }
     }
 
-    let objective = match objective_name.as_str() {
-        "safe-recall" | "safe" => Objective::SafeRecall {
-            max_false_positives: max_fp,
-        },
-        "accuracy" => Objective::Accuracy,
-        "max-coverage" | "coverage" => Objective::MaxCoverage { min_precision },
-        other => {
-            return Err(format!(
-                "unknown objective '{other}' (safe-recall | accuracy | max-coverage)"
-            ))
-        }
-    };
+    /// `--format json` and nothing else selects JSON; every other value renders
+    /// human, which is what the hand-rolled `json = next(...)? == "json"` did.
+    /// Preserved deliberately — this conversion changes how flags are PARSED,
+    /// not what they mean.
+    fn json(&self) -> bool {
+        self.format == "json"
+    }
+}
 
+fn parse_opts(args: &[String]) -> Result<Opts, String> {
+    let o = sovereign_cli_shared::flag_surface::parse::<Opts>(args)?;
+
+    // The one rule kept by hand, deliberately. `conflicts_with` would express
+    // it and would render "cannot be used with" — mechanically right, and
+    // silent about WHY, which is the entire content of this message.
+    //
     // A run restricted to one axis measures one axis. Saving it as
     // THE baseline would silently retire the other five — the next
     // full run would then report them as newly appeared and have
     // nothing to diff them against.
-    if save_baseline && !axes.is_empty() {
+    if o.save_baseline && !o.axes.is_empty() {
         return Err(
             "--save-baseline needs a full run; drop --axis (a partial baseline \
              would retire the axes it omits)"
@@ -198,23 +250,7 @@ fn parse_opts(args: &[String]) -> Result<Opts, String> {
         );
     }
 
-    Ok(Opts {
-        bank,
-        axes,
-        objective,
-        embed_model,
-        json,
-        save_baseline,
-        baseline_dir,
-        no_drift,
-        explain,
-    })
-}
-
-fn next(it: &mut std::slice::Iter<'_, String>, flag: &str) -> Result<String, String> {
-    it.next()
-        .cloned()
-        .ok_or_else(|| format!("{flag} requires a value"))
+    Ok(o)
 }
 
 /// Collect `.toml` calibration banks from a file or directory path.
@@ -246,6 +282,11 @@ async fn cmd_fit(args: &[String]) -> i32 {
             return 2;
         }
     };
+
+    // Hoisted off `opts` before the partial moves below (`opts.bank`,
+    // `opts.embed_model`) borrow-lock the accessors out of reach.
+    let json = opts.json();
+    let objective = opts.objective();
 
     let Some(root) = crate::router_cache_cmd::repo_root() else {
         eprintln!("router fit: not inside a sovereign checkout (no sovereign/models.toml found)");
@@ -343,7 +384,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
         );
         return 2;
     }
-    if !opts.json {
+    if !json {
         eprintln!(
             "router fit: {} cases from {} bank(s), embedding with {} …",
             cases.len(),
@@ -556,11 +597,11 @@ async fn cmd_fit(args: &[String]) -> i32 {
         // binary axes are asymmetric one-shot commits, so they take
         // the caller's objective (safe-recall by default).
         let obj = if axis.as_str() == "intent"
-            && matches!(opts.objective, Objective::SafeRecall { .. })
+            && matches!(objective, Objective::SafeRecall { .. })
         {
             Objective::MaxCoverage { min_precision: 1.0 }
         } else {
-            opts.objective
+            objective
         };
         if let Some(r) = fit(axis_cases, *gate, obj) {
             reports.insert(axis.clone(), r);
@@ -625,7 +666,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
         None
     };
 
-    if opts.json {
+    if json {
         let payload = serde_json::json!({
             "embed_model": measured_model,
             "prescribed_embed_model": slot.file,
@@ -1190,4 +1231,115 @@ fn drift_json(d: &DriftReport) -> serde_json::Value {
 /// assert.
 fn attributable_regression(x: &AxisDelta, attributable: bool) -> bool {
     attributable && x.regressed()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── flag surface ────────────────────────────────────────────────────
+    // These pin the BEHAVIOUR the hand-rolled `while let Some(a) = it.next()`
+    // loop had, so the conversion to `#[derive(clap::Parser)]` is a refactor
+    // and not a silent change of what `router fit` accepts. They also show the
+    // next author how to test a flag surface without booting an embedder.
+
+    fn parse(argv: &[&str]) -> Result<Opts, String> {
+        super::parse_opts(&argv.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+    }
+
+    #[test]
+    fn field_name_becomes_the_long_flag_and_the_type_does_the_coercion() {
+        let o = parse(&["--bank", "/tmp/b.toml", "--max-false-positives", "3", "--explain"])
+            .unwrap();
+        assert_eq!(o.bank, Some(PathBuf::from("/tmp/b.toml")));
+        assert_eq!(o.max_false_positives, 3);
+        assert!(o.explain);
+        assert!(!o.no_drift);
+    }
+
+    #[test]
+    fn key_equals_value_is_accepted() {
+        // The form four hand-rolled CLIs silently dropped (nc-22b). clap takes
+        // it for free; the loop this replaced had to be taught it.
+        let o = parse(&["--bank=/tmp/b.toml", "--objective=accuracy"]).unwrap();
+        assert_eq!(o.bank, Some(PathBuf::from("/tmp/b.toml")));
+        assert_eq!(o.objective(), Objective::Accuracy);
+    }
+
+    #[test]
+    fn axis_is_repeatable() {
+        let o = parse(&["--axis", "intent", "--axis", "scope"]).unwrap();
+        assert_eq!(o.axes, vec!["intent".to_string(), "scope".to_string()]);
+    }
+
+    #[test]
+    fn objective_aliases_resolve_and_carry_their_own_bound() {
+        assert_eq!(
+            parse(&[]).unwrap().objective(),
+            Objective::SafeRecall {
+                max_false_positives: 0
+            },
+            "safe-recall at 0 is the default"
+        );
+        assert_eq!(
+            parse(&["--objective", "safe", "--max-false-positives", "2"])
+                .unwrap()
+                .objective(),
+            Objective::SafeRecall {
+                max_false_positives: 2
+            }
+        );
+        assert_eq!(
+            parse(&["--objective", "coverage", "--min-precision", "0.9"])
+                .unwrap()
+                .objective(),
+            Objective::MaxCoverage { min_precision: 0.9 }
+        );
+    }
+
+    #[test]
+    fn an_unknown_objective_still_names_the_domain() {
+        // The message is the hand-rolled one verbatim: `canonical_objective`
+        // is the value parser, so clap WRAPS this text rather than replacing
+        // it with a bare "invalid value".
+        let err = parse(&["--objective", "cheapest"]).unwrap_err();
+        assert!(
+            err.contains("safe-recall | accuracy | max-coverage"),
+            "got: {err}"
+        );
+    }
+
+    #[test]
+    fn save_baseline_with_an_axis_filter_keeps_the_reason_it_is_refused() {
+        // The one rule NOT delegated to clap, and this is why: `conflicts_with`
+        // would reject the same pair and say nothing about retiring the axes it
+        // omits. Asserting the reason is asserting that the reason survived.
+        let err = parse(&["--save-baseline", "--axis", "intent"]).unwrap_err();
+        assert!(err.contains("would retire the axes it omits"), "got: {err}");
+        assert!(parse(&["--save-baseline"]).is_ok());
+    }
+
+    #[test]
+    fn format_json_is_the_only_json() {
+        assert!(parse(&["--format", "json"]).unwrap().json());
+        assert!(!parse(&["--format", "human"]).unwrap().json());
+        assert!(!parse(&[]).unwrap().json());
+    }
+
+    #[test]
+    fn an_unknown_flag_is_still_rejected() {
+        assert!(parse(&["--nope"]).is_err());
+    }
+
+    #[test]
+    fn a_parse_error_carries_one_prefix_and_names_the_typed_command() {
+        // Composed exactly as `cmd_fit` composes it. `clap`'s own rendering
+        // opens `error: `, so before `flag_surface::parse` owned the stripping
+        // this read `router fit: error: …`; and the `Usage:` line named
+        // `sovereign-cli-llm` rather than the command printed directly beneath
+        // it by `HELP`.
+        let rendered = format!("router fit: {}", parse(&["--nope"]).unwrap_err());
+        assert!(!rendered.starts_with("router fit: error:"), "got: {rendered}");
+        assert!(rendered.contains(&format!("Usage: {COMMAND}")), "got: {rendered}");
+    }
 }

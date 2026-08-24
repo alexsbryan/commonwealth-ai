@@ -42,6 +42,212 @@ pub const EXCLUDE_DIRS_DECL: &[&str] = &[
     ".git",
 ];
 
+/// Blank out comments, preserving line numbering and string literals.
+///
+/// One implementation, two callers, and it started as two. `arg_loop_scan` had
+/// a private line-oriented version whose own doc conceded the gap — *"flag
+/// literals live in match arms, not in strings that also contain `//`"* — a
+/// true-enough assumption for flags that is false for provenance keys, where
+/// `"http://…"` is ordinary data. Rather than mint a second stripper beside it
+/// (ARCH §10.6, one decider one name), the lexer replaced it: strictly more
+/// correct for the original caller, and correct for the new one.
+///
+/// The false positive that forced the rewrite: it reported
+/// `detector.rs:737` as a production site, and that line is the detector's OWN
+/// doc comment explaining the pattern. Prose about a defect is not the defect.
+/// Any scanner that reads source as text has this bug, and the file most likely
+/// to discuss a pattern is the file implementing its detector — so the false
+/// positive lands on the instrument itself and reads as a real finding.
+///
+/// String literals are KEPT, deliberately: the keys these scans match on
+/// (`"source"`, `"custody"`) are literals, so blanking them would blank the
+/// signal. That makes the comment scan a real lexer rather than a regex — a
+/// `//` inside `"http://…"` does not start a comment.
+pub fn strip_comments(src: &str) -> String {
+    #[derive(Clone, Copy, PartialEq)]
+    enum St {
+        Code,
+        Line,
+        Block(u32),
+        Str,
+        RawStr(usize),
+        Ch,
+    }
+    let b = src.as_bytes();
+    let mut out = b.to_vec();
+    let mut st = St::Code;
+    let mut i = 0usize;
+    let blank = |out: &mut Vec<u8>, at: usize| {
+        if out[at] != b'\n' {
+            out[at] = b' ';
+        }
+    };
+    while i < b.len() {
+        match st {
+            St::Code => {
+                if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'/' {
+                    st = St::Line;
+                    blank(&mut out, i);
+                    blank(&mut out, i + 1);
+                    i += 2;
+                    continue;
+                }
+                if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
+                    st = St::Block(1);
+                    blank(&mut out, i);
+                    blank(&mut out, i + 1);
+                    i += 2;
+                    continue;
+                }
+                // `r"…"` / `r#"…"#` — the hash count closes it.
+                if b[i] == b'r' {
+                    let mut j = i + 1;
+                    let mut hashes = 0usize;
+                    while j < b.len() && b[j] == b'#' {
+                        hashes += 1;
+                        j += 1;
+                    }
+                    if j < b.len() && b[j] == b'"' {
+                        st = St::RawStr(hashes);
+                        i = j + 1;
+                        continue;
+                    }
+                }
+                if b[i] == b'"' {
+                    st = St::Str;
+                } else if b[i] == b'\'' {
+                    st = St::Ch;
+                }
+                i += 1;
+            }
+            St::Line => {
+                if b[i] == b'\n' {
+                    st = St::Code;
+                } else {
+                    blank(&mut out, i);
+                }
+                i += 1;
+            }
+            St::Block(depth) => {
+                if b[i] == b'/' && i + 1 < b.len() && b[i + 1] == b'*' {
+                    st = St::Block(depth + 1);
+                    blank(&mut out, i);
+                    blank(&mut out, i + 1);
+                    i += 2;
+                    continue;
+                }
+                if b[i] == b'*' && i + 1 < b.len() && b[i + 1] == b'/' {
+                    blank(&mut out, i);
+                    blank(&mut out, i + 1);
+                    st = if depth == 1 { St::Code } else { St::Block(depth - 1) };
+                    i += 2;
+                    continue;
+                }
+                blank(&mut out, i);
+                i += 1;
+            }
+            St::Str => {
+                if b[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if b[i] == b'"' {
+                    st = St::Code;
+                }
+                i += 1;
+            }
+            St::RawStr(hashes) => {
+                if b[i] == b'"' {
+                    let closed = (1..=hashes).all(|k| b.get(i + k) == Some(&b'#'));
+                    if closed {
+                        st = St::Code;
+                        i += hashes + 1;
+                        continue;
+                    }
+                }
+                i += 1;
+            }
+            St::Ch => {
+                if b[i] == b'\\' {
+                    i += 2;
+                    continue;
+                }
+                if b[i] == b'\'' {
+                    st = St::Code;
+                }
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8(out).unwrap_or_else(|_| src.to_string())
+}
+
+/// Blank out `#[cfg(test)]` items, preserving line numbering.
+///
+/// [`EXCLUDE_DIRS_MENTIONS`] keeps test DIRECTORIES out; this keeps INLINE test
+/// modules out, which is where most of this repo's test code actually lives. A
+/// scanner that counts them reports fixtures as production sites — and for a
+/// provenance scan that is not noise but an inversion: `index/evidence.rs`'s
+/// test module is full of `metadata` maps carrying `"custody"` precisely
+/// BECAUSE the production type has already converged off the untyped channel.
+/// Counting those would report the converged case as the unconverged one.
+///
+/// Same scope rule `cargo xtask concept-gate` applies for the same reason: a
+/// test helper is not a second home for a noun.
+///
+/// Every removed byte becomes a space and every newline is kept, so a match
+/// offset in the result still maps to the right line in the original.
+pub fn strip_test_scope(src: &str) -> String {
+    const ATTR: &str = "#[cfg(test)]";
+    let bytes = src.as_bytes();
+    let mut out: Vec<u8> = bytes.to_vec();
+    let mut search = 0usize;
+    while let Some(rel) = src[search..].find(ATTR) {
+        let at = search + rel;
+        // Walk to the item's first `{`, then match braces to its close. An
+        // item with no brace body (`#[cfg(test)] use ...;`) ends at the `;`.
+        let mut i = at + ATTR.len();
+        let mut depth = 0usize;
+        let mut started = false;
+        while i < bytes.len() {
+            match bytes[i] {
+                b'{' => {
+                    depth += 1;
+                    started = true;
+                }
+                b'}' => {
+                    // A `}` before any `{` means this `#[cfg(test)]` was not
+                    // introducing an item at all — it is text inside a comment
+                    // or a string literal (this file contains one). Stop
+                    // rather than underflow, and blank nothing.
+                    if !started {
+                        i = at + ATTR.len();
+                        break;
+                    }
+                    depth -= 1;
+                    if depth == 0 {
+                        i += 1;
+                        break;
+                    }
+                }
+                b';' if !started => {
+                    i += 1;
+                    break;
+                }
+                _ => {}
+            }
+            i += 1;
+        }
+        for b in out.iter_mut().take(i).skip(at) {
+            if *b != b'\n' {
+                *b = b' ';
+            }
+        }
+        search = i;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| src.to_string())
+}
+
 pub fn repo_root() -> Result<PathBuf, String> {
     let out = std::process::Command::new("git")
         .args(["rev-parse", "--show-toplevel"])
@@ -185,64 +391,7 @@ pub struct ArgLoopScan {
     pub mixed: Vec<PathBuf>,
 }
 
-/// Strip `//` line comments and `/* .. */` block comments. Line-oriented and
-/// deliberately simple: flag literals live in match arms, not in strings that
-/// also contain `//`, and the false positive this exists to kill is the
-/// derive-in-a-comment (`hpr-cost.py` found two in `vault_report.rs`).
-fn strip_comments(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut in_block = false;
-    for line in text.lines() {
-        let mut rest = line;
-        if in_block {
-            match rest.find("*/") {
-                Some(i) => {
-                    rest = &rest[i + 2..];
-                    in_block = false;
-                }
-                None => {
-                    out.push('\n');
-                    continue;
-                }
-            }
-        }
-        let mut kept = String::new();
-        loop {
-            let line_c = rest.find("//");
-            let block_c = rest.find("/*");
-            match (line_c, block_c) {
-                (Some(l), None) => {
-                    kept.push_str(&rest[..l]);
-                    rest = "";
-                }
-                (Some(l), Some(b)) if l < b => {
-                    kept.push_str(&rest[..l]);
-                    rest = "";
-                }
-                (_, Some(b)) => {
-                    kept.push_str(&rest[..b]);
-                    match rest[b + 2..].find("*/") {
-                        Some(e) => rest = &rest[b + 2 + e + 2..],
-                        None => {
-                            in_block = true;
-                            rest = "";
-                        }
-                    }
-                }
-                (None, None) => {
-                    kept.push_str(rest);
-                    rest = "";
-                }
-            }
-            if rest.is_empty() {
-                break;
-            }
-        }
-        out.push_str(&kept);
-        out.push('\n');
-    }
-    out
-}
+
 
 pub fn classify_flag_surface(text: &str) -> (FlagSurface, usize) {
     let stripped = strip_comments(text);
@@ -286,6 +435,63 @@ pub fn arg_loop_scan(files: &[PathBuf]) -> ArgLoopScan {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The false positive that produced this function: the provenance detector
+    /// reported its own doc comment as a production site.
+    #[test]
+    fn prose_about_a_pattern_is_not_the_pattern() {
+        let src = "/// a `metadata.get(\"source\")` downstream is the other half\n\
+                   fn real() { metadata.get(\"source\"); }\n";
+        let out = strip_comments(src);
+        assert_eq!(out.matches("metadata.get").count(), 1, "only the code site survives");
+        assert!(out.starts_with("   "), "the doc line is blanked, not deleted");
+        assert_eq!(out.lines().count(), src.lines().count());
+    }
+
+    /// String literals are the SIGNAL for these scans, so they must survive —
+    /// and a `//` inside one must not open a comment. That is the difference
+    /// between a lexer and a regex, and it is why this is not a one-liner.
+    #[test]
+    fn a_slash_slash_inside_a_string_does_not_start_a_comment() {
+        let src = "let u = \"http://example.com\"; metadata.get(\"source\");\n";
+        let out = strip_comments(src);
+        assert!(out.contains("metadata.get(\"source\")"), "got: {out}");
+        assert!(out.contains("http://example.com"));
+    }
+
+    #[test]
+    fn block_comments_nest_and_raw_strings_survive() {
+        let src = "/* a /* b */ c */ keep(); let r = r#\"x // y\"#;\n";
+        let out = strip_comments(src);
+        assert!(out.contains("keep()"), "got: {out}");
+        assert!(out.contains("x // y"), "raw string body must survive: {out}");
+        assert!(!out.contains('b'), "nested block comment must be gone: {out}");
+    }
+
+    /// Found by running the detector over this workspace: a `#[cfg(test)]`
+    /// appearing inside a comment or a string literal is not an item, and the
+    /// brace walk ran off the end of the enclosing block subtracting from zero.
+    /// THIS FILE contains such a literal, so the scanner crashed on itself.
+    #[test]
+    fn a_cfg_test_inside_text_does_not_run_the_brace_walk_off_the_end() {
+        // The attribute here is inside a string, exactly as `strip_test_scope`
+        // spells it, and the next brace is a CLOSE.
+        let src = "fn f() {\n    let s = \"#[cfg(test)]\";\n}\nfn g() { keep(); }\n";
+        let out = strip_test_scope(src);
+        assert!(out.contains("keep()"), "nothing after the text may be blanked");
+        assert_eq!(out.lines().count(), src.lines().count());
+    }
+
+    /// The ordinary case still works: a real test module goes, production stays,
+    /// and every line survives so reported line numbers stay true.
+    #[test]
+    fn a_real_test_module_is_blanked_and_the_line_count_is_preserved() {
+        let src = "fn prod() { a(); }\n#[cfg(test)]\nmod t {\n    fn x() { b(); }\n}\nfn after() { c(); }\n";
+        let out = strip_test_scope(src);
+        assert!(out.contains("a()") && out.contains("c()"));
+        assert!(!out.contains("b()"), "the test body must be gone");
+        assert_eq!(out.lines().count(), src.lines().count());
+    }
 
     #[test]
     fn decl_regex_matches_the_factory_scale_shapes() {
@@ -364,7 +570,12 @@ fn parse() {
 
     #[test]
     fn comment_stripping_handles_blocks() {
+        // Comments are BLANKED, not deleted. The old line-oriented version
+        // removed them, which shifted every column after a comment; a scanner
+        // that maps a match offset back to a location then reports the wrong
+        // one. Same rule `strip_test_scope` follows, for the same reason.
         let s = strip_comments("a /* x\ny */ b // tail\nc");
-        assert_eq!(s, "a \n b \nc\n");
+        assert_eq!(s, "a     \n     b        \nc");
+        assert_eq!(s.len(), "a /* x\ny */ b // tail\nc".len(), "byte offsets must be stable");
     }
 }

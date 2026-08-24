@@ -443,6 +443,7 @@ impl CorpusUpdater {
             .into_iter()
             .map(|s| SymbolEnrichment {
                 body_hash: body_hash(&s.body),
+                cache_key: crate::enrichment::code_intel::cache_key(s.kind, &s.body),
                 meta: s.meta,
                 summary: String::new(),
                 asks: Vec::new(),

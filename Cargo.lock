@@ -1928,6 +1928,7 @@ dependencies = [
  "hex",
  "http-body 1.0.1",
  "http-body-util",
+ "kernel-types",
  "libc",
  "oicp-types",
  "reqwest 0.12.28",
@@ -12077,6 +12078,7 @@ dependencies = [
  "arc-swap",
  "async-trait",
  "chrono",
+ "clap",
  "corpus-engine",
  "corpus-engine-archaeology",
  "corpus-engine-notes",
@@ -12178,6 +12180,7 @@ dependencies = [
  "dirs 5.0.1",
  "futures",
  "hostname",
+ "kernel-types",
  "libc",
  "regex",
  "reqwest 0.12.28",
@@ -12211,6 +12214,7 @@ dependencies = [
  "axum",
  "bytes",
  "chrono",
+ "clap",
  "commonwealth-core",
  "commonwealth-state",
  "corpus-engine",
@@ -12262,6 +12266,7 @@ dependencies = [
 name = "sovereign-cli-shared"
 version = "0.5.0"
 dependencies = [
+ "clap",
  "corpus-engine",
  "corpus-engine-scip",
  "dirs 5.0.1",

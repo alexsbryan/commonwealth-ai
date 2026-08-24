@@ -17,6 +17,8 @@
 //! - [`cli_contract`]: loader for the CLI contract manifest (`docs/cli-contract.toml`).
 //! - [`cli_contract_report`]: renders that manifest's quality surface for
 //!   `svrn contract` and for the ratchet tests — one census, one renderer.
+//! - [`flag_surface`]: `parse::<T: clap::Parser>` — the one rendering rule for
+//!   every derived flag surface, so a caller's error prefix is never doubled.
 //! - [`help`]: shared `Help` struct + `print` formatter.
 //! - [`deprecation`]: standard deprecation / retired announcements.
 //! - [`prompts`]: interactive confirm / line-read helpers.
@@ -45,6 +47,7 @@ pub mod code_index;
 pub mod code_index_incremental;
 pub mod deprecation;
 pub mod dirs;
+pub mod flag_surface;
 pub mod help;
 #[cfg(feature = "mcp-client")]
 pub mod mcp_client;

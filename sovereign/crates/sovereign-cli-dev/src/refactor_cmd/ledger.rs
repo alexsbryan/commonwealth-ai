@@ -88,6 +88,10 @@ pub struct Ledger {
     pub orphans: Vec<String>,
     /// Label lines that would not parse, named with file and line.
     pub malformed: Vec<String>,
+    /// One site judged differently by two parallel labellers' shards. A
+    /// partitioning bug, not a data error — surfaced so a fan-out cannot
+    /// silently drop half a disagreement.
+    pub collisions: Vec<String>,
     /// The commit the SCIP graph was built from. A number that does not name
     /// the tree it was measured on is not a measurement.
     pub graph_commit: String,
@@ -278,6 +282,7 @@ pub async fn build(
         slices,
         orphans,
         malformed: store.malformed,
+        collisions: store.collisions,
         graph_commit,
     })
 }
@@ -352,6 +357,17 @@ pub fn render(ledger: &Ledger) -> String {
             let _ = writeln!(out, "   {o}");
         }
     }
+    if !ledger.collisions.is_empty() {
+        let _ = writeln!(
+            out,
+            "\n  {} site(s) judged differently by two shards — the fan-out gave two \
+             workers the same site:",
+            ledger.collisions.len()
+        );
+        for c in ledger.collisions.iter().take(5) {
+            let _ = writeln!(out, "    {c}");
+        }
+    }
     if !ledger.malformed.is_empty() {
         let _ = writeln!(
             out,
@@ -416,6 +432,7 @@ mod tests {
             slices,
             orphans: Vec::new(),
             malformed: Vec::new(),
+            collisions: Vec::new(),
             graph_commit: "abc123".into(),
         }
     }

@@ -100,6 +100,8 @@ pub mod hash;
 pub mod ids;
 pub mod judgement;
 pub mod origin;
+#[cfg(any(test, feature = "wire-fixture"))]
+pub mod wire;
 
 pub use answer::{Answer, Citation, Draft, PeerAnswer, Refused, Seal, TURN_SUBJECT};
 pub use attribution::Attribution;

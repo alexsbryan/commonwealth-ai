@@ -183,10 +183,12 @@ mod tests {
 
     #[test]
     fn serde_wire_form_is_a_plain_hex_string() {
+        // Asserted through the ONE wire decider (`crate::wire`, §10.6) —
+        // this was the hand-written original the module generalises.
         let h = ContentHash::of_str("wire");
-        let j = serde_json::to_string(&h).unwrap();
-        assert_eq!(j, format!("\"{}\"", h.to_hex()));
-        assert_eq!(serde_json::from_str::<ContentHash>(&j).unwrap(), h);
+        let f = crate::wire::WireFixture::json(&h.to_hex(), &h).unwrap();
+        assert!(f.is_transparent(), "{} != {}", f.before, f.after);
+        assert_eq!(f.after, format!("\"{}\"", h.to_hex()));
     }
 
     #[test]

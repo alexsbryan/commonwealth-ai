@@ -91,7 +91,6 @@ mod update_cmd;
 mod util;
 
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -177,24 +176,49 @@ impl ApprovalChannel for CliApprovalChannel {
     }
 }
 
-// ─── Args ──────────────────────────────────────────────────────
+// ─── Globals ───────────────────────────────────────────────────
 
-struct Args {
-    model: PathBuf,
-    primary_model: Option<PathBuf>,
-    data_dir: PathBuf,
-    skills_dir: Option<PathBuf>,
-    use_router: bool,
-    ingest: Option<PathBuf>,
-    brave_api_key: Option<String>,
-    tavily_api_key: Option<String>,
-    /// Whether the KnowledgeView landscape-digest feature is active.
-    /// Default `true`; `--no-knowledge-view` on the command line flips
-    /// it to `false`. When disabled, the CLI skips the three enriched
-    /// views + cross-view resonance, matching the desktop app's
-    /// Settings → Knowledge toggle and the server's
-    /// `[knowledge_view] enabled = false` config.
-    knowledge_view_enabled: bool,
+/// The dispatcher's OWN flag surface — the only two flags `svrn` itself owns.
+///
+/// Everything else on the command line is a SUBCOMMAND and its flags belong to
+/// whichever sibling serves it. That is what `trailing_var_arg` +
+/// `allow_hyphen_values` express: parsing stops at the first non-flag token,
+/// and every token from there on lands in [`Globals::rest`] verbatim for the
+/// dispatch table in [`async_main`] to route. `svrn bench --version` therefore
+/// reaches `sovereign-cli-llm` with `--version` intact rather than being
+/// answered here — the property the hand-rolled `raw_args.first()` checks had,
+/// and the one a naive strict parse would have broken.
+///
+/// `disable_help_flag` / `disable_version_flag` because both are served by
+/// [`print_usage`] and [`version_line`] against rules clap does not express
+/// (see [`async_main`]): help answers only when it is the WHOLE command line,
+/// version answers whatever follows it.
+///
+/// What this REPLACED was not a dispatcher at all. Until 2026-08-23 this file
+/// carried an `Args` struct and a 50-line `parse_args` scanning nine flags
+/// (`--model`, `--data-dir`, `--ingest`, …) for the interactive REPL — a REPL
+/// that moved to `sovereign-cli-llm` in the 2026-05-22 slice-5 split. Nothing
+/// had called `parse_args` since; `cargo build` had been reporting `struct
+/// `Args` is never constructed` and `function `parse_args` is never used` the
+/// whole time. The flags were still advertised in [`HELP`], so the surface
+/// read as live while parsing nothing. Both are gone, and the surface that is
+/// actually reachable is the one declared here.
+#[derive(clap::Parser, Debug)]
+#[command(
+    // The `Usage:` line names the command the user typed, not the binary
+    // (`sovereign-cli`), which is not what anyone runs.
+    name = "svrn",
+    no_binary_name = true,
+    disable_help_flag = true,
+    disable_version_flag = true
+)]
+struct Globals {
+    #[arg(long, short = 'h')]
+    help: bool,
+    #[arg(long, short = 'V')]
+    version: bool,
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+    rest: Vec<String>,
 }
 
 use crate::util::help::{Help, HelpSection};
@@ -207,10 +231,7 @@ const HELP: Help = Help {
     command: "svrn",
     summary: "Local AI assistant with code intelligence, knowledge bases, and an optional mesh.",
     sections: &[
-        HelpSection::Usage(
-            "svrn <subcommand> [flags]\n\
-             sovereign --model <path.gguf> [options]   (legacy interactive REPL)",
-        ),
+        HelpSection::Usage("svrn <subcommand> [flags]"),
         HelpSection::Subcommands(&[
             (
                 "setup",
@@ -302,28 +323,13 @@ const HELP: Help = Help {
                 "Check for and install a newer CLI release (--check to only report)",
             ),
         ]),
+        // The two flags the dispatcher itself owns — and the whole of
+        // `Globals`. The nine that stood above them until 2026-08-23
+        // (`--model`, `--data-dir`, `--ingest`, …) belonged to the interactive
+        // REPL, which moved to `svrn chat` in the 2026-05-22 split; their
+        // parser had been dead code ever since, so the help advertised nine
+        // flags that were read by nothing.
         HelpSection::Flags(&[
-            ("--model <path>", "Quick responder GGUF (REPL mode only)"),
-            (
-                "--primary-model <path>",
-                "Main responder GGUF (REPL, lazy-loaded)",
-            ),
-            ("--data-dir <path>", "Database directory (default: data)"),
-            (
-                "--skills-dir <path>",
-                "Skills directory (default: ~/.svrnmesh/skills)",
-            ),
-            (
-                "--ingest <path>",
-                "Ingest documents from directory before REPL",
-            ),
-            ("--router", "Enable LLM-based intent routing"),
-            (
-                "--no-knowledge-view",
-                "Disable KnowledgeView landscape digests (default: enabled)",
-            ),
-            ("--brave-api-key <key>", "Brave Search key (optional)"),
-            ("--tavily-api-key <key>", "Tavily Search key (optional)"),
             ("--help, -h", "Show this message"),
             ("--version, -V", "Print the version and exit"),
         ]),
@@ -597,73 +603,6 @@ fn record_dismissed_nudge(id: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn parse_args() -> Option<Args> {
-    let args: Vec<String> = std::env::args().collect();
-    let mut model = None;
-    let mut primary_model = None;
-    let mut data_dir = None;
-    let mut skills_dir = None;
-    let mut use_router = false;
-    let mut ingest = None;
-    let mut brave_api_key = None;
-    let mut tavily_api_key = None;
-    let mut knowledge_view_enabled = true;
-
-    let mut i = 1;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--model" => {
-                i += 1;
-                model = args.get(i).map(PathBuf::from);
-            }
-            "--primary-model" => {
-                i += 1;
-                primary_model = args.get(i).map(PathBuf::from);
-            }
-            "--data-dir" => {
-                i += 1;
-                data_dir = args.get(i).map(PathBuf::from);
-            }
-            "--skills-dir" => {
-                i += 1;
-                skills_dir = args.get(i).map(PathBuf::from);
-            }
-            "--ingest" => {
-                i += 1;
-                ingest = args.get(i).map(PathBuf::from);
-            }
-            "--brave-api-key" => {
-                i += 1;
-                brave_api_key = args.get(i).cloned();
-            }
-            "--tavily-api-key" => {
-                i += 1;
-                tavily_api_key = args.get(i).cloned();
-            }
-            "--router" => {
-                use_router = true;
-            }
-            "--no-knowledge-view" => {
-                knowledge_view_enabled = false;
-            }
-            _ => {}
-        }
-        i += 1;
-    }
-
-    Some(Args {
-        model: model?,
-        primary_model,
-        data_dir: data_dir.unwrap_or_else(|| PathBuf::from("data")),
-        skills_dir,
-        use_router,
-        ingest,
-        brave_api_key,
-        tavily_api_key,
-        knowledge_view_enabled,
-    })
-}
-
 // ─── Main ──────────────────────────────────────────────────────
 
 /// Entry point. Builds the tokio runtime explicitly (rather than via
@@ -759,29 +698,61 @@ fn version_line() -> String {
 }
 
 async fn async_main() {
-    // Check for subcommands before standard arg parsing.
-    let raw_args: Vec<String> = std::env::args().skip(1).collect();
+    let argv: Vec<String> = std::env::args().skip(1).collect();
 
-    // Top-level --help / help short-circuit. A lone "help" (no
-    // subcommand) prints the banner; `svrn mesh --help` is
-    // handled by the subcommand dispatcher below.
-    if let Some(first) = raw_args.first() {
-        if matches!(first.as_str(), "--help" | "-h" | "help") && raw_args.len() == 1 {
+    // The dispatcher's own flags, off the front. Everything from the first
+    // non-flag token onward is the subcommand and its arguments, untouched —
+    // see [`Globals`].
+    //
+    // What reaches this Err arm is narrow, and measured rather than assumed:
+    // `allow_hyphen_values` means an UNRECOGNISED leading flag is handed to
+    // `rest` rather than refused, so `svrn --nope` still falls through the
+    // dispatch table to the banner exactly as it always did (pinned by
+    // `an_unrecognised_leading_flag_is_forwarded_not_rejected`). A malformed
+    // use of a flag the dispatcher DOES own is what lands here —
+    // `svrn --help=x` -> "unexpected value 'x' for '--help'". Either way the
+    // exit code is 1 with the banner, which is what an unusable leading token
+    // has always produced.
+    let globals = match sovereign_cli_shared::flag_surface::parse::<Globals>(&argv) {
+        Ok(g) => g,
+        Err(e) => {
+            eprintln!("svrn: {e}\n");
             print_usage();
-            std::process::exit(0);
+            std::process::exit(1);
         }
+    };
+    let raw_args = globals.rest;
+
+    // Top-level --help / -h / help. Help answers only when it is the WHOLE
+    // command line; `svrn mesh --help` belongs to `mesh` and never reaches
+    // here, because `mesh` closed flag parsing above.
+    //
+    // The one rule that changed shape: the old check read `raw_args.first()`,
+    // so it was positional. `Globals` is not — any `-h`/`--help` ahead of the
+    // subcommand sets the flag wherever it sits. The observable behaviour is
+    // the same for every single-flag command line, `svrn -h status` included:
+    // that exits 1 with the banner, as it did when `-h` fell through the
+    // dispatch table matching no subcommand.
+    if globals.help && raw_args.is_empty() {
+        print_usage();
+        std::process::exit(0);
+    }
+    if raw_args.len() == 1 && raw_args[0] == "help" {
+        print_usage();
+        std::process::exit(0);
+    }
+    if globals.help {
+        print_usage();
+        std::process::exit(1);
     }
 
     // Top-level --version / -V (or a lone `version`). A bug report needs a
     // version string, and before this there was none — `svrn --version` fell
     // through to the banner. `svrn <subcommand> --version` still routes to the
     // subcommand dispatcher below, unshadowed.
-    if let Some(first) = raw_args.first() {
-        let f = first.as_str();
-        if f == "--version" || f == "-V" || (f == "version" && raw_args.len() == 1) {
-            println!("{}", version_line());
-            std::process::exit(0);
-        }
+    if globals.version || (raw_args.len() == 1 && raw_args[0] == "version") {
+        println!("{}", version_line());
+        std::process::exit(0);
     }
 
     // Hidden introspection: `svrn __dump-commands` prints every top-level
@@ -1329,6 +1300,81 @@ async fn async_main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── the dispatcher's own flag surface ───────────────────────────────
+    // `Globals` sits in front of EVERY `svrn` invocation, so the property that
+    // matters is not which flags it accepts but which it REFUSES to touch: a
+    // subcommand's flags must reach the subcommand verbatim. Nothing tested
+    // the argv split before the conversion, because there was nothing to call
+    // — the hand-rolled checks read `raw_args.first()` inline in `async_main`,
+    // which exits the process and cannot be driven from a test.
+
+    // `std::result::Result` spelled out: this module's `use super::*` pulls in
+    // `sovereign_core::error::Result`, which takes one generic parameter.
+    fn globals(argv: &[&str]) -> std::result::Result<Globals, String> {
+        sovereign_cli_shared::flag_surface::parse::<Globals>(
+            &argv.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        )
+    }
+
+    /// THE forwarding property. `trailing_var_arg` + `allow_hyphen_values`
+    /// mean parsing stops at the first non-flag token, so a flag the
+    /// dispatcher also owns (`--version`) still belongs to the subcommand
+    /// once a subcommand has been named. A strict parse would answer here
+    /// instead and every sibling would stop receiving its own arguments.
+    #[test]
+    fn a_subcommands_flags_are_never_eaten_by_the_globals() {
+        let g = globals(&["bench", "--version"]).unwrap();
+        assert!(!g.version, "`svrn bench --version` must not answer here");
+        assert_eq!(g.rest, ["bench", "--version"]);
+
+        let g = globals(&["mesh", "status", "--json", "-n", "5"]).unwrap();
+        assert!(!g.help && !g.version);
+        assert_eq!(g.rest, ["mesh", "status", "--json", "-n", "5"]);
+
+        // The hidden introspection verbs route on `rest[0]` too.
+        assert_eq!(globals(&["__dump-commands"]).unwrap().rest, ["__dump-commands"]);
+    }
+
+    /// The globals themselves, and the split that decides whether help is the
+    /// WHOLE command line — the rule `async_main` reads to choose exit 0
+    /// (`svrn -h`) over exit 1 (`svrn -h status`, which matched no subcommand
+    /// before the conversion either).
+    #[test]
+    fn the_globals_are_set_only_ahead_of_the_subcommand() {
+        let g = globals(&["--version"]).unwrap();
+        assert!(g.version && g.rest.is_empty());
+        assert!(globals(&["-V"]).unwrap().version);
+
+        let g = globals(&["--help"]).unwrap();
+        assert!(g.help && g.rest.is_empty());
+
+        let g = globals(&["-h", "status"]).unwrap();
+        assert!(g.help, "the flag is still seen");
+        assert_eq!(g.rest, ["status"], "...but it is not a bare help request");
+
+        // `help` / `version` as WORDS are subcommands, not flags; `async_main`
+        // matches them out of `rest` by length.
+        let g = globals(&["help"]).unwrap();
+        assert!(!g.help);
+        assert_eq!(g.rest, ["help"]);
+    }
+
+    /// An upstream property this dispatcher DEPENDS on and does not control,
+    /// so it is pinned rather than trusted (ARCH §18.4). `allow_hyphen_values`
+    /// makes clap hand an unrecognised leading `--flag` to `rest` instead of
+    /// erroring, which is what keeps `svrn --nope` on its historical path:
+    /// no subcommand matches, so the banner prints and the exit is 1. If a
+    /// clap upgrade starts rejecting it, this goes red — rather than the
+    /// dispatcher quietly starting to refuse arguments it used to forward.
+    #[test]
+    fn an_unrecognised_leading_flag_is_forwarded_not_rejected() {
+        let g = globals(&["--nope"]).expect(
+            "clap changed: an unknown leading flag now errors instead of              landing in `rest`. `async_main`'s parse-error arm already prints              the banner and exits 1, so the observable behaviour is unchanged              — update this test to assert the Err.",
+        );
+        assert_eq!(g.rest, ["--nope"]);
+        assert!(!g.help && !g.version);
+    }
 
     /// `--version` must carry the real workspace version — the string a bug
     /// report should include. Guards against the earlier regression where

@@ -33,6 +33,11 @@ which = { version = "7", optional = true }
 # the work-atlas coordination tools.
 reqwest = { workspace = true, optional = true }
 dirs = "5"
+# The flag-surface derive. Every `sovereign-cli-*` binary that declares its
+# flags as a struct reaches `flag_surface::parse` through here, so the seam has
+# ONE home rather than one per CLI crate (§10.6). ~11 transitive crates against
+# the 871 `sovereign-cli` already carries.
+clap = { workspace = true }
 # The rebrand-aware path SSOT — `dirs.rs` delegates to it instead of
 # mirroring `resolve_branded_dir` by hand (the mirror drifted risk).
 sovereign-contracts = { workspace = true }

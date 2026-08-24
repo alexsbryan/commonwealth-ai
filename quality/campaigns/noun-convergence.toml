@@ -9,7 +9,37 @@ objective = "Four domains, four boundaries, one small contract at each — so ex
 spec      = "quality/TARGET_ARCHITECTURE.md"
 register  = "quality/CONCEPTS.toml"
 declared  = "2026-08-19"
-status    = "active"
+status    = "closed"
+# PARKED 2026-08-22 by operator direction. Not abandoned and not a failure —
+# it landed real convergence (nc-17 through nc-27, four fork families, a §18.6
+# catch that stopped a HARD gate being silently loosened). It is parked because
+# an accountability audit against the END GOAL found the campaign was steering
+# by instruments that could not see the goal:
+#
+#   - nc-redundant was 79% BLIND TO DELETION for its entire life. Its near tier
+#     reads an embedding index that never evicts, so 8117 of 10301 lines could
+#     not move by the deletion the bar existed to reward (note 45213e2b).
+#   - nc-adoption's TREATMENT WAS NEVER BUILT. Six rows at its minted floor of
+#     2.94, verdict `failed` every time, while the envelope it was testing was
+#     never minted in kernel-types and its three named conversions never
+#     happened. That is a NEVER-RAN scored as a FAILURE, inside the scoreboard.
+#   - THE KERNEL IS AT THE WRONG ALTITUDE FOR WHERE THE WORK IS. Of the 30
+#     hottest .rs files by 30-day agent reads+edits, 21 import neither
+#     kernel-types nor sovereign-contracts, and they re-derive Opts, Plan, Mode,
+#     Artifact, Report, CheckStatus — command- and workflow-shaped nouns. Zero
+#     of their 232 local nouns collide with a kernel-types name. kernel-types is
+#     a good crate; it was built where the architecture argument was, not where
+#     the keystrokes are.
+#
+# THE SUCCESSOR IS `hot-path-reuse` (quality/campaigns/hot-path-reuse.toml),
+# scoped to that altitude, with each of the failures above answered by a
+# structure rather than an intention. Its "what killed noun-convergence" table
+# cites this campaign's own record row by row.
+#
+# WHAT REMAINS TRUE HERE and should not be re-litigated: kernel-types is layer 0
+# and correct; ARCH §10.6's "one decider, one name" stands; the four fork
+# families nc-22 found were real bugs. Reopen only with an instrument that has
+# passed a positive AND a negative control first.
 
 # ── THE SYSTEM, AS THE OPERATOR DESCRIBES IT ────────────────────────────────
 #

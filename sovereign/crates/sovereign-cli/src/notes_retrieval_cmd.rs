@@ -377,49 +377,46 @@ fn retrieval_log_dir(override_dir: Option<&str>) -> Result<PathBuf, String> {
     Ok(sovereign_contracts::rebrand::svrnmesh_root().join("retrieval-log"))
 }
 
+/// The flag surface, as a struct. THE FIELD LIST IS THE FLAG LIST — `clap`
+/// derives `--log-dir` from `log_dir` and the value coercion from the field
+/// type, so adding a flag here is adding a field. The hand-rolled loop this
+/// replaced named each flag in three places (the field, the match arm, the
+/// `Opts { … }` literal) and its five "`--x` needs a value" messages were
+/// mechanical restatements of the arity `clap` already knows.
+///
+/// `disable_help_flag` because `--help` is served by [`print_help`] in [`run`],
+/// which checks before parsing and is unchanged.
+#[derive(clap::Parser, Debug)]
+#[command(
+    // The `Usage:` line names what the user TYPED. Without it clap names the
+    // binary (`sovereign-cli`), which is not how this command is reached.
+    name = "svrn notes retrieval-audit",
+    no_binary_name = true,
+    disable_help_flag = true
+)]
 struct Opts {
+    #[arg(long)]
     project: Option<String>,
+    /// The flag is `--dir`; the field is `transcript_dir` because `dir` alone
+    /// would not say WHICH directory next to `log_dir`.
+    #[arg(long = "dir")]
     transcript_dir: Option<String>,
+    #[arg(long)]
     log_dir: Option<String>,
+    #[arg(long)]
     session: Option<String>,
-    json: bool,
+    /// Raw, not a `bool`. `--format json` and nothing else selects JSON; every
+    /// other value renders human, which is what the hand-rolled
+    /// `map(|s| s == "json")` did. Preserved deliberately — this conversion
+    /// changes how flags are PARSED, not what they mean.
+    #[arg(long, default_value = "human")]
+    format: String,
 }
 
-fn parse_opts(args: &[String]) -> Result<Opts, String> {
-    let mut o = Opts {
-        project: None,
-        transcript_dir: None,
-        log_dir: None,
-        session: None,
-        json: false,
-    };
-    let mut i = 0;
-    while i < args.len() {
-        match args[i].as_str() {
-            "--project" => {
-                o.project = Some(args.get(i + 1).ok_or("--project needs a value")?.clone());
-                i += 2;
-            }
-            "--dir" => {
-                o.transcript_dir = Some(args.get(i + 1).ok_or("--dir needs a value")?.clone());
-                i += 2;
-            }
-            "--log-dir" => {
-                o.log_dir = Some(args.get(i + 1).ok_or("--log-dir needs a value")?.clone());
-                i += 2;
-            }
-            "--session" => {
-                o.session = Some(args.get(i + 1).ok_or("--session needs a value")?.clone());
-                i += 2;
-            }
-            "--format" => {
-                o.json = args.get(i + 1).map(|s| s == "json").unwrap_or(false);
-                i += 2;
-            }
-            other => return Err(format!("unknown flag: {other}")),
-        }
+impl Opts {
+    fn json(&self) -> bool {
+        self.format == "json"
     }
-    Ok(o)
 }
 
 /// Enumerate `<session>.jsonl` retrieval logs, honoring `--session`.
@@ -458,7 +455,7 @@ pub async fn run(args: &[String]) -> i32 {
         print_help();
         return 0;
     }
-    let opts = match parse_opts(args) {
+    let opts = match sovereign_cli_shared::flag_surface::parse::<Opts>(args) {
         Ok(o) => o,
         Err(e) => {
             eprintln!("retrieval-audit: {e}");
@@ -517,7 +514,7 @@ pub async fn run(args: &[String]) -> i32 {
         return 1;
     }
 
-    if opts.json {
+    if opts.json() {
         print_json(&audits);
     } else {
         print_table(&audits);
@@ -710,6 +707,57 @@ fn print_help() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ── flag surface ────────────────────────────────────────────────────
+    // These pin the BEHAVIOUR the hand-rolled `while i < args.len()` loop had,
+    // so the conversion to `#[derive(clap::Parser)]` is a refactor and not a
+    // silent change of what `retrieval-audit` accepts.
+
+    fn parse(argv: &[&str]) -> Result<Opts, String> {
+        sovereign_cli_shared::flag_surface::parse::<Opts>(
+            &argv.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+        )
+    }
+
+    #[test]
+    fn field_name_becomes_the_long_flag_and_dir_stays_dir() {
+        let o = parse(&["--project", "/p", "--dir", "/t", "--session", "abc"]).unwrap();
+        assert_eq!(o.project.as_deref(), Some("/p"));
+        // `--dir`, not `--transcript-dir`: the `long = "dir"` override is what
+        // keeps the flag spelled the way the help and the hook document it
+        // while the field says which directory it is.
+        assert_eq!(o.transcript_dir.as_deref(), Some("/t"));
+        assert_eq!(o.session.as_deref(), Some("abc"));
+        assert_eq!(o.log_dir, None);
+    }
+
+    #[test]
+    fn format_json_is_the_only_json() {
+        // The hand-rolled loop did `map(|s| s == "json")`, so every other value
+        // — and the flag's absence — rendered human. Preserved: this
+        // conversion changed how flags are parsed, not what they mean.
+        assert!(parse(&["--format", "json"]).unwrap().json());
+        assert!(!parse(&["--format", "human"]).unwrap().json());
+        assert!(!parse(&["--format", "bogus"]).unwrap().json());
+        assert!(!parse(&[]).unwrap().json());
+    }
+
+    #[test]
+    fn a_parse_error_carries_one_prefix_and_names_the_typed_command() {
+        // Composed exactly as `run` composes it. `clap`'s own rendering opens
+        // `error: `, so without `flag_surface::parse` owning the stripping this
+        // would read `retrieval-audit: error: …`, and the `Usage:` line would
+        // name `sovereign-cli` — a binary nobody types.
+        let rendered = format!("retrieval-audit: {}", parse(&["--nope"]).unwrap_err());
+        assert!(
+            !rendered.starts_with("retrieval-audit: error:"),
+            "got: {rendered}"
+        );
+        assert!(
+            rendered.contains("Usage: svrn notes retrieval-audit"),
+            "got: {rendered}"
+        );
+    }
     use std::io::Write;
 
     fn write(path: &Path, body: &str) {

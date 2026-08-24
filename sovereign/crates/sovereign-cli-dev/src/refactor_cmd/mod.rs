@@ -24,6 +24,7 @@
 mod affinity;
 mod census;
 mod classify;
+mod destination;
 mod detector;
 mod discover;
 mod gate;
@@ -250,6 +251,19 @@ async fn status_cmd(args: &[String]) -> i32 {
         }
     };
 
+    // The register is surveyed beside the burn-down, not after it: `dest` on
+    // every open holding is a canonical copied from `quality/CONCEPTS.toml`,
+    // so a canonical that resolves nowhere makes those rows unactionable no
+    // matter how healthy the detectors are.
+    let register = match destination::RegisterHealth::survey(&root) {
+        Ok(h) => Some(h),
+        Err(e) => {
+            // Could-not-judge, named — never a silent zero (ARCH §18.3).
+            eprintln!("warning: register destinations could not be surveyed — {e}");
+            None
+        }
+    };
+
     let unlabelled_keys: Vec<serde_json::Value> = ledger
         .slices
         .iter()
@@ -276,7 +290,9 @@ async fn status_cmd(args: &[String]) -> i32 {
             "orphaned_labels": ledger.orphans,
             "orphaned_label_count": ledger.orphans.len(),
             "malformed_label_lines": ledger.malformed,
+            "shard_collisions": ledger.collisions,
             "by_destination": by_dest,
+            "register": register.as_ref().map(destination::RegisterHealth::json),
             "unlabelled_keys": unlabelled_keys,
             "detectors": ledger.slices.iter().map(|s| serde_json::json!({
                 "id": s.id.as_str(),
@@ -293,6 +309,9 @@ async fn status_cmd(args: &[String]) -> i32 {
         );
     } else {
         print!("{}", ledger::render(&ledger));
+        if let Some(h) = &register {
+            print!("{}", h.render());
+        }
         if !unlabelled_keys.is_empty() {
             println!("\n UNLABELLED (first {})", unlabelled_keys.len());
             for k in &unlabelled_keys {
@@ -525,13 +544,60 @@ async fn label_model_cmd(args: &[String]) -> i32 {
         return 2;
     }
 
+    // The per-symbol descriptions the enrichment pass produced. Without them
+    // the model compares SOURCE, and two forked copies of one concept usually
+    // differ in source while agreeing in purpose — which is the judgement being
+    // asked for. Coverage is printed rather than assumed: a prompt silently
+    // degraded to source-only is indistinguishable from a good one downstream.
+    let sums = match affinity::load_summaries(&index_path) {
+        Ok(v) => {
+            let idx = label_model::index_summaries(&v);
+            println!(
+                "descriptions: {} symbols enriched, {} usable",
+                v.len(),
+                idx.len()
+            );
+            idx
+        }
+        Err(u) => {
+            println!("descriptions: NONE — {}", u.reason);
+            println!("             remedy: {}", u.remedy);
+            label_model::Summaries::new()
+        }
+    };
+    let covered: usize = groups
+        .iter()
+        .map(|g| label_model::summary_coverage(g, &sums).0)
+        .sum();
+    let total: usize = groups.iter().map(|g| g.sites.len()).sum();
+    println!(
+        "             {covered}/{total} of the sites under test carry one"
+    );
+
     println!(
         "scoring {} group(s) against {} — model `{model}`, local daemon, no external tokens",
         groups.len(),
         gold_path
     );
-    let answers =
-        label_model::run_groups(&root, "http://localhost:9741", &model, &groups, true).await;
+    // Worked examples, minus any whose name is a question in this run.
+    let under_test: std::collections::BTreeSet<String> =
+        groups.iter().map(|g| g.name.clone()).collect();
+    let shots = label_model::shots_for(&under_test);
+    println!(
+        "worked examples: {} of {} (any colliding with a scored group is dropped)",
+        shots.len(),
+        label_model::SHOTS.len()
+    );
+    let answers = label_model::run_groups(
+        &root,
+        "http://localhost:9741",
+        &model,
+        &groups,
+        &sums,
+        &shots,
+        true,
+    )
+    .await;
 
     for split in [label_model::Split::Dev, label_model::Split::Test] {
         if only_split.is_some_and(|s| s != split) {
@@ -600,6 +666,21 @@ async fn label_from_register(args: &[String]) -> i32 {
         return 3;
     }
 
+    // A canonical that resolves nowhere must not enter the store. Until
+    // 2026-08-24 this pass would have written `sovereign_contracts::verdict::
+    // Verdict` onto every Verdict site — a path with no module behind it — and
+    // the eleven HAND labels beside them already said `kernel_types::Verdict`.
+    // Two deciders for one name (ARCH §10.6), with the tool holding the wrong
+    // one. The check is here rather than at the call site because this is where
+    // the register's word becomes a stored judgement.
+    let workspace = match destination::Workspace::scan(&root) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("error: could not judge — {e}");
+            return 3;
+        }
+    };
+
     let store = labels::LabelStore::load(&root);
     let mut applied = 0usize;
     let mut already = 0usize;
@@ -627,6 +708,16 @@ async fn label_from_register(args: &[String]) -> i32 {
             skipped.push(format!("{} — composite disposition {raw:?}", row.name));
             continue;
         };
+        let resolution = workspace.resolve(&row.canonical);
+        if !resolution.is_usable() {
+            skipped.push(format!(
+                "{} — canonical {} is not a path a worker can `use`: {}",
+                row.name,
+                row.canonical,
+                resolution.render()
+            ));
+            continue;
+        }
         let label = labels::Label {
             key,
             dest: row.canonical.clone(),
@@ -765,6 +856,33 @@ async fn next_cmd(args: &[String]) -> i32 {
         println!("Run `svrn code refactor status` to see what is unlabelled, then `label` it.");
         return 0;
     };
+
+    // Interlock: an order is a self-contained instruction, and the first line
+    // of it a worker acts on is the destination's import. Cutting one for a
+    // path with nothing behind it spends a lease and a session to arrive at a
+    // compile error — the well-formed-and-wrong result ARCH §18 refuses. The
+    // check runs against the WORKING TREE, so a canonical repaired this minute
+    // is honoured without waiting for the next index.
+    match destination::Workspace::scan(&root) {
+        Ok(ws) => {
+            let r = ws.resolve(&chosen.destination);
+            if !r.is_usable() {
+                eprintln!(
+                    "refused: destination {} is not a path a worker can `use`.\n  \
+                     {}\n  \
+                     Repair the row's `canonical` in quality/CONCEPTS.toml, or mint the \n  \
+                     home before cutting work toward it. Nothing was locked.",
+                    chosen.destination,
+                    r.render()
+                );
+                return 2;
+            }
+        }
+        Err(e) => {
+            eprintln!("refused: could not judge destination {} — {e}", chosen.destination);
+            return 3;
+        }
+    }
 
     let mut lock = match order::FileLock::acquire(&root, &chosen.id, &chosen.files) {
         Ok(l) => l,
@@ -915,6 +1033,25 @@ async fn label_cmd(args: &[String]) -> i32 {
     if args.first().map(String::as_str) == Some("--model") {
         return label_model_cmd(&args[1..]).await;
     }
+    // `--shard <name>` routes this judgement to `labels/<detector>.<name>.jsonl`
+    // so N parallel labellers never append to one file. Pulled out before the
+    // positionals so it may appear anywhere on the line.
+    let mut shard: Option<String> = None;
+    let mut args: Vec<String> = {
+        let mut out = Vec::new();
+        let mut it = args.iter();
+        while let Some(a) = it.next() {
+            if let Some(v) = a.strip_prefix("--shard=") {
+                shard = Some(v.to_string());
+            } else if a == "--shard" {
+                shard = it.next().cloned();
+            } else {
+                out.push(a.clone());
+            }
+        }
+        out
+    };
+    let args = &args[..];
     if args.len() < 5 {
         eprintln!(
             "error: label needs <detector> <key> <disposition> <destination> <why>\n\
@@ -930,18 +1067,21 @@ async fn label_cmd(args: &[String]) -> i32 {
         eprintln!("error: unknown detector '{}'", args[0]);
         return 1;
     };
-    let disp: labels::Disposition =
-        match serde_json::from_value(serde_json::Value::String(args[2].clone())) {
-            Ok(d) => d,
-            Err(_) => {
-                eprintln!(
-                    "error: unknown disposition '{}' — one of converge|distinct|idiom|\
-                 external-mirror|layered|leave|UNSURE",
-                    args[2]
-                );
-                return 1;
-            }
-        };
+    // Accepts both the wire spelling and the display spelling, and the error
+    // text is generated from the same list the parser uses, so the two cannot
+    // drift apart again.
+    let Some(disp) = labels::Disposition::parse_cli(&args[2]) else {
+        eprintln!(
+            "error: unknown disposition '{}' — one of {}",
+            args[2],
+            labels::Disposition::ALL
+                .iter()
+                .map(|d| d.wire())
+                .collect::<Vec<_>>()
+                .join("|")
+        );
+        return 1;
+    };
     let root = match census::repo_root() {
         Ok(r) => r,
         Err(e) => {
@@ -957,7 +1097,7 @@ async fn label_cmd(args: &[String]) -> i32 {
         by: "seat".to_string(),
         at: chrono::Utc::now().format("%Y-%m-%d").to_string(),
     };
-    match labels::LabelStore::append(&root, det, &label) {
+    match labels::LabelStore::append_to(&root, det, &label, shard.as_deref()) {
         Ok(()) => {
             println!("labelled {} -> {} ({})", label.key, label.dest, args[2]);
             0

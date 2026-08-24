@@ -164,8 +164,122 @@ fn crate_of(site: &Site) -> String {
 /// Succinct and non-contradictory on purpose: this runs on a small open-weight
 /// model, and a prompt that hedges in one clause and demands certainty in the
 /// next produces confident noise. One task, one output shape, one escape hatch.
-pub fn compose_prompt(root: &Path, group: &NameGroup) -> String {
+/// Per-symbol descriptions, keyed by the SCIP qualified name — the same string
+/// a `Site.locus` carries, so the join is exact rather than fuzzy.
+pub type Summaries = BTreeMap<String, String>;
+
+/// Index the enrichment cache by qualified name.
+///
+/// Absent summaries are not an error here: the pass must still run on a corpus
+/// that was never enriched. What matters is that the caller can SEE how many
+/// sites got one — a prompt silently degraded to source-only looks identical to
+/// a good one from the outside, and that is the failure this codebase keeps
+/// producing (ARCH §18.3).
+pub fn index_summaries(sums: &[super::affinity::SymbolSummary]) -> Summaries {
+    sums.iter()
+        .filter(|s| !s.summary.trim().is_empty())
+        .map(|s| (s.meta.qualified_name.clone(), s.summary.trim().to_string()))
+        .collect()
+}
+
+/// How many of a group's sites have a description. Glassbox for the above.
+pub fn summary_coverage(group: &NameGroup, sums: &Summaries) -> (usize, usize) {
+    let have = group
+        .sites
+        .iter()
+        .filter(|s| sums.contains_key(&s.locus))
+        .count();
+    (have, group.sites.len())
+}
+
+/// One worked example: the situation, the answer, and why.
+pub struct Shot {
+    pub name: &'static str,
+    pub sketch: &'static str,
+    pub judgement: &'static str,
+    pub why: &'static str,
+}
+
+/// The four answers, one worked example each.
+///
+/// # Why these are invented rather than drawn from the workspace
+///
+/// The obvious source is the register or today's adjudications — but every
+/// real name that is defined in two crates IS a group in the dev/test split,
+/// so using one as an exemplar hands the model the answer to a question it is
+/// about to be scored on. `Verdict` sits in the held-out half; one exemplar
+/// would have burned it. Note b15c59f0 records what an answer-contaminated
+/// estate costs, and the contamination is invisible once it is in the prompt.
+///
+/// The register is also the wrong shape for teaching the boundary: 21 of its
+/// 31 rows are `converge` and idiom patterns are excluded from its census by
+/// construction, so exemplars drawn from it would pull toward converge — and
+/// converge is the direction of the COSTLY error (a worker merging two types
+/// that were never one). These four are balanced across the answer set on
+/// purpose, and [`shots_for`] still filters structurally.
+pub const SHOTS: [Shot; 4] = [
+    Shot {
+        name: "RetryPolicy",
+        sketch: "crate `net-client`:  pub struct RetryPolicy { max_attempts: u32, backoff_ms: u64 }
+                 crate `job-runner`:  pub struct RetryPolicy { max_attempts: u32, backoff_ms: u64 }",
+        judgement: "one-concept",
+        why: "identical fields and identical meaning; one was copied because reaching for the other was harder than retyping it",
+    },
+    Shot {
+        name: "Frame",
+        sketch: "crate `video-decode`: pub struct Frame { pixels: Vec<u8>, width: u32, height: u32 }
+                 crate `wire-proto`:   pub struct Frame { opcode: u8, payload: Bytes }",
+        judgement: "different-concepts",
+        why: "a picture and a protocol envelope share an English word and nothing else; merging them would invent a type that models neither",
+    },
+    Shot {
+        name: "Config",
+        sketch: "crate `indexer`: pub struct Config { shard_size: usize }
+                 crate `server`:  pub struct Config { bind: SocketAddr }
+                 crate `cli`:     pub struct Config { verbose: bool }",
+        judgement: "per-crate-idiom",
+        why: "every crate names its own settings `Config`; the repetition is the convention working, not duplication",
+    },
+    Shot {
+        name: "Handle",
+        sketch: "crate `alpha`: pub struct Handle(u64);
+                 crate `beta`:  pub struct Handle(u64);   // no doc comments, no methods shown",
+        judgement: "unsure",
+        why: "two opaque newtypes over the same primitive tell you nothing about whether they index the same thing; the shape is identical and the meaning is unknown",
+    },
+];
+
+/// Exemplars safe to show while judging `under_test`.
+///
+/// An exemplar whose name is also a question in this run is dropped: it would
+/// be handing over an answer, and the score would then measure recall of the
+/// prompt rather than judgement. Structural, because "remember not to include
+/// the answer" is exactly the kind of rule that survives until someone adds an
+/// exemplar in a hurry (ARCH §10 — make it structural, not remembered).
+pub fn shots_for<'a>(under_test: &std::collections::BTreeSet<String>) -> Vec<&'a Shot> {
+    SHOTS
+        .iter()
+        .filter(|s| !under_test.contains(s.name))
+        .collect()
+}
+
+pub fn compose_prompt(
+    root: &Path,
+    group: &NameGroup,
+    sums: &Summaries,
+    shots: &[&Shot],
+) -> String {
     let mut p = String::new();
+    if !shots.is_empty() {
+        p.push_str("Worked examples of this same judgement:\n\n");
+        for s in shots {
+            p.push_str(&format!(
+                "{}\n-> {} : {}\n\n",
+                s.sketch, s.judgement, s.why
+            ));
+        }
+        p.push_str("---\n\n");
+    }
     p.push_str(&format!(
         "The type name `{}` is defined in {} different Rust crates in one workspace.\n\n",
         group.name,
@@ -173,6 +287,14 @@ pub fn compose_prompt(root: &Path, group: &NameGroup) -> String {
     ));
     for s in &group.sites {
         p.push_str(&format!("--- crate `{}` ({})\n", crate_of(s), s.file));
+        // The plain-English description of what this definition is FOR, when
+        // the corpus has been enriched. Two forked copies of one concept often
+        // look different in source (different fields, different helpers) and
+        // identical in purpose — which is the judgement being asked for. Source
+        // alone makes the model compare syntax; this makes it compare intent.
+        if let Some(d) = sums.get(&s.locus) {
+            p.push_str(&format!("what it is for: {d}\n"));
+        }
         p.push_str(&snippet(root, s));
         p.push_str("\n\n");
     }
@@ -201,19 +323,73 @@ pub fn strip_fences(s: &str) -> &str {
     t.strip_suffix("```").unwrap_or(t).trim()
 }
 
+/// Every balanced `{...}` span in `s`, outermost only, in order.
+///
+/// Brace-counting rather than first-`{`-to-last-`}`, and string-aware so a `}`
+/// inside a JSON string cannot close an object early. The prompt carries Rust
+/// source, so a model that reasons aloud echoes braces from the snippets — the
+/// naive span then runs from a brace in the prose to a brace in the epilogue
+/// and is not JSON at all. That is what produced 13/13 parse failures.
+pub fn balanced_objects(s: &str) -> Vec<&str> {
+    let b = s.as_bytes();
+    let mut out = Vec::new();
+    let (mut depth, mut start) = (0usize, 0usize);
+    let (mut in_str, mut esc) = (false, false);
+    for i in 0..b.len() {
+        let c = b[i];
+        if in_str {
+            if esc {
+                esc = false;
+            } else if c == b'\\' {
+                esc = true;
+            } else if c == b'"' {
+                in_str = false;
+            }
+            continue;
+        }
+        match c {
+            b'"' => in_str = true,
+            b'{' => {
+                if depth == 0 {
+                    start = i;
+                }
+                depth += 1;
+            }
+            b'}' => {
+                if depth > 0 {
+                    depth -= 1;
+                    if depth == 0 {
+                        out.push(&s[start..=i]);
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
 pub fn parse_answer(raw: &str) -> Result<ModelAnswer, String> {
     let stripped = strip_fences(raw);
-    // Models sometimes emit a sentence then the object. Take the first object.
-    let candidate = match (stripped.find('{'), stripped.rfind('}')) {
-        (Some(a), Some(b)) if b > a => &stripped[a..=b],
-        _ => stripped,
-    };
-    serde_json::from_str::<ModelAnswer>(candidate).map_err(|e| {
-        format!(
-            "{e}; raw head: {:?}",
-            raw.chars().take(160).collect::<String>()
-        )
-    })
+    // LAST first: a model that thinks aloud puts its answer at the end, and an
+    // earlier object is usually the prompt's own example echoed back. Taking
+    // the first would score the example instead of the judgement.
+    let mut last_err = String::new();
+    for cand in balanced_objects(stripped).into_iter().rev() {
+        match serde_json::from_str::<ModelAnswer>(cand) {
+            Ok(a) => return Ok(a),
+            Err(e) => last_err = e.to_string(),
+        }
+    }
+    Err(format!(
+        "no JSON object in the reply parsed as an answer ({}); raw head: {:?}",
+        if last_err.is_empty() {
+            "none found".to_string()
+        } else {
+            last_err
+        },
+        raw.chars().take(160).collect::<String>()
+    ))
 }
 
 /// Ask the daemon one question.
@@ -228,7 +404,30 @@ pub async fn ask(
     prompt: &str,
 ) -> Result<ModelAnswer, String> {
     let url = format!("{}/v1/chat/completions", daemon_url.trim_end_matches('/'));
+    // CONSTRAIN THE SHAPE, DO NOT ASK FOR IT (ARCH §7.6 — never ask a model to
+    // guarantee what code can enforce). The prompt used to say "reply with one
+    // JSON object and nothing else"; the 4B on the fast slot reasoned aloud
+    // instead, spent all 220 tokens on the preamble and emitted no object at
+    // all — 13/13 parse failures, and the pass reported COULD-NOT-JUDGE rather
+    // than a score, which is the only reason it was visible. With the schema
+    // attached the same model answers in ~90 tokens with no prose, and
+    // `judgement` cannot come back as anything outside the closed set.
+    let schema = serde_json::json!({
+        "type": "object",
+        "properties": {
+            "judgement": {"type": "string",
+                          "enum": ["one-concept", "different-concepts", "per-crate-idiom", "unsure"]},
+            "canonical": {"type": "string"},
+            "why": {"type": "string"}
+        },
+        "required": ["judgement", "canonical", "why"],
+        "additionalProperties": false
+    });
     let body = serde_json::json!({
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {"name": "name_group_judgement", "schema": schema}
+        },
         "model": model,
         "temperature": TEMPERATURE,
         "top_p": 1.0,
@@ -272,6 +471,8 @@ pub async fn run_groups(
     daemon_url: &str,
     model: &str,
     groups: &[NameGroup],
+    sums: &Summaries,
+    shots: &[&Shot],
     progress: bool,
 ) -> BTreeMap<String, Result<ModelAnswer, String>> {
     let client = reqwest::Client::builder()
@@ -280,14 +481,23 @@ pub async fn run_groups(
         .unwrap_or_default();
     let mut out = BTreeMap::new();
     for (i, g) in groups.iter().enumerate() {
-        let prompt = compose_prompt(root, g);
+        let prompt = compose_prompt(root, g, sums, shots);
         let answer = ask(&client, daemon_url, model, &prompt).await;
         if progress {
             let label = match &answer {
                 Ok(a) => a.judgement.to_disposition().as_str().to_string(),
                 Err(e) => format!("FAILED ({})", e.chars().take(60).collect::<String>()),
             };
-            eprintln!("  [{}/{}] {:<24} {}", i + 1, groups.len(), g.name, label);
+            let (have, all) = summary_coverage(g, sums);
+            eprintln!(
+                "  [{}/{}] {:<24} {:<18} descriptions {}/{}",
+                i + 1,
+                groups.len(),
+                g.name,
+                label,
+                have,
+                all
+            );
         }
         out.insert(g.name.clone(), answer);
     }
@@ -426,6 +636,99 @@ pub fn load_gold(path: &Path) -> Result<BTreeMap<String, Disposition>, String> {
 
 #[cfg(test)]
 mod tests {
+    /// An exemplar must never be shown while its own name is being judged —
+    /// that is handing over the answer, and the score would then measure
+    /// recall of the prompt rather than judgement.
+    #[test]
+    fn an_exemplar_colliding_with_a_scored_group_is_dropped() {
+        let under_test: std::collections::BTreeSet<String> =
+            ["Config".to_string(), "Verdict".to_string()].into_iter().collect();
+        let shots = shots_for(&under_test);
+        assert_eq!(shots.len(), SHOTS.len() - 1);
+        assert!(!shots.iter().any(|s| s.name == "Config"));
+    }
+
+    /// NEGATIVE CONTROL: with no collision every exemplar survives, so the
+    /// test above cannot pass by the filter simply dropping everything.
+    #[test]
+    fn with_no_collision_every_exemplar_survives() {
+        let none = std::collections::BTreeSet::new();
+        assert_eq!(shots_for(&none).len(), SHOTS.len());
+    }
+
+    /// The exemplar set must cover all four answers. A set missing one teaches
+    /// the model that answer is unavailable — and the missing one would be
+    /// `unsure`, the escape hatch §18.3 exists to keep open.
+    #[test]
+    fn the_exemplars_cover_every_answer_exactly_once() {
+        let mut js: Vec<&str> = SHOTS.iter().map(|s| s.judgement).collect();
+        js.sort();
+        assert_eq!(
+            js,
+            vec!["different-concepts", "one-concept", "per-crate-idiom", "unsure"]
+        );
+    }
+
+    /// No exemplar may reuse a real workspace type name, or it silently
+    /// becomes leakage the moment that name appears in a split.
+    #[test]
+    fn no_exemplar_borrows_a_name_this_program_adjudicates() {
+        for s in SHOTS {
+            for taken in ["Verdict", "Gap", "Evidence", "Origin", "Answer", "Custody"] {
+                assert_ne!(s.name, taken, "exemplar `{}` collides with a real concept", s.name);
+            }
+        }
+    }
+
+    /// The real 4B failure: it reasons aloud, echoing braces from the Rust
+    /// snippets in the prompt, then answers. First-brace-to-last-brace spans
+    /// prose and parses as nothing — this was 13/13 failures on the dev split.
+    #[test]
+    fn an_answer_after_a_reasoning_preamble_that_echoes_braces_is_found() {
+        let raw = "The user is asking me to decide. Looking at `pub struct ChunkRange { \
+                   start_id: u64 }` in both crates, they match.\n\n\
+                   {\"judgement\":\"one-concept\",\"canonical\":\"kernel_types::ChunkRange\",\"why\":\"identical\"}";
+        let a = parse_answer(raw).expect("must parse");
+        assert_eq!(a.judgement.to_disposition(), Disposition::Converge);
+    }
+
+    /// The prompt shows an example object. Taking the FIRST object would score
+    /// the example rather than the judgement, which would look like a working
+    /// pass producing one constant answer.
+    #[test]
+    fn the_prompts_echoed_example_does_not_win_over_the_real_answer() {
+        let raw = "Format reminder: {\"judgement\":\"one-concept\",\"canonical\":\"\",\"why\":\"x\"}\n\
+                   After review they are unrelated.\n\
+                   {\"judgement\":\"different-concepts\",\"canonical\":\"\",\"why\":\"different domains\"}";
+        let a = parse_answer(raw).expect("must parse");
+        assert_eq!(a.judgement.to_disposition(), Disposition::Distinct);
+    }
+
+    /// A `}` inside a string must not close the object early.
+    #[test]
+    fn a_brace_inside_a_json_string_does_not_end_the_object() {
+        let raw = r#"{"judgement":"unsure","canonical":"","why":"the body is { opaque }"}"#;
+        let a = parse_answer(raw).expect("must parse");
+        assert_eq!(a.judgement.to_disposition(), Disposition::Unsure);
+        assert!(a.why.contains("opaque"));
+    }
+
+    /// No answer at all is an error naming what happened — never a default
+    /// judgement, which would silently become a durable label (ARCH §18.3).
+    #[test]
+    fn a_reply_with_no_object_is_an_error_not_a_default() {
+        let e = parse_answer("I cannot tell from what is shown.").unwrap_err();
+        assert!(e.contains("no JSON object"), "{e}");
+    }
+
+    /// Fenced JSON still works — the old path must not regress.
+    #[test]
+    fn a_fenced_object_still_parses() {
+        let a = parse_answer("```json\n{\"judgement\":\"per-crate-idiom\",\"canonical\":\"\",\"why\":\"Result\"}\n```")
+            .expect("must parse");
+        assert_eq!(a.judgement.to_disposition(), Disposition::Idiom);
+    }
+
     use super::*;
 
     fn site(file: &str, token: &str) -> Site {
@@ -477,7 +780,7 @@ mod tests {
             name: "Verdict".into(),
             sites: vec![site("a/src/x.rs", "Verdict")],
         };
-        let p = compose_prompt(d.path(), &g);
+        let p = compose_prompt(d.path(), &g, &Summaries::new(), &[]);
         for opt in [
             "one-concept",
             "different-concepts",

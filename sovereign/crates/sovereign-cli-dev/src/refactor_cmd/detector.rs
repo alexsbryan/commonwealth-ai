@@ -63,11 +63,12 @@ use corpus_engine_scip::converge::{
 use corpus_engine_scip::shape::{field_signatures, shape_census, ShapeOptions};
 use corpus_engine_scip::{ScipRefRecord, ScipSymbolRecord};
 use kernel_types::{Judgement, Reason, Verdict};
+use regex::Regex;
 
 use super::census;
 
-/// The closed set. Adding a sixth kind is a deliberate edit here, not a row
-/// someone drops into a config file (ARCH §2).
+/// The closed set. Adding a kind is a deliberate edit here, not a row someone
+/// drops into a config file (ARCH §2).
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, serde::Serialize, serde::Deserialize,
 )]
@@ -83,6 +84,9 @@ pub enum DetectorId {
     Behaviour,
     /// Hand-rolled `--flag` match loops where a derived parser would serve.
     ArgLoop,
+    /// Provenance carried through an untyped `metadata` map instead of a
+    /// typed `Origin` / `Custody` / `Attribution` field.
+    ProvenanceChannel,
 }
 
 impl DetectorId {
@@ -93,16 +97,18 @@ impl DetectorId {
             DetectorId::Name => "name",
             DetectorId::Behaviour => "behaviour",
             DetectorId::ArgLoop => "arg-loop",
+            DetectorId::ProvenanceChannel => "provenance-channel",
         }
     }
 
     /// Every detector, in the order `status` reports them.
-    pub const ALL: [DetectorId; 5] = [
+    pub const ALL: [DetectorId; 6] = [
         DetectorId::FieldAtom,
         DetectorId::Shape,
         DetectorId::Name,
         DetectorId::Behaviour,
         DetectorId::ArgLoop,
+        DetectorId::ProvenanceChannel,
     ];
 }
 
@@ -676,6 +682,165 @@ impl Detector for ArgLoopDetector {
     }
 }
 
+// ── 6. The provenance channel ────────────────────────────────────────────────
+
+/// Seat ruling: the metadata keys that answer **where did this content come
+/// from**, which is the question `kernel_types::Origin` exists to answer as a
+/// typed field.
+///
+/// Each entry carries the field it migrates onto, because that is what the
+/// order's `(expected, found) -> edit` rule needs and it is not derivable from
+/// the key alone.
+///
+/// # What is deliberately NOT here, and why
+///
+/// The same scan sees 41 other keys on the same maps. They are excluded by
+/// ruling, not by oversight, and the boundary is the shape of `Origin` itself
+/// (`Source` / `Server` / `Grain` / `Locator`):
+///
+/// - **Bibliographic** — `title`, `authors`, `year`, `language`, `subjects`,
+///   `gutenberg_id`, `locc`, `bookshelves`, `abstract`. These are facts about
+///   the DOCUMENT, not about its acquisition. Folding them into `Origin` would
+///   widen the noun into a catalogue record, which is the additive move this
+///   program exists to refuse.
+/// - **Structural** — `ordinal`, `section_id`, `section_path`, `raptor_level`,
+///   `raptor_node_id`, `atlas_tier`. Index position, not provenance.
+///   `raptor_level` is the closest call: derivedness IS the `Grain` question.
+///   It is out because the grain decision does not read this channel today —
+///   `grounding/sealed.rs` takes `grains` as a parameter from the caller — so
+///   firing here would report a site that is not on the path being migrated.
+///
+/// Widening this list is a settings change, and the digest below makes it a
+/// visible diff that restarts the series (interlock 7).
+const PROVENANCE_KEYS: &[(&str, &str)] = &[
+    ("source", "Origin::source — the channel content arrived through"),
+    ("source_id", "Origin::source — the channel's own id"),
+    ("url", "Origin::locator — where it was fetched from"),
+    ("peer_name", "Origin::server — which machine served it"),
+    ("peer", "Origin::server — same question, second spelling"),
+    ("custody", "Evidence::custody — the CUSTODY_META_KEY channel"),
+    ("attributed_to", "Attribution — which engine produced the text"),
+];
+
+/// Provenance riding an untyped `HashMap<String, String>`.
+///
+/// This is the instrument phase 4 of the register needs and the one the other
+/// five cannot supply. `field-atom` sees `<name>: String` DECLARATIONS;
+/// `shape` and `name` see duplicate TYPES. None of them can see a fact travelling
+/// as a map entry, because there is no type there to be duplicated — which is
+/// exactly the defect: `Origin` is not being re-implemented, it is being
+/// bypassed.
+///
+/// `quality/REFACTOR_LEDGER.md` names this detector `provenance-metadata-writer`
+/// in its worked example and never built it. The name here is
+/// `provenance-channel`, because it fires on READS as well as writes: a
+/// `metadata.get("source")` downstream is the other half of the same channel
+/// and migrating only the writers would leave readers looking for a key nobody
+/// sets any more.
+///
+/// # It matches statements, not lines
+///
+/// The canonical site is multi-line:
+///
+/// ```ignore
+/// metadata.insert(
+///     crate::types::CUSTODY_META_KEY.to_string(),
+///     crate::types::Custody::Personal.as_str().to_string(),
+/// );
+/// ```
+///
+/// A line-anchored scan — including the `rg` one-liner the register's `measure`
+/// records — misses every write in that shape. Measured on this tree
+/// 2026-08-24: line-anchored found 1 `custody` site, statement-anchored found 3.
+pub struct ProvenanceChannelDetector;
+
+impl ProvenanceChannelDetector {
+    fn matcher() -> Regex {
+        let literals = PROVENANCE_KEYS
+            .iter()
+            .map(|(k, _)| regex::escape(k))
+            .collect::<Vec<_>>()
+            .join("|");
+        // `(?s)` so `.` spans newlines; the receiver may be a local (`meta`,
+        // `metadata`) or a field (`chunk.metadata`) — `\b` holds after the dot.
+        Regex::new(&format!(
+            r#"(?s)\bmeta(?:data)?\s*\.\s*(?:get|insert|contains_key|remove)\s*\(\s*&?\s*(?:"({literals})"|(?:[A-Za-z_][A-Za-z0-9_]*\s*::\s*)*CUSTODY_META_KEY)"#
+        ))
+        .expect("provenance-channel matcher is a literal pattern")
+    }
+}
+
+#[async_trait::async_trait]
+impl Detector for ProvenanceChannelDetector {
+    fn id(&self) -> DetectorId {
+        DetectorId::ProvenanceChannel
+    }
+
+    fn settings_digest(&self) -> String {
+        format!("keys={};test_scope=excluded", PROVENANCE_KEYS.len())
+    }
+
+    fn control(&self) -> ControlSite {
+        ControlSite {
+            file: "sovereign/crates/sovereign-core/src/runtime/retrieval_pipeline.rs",
+            token: "custody",
+            why: "The estate stamp writes Custody through CUSTODY_META_KEY at \
+                  acquisition — the canonical untyped-provenance site, and the \
+                  one `quality/CONCEPTS.toml`'s Custody row cites. It is also \
+                  the multi-line shape a line-anchored scan cannot see, so a \
+                  silent control here means the matcher regressed to \
+                  line-matching rather than that the channel was closed.",
+        }
+    }
+
+    async fn fire(&self, ctx: &DetectorCtx<'_>) -> Result<FireReport, String> {
+        let re = Self::matcher();
+        let files = census::walk_rs_files(ctx.root, census::EXCLUDE_DIRS_MENTIONS);
+        let mut sites = Vec::new();
+        for path in &files {
+            let Ok(raw) = std::fs::read_to_string(path) else {
+                continue;
+            };
+            // Comments first: a `#[cfg(test)]` written INSIDE a comment is
+            // prose too, and blanking comments settles both cases at once.
+            let src = census::strip_test_scope(&census::strip_comments(&raw));
+            let rel = rel_path(ctx.root, path);
+            for m in re.captures_iter(&src) {
+                let whole = m.get(0).expect("group 0 always exists");
+                let key = m
+                    .get(1)
+                    .map(|g| g.as_str().to_string())
+                    .unwrap_or_else(|| "custody".to_string());
+                let line = src[..whole.start()].lines().count() as i32;
+                let onto = PROVENANCE_KEYS
+                    .iter()
+                    .find(|(k, _)| *k == key)
+                    .map(|(_, onto)| *onto)
+                    .unwrap_or("Origin");
+                sites.push(Site {
+                    detector: DetectorId::ProvenanceChannel,
+                    file: rel.clone(),
+                    line,
+                    // One holding per (file, key): a file touching `"source"`
+                    // four times is ONE decision to migrate, not four.
+                    locus: rel.clone(),
+                    token: key.clone(),
+                    note: format!("provenance rides metadata[{key:?}] — migrate onto {onto}"),
+                });
+            }
+        }
+        // De-duplicate to one holding per (file, key), keeping the first line.
+        sites.sort_by(|a, b| (&a.file, &a.token, a.line).cmp(&(&b.file, &b.token, b.line)));
+        sites.dedup_by(|a, b| a.file == b.file && a.token == b.token);
+        Ok(FireReport::new(
+            self.id(),
+            sites,
+            self.control(),
+            self.settings_digest(),
+        ))
+    }
+}
+
 /// Every detector, constructed. The one place the set is enumerated.
 pub fn all() -> Vec<Box<dyn Detector>> {
     vec![
@@ -684,6 +849,7 @@ pub fn all() -> Vec<Box<dyn Detector>> {
         Box::new(NameDetector),
         Box::new(BehaviourDetector),
         Box::new(ArgLoopDetector),
+        Box::new(ProvenanceChannelDetector),
     ]
 }
 
@@ -711,10 +877,67 @@ mod tests {
 
     #[test]
     fn the_id_set_is_closed_and_every_id_renders() {
-        assert_eq!(DetectorId::ALL.len(), 5);
+        assert_eq!(DetectorId::ALL.len(), 6);
         for id in DetectorId::ALL {
             assert!(!id.as_str().is_empty());
         }
+    }
+
+    /// The multi-line shape is the one that matters: the canonical custody
+    /// write spans four lines, and the `rg` one-liner in the register's
+    /// `measure` field cannot see it. If this ever fails, the detector has
+    /// regressed to line-matching and its count is an undercount that reads
+    /// like progress.
+    #[test]
+    fn the_matcher_sees_a_write_that_spans_lines() {
+        let re = ProvenanceChannelDetector::matcher();
+        let multi = "metadata.insert(\n    crate::types::CUSTODY_META_KEY.to_string(),\n";
+        assert!(re.is_match(multi), "multi-line CUSTODY_META_KEY insert");
+        assert!(re.is_match("c.metadata.get(\"source\")"), "field receiver");
+        assert!(re.is_match("meta.insert(\"peer_name\".to_string(), n)"), "short receiver");
+        assert!(re.is_match("m.metadata.get(&\"url\")"), "borrowed key");
+    }
+
+    /// The exclusions are a ruling, so they are pinned. A key that is about the
+    /// DOCUMENT or its INDEX POSITION is not provenance, and widening the set by
+    /// accident would flood the ledger with holdings no `Origin` field can take.
+    #[test]
+    fn bibliographic_and_structural_keys_are_not_provenance() {
+        let re = ProvenanceChannelDetector::matcher();
+        for key in ["title", "authors", "year", "ordinal", "section_id", "raptor_level"] {
+            assert!(
+                !re.is_match(&format!("metadata.get(\"{key}\")")),
+                "{key} must not read as provenance"
+            );
+        }
+    }
+
+    /// Test fixtures are not production sites. `corpus-engine/src/index/
+    /// evidence.rs` is the case that makes this load-bearing: its test module
+    /// builds `metadata` maps carrying `"custody"` precisely BECAUSE the
+    /// production type has already converged off that channel. Counting them
+    /// would report the converged case as unconverged — a burn-down that goes
+    /// UP when work lands.
+    #[test]
+    fn an_inline_test_module_is_not_a_production_site() {
+        let src = "fn prod() { metadata.get(\"source\"); }\n\
+                   #[cfg(test)]\n\
+                   mod tests {\n\
+                       fn t() { metadata.get(\"custody\"); }\n\
+                   }\n\
+                   fn after() { metadata.get(\"url\"); }\n";
+        let stripped = census::strip_test_scope(src);
+        let re = ProvenanceChannelDetector::matcher();
+        let keys: Vec<String> = re
+            .captures_iter(&stripped)
+            .filter_map(|c| c.get(1).map(|g| g.as_str().to_string()))
+            .collect();
+        assert_eq!(keys, vec!["source", "url"], "the test module's key must be gone");
+        assert_eq!(
+            stripped.lines().count(),
+            src.lines().count(),
+            "line numbering must survive stripping, or every reported line is wrong"
+        );
     }
 
     #[test]
