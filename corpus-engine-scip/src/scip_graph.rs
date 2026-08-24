@@ -656,6 +656,14 @@ impl ScipGraph {
             CREATE INDEX IF NOT EXISTS idx_refs_caller ON refs(caller_symbol);
             CREATE INDEX IF NOT EXISTS idx_refs_callee ON refs(callee_symbol);
             CREATE INDEX IF NOT EXISTS idx_refs_corpus ON refs(corpus_id);
+            -- `symbols` has had a file_path index since v1; `refs` did not, so
+            -- every by-file question was a full scan of the ref table (measured
+            -- 2026-08-23 on a 1,646,038-row graph: 3.4s warm / 8.0s cold, versus
+            -- 0.004s with this index, 0.97s to build). No SCHEMA_VERSION bump —
+            -- `CREATE INDEX IF NOT EXISTS` is idempotent and applies to existing
+            -- dbs on the next open, the same additive reasoning as the span
+            -- columns below.
+            CREATE INDEX IF NOT EXISTS idx_refs_file ON refs(file_path);
 
             CREATE TABLE IF NOT EXISTS scip_meta (
                 key TEXT PRIMARY KEY,

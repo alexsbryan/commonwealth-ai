@@ -208,6 +208,7 @@ mod tests {
                 line_end: 9,
                 language: "rust".to_string(),
             },
+            cache_key: String::new(),
             body_hash: body_hash.to_string(),
             summary: summary.to_string(),
             asks: vec!["What does it do?".to_string()],
