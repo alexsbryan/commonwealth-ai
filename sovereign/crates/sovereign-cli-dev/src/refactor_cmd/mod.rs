@@ -31,6 +31,7 @@ mod label_model;
 mod labels;
 mod ledger;
 mod order;
+mod reduction;
 mod schedule;
 mod spec;
 
@@ -96,6 +97,15 @@ The refactor factory, read-only half (quality/REFACTOR_FACTORY.md).
                           see. The worker does not mark anything done.
     --corpus-id <id>      SCIP corpus
 
+  reduction               the campaign scorecard: net lines against the
+                          merge-base, and the new public surface a change
+                          added instead of converging. Both bars in one
+                          verb because they answer one question.
+    --base <ref>          merge-base counterpart (default: main)
+    --allow <name>        a public item the spec declares (repeatable)
+    --max-net <n>         fail if net lines exceed n (default: report only —
+                          newtype work is additive by construction)
+
 Read-only except `label` (appends one line), `next` (writes an order + locks)
 and `close` (releases them). prepare/apply are rf-3/rf-4 and are not built yet.
 ";
@@ -113,11 +123,60 @@ pub(crate) async fn run(args: &[String]) -> i32 {
         "close" => close_cmd(&args[1..]).await,
         "label" => label_cmd(&args[1..]).await,
         "affinity" => affinity_cmd(&args[1..]).await,
+        "reduction" => reduction_cmd(&args[1..]),
         other => {
             eprintln!("error: unknown refactor subcommand '{other}'");
             eprint!("{HELP}");
             1
         }
+    }
+}
+
+/// `svrn code refactor reduction` — did this branch converge, or did it add?
+///
+/// Exit 0 only on PASSED. FAILED and COULD-NOT-JUDGE both exit non-zero, and
+/// they are distinct because "the branch grew" and "I could not resolve a
+/// base" are different facts and collapsing them would hide the second
+/// (ARCH §18.1).
+fn reduction_cmd(args: &[String]) -> i32 {
+    let mut base = "main".to_string();
+    let mut allowed: Vec<String> = Vec::new();
+    let mut max_net: Option<i64> = None;
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--base" => {
+                if let Some(v) = args.get(i + 1) {
+                    base = v.clone();
+                    i += 1;
+                }
+            }
+            "--allow" => {
+                if let Some(v) = args.get(i + 1) {
+                    allowed.push(v.clone());
+                    i += 1;
+                }
+            }
+            other if other.starts_with("--base=") => base = other[7..].to_string(),
+            "--max-net" => {
+                if let Some(v) = args.get(i + 1) {
+                    max_net = v.parse().ok();
+                    i += 1;
+                }
+            }
+            other if other.starts_with("--allow=") => allowed.push(other[8..].to_string()),
+            other if other.starts_with("--max-net=") => max_net = other[10..].parse().ok(),
+            _ => {}
+        }
+        i += 1;
+    }
+    let root = std::env::current_dir().unwrap_or_else(|_| std::path::PathBuf::from("."));
+    let report = reduction::measure(&root, &base, &allowed, max_net);
+    print!("{}", report.render(&allowed));
+    match report.verdict {
+        reduction::Verdict::Passed => 0,
+        reduction::Verdict::Failed(_) => 1,
+        reduction::Verdict::CouldNotJudge(_) => 3,
     }
 }
 
