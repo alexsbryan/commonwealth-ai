@@ -17,16 +17,25 @@
 //! — and [`print_plan`] shows it, before a single byte is downloaded
 //! or written. `--yes` skips the prompt, not the plan.
 //!
-//! **Lean mode.** `[models].primary` and `[models.edit].path` are set
-//! to the SAME file, so `ModelsSection::fast_path()` (which falls
-//! back to `primary` when `fast` is unset) equals the FIM path and
-//! `EmbeddedLlamaCpp::install_edit_slot` takes its alias branch — one
-//! copy of Mellum2 in RAM serving both chat and completions. The
-//! alternative, a dedicated pinned `fim` slot beside a separate chat
-//! primary, needs 7–13 GB of headroom on top of the primary; the
-//! `high` (16.3 GB primary, 20–23 GB band) and `very_high` (20.5 GB
-//! primary, ≥24 GB band) tiers have ~3.5 GB. That is measured against
-//! `models.toml`, not assumed — see the FIM LADDER block there.
+//! **A dedicated slot, and the chat model is left alone.** This writes
+//! `[models.edit]` only: `[models].primary` and `[models].fast` are
+//! not touched, so the machine ends up with four slots — primary,
+//! fast, embed, edit — and ONE editing model serving both lanes
+//! (ghost text via the vocab's FIM markers, the next-edit Tab queue
+//! via its own dialect).
+//!
+//! **This used to be lean mode**, which aliased `primary` to the
+//! editing model so a single copy served chat and completions. That
+//! existed because the only ladder rung was Mellum2, whose smallest
+//! artifact is 7 GB — too much to pin beside a 16–20 GB primary on
+//! the `high`/`very_high` tiers, which have ~3.5 GB spare AT THE
+//! FLOOR of their band. The trade it made was the user's chat model.
+//!
+//! The default rung is 1.54 GB now (Sweep-Next-Edit-1.5B, a
+//! Qwen2.5-Coder derivative whose vocab carries atomic FIM markers —
+//! verified, see `models.toml`), so the headroom argument no longer
+//! applies at any tier and the trade is not worth making. The Mellum2
+//! rungs remain addressable via `--quant`.
 
 use std::io::{self, IsTerminal as _, Write as _};
 use std::path::{Path, PathBuf};
@@ -38,7 +47,8 @@ use sovereign_inference::setup_planner::{
     fim_rung_for_profile, fim_slot_for_rung, hf_download_url, next_fim_rung, resolve_slot, SlotKind,
 };
 
-use crate::setup_config::{DaemonSection, DataSection, EditSection, ModelsSection, SetupConfig};
+use crate::setup_config::{DaemonSection, EditSection, SetupConfig};
+use sovereign_core::types::NextEditFormat;
 
 use super::download::{download_silent, download_with_progress};
 use super::Opts;
@@ -113,10 +123,15 @@ impl Plan {
     /// True when the config already points at exactly what we'd
     /// write. Drives "already configured" phrasing so a re-run
     /// doesn't claim credit for work it didn't do.
-    fn already_lean_on_this_model(&self) -> bool {
-        self.existing.as_ref().is_some_and(|e| {
-            e.primary == self.model_path && e.fim_path.as_deref() == Some(self.model_path.as_path())
-        })
+    ///
+    /// Only the EDIT path is compared now. It used to also require
+    /// `primary == model_path`, because lean mode aliased the two;
+    /// the edit slot is dedicated now and the chat primary is none of
+    /// this command's business.
+    fn already_on_this_edit_model(&self) -> bool {
+        self.existing
+            .as_ref()
+            .is_some_and(|e| e.fim_path.as_deref() == Some(self.model_path.as_path()))
     }
 }
 
@@ -326,10 +341,15 @@ fn print_plan(plan: &Plan) {
     println!("    From     {}", plan.slot.hf_url);
     println!("    To       {}", plan.model_path.display());
     println!();
-    println!("    Serving  lean mode — this model becomes BOTH the chat");
-    println!("             primary and the completion model, one copy in RAM.");
+    println!(
+        "    Serving  a dedicated edit slot ({:.2} GB), pinned beside your",
+        plan.slot.size_gb
+    );
+    println!("             chat model. Both editing lanes — ghost text and the");
+    println!("             next-edit Tab queue — come off this one model.");
+    println!("             Your [models].primary is NOT touched.");
     match &plan.existing {
-        Some(_) if plan.already_lean_on_this_model() => {
+        Some(_) if plan.already_on_this_edit_model() => {
             println!();
             println!(
                 "    Config   {} is already set up this way;",
@@ -345,7 +365,10 @@ fn print_plan(plan: &Plan) {
                 short(&e.primary),
                 short(&plan.model_path)
             );
-            println!("               fast         cleared (primary serves it)");
+            println!(
+                "               primary      {} (unchanged)",
+                short(&e.primary)
+            );
             println!(
                 "               models.edit   {} \u{2192} {}",
                 e.fim_path
@@ -446,6 +469,22 @@ async fn download_models(plan: &Plan) -> Result<(), i32> {
     Ok(())
 }
 
+/// The next-edit prompt/parse contract for a ladder rung.
+///
+/// The dialect is a property of the FINE-TUNE and cannot be probed
+/// from the vocab, so the manifest rung is the only place that knows
+/// it. Writing it here is what stops a specialist from being served
+/// through the `region_instruct` default — which does not fail, it
+/// returns confident, well-formed, WRONG edits (the next-edit bakeoff
+/// scored Instinct 0/30 exactly that way).
+fn next_edit_format_for_rung(rung: &str) -> Option<NextEditFormat> {
+    match rung {
+        "sweep_1_5b" => Some(NextEditFormat::Sweep),
+        // The Mellum2 rungs are Instruct models and speak the default.
+        _ => None,
+    }
+}
+
 fn write_config(plan: &Plan) -> Result<(), String> {
     let fim = EditSection {
         path: plan.model_path.clone(),
@@ -459,7 +498,9 @@ fn write_config(plan: &Plan) -> Result<(), String> {
         temperature: None,
         max_prefix_chars: None,
         max_suffix_chars: None,
-        next_edit_format: None,
+        // ...but the dialect IS written, because it is not a tuning
+        // knob with a sane default — it is a fact about the weights.
+        next_edit_format: next_edit_format_for_rung(&plan.rung),
     };
 
     let mut cfg = match SetupConfig::load() {
@@ -478,40 +519,29 @@ fn write_config(plan: &Plan) -> Result<(), String> {
             println!("    \u{2713} Backed up {}", plan.backup_path.display());
             existing
         }
-        Err(_) => SetupConfig {
-            compute: Default::default(),
-            search: Default::default(),
-            models: ModelsSection {
-                primary: plan.model_path.clone(),
-                fast: None,
-                embed: plan.embed_path.clone(),
-                code: None,
-                context_size: None,
-                extra: std::collections::BTreeMap::new(),
-                max_extras_memory_gb: None,
-                primary_pool: None,
-                edit: None,
-            },
-            daemon: DaemonSection::default(),
-            data: DataSection {
-                dir: plan.data_dir.clone(),
-            },
-            watched_folders: Default::default(),
-            memory: Default::default(),
-            iroh: Default::default(),
-            shared_model: Default::default(),
-            discovery: Default::default(),
-            mcp_servers: Vec::new(),
-        },
+        Err(_) => {
+            // No config at all. The edit model is a small specialist —
+            // making it the chat primary is precisely the lean-mode
+            // trade this command just stopped making, and a next-edit
+            // fine-tune is a poor chat model. Send them through the
+            // ordinary wizard first so `primary`/`fast`/`embed` exist,
+            // then this command adds the fourth slot beside them.
+            return Err(format!(
+                "no config at {} yet — run `svrn setup` first to choose a chat model, \
+                 then re-run `svrn setup --fim` to pin the editing model beside it. \
+                 (This command used to write the editing model as your chat primary; \
+                 it no longer does, so it needs a primary to sit next to.)",
+                plan.config_path.display()
+            ));
+        }
     };
 
-    cfg.models.primary = plan.model_path.clone();
-    // Clearing `fast` is what puts the daemon in alias mode:
-    // `fast_path()` falls back to `primary`, which now equals
-    // `fim.path`, so `install_edit_slot` serves completions from the
-    // resident fast slot instead of loading a second copy. Leaving a
-    // stale `fast` here would quietly cost a whole extra model.
-    cfg.models.fast = None;
+    // `primary` and `fast` are deliberately NOT touched. Lean mode
+    // used to overwrite `primary` with the editing model and clear
+    // `fast` so `fast_path()` aliased back to it — one copy in RAM,
+    // at the cost of the user's chat model. The editing model is
+    // 1.54 GB now, so it is pinned as its own slot and the chat
+    // model survives: primary + fast + embed + edit.
     cfg.models.embed = plan.embed_path.clone();
     cfg.models.edit = Some(fim);
 
@@ -675,12 +705,17 @@ async fn verify(port: u16) -> Result<Verified, String> {
             println!("      Qwen2.5-Coder) if you need inline completion.");
         }
     }
-    if !aliased_to_fast {
-        // Not fatal — completions work either way — but it means the
-        // lean-mode invariant broke and the operator is paying for a
-        // second resident copy without having asked to.
-        println!("    \u{26a0} serving from a DEDICATED slot, not the shared fast slot —");
-        println!("      lean mode didn't take. Two copies of the model are resident.");
+    if aliased_to_fast {
+        // Inverted from what this used to check. A dedicated slot is
+        // now the intended arrangement, so the surprising case is the
+        // ALIAS: it means `[models].primary` still points at the
+        // editing model, i.e. a config left over from lean mode.
+        // Completions work, but chat is being served by an editing
+        // model — which is the trade this command stopped making.
+        println!("    \u{26a0} the editing model is also your [models].primary —");
+        println!("      chat is being served by an editing model. That is the old");
+        println!("      lean-mode arrangement; point [models].primary at a chat");
+        println!("      model to get the four-slot layout.");
     }
 
     // 3. A real completion. The synthetic case is deliberately one
@@ -961,11 +996,10 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
 
     println!();
     println!("  Swap the model");
-    println!("    svrn setup --fim --quant <rung>     # mxfp4_moe | q4_k_m | q6_k | q8_0");
-    // Deliberately NOT `svrn model set primary <file>`: in lean mode
-    // primary and models.edit.path must move together, and `model set`
-    // touches only one of them. A half-applied swap loads two models.
-    println!("    (both primary and models.edit move together \u{2014} that's what keeps it lean)");
+    println!(
+        "    svrn setup --fim --quant <rung>     # sweep_1_5b | mxfp4_moe | q4_k_m | q6_k | q8_0"
+    );
+    println!("    (only [models.edit] moves \u{2014} your chat model is left alone)");
     if let Some((next_rung, next_slot)) = next_fim_rung(&plan.rung) {
         println!();
         println!("  Worth trying next");
@@ -1112,7 +1146,7 @@ mod tests {
     }
 
     #[test]
-    fn already_lean_requires_both_primary_and_fim_to_match() {
+    fn already_configured_looks_only_at_the_edit_path() {
         let model = PathBuf::from("/models/m.gguf");
         let other = PathBuf::from("/models/other.gguf");
 
@@ -1123,7 +1157,7 @@ mod tests {
                 fim_path: Some(model.clone()),
             }),
         );
-        assert!(matching.already_lean_on_this_model());
+        assert!(matching.already_on_this_edit_model());
 
         // primary matches but FIM was never configured
         let half = plan_with(
@@ -1133,19 +1167,34 @@ mod tests {
                 fim_path: None,
             }),
         );
-        assert!(!half.already_lean_on_this_model());
+        assert!(!half.already_on_this_edit_model());
 
-        // FIM points somewhere else — the dedicated-slot arrangement
+        // A DIFFERENT chat primary with the edit slot already on this
+        // model is the arrangement we now write, so it counts as
+        // already-configured. Under lean mode this asserted the
+        // opposite — `primary` had to match too, and a separate chat
+        // model made the config look unconfigured.
         let dedicated = plan_with(
             model.clone(),
             Some(ExistingConfig {
-                primary: other,
+                primary: other.clone(),
                 fim_path: Some(model),
             }),
         );
-        assert!(!dedicated.already_lean_on_this_model());
+        assert!(dedicated.already_on_this_edit_model());
 
-        assert!(!plan_with(PathBuf::from("/models/m.gguf"), None).already_lean_on_this_model());
+        // The edit slot pointing at some OTHER model is what "not
+        // configured with this one" actually means now.
+        let elsewhere = plan_with(
+            PathBuf::from("/models/m.gguf"),
+            Some(ExistingConfig {
+                primary: other,
+                fim_path: Some(PathBuf::from("/models/different.gguf")),
+            }),
+        );
+        assert!(!elsewhere.already_on_this_edit_model());
+
+        assert!(!plan_with(PathBuf::from("/models/m.gguf"), None).already_on_this_edit_model());
     }
 
     #[test]

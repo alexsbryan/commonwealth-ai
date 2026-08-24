@@ -62,6 +62,7 @@ pub enum SlotKind {
 /// `models.toml`. Ordering is load-bearing: [`next_fim_rung`] walks
 /// it to suggest the next step up.
 pub const FIM_RUNGS: &[(&str, &str)] = &[
+    ("sweep_1_5b", "edit_sweep_1_5b"),
     ("mxfp4_moe", "fim_mxfp4_moe"),
     ("q4_k_m", "fim_q4_k_m"),
     ("q6_k", "fim_q6_k"),
@@ -77,11 +78,18 @@ pub const FIM_RUNGS: &[(&str, &str)] = &[
 /// total memory, not free-VRAM-after-primary: in lean mode the FIM
 /// model IS the resident model.
 pub fn fim_rung_for_profile(profile: &ProfileName) -> &'static str {
-    match profile {
-        ProfileName::CpuOnly | ProfileName::LowMem => "mxfp4_moe",
-        ProfileName::Default => "q4_k_m",
-        ProfileName::High | ProfileName::VeryHigh => "q6_k",
-    }
+    // Hardware no longer selects here, and that is the point. The
+    // Mellum2 rungs below had to scale with total memory because lean
+    // mode made the FIM model the RESIDENT model — the edit slot and
+    // the chat primary were the same file. A 1.54 GB dual-lane model
+    // fits as a DEDICATED slot beside any primary on any tier, so
+    // there is nothing left for the profile to choose between, and the
+    // chat model no longer has to be sacrificed to get completions.
+    //
+    // `--quant` still addresses the Mellum2 rungs by name for anyone
+    // who wants that trade; see FIM_RUNGS.
+    let _ = profile;
+    "sweep_1_5b"
 }
 
 /// Resolve a rung by its CLI name (`"q6_k"`). `None` for an unknown
@@ -403,20 +411,53 @@ mod fim_ladder_tests {
         }
     }
 
-    /// Mellum2-only is an operator constraint, not an accident: the
-    /// daemon's marker probe refuses a model whose vocab lacks atomic
-    /// FIM markers, so a well-meaning swap to some other coder GGUF
-    /// would produce a 503 at completion time rather than a build
-    /// error. Pin it here where the failure is cheap.
+    /// Every rung's vocab must carry atomic FIM markers — THAT is the
+    /// constraint, and it is why this test used to read
+    /// `every_rung_is_mellum2`.
+    ///
+    /// The reasoning behind the old name still stands: the daemon's
+    /// marker probe withholds the FIM lane from a model whose vocab
+    /// lacks them, so a well-meaning swap to some other coder GGUF
+    /// yields a 503 at completion time rather than a build error. But
+    /// "is Mellum2" was a PROXY for the real property, and it excluded
+    /// models that satisfy it — Sweep-Next-Edit-1.5B is a
+    /// Qwen2.5-Coder derivative whose vocab carries the atomic
+    /// `<|fim_prefix|>` family, measured on the artifact rather than
+    /// assumed (2026-08-24: `/status.inference.edit` reported
+    /// `fim_style: "qwen_coder"` on a dedicated slot and
+    /// `/v1/completions` returned a correct infill).
+    ///
+    /// A vocab cannot be probed without the weights, so this is an
+    /// allowlist, not a check. Adding a family here is a claim that
+    /// someone ran the probe against that GGUF and saw a style come
+    /// back. Do not add one on a model card's say-so.
     #[test]
-    fn every_rung_is_mellum2() {
+    fn every_rung_has_verified_fim_markers() {
+        const MARKER_VERIFIED: &[&str] = &["Mellum2-12B-A2.5B", "sweep-next-edit-1.5b"];
         for (cli_name, _) in FIM_RUNGS {
             let slot = fim_slot_for_rung(cli_name).expect("rung resolves");
-            assert_eq!(
-                slot.base_name, "Mellum2-12B-A2.5B",
-                "rung {cli_name} left the Mellum2 family"
+            assert!(
+                MARKER_VERIFIED.contains(&slot.base_name.as_str()),
+                "rung {cli_name} ({}) is not in the marker-verified allowlist — \
+                 run the vocab probe against the GGUF and add it, or drop the rung",
+                slot.base_name
             );
         }
+    }
+
+    /// The default rung must fit beside a chat primary on the SMALLEST
+    /// tier, because that is the whole claim of the four-slot story:
+    /// primary + fast + embed + edit, nothing overwritten.
+    #[test]
+    fn default_rung_is_small_enough_for_a_dedicated_slot() {
+        let slot = fim_slot_for_rung(fim_rung_for_profile(&ProfileName::CpuOnly))
+            .expect("default rung resolves");
+        assert!(
+            slot.size_gb <= 3.0,
+            "default FIM rung is {} GB — too big to pin beside a primary; \
+             lean mode (overwriting [models].primary) would be back",
+            slot.size_gb
+        );
     }
 
     /// The ladder must be ordered smallest-first — `next_fim_rung`
@@ -460,11 +501,23 @@ mod fim_ladder_tests {
     /// refusal.
     #[test]
     fn fim_never_falls_back_to_a_chat_slot() {
+        // The guard is "came from the FIM ladder", not "is Mellum2" —
+        // the old spelling pinned the family as a stand-in for that,
+        // and a second FIM-capable rung made the stand-in wrong while
+        // the concern stayed exactly the same. Comparing against the
+        // ladder's own base_names cannot be satisfied by a chat slot,
+        // which is what this test is actually here to prevent.
+        let ladder: Vec<String> = FIM_RUNGS
+            .iter()
+            .map(|(n, _)| fim_slot_for_rung(n).expect("rung resolves").base_name)
+            .collect();
         for p in ALL_PROFILES {
             let slot = resolve_slot(&p, SlotKind::Fim).expect("resolves");
-            assert_eq!(
-                slot.base_name, "Mellum2-12B-A2.5B",
-                "{p:?} got a non-FIM slot"
+            assert!(
+                ladder.contains(&slot.base_name),
+                "{p:?} resolved to {:?}, which is not a FIM ladder rung — \
+                 Fim fell through to a fast/embed/thoughtful slot",
+                slot.base_name
             );
         }
     }

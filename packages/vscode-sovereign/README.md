@@ -18,31 +18,40 @@ svrn setup --fim
 
 That prints a plan — which model, which quant, what it downloads, which
 config keys change, what it backs up — and asks before touching
-anything. On approval it downloads Mellum2, writes `[models.edit]`,
-restarts the daemon, round-trips a real completion to prove the slot is
-live, and installs this extension into `code` / `cursor` / `windsurf`.
-Add `--yes` for unattended runs, `--skip-editor` to stop at the daemon.
+anything. On approval it downloads the editing model, writes
+`[models.edit]`, restarts the daemon, round-trips a real completion to
+prove the slot is live, and installs this extension into `code` /
+`cursor` / `windsurf`. Add `--yes` for unattended runs, `--skip-editor`
+to stop at the daemon. It needs a config to add to, so run `svrn setup`
+first to pick a chat model.
 
-It runs **lean mode**: `[models].primary` and `[models.edit].path` point
-at the same file, so completions come from the always-resident fast slot
-with one copy in RAM. **That replaces the chat model on this machine** —
-the old config is saved to `config.toml.pre-fim` and the closing banner
-prints the one-line restore.
+**Your chat model is not touched.** `[models].primary` and
+`[models].fast` are left exactly as they were; only `[models.edit]` is
+written. You end up with four slots — primary, fast, embed, and a
+pinned 1.5 GB editing model that serves **both** editing lanes: ghost
+text and the next-edit Tab queue. The old config is still backed up to
+`config.toml.pre-fim`.
 
-Pick a different quant with `--quant`:
+Pick a different rung with `--quant`:
 
-| rung | size | for |
-|---|---|---|
-| `mxfp4_moe` | 7.0 GB | cpu-only / low-memory (the default there) |
-| `q4_k_m` | 8.1 GB | 8–19 GB VRAM (the default there) |
-| `q6_k` | 10.9 GB | ≥20 GB VRAM (the default there); the validated artifact |
-| `q8_0` | 12.9 GB | when you have memory to spare |
+| rung | size | model | for |
+|---|---|---|---|
+| `sweep_1_5b` | **1.5 GB** | Sweep-Next-Edit-1.5B | **the default, every tier** |
+| `mxfp4_moe` | 7.0 GB | Mellum2-12B-A2.5B | cpu-only / low-memory |
+| `q4_k_m` | 8.1 GB | Mellum2-12B-A2.5B | 8–19 GB VRAM |
+| `q6_k` | 10.9 GB | Mellum2-12B-A2.5B | ≥20 GB VRAM |
+| `q8_0` | 12.9 GB | Mellum2-12B-A2.5B | when you have memory to spare |
 
-All four are the same model — JetBrains Mellum2-12B-A2.5B-Instruct, an
-MoE with 2.5B active params, so it generates at 2.5B speed at 12B
-weights. Re-run `svrn setup --fim --quant q8_0` to move rungs; that
-keeps `primary` and `models.edit.path` in sync, which `svrn model set`
-would not.
+The default is Sweep-Next-Edit-1.5B (Apache-2.0), a Qwen2.5-Coder
+derivative — which is *why* it can serve ghost text at all: its vocab
+carries the atomic `<|fim_prefix|>` family, so the daemon's boot probe
+returns `qwen_coder` and both lanes light up off one model. On our
+60-case FIM bank it is indistinguishable from Mellum2-12B (24/60 vs
+27/60 first-line — a three-case gap at n=60), at 1/7 the residency.
+
+Hardware no longer picks the rung. It used to, because the editing
+model *was* the resident model; at 1.5 GB a dedicated slot fits beside
+any primary on any tier. The Mellum2 rungs stay addressable by name.
 
 <details>
 <summary>Manual setup — what the flag automates</summary>
@@ -67,10 +76,11 @@ config takes absolute paths):
 ```bash
 mkdir -p ~/.svrnmesh/models
 
-# Coder model — Mellum2-12B-A2.5B Q6_K (validated artifact; ~10.9 GB).
-# Smaller rungs of the SAME model: -Q4_K_M (8.1 GB), -MXFP4_MOE (7.0 GB).
-curl -L -o ~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf \
-  "https://huggingface.co/JetBrains/Mellum2-12B-A2.5B-Instruct-GGUF-Q6_K/resolve/main/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
+# Editing model — Sweep-Next-Edit-1.5B Q8_0 (the default; ~1.5 GB).
+# Serves BOTH lanes: ghost text (its vocab carries atomic FIM markers)
+# and the next-edit Tab queue.
+curl -L -o ~/.svrnmesh/models/sweep-next-edit-1.5b.q8_0.v2.gguf \
+  "https://huggingface.co/sweepai/sweep-next-edit-1.5B/resolve/main/sweep-next-edit-1.5b.q8_0.v2.gguf"
 
 # Tiny embed model (~0.6 GB)
 curl -L -o ~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf \
@@ -94,21 +104,22 @@ Edit `~/.svrnmesh/config.toml` (create it if the daemon hasn't yet):
 
 ```toml
 [models]
-primary = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
+primary = "~/.svrnmesh/models/<your-chat-model>.gguf"
 embed   = "~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
 
 [models.edit]
-path    = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-Q6_K.gguf"
+path             = "~/.svrnmesh/models/sweep-next-edit-1.5b.q8_0.v2.gguf"
+next_edit_format = "sweep"
 ```
 
 (`[models.fim]` is the old name for this section and still works, but
 write `[models.edit]` in new configs — the section covers both editing
 lanes, not just fill-in-the-middle.)
 
-Because `primary` and `models.edit.path` are the **same file**, the daemon
-serves completions from its always-resident fast slot — one copy of the
-model in RAM, nothing extra loaded. (This is "lean mode". If you also
-chat with the daemon heavily, see *Upgrading* below.)
+The editing model is its own pinned slot, separate from `primary`, so
+your chat model keeps its own weights and keystrokes never queue behind
+chat traffic. At 1.5 GB that costs little. See *Running Mellum2 instead*
+below for the larger option and its arithmetic.
 
 ### 4. Restart the daemon
 
@@ -133,11 +144,15 @@ If instead you get a 503, the response body tells you exactly what to fix.
 ### 6. Install the extension
 
 ```bash
-code --install-extension sovereign-fim-0.1.0.vsix
+code --install-extension sovereign-fim-<version>.vsix
 ```
 
-(The `.vsix` is attached to the GitHub release, or build it yourself:
-`npm install && npm run package` in `packages/vscode-sovereign`.)
+Get the file from the release shelf — open
+<https://github.com/alexsbryan/svrnmesh-releases/releases>, pick the
+newest `vscode-v*` release, and download its `sovereign-fim-*.vsix`.
+(There is no per-prefix `latest` pointer; `/releases/latest` is
+repo-global and belongs to the desktop app.) Or build it yourself:
+`npm install && npm run package` in `packages/vscode-sovereign`.
 
 ### 7. Type
 
@@ -166,8 +181,11 @@ names which one answered:
   your last few edits and finds the remaining sites by string search.
   Deterministic, ~6 ms, incapable of inventing anything, and it works
   with **no model at all** (no `[models.edit]` slot needed). It speaks
-  only past a confidence threshold: two supporting edits for a
-  specific pattern, three for a short one.
+  only past a confidence threshold: two supporting edits, and a rule
+  at least five characters long. Shorter rewrites never fire however
+  often you repeat them — they matched too many wrong sites to be
+  worth it — though a short INSERTION or DELETION is re-anchored to
+  the surrounding line rather than dropped.
 - **Model engine** — for patterns no single literal rule describes:
   the same argument added to differently-shaped call sites, a
   replacement that varies per site (`.unwrap()` → `.expect("…")` with
@@ -252,30 +270,42 @@ say, its one-line advice:
 | lightbulb | the model id | next-edit only — this model's vocabulary has no FIM markers, so there is no ghost text |
 | lightning bolt | the model id | both lanes: ghost text and next-edit |
 
-## Keeping a separate chat model
+## Running Mellum2 instead
 
-Lean mode's one tradeoff: chat and completions share a slot, so if you
-chat with the daemon while you type, keystrokes queue behind chat
-traffic. Pointing `[models.edit].path` at a GGUF **different** from
-`primary` gives editing its own pinned, always-resident slot and removes
-the contention.
+The dedicated editing slot is the default now, so there is nothing to
+"upgrade" to — the arrangement below used to be the manual escape hatch
+and is what `svrn setup --fim` writes for you:
 
 ```toml
 [models]
 primary = "~/.svrnmesh/models/<your-chat-model>.gguf"
+fast    = "~/.svrnmesh/models/<your-router-model>.gguf"
 embed   = "~/.svrnmesh/models/Qwen3-Embedding-0.6B-Q8_0.gguf"
 
 [models.edit]
-path    = "~/.svrnmesh/models/Mellum2-12B-A2.5B-Instruct-MXFP4_MOE.gguf"
+path             = "~/.svrnmesh/models/sweep-next-edit-1.5b.q8_0.v2.gguf"
+next_edit_format = "sweep"
 ```
 
-Do the memory arithmetic before you commit to it, which is why
-`svrn setup --fim` does not offer this arrangement: the smallest Mellum2
-artifact is 7.0 GB, and that is 7.0 GB **on top of** your chat primary,
-resident all the time. Against the curated primaries in
-`sovereign/models.toml` that is ~3.7 GB of headroom on the 20–23 GB tier
-and ~3.5 GB on the ≥24 GB tier — it does not fit. It works when you pair
-it with a small chat model, or on a large unified-memory machine.
+`next_edit_format` matters and cannot be guessed: the prompt contract is
+a property of the fine-tune, not of the tokenizer, so the daemon will
+not sniff it. Left unset it defaults to `region_instruct`, which a
+specialist was never trained on — and the failure is not a crash, it is
+confident, well-formed, wrong edits. `svrn setup --fim` writes the key
+for you; if you hand-configure a specialist, write it yourself. (The
+daemon warns at boot when a model's filename suggests a dialect it is
+not being served.)
+
+To run Mellum2-12B on the slot instead, `svrn setup --fim --quant q6_k`.
+Do the memory arithmetic first: the smallest Mellum2 artifact is 7.0 GB
+resident **on top of** your chat primary, against ~3.5–3.7 GB of
+headroom at the FLOOR of the 20–23 GB and ≥24 GB tiers. Read that as a
+statement about the tier floor rather than about your machine — the
+`very_high` tier has no upper bound, so a 64 GB Apple Silicon box sits
+in the same tier as a 24 GB one and the arithmetic is nothing alike:
+20.5 + 10.9 + 1.9 + 0.6 ≈ 34 GB, comfortably inside the ~48 GB macOS
+hands the GPU by default. With the 1.5 GB default the same machine sits
+near 24.5 GB and the question stops being interesting.
 
 ## How it works (one paragraph)
 
