@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Deep-research scene 1 driver (order deep-research-t3b).
 //!
-//! The desktop is a DRIVER over the CLI verb's contract (`svrn deep-research`,
-//! order deep-research-t3a): it spawns the verb, forwards the operator's
-//! question + budget + typed consent grant as verb flags, and then READS the
-//! run-dir artifacts the verb writes — `charter.json`, `budget-ledger.json`,
+//! The desktop is a DRIVER over the loop, not an implementation of it: it
+//! forwards the operator's question + budget + typed consent grant into
+//! `sovereign_core::deep_research::launch`, and then READS the run-dir
+//! artifacts the loop writes — `charter.json`, `budget-ledger.json`,
 //! `gap-list-<round>.json`, `verdict-set.json`, `report.md`, `manifest.json` —
 //! as the single live-state source. No loop logic, no instrument, no decider,
-//! no second state source: the verb remains the only implementation of the
-//! loop (the one-loop rule is structural; the desktop is a driver, never an
-//! implementation).
+//! no second state source.
+//!
+//! It used to SPAWN `svrn deep-research` to get here, probing PATH for a
+//! binary that a desktop-only install does not have — and because config
+//! does not cross a process boundary, the operator's configured search
+//! provider and every env-set knob stopped at the process edge. The
+//! one-loop rule is now enforced the honest way: by calling the one
+//! function. `launch::prepare` is the single assembly of a `RunConfig`,
+//! so the CLI verb and this driver cannot drift apart.
 //!
 //! The artifacts are deserialized with sovereign-core's OWN ICD types
 //! (`deep_research::icd`), so a schema drift between the verb and the viewer
@@ -17,13 +23,14 @@
 //! (zero untraced figures in [passed]) calls the loop's own decider
 //! (`containment::missing_claim_figures`) — never a second figure parser.
 //!
-//! Binary discovery probes in order (the supervisor's probe order, extended
-//! for a CLI rather than a daemon): `SOVEREIGN_CLI_PATH` (dev/dogfood), then
-//! `sovereign` / `sovereign-cli` on PATH, then `~/.local/bin/sovereign`.
-//! Absence is reported, never defaulted — the Ask entry names the probes.
+//! Aborting is a flag, not a signal: `run` polls the shared `AtomicBool`
+//! at every state entry and lands on a truncated report with the
+//! truncation declared, where killing a child process left the run dir
+//! mid-write.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
@@ -33,6 +40,9 @@ use sovereign_core::deep_research::containment::missing_claim_figures;
 use sovereign_core::deep_research::icd::{
     BudgetLedger, Charter, EvidenceWindow, GapList, Manifest, Verdict, VerdictSet,
 };
+use sovereign_core::deep_research::launch::{self, LaunchOptions};
+use sovereign_core::deep_research::{resume, run, SearchSource};
+use sovereign_core::types::Custody;
 use tauri::{AppHandle, Emitter};
 
 /// The run-dir base the desktop drives the verb with (`--run-dir <base>`).
@@ -47,97 +57,45 @@ fn runs_base() -> PathBuf {
         .join("deep-research-runs")
 }
 
-/// Resolve the CLI binary that owns the deep-research verb. Probes in order:
-/// `SOVEREIGN_CLI_PATH` (dev/dogfood), `sovereign` / `sovereign-cli` on PATH,
-/// then `~/.local/bin/sovereign`. `None` only when every probe missed — the
-/// caller reports it loudly, naming the probes.
-fn resolve_cli() -> Option<PathBuf> {
-    if let Ok(p) = std::env::var("SOVEREIGN_CLI_PATH") {
-        let pb = PathBuf::from(p);
-        if pb.is_file() {
-            return Some(pb);
-        }
-    }
-    if let Some(paths) = std::env::var_os("PATH") {
-        for name in ["sovereign", "sovereign-cli"] {
-            for dir in std::env::split_paths(&paths) {
-                let cand = dir.join(name);
-                if cand.is_file() {
-                    return Some(cand);
-                }
-            }
-        }
-    }
-    if let Some(home) = std::env::var_os("HOME") {
-        let cand = PathBuf::from(home).join(".local/bin/sovereign");
-        if cand.is_file() {
-            return Some(cand);
-        }
-    }
-    None
-}
-
 // ── Capabilities ───────────────────────────────────────────────────────────
 
-/// What the installed verb can do — the desktop gates its affordances on the
-/// verb's own flag list, so t3a's additions (e.g. `--resume`) light up the
-/// resume affordance the moment the verb grows them, with no desktop change.
+/// What this build can do. Deep research is compiled IN — there is no
+/// binary to find and nothing to probe — so the capability question is
+/// answered by the build, not by a filesystem search. `flags` keeps the
+/// name and shape the UI already gates its affordances on.
 #[derive(Debug, Serialize, Clone)]
 pub struct DrCapabilities {
-    /// The resolved CLI path, when one was found.
+    /// Retained for the UI's shape. Always `None` now: deep research is
+    /// not a separate binary any more.
     pub cli_path: Option<String>,
-    /// The flags the verb's `--help` names (`--consent`, `--resume`, …).
+    /// The affordances this build supports. Named capabilities, not
+    /// scraped `--help` tokens.
     pub flags: Vec<String>,
-    /// Why the verb could not be probed, when it could not. Absence is
-    /// reported, never defaulted.
+    /// Why the feature is unavailable, when it is. Absence is reported,
+    /// never defaulted.
     pub error: Option<String>,
 }
 
-/// Resolve the CLI and probe `deep-research --help` for its flag list.
+/// Report the in-process deep-research capability. Where this used to
+/// probe `deep-research --help` on a CLI it had to find on PATH — and
+/// returned "not installed" on any desktop-only install — the loop is
+/// now linked into this binary, so the answer cannot be absent.
 #[tauri::command]
 pub async fn dr_capabilities() -> DrCapabilities {
-    let Some(cli) = resolve_cli() else {
-        return DrCapabilities {
-            cli_path: None,
-            flags: Vec::new(),
-            error: Some(
-                "the deep-research CLI verb is not installed — probed SOVEREIGN_CLI_PATH, \
-                 PATH (sovereign, sovereign-cli), ~/.local/bin/sovereign"
-                    .to_string(),
-            ),
-        };
-    };
-    let probe = tokio::process::Command::new(&cli)
-        .args(["deep-research", "--help"])
-        .output()
-        .await;
-    match probe {
-        Ok(out) if out.status.success() => {
-            let text = String::from_utf8_lossy(&out.stdout).to_string();
-            let flags: Vec<String> = text
-                .split_whitespace()
-                .filter(|tok| tok.starts_with("--") && tok.len() > 2)
-                .map(|tok| tok.to_string())
-                .collect();
-            DrCapabilities {
-                cli_path: Some(cli.display().to_string()),
-                flags,
-                error: None,
-            }
-        }
-        Ok(out) => DrCapabilities {
-            cli_path: Some(cli.display().to_string()),
-            flags: Vec::new(),
-            error: Some(format!(
-                "deep-research --help exited {} — the verb may not be built into this CLI",
-                out.status
-            )),
-        },
-        Err(e) => DrCapabilities {
-            cli_path: Some(cli.display().to_string()),
-            flags: Vec::new(),
-            error: Some(format!("deep-research --help probe failed: {e}")),
-        },
+    // The daemon is still required (the loop's embed + draft surface).
+    // A missing or unreadable SetupConfig is reported, not defaulted.
+    let error = launch::daemon_targets().err();
+    DrCapabilities {
+        cli_path: None,
+        flags: vec![
+            "--consent".to_string(),
+            "--corpora".to_string(),
+            "--fetch".to_string(),
+            "--max-rounds".to_string(),
+            "--resume".to_string(),
+            "--search".to_string(),
+        ],
+        error,
     }
 }
 
@@ -175,30 +133,50 @@ pub struct DrStartOptions {
     pub resume_run_id: Option<String>,
 }
 
-/// The typed consent grant's closed set — the verb's own contract, checked
-/// at the driver boundary so a typo never reaches the verb. `None` means
-/// default-deny: no `--consent` flag.
-fn consent_flag(floor: &str) -> Result<Option<&'static str>, String> {
-    match floor {
-        "public-web" => Ok(Some("public-web")),
-        "peer" => Ok(Some("peer")),
-        "personal" => Ok(Some("personal")),
-        other => Err(format!(
-            "unknown consent class `{other}` — the closed set is public-web | peer | personal"
+/// The typed consent grant's closed set, parsed at the driver boundary so
+/// a typo never reaches a run. `Custody::parse_wire` is the ONE parser —
+/// the desktop does not carry a second spelling of the closed set. `None`
+/// means default-deny.
+fn consent_class(floor: &str) -> Result<Custody, String> {
+    match Custody::parse_wire(floor) {
+        Some(c) if c != Custody::Unknown => Ok(c),
+        _ => Err(format!(
+            "unknown consent class `{floor}` — the closed set is public-web | peer | personal"
         )),
     }
 }
 
-/// Demo-only verb-flag pass-through (order deep-research-t3b, evidence
-/// pass (f)): `SOVEREIGN_DEMO_DR_FLAGS` holds verb flags to append at
-/// spawn (space-separated; values must not contain spaces). Unset in
-/// every real flow — the demo's global-setup is the only writer, so the
-/// recorded pass films a deterministic deck run while the Ask surface
-/// stays spec-faithful (question + budget + consent only).
-fn demo_extra_args() -> Vec<String> {
-    std::env::var("SOVEREIGN_DEMO_DR_FLAGS")
-        .map(|s| s.split_whitespace().map(str::to_string).collect())
-        .unwrap_or_default()
+/// Demo-only backend override (order deep-research-t3b, evidence pass
+/// (f)): `SOVEREIGN_DEMO_DR_FLAGS` carries `--backend mock --mock-deck
+/// DIR` so the recorded pass films a deterministic deck run while the Ask
+/// surface stays spec-faithful (question + budget + consent only). Unset
+/// in every real flow — the demo's global-setup is the only writer.
+///
+/// It stays spelled as flags because the demo's global-setup and the
+/// env-flag registry already name it that way, but it now lands in typed
+/// `LaunchOptions` fields rather than a subprocess argv. Anything the
+/// closed set does not name is IGNORED, not passed through: with no
+/// second process to parse them, an unrecognised token has no meaning.
+fn demo_backend_override() -> Option<(String, Option<PathBuf>)> {
+    let raw = std::env::var("SOVEREIGN_DEMO_DR_FLAGS").ok()?;
+    let toks: Vec<&str> = raw.split_whitespace().collect();
+    let mut backend: Option<String> = None;
+    let mut deck: Option<PathBuf> = None;
+    let mut i = 0;
+    while i < toks.len() {
+        match toks[i] {
+            "--backend" => {
+                backend = toks.get(i + 1).map(|s| s.to_string());
+                i += 2;
+            }
+            "--mock-deck" => {
+                deck = toks.get(i + 1).map(PathBuf::from);
+                i += 2;
+            }
+            _ => i += 1,
+        }
+    }
+    backend.map(|b| (b, deck))
 }
 
 /// A live event from the driver, tagged on `kind` (mirrors the workflow run
@@ -250,300 +228,173 @@ pub struct DrConsent {
     pub granted_at_unix: i64,
 }
 
-/// One live run's child, kept so `dr_abort` can kill it. The poll loop and
-/// the abort path share it through a tokio mutex (try_wait/kill need `&mut`).
-static CHILDREN: OnceLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<tokio::process::Child>>>>> =
-    OnceLock::new();
+/// One live run's abort flag, kept so `dr_abort` can raise it. The loop
+/// polls it at every state entry and lands on a truncated report with the
+/// truncation declared — where killing a child process left the run dir
+/// mid-write, with no record that it had been cut short.
+static ABORTS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
 
-fn children() -> &'static Mutex<HashMap<String, Arc<tokio::sync::Mutex<tokio::process::Child>>>> {
-    CHILDREN.get_or_init(|| Mutex::new(HashMap::new()))
+fn aborts() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+    ABORTS.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Start a deep-research run by spawning the verb. Returns immediately; the
-/// run proceeds on background tasks and progress lands on the job-scoped
-/// channel.
+/// Start a deep-research run in-process. Returns as soon as the run dir
+/// exists — `launch::prepare` mints it before the loop turns, so the
+/// `Started` event carries a real path with no stderr to scrape and no
+/// 60-second discovery timeout. The loop then proceeds on a background
+/// task and progress lands on the job-scoped channel.
+///
+/// The `job_id` is the RUN id (`dr-<unix>`), which is what the run
+/// actually is — not a process id, which was an address for a child that
+/// no longer exists (§7.5: identity from essence, never an address).
 #[tauri::command]
 pub async fn dr_start(
     app: AppHandle,
     question: String,
     options: DrStartOptions,
 ) -> Result<DrRunHandle, String> {
-    let cli = resolve_cli().ok_or_else(|| {
-        "the deep-research CLI verb is not installed — probed SOVEREIGN_CLI_PATH, \
-         PATH (sovereign, sovereign-cli), ~/.local/bin/sovereign"
-            .to_string()
-    })?;
     if question.trim().is_empty() && options.resume_run_id.is_none() {
         return Err("a question is required (or a run to resume)".to_string());
     }
-    // The typed consent grant (default-deny): an untyped grant sends no
-    // `--consent` flag; an unknown class is refused here before spawn.
-    let consent = match options.consent.as_deref() {
-        None => None,
-        Some(floor) => consent_flag(floor)?,
-    };
-
     let base = runs_base();
     std::fs::create_dir_all(&base).map_err(|e| format!("run dir base {base:?}: {e}"))?;
 
-    let mut cmd = tokio::process::Command::new(&cli);
-    cmd.arg("deep-research");
-    if !question.trim().is_empty() {
-        cmd.arg(question.trim());
-    }
-    cmd.arg("--run-dir").arg(&base);
-    if let Some(n) = options.max_rounds {
-        cmd.arg("--max-rounds").arg(n.to_string());
-    }
-    if let Some(n) = options.search {
-        cmd.arg("--search").arg(n.to_string());
-    }
-    if let Some(n) = options.fetch {
-        cmd.arg("--fetch").arg(n.to_string());
-    }
-    if !options.corpora.is_empty() {
-        cmd.arg("--corpora").arg(options.corpora.join(","));
-    }
-    if let Some(floor) = consent {
-        cmd.arg("--consent").arg(floor);
-    }
-    if let Some(run_id) = &options.resume_run_id {
-        cmd.arg("--resume").arg(run_id);
-    }
-    // The demo film's pass-through (order deep-research-t3b, evidence pass
-    // (f)): `SOVEREIGN_DEMO_DR_FLAGS` appends the verb's OWN flags — e.g.
-    // `--backend mock --mock-deck DIR` — so the recorded run can be served
-    // from a deterministic deck. The desktop stays a driver: every token
-    // goes through the verb's closed-set parsing and run-dir verification.
-    // Only tests/e2e/demo's global-setup sets it; every real flow leaves it
-    // unset and the argument list is byte-identical to today's.
-    cmd.args(demo_extra_args());
-    cmd.stdin(std::process::Stdio::null())
-        .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::piped());
+    // Resume restores its identity from the checkpoint; a fresh launch
+    // assembles one. Either way `launch` is the ONE assembly — this
+    // driver never builds a `RunConfig` of its own.
+    let resuming = options.resume_run_id.is_some();
+    let launch = match &options.resume_run_id {
+        Some(run_id) => launch::prepare_resume(&base.join(run_id)).await?,
+        None => {
+            // The typed consent grant (default-deny): an absent class
+            // grants nothing; an unknown one refuses before a run dir
+            // exists.
+            let consent_floor = match options.consent.as_deref() {
+                None => None,
+                Some(floor) => Some(consent_class(floor)?),
+            };
+            // The demo's deterministic deck, when the demo set it.
+            let (backend, mock_deck_dir) =
+                demo_backend_override().unwrap_or_else(|| ("auto".to_string(), None));
+            let search_source = if backend == "mock" {
+                SearchSource::Mock
+            } else {
+                SearchSource::Corpus
+            };
+            launch::prepare(LaunchOptions {
+                question: question.trim().to_string(),
+                runs_base: base,
+                max_rounds: options.max_rounds.unwrap_or(2),
+                code_set_k: 0,
+                eps_quota: 0.0,
+                search_allowance: options.search.unwrap_or(4),
+                fetch_allowance: options.fetch.unwrap_or(4),
+                estate_corpus_ids: options.corpora.clone(),
+                search_source,
+                backend,
+                mock_deck_dir,
+                consent_floor,
+            })
+            .await?
+        }
+    };
 
-    let mut child = cmd
-        .spawn()
-        .map_err(|e| format!("spawn {} deep-research: {e}", cli.display()))?;
-    let stderr = child.stderr.take().expect("stderr piped");
-    let stdout = child.stdout.take().expect("stdout piped");
-    let job_id = child.id().expect("a spawned child has an id").to_string();
-    let child_arc = Arc::new(tokio::sync::Mutex::new(child));
-    children()
+    let job_id = launch.run_id.clone();
+    let run_dir = launch.run_dir.clone();
+    let abort = Arc::new(AtomicBool::new(false));
+    aborts()
         .lock()
-        .expect("children mutex")
-        .insert(job_id.clone(), Arc::clone(&child_arc));
+        .expect("aborts mutex")
+        .insert(job_id.clone(), Arc::clone(&abort));
     let channel = progress_channel(&job_id);
-
-    // The verb's stdout tail (its summary) — the failure path names it.
-    let tail_buf: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
-    {
-        use tokio::io::AsyncBufReadExt;
-        let buf = Arc::clone(&tail_buf);
-        tokio::spawn(async move {
-            let mut lines = tokio::io::BufReader::new(stdout).lines();
-            while let Ok(Some(l)) = lines.next_line().await {
-                let mut b = buf.lock().unwrap();
-                b.push(l);
-                if b.len() > 40 {
-                    b.remove(0);
-                }
-            }
-        });
-    }
 
     let app_runner = app.clone();
     let channel_runner = channel.clone();
-    let base_runner = base.clone();
+    let run_dir_runner = run_dir.clone();
     let job_runner = job_id.clone();
 
-    tokio::spawn(async move {
-        // The verb's stderr names its run dir before the loop opens it — the
-        // verb's own naming is the run-id discovery (fallback: a new dr-* dir
-        // under the base, so a stderr wording change degrades to discovery
-        // rather than a silent miss).
-        let run_dir = match await_run_dir(stderr, &base_runner).await {
-            Ok(d) => d,
-            Err(e) => {
-                let _ = app_runner.emit(&channel_runner, DeepResearchRunEvent::Failed { error: e });
-                return;
-            }
-        };
-        let run_id = run_dir
-            .file_name()
-            .and_then(|s| s.to_str())
-            .unwrap_or("?")
-            .to_string();
-        let _ = app_runner.emit(
-            &channel_runner,
-            DeepResearchRunEvent::Started {
-                run_id,
-                run_dir: run_dir.display().to_string(),
-            },
-        );
+    let _ = app.emit(
+        &channel,
+        DeepResearchRunEvent::Started {
+            run_id: job_id.clone(),
+            run_dir: run_dir.display().to_string(),
+        },
+    );
 
-        // Poll the run dir for live state while the verb runs; on exit,
-        // read the report (or fail with the stdout tail).
-        let poller = RunDirPoller::new(run_dir.clone());
-        let mut last: Option<DrLiveSnapshot> = None;
-        let mut exited: Option<std::process::ExitStatus> = None;
-        loop {
-            if let Some(status) = exited {
-                if poller.report_md().is_some() {
-                    match build_report(&run_dir) {
-                        Some(report) => {
-                            let _ = app_runner.emit(
-                                &channel_runner,
-                                DeepResearchRunEvent::ReportReady { report },
-                            );
-                        }
-                        None => {
-                            let _ = app_runner.emit(
-                                &channel_runner,
-                                DeepResearchRunEvent::Failed {
-                                    error: "report.md exists but its artifacts failed to parse"
-                                        .to_string(),
-                                },
-                            );
-                        }
-                    }
-                } else {
-                    // Let the stdout drainer catch up before reading the tail.
-                    tokio::time::sleep(Duration::from_millis(120)).await;
-                    let tail = tail_buf.lock().unwrap().join(" | ");
-                    let _ = app_runner.emit(
-                        &channel_runner,
-                        DeepResearchRunEvent::Failed {
-                            error: format!(
-                                "deep-research exited {status} without a report — {tail}"
-                            ),
+    tokio::spawn(async move {
+        // Poll the run dir for live state on one task while the loop
+        // drives on another. The run dir stays the single state source —
+        // in-process changes who writes it, not what reads it.
+        let poller = RunDirPoller::new(run_dir_runner.clone());
+        let done = Arc::new(AtomicBool::new(false));
+        let done_poll = Arc::clone(&done);
+        let app_poll = app_runner.clone();
+        let channel_poll = channel_runner.clone();
+        let poll = tokio::spawn(async move {
+            let mut last: Option<DrLiveSnapshot> = None;
+            while !done_poll.load(Ordering::Relaxed) {
+                emit_if_changed(&app_poll, &channel_poll, poller.snapshot(), &mut last);
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+            }
+        });
+
+        let config = launch.config.clone();
+        let port = launch.port.clone();
+        let provider = launch.provider.clone();
+        let outcome = if resuming {
+            resume(config, port, provider, abort).await
+        } else {
+            run(config, port, provider, abort).await
+        };
+        done.store(true, Ordering::Relaxed);
+        let _ = poll.await;
+        aborts().lock().expect("aborts mutex").remove(&job_runner);
+
+        let event = match outcome {
+            Ok(mut outcome) => {
+                // Closing is not optional: the fetched evidence lands in
+                // `dr-estate-<run_id>` and the RACE page is written. A
+                // failure here is reported, never swallowed — but the
+                // report itself already exists, so the operator still
+                // gets it, with the close failure named.
+                let close_err = launch::close(&mut outcome, &launch.provider, &launch.embed_model)
+                    .await
+                    .err();
+                match build_report(&run_dir_runner) {
+                    Some(report) => match close_err {
+                        None => DeepResearchRunEvent::ReportReady { report },
+                        Some(e) => DeepResearchRunEvent::Failed {
+                            error: format!("the run finished but could not be closed: {e}"),
                         },
-                    );
+                    },
+                    None => DeepResearchRunEvent::Failed {
+                        error: "the run finished but its artifacts failed to parse".to_string(),
+                    },
                 }
-                let _ = children()
-                    .lock()
-                    .expect("children mutex")
-                    .remove(&job_runner);
-                break;
             }
-            emit_if_changed(&app_runner, &channel_runner, poller.snapshot(), &mut last);
-            let status = {
-                let mut guard = child_arc.lock().await;
-                match guard.try_wait() {
-                    Ok(s) => s,
-                    Err(e) => {
-                        let _ = app_runner.emit(
-                            &channel_runner,
-                            DeepResearchRunEvent::Failed {
-                                error: format!("wait: {e}"),
-                            },
-                        );
-                        return;
-                    }
-                }
-            };
-            if let Some(s) = status {
-                exited = Some(s);
-            }
-            tokio::time::sleep(Duration::from_millis(1000)).await;
-        }
+            Err(e) => DeepResearchRunEvent::Failed {
+                error: format!("deep-research failed: {e}"),
+            },
+        };
+        let _ = app_runner.emit(&channel_runner, event);
     });
 
     Ok(DrRunHandle { job_id, channel })
 }
 
-/// Kill a running deep-research child (the run dir keeps its artifacts; the
-/// resume affordance picks up from there once the verb's `--resume` lands).
+/// Ask a running loop to stop. The flag is polled at every state entry, so
+/// the run lands on a truncated report with the truncation DECLARED —
+/// where killing a child process left whatever the run dir happened to
+/// hold. The resume affordance picks up from the last checkpoint.
 #[tauri::command]
 pub async fn dr_abort(job_id: String) -> Result<(), String> {
-    let child = children().lock().expect("children mutex").remove(&job_id);
-    match child {
-        Some(c) => {
-            let mut guard = c.lock().await;
-            guard
-                .kill()
-                .await
-                .map_err(|e| format!("kill run {job_id}: {e}"))
+    match aborts().lock().expect("aborts mutex").get(&job_id) {
+        Some(flag) => {
+            flag.store(true, Ordering::Relaxed);
+            Ok(())
         }
         None => Err(format!("no active run {job_id}")),
     }
-}
-
-/// Read the verb's stderr until it names its run dir ("deep-research: run dir
-/// PATH" — the verb's own naming, printed before the loop opens the dir).
-/// Fallback: the first dr-* directory that appears under `base` after spawn
-/// (covers a stderr wording change without a silent miss). Fails loudly after
-/// a 60s timeout with the stderr tail.
-async fn await_run_dir(
-    stderr: tokio::process::ChildStderr,
-    base: &Path,
-) -> Result<PathBuf, String> {
-    use tokio::io::AsyncBufReadExt;
-    let mut known: std::collections::HashSet<PathBuf> = dir_children(base);
-    let mut lines = tokio::io::BufReader::new(stderr).lines();
-    let mut tail: Vec<String> = Vec::new();
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(60);
-    loop {
-        tokio::select! {
-            line = lines.next_line() => {
-                match line {
-                    Ok(Some(l)) => {
-                        tail.push(l.clone());
-                        if tail.len() > 40 { tail.remove(0); }
-                        if let Some(p) = l.strip_prefix("deep-research: run dir ") {
-                            let named = PathBuf::from(p.trim());
-                            if named.is_dir() { return Ok(named); }
-                            // The verb names a dir it is about to create —
-                            // accept it and wait for the dir to appear.
-                            for _ in 0..50 {
-                                if named.is_dir() { return Ok(named.clone()); }
-                                tokio::time::sleep(Duration::from_millis(200)).await;
-                            }
-                            return Err(format!(
-                                "run dir {named:?} never appeared — {}",
-                                tail.join(" | ")
-                            ));
-                        }
-                    }
-                    Ok(None) => break,
-                    Err(e) => return Err(format!("stderr read: {e} — {}", tail.join(" | "))),
-                }
-            }
-            _ = tokio::time::sleep(Duration::from_millis(250)) => {
-                let now = dir_children(base);
-                for p in now.difference(&known) {
-                    if p.file_name()
-                        .and_then(|s| s.to_str())
-                        .is_some_and(|n| n.starts_with("dr-"))
-                    {
-                        return Ok(p.clone());
-                    }
-                }
-                known = now;
-                if tokio::time::Instant::now() > deadline {
-                    return Err(format!(
-                        "the verb never named its run dir (60s) — stderr tail: {}",
-                        tail.join(" | ")
-                    ));
-                }
-            }
-        }
-    }
-    Err(format!(
-        "verb exited before naming its run dir — {}",
-        tail.join(" | ")
-    ))
-}
-
-fn dir_children(base: &Path) -> std::collections::HashSet<PathBuf> {
-    std::fs::read_dir(base)
-        .map(|rd| {
-            rd.flatten()
-                .map(|e| e.path())
-                .filter(|p| p.is_dir())
-                .collect()
-        })
-        .unwrap_or_default()
 }
 
 // ── Live snapshot ──────────────────────────────────────────────────────────
@@ -1393,26 +1244,30 @@ mod tests {
     }
 
     #[test]
-    fn consent_flag_refuses_an_unknown_class_and_passes_the_closed_set() {
-        assert_eq!(consent_flag("public-web"), Ok(Some("public-web")));
-        assert_eq!(consent_flag("peer"), Ok(Some("peer")));
-        assert_eq!(consent_flag("personal"), Ok(Some("personal")));
+    fn consent_class_refuses_an_unknown_class_and_passes_the_closed_set() {
+        assert_eq!(consent_class("public-web"), Ok(Custody::PublicWeb));
+        assert_eq!(consent_class("peer"), Ok(Custody::Peer));
+        assert_eq!(consent_class("personal"), Ok(Custody::Personal));
         assert!(
-            consent_flag("everything").is_err(),
-            "a typo must not reach the verb"
+            consent_class("everything").is_err(),
+            "a typo must not reach a run"
+        );
+        assert!(
+            consent_class("unknown").is_err(),
+            "a grant never releases unknown provenance"
         );
     }
 
     #[test]
-    fn demo_extra_args_are_verb_flags_only_when_the_demo_var_is_set() {
+    fn demo_backend_override_is_absent_unless_the_demo_var_is_set() {
         // The env mutation could race a parallel test that reads the var —
         // none does (it is demo-only), but the lock keeps the intent loud.
         static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
         let _guard = ENV_LOCK.lock().unwrap();
         unsafe { std::env::remove_var("SOVEREIGN_DEMO_DR_FLAGS") };
         assert!(
-            demo_extra_args().is_empty(),
-            "unset = byte-identical args; real flows must not gain flags"
+            demo_backend_override().is_none(),
+            "unset = the live port; real flows must not gain a mock backend"
         );
         unsafe {
             std::env::set_var(
@@ -1421,14 +1276,70 @@ mod tests {
             )
         };
         assert_eq!(
-            demo_extra_args(),
-            vec![
-                "--backend",
-                "mock",
-                "--mock-deck",
-                "/tmp/deep-research-deck"
-            ],
-            "the demo pass-through appends the verb's own flags, split on whitespace"
+            demo_backend_override(),
+            Some((
+                "mock".to_string(),
+                Some(PathBuf::from("/tmp/deep-research-deck"))
+            )),
+            "the demo pass-through lands in typed launch options, not an argv"
+        );
+        unsafe { std::env::remove_var("SOVEREIGN_DEMO_DR_FLAGS") };
+    }
+
+    /// THE SHIPPING TEST, structurally (§7: make it structural, not
+    /// remembered). Deep research used to run by spawning `svrn
+    /// deep-research`, found by probing PATH — so a desktop-only install,
+    /// which has no CLI on PATH, got zero runs, and an install that DID
+    /// have one could bind a different version than the app was built
+    /// against. Neither failure is visible in a unit test of behaviour;
+    /// both are visible here.
+    ///
+    /// Watched red against the pre-lift file at HEAD: it spawned a child
+    /// process twice and probed the CLI-path override.
+    ///
+    /// The scan is scoped to the PRODUCTION half of the file — everything
+    /// above `#[cfg(test)]`. This test necessarily spells the forbidden
+    /// tokens, and an instrument that trips on its own prose measures
+    /// nothing (the same trap as note 8714cf3c, where a render gate
+    /// matched the sentence describing it).
+    #[test]
+    fn the_driver_starts_no_subprocess_and_probes_no_path() {
+        let src = include_str!("deep_research_commands.rs");
+        let body = src
+            .split_once("#[cfg(test)]")
+            .expect("this file has a test module")
+            .0;
+        for forbidden in [
+            "Command::new",
+            "SOVEREIGN_CLI_PATH",
+            "sovereign-cli",
+            ".local/bin/sovereign",
+        ] {
+            assert!(
+                !body.contains(forbidden),
+                "the deep-research driver must not reach for a CLI binary, but it names \
+                 `{forbidden}` — a desktop-only install has none, and a PATH hit can be a \
+                 different version than this build"
+            );
+        }
+    }
+
+    /// A token the closed set does not name is IGNORED rather than
+    /// forwarded: with no second process to parse it, passing it on
+    /// would mean pretending it did something.
+    #[test]
+    fn demo_backend_override_ignores_tokens_it_does_not_name() {
+        static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe {
+            std::env::set_var(
+                "SOVEREIGN_DEMO_DR_FLAGS",
+                "--backend mock --nonsense 7 --mock-deck /tmp/d",
+            )
+        };
+        assert_eq!(
+            demo_backend_override(),
+            Some(("mock".to_string(), Some(PathBuf::from("/tmp/d"))))
         );
         unsafe { std::env::remove_var("SOVEREIGN_DEMO_DR_FLAGS") };
     }

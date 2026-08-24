@@ -376,6 +376,7 @@ mod tests {
     fn setup_fixture() -> SetupConfig {
         SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/m/primary.gguf"),
                 fast: Some(PathBuf::from("/m/fast.gguf")),

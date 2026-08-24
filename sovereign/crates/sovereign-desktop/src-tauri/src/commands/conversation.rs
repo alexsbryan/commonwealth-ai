@@ -415,25 +415,9 @@ pub async fn submit_information_search(
 
     let config_snapshot = state.config.read().await.clone();
 
-    let mut registry = WebSearchRegistry::new();
-    // DuckDuckGo is always available — the zero-config fallback.
-    // Registered first so even a missing operator key still has
-    // a backend to dispatch to.
-    registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
-    let preferred: Box<dyn WebSearchBackend> =
-        match config_snapshot.search_backend.provider.as_str() {
-            "tavily" => config_snapshot.search_backend.api_key.as_ref().map(
-                |k| -> Box<dyn WebSearchBackend> { Box::new(TavilyBackendImpl::new(k.clone())) },
-            ),
-            "brave" => config_snapshot.search_backend.api_key.as_ref().map(
-                |k| -> Box<dyn WebSearchBackend> { Box::new(BraveBackendImpl::new(k.clone())) },
-            ),
-            _ => None,
-        }
-        .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
-    registry.register(Arc::from(preferred));
-
-    let orchestrator = SearchOrchestrator::new(Arc::new(registry));
+    // The ONE registry construction (§10.6) — the same one `state.rs`
+    // and the deep-research loop use, over the operator's `[search]`.
+    let orchestrator = SearchOrchestrator::new(Arc::new(crate::state::effective_search_registry()));
 
     // The ONE egress boundary (order deep-research-t2a): the client is
     // built by sovereign-core's egress module (the F26 census enforces

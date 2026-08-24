@@ -1218,6 +1218,13 @@ purpose = "Tavily Search API key for the web-search orchestrator's Tavily backen
 [[flag]]
 name = "SOVEREIGN_DEMO_DR_FLAGS"
 cluster = "demo"
-default = "unset (real flows are byte-identical)"
+default = "unset (real flows get the live port)"
 status = "guard"
-purpose = "Appended verb flags for the desktop's `dr_start` spawn (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. The desktop remains a driver — every token passes the verb's own closed-set parsing and run-dir verification. Only the demo global-setup writes it; every real flow leaves it unset."
+purpose = "The desktop's demo-only backend override (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. Still spelled as flags because the demo global-setup and this registry already name it that way, but since the desktop stopped spawning the CLI it is PARSED into typed `launch::LaunchOptions` fields (`backend`, `mock_deck_dir`) rather than appended to a subprocess argv — a token the closed set does not name is ignored, not forwarded, because there is no second process to give it meaning. Read in exactly one place (`deep_research_commands::demo_backend_override`). Only the demo global-setup writes it; every real flow leaves it unset and gets the live port."
+
+[[flag]]
+name = "SOVEREIGN_DR_COMPOSED_REPORT"
+cluster = "deep-research"
+default = "off"
+status = "shipped"
+purpose = "drb1-t5: the deep-research deliverable is COMPOSED (one section per planned sub-question over the whole merged evidence window, plus a closing synthesis — AIQ teardown §1.6/§6.3) instead of being rebuilt from atomised claim rows. On-form: SOVEREIGN_DR_COMPOSED_REPORT=1 (also true, case-insensitive); every other value, including unset, leaves the claim-ledger render in place. Why it exists: measured on the logged t7a flight, the ledger shape scored 2.16/10 against the DRB-I reference's 9.32 on the benchmark's own criteria, with `## Findings` empty or near-empty on all nine deliverables because 127 of 137 claims landed could-not-judge — the page was the bookkeeping rather than the answer. What does NOT change when it is on: the gate. The audit runs over the COMPOSED text (so the audited artefact and the delivered artefact are one document), the corroboration floor, custody veto and containment witness are untouched, refuted claims are marked in place, and everything unverified is named in a closing Verification section. Read in exactly one place (deep_research::composed_report_enabled). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."

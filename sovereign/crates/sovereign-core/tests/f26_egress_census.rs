@@ -37,7 +37,7 @@
 //! enrich providers path named first:
 //!   - sovereign/crates/sovereign-cli-llm/src/enrich_cmd/inference_client.rs
 //!     (RemotePayload — the `--provider` chat client)
-//!   - sovereign/crates/sovereign-cli/src/deep_research_cmd.rs
+//!   - sovereign/crates/sovereign-core/src/deep_research/port.rs
 //!     (QueryEgress — the web_search client)
 //!   - sovereign/crates/sovereign-tools/src/knowledge_lookup/mod.rs
 //!     (QueryEgress — the web-escalation client)
@@ -133,6 +133,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // and model_client(timeout). Everything below is Local / Mesh /
     // InboundOnly / OperatorSurface / TestOnly.
     ("sovereign/crates/sovereign-core/src/egress.rs", Class::Boundary, 2),
+    // deep_research/port.rs: the live `ResearchPort` — the rung-2/3
+    // acquisition surface. Its web_search client is built by
+    // BOUNDARY_MODULE (egress.rs `search_client`), and the query
+    // egress passes the release gate (consent grant, default-deny),
+    // so the one site counted here is the /v1/models probe against
+    // the host daemon. Lifted out of sovereign-cli so the desktop
+    // stops spawning the CLI to reach it — the classification did not
+    // change with the crate.
+    ("sovereign/crates/sovereign-core/src/deep_research/port.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-mesh: the estate's own transport (Mesh) ----
     // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.
@@ -242,12 +251,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-daemon/src/model_cmd.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-cli ----
-    // deep_research_cmd: the rung-2/3 acquisition port — its
-    // web_search client moved into BOUNDARY_MODULE (egress.rs
-    // search_client) with the boundary, and the query egress passes
-    // the release gate (consent grant, default-deny). The /v1/models
-    // probe stays LocalDaemon.
-    ("sovereign/crates/sovereign-cli/src/deep_research_cmd.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli/src/project_registry.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli/src/update_cmd.rs", Class::InboundOnly, 1),
     ("sovereign/crates/sovereign-cli/src/session_cmd.rs", Class::LocalDaemon, 1),

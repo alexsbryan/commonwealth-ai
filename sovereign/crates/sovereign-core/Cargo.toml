@@ -51,17 +51,28 @@ dirs = "5"
 # to derive the cache key. Workspace-version pin keeps lock-file
 # coherent with the 9+ other crates that already use sha2.
 sha2 = { workspace = true }
+# The live `ResearchPort`'s web leg (`deep_research::port`): the search
+# backend registry + orchestrator and the shared HTML text extractor.
+# Same-layer (both `runtime` in quality/ARCH_LAYERS.toml) and acyclic —
+# sovereign-tools-base depends only on sovereign-contracts plus
+# third-party leaves, never on sovereign-core.
+sovereign-tools-base = { workspace = true }
+# The launch path's provider (`deep_research::launch`): the loop talks
+# to the LOCAL daemon's `/v1` over loopback and never to a frontier.
+# Layer-legal — oicp-client sits in the contracts layer, below runtime.
+oicp-client = { workspace = true }
+# The live port's PDF leg (drb1-t2). Same crate+version the corpus
+# ingest path runs (`sovereign-tools`' `local_corpus::extract_stage`),
+# so there is ONE PDF-to-text implementation in the workspace and this
+# is a second CALLER of it, not a second extractor.
+pdf-extract = "0.7"
+# Staging file for the PDF leg — the extractor takes a path, not bytes.
+tempfile = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true }
-tempfile = "3"
-# FR-6 decorrelation driver (`tests/fr6_decorrelation.rs`, order
-# deep-research-t0b): the pure-HTTP OICP client supplies the live
-# InferenceProvider the measurement runs both gate strings through.
-# Lean — no llama.cpp anywhere in this crate's test build.
-oicp-client = { path = "../../../oicp-client" }
 
 [lints]
 workspace = true

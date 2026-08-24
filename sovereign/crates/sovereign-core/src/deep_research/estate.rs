@@ -26,6 +26,18 @@ use std::path::Path;
 /// term; falls back to the prefix when no term is present (short
 /// chunks, non-lexical matches). Moved here from the CLI verb (t1g
 /// rung 2) so the gym's corpus surface uses the SAME snippet shape.
+///
+/// Two calibrations were measured by the watched test, and both are
+/// load-bearing (demo re-ask dr-1786727099, where the prefix-left
+/// window ended in a donate blurb and the gap-derived web queries
+/// drifted to museum-grant pages):
+///   - function words (when/were/...) are filtered — the first pass
+///     anchored on "were" at the sentence end and cut "July 20, 1969";
+///   - the window leads 200 chars before the anchor so the answer
+///     sentence's context survives the cut.
+///
+/// `to_ascii_lowercase` keeps byte offsets valid for slicing (case
+/// folding can change length).
 pub fn estate_snippet(content: &str, query: &str, max: usize) -> String {
     // English function words of length >= 4. Small by design: only the
     // words that measurably mis-anchor the window; content terms pass.
@@ -152,6 +164,26 @@ pub trait ResearchPort: Send + Sync {
         _run_dir: &Path,
     ) -> Result<AlignmentDecision, String> {
         Ok(AlignmentDecision::Proceed)
+    }
+
+    /// EMBED (order drb1-t5): L2-normalisable vectors for `texts`, in
+    /// the retrieval embedding space.
+    ///
+    /// The gate's support binder needs this. Its predecessor located a
+    /// claim's support with `chunk.content.contains(specific)` —
+    /// brittle string matching, which is the classic keyword-matcher
+    /// failure the router already replaced three times
+    /// (`current_info_classifier`, `scope_classifier`,
+    /// `claim_class_classifier`). Measured over the logged t7a flight:
+    /// 125 of 137 claims (91%) bound to ZERO origins because research
+    /// prose paraphrases its sources.
+    ///
+    /// The DEFAULT is `Err` and NOT an empty vector (§18.3: absence is
+    /// reported, never defaulted). A caller that cannot embed must NAME
+    /// the degradation in its record — never silently score as though
+    /// the span had been located and found wanting.
+    async fn embed(&self, _texts: &[String]) -> Result<Vec<Vec<f32>>, String> {
+        Err("port provides no embedding surface".to_string())
     }
 }
 

@@ -1011,6 +1011,7 @@ mod tests {
     fn hermetic_cfg() -> SetupConfig {
         SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/models/primary.gguf"),
                 fast: None,

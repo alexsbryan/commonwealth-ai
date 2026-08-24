@@ -1652,3 +1652,74 @@ it is an experiment (then it should not be default-on). Resolve it with the
 ### RAPTOR grounding — `SOVEREIGN_RAPTOR_GROUNDING`
 - Default **on**, status shipped (`env-flags.toml`). Summary nodes as
   virtual chunks earned the default.
+
+## `SOVEREIGN_DR_COMPOSED_REPORT` — the composed deep-research deliverable (drb1-t5)
+
+**Shipped 2026-08-22, DEFAULT OFF.** Campaign `drb1-race`, order `drb1-t5`,
+pre-registered in `research/deep-research/adversarial/pre-registration.md`.
+
+**What it turns on.** The deliverable is composed — one section per planned
+sub-question, retrieved per section over the whole merged evidence window by
+embedding, plus a closing synthesis — rather than rebuilt from atomised,
+individually-audited claim rows.
+
+**Why.** Measured on the logged t7a flight (`runs-t7a-graded-shadow`, the
+benchmark's own RACE criteria, 27B judge): the ledger shape scored a weighted
+mean of **2.16/10** against the reference's **9.32**, and `## Findings` was
+empty or near-empty on all nine deliverables because 127 of 137 claims landed
+could-not-judge. The reference class that scores 40.46 runs ~2,200 words over
+six to eight sections.
+
+**What does not change.** The gate. The audit runs over the composed text, so
+the audited artefact and the delivered artefact are the same document. The
+corroboration floor, custody veto, containment witness and verdict set are
+untouched; refuted claims are marked in place; unverified claims are named in a
+closing Verification section rather than dropped.
+
+**Correction 2026-08-23.** This row previously read "The reference class that
+scores 40.46 runs ~2,200 words over six to eight sections." That conflated two
+different articles. 2,206 words is **Perplexity's** mean over the DRB-I subset
+— the competitor scoring 40.46. The benchmark's REFERENCE articles, which form
+the denominator in `overall = T/(T+R)`, run **6,898-13,348 words** (measured
+from `deep_research_bench/data/test_data/raw_data/reference.jsonl`). The
+mistake is load-bearing: 6-8 sections x the 300-380-word budget in
+`synthesize.rs` reproduces "~2,200" exactly, so the sentence very likely
+authored the constant. Nothing about the flag's on/off state changes; the
+sizing rationale does.
+
+**Reversal condition.** If the composed arm does not beat the ledger arm on the
+graded-probe composite with the honesty floor intact (0.0 ungrounded on P4-v0
+and R-12), it stays off and the finding is reported with the curves.
+
+**Correction 2026-08-24 — the evidence this row leaned on is contaminated, and
+the flag STAYS OFF.** The 44.40 composite was measured by
+`research/deep-research/arms/lab/compose2.py`, a Python REIMPLEMENTATION of
+`compose_report` — and over estates that contain, as evidence, the DRB-I
+reference article for the task being answered. Six of the ten subset estates
+carry their own answer (5.8%-16.2% of evidence by volume; tasks 56, 58, 59, 62,
+65, 69). `demo13/build-ceiling-deck.py` declares that caveat correctly for its
+own arm; `arms/lab/build_estate.py` pooled those windows into the lab estate
+without carrying it forward. Full accounting in
+`research/deep-research/adversarial/pre-registration.md` §"CORRECTION 2026-08-24".
+
+**What the shipping code actually scores.** First measurement of the Rust path
+against this bar (task 69, pinned greedy judge, same estate/binary/window both
+arms): composed **28.4100** vs ledger **27.2127** — composed wins all four RACE
+dimensions, +1.20 overall, insight widest at +11% relative. Perplexity on the
+same task replays at 43.8759.
+
+**Why that is not yet a flip.** The direction the row asks for holds, and the
+honesty floor is untouched (the audit still runs over the composed text; the
+corroboration floor, custody veto and containment witness are unchanged). But
+n=1 task is a direction, not the composite the row names. The flip wants the
+four CLEAN subset tasks (78, 83, 90, 95) measured on the shipping path, both
+arms. At the composed arm's current cost — 68 minutes per run, 93% of it 27B
+compose+audit — that is ~6 hours of local inference, which is why the
+throughput work gates the decision rather than the other way round.
+
+**The larger finding, recorded because it reprioritises this row.** That
+composed run's entire evidence window was 4 chunks / 1,866 chars / ~466 tokens,
+two of which were an Amazon job posting. A 5,773-word report was composed from
+~1,185 chars of relevant evidence, which is why 142 of 190 claims landed
+could-not-judge. The deliverable SHAPE is no longer the binding constraint on
+this score; acquisition is.

@@ -21,6 +21,8 @@ pub mod estate;
 pub mod fetch;
 pub mod gym;
 pub mod icd;
+pub mod launch;
+pub mod port;
 pub mod render;
 pub mod state;
 pub mod synthesize;
@@ -346,6 +348,15 @@ fn config_mismatch(a: &RunConfig, b: &RunConfig) -> Option<&'static str> {
         return Some("consent");
     }
     None
+}
+
+/// drb1-t5: the composed-report deliverable. DEFAULT OFF — a shipped
+/// default-off switch carries its `sovereign/DEFAULTS_LEDGER.md` row and
+/// its `quality/env-flags.toml` entry.
+fn composed_report_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_COMPOSED_REPORT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 fn aborted(flag: &AtomicBool) -> bool {
@@ -708,6 +719,40 @@ fn normalize_word_figures(s: &str) -> String {
 /// "20%" and the witness, fold identity, figure inventory, question
 /// specifiers, and fact query read word and digit forms identically.
 /// Deterministic, no model.
+/// Cosine similarity — the ONE implementation the deep-research module
+/// uses (§10.6). Returns -1.0 on a dimension mismatch or a
+/// zero-magnitude vector so a degenerate embedding can never be
+/// mistaken for a near match; callers treat a ZERO-LENGTH input as
+/// unavailability, not as a low score (§18.3).
+/// Strip C0 control bytes (keeping tab/newline/CR) before text reaches
+/// the embedding tokenizer. Measured 2026-08-22: a PDF-extracted chunk
+/// in the DRB-I estate carried an interior NUL, and the embed backend
+/// refused the WHOLE batch — "Embed tokenization failed: input contains
+/// an interior NUL at byte 785". One bad byte in one passage takes down
+/// every passage batched with it, so the scrub belongs at the boundary,
+/// not at the call sites that happen to remember.
+pub(crate) fn scrub_control(s: &str) -> String {
+    s.chars()
+        .filter(|c| !c.is_control() || matches!(c, '\t' | '\n' | '\r'))
+        .collect()
+}
+
+pub(crate) fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() || a.is_empty() {
+        return -1.0;
+    }
+    let (mut dot, mut na, mut nb) = (0.0f32, 0.0f32, 0.0f32);
+    for (x, y) in a.iter().zip(b.iter()) {
+        dot += x * y;
+        na += x * x;
+        nb += y * y;
+    }
+    if na <= 0.0 || nb <= 0.0 {
+        return -1.0;
+    }
+    dot / (na.sqrt() * nb.sqrt())
+}
+
 fn figure_tokens(s: &str) -> Vec<String> {
     figure_runs(&normalize_word_figures(s))
         .into_iter()
@@ -2224,7 +2269,43 @@ impl Controller {
             return self.land_aborted().await;
         }
         let window = self.merge_windows();
-        let (audits, _) = self.audit_pass(draft, &window).await?;
+
+        // drb1-t5: the COMPOSED deliverable — one section per planned
+        // sub-question plus a closing synthesis, written over the whole
+        // merged window (AIQ §1.6/§6.3). Default OFF; the flight and the
+        // ledger row name it. When it composes, the gate runs over the
+        // composed text, so the audited artefact and the delivered
+        // artefact are the same document — never two.
+        let composed = if composed_report_enabled() {
+            match synthesize::compose_report(&*self.port, &self.question, &window, &self.frontier)
+                .await
+            {
+                Ok(md) => Some(md),
+                Err(e) => {
+                    tracing::warn!(
+                        target: "deep_research",
+                        error = %e,
+                        "composed report unavailable — falling back to the claim-ledger render (named, never silent)"
+                    );
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let audit_target;
+        let audit_ref = match &composed {
+            Some(md) => {
+                audit_target = Draft {
+                    text: md.clone(),
+                    ..draft.clone()
+                };
+                &audit_target
+            }
+            None => draft,
+        };
+        let (audits, _) = self.audit_pass(audit_ref, &window).await?;
         let claims = final_claims(&audits, &window);
         let verdict_set = icd::VerdictSet {
             icd: "verdict_set".to_string(),
@@ -2249,15 +2330,21 @@ impl Controller {
         };
         self.write_artifact("source-registry.json", &registry)?;
         self.prior_gap_texts = not_covered(&claims);
-        let report = render_report(
-            &self.question,
-            &claims,
-            &self.config.run_id,
-            self.reframe_record.as_ref(),
-            self.alignment_record.as_ref(),
-            &self.residue,
-            &self.empty_rounds,
-        );
+        let report = match &composed {
+            Some(md) => {
+                let (numbered, _) = synthesize::number_citations(md, &window);
+                render::annotate_composed(&numbered, &claims)
+            }
+            None => render_report(
+                &self.question,
+                &claims,
+                &self.config.run_id,
+                self.reframe_record.as_ref(),
+                self.alignment_record.as_ref(),
+                &self.residue,
+                &self.empty_rounds,
+            ),
+        };
         let report_path = self.config.run_dir.join("report.md");
         std::fs::write(&report_path, report).map_err(|e| format!("report write: {e}"))?;
         self.artifacts.push("report.md".to_string());

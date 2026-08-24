@@ -1,0 +1,37 @@
+  task 78: 13 chunks -> 49 passages, 7 sections
+    §1 What are the distinct clinical warning signs across early, m -> 535w
+    §2 Which specific behavioral or physical changes should prompt  -> 623w
+    §3 How do Deep Brain Stimulation (DBS) parameters influence dai -> 533w
+    §4 What practical home environment modifications optimize safet -> 621w
+    §5 Which dietary restrictions and medication timing adjustments -> 553w
+    §6 How can caregivers implement structured support strategies t -> 542w
+    §7 What long-term maintenance protocols ensure optimal device f -> 562w
+    §synthesis -> 465w
+  -> 4526 words, 10 sources
+
+  task 78 composed in 573s
+  task 65: 29 chunks -> 185 passages, 8 sections
+    §1 What are the specific phenotypic traits and geometric comple -> 518w
+    §2 How can modern control theory frameworks be adapted to model -> 627w
+    §3 Which theoretical models best describe the error dynamics in -> 588w
+    §4 How should feedback mechanisms be designed to ensure robustn -> 565w
+    §5 What optimization strategies from control engineering minimi -> 528w
+    §6 How do alternative mathematical methods, such as stochastic  -> 574w
+    §7 What are the critical performance metrics required to valida -> 581w
+    §8 How can the integrated design framework be scaled for high-t -> 660w
+    §synthesis -> 463w
+  -> 5169 words, 9 sources
+
+  task 65 composed in 664s
+  task 62: 16 chunks -> 85 passages, 7 sections
+    §1 What are the fundamental physical and architectural bottlene -> 593w
+    §2 Which specific hardware scaling strategies, such as modular  -> 650w
+    §3 How do different control methodologies compare in their abil -> 646w
+    §4 To what extent can existing fabrication techniques and mater -> 644w
+    §5 What is the feasibility assessment of integrating classical  -> 568w
+    §6 How do practical implementation challenges like thermal mana -> 619w
+    §7 Based on current technological trajectories, which specific  -> 530w
+    §synthesis -> 462w
+  -> 4785 words, 8 sources
+
+  task 62 composed in 591s

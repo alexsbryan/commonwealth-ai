@@ -41,11 +41,6 @@ corpus-engine-scip = { workspace = true, optional = true }
 # calls. Depended on directly rather than through `sovereign-inference`, which
 # re-exports it while linking llama.cpp unconditionally.
 oicp-client = { workspace = true, optional = true }
-# The pure leaf web tools (DDG search + HTML extraction) the thin
-# deep-research loop's `ResearchPort` uses. No corpus-engine/llama/mesh —
-# same dependency budget as oicp-client. Optional + pulled by the
-# `deep-research` feature only.
-sovereign-tools-base = { workspace = true, optional = true }
 corpus-engine-notes = { workspace = true }
 # Only the opt-in `awareness` diagnostic CLI reads the ATOS FeatureStore
 # (corpus_engine_atos). Optional + pulled by the `awareness` feature so the
@@ -65,13 +60,6 @@ arc-swap = { workspace = true }
 dirs = "5"
 hex = "0.4"
 hostname = { workspace = true }
-tempfile = { workspace = true }
-# drb1-t2 (the PDF wall): the deep-research fetch port extracts PDF
-# text with the SAME crate+version the corpus ingest path uses
-# (sovereign-tools' extract_stage) — a second CALLER of the one
-# extractor, not a second implementation. Pure-Rust, no llama/lancedb
-# weight; the version is pinned by the shared workspace lock.
-pdf-extract = "0.7"
 which = "7"
 sha2 = { workspace = true }
 chrono = { workspace = true }
@@ -94,9 +82,9 @@ sovereign-cli-shared = { workspace = true }
 # The shipped build carries the deep-research verb (order
 # deep-research-t3a graduated it out of the dev-tools-only surface).
 # `--backend mock --mock-deck` stays visible/documented; the loop is
-# local-only (oicp-client + sovereign-tools-base are pure reqwest
-# leaves — no llama.cpp, no corpus-engine extras beyond the
-# non-optional dep).
+# local-only — the loop and its live port live in sovereign-core;
+# this crate keeps only the verb (arg parsing, resume sidecar, estate
+# ingest, summary) and reaches the daemon over loopback HTTP.
 default = [
     "deep-research",
     # The notes/seat daemon routes are UNGATED by design (pin test
@@ -113,8 +101,7 @@ default = [
 # lifecycle, ATOS, code intelligence, archaeology) that the default
 # (end-user) build gates out. Most gated verbs exec the
 # `sovereign-cli-dev` sibling at runtime; `deep-research` runs in-process
-# and pulls oicp-client + sovereign-tools-base (both pure reqwest leaves
-# — no llama.cpp, no corpus-engine extras beyond the non-optional dep).
+# and pulls oicp-client (a pure reqwest leaf — no llama.cpp).
 dev-tools = [
     "dep:corpus-engine-archaeology",
     "dep:sovereign-agent-bench",
@@ -123,7 +110,7 @@ dev-tools = [
 # The thin local-only research loop (T1): gated corpus + web search,
 # custody-stamped fetch, gap-audited rounds. Talks to the daemon over
 # loopback HTTP only (oicp-client) — no llama.cpp, no mesh.
-deep-research = ["dep:oicp-client", "dep:sovereign-tools-base"]
+deep-research = ["dep:oicp-client"]
 # `svrn code index` / `svrn refresh` in the SHIPPED binary. Three lines is the
 # entire cost: the index path talks to the daemon over loopback HTTP for
 # embeddings (`oicp-client`, pure reqwest — no llama.cpp), reads/writes the

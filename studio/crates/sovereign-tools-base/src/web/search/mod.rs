@@ -11,6 +11,7 @@
 
 pub mod assets;
 pub mod backend_trait;
+pub mod configured;
 pub mod orchestrator;
 
 pub use assets::{
@@ -21,6 +22,7 @@ pub use backend_trait::{
     BraveBackendImpl, DuckDuckGoBackendImpl, MockBackendImpl, SearchCost, TavilyBackendImpl,
     WebSearchBackend, WebSearchRegistry,
 };
+pub use configured::{configured_search, ConfiguredSearch, FALLBACK_BACKEND};
 // The privacy posture type moved down to the shared contract crate
 // (so the egress boundary in sovereign-core can consult it); kept
 // here at its historical path so every importer is unaffected.

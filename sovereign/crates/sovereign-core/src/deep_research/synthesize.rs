@@ -234,6 +234,430 @@ pub(crate) fn draft_is_degenerate(text: &str) -> bool {
 /// evidence + the still-open gaps. `strict_shape` (REV-2: the
 /// degenerate-draft guard's re-draft) appends a plain-prose shape
 /// constraint — the default prompt is byte-shaped exactly as before.
+
+// ---------------------------------------------------------------------
+// drb1-t5 — the composed report (AIQ writer contract, teardown §1.6/§6.3).
+//
+// `draft_round` produces ONE prose draft per round, and the render then
+// rebuilt the deliverable out of atomised, individually-audited claim
+// rows. Measured on the logged t7a flight, that shape cannot produce a
+// research article: the nine deliverables averaged 2.16/10 against the
+// reference's 9.32 on the benchmark's own criteria, with `## Findings`
+// empty or near-empty on every one of them, because 127 of 137 claims
+// landed could-not-judge and the page was the bookkeeping rather than
+// the answer.
+//
+// The reference class this must reach is known and measured: the
+// articles that score 40.46 run ~2,200 words across six to eight
+// sections with sub-headings, each section answering one sub-question of
+// the prompt and citing as it goes. That is what this composes.
+//
+// Every obligation below is AIQ §6.3 ported onto OUR evidence — with
+// their soft `evidence_judgment` replaced by the window we actually
+// verified, and their instructed honesty left to our gate, which runs
+// over the composed text afterwards and is not weakened by this stage.
+// ---------------------------------------------------------------------
+
+/// Passage geometry for per-section retrieval.
+const PASSAGE_CHARS: usize = 1400;
+const PASSAGE_OVERLAP: usize = 200;
+/// Passages handed to one section's writer.
+const SECTION_PASSAGES: usize = 8;
+/// At most this many passages from any ONE source per section, so a
+/// single long page cannot crowd out the rest of the window.
+const PER_SOURCE_CAP: usize = 3;
+
+/// The section writer's obligations (AIQ §6.3, items 3-6). Stated once,
+/// used by every section — one decider, one name (§10.6).
+const WRITER_CONTRACT: &str = "\
+Obligations for this section:\n\
+- Retain the useful detail: specific numbers, dates, names, mechanisms, \
+findings and caveats from the evidence must survive into the prose. Do NOT \
+flatten them into generic themes.\n\
+- Cross-synthesize ACROSS sources into higher-level conclusions rather than \
+summarising one source at a time.\n\
+- Do not merely report: evaluate. Say what the finding means, why it matters, \
+how strong the support is, and what follows from it.\n\
+- Where sources disagree, present the conflict and say which evidence is \
+stronger or more recent.\n\
+- Developed paragraphs, not bullet checklists. A short markdown table is \
+welcome where the content is genuinely tabular.\n\
+- Err on the side of more useful information rather than less.\n\
+- Assert ONLY what the evidence supports. Never invent facts, numbers, names \
+or dates. Cite EVERY material claim as [Source: ev-N], naming the evidence \
+chunk the claim rests on — the same handle the evidence block labels it with.\n\
+- If the evidence genuinely does not cover part of this sub-question, say so \
+in ONE short sentence and move on.";
+
+/// One retrieval passage: a span of a window chunk, tagged with the
+/// chunk it came from so the citation maps to a real fetched source.
+#[derive(Clone)]
+struct Passage {
+    chunk_id: String,
+    url: String,
+    text: String,
+}
+
+/// Split the window into overlapping passages. Retrieval granularity:
+/// a whole chunk is too coarse to rank against one sub-question.
+fn window_passages(window: &EvidenceWindow) -> Vec<Passage> {
+    let mut out = Vec::new();
+    for c in &window.chunks {
+        let joined: String = super::scrub_control(&c.content)
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
+        let chars: Vec<char> = joined.chars().collect();
+        let step = PASSAGE_CHARS.saturating_sub(PASSAGE_OVERLAP).max(1);
+        let mut i = 0usize;
+        while i < chars.len() {
+            let end = (i + PASSAGE_CHARS).min(chars.len());
+            let text: String = chars[i..end].iter().collect();
+            if text.chars().count() >= 220 || out.is_empty() {
+                out.push(Passage {
+                    chunk_id: c.id.clone(),
+                    url: c.source_url.clone(),
+                    text,
+                });
+            }
+            if end == chars.len() {
+                break;
+            }
+            i += step;
+        }
+    }
+    out
+}
+
+/// Sub-questions whose embeddings sit at or above this cosine are the
+/// same question twice, and writing both produces the same section
+/// twice. Pre-registered 2026-08-23 (`research/deep-research/adversarial/
+/// pre-registration.md`, "Composed-report output quality (E)") as the
+/// MIDPOINT of the observed gap: the duplicate pair that shipped on run
+/// `dr-1787534265` measured 0.8591, and the tightest pair that composed
+/// cleanly on `dr-1787535219` measured 0.7908.
+///
+/// The bias is deliberate. A false merge LOSES a section; a false keep
+/// merely repeats one. So the floor sits above every observed safe pair
+/// rather than hugging the duplicate.
+///
+/// n = 2 runs — a separation, not a calibration (§18.5). One const, one
+/// name: a third observation re-derives it here.
+pub const SUBQUESTION_DEDUP_FLOOR: f32 = 0.825;
+
+/// Below this max question-to-passage cosine the evidence window does
+/// not answer the question, and the honest deliverable is one line
+/// saying so — not 2,381 words about adjacent topics, which is what run
+/// `dr-1787534265` shipped for an auction question over an A2A/MCP
+/// estate.
+///
+/// Pre-registered with the same evidence: that run's max measured
+/// 0.3009; the run whose estate DID hold the answer measured 0.7885.
+/// The floor sits well below the answerable case because a false refusal
+/// on an answerable question is far worse than a verbose report.
+pub const EVIDENCE_RELEVANCE_FLOOR: f32 = 0.45;
+
+/// Drop sub-questions that repeat one already kept, by embedding cosine.
+///
+/// Returns the indices to KEEP, in order — the first member of each
+/// near-duplicate cluster wins, so the plan's own ordering survives and
+/// the choice does not depend on iteration order.
+///
+/// This runs before any section is written, which is the point: the
+/// duplicate cost is a wasted draft call per repeat, and the duplicate
+/// TEXT is what a reader sees. Uses the sub-question vectors
+/// `compose_report` already embedded for ranking — no new embed call.
+fn dedupe_subquestions(sub_vecs: &[Vec<f32>]) -> Vec<usize> {
+    let mut keep: Vec<usize> = Vec::new();
+    for (i, v) in sub_vecs.iter().enumerate() {
+        let dup = keep
+            .iter()
+            .find(|&&k| super::cosine(v, &sub_vecs[k]) >= SUBQUESTION_DEDUP_FLOOR);
+        match dup {
+            Some(&k) => tracing::debug!(
+                target: "deep_research",
+                dropped = i, kept = k,
+                cosine = super::cosine(v, &sub_vecs[k]),
+                floor = SUBQUESTION_DEDUP_FLOOR,
+                "compose_report: sub-question repeats an earlier one — one section, not two"
+            ),
+            None => keep.push(i),
+        }
+    }
+    keep
+}
+
+/// The highest question-to-passage cosine in the window — how well the
+/// evidence we actually hold answers what was actually asked.
+fn peak_relevance(question_vec: &[f32], passage_vecs: &[Vec<f32>]) -> f32 {
+    passage_vecs
+        .iter()
+        .map(|v| super::cosine(question_vec, v))
+        .fold(f32::NEG_INFINITY, f32::max)
+}
+
+/// Top passages for one sub-question, source-diverse. Falls back to
+/// document order when the embedding surface is unavailable — NAMED by
+/// the caller, never silently scored (§18.3).
+fn rank_passages(sub_vec: &[f32], passage_vecs: &[Vec<f32>], passages: &[Passage]) -> Vec<Passage> {
+    let mut scored: Vec<(f32, usize)> = passage_vecs
+        .iter()
+        .enumerate()
+        .map(|(i, v)| (super::cosine(sub_vec, v), i))
+        .collect();
+    scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let mut picked = Vec::new();
+    let mut per_source: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
+    for (_, i) in scored {
+        let p = &passages[i];
+        let n = per_source.entry(p.url.as_str()).or_insert(0);
+        if *n >= PER_SOURCE_CAP {
+            continue;
+        }
+        *n += 1;
+        picked.push(p.clone());
+        if picked.len() >= SECTION_PASSAGES {
+            break;
+        }
+    }
+    picked
+}
+
+/// The honest deliverable when the evidence does not answer the question:
+/// say so, in one line, and name the measurement that decided it.
+///
+/// This replaces the failure it is named for. Run `dr-1787534265` asked
+/// about first-price auctions over an estate holding A2A/MCP material and
+/// shipped 2,381 words about adjacent topics with 0 of 67 claims verified
+/// — a report that looks like an answer and is not one. A reader is far
+/// better served by one true sentence.
+///
+/// It is a REFUSAL, not a short report: it names the floor, the measured
+/// value and the window size, so the operator can tell "we hold nothing
+/// relevant" apart from "the composer broke".
+fn unanswered_report(question: &str, peak: f32, chunks: usize) -> String {
+    format!(
+        "# {question}\n\n         ## No answer from this evidence\n\n         The evidence gathered for this run does not answer the question. The          closest passage in a {chunks}-passage window scored {peak:.3} against          the question, below the {EVIDENCE_RELEVANCE_FLOOR:.2} relevance floor          — near enough to unrelated that composing a report from it would          produce prose about adjacent topics rather than an answer.\n\n         No findings are reported because none were found. Re-run against a          corpus that holds material on this subject, or release the web leg          with `--consent public-web` so the run can go and look.\n"
+    )
+}
+
+/// The composed deliverable: one section per sub-question plus a closing
+/// synthesis, with a `## Sources` list whose numbers the section text
+/// cites. Returns the markdown and the ordered source list.
+pub async fn compose_report(
+    port: &dyn ResearchPort,
+    question: &str,
+    window: &EvidenceWindow,
+    subquestions: &[String],
+) -> Result<String, String> {
+    if window.chunks.is_empty() {
+        return Err("compose_report: empty evidence window".to_string());
+    }
+    let passages = window_passages(window);
+    let subs: Vec<String> = if subquestions.is_empty() {
+        vec![question.to_string()]
+    } else {
+        subquestions.to_vec()
+    };
+
+    // One embed pass for the passages, one for the sub-questions — the
+    // question rides along as the LAST row of the sub-question call, so
+    // the relevance gate below costs no extra round-trip.
+    let passage_texts: Vec<String> = passages.iter().map(|p| p.text.clone()).collect();
+    let pv = port.embed(&passage_texts).await;
+    let mut sub_inputs = subs.clone();
+    sub_inputs.push(question.to_string());
+    let sv = port.embed(&sub_inputs).await;
+    let embedded = match (&pv, &sv) {
+        (Ok(a), Ok(b)) if !a.iter().any(|v| v.is_empty()) && !b.iter().any(|v| v.is_empty()) => {
+            true
+        }
+        _ => {
+            tracing::warn!(
+                target: "deep_research",
+                "compose_report: no embedding surface — sections fall back to document order (DEGRADED, named)"
+            );
+            false
+        }
+    };
+
+    // Two gates over the vectors just computed. Both are skipped when
+    // the embedding surface is unavailable — a degraded run composes as
+    // before rather than refusing on a measurement it could not take
+    // (§18.3: could-not-judge is not the same verdict as failed).
+    let mut kept: Vec<usize> = (0..subs.len()).collect();
+    if embedded {
+        let sv_ok = sv.as_ref().unwrap();
+        let pv_ok = pv.as_ref().unwrap();
+
+        // Does the evidence answer the question at all? Below the floor,
+        // the honest deliverable is one line saying so.
+        let question_vec = &sv_ok[subs.len()];
+        let peak = peak_relevance(question_vec, pv_ok);
+        if peak < EVIDENCE_RELEVANCE_FLOOR {
+            tracing::info!(
+                target: "deep_research",
+                peak, floor = EVIDENCE_RELEVANCE_FLOOR, chunks = passages.len(),
+                "compose_report: the evidence does not answer the question — refusing to compose"
+            );
+            return Ok(unanswered_report(question, peak, passages.len()));
+        }
+        tracing::debug!(
+            target: "deep_research", peak, floor = EVIDENCE_RELEVANCE_FLOOR,
+            "compose_report: evidence clears the relevance floor"
+        );
+
+        // Two sub-questions that mean the same thing make one section,
+        // not two near-identical ones.
+        kept = dedupe_subquestions(&sv_ok[..subs.len()]);
+        if kept.len() < subs.len() {
+            tracing::info!(
+                target: "deep_research",
+                planned = subs.len(), sections = kept.len(),
+                "compose_report: near-duplicate sub-questions merged"
+            );
+        }
+    }
+
+    let allowed = allowed_urls(window);
+    let system = "You are a local research synthesist writing one section of a \
+                  report. Write from the evidence given and nothing else.";
+    let mut sections: Vec<String> = Vec::new();
+
+    for &si in kept.iter() {
+        let sub = &subs[si];
+        let picked = if embedded {
+            rank_passages(&sv.as_ref().unwrap()[si], pv.as_ref().unwrap(), &passages)
+        } else {
+            // Degraded path: no embedding surface, so rank by nothing.
+            // Rotate the window per section rather than handing every
+            // section the SAME passages — identical inputs would make
+            // identical sections and the report would say one thing
+            // eight times.
+            let start = (si * SECTION_PASSAGES) % passages.len().max(1);
+            passages
+                .iter()
+                .cycle()
+                .skip(start)
+                .take(SECTION_PASSAGES.min(passages.len()))
+                .cloned()
+                .collect()
+        };
+        if picked.is_empty() {
+            continue;
+        }
+        let mut ev = String::new();
+        for p in picked.iter() {
+            ev.push_str(&format!("[{}] ({})\n{}\n\n", p.chunk_id, p.url, p.text));
+        }
+        let prompt = format!(
+            "You are writing ONE section of an analytical research report that answers:\n{question}\n\n\
+             THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n{WRITER_CONTRACT}\n\n\
+             Write 300-380 words. Start with a '## ' heading that is a short noun phrase, \
+             never the sub-question verbatim; use '### ' sub-headings where the material \
+             has natural parts. No preamble and no commentary about the evidence itself."
+        );
+        let body = port
+            .draft(&prompt, Some(system), &allowed)
+            .await
+            .map_err(|e| format!("section draft: {e}"))?;
+        sections.push(body);
+    }
+
+    if sections.is_empty() {
+        return Err("compose_report: no section produced".to_string());
+    }
+
+    // The closing synthesis (AIQ §6.3 item 3's "cross-synthesize into
+    // higher-level conclusions"), the direct Insight-dimension lever:
+    // Insight carries the highest mean dimension weight across the
+    // DRB-I subset (0.351) and was our weakest dimension.
+    let digest: String = sections
+        .iter()
+        .map(|s| s.chars().take(1500).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let synth_prompt = format!(
+        "You are writing the closing synthesis of a research report answering:\n{question}\n\n\
+         THE REPORT SO FAR:\n{digest}\n\n\
+         Write a '## Synthesis and Assessment' section of 280-340 words that draws the \
+         threads into 3-5 justified conclusions, each saying WHY it follows from what the \
+         report established; weighs which rest on strong evidence and which are tentative; \
+         names the genuine open questions and what would resolve them; and gives the \
+         practical implication a demanding reader would want. Reuse the [Source: ev-N] \
+         handles already used above where a claim needs one. Developed paragraphs, no \
+         checklists, and no new facts beyond what the report states."
+    );
+    match port.draft(&synth_prompt, Some(system), &allowed).await {
+        Ok(t) => sections.push(t),
+        Err(e) => tracing::warn!(
+            target: "deep_research", error = %e,
+            "compose_report: synthesis section failed — the report lands without it, named"
+        ),
+    }
+
+    // The composed text keeps its [Source: ev-N] handles: the gate's
+    // ref-required step verifies the writer's OWN selection against the
+    // window, and rewriting the handles into reader-facing numbers
+    // before the audit would blind it. `number_citations` does that
+    // rewrite at RENDER time, after the verdicts exist.
+    Ok(format!("# {question}\n\n{}", sections.join("\n\n")))
+}
+
+/// Render-time rewrite: `[Source: ev-3]` → `[2]`, with the ordered
+/// source list the numbers index. Runs AFTER the gate, never before.
+pub fn number_citations(md: &str, window: &EvidenceWindow) -> (String, Vec<String>) {
+    let url_of = |id: &str| -> Option<String> {
+        window
+            .chunks
+            .iter()
+            .find(|c| c.id == id)
+            .map(|c| c.source_url.clone())
+    };
+    let mut numbering: Vec<String> = Vec::new();
+    let mut out = String::with_capacity(md.len());
+    let mut rest = md;
+    while let Some(open) = rest.find("[Source:") {
+        out.push_str(&rest[..open]);
+        let after = &rest[open..];
+        match after.find(']') {
+            Some(close) => {
+                let inner = after[8..close].trim();
+                match url_of(inner) {
+                    Some(u) => {
+                        let n = match numbering.iter().position(|x| x == &u) {
+                            Some(i) => i + 1,
+                            None => {
+                                numbering.push(u);
+                                numbering.len()
+                            }
+                        };
+                        out.push_str(&format!("[{n}]"));
+                    }
+                    // A handle naming no window chunk is DROPPED from the
+                    // reader's page; the verdict set still records the
+                    // claim's refusal (ref-required), so the absence is
+                    // on the record rather than hidden.
+                    None => {}
+                }
+                rest = &after[close + 1..];
+            }
+            None => {
+                out.push_str(after);
+                return (out, numbering);
+            }
+        }
+    }
+    out.push_str(rest);
+    if !numbering.is_empty() {
+        out.push_str("\n\n## Sources\n\n");
+        for (i, u) in numbering.iter().enumerate() {
+            out.push_str(&format!("{}. {}\n", i + 1, u));
+        }
+    }
+    (out, numbering)
+}
+
 pub async fn draft_round(
     port: &dyn ResearchPort,
     run_id: &str,
@@ -430,6 +854,105 @@ mod tests {
         let block = evidence_block(&w);
         assert!(block.contains("[ev-1] The Meridian Bridge"));
         assert_eq!(evidence_block(&w), evidence_block(&w));
+    }
+
+    // ------------------------------------------------------------------
+    // Composed-report output quality (E) — the pre-registered bars.
+    // `research/deep-research/adversarial/pre-registration.md`,
+    // "Composed-report output quality (E)", written 2026-08-23 BEFORE
+    // this code. Both cases are MEASURED fixtures from live runs, not
+    // invented vectors: the cosines below are what the loop's own
+    // embedder produced on those runs' actual plans.
+    // ------------------------------------------------------------------
+
+    /// Two unit vectors at a chosen cosine, so a fixture can name the
+    /// measured separation directly instead of shipping 1024 floats.
+    fn pair_at(cosine: f32) -> (Vec<f32>, Vec<f32>) {
+        let a = vec![1.0, 0.0];
+        let b = vec![cosine, (1.0 - cosine * cosine).sqrt()];
+        (a, b)
+    }
+
+    /// PRE-REGISTERED BAR, half 1: run `dr-1787534265`'s two
+    /// sub-questions measured **0.8591** apart and shipped "Absence of
+    /// Auction Theory in Evidence" and "Absence of Auction Theory
+    /// Evidence" — the same paragraph twice. 2 must collapse to 1.
+    #[test]
+    fn the_duplicate_pair_that_shipped_twice_becomes_one_section() {
+        let (a, b) = pair_at(0.8591);
+        let keep = dedupe_subquestions(&[a, b]);
+        assert_eq!(
+            keep,
+            vec![0],
+            "0.8591 is the measured cosine of the pair that shipped as two \
+             near-identical sections; it must merge"
+        );
+    }
+
+    /// PRE-REGISTERED BAR, half 2: run `dr-1787535219`'s tightest pair
+    /// measured **0.7908** and composed cleanly. 10 must stay 10 — and
+    /// this is the half that fails if the floor is set too low, which is
+    /// the error that LOSES a section.
+    #[test]
+    fn the_tightest_clean_pair_keeps_both_sections() {
+        let (a, b) = pair_at(0.7908);
+        let keep = dedupe_subquestions(&[a, b]);
+        assert_eq!(
+            keep,
+            vec![0, 1],
+            "0.7908 composed cleanly on a live run; merging it would lose a section"
+        );
+    }
+
+    /// The first member of a cluster wins, so the plan's own ordering
+    /// decides — not iteration order, and not a counter.
+    #[test]
+    fn dedup_keeps_the_first_of_each_cluster_and_is_order_stable() {
+        let (a, b) = pair_at(0.90);
+        let far = vec![0.0, 1.0];
+        assert_eq!(
+            dedupe_subquestions(&[a.clone(), b.clone(), far.clone()]),
+            vec![0, 2]
+        );
+        // The distinct one moving to the front changes which indices
+        // survive but never how many.
+        assert_eq!(dedupe_subquestions(&[far, a, b]), vec![0, 1]);
+    }
+
+    /// PRE-REGISTERED BAR, the relevance floor: run `dr-1787534265`'s
+    /// window peaked at **0.3009** against its question and shipped
+    /// 2,381 words anyway; run `dr-1787535219`'s peaked at **0.7885**
+    /// and composed a real report.
+    #[test]
+    fn the_relevance_floor_separates_the_two_measured_windows() {
+        let q = vec![1.0, 0.0];
+        let unanswerable: Vec<Vec<f32>> = vec![pair_at(0.3009).1, pair_at(0.21).1];
+        let answerable: Vec<Vec<f32>> = vec![pair_at(0.7885).1, pair_at(0.30).1];
+        assert!(
+            peak_relevance(&q, &unanswerable) < EVIDENCE_RELEVANCE_FLOOR,
+            "the window that could not answer must be refused"
+        );
+        assert!(
+            peak_relevance(&q, &answerable) >= EVIDENCE_RELEVANCE_FLOOR,
+            "the window that DID answer must compose — a false refusal is the worse error"
+        );
+    }
+
+    /// The refusal is a refusal: it names the floor, the measurement and
+    /// the window size, so "we hold nothing relevant" cannot be mistaken
+    /// for "the composer broke" (§18.3, absence is reported).
+    #[test]
+    fn the_unanswered_report_names_what_it_measured() {
+        let r = unanswered_report("Do we know about auctions?", 0.3009, 4);
+        assert!(r.starts_with("# Do we know about auctions?"));
+        assert!(r.contains("No answer from this evidence"));
+        assert!(r.contains("0.301"), "the measured peak is named: {r}");
+        assert!(r.contains("0.45"), "the floor is named: {r}");
+        assert!(r.contains("4-passage"), "the window size is named: {r}");
+        assert!(
+            !r.contains("## Findings"),
+            "a refusal must not ship an empty findings section"
+        );
     }
 
     #[test]
@@ -785,5 +1308,110 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
             retry_prompt.contains("Spelled-out figures"),
             "the retry prompt must carry the figures-as-digits clause: {retry_prompt}"
         );
+    }
+
+    // ---- drb1-t5: the composed deliverable -------------------------
+
+    fn two_source_window() -> EvidenceWindow {
+        let mut w = window();
+        w.chunks.push(super::super::icd::WindowChunk {
+            id: "ev-2".to_string(),
+            locator: "https://example.org/b".to_string(),
+            source_url: "https://example.org/b".to_string(),
+            custody: Custody::PublicWeb.as_str().to_string(),
+            provenance_class: "known".to_string(),
+            content: "A second source, on the same bridge, giving the span as 240 metres."
+                .to_string(),
+            ingested_into: None,
+            tags: Vec::new(),
+        });
+        w
+    }
+
+    /// The reader-facing numbering happens AFTER the gate: the composed
+    /// text keeps its [Source: ev-N] handles so ref-required can verify
+    /// the writer's own selection.
+    #[test]
+    fn number_citations_maps_handles_in_first_use_order() {
+        let md = "The bridge opened in 1873 [Source: ev-1]. Its span is 240 metres \
+                  [Source: ev-2]. Opened 1873 again [Source: ev-1].";
+        let (out, srcs) = number_citations(md, &two_source_window());
+        assert!(
+            out.contains("1873 [1]."),
+            "first source numbers 1, got: {out}"
+        );
+        assert!(
+            out.contains("240 metres [2]."),
+            "second source numbers 2, got: {out}"
+        );
+        assert!(
+            out.contains("again [1]."),
+            "a repeat source keeps its number"
+        );
+        assert_eq!(
+            srcs,
+            vec![
+                "https://example.com/a".to_string(),
+                "https://example.org/b".to_string()
+            ]
+        );
+        assert!(out.contains("## Sources"), "the page lists what it cited");
+    }
+
+    /// A handle naming no window chunk is dropped from the READER's
+    /// page — it must never be renumbered onto some other source. The
+    /// verdict set still records the claim's ref-required refusal, so
+    /// the absence stays on the record (§18.3).
+    #[test]
+    fn number_citations_drops_a_handle_that_names_no_chunk() {
+        let md = "A claim resting on nothing in the window [Source: ev-99].";
+        let (out, srcs) = number_citations(md, &two_source_window());
+        assert!(!out.contains("ev-99"), "the dangling handle is gone: {out}");
+        assert!(
+            !out.contains("[1]"),
+            "it is NOT renumbered onto a real source: {out}"
+        );
+        assert!(srcs.is_empty(), "and it contributes no source row");
+    }
+
+    /// Retrieval granularity: a whole chunk is too coarse to rank
+    /// against one sub-question, so the window is split with overlap.
+    #[test]
+    fn window_passages_split_long_chunks_with_overlap() {
+        let mut w = window();
+        w.chunks[0].content = "lorem ipsum dolor sit amet ".repeat(400);
+        let ps = window_passages(&w);
+        assert!(
+            ps.len() > 1,
+            "a long chunk yields several passages, got {}",
+            ps.len()
+        );
+        assert!(
+            ps.iter().all(|p| p.chunk_id == "ev-1"),
+            "every passage remembers the chunk it came from"
+        );
+        assert!(
+            ps.iter().all(|p| p.text.chars().count() <= PASSAGE_CHARS),
+            "no passage exceeds the span budget"
+        );
+    }
+
+    /// The writer contract is stated ONCE and carries the obligations
+    /// the Insight dimension actually rewards (AIQ §6.3 items 3-6).
+    #[test]
+    fn writer_contract_carries_the_analysis_obligations() {
+        for needle in [
+            "Do NOT",
+            "Cross-synthesize",
+            "evaluate",
+            "disagree",
+            "Developed paragraphs",
+            "[Source: ev-N]",
+        ] {
+            assert!(
+                WRITER_CONTRACT.contains(needle),
+                "the writer contract must carry {needle:?}"
+            );
+        }
     }
 }

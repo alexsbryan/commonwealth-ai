@@ -1,0 +1,162 @@
+#!/usr/bin/env python3
+"""Composer v2 — AIQ's writer contract (teardown §1.6, §6.3) over our estate.
+
+v1 measured coverage. v2 targets INSIGHT, which carries the highest mean
+dimension weight across the DRB-I subset (0.351) and is our worst dimension
+(1.71 vs the reference's 9.19). The criteria that carry that weight ask for
+evaluation, synthesis, justification and significance — not for facts listed.
+
+Ported from AIQ §6.3, each item a prompt obligation:
+  - synthesis map before drafting (components -> facts that must survive,
+    consensus vs conflict, table-vs-prose)
+  - retain detail; do NOT flatten rich notes into generic themes
+  - cross-synthesize across sources into higher-level conclusions
+  - present conflicts, saying which evidence is stronger or more recent
+  - developed paragraphs, not checklists
+  - err toward more useful information rather than less
+  - name real gaps; citations map 1:1 to fetched sources
+
+Still zero web spend: every passage comes from the pooled estate.
+"""
+import json, os, re, sys, time, argparse
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+from compose import (chat, embed, norm, cos, strip_think, passages, QUERY)  # noqa: E402
+
+CONTRACT = """Obligations for this section:
+- Retain the useful detail: specific numbers, dates, names, mechanisms, study
+  findings and caveats from the evidence must survive into the prose. Do NOT
+  flatten them into generic themes.
+- Cross-synthesize ACROSS sources into higher-level conclusions rather than
+  summarising one source at a time.
+- Do not merely report: evaluate. Say what the finding means, why it matters,
+  how strong the support is, and what follows from it.
+- Where sources disagree, present the conflict and say which evidence is
+  stronger or more recent.
+- Developed paragraphs, not bullet checklists. A short markdown table is
+  welcome where the content is genuinely tabular.
+- Err on the side of more useful information rather than less.
+- Assert ONLY what the evidence supports. Never invent facts, numbers, names
+  or dates. Cite with bracket numbers, e.g. [2], after each material claim.
+- If the evidence genuinely does not cover part of this sub-question, say so
+  in ONE short sentence and move on."""
+
+
+
+def tidy_citations(text):
+    """Collapse [5][5] -> [5] and sort runs: [6][5] -> [5][6]."""
+    def fix(m):
+        ns = sorted({int(x) for x in re.findall(r'\d+', m.group(0))})
+        return ''.join(f'[{n}]' for n in ns)
+    return re.sub(r'(?:\[\d+\]){2,}', fix, text)
+
+
+def decompose2(prompt, model):
+    q = ("Read this research request and list the sections a comprehensive, "
+         "analytical report must contain to answer it fully. Cover every "
+         "explicit ask, plus the background and the evaluative synthesis a "
+         "demanding reader expects. Output ONLY a JSON array of 5-6 short "
+         "section titles phrased as questions, no prose.\n\nREQUEST:\n" + prompt)
+    raw = strip_think(chat(model, q, max_tokens=700, temperature=0.2)['text'])
+    m = re.search(r'\[.*\]', raw, re.S)
+    if m:
+        try:
+            subs = [s.strip() for s in json.loads(m.group(0)) if isinstance(s, str) and s.strip()]
+            if subs:
+                return subs[:6]
+        except Exception:
+            pass
+    return [l.strip(' -*0123456789.') for l in raw.splitlines() if len(l.strip()) > 12][:6]
+
+
+def write_section2(sub, picked, model, prompt, words=(300, 380)):
+    ev = "\n\n".join(f"[{i+1}] ({p['url']})\n{p['text']}" for i, p in enumerate(picked))
+    q = (f"You are writing ONE section of an analytical research report that answers:\n{prompt}\n\n"
+         f"THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n\n{CONTRACT}\n\n"
+         f"Write {words[0]}-{words[1]} words. Start with a '## ' heading; use '### ' "
+         "sub-headings where the material has natural parts. No preamble, no "
+         "meta-commentary about the evidence or about being an AI.")
+    return strip_think(chat(model, q, max_tokens=1200)['text'])
+
+
+def write_synthesis(prompt, sections, model):
+    digest = "\n\n".join(s[:1500] for s in sections)
+    q = (f"You are writing the closing synthesis of a research report answering:\n{prompt}\n\n"
+         f"THE REPORT SO FAR:\n{digest}\n\n"
+         "Write a '## Synthesis and Assessment' section of 280-340 words that:\n"
+         "- draws the threads together into 3-5 justified conclusions, each stating "
+         "  WHY it follows from what the report established;\n"
+         "- weighs which conclusions rest on strong evidence and which are tentative;\n"
+         "- names the genuine open questions and what would resolve them;\n"
+         "- offers the practical implication a demanding reader would want.\n"
+         "Reuse the bracket citation numbers already used above where a claim needs one. "
+         "Developed paragraphs, no checklists, no new facts beyond what the report states.")
+    return strip_think(chat(model, q, max_tokens=900)['text'])
+
+
+def compose2(task, model, outroot, k=8):
+    est = json.load(open(f'{HERE}/estate/task-{task}.json'))
+    prompts = {int(json.loads(l)['id']): json.loads(l)['prompt'] for l in open(QUERY)}
+    prompt = prompts[task]
+
+    subs = decompose2(prompt, model)
+    ps = passages(est['chunks'])
+    print(f'  task {task}: {len(est["chunks"])} chunks -> {len(ps)} passages, {len(subs)} sections', flush=True)
+    pv = [norm(v) for v in embed([p['text'][:1000] for p in ps])]
+    sv = [norm(v) for v in embed(subs)]
+
+    used, sections = {}, []
+    for si, sub in enumerate(subs):
+        ranked = sorted(range(len(ps)), key=lambda i: -cos(sv[si], pv[i]))
+        picked, seen = [], {}
+        for i in ranked:
+            u = ps[i]['url']
+            if seen.get(u, 0) >= 3:
+                continue
+            seen[u] = seen.get(u, 0) + 1
+            picked.append(ps[i])
+            if len(picked) >= k:
+                break
+        body = write_section2(sub, picked, model, prompt)
+
+        def remap(m):
+            n = int(m.group(1))
+            if 1 <= n <= len(picked):
+                u = picked[n - 1]['url']
+                used.setdefault(u, len(used) + 1)
+                return f'[{used[u]}]'
+            return ''
+        sections.append(tidy_citations(re.sub(r'\[(\d+)\]', remap, body)))
+        print(f'    §{si+1} {sub[:60]} -> {len(body.split())}w', flush=True)
+
+    synth = write_synthesis(prompt, sections, model)
+    synth = re.sub(r'\[(\d+)\]', lambda m: m.group(0) if int(m.group(1)) <= len(used) else '', synth)
+    sections.append(tidy_citations(synth))
+    print(f'    §synthesis -> {len(synth.split())}w', flush=True)
+
+    srcs = "\n".join(f'{n}. {u}' for u, n in sorted(used.items(), key=lambda kv: kv[1]))
+    report = f'# {prompt}\n\n' + "\n\n".join(sections) + f'\n\n## Sources\n\n{srcs}\n'
+
+    d = f'{outroot}/drb-{task}/dr-lab'
+    os.makedirs(d, exist_ok=True)
+    open(f'{d}/report.md', 'w').write(report)
+    json.dump({'question': prompt}, open(f'{d}/charter.json', 'w'))
+    json.dump({'icd': 'verdict-set', 'version': 1, 'run_id': 'dr-lab',
+               'charter_hash': 'lab', 'claims': [], 'empty_rounds': []},
+              open(f'{d}/verdict-set.json', 'w'))
+    print(f'  -> {len(report.split())} words, {len(used)} sources\n', flush=True)
+    return report
+
+
+if __name__ == '__main__':
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--tasks', default='78')
+    ap.add_argument('--model', default='Qwen3.8-27B-UD-Q6_K_XL')
+    ap.add_argument('--out', default=os.path.join(HERE, 'out/v2'))
+    ap.add_argument('--k', type=int, default=8)
+    a = ap.parse_args()
+    for t in [int(x) for x in a.tasks.split(',')]:
+        t0 = time.time()
+        compose2(t, a.model, a.out, a.k)
+        print(f'  task {t} in {time.time()-t0:.0f}s', flush=True)

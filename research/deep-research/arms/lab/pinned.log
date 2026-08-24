@@ -1,0 +1,60 @@
+=== [A] DETERMINISM CHECK — t56 judged twice under the pin (bar: agree within 0.10) ===
+  judge 356s (attempt 1)
+}
+OVERALL x100 = 43.4378
+--- draw 2 ---
+  judge 357s (attempt 1)
+}
+OVERALL x100 = 43.4378
+=== [A] DONE — compare the two OVERALL lines above ===
+
+=== [B] PINNED BAR — Perplexity's 10 subset articles ===
+  judge 331s (attempt 1)
+  task 56: T=7.05 R=9.14 overall=43.52 (331s, 956w)
+  judge 388s (attempt 1)
+  task 58: T=7.96 R=9.32 overall=46.05 (388s, 2431w)
+  judge 362s (attempt 1)
+  task 59: T=7.17 R=9.30 overall=43.54 (362s, 2400w)
+  judge 519s (attempt 1)
+  task 62: T=7.09 R=9.52 overall=42.69 (519s, 2402w)
+  judge 408s (attempt 1)
+  task 65: T=7.03 R=9.02 overall=43.80 (408s, 1970w)
+  judge 309s (attempt 1)
+  task 69: T=7.20 R=9.21 overall=43.88 (309s, 2932w)
+  judge 368s (attempt 1)
+  task 78: T=8.06 R=9.20 overall=46.70 (368s, 2082w)
+  judge 727s (attempt 1)
+  task 83: T=5.82 R=8.66 overall=40.20 (727s, 2074w)
+  judge 386s (attempt 1)
+  task 90: T=7.11 R=9.28 overall=43.38 (386s, 2129w)
+  judge 426s (attempt 1)
+  task 95: T=7.41 R=9.33 overall=44.28 (426s, 2689w)
+
+TASK          T        R   OVERALL    WORDS
+56         7.05     9.14     43.52      956
+58         7.96     9.32     46.05     2431
+59         7.17     9.30     43.54     2400
+62         7.09     9.52     42.69     2402
+65         7.03     9.02     43.80     1970
+69         7.20     9.21     43.88     2932
+78         8.06     9.20     46.70     2082
+83         5.82     8.66     40.20     2074
+90         7.11     9.28     43.38     2129
+95         7.41     9.33     44.28     2689
+
+  comprehensiveness      43.1374
+  insight                42.2166
+  instruction_following  46.1095
+  readability            45.0300
+  COMPOSITE              43.8040   (n=10 of 10)
+
+  Perplexity official 40.46 | 27B judge reads Perplexity at 43.67
+  baseline t7a graded-probe 17.3751
+
+=== [C] PINNED ARM — our 10 v3 articles ===
+  judge 356s (attempt 1)
+  task 56: T=7.05 R=9.18 overall=43.44 (356s, 3053w)
+  judge 375s (attempt 1)
+  task 58: T=7.74 R=9.35 overall=45.30 (375s, 3297w)
+  judge 348s (attempt 1)
+  task 59: T=7.74 R=9.33 overall=45.36 (348s, 3015w)

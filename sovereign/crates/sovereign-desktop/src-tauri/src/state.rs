@@ -38,6 +38,31 @@ pub use config::*;
 // Construction helpers for `bootstrap_with_progress` (§3.3).
 mod builders;
 
+/// The ONE web-search registry for every desktop surface — chat tools,
+/// the conversation tool builder, and (through the same function in
+/// tools-base) the deep-research loop.
+///
+/// Reads the operator's `[search]` section from `SetupConfig`, with the
+/// older `SVRNMESH_TAVILY_API_KEY` as the fallback key so existing
+/// setups keep working. `desktop.toml`'s `[search_backend]` is migrated
+/// into `[search]` once on load (`DesktopConfig::migrate_legacy_search_backend`)
+/// and is no longer read here — two surfaces for one fact is exactly how
+/// a desktop-configured provider stayed invisible to a run.
+pub fn effective_search_registry() -> sovereign_tools::web::search::WebSearchRegistry {
+    let search_cfg = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.search)
+        .unwrap_or_default();
+    let env_key = sovereign_contracts::rebrand::svrnmesh_env("TAVILY_API_KEY")
+        .and_then(|v| v.into_string().ok());
+    let configured =
+        sovereign_tools::web::search::configured_search(&search_cfg, env_key.as_deref());
+    tracing::info!(
+        backend = %configured.preferred,
+        "web search: operator backend resolved (duckduckgo always available)"
+    );
+    configured.registry
+}
+
 // ─── App State ───────────────────────────────────────────────
 
 pub struct AppState {
@@ -570,49 +595,16 @@ pub async fn bootstrap_with_progress(
         // direct-enum dispatch never had. The legacy path stays
         // available via SearchTool::with_web for the seven other call
         // sites still using it.
-        use sovereign_tools::web::search::{
-            BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
-            WebSearchBackend, WebSearchRegistry,
-        };
+        use sovereign_tools::web::search::SearchOrchestrator;
 
-        let mut registry = WebSearchRegistry::new();
-        // DuckDuckGo is always available (zero-config fallback).
-        registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
-        // The operator-chosen provider, if any, gets registered
-        // alongside. Both stay in the registry; the orchestrator
-        // picks via the operator preference order (Tavily/Brave
-        // first when configured, DuckDuckGo as the fallback).
-        let preferred: Box<dyn WebSearchBackend> = match config.search_backend.provider.as_str() {
-            "tavily" => {
-                config
-                    .search_backend
-                    .api_key
-                    .as_ref()
-                    .map(|key| -> Box<dyn WebSearchBackend> {
-                        Box::new(TavilyBackendImpl::new(key.clone()))
-                    })
-            }
-            "brave" => {
-                config
-                    .search_backend
-                    .api_key
-                    .as_ref()
-                    .map(|key| -> Box<dyn WebSearchBackend> {
-                        Box::new(BraveBackendImpl::new(key.clone()))
-                    })
-            }
-            _ => None,
-        }
-        .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
-        // Convert the Box to Arc so the registry's Arc-of-trait
-        // shape is happy. DuckDuckGo's `register` above sets up the
-        // fallback; this `register` may replace it with the same id
-        // when the operator's provider is also DuckDuckGo (the
-        // registry warn-logs the replacement, which is the right
-        // signal — operator wanted DDG and they got it).
-        registry.register(Arc::from(preferred));
-
-        let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(registry)));
+        // The ONE registry construction (§10.6). DuckDuckGo is always
+        // registered as the zero-config fallback; the operator's
+        // `[search]` provider joins it when keyed. The deep-research
+        // loop reads the same section through the same function, so a
+        // provider configured once serves every surface.
+        let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(
+            effective_search_registry(),
+        )));
         tools.register(Box::new(
             sovereign_tools::search::SearchTool::with_orchestrator(
                 Arc::clone(&store),
@@ -650,29 +642,10 @@ pub async fn bootstrap_with_progress(
         // instance vs. sharing — kept duplicate for scope-locality
         // (the search-tool block above is its own gated branch).
         if config.auto_escalate_to_web {
-            use sovereign_tools::web::search::{
-                BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
-                WebSearchBackend, WebSearchRegistry,
-            };
-            let mut registry = WebSearchRegistry::new();
-            registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
-            let preferred: Box<dyn WebSearchBackend> =
-                match config.search_backend.provider.as_str() {
-                    "tavily" => config.search_backend.api_key.as_ref().map(
-                        |key| -> Box<dyn WebSearchBackend> {
-                            Box::new(TavilyBackendImpl::new(key.clone()))
-                        },
-                    ),
-                    "brave" => config.search_backend.api_key.as_ref().map(
-                        |key| -> Box<dyn WebSearchBackend> {
-                            Box::new(BraveBackendImpl::new(key.clone()))
-                        },
-                    ),
-                    _ => None,
-                }
-                .unwrap_or_else(|| Box::new(DuckDuckGoBackendImpl::new()));
-            registry.register(Arc::from(preferred));
-            let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(registry)));
+            use sovereign_tools::web::search::SearchOrchestrator;
+            let orchestrator = Arc::new(SearchOrchestrator::new(Arc::new(
+                effective_search_registry(),
+            )));
             tool = tool
                 .with_web_orchestrator(orchestrator)
                 .with_auto_escalate(true);
