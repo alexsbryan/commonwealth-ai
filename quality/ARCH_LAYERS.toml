@@ -185,7 +185,6 @@ crates = [
     "sovereign-pipeline",
     "sovereign-agent-bench",
     "sovereign-studio",
-    "commonwealth-daemon",
     "oicp-conformance",
     "xtask",
 ]
@@ -301,12 +300,6 @@ reason = "mesh foundation must stay consumable without the agent runtime"
 from = "commonwealth-app"
 to = "sovereign-*"
 reason = "mesh foundation must stay consumable without the agent runtime"
-
-[[forbid]]
-from = "commonwealth-daemon"
-to = "sovereign-*"
-except = ["sovereign-contracts"]
-reason = "the standalone mesh daemon must not drag the agent runtime"
 
 # WHAT actually crosses, so R6 has a size rather than a feeling. Census
 # 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 11 types /

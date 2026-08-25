@@ -11,6 +11,23 @@ use tracing::{debug, warn};
 
 use crate::store::MeshStore;
 
+/// IMPLEMENT_ME (2026-08-24, daemon-convergence): **this GC has no
+/// production spawner.** Its only one was
+/// `commonwealth-daemon/src/main.rs:789`, and that crate was deleted as
+/// vestigial. The sovereign daemon has never spawned it either, so
+/// nothing bounds the contributions ledger on any shipped configuration
+/// — `research/scale-analysis/MESH_SCALE_T0_JOURNAL.md` already flagged
+/// the ledger as growing without bound for exactly this reason.
+///
+/// Deliberately left unwired rather than silently re-homed: spawning it
+/// from the sovereign daemon is a behaviour change (it starts deleting
+/// rows on a live store), not a mechanical port, and it needs the
+/// `app_scope` decision below made on purpose — the deleted daemon used
+/// a 7-day TTL that was *narrower* than its own 30-day read window.
+///
+/// Whoever next needs a bounded ledger: wire it with an explicit
+/// `app_scope`, or delete this type and accept unbounded growth in
+/// writing. Do not leave it in this third state.
 pub struct RetentionGc {
     store: Arc<MeshStore>,
     ttl_seconds: u64,

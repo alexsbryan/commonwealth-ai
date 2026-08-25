@@ -108,7 +108,6 @@ members = [
     "commonwealth/crates/commonwealth-inference",
     "commonwealth/crates/commonwealth-api",
     "commonwealth/crates/commonwealth-knowledge",
-    "commonwealth/crates/commonwealth-daemon",
     "commonwealth/crates/commonwealth-test-harness",
     "commonwealth/crates/commonwealth-app",
     "commonwealth/crates/commonwealth-state",
