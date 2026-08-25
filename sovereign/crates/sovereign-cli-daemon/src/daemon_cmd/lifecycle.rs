@@ -279,36 +279,6 @@ fn parse_ss_first_pid(text: &str) -> Option<i32> {
 }
 
 #[cfg(all(test, unix))]
-mod run_lock_tests {
-    use super::*;
-
-    #[test]
-    fn second_flock_refused_while_first_held() {
-        let dir = tempfile::tempdir().expect("tempdir");
-        let path = dir.path().join("daemon.lock");
-        let first = try_flock_exclusive(&path)
-            .expect("open lock file")
-            .expect("first acquire succeeds");
-        // A second open file description on the same path must be
-        // refused while the first is held — this is exactly the
-        // second-`daemon run` scenario.
-        assert!(
-            try_flock_exclusive(&path)
-                .expect("open lock file")
-                .is_none(),
-            "second acquire must be refused while first is held"
-        );
-        drop(first);
-        assert!(
-            try_flock_exclusive(&path)
-                .expect("open lock file")
-                .is_some(),
-            "lock must be re-acquirable after the holder drops (kernel release)"
-        );
-    }
-}
-
-#[cfg(all(test, unix))]
 mod stop_daemon_tests {
     use super::*;
 
@@ -658,72 +628,6 @@ fn parse_ready_timeout(raw: Option<&str>) -> std::time::Duration {
 /// Path to the pidfile written by `daemon start`.
 pub(super) fn daemon_pid_path() -> std::path::PathBuf {
     sovereign_root().join("daemon.pid")
-}
-
-/// Single-instance run lock (DAEMON_RESILIENCE.md P0.5).
-///
-/// `daemon start` has always had a port-collision guard, but the
-/// `daemon run` path (systemd, launchd, the shell supervisor, a stray
-/// manual run) had NONE: a second `run` loaded every model (double
-/// RAM), unconditionally overwrote the pidfile so `stop` targeted the
-/// zombie, and — its bind being best-effort — parked forever with no
-/// listener. flock(2) is the primitive built for this: the kernel
-/// releases it on ANY exit path including SIGKILL, so there is no
-/// stale-lock cleanup logic to get wrong.
-///
-/// The returned `File` must be held for the daemon's lifetime —
-/// dropping it releases the lock. `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1`
-/// skips the guard for multi-daemon harnesses that drive `daemon run`
-/// under a shared HOME (per-HOME harnesses like mesh-soak don't need
-/// it — the lock file is per **$HOME**, not per data dir). That
-/// distinction is load-bearing: the lock lives under `sovereign_root()`,
-/// which is `$HOME`-derived and does NOT honour `SVRNMESH_DATA_DIR`, so
-/// pointing two daemons at different data dirs under one HOME still
-/// collides on this lock. Only a different HOME separates them.
-#[cfg(unix)]
-pub(super) fn acquire_run_lock() -> Result<Option<std::fs::File>, String> {
-    if std::env::var("SOVEREIGN_ALLOW_MULTIPLE_DAEMONS")
-        .ok()
-        .as_deref()
-        == Some("1")
-    {
-        return Ok(None);
-    }
-    let dir = sovereign_root();
-    let _ = std::fs::create_dir_all(&dir);
-    let path = dir.join("daemon.lock");
-    match try_flock_exclusive(&path) {
-        Err(e) => Err(format!("cannot open run lock {}: {e}", path.display())),
-        Ok(None) => Err(format!(
-            "another daemon already holds the run lock ({}) — refusing to run a second \
-             instance.\n  Check `svrn daemon status`; stop the running daemon with \
-             `svrn daemon stop`.\n  (Multi-daemon test harnesses under one HOME: set \
-             SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1.)",
-            path.display()
-        )),
-        Ok(Some(file)) => Ok(Some(file)),
-    }
-}
-
-/// The flock core, path-parameterized for unit tests. `Ok(None)` =
-/// held by another open file description (i.e. another daemon).
-#[cfg(unix)]
-fn try_flock_exclusive(path: &std::path::Path) -> std::io::Result<Option<std::fs::File>> {
-    use std::os::unix::io::AsRawFd;
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .open(path)?;
-    // SAFETY: flock on an fd we own; LOCK_NB means it never blocks.
-    if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 {
-        return Ok(None);
-    }
-    Ok(Some(file))
-}
-
-#[cfg(not(unix))]
-pub(super) fn acquire_run_lock() -> Result<Option<std::fs::File>, String> {
-    Ok(None)
 }
 
 /// Read the pidfile and return its pid if the process is still alive.

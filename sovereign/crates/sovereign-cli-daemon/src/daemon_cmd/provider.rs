@@ -29,7 +29,7 @@ pub(super) struct LlamaCppFactory {
     /// raw provider — without this, reload would drop the wrapper
     /// and `/v1/chat/completions` would silently start substituting
     /// for peer-only model names again.
-    pub(super) daemon: Arc<sovereign_mesh::EmbeddedDaemon>,
+    pub(super) daemon: Arc<sovereign_mesh::DeferredDaemon>,
 }
 
 #[async_trait]
@@ -87,13 +87,23 @@ impl ProviderFactory for LlamaCppFactory {
         // gossip would see a counter that snaps to zero on reload
         // and stays there until new traffic flows. See
         // `sovereign/docs/MESH_LOAD_AWARENESS.md`.
-        let app_state_opt = self.daemon.app_state().await;
+        // The factory is only reachable through `POST /v1/admin/reload`, which
+        // is served BY the daemon — so by the time this runs the handle is
+        // always bound. `None` here would mean a reload that arrived before
+        // the daemon existed, which the HTTP surface cannot produce.
+        let daemon = self
+            .daemon
+            .get()
+            .ok_or_else(|| "reload arrived before the daemon was commissioned".to_string())?;
+        let peer_source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> =
+            Arc::clone(&self.daemon) as Arc<_>;
+        let app_state_opt = daemon.app_state().await;
         let mesh_provider = if let Some(state) = app_state_opt.as_ref() {
             match state.in_flight_publisher() {
                 Some(publisher) => Arc::new(
-                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_in_flight_publisher(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source_and_publisher(
                         raw,
-                        Arc::clone(&self.daemon),
+                        Arc::clone(&peer_source),
                         publisher,
                     ),
                 ),
@@ -101,16 +111,20 @@ impl ProviderFactory for LlamaCppFactory {
                 // task hasn't run; reload still installs the new
                 // MIP, and the spawned task will install its
                 // publisher when it next polls.
-                None => Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                    raw,
-                    Arc::clone(&self.daemon),
-                )),
+                None => Arc::new(
+                    sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
+                        raw,
+                        Arc::clone(&peer_source),
+                    ),
+                ),
             }
         } else {
-            Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-                raw,
-                Arc::clone(&self.daemon),
-            ))
+            Arc::new(
+                sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
+                    raw,
+                    Arc::clone(&peer_source),
+                ),
+            )
         };
         // Push current slot aliases into the freshly-built mesh
         // provider so a reload preserves the deferred-resolution

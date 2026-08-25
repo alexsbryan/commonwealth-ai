@@ -4320,3 +4320,78 @@ mod tests {
         }
     }
 }
+
+/// A handle to a daemon this host will commission later in its boot, usable as
+/// a [`PeerEndpointSource`] in the meantime.
+///
+/// Production wiring is genuinely cyclic and always was: the daemon serves
+/// peers through a [`MeshInferenceProvider`], and that provider routes through
+/// the daemon. One of the two has to exist first. Before 2026-08-24 the cycle
+/// was broken by leaving the daemon's provider slot empty and punching it in
+/// afterwards, which is what made "no provider installed" and "this host has
+/// no inference role" the same observable state.
+///
+/// This breaks it in the other direction, and it is the ONLY late binding
+/// left in the daemon's assembly. Before [`bind`](Self::bind) every method
+/// answers exactly as a commissioned-but-stopped daemon does — no peers, no
+/// node id, no ledger emission — so no caller can tell the two apart, and no
+/// *capability* is deferred, only the daemon's own handle.
+pub struct DeferredDaemon {
+    daemon: std::sync::OnceLock<Arc<EmbeddedDaemon>>,
+}
+
+impl Default for DeferredDaemon {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DeferredDaemon {
+    pub fn new() -> Self {
+        Self {
+            daemon: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// Bind the commissioned daemon. Idempotent by `OnceLock`: a second call
+    /// is a no-op, so a host cannot swap the routing target mid-flight.
+    pub fn bind(&self, daemon: Arc<EmbeddedDaemon>) {
+        if self.daemon.set(daemon).is_err() {
+            tracing::warn!("DeferredDaemon already bound — ignoring rebind");
+        }
+    }
+
+    /// The commissioned daemon, or `None` before [`bind`](Self::bind).
+    /// Callers that run after boot (the admin-reload provider factory) can
+    /// treat `None` as "reload arrived before the daemon existed", which is
+    /// not reachable through the HTTP surface the daemon itself serves.
+    pub fn get(&self) -> Option<Arc<EmbeddedDaemon>> {
+        self.daemon.get().cloned()
+    }
+}
+
+#[async_trait]
+impl PeerEndpointSource for DeferredDaemon {
+    async fn peer_inference_endpoints(&self) -> Vec<PeerInferenceEndpoint> {
+        match self.daemon.get() {
+            Some(d) => EmbeddedDaemon::peer_inference_endpoints(d).await,
+            None => Vec::new(),
+        }
+    }
+
+    async fn local_node_id(&self) -> Option<commonwealth_core::ids::NodeId> {
+        EmbeddedDaemon::self_node_id(self.daemon.get()?).await
+    }
+
+    async fn ledger_emission_for(
+        &self,
+        peer_node_id: &commonwealth_core::ids::NodeId,
+        model_id: &str,
+        peer_name: &str,
+    ) -> Option<LedgerEmission> {
+        self.daemon
+            .get()?
+            .ledger_emission_for(peer_node_id, model_id, peer_name)
+            .await
+    }
+}

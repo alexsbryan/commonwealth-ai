@@ -1048,8 +1048,11 @@ mod tests {
     /// _tmp)` — hold the tempdir so it isn't cleaned up mid-test.
     async fn spawn_test_router() -> (Arc<EmbeddedDaemon>, String, TempDir) {
         let tmp = tempfile::tempdir().unwrap();
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(hermetic_cfg()).await;
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            hermetic_cfg(),
+            crate::daemon_services::DaemonServices::MeshAdmin,
+        );
         let app = mesh_router(Arc::clone(&daemon));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
@@ -1202,11 +1205,14 @@ mod tests {
     #[tokio::test]
     async fn leave_to_solo_rebinds_same_port_repeatedly() {
         let tmp = tempfile::tempdir().unwrap();
-        let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf());
         let mut cfg = hermetic_cfg();
         cfg.daemon.client_port = 39411;
         cfg.daemon.internal_port = 39412;
-        daemon.set_setup_config(cfg).await;
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            cfg,
+            crate::daemon_services::DaemonServices::MeshAdmin,
+        );
 
         daemon.create_mesh("test mesh", "alice").await.unwrap();
         for i in 0..5 {

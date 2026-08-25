@@ -580,18 +580,31 @@ shadows = "models.primary_pool.copies"
 purpose = "Distributed-inference primary's sibling set override."
 
 [[flag]]
-name = "SOVEREIGN_USE_SUPERVISOR"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-purpose = "Route distributed-inference workers through the supervisor."
-
-[[flag]]
 name = "SOVEREIGN_WORKER_RUNNER"
 cluster = "mesh"
 default = "unset"
 status = "shipped"
 purpose = "Distributed-inference worker runner selector."
+
+# ── daemon-lifecycle ────────────────────────────────────────────────
+#
+# Which PROCESS becomes the daemon. These select a launch topology, not a
+# tunable, so they are the first candidates for `quality/TOPOLOGY.md` Phase 10
+# (an env read that selects behaviour becomes a profile variant, §6.2).
+
+[[flag]]
+name = "SOVEREIGN_USE_SUPERVISOR"
+cluster = "daemon-lifecycle"
+default = "on"
+status = "guard"
+purpose = "Desktop kill-switch for supervised-child mode: `0`/`false` drops the daemon CHILD process and runs an in-process EmbeddedDaemon instead. Unset (and the redundant legacy `1`) means supervised child — the default since DAEMON_RESILIENCE P0.1, the W1 flip. It has nothing to do with distributed-inference workers, which is what this entry claimed until 2026-08-24."
+
+[[flag]]
+name = "SOVEREIGN_FORCE_LOCAL"
+cluster = "daemon-lifecycle"
+default = "off"
+status = "guard"
+purpose = "`1` means THIS process runs the weights — the real-mode desktop harnesses and the run-local-while-a-daemon-is-up case. Implies the in-process EmbeddedDaemon, since a child daemon would contradict it (supervisor_setup::is_enabled)."
 
 # ── inference ───────────────────────────────────────────────────────
 

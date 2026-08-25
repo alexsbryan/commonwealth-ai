@@ -18,16 +18,19 @@
 /// `crate::oicp::*` exactly as they did inside `sovereign-core`.
 pub use oicp_types as oicp;
 
+pub mod data_roots;
 pub mod error;
 pub mod frame;
 pub mod health;
 pub mod intent_policy;
+pub mod launch;
 pub mod mcp_config;
 pub mod memory_config;
 pub mod observer;
 pub mod rebrand;
 pub mod recipe;
 pub mod registry;
+pub mod run_lock;
 pub mod setup_config;
 pub mod skills;
 pub mod slot_policy;

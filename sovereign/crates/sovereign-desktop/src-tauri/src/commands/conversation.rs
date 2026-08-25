@@ -63,7 +63,9 @@ pub async fn list_conversations(
     offset: Option<usize>,
     surface_skill_id: Option<String>,
 ) -> Result<Vec<ConversationEntry>, String> {
-    let _guard = require_runtime!(state);
+    // Readiness gates on the DATABASE, not the chat Runtime: listing
+    // conversations is not a chat operation (Phase 0).
+    let _ = require_store!(state);
     // Surface-scoped listing: each surface only sees its own
     // conversations. The default-chat sidebar passes `None` and
     // gets back only conversations with `skill_id IS NULL`; the
@@ -106,7 +108,7 @@ pub async fn notebook_conversations(
     limit: Option<usize>,
     offset: Option<usize>,
 ) -> Result<Vec<ConversationEntry>, String> {
-    let _guard = require_runtime!(state);
+    let _ = require_store!(state);
     let convos = if let Some(sqlite) = state.sqlite_store.read().await.as_ref() {
         sqlite
             .list_conversations_for_corpus(&corpus_id, limit.unwrap_or(20), offset.unwrap_or(0))
@@ -132,11 +134,9 @@ pub async fn get_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<ConversationDetail, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+    let store = require_store!(state);
 
-    let convo = runtime
-        .store
+    let convo = store
         .get_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())?;
@@ -169,11 +169,9 @@ pub async fn delete_conversation(
     state: State<'_, Arc<AppState>>,
     conversation_id: String,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+    let store = require_store!(state);
 
-    runtime
-        .store
+    store
         .delete_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())
@@ -197,11 +195,9 @@ pub async fn rename_conversation(
         trimmed.to_string()
     };
 
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+    let store = require_store!(state);
 
-    runtime
-        .store
+    store
         .update_conversation_title(&conversation_id, &title)
         .await
         .map_err(|e| e.to_string())?;
@@ -225,11 +221,9 @@ pub async fn set_conversation_enabled_corpora(
     conversation_id: String,
     enabled_corpora: Option<Vec<String>>,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+    let store = require_store!(state);
 
-    runtime
-        .store
+    store
         .set_conversation_enabled_corpora(&conversation_id, enabled_corpora)
         .await
         .map_err(|e| e.to_string())?;
@@ -243,11 +237,9 @@ pub async fn search_messages(
     state: State<'_, Arc<AppState>>,
     query: String,
 ) -> Result<Vec<SearchResult>, String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
+    let store = require_store!(state);
 
-    let messages = runtime
-        .store
+    let messages = store
         .search_messages(&query)
         .await
         .map_err(|e| e.to_string())?;
@@ -656,10 +648,8 @@ pub async fn forget_memory(
     state: State<'_, Arc<AppState>>,
     memory_id: String,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-    runtime
-        .store
+    let store = require_store!(state);
+    store
         .delete_memory(&memory_id)
         .await
         .map_err(|e| e.to_string())
@@ -674,20 +664,14 @@ pub async fn weaken_memory(
     state: State<'_, Arc<AppState>>,
     memory_id: String,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-    let all = runtime
-        .store
-        .get_all_memories()
-        .await
-        .map_err(|e| e.to_string())?;
+    let store = require_store!(state);
+    let all = store.get_all_memories().await.map_err(|e| e.to_string())?;
     let current = all
         .iter()
         .find(|m| m.id == memory_id)
         .ok_or_else(|| format!("memory {memory_id} not found"))?;
     let new_conf = (current.confidence * 0.5).max(0.0);
-    runtime
-        .store
+    store
         .update_memory_confidence(&memory_id, new_conf)
         .await
         .map_err(|e| e.to_string())
@@ -1328,10 +1312,8 @@ pub async fn export_answer(
     message_id: String,
     dest_path: String,
 ) -> Result<(), String> {
-    let guard = require_runtime!(state);
-    let runtime = guard.as_ref().unwrap();
-    let convo = runtime
-        .store
+    let store = require_store!(state);
+    let convo = store
         .get_conversation(&conversation_id)
         .await
         .map_err(|e| e.to_string())?;

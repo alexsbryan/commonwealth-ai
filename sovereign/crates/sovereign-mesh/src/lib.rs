@@ -19,6 +19,7 @@ pub mod capabilities;
 pub mod commit_harvest;
 pub mod corpus_watch_http;
 pub mod daemon;
+pub mod daemon_services;
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
 /// routing decision (full candidate set, every scorer input stamped
@@ -119,6 +120,11 @@ pub mod pinned_transport;
 pub mod pinned_worker_source;
 
 pub use daemon::EmbeddedDaemon;
+pub use peer_inference::DeferredDaemon;
+pub use daemon_services::{
+    DaemonServices, DesktopServices, EmbedAdvertisement, HeadlessRails, HeadlessServices, McpMount,
+    McpSurface, ServingCapability, ServingCore, ServingProfile,
+};
 pub use deep_link::{parse_deep_link, DeepLink};
 pub use state::MeshState;
 pub use types::*;

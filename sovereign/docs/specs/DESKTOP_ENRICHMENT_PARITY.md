@@ -68,8 +68,11 @@ load-bearing paths fired locally (`atom_enum_overview count=16`,
 - **Phase 2 — VERIFIED (no code needed).** `/v1/knowledge/landscape_digest` IS
   mounted: `sovereign-cli-daemon/.../daemon_cmd/bootstrap.rs` builds
   `landscape_digest_http::landscape_digest_router(KnowledgeViewManager)` and
-  calls `install_knowledge_view_http_router`, which `daemon.rs:1960` merges into
-  the client router. Attach-mode desktop already reaches it.
+  names it as `DaemonServices::Headless::knowledge_view_http`, which
+  `start_daemon` merges into the client router. Attach-mode desktop already
+  reaches it. *(Until 2026-08-24 this was an `install_knowledge_view_http_router`
+  call, which meant the route existed only if that call ran; it is now a
+  required field of the headless variant.)*
 - **Phase 3 — DONE.** The renderer lives in **corpus-engine**
   (`FieldSkeleton::render_landscape(heading, budget)`), NOT sovereign-tools:
   `sovereign-core` only dev-depends on `sovereign-tools`, so the production

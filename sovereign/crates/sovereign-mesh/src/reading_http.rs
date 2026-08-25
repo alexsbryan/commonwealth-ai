@@ -295,7 +295,7 @@ async fn get_chunk(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -326,7 +326,7 @@ async fn get_neighbors(
         return r;
     }
     let radius = radius.min(5);
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -385,7 +385,7 @@ async fn get_atom_card(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -421,7 +421,7 @@ async fn get_atom_elsewhere(
     if let Err(r) = enforce_localhost(&peer) {
         return r;
     }
-    let engine = match daemon.corpus_engine().await {
+    let engine = match daemon.corpus_engine() {
         Some(e) => e,
         None => return service_unavailable("corpus engine not initialised"),
     };
@@ -714,7 +714,7 @@ pub(crate) async fn maybe_resolve_conversation_meta(
     }
     let conversation_id = row.source_doc_id.clone()?;
     let segments = parse_conversation_segments(&row.content);
-    let store = daemon.state_store().await;
+    let store = daemon.state_store();
     let (title, updated_at) = match store {
         Some(s) => match s.get_conversation(&conversation_id).await {
             Ok(c) => (c.title.clone(), Some(c.updated_at)),

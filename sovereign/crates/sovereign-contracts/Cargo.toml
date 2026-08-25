@@ -35,6 +35,13 @@ dirs = "5"
 # naming a type owned by the layer above it; noun-convergence rung 2.)
 regex = { workspace = true }
 
+# `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
+# third-party crate, so it adds no workspace layer edge — and unix-gated,
+# because the lock has no enforcement to offer anywhere else
+# (`RunLock::is_enforced`).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [dev-dependencies]
 tempfile = { workspace = true }
 

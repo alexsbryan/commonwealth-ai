@@ -26,7 +26,13 @@ pub async fn search_web(
     query: String,
     conversation_id: String,
 ) -> Result<MessageResponse, DesktopError> {
+    // The Runtime is held for one reason only: `tools`. `AppState` carries
+    // no tool registry of its own, so the search-tool lookup below cannot be
+    // repointed the way the two message saves are (daemon-convergence
+    // Phase 0). Resolve it first — it is strictly the later of the two to
+    // become available, so its not-ready message is the one the user sees.
     let runtime = state.runtime().await?;
+    let store = state.store().await?;
 
     // Save user message.
     let user_msg = sovereign_core::types::Message {
@@ -38,8 +44,7 @@ pub async fn search_web(
         metadata: None,
         version: now_epoch(),
     };
-    runtime
-        .store
+    store
         .save_message(&user_msg)
         .await
         .map_err(|e| e.to_string())?;
@@ -89,8 +94,7 @@ pub async fn search_web(
         metadata: None,
         version: now_epoch(),
     };
-    runtime
-        .store
+    store
         .save_message(&assistant_msg)
         .await
         .map_err(|e| e.to_string())?;

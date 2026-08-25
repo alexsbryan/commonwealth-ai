@@ -141,7 +141,7 @@ fn resolve_daemon_child() -> Option<SpawnSpec> {
     let exe = std::env::current_exe().ok()?;
     Some(SpawnSpec {
         binary: exe,
-        args: vec!["--daemon-child".into()],
+        args: vec![sovereign_contracts::launch::DAEMON_CHILD_FLAG.into()],
     })
 }
 
@@ -444,7 +444,7 @@ mod tests {
         daemon_supervisor_config(
             SpawnSpec {
                 binary: PathBuf::from("/nonexistent/sovereign-desktop"),
-                args: vec!["--daemon-child".into()],
+                args: vec![sovereign_contracts::launch::DAEMON_CHILD_FLAG.into()],
             },
             9741,
             PathBuf::from("/nonexistent/crash-logs"),

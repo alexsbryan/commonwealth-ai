@@ -57,12 +57,12 @@ pub async fn run(args: &[String]) -> i32 {
             };
             (rebrand::data_dir(), reason)
         }
-        // Platform-native dirs for the embedded mesh / GUI settings. These
-        // are distinct from `data` on Linux and Windows.
-        "mesh-data" => (
-            rebrand::mesh_data_dir(),
-            "platform data dir + brand".to_string(),
-        ),
+        // The platform-native CONFIG dir — where a GUI settings file
+        // (`desktop.toml`) lives. On macOS this resolves to the same directory
+        // as the old `mesh-data`, which is exactly why the two were confused;
+        // on Linux and Windows they differ (`~/.config` vs `~/.local/share`).
+        // `mesh-data` was removed 2026-08-24: it named a second per-user data
+        // root, and there is only one.
         "config" => (
             rebrand::mesh_config_dir(),
             "platform config dir + brand".to_string(),
@@ -70,7 +70,7 @@ pub async fn run(args: &[String]) -> i32 {
         other => {
             eprintln!(
                 "svrn path: unknown path `{other}` \
-                 (expected one of: root, data, mesh-data, config)"
+                 (expected one of: root, data, config)"
             );
             return 2;
         }

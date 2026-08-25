@@ -187,7 +187,7 @@ pub async fn cmd_extract(args: &[String]) -> i32 {
     // Probe daemon — fail fast if it's down.
     if !probe_daemon(&cfg.base_url).await {
         eprintln!(
-            "error: daemon is not responding at {} — start it with `commonwealth daemon start` or equivalent",
+            "error: daemon is not responding at {} — start it with `svrn daemon start` or equivalent",
             cfg.base_url
         );
         return 2;

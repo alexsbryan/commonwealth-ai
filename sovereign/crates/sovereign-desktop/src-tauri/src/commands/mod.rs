@@ -300,6 +300,25 @@ macro_rules! require_runtime {
     }};
 }
 
+/// The `require_runtime!` shape for commands that need the DATABASE, not
+/// the chat Runtime — conversation list/rename/delete, memory tombstones,
+/// message search, answer export. Yields an owned `Arc<dyn StateStore>`
+/// (the same handle `Runtime::new` is given, see `AppState::store`) and
+/// drops the read guard, so no lock is held across the caller's awaits.
+///
+/// Same not-ready string as `require_runtime!` on purpose: the repoint
+/// (daemon-convergence Phase 0) must not change what the frontend renders
+/// while bootstrap is in flight.
+macro_rules! require_store {
+    ($state:expr) => {{
+        let guard = $state.store.read().await;
+        match guard.as_ref() {
+            Some(store) => std::sync::Arc::clone(store),
+            None => return Err("Backend is still loading. Please wait.".to_string()),
+        }
+    }};
+}
+
 // ─── Concern submodules (PR5 split of the former 6557-line commands.rs) ───
 mod budget;
 mod chat;

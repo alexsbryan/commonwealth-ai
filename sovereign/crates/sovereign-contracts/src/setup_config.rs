@@ -325,7 +325,7 @@ pub struct MemorySection {
 /// (Qwen3-Embedding vs Darwin/Qwen-instruct); the primary can't
 /// substitute, so embed-less configs raise an invariant exception
 /// at the first embed call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModelsSection {
     /// The "primary" model — what the UX calls the Main responder.
     /// Internally this is the `thoughtful` profile slot.
@@ -1134,6 +1134,33 @@ fn default_data_dir() -> PathBuf {
 }
 
 impl SetupConfig {
+    /// A config for a process that has **no `config.toml`** — no model slots
+    /// configured, every other section at its documented default (`:9741` /
+    /// `:9742`, loopback client bind, `0.0.0.0` internal bind, no bearer
+    /// token). This is the real state of `svrn mesh create` on a machine that
+    /// has not run `svrn setup`, and of any test that does not care about
+    /// models.
+    ///
+    /// Deliberately **not** an `impl Default`: `load().unwrap_or_default()`
+    /// would silently substitute this for a `config.toml` that exists but
+    /// would not parse, which is the substitution ARCH §18.3 forbids. A caller
+    /// has to type the name, and a caller reaching for it after a failed load
+    /// must report the failure first.
+    pub fn unconfigured() -> Self {
+        Self {
+            models: ModelsSection::default(),
+            daemon: DaemonSection::default(),
+            data: DataSection::default(),
+            watched_folders: WatchedFoldersSection::default(),
+            memory: MemorySection::default(),
+            iroh: IrohSection::default(),
+            shared_model: SharedModelSection::default(),
+            discovery: DiscoverySection::default(),
+            compute: ComputeSection::default(),
+            mcp_servers: Vec::new(),
+        }
+    }
+
     /// The canonical config path: `~/.svrnmesh/config.toml`. Co-located
     /// with `~/.svrnmesh/`'s other user-scoped state (corpora, indexes,
     /// notes db, mesh.json) so operators only have one user directory

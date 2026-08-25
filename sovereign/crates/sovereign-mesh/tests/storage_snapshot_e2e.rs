@@ -32,6 +32,9 @@ use commonwealth_core::contributions::LedgerEventKind;
 use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_core::setup_config::SetupConfig;
+use sovereign_mesh::DaemonServices;
+mod common;
 
 const EMBED_DIM: usize = 8;
 
@@ -102,8 +105,11 @@ async fn first_tick_emits_only_mesh_shared_corpora_to_ledger() {
     // Daemon: data_dir holds mesh.json + node_id; corpus engine
     // injected so `start_daemon` spawns the snapshot loop with the
     // mesh_sharing filter in place.
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf());
-    daemon.set_corpus_engine(Arc::clone(&engine)).await;
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        common::desktop_services_with_engine(Arc::clone(&engine)),
+    );
     daemon
         .create_mesh("storage-snapshot test", "node")
         .await
@@ -169,7 +175,7 @@ async fn snapshot_emits_nothing_when_no_corpus_engine_attached() {
     // on the engine field would silently produce empty snapshots
     // every hour.
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf());
+    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
     // Intentionally NO `set_corpus_engine` call.
     daemon
         .create_mesh("no-engine test", "node")

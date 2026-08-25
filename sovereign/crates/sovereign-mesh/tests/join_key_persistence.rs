@@ -31,6 +31,8 @@ use std::time::Duration;
 
 use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_mesh::persist;
+use sovereign_core::setup_config::SetupConfig;
+use sovereign_mesh::DaemonServices;
 
 #[tokio::test]
 async fn join_key_persists_across_restart_and_current_invite_returns_same_key() {
@@ -39,7 +41,7 @@ async fn join_key_persists_across_restart_and_current_invite_returns_same_key() 
 
     // Round 1: create the mesh, snapshot the invite (key + link).
     let (key_before, link_before) = {
-        let daemon = EmbeddedDaemon::new(data_dir.clone());
+        let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
         let create = daemon
             .create_mesh("join-key restart test", "founder")
             .await
@@ -77,7 +79,7 @@ async fn join_key_persists_across_restart_and_current_invite_returns_same_key() 
     // Round 2: fresh daemon, same data_dir → resume → check invite
     // is back. The resume path explicitly calls `persist::load_join_key`
     // to restore the in-memory cache.
-    let daemon = EmbeddedDaemon::new(data_dir);
+    let daemon = EmbeddedDaemon::new(data_dir, SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
     let resumed = daemon
         .try_resume()
         .await
@@ -122,7 +124,7 @@ async fn leave_clears_join_key_secret_so_next_mesh_does_not_inherit_stale_invite
     let tmp = tempfile::tempdir().unwrap();
     let data_dir = tmp.path().to_path_buf();
 
-    let daemon = EmbeddedDaemon::new(data_dir.clone());
+    let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
     daemon
         .create_mesh("pre-leave mesh", "node-A")
         .await
@@ -167,7 +169,7 @@ async fn resume_with_missing_join_key_secret_is_non_fatal() {
     // join_key.secret file. Simulates a daemon restored from a
     // pre-feature backup.
     {
-        let daemon = EmbeddedDaemon::new(data_dir.clone());
+        let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
         daemon
             .create_mesh("pre-feature mesh", "founder")
             .await
@@ -180,7 +182,7 @@ async fn resume_with_missing_join_key_secret_is_non_fatal() {
         .expect("test setup: remove join_key.secret to simulate pre-feature state");
 
     // Resume should succeed, current_invite should return None.
-    let daemon = EmbeddedDaemon::new(data_dir);
+    let daemon = EmbeddedDaemon::new(data_dir, SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
     let resumed = daemon.try_resume().await.expect(
         "try_resume MUST succeed even when join_key.secret is missing — \
                  panicking here would brick every pre-feature backup",

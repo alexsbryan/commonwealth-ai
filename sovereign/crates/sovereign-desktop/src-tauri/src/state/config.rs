@@ -299,7 +299,14 @@ pub struct SearchBackendConfig {
 }
 
 fn default_data_dir() -> PathBuf {
-    sovereign_contracts::rebrand::mesh_data_dir()
+    // THE SSOT accessor (`rebrand::data_dir`), whose own doc says "read sites
+    // must not re-derive it". This returned `mesh_data_dir()` (the platform
+    // data dir) until 2026-08-24, so a FRESH install put its data in
+    // `~/Library/Application Support/svrnmesh` while the daemon used
+    // `~/.svrnmesh` — which is how that directory's stale 15G was created.
+    // `desktop.toml` is unaffected: it is a settings file and still resolves
+    // through `mesh_config_dir()`, which is deliberately platform-native.
+    sovereign_contracts::rebrand::data_dir()
 }
 
 fn default_skills_dir() -> PathBuf {
@@ -308,7 +315,7 @@ fn default_skills_dir() -> PathBuf {
     // directory is now `modes/` (only inner-work + recipe-author),
     // but the user-overlay slot is unchanged so existing custom
     // skill files still load.
-    sovereign_contracts::rebrand::mesh_data_dir().join("skills")
+    sovereign_contracts::rebrand::data_dir().join("skills")
 }
 
 fn default_enabled_tools() -> Vec<String> {

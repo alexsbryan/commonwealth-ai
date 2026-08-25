@@ -19,6 +19,7 @@ use sovereign_core::setup_config::{
     DaemonSection, DataSection, IrohSection, ModelsSection, SetupConfig,
 };
 use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_mesh::DaemonServices;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {
@@ -58,8 +59,11 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
 #[tokio::test]
 async fn unexposed_solo_mesh_binds_loopback_with_no_token() {
     let dir = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(dir.path().to_path_buf());
-    daemon.set_setup_config(cfg_with_ports(38751, 38752)).await;
+    let daemon = EmbeddedDaemon::new(
+        dir.path().to_path_buf(),
+        cfg_with_ports(38751, 38752),
+        DaemonServices::MeshAdmin,
+    );
     // NO expose_client_api() — the silent solo-mesh path.
     daemon
         .create_mesh("solo", "node")
@@ -88,8 +92,11 @@ async fn unexposed_solo_mesh_binds_loopback_with_no_token() {
 #[tokio::test]
 async fn exposed_mesh_binds_wide_with_token_and_persists_marker() {
     let dir = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(dir.path().to_path_buf());
-    daemon.set_setup_config(cfg_with_ports(38851, 38852)).await;
+    let daemon = EmbeddedDaemon::new(
+        dir.path().to_path_buf(),
+        cfg_with_ports(38851, 38852),
+        DaemonServices::MeshAdmin,
+    );
     // Explicit share: expose BEFORE create so start_daemon binds wide
     // on first start (no restart).
     daemon.expose_client_api();

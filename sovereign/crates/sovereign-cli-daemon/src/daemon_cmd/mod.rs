@@ -10,8 +10,11 @@
 //! 2. Build an `EmbeddedLlamaCpp` inference provider from the three
 //!    GGUF slots (primary / fast / embed).
 //! 3. Build a `ToolRegistry` + `NoteStore` so `/mcp/*` has tools.
-//! 4. Build `EmbeddedDaemon` with `.set_inference_provider()` and
-//!    `.set_mcp()` so `:9741` serves both `/v1/*` and `/mcp/*`.
+//! 4. Build every service the daemon needs — engine, mesh-routed provider,
+//!    tool mount, project / knowledge-view / solve routers, shared stores —
+//!    then commission `EmbeddedDaemon` with all of them in ONE
+//!    `DaemonServices::Headless` value, so `:9741` serves `/v1/*`, `/mcp/*`
+//!    and the rest with no post-construction wiring step to forget.
 //! 5. `try_resume()` the persisted mesh; on first run where no
 //!    `mesh.json` exists, create a silent "solo" mesh so the listener
 //!    comes up. `svrn mesh rotate` (future) can later print a
@@ -250,18 +253,6 @@ async fn run_daemon(args: &[String]) -> i32 {
         return 0;
     }
 
-    // ── Single-instance guard (DAEMON_RESILIENCE.md P0.5) ─────────
-    // Taken before anything heavy: a refused second instance must not
-    // have already loaded models. Held for the process lifetime; the
-    // kernel releases it on any exit, including SIGKILL.
-    let _run_lock = match lifecycle::acquire_run_lock() {
-        Ok(lock) => lock,
-        Err(msg) => {
-            eprintln!("error: {msg}");
-            return 1;
-        }
-    };
-
     // ── Log rotation ──────────────────────────────────────────────
     //
     // launchd holds the FDs on `daemon.log` / `daemon.err` (set via
@@ -332,6 +323,56 @@ async fn run_daemon(args: &[String]) -> i32 {
                 return 1;
             }
         },
+    };
+
+    // ── Is our data root the one that holds this machine's data? ──
+    //
+    // Four directories have been a data root across releases, and
+    // `data_dir()` always returns a plausible one — which is what made a
+    // wrong answer invisible (note `b2aa9fb8`). Classify before claiming:
+    // starting fresh on top of live data somewhere else is a silent
+    // substitution, and the daemon is the surface where it is worst (a
+    // service that boots into an empty universe and reports healthy).
+    match sovereign_contracts::data_roots::classify(&config.data.dir) {
+        v if v.is_refusal() => {
+            eprintln!("error: data root {}: {v}", config.data.dir.display());
+            return 1;
+        }
+        sovereign_contracts::data_roots::RootConflict::Clear => {}
+        v => tracing::warn!(
+            target: "daemon",
+            root = %config.data.dir.display(),
+            "data roots: {v}"
+        ),
+    }
+
+    // ── Single-instance guard (DAEMON_RESILIENCE.md P0.5) ─────────
+    //
+    // Taken as early as the thing it protects is KNOWN — which is here,
+    // right after the config parse, not before it. The lock is keyed on the
+    // DATA ROOT (`RunLock`), and until 2026-08-24 it was keyed on `$HOME`
+    // and therefore had to be taken before the config was read; that key
+    // refused three soak nodes with three data dirs under one HOME and
+    // admitted two processes onto one data dir from two HOMEs. A TOML parse
+    // is the only thing that now happens first, and nothing heavy — no
+    // model, no listener, no store — has been touched.
+    //
+    // Held for the process lifetime: the kernel releases it on any exit,
+    // including SIGKILL, so there is no stale-lock cleanup path.
+    let _run_lock = match sovereign_contracts::run_lock::RunLock::acquire(&config.data.dir) {
+        Ok(lock) => {
+            tracing::debug!(
+                target: "daemon",
+                lock = %lock.path().display(),
+                enforced = lock.is_enforced(),
+                "run lock: claimed the data root"
+            );
+            lock
+        }
+        Err(e) => {
+            eprintln!("error: {e}");
+            return 1;
+        }
     };
 
     // Shared-model cluster role → RPC env contract. The desktop fleet
@@ -713,12 +754,107 @@ async fn run_daemon(args: &[String]) -> i32 {
     )
     .await;
 
-    let (daemon, mesh_provider) =
-        bootstrap::build_mesh_providers(&data_dir, Arc::clone(&provider)).await;
+    // ── Assemble the daemon's services, THEN commission the daemon ────
+    //
+    // Order is load-bearing and is the point of daemon-convergence Phase 2:
+    // every dependency is built first and handed over in one total value, so
+    // there is no window in which a request can reach a half-wired daemon and
+    // no slot this bootstrap can forget. `DeferredDaemon` breaks the one
+    // genuine cycle — the daemon serves peers through a provider that routes
+    // to peers — and carries no capability of its own.
+    let (deferred_daemon, mesh_provider) =
+        bootstrap::build_mesh_provider(Arc::clone(&provider)).await;
     let routed_provider: Arc<dyn InferenceProvider> = mesh_provider.clone();
-    daemon
-        .set_inference_provider(Arc::clone(&routed_provider))
+
+    // Notes-rail convergence recorder (order commons-fluency fix 9):
+    // ONE shared instance — named on the daemon's `HeadlessRails` so `/status`
+    // reads it, and handed to BOTH the outbound publish sink and the inbound
+    // ingest poller so the writers' stamps are what `/status` reports. A second
+    // copy would let the status section disagree with the sink — never.
+    let convergence_recorder = Arc::new(commonwealth_api::state::ConvergenceRecord::new());
+
+    bootstrap::wire_note_propagation_sink(
+        Arc::clone(&notes_store),
+        Arc::clone(&work_atlas_mesh_store),
+        self_node_id,
+        Arc::clone(&convergence_recorder),
+    );
+
+    bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
+
+    bootstrap::spawn_notes_ingest_poller(
+        Arc::clone(&work_atlas_mesh_store),
+        Arc::clone(&notes_store),
+        self_node_id,
+        Arc::clone(&convergence_recorder),
+    );
+
+    bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
+
+    bootstrap::spawn_tier2_enrichment_resume(&data_dir);
+
+    let advertise_embed =
+        bootstrap::advertise_embed_model(Arc::clone(&provider), &config, resolved_embed_family)
+            .await;
+
+    // Keep the reindexer alive for the lifetime of the daemon.
+    // The variable binding is load-bearing — dropping the Arc
+    // stops every supervised watcher.
+    let (_reindexer_handle, project_http, knowledge_view_http) =
+        bootstrap::start_freshness_pipeline(
+            &data_dir,
+            Arc::clone(&notes_store),
+            Arc::clone(&engine),
+            Arc::clone(&provider),
+            Arc::clone(&merged_scip_handle),
+        )
         .await;
+
+    // The watched-folder singleton must be installed before the daemon starts
+    // serving, but the ROUTE is now part of the daemon's declared capability
+    // rather than something this call installs — so a failed subsystem yields
+    // handlers that answer 503 with a named reason, not routes that 404.
+    let _watched_subsystem =
+        bootstrap::setup_watched_folders(Arc::clone(&engine), &data_dir, &config, folder_tiered_deps)
+            .await;
+
+    // ── Commission ────────────────────────────────────────────────────
+    let daemon = sovereign_mesh::EmbeddedDaemon::new(
+        data_dir.clone(),
+        config.clone(),
+        sovereign_mesh::DaemonServices::headless(sovereign_mesh::HeadlessServices {
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    // The engine the auto_ingest loop and the
+                    // /internal/corpus/* surface both read.
+                    corpus_engine: Arc::clone(&engine),
+                    inference_provider: Arc::clone(&routed_provider),
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),
+                    project_http,
+                    corpus_watch_http: sovereign_mesh::corpus_watch_http::corpus_watch_router(),
+                },
+                advertise_embed,
+            },
+            rails: sovereign_mesh::HeadlessRails {
+                // Rebuilds the provider when `models.*` changes on disk. Holds
+                // the same deferred handle, bound below.
+                provider_factory: Arc::new(provider::LlamaCppFactory {
+                    daemon: Arc::clone(&deferred_daemon),
+                }),
+                // The work atlas writes into THIS store, so its entries reach
+                // gossip's `all_entries_for_gossip` enumeration. Without it the
+                // daemon builds a private in-memory store and atlas data is
+                // invisible across the mesh.
+                mesh_store: Arc::clone(&work_atlas_mesh_store),
+                convergence_recorder: Arc::clone(&convergence_recorder),
+            },
+            knowledge_view_http,
+            solve_http: solve_http::solve_router(Arc::clone(&solve_jobs)),
+        }),
+    );
+    deferred_daemon.bind(Arc::clone(&daemon));
 
     // Host side of distributed-inference auto-warm. When this node distributes a
     // large primary across mesh workers, the embedded engine calls this seam to
@@ -745,97 +881,6 @@ async fn run_daemon(args: &[String]) -> i32 {
     );
 
     bootstrap::spawn_slot_alias_push(Arc::clone(&daemon), mesh_provider);
-
-    // Hand the engine to the mesh daemon so the auto_ingest loop and
-    // /internal/corpus/* HTTP surface can both see in-progress
-    // wikipedia/etc. ingests. See engine block above for the
-    // diagnostic story.
-    daemon.set_corpus_engine(Arc::clone(&engine)).await;
-
-    // Wire the work-atlas's shared `MeshStore` into the daemon BEFORE
-    // `try_resume`. Once the daemon transitions to Running its
-    // `AppState.mesh_store` is this exact `Arc<MeshStore>`, so:
-    //   - the work-atlas tools (`declare_scope`, etc.) write into
-    //     the store gossip's `all_entries_for_gossip` enumerates;
-    //   - peer broadcasts arriving at `/internal/app/state` merge
-    //     into the same instance the atlas reads from.
-    // Without this, the daemon would have constructed its own
-    // independent in-memory store and atlas data would be invisible
-    // across the mesh.
-    daemon
-        .set_mesh_store(Arc::clone(&work_atlas_mesh_store))
-        .await;
-
-    // Notes-rail convergence recorder (order commons-fluency fix 9):
-    // ONE shared instance — installed into AppState (via the daemon's
-    // set_convergence_recorder, picked up at AppState construction in
-    // start_daemon) so `/status` reads it, and handed to BOTH the
-    // outbound publish sink and the inbound ingest poller so the
-    // writers' stamps are what `/status` reports. A second copy would
-    // let the status section disagree with the sink — never.
-    let convergence_recorder = Arc::new(commonwealth_api::state::ConvergenceRecord::new());
-    daemon
-        .set_convergence_recorder(Arc::clone(&convergence_recorder))
-        .await;
-
-    bootstrap::wire_note_propagation_sink(
-        Arc::clone(&notes_store),
-        Arc::clone(&work_atlas_mesh_store),
-        self_node_id,
-        Arc::clone(&convergence_recorder),
-    );
-
-    bootstrap::spawn_notes_tier_backfill(Arc::clone(&notes_store));
-
-    bootstrap::spawn_notes_ingest_poller(
-        Arc::clone(&work_atlas_mesh_store),
-        Arc::clone(&notes_store),
-        self_node_id,
-        Arc::clone(&convergence_recorder),
-    );
-
-    bootstrap::spawn_lazy_stamp_fingerprints(Arc::clone(&engine));
-
-    bootstrap::spawn_tier2_enrichment_resume(&data_dir);
-
-    bootstrap::advertise_embed_model(
-        Arc::clone(&provider),
-        &config,
-        resolved_embed_family,
-        Arc::clone(&daemon),
-    )
-    .await;
-
-    bootstrap::install_http_and_mcp(
-        Arc::clone(&daemon),
-        tools,
-        Arc::clone(&notes_store),
-        &config,
-        Arc::clone(&solve_jobs),
-    )
-    .await;
-
-    // Keep the reindexer alive for the lifetime of the daemon.
-    // The variable binding is load-bearing — dropping the Arc
-    // stops every supervised watcher.
-    let _reindexer_handle = bootstrap::start_freshness_pipeline(
-        &data_dir,
-        Arc::clone(&notes_store),
-        Arc::clone(&daemon),
-        Arc::clone(&engine),
-        Arc::clone(&provider),
-        Arc::clone(&merged_scip_handle),
-    )
-    .await;
-
-    let _watched_subsystem = bootstrap::setup_watched_folders(
-        Arc::clone(&engine),
-        &data_dir,
-        &config,
-        folder_tiered_deps,
-        Arc::clone(&daemon),
-    )
-    .await;
 
     // ── Resume or bootstrap a solo mesh ───────────────────────────
     match daemon.try_resume().await {

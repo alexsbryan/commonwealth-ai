@@ -1797,12 +1797,15 @@ defect this programme exists to eliminate. Found and fixed:
    reason: `founder_degraded` is only in the `--json` branch. The same one-flag
    change revives it — which matters because that SLI is the *only* assertion
    `--reachability-chaos` makes.
-3. **Multi-node soaks were secretly single-node.** The daemon takes a per-HOME
-   run lock (`lifecycle.rs:569-591`) and `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS`
-   appeared nowhere in `scripts/` or `.github/`, so node0 took the lock and
-   every other node exited immediately. The surviving one-node mesh still passed
-   the whole invariant pack, because convergence and pairwise liveness are
-   vacuous over a single reachable node. A failed bring-up is now a red run.
+3. **Multi-node soaks were secretly single-node.** The daemon took a per-HOME
+   run lock and `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS` appeared nowhere in
+   `scripts/` or `.github/`, so node0 took the lock and every other node exited
+   immediately. The surviving one-node mesh still passed the whole invariant
+   pack, because convergence and pairwise liveness are vacuous over a single
+   reachable node. A failed bring-up is now a red run. Fixed at the root
+   2026-08-24: the lock is keyed on the DATA ROOT
+   (`sovereign_contracts::run_lock::RunLock`), each soak node already declares
+   its own `[data] dir`, and the escape hatch is deleted.
 
 Still outstanding, and deliberately not changed: CI remains advisory
 (`continue-on-error: true`, the gate step ends `|| true`, and

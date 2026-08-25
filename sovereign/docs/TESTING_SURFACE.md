@@ -398,7 +398,7 @@ is `/oicp/v1/capabilities` HTTP wire — re-classified during this round
 as *covered indirectly* by `peer_preference_manifest::fetch_manifest`,
 which parses the manifest JSON over the wire on every assertion. The
 two P2-uncovered cells (`Stream early termination`, `Concurrent
-set_inference_provider`) are pub(crate)-bound and require heavyweight
+swap_inference_provider`) are private and require heavyweight
 peer-routing setup to drive — annotated below with the deferral
 rationale.
 
@@ -603,7 +603,7 @@ step. Buckets follow the daemon's structural layout.
 | Bad `join_key` rejected with 401 + no mutation | ✓ | **P0** | `join_handshake::invalid_join_key_rejects_with_401_and_does_not_mutate` |
 | Auto-leave gate refuses to clobber populated mesh | ✓ | **P0** | `auto_leave_gate::{join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state, join_mesh_against_solo_mesh_passes_the_gate_and_attempts_handshake}`. Pins both halves of the §3 docstring: populated mesh refuses + preserves mesh.json + join_key.secret bytes verbatim; solo mesh passes the gate so the post-`setup` bootstrap flow survives. Tests the 2026-05-10 incident referenced in HANDOFF_WS2_MESH_FANOUT.md |
 | Stream early termination (client drops mid-stream) | · | P1 | **Gap (deferred).** `ThroughputObservedStream` is `pub(crate)`, so the Drop math can only be driven via the peer-routing path. That requires a real MeshInferenceProvider + downstream stream → significant L3 harness for a single P1 cell. Sketch: stand up two daemons via `EmbeddedDaemon`, originate a peer-routed `/v1/chat/completions` streaming request on the joiner, drop the receiver after one chunk, assert a partial-progress `InferenceReceived` event lands. |
-| Concurrent `set_inference_provider` swaps | · | P2 | **Gap (deferred).** Tests today wire then read; no concurrency. Driving requires either reaching into pub(crate) RwLock or racing multiple `/v1/admin/reload` calls through HTTP; both are heavyweight for a P2 cell. Practical risk is low (admin reloads aren't a hot path) — defer until the matrix gets pruned for a third pass. |
+| Concurrent inference-provider swaps (`EmbeddedDaemon::swap_inference_provider`) | · | P2 | **Gap (deferred).** Tests today wire then read; no concurrency. Driving requires either reaching into pub(crate) RwLock or racing multiple `/v1/admin/reload` calls through HTTP; both are heavyweight for a P2 cell. Practical risk is low (admin reloads aren't a hot path) — defer until the matrix gets pruned for a third pass. |
 
 ---
 

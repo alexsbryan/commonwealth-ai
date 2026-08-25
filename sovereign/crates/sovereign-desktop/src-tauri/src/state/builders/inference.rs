@@ -27,11 +27,16 @@ use crate::state::{BootstrapPhase, DesktopConfig, ResolvedModelSlots};
 ///   peer when one is online), or the raw provider unchanged in Attach
 ///   mode (`mesh = None`, the CLI daemon already owns peer routing).
 ///
+/// `mesh` is a [`DeferredDaemon`](sovereign_mesh::DeferredDaemon), not the
+/// daemon: this runs at the TOP of bootstrap and the daemon is commissioned at
+/// the bottom, once the engine and routers it needs exist. Until then the
+/// handle reports no peers, exactly as a constructed-but-stopped daemon did.
+///
 /// Both share the same underlying weights — the wrapper is a thin router
 /// over an Arc clone, no double-load.
 pub(crate) async fn load_inference(
     inference_slot: &RwLock<Option<Arc<dyn InferenceProvider>>>,
-    mesh: Option<&Arc<sovereign_mesh::EmbeddedDaemon>>,
+    mesh: Option<&Arc<sovereign_mesh::DeferredDaemon>>,
     // Model-slot PATHS + context come from `SetupConfig` via
     // `ResolvedModelSlots` (single source of truth, possibly CPU-compat-
     // mutated). `config` still supplies the family hints + idle timeout,
@@ -257,10 +262,16 @@ pub(crate) async fn load_inference(
     // None`) hands the raw provider through — the CLI daemon already owns
     // peer routing, so wrapping against a None daemon would be a no-op.
     let inference: Arc<dyn InferenceProvider> = match mesh {
-        Some(mesh) => Arc::new(sovereign_mesh::peer_inference::MeshInferenceProvider::new(
-            Arc::clone(&raw_inference),
-            Arc::clone(mesh),
-        )),
+        Some(mesh) => {
+            let source: Arc<dyn sovereign_mesh::peer_inference::PeerEndpointSource> =
+                Arc::clone(mesh) as Arc<_>;
+            Arc::new(
+                sovereign_mesh::peer_inference::MeshInferenceProvider::with_peer_source(
+                    Arc::clone(&raw_inference),
+                    source,
+                ),
+            )
+        }
         None => Arc::clone(&raw_inference),
     };
     Ok((raw_inference, inference))

@@ -923,7 +923,7 @@ async fn check_daemon_running() -> CheckResult {
             layer: Layer::Commonwealth,
             status: CheckStatus::Failed,
             message: "commonwealth daemon not reachable at :9741".into(),
-            repair: Repair::executable("commonwealth daemon start"),
+            repair: Repair::executable("svrn daemon start"),
         }
     }
 }

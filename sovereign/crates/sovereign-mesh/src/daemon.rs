@@ -6,7 +6,7 @@
 
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Weak};
 
 use tokio::sync::RwLock;
 use tracing::{info, warn};
@@ -14,12 +14,9 @@ use tracing::{info, warn};
 use commonwealth_api::state::{AppState, LocalInferenceService};
 use commonwealth_core::ids::NodeId;
 use commonwealth_core::mesh::Mesh;
-use commonwealth_core::oicp::EmbedModelInfo;
 use commonwealth_discovery::mdns::{BrowseHandle, DiscoveredPeer, MdnsDiscovery};
 use commonwealth_discovery::membership;
 use corpus_engine::CorpusEngine;
-use corpus_engine_notes::NoteStore;
-use sovereign_core::registry::ToolRegistry;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 
@@ -68,7 +65,8 @@ fn mdns_enabled_effective(cfg_mdns: bool) -> bool {
     cfg_mdns && !env_force_off
 }
 
-use crate::admin_http::{ConfigDiff, ProviderFactory};
+use crate::admin_http::ConfigDiff;
+use crate::daemon_services::DaemonServices;
 use crate::deep_link::DeepLink;
 use crate::gossip::{self, GossipHandle};
 use crate::mcp_router;
@@ -76,143 +74,58 @@ use crate::mesh_discovery::{local_ip_candidates, reachable_addresses};
 use crate::persist;
 use crate::state::MeshState;
 
-/// Per-session MCP mount for the embedded daemon. When set, the daemon
-/// merges `mcp_router::mcp_router(...)` into its `:9741` client router
-/// so `/mcp`, `/mcp/message`, and `/mcp/stats` share the port with the
-/// OpenAI-compatible `/v1/*` endpoints.
-#[derive(Clone)]
-struct McpMount {
-    tools: Arc<ToolRegistry>,
-    notes: Arc<NoteStore>,
-    session_id: String,
-}
-
-/// The embedded Commonwealth daemon, managed by Sovereign's UI.
+/// The embedded Commonwealth daemon — the ONE daemon implementation, shared
+/// by `sovereign daemon run`, the desktop's Local mode, and `svrn mesh`.
+///
+/// **Everything a host supplies arrives as one value.** Until 2026-08-24 this
+/// struct carried 17 `RwLock<Option<T>>` slots punched in afterwards by 10
+/// `set_*` and 7 `install_*_router` methods; a slot a host forgot was
+/// indistinguishable from a slot a host deliberately declined, and the route
+/// behind it silently 404'd. [`DaemonServices`] replaces all seventeen — see
+/// `daemon_services`'s module docs for the pair-independence pass
+/// (`quality/TOPOLOGY.md` §4) that produced its three variants.
+///
+/// The two `RwLock<Option<…>>` that remain are **derived from the variant, not
+/// settable by a host**: both are seeded at construction and mutated only by
+/// `POST /v1/admin/reload`, which is itself reachable only on the variant that
+/// carries a `ProviderFactory`.
 pub struct EmbeddedDaemon {
     state: Arc<RwLock<DaemonState>>,
     /// Where to persist `mesh.json` so the daemon can auto-resume on
-    /// app restart. Set once at construction.
+    /// app restart. Empty means persistence is off (the in-memory
+    /// test constructor).
     data_dir: PathBuf,
-    /// The CorpusEngine this daemon consults when peers gossip-query
-    /// our knowledge over `/internal/knowledge/search`, and when we
-    /// publish our own `hosted_corpora` on gossip rounds.
-    ///
-    /// Held in an RwLock<Option<_>> because Sovereign's bootstrap
-    /// constructs the daemon *before* it builds the engine (the
-    /// engine needs an `EmbedFn` that isn't ready until the fast
-    /// model has loaded). The desktop calls `set_corpus_engine`
-    /// during bootstrap just before `try_resume`, so by the time
-    /// the daemon is Running the engine is always present. Tests
-    /// and the CLI's mesh subcommands keep it `None`.
-    corpus_engine: RwLock<Option<Arc<CorpusEngine>>>,
-    /// The Sovereign `InferenceProvider` that answers peer chat
-    /// completions hitting our `/v1/chat/completions`. Same
-    /// injection timing as `corpus_engine`: set during desktop
-    /// bootstrap before the daemon is started. When this is
-    /// absent, the daemon's handler falls through to the
-    /// scheduler/llama-server path (which is empty in the
-    /// Sovereign+mesh embed, so peer inference just 503s).
+    /// This daemon's own `Arc`, captured by `Arc::new_cyclic` at
+    /// construction. It is what lets `start_daemon` build the three routers
+    /// that are pure functions of the daemon — mesh, admin, reading — instead
+    /// of accepting them from a host that might not pass them. A serving
+    /// daemon therefore cannot be missing its own control surface.
+    self_weak: Weak<EmbeddedDaemon>,
+    /// What this host is and everything it supplies. Immutable for the
+    /// daemon's lifetime.
+    services: DaemonServices,
+    /// The config this daemon booted with. **Not** an `Option`:
+    /// `SetupConfig::unconfigured()` is byte-identical to every fallback this file
+    /// used to apply when the slot was `None` (`9741`/`9742`, loopback client
+    /// bind, `0.0.0.0` internal bind, no token), and `register_local_model_slots`
+    /// skips empty paths — so "no config installed" was never a distinct state,
+    /// only an unnamed one. `admin_http::reload` diffs the file on disk against
+    /// this value and advances it on success.
+    setup_config: RwLock<SetupConfig>,
+    /// The provider that answers peer chat completions on
+    /// `/v1/chat/completions`. Seeded from [`Self::services`]; swapped in place
+    /// by `reload_from_setup_config` when `models.*` changes on disk, which is
+    /// why it is behind a lock rather than living in the variant. `None`
+    /// exactly on [`DaemonServices::MeshAdmin`], which has no inference role —
+    /// never because a host forgot to install one.
     inference_provider: RwLock<Option<Arc<dyn InferenceProvider>>>,
-    /// Embedding model metadata advertised to mesh peers for
-    /// collaborative ingestion compatibility checks. Derived at
-    /// bootstrap from the loaded embed slot's actual dimensions,
-    /// pooling strategy, and config-specified `embed_family`.
-    /// `None` when no embed model is configured.
-    embed_model: RwLock<Option<EmbedModelInfo>>,
-    /// Optional MCP tool-server mount. When present, the client
-    /// router on `:9741` additionally serves `/mcp`, `/mcp/message`,
-    /// and `/mcp/stats`. Set at bootstrap via [`Self::set_mcp`].
-    /// `None` means the daemon only serves `/v1/*` (inference, OICP
-    /// capabilities, knowledge search) — no code-intelligence tools.
-    mcp: RwLock<Option<McpMount>>,
-    /// Pre-built axum `Router` merged into the client listener at
-    /// `start_daemon` time. The daemon can't hand out an `Arc<Self>`
-    /// from a `&self` method, so the caller (who already owns the
-    /// outer `Arc<EmbeddedDaemon>`) builds `mesh_http::mesh_router`
-    /// externally and stashes it here. `None` means the mesh HTTP
-    /// surface is disabled — tests and legacy callers skip it.
-    mesh_http_router: RwLock<Option<axum::Router>>,
-    /// Pre-built axum `Router` for the admin HTTP surface
-    /// (`POST /v1/admin/reload`). Same installation pattern as
-    /// `mesh_http_router`: the CLI/desktop builds
-    /// `admin_http::admin_router(Arc::clone(&daemon))` and hands it
-    /// here before `start_daemon`. `None` means no admin surface —
-    /// consumers must `kickstart`/`systemctl restart` to apply config
-    /// changes.
-    admin_http_router: RwLock<Option<axum::Router>>,
-    /// Same pattern — project_http router for `/v1/projects/*`.
-    /// Owned by the CLI / desktop side which holds the Reindexer.
-    project_http_router: RwLock<Option<axum::Router>>,
-    /// Knowledge-view HTTP router (`POST /v1/knowledge/landscape_digest`).
-    /// Built by `sovereign-cli`'s daemon bootstrap once the
-    /// `KnowledgeViewManager` exists; merged into the client listener
-    /// at `start_daemon` time. `None` in tests / paths without the
-    /// manager — the endpoint then 404s, which the desktop's
-    /// `MeshLandscapeDigestClient` handles by inserting an empty
-    /// digest list (identical to KnowledgeView=off).
-    knowledge_view_http_router: RwLock<Option<axum::Router>>,
-    /// Watched-folder HTTP router (`/internal/corpus/watch/...`).
-    /// Reads the `watched_folder_runtime` singleton internally —
-    /// `EmbeddedDaemon` doesn't carry the manager directly.
-    corpus_watch_http_router: RwLock<Option<axum::Router>>,
-    /// Reading-surface HTTP router
-    /// (`/internal/corpus/{corpus_id}/chunks/...`,
-    /// `/internal/corpus/{corpus_id}/atoms/...`). Built by
-    /// `reading_http::reading_router(daemon_arc)` and installed by
-    /// the bootstrap before `start_daemon`. `None` means the desktop
-    /// reading surface won't be reachable — the chat UI still works
-    /// (citation popovers fall back to the legacy path).
-    reading_http_router: RwLock<Option<axum::Router>>,
-    /// Solve-job HTTP router (`/v1/solve/jobs*`) — the daemon-hosted
-    /// TDD solver surface. Built by the CLI daemon bootstrap (which
-    /// owns the job table and the `commonwealth-tdd` dependency) and
-    /// installed before `start_daemon`. `None` means no solve
-    /// surface — the routes 404.
-    solve_http_router: RwLock<Option<axum::Router>>,
-    /// In-memory copy of the `SetupConfig` the daemon booted with.
-    /// `admin_http::reload` diffs this against the file on disk so it
-    /// knows which fields actually changed. Updated in place after a
-    /// successful reload. `None` in tests / legacy callers that skip
-    /// `set_setup_config`.
-    setup_config: RwLock<Option<SetupConfig>>,
-    /// How to rebuild an `InferenceProvider` when `models.*` changes
-    /// during a reload. The daemon itself can't import
-    /// `sovereign-inference` model loading without layering
-    /// violations; the CLI/desktop provide a concrete factory at
-    /// startup.
-    provider_factory: RwLock<Option<Arc<dyn ProviderFactory>>>,
     /// Cached plaintext of the active mesh's join key, mirroring
     /// `<data_dir>/join_key.secret`. The hash is one-way, so without
     /// this the share UI couldn't render the invite link after the
-    /// app restarts. Set on `create_mesh` / `join_mesh` /
-    /// `try_resume`; refreshed on `set_join_key` (called by the
-    /// rotate handler); cleared on `stop`.
+    /// app restarts. Genuine runtime state: set on `create_mesh` /
+    /// `join_mesh` / `try_resume`; refreshed on `set_join_key` (called
+    /// by the rotate handler); cleared on `stop`.
     join_key_plaintext: RwLock<Option<String>>,
-    /// Optional `StateStore` handle used by the reading-surface HTTP
-    /// router to resolve conversation-history chunks back to their
-    /// owning conversation (title, updated_at). The daemon doesn't
-    /// otherwise need a state store — search/inference goes through
-    /// the runtime — so this slot is only set by the desktop's
-    /// bootstrap when it wants reading-surface conversation
-    /// rendering. `None` means conversation chunks render with no
-    /// title metadata; the surface still shows the chunk text.
-    state_store: RwLock<Option<Arc<dyn StateStore>>>,
-    /// Optional `MeshStore` injected by the bootstrap. When set, the
-    /// daemon uses this for `AppState.mesh_store` instead of building
-    /// its own in-memory instance — letting other subsystems (e.g.
-    /// the work atlas) write into the SAME store the gossip layer
-    /// publishes from. Same injection timing as `set_corpus_engine`:
-    /// set during bootstrap before `start_daemon`. When `None`,
-    /// `start_daemon` falls back to the legacy in-memory MeshStore.
-    mesh_store: RwLock<Option<Arc<commonwealth_state::MeshStore>>>,
-    /// Optional `ConvergenceRecord` injected by the bootstrap (order
-    /// commons-fluency fix 9). When set, `start_daemon` installs it
-    /// into `AppStateInner.convergence` so the notes publish sink and
-    /// ingest poller stamp the SAME instance `/status` reads. Same
-    /// injection timing as `set_mesh_store`: set during bootstrap
-    /// before `start_daemon`. When `None`, `/status` honestly reads
-    /// `never` on both convergence arms.
-    convergence_recorder: RwLock<Option<Arc<commonwealth_api::state::ConvergenceRecord>>>,
     /// Endpoint→NodeId directory for discovered RPC workers: which mesh
     /// member owns each raw `ip:port` ggml-RPC endpoint. Written by
     /// [`Self::discover_rpc_workers`] at the moment the endpoint string is
@@ -392,220 +305,153 @@ pub struct JoinMeshResult {
 }
 
 impl EmbeddedDaemon {
-    /// Construct a daemon that persists its running-mesh state to
-    /// `data_dir/mesh.json`. Call [`try_resume`](Self::try_resume)
-    /// once at app start to re-attach to a previously-created mesh.
-    pub fn new(data_dir: PathBuf) -> Self {
-        Self {
+    /// The only constructor. **Total**: the host names which of the three
+    /// live shapes it is and supplies everything that shape needs, in one
+    /// value, before the daemon exists. There is no window in which a request
+    /// can observe a half-wired daemon, and no slot a host can forget.
+    ///
+    /// `data_dir` is where `mesh.json` is persisted so the daemon can
+    /// auto-resume on restart; an empty path disables persistence (see
+    /// [`Self::in_memory`]). Call [`try_resume`](Self::try_resume) once at
+    /// app start to re-attach to a previously-created mesh.
+    ///
+    /// Returns an `Arc` because construction goes through `Arc::new_cyclic`:
+    /// the daemon keeps a `Weak` to itself so it can build its own mesh,
+    /// admin and reading routers at start. Those three used to be installed
+    /// by each host — and the desktop installed a different subset from the
+    /// CLI daemon, which is exactly the divergence this constructor retires.
+    pub fn new(
+        data_dir: PathBuf,
+        setup_config: SetupConfig,
+        services: DaemonServices,
+    ) -> Arc<Self> {
+        let provider = services
+            .serving()
+            .map(|s| Arc::clone(&s.core.inference_provider));
+
+        // Answer the variant question ONCE, at the top.
+        //
+        // This block used to ask it SEVEN times through seven `Option`-
+        // returning accessors. `DaemonServices` exposes ten; three are real
+        // forks (`serving`, `rails`, `state_store`) and seven are artifactual,
+        // wrapping fields that are not optional one level down
+        // (`quality/TOPOLOGY.md §10`). Reading through an artifactual one means
+        // a click lands on `.map()` rather than on a struct field — and worse,
+        // it STACKS a meaningless outer `Option` on top of the genuinely
+        // meaningful inner absence that `McpSurface` and `EmbedAdvertisement`
+        // carry with a reason (§18.3). Matching once leaves only the absences
+        // that mean something.
+        match services.serving() {
+            // `MeshAdmin` has no serving role at all. That emptiness is the
+            // shape, not a set of holes.
+            None => info!(
+                profile = services.label(),
+                "daemon: commissioned with no serving role"
+            ),
+            Some(serving) => {
+                info!(
+                    profile = services.label(),
+                    host_routers = services.host_routers().len(),
+                    // Structural, not probed. `ServingCore` holds both as plain
+                    // `Arc`s, so a serving daemon cannot lack either — the old
+                    // `.is_some()` pair could never report false here, which is
+                    // exactly what made them read as checks rather than facts.
+                    corpus_engine = true,
+                    inference = true,
+                    // A REAL fork, and the one place the two serving shapes
+                    // cross rather than nest: Desktop carries a store, Headless
+                    // does not (Phase 3 closes it).
+                    state_store = services.state_store().is_some(),
+                    "daemon: commissioned"
+                );
+                match &serving.capability.mcp {
+                    crate::daemon_services::McpSurface::Mounted(m) => {
+                        info!(tools = m.tools.count(), "daemon: /mcp will be mounted");
+                    }
+                    crate::daemon_services::McpSurface::Unavailable { reason } => {
+                        warn!(%reason, "daemon: /mcp NOT mounted");
+                    }
+                }
+                if let crate::daemon_services::EmbedAdvertisement::Unavailable { reason } =
+                    &serving.advertise_embed
+                {
+                    warn!(
+                        %reason,
+                        "daemon: no embed model advertised — peers will NOT route \
+                         collaborative ingestion to this node"
+                    );
+                }
+            }
+        }
+        Arc::new_cyclic(|self_weak| Self {
             state: Arc::new(RwLock::new(DaemonState::Stopped)),
             data_dir,
-            corpus_engine: RwLock::new(None),
-            inference_provider: RwLock::new(None),
-            embed_model: RwLock::new(None),
-            mcp: RwLock::new(None),
-            mesh_http_router: RwLock::new(None),
-            admin_http_router: RwLock::new(None),
-            project_http_router: RwLock::new(None),
-            knowledge_view_http_router: RwLock::new(None),
-            corpus_watch_http_router: RwLock::new(None),
-            reading_http_router: RwLock::new(None),
-            solve_http_router: RwLock::new(None),
-            setup_config: RwLock::new(None),
-            provider_factory: RwLock::new(None),
+            self_weak: self_weak.clone(),
+            services,
+            setup_config: RwLock::new(setup_config),
+            inference_provider: RwLock::new(provider),
             join_key_plaintext: RwLock::new(None),
-            state_store: RwLock::new(None),
-            mesh_store: RwLock::new(None),
-            convergence_recorder: RwLock::new(None),
             rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
             rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
-        }
+        })
     }
 
-    /// Inject a `MeshStore` for the daemon to use as `AppState.mesh_store`.
-    /// Call before `start_daemon`. Lets the bootstrap pre-construct a
-    /// shared `Arc<MeshStore>` and hand the same handle to other
-    /// subsystems (e.g. the work atlas) so writes from those modules
-    /// reach the gossip layer's `all_entries_for_gossip` enumeration.
-    pub async fn set_mesh_store(&self, store: Arc<commonwealth_state::MeshStore>) {
-        *self.mesh_store.write().await = Some(store);
+    /// A daemon with persistence disabled — no `mesh.json` is written and
+    /// `try_resume` always answers `false`. Tests that don't want to set up a
+    /// tempdir; production code uses [`Self::new`] with a real `data_dir`.
+    pub fn in_memory(setup_config: SetupConfig, services: DaemonServices) -> Arc<Self> {
+        Self::new(PathBuf::new(), setup_config, services)
     }
 
-    /// Inject the notes-rail convergence recorder (order commons-fluency
-    /// fix 9). Call before `start_daemon`: the bootstrap pre-constructs
-    /// one `Arc<ConvergenceRecord>`, installs it here, and hands the
-    /// SAME handle to the notes publish sink and ingest poller — so the
-    /// daemon-side writers and `/status`'s reader share one instance.
-    pub async fn set_convergence_recorder(
-        &self,
-        recorder: Arc<commonwealth_api::state::ConvergenceRecord>,
-    ) {
-        *self.convergence_recorder.write().await = Some(recorder);
+    /// What this daemon is and what its host gave it. Read by
+    /// `start_daemon`, by the HTTP routers, and by `/status`.
+    pub fn services(&self) -> &DaemonServices {
+        &self.services
     }
 
-    /// Legacy constructor that doesn't persist — use only in tests
-    /// where a tempdir isn't worth setting up. Production code must
-    /// prefer `new(data_dir)`.
-    pub fn new_in_memory() -> Self {
-        Self {
-            state: Arc::new(RwLock::new(DaemonState::Stopped)),
-            data_dir: PathBuf::new(),
-            corpus_engine: RwLock::new(None),
-            inference_provider: RwLock::new(None),
-            embed_model: RwLock::new(None),
-            mcp: RwLock::new(None),
-            mesh_http_router: RwLock::new(None),
-            admin_http_router: RwLock::new(None),
-            project_http_router: RwLock::new(None),
-            knowledge_view_http_router: RwLock::new(None),
-            corpus_watch_http_router: RwLock::new(None),
-            reading_http_router: RwLock::new(None),
-            solve_http_router: RwLock::new(None),
-            setup_config: RwLock::new(None),
-            provider_factory: RwLock::new(None),
-            join_key_plaintext: RwLock::new(None),
-            state_store: RwLock::new(None),
-            mesh_store: RwLock::new(None),
-            convergence_recorder: RwLock::new(None),
-            rpc_endpoint_nodes: std::sync::RwLock::new(std::collections::HashMap::new()),
-            rpc_worker_sticky: std::sync::RwLock::new(std::collections::HashMap::new()),
-            rpc_worker_last_seen: std::sync::RwLock::new(std::collections::HashMap::new()),
-        }
-    }
-
-    /// Install an MCP tool mount so the client router on `:9741` also
-    /// serves `/mcp`, `/mcp/message`, and `/mcp/stats`. Call once
-    /// during bootstrap *before* `try_resume` / `create_mesh` /
-    /// `join_mesh`. Passing a session id (e.g. `serve-<uuid>`) groups
-    /// per-process tool calls in `NoteStore::log_tool_call`.
-    pub async fn set_mcp(
-        &self,
-        tools: Arc<ToolRegistry>,
-        notes: Arc<NoteStore>,
-        session_id: String,
-    ) {
-        *self.mcp.write().await = Some(McpMount {
-            tools,
-            notes,
-            session_id,
-        });
-    }
-
-    /// Install the mesh HTTP API so `/v1/mesh/status` + `create` +
-    /// `join` + `rotate` + `leave` are served on the same `:9741`
-    /// listener. The caller builds the router with
-    /// [`mesh_http::mesh_router(Arc::clone(&daemon_arc))`]
-    /// (which captures the `Arc<EmbeddedDaemon>` the caller owns) and
-    /// hands it here. We can't build the router internally from
-    /// `&self` because axum handlers need an `Arc<Self>` and this
-    /// method can't conjure one.
+    /// Resolve the `(client_port, internal_port)` pair this daemon should
+    /// bind and advertise, from the config it was commissioned with.
     ///
-    /// Call once at bootstrap, before `start_daemon`. Calling again
-    /// later replaces the previously installed router; the change
-    /// won't take effect until the next `start_daemon` cycle.
-    pub async fn install_mesh_http_router(&self, router: axum::Router) {
-        *self.mesh_http_router.write().await = Some(router);
-    }
-
-    /// Install the admin HTTP router (`POST /v1/admin/reload`). Same
-    /// installation shape as [`install_mesh_http_router`] — the caller
-    /// builds `admin_http::admin_router(Arc::clone(&daemon))` and hands
-    /// it here. Must be called before `start_daemon` for the route to
-    /// be live; a later install affects only the next restart.
-    /// Install the project HTTP router (`GET /v1/projects`,
-    /// register / unregister / rebuild). Same shape as
-    /// [`install_admin_http_router`].
-    pub async fn install_project_http_router(&self, router: axum::Router) {
-        *self.project_http_router.write().await = Some(router);
-    }
-
-    pub async fn install_admin_http_router(&self, router: axum::Router) {
-        *self.admin_http_router.write().await = Some(router);
-    }
-
-    /// Install the knowledge-view HTTP router
-    /// (`POST /v1/knowledge/landscape_digest`). Same shape as
-    /// [`install_admin_http_router`] — caller builds
-    /// `landscape_digest_http::landscape_digest_router(Arc::clone(&mgr))`
-    /// and hands it here. `None` (no install) means the endpoint is
-    /// not exposed; an attached desktop's HTTP client soft-fails to
-    /// an empty digest list in that case.
-    pub async fn install_knowledge_view_http_router(&self, router: axum::Router) {
-        *self.knowledge_view_http_router.write().await = Some(router);
-    }
-
-    /// Install the watched-folder HTTP router
-    /// (`/internal/corpus/watch/...`). Same pattern as
-    /// [`install_knowledge_view_http_router`]: caller builds
-    /// `corpus_watch_http::corpus_watch_router()` and hands it here.
-    /// Must be called before `start_daemon` for the routes to bind;
-    /// a later install affects only the next restart.
-    pub async fn install_corpus_watch_http_router(&self, router: axum::Router) {
-        *self.corpus_watch_http_router.write().await = Some(router);
-    }
-
-    /// Install the reading-surface HTTP router
-    /// (`/internal/corpus/{corpus}/chunks/...` and
-    /// `/internal/corpus/{corpus}/atoms/...`). Same lifecycle as
-    /// the other `install_*_http_router` setters: caller builds
-    /// `reading_http::reading_router(Arc::clone(&daemon))` and
-    /// hands it here before `start_daemon`. Loopback-guarded.
-    pub async fn install_reading_http_router(&self, router: axum::Router) {
-        *self.reading_http_router.write().await = Some(router);
-    }
-
-    /// Install the solve-job HTTP router (`/v1/solve/jobs*`). Same
-    /// lifecycle as the other `install_*_http_router` setters: the
-    /// CLI daemon bootstrap builds the router around its job table
-    /// and hands it here before `start_daemon`. Loopback-guarded by
-    /// the builder.
-    pub async fn install_solve_http_router(&self, router: axum::Router) {
-        *self.solve_http_router.write().await = Some(router);
-    }
-
-    /// Record the `SetupConfig` this daemon booted with. The admin
-    /// reload handler diffs future on-disk states against this value
-    /// to figure out which fields actually changed. Called once by
-    /// `sovereign daemon run` right after it loads the config, and
-    /// again after every successful reload so the in-memory baseline
-    /// moves forward.
-    pub async fn set_setup_config(&self, cfg: SetupConfig) {
-        *self.setup_config.write().await = Some(cfg);
-    }
-
-    /// Resolve the `(client_port, internal_port)` pair this daemon
-    /// should bind and advertise. Pulls from
-    /// `setup_config.daemon.{client_port, internal_port}` when a
-    /// config has been installed (`set_setup_config`); otherwise
-    /// returns the historic `(9741, 9742)` defaults.
+    /// Use this in every place that previously hardcoded 9741 or 9742 for
+    /// *this* daemon's binding decisions: `create_mesh`, `join_mesh`,
+    /// `start_daemon`'s listener bind, the mDNS announce, and the
+    /// auto-collaborate loop's spawn.
     ///
-    /// Use this in every place that previously hardcoded 9741 or
-    /// 9742 for *this* daemon's binding decisions: `create_mesh`,
-    /// `join_mesh`, `start_daemon`'s listener bind, the mDNS
-    /// announce, and the auto-collaborate loop's spawn.
-    ///
-    /// **Scope note (peer-side uniformity).** The peer-targeting
-    /// rewrites in `peer_inference_endpoints` and
-    /// `auto_ingest`'s candidate-URL builder still assume every
-    /// peer uses the same port pair as this daemon — they apply
-    /// `client_port` from `resolved_ports` to all peers
-    /// uniformly. Mixed-port mesh deployments need a wire-protocol
-    /// change (a `client_port` field on `MemberRecord`) and are
-    /// tracked separately in §10.1.
+    /// **Scope note (peer-side uniformity).** The peer-targeting rewrites in
+    /// `peer_inference_endpoints` and `auto_ingest`'s candidate-URL builder
+    /// still assume every peer uses the same port pair as this daemon — they
+    /// apply `client_port` from `resolved_ports` to all peers uniformly.
+    /// Mixed-port mesh deployments need a wire-protocol change (a
+    /// `client_port` field on `MemberRecord`) and are tracked separately in
+    /// §10.1.
     pub(crate) async fn resolved_ports(&self) -> (u16, u16) {
-        if let Some(cfg) = self.setup_config.read().await.as_ref() {
-            (cfg.daemon.client_port, cfg.daemon.internal_port)
-        } else {
-            (9741, 9742)
-        }
+        let cfg = self.setup_config.read().await;
+        (cfg.daemon.client_port, cfg.daemon.internal_port)
     }
 
-    /// Install the `ProviderFactory` the admin reload handler uses to
-    /// rebuild an `InferenceProvider` when `models.*` fields change.
-    /// Without one, a reload that touches model paths fails at the
-    /// HTTP layer rather than silently swallowing the change.
-    pub async fn set_provider_factory(&self, factory: Arc<dyn ProviderFactory>) {
-        *self.provider_factory.write().await = Some(factory);
+    /// Borrow the `CorpusEngine` this host commissioned the daemon with, if
+    /// its variant carries one. `reading_http` and the knowledge handlers
+    /// call this; `MeshAdmin` answers `None` by construction.
+    pub fn corpus_engine(&self) -> Option<&Arc<CorpusEngine>> {
+        self.services.serving().map(|s| &s.core.corpus_engine)
+    }
+
+    /// Borrow the `StateStore` the reading surface uses to resolve
+    /// `conversation-history` chunks back to their conversation. `Some` only
+    /// on [`DaemonServices::Desktop`] — the headless daemon opens no
+    /// `sovereign.db` (daemon-convergence Phase 3).
+    pub fn state_store(&self) -> Option<&Arc<dyn StateStore>> {
+        self.services.state_store()
+    }
+
+    /// Swap the serving `InferenceProvider`. Private on purpose: the ONLY
+    /// caller is `reload_from_setup_config`, which is itself reachable only
+    /// on the variant that carries a `ProviderFactory`. A host cannot install
+    /// a provider after construction — it names one in its
+    /// [`DaemonServices`] or it has none.
+    async fn swap_inference_provider(&self, provider: Arc<dyn InferenceProvider>) {
+        *self.inference_provider.write().await = Some(provider);
     }
 
     /// Re-read `SetupConfig` from disk (or from `config_path_override`
@@ -615,8 +461,8 @@ impl EmbeddedDaemon {
     ///
     /// Semantics:
     /// - `models.*` changes → rebuild the provider via
-    ///   [`set_provider_factory`]'s factory, then swap atomically
-    ///   through [`set_inference_provider`]. In-flight requests
+    ///   the variant's `ProviderFactory`, then swap atomically
+    ///   through the private provider slot. In-flight requests
     ///   holding the old `Arc` continue against it; new ones see
     ///   the new provider.
     /// - `daemon.client_port` / `daemon.internal_port` / `data.dir`
@@ -634,12 +480,7 @@ impl EmbeddedDaemon {
         &self,
         config_path_override: Option<&Path>,
     ) -> Result<crate::admin_http::ReloadResponse, String> {
-        let current = self
-            .setup_config
-            .read()
-            .await
-            .clone()
-            .ok_or_else(|| "no SetupConfig installed on this daemon".to_string())?;
+        let current = self.setup_config.read().await.clone();
 
         let fresh = match config_path_override {
             Some(p) => SetupConfig::load_from(p)?,
@@ -658,14 +499,23 @@ impl EmbeddedDaemon {
         let mut reloaded: Vec<String> = vec![];
 
         if !diff.models_changed.is_empty() {
+            // No factory means this variant cannot rebuild a provider — the
+            // desktop's daemon has never carried one. Name the variant in
+            // the refusal rather than reporting a missing installation
+            // (ARCH §18.3): nothing is missing, this shape has no factory.
             let factory = self
-                .provider_factory
-                .read()
-                .await
-                .clone()
-                .ok_or_else(|| "models changed but no ProviderFactory installed".to_string())?;
+                .services
+                .rails()
+                .map(|r| Arc::clone(&r.provider_factory))
+                .ok_or_else(|| {
+                format!(
+                    "models changed but the `{}` daemon profile carries no ProviderFactory — \
+                     restart to apply model changes",
+                    self.services.label()
+                )
+            })?;
             let new_provider = factory.build_provider(&fresh).await?;
-            self.set_inference_provider(new_provider).await;
+            self.swap_inference_provider(new_provider).await;
             for f in &diff.models_changed {
                 reloaded.push((*f).to_string());
             }
@@ -687,78 +537,13 @@ impl EmbeddedDaemon {
         // otherwise a subsequent reload would keep reporting them
         // as "changed" even though the caller already acknowledged
         // them.
-        *self.setup_config.write().await = Some(fresh);
+        *self.setup_config.write().await = fresh;
 
         Ok(crate::admin_http::ReloadResponse {
             reloaded_fields: reloaded,
             restart_required_fields,
             restart_required,
         })
-    }
-
-    /// Install a `CorpusEngine` so that when the daemon starts, its
-    /// `AppState` has something to search — without this, the
-    /// handlers on `/v1/knowledge/search` and
-    /// `/internal/knowledge/search` return 503 and peers asking us
-    /// for philosophy passages see an empty mesh. Call once, during
-    /// Sovereign's bootstrap, *before* `try_resume` / `create_mesh`
-    /// / `join_mesh` so the first gossip round that runs after
-    /// startup already advertises our real `hosted_corpora`.
-    ///
-    /// If called while the daemon is already running, the engine is
-    /// swapped in — useful when bootstrap rebuilds the engine mid-
-    /// session (e.g. the user changes the embed model). Existing
-    /// Arc<AppState> instances captured by running HTTP tasks keep
-    /// the old engine; the next created `AppState` (after a
-    /// `stop` + restart) will pick up the new one.
-    pub async fn set_corpus_engine(&self, engine: Arc<CorpusEngine>) {
-        *self.corpus_engine.write().await = Some(engine);
-    }
-
-    /// Borrow the currently-installed `CorpusEngine`, if any. Used
-    /// by HTTP routers (notably `reading_http`) that need to fetch
-    /// chunks on demand without taking ownership. Returns `None`
-    /// when bootstrap hasn't installed an engine yet.
-    pub async fn corpus_engine(&self) -> Option<Arc<CorpusEngine>> {
-        self.corpus_engine.read().await.clone()
-    }
-
-    /// Install the `StateStore` the reading-surface HTTP router uses
-    /// to look up conversation metadata when serving
-    /// `conversation-history` chunks. Same injection-timing
-    /// expectations as `set_corpus_engine`: call from the desktop
-    /// bootstrap once the SQLite store is open, before
-    /// `start_daemon`. Tests / CLI mesh paths skip this and the
-    /// reading surface degrades gracefully (chunk text without a
-    /// resolved conversation title).
-    pub async fn set_state_store(&self, store: Arc<dyn StateStore>) {
-        *self.state_store.write().await = Some(store);
-    }
-
-    /// Borrow the currently-installed `StateStore`, if any.
-    /// `reading_http` calls this when a chunk's `corpus_id` is
-    /// `"conversation-history"` to resolve `source_doc_id` →
-    /// conversation title.
-    pub async fn state_store(&self) -> Option<Arc<dyn StateStore>> {
-        self.state_store.read().await.clone()
-    }
-
-    /// Install the `InferenceProvider` that answers peer chat
-    /// completions. Same injection timing as `set_corpus_engine`:
-    /// call during desktop bootstrap, before any mesh start. The
-    /// same provider Sovereign uses for the local user's chats —
-    /// a peer asking us for synthesis gets the same quality a
-    /// local user would.
-    pub async fn set_inference_provider(&self, provider: Arc<dyn InferenceProvider>) {
-        *self.inference_provider.write().await = Some(provider);
-    }
-
-    /// Record the embedding model metadata so that when the daemon starts,
-    /// the Commonwealth `AppState` can advertise the correct model to peers
-    /// evaluating collaborative ingestion compatibility. Call during desktop
-    /// bootstrap, after the embed model has been probed for actual dimensions.
-    pub async fn set_embed_model_info(&self, info: EmbedModelInfo) {
-        *self.embed_model.write().await = Some(info);
     }
 
     fn persistence_enabled(&self) -> bool {
@@ -769,7 +554,7 @@ impl EmbeddedDaemon {
     /// the daemon with that mesh so mDNS advertises immediately and
     /// existing members can reconnect without the user recreating.
     /// No-op if no persisted file exists or if persistence is
-    /// disabled (the `new_in_memory` constructor).
+    /// disabled (the [`in_memory`](Self::in_memory) constructor).
     pub async fn try_resume(&self) -> Result<bool, MeshError> {
         if !self.persistence_enabled() {
             return Ok(false);
@@ -1248,16 +1033,11 @@ impl EmbeddedDaemon {
         // blocks n0's relays reaches the founder via the fleet's own
         // relay (W4), or with n0 fully severed (H1). Default = n0.
         let join_relay_cfg: commonwealth_transport::iroh::RelayConfig = {
-            let guard = self.setup_config.read().await;
-            guard
-                .as_ref()
-                .map(|c| {
-                    commonwealth_transport::iroh::RelayConfig::from_parts(
-                        c.iroh.relay_urls.clone(),
-                        c.iroh.discovery.as_deref(),
-                    )
-                })
-                .unwrap_or_default()
+            let c = self.setup_config.read().await;
+            commonwealth_transport::iroh::RelayConfig::from_parts(
+                c.iroh.relay_urls.clone(),
+                c.iroh.discovery.as_deref(),
+            )
         };
         let handshake = if let (Some(dial), true) = (iroh_dial.as_deref(), invite_encrypted) {
             // ENCRYPTED join: dial the founder by key over iroh and
@@ -2296,9 +2076,15 @@ impl EmbeddedDaemon {
         // the same store gossip publishes from) inject one via
         // `set_mesh_store` before this point. Long-term persistence
         // for the legacy mesh state still flows through `mesh.json`.
-        let corpus_engine = self.corpus_engine.read().await.clone();
-        let mesh_store = match self.mesh_store.read().await.clone() {
-            Some(provided) => provided,
+        let corpus_engine = self
+            .services
+            .serving()
+            .map(|s| Arc::clone(&s.core.corpus_engine));
+        let mesh_store = match self.services.rails().map(|r| &r.mesh_store) {
+            Some(provided) => Arc::clone(provided),
+            // Only the headless daemon carries a shared store; the desktop and
+            // the mesh-admin one-shot get a private in-memory one, which is
+            // what their variants declare by not having the field.
             None => Arc::new(
                 commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore failed"),
             ),
@@ -2318,8 +2104,10 @@ impl EmbeddedDaemon {
         // `Arc<ConvergenceRecord>` to the publish sink + ingest
         // poller, so `/status`'s convergence section reads the
         // writers' stamps, never a parallel copy.
-        if let Some(recorder) = self.convergence_recorder.read().await.clone() {
-            app_state.inner.install_convergence_recorder(recorder);
+        if let Some(recorder) = self.services.rails().map(|r| &r.convergence_recorder) {
+            app_state
+                .inner
+                .install_convergence_recorder(Arc::clone(recorder));
         }
 
         // Route every peer dial through an `IpTransport` configured
@@ -2449,8 +2237,13 @@ impl EmbeddedDaemon {
         // ingest pipeline pays only the cost of one rwlock read +
         // one atomic load per embed batch when the feature is off.
         if let Some(engine) = corpus_engine.as_ref() {
-            if let Some(cfg) = self.setup_config.read().await.as_ref() {
-                let secs = cfg.daemon.yield_to_foreground_secs;
+            {
+                let secs = self
+                    .setup_config
+                    .read()
+                    .await
+                    .daemon
+                    .yield_to_foreground_secs;
                 app_state.set_yield_window_secs(secs);
                 info!(
                     yield_to_foreground_secs = secs,
@@ -2469,8 +2262,8 @@ impl EmbeddedDaemon {
         // peer fan-out is what OOM-killed the daemon. Apply the configured
         // ceiling (default 1) regardless of whether a corpus engine is present,
         // so a storage-only or inference-only node is still bounded.
-        if let Some(cfg) = self.setup_config.read().await.as_ref() {
-            let max = cfg.daemon.max_peer_inflight;
+        {
+            let max = self.setup_config.read().await.daemon.max_peer_inflight;
             app_state.set_contribution_max_peer_inflight(max);
             info!(
                 max_peer_inflight = max,
@@ -2483,7 +2276,11 @@ impl EmbeddedDaemon {
         // Without this, `get_local_embed_model()` returns None and the
         // collaborate handler falls back to the qwen3-embedding-0.6b default,
         // which won't match a peer running a different model.
-        if let Some(embed_info) = self.embed_model.read().await.as_ref() {
+        if let Some(embed_info) = self
+            .services
+            .serving()
+            .and_then(|s| s.advertise_embed.info())
+        {
             app_state
                 .inner
                 .inference_store
@@ -2508,8 +2305,9 @@ impl EmbeddedDaemon {
         // post-setup health check. We register one `ModelInfo` per
         // configured slot (primary / fast / embed) with a
         // deterministic ModelId so reloads don't create duplicates.
-        if let Some(cfg) = self.setup_config.read().await.as_ref() {
-            register_local_model_slots(&app_state, cfg, node_id);
+        {
+            let cfg = self.setup_config.read().await;
+            register_local_model_slots(&app_state, &cfg, node_id);
         }
 
         // Client API bind — the OpenAI-compatible public surface
@@ -2528,15 +2326,12 @@ impl EmbeddedDaemon {
         // first request. The internal port (`:9742`, mTLS) is unrelated
         // and always binds `0.0.0.0`.
         let (mut client_bind, configured_token, internal_bind) = {
-            let guard = self.setup_config.read().await;
-            match guard.as_ref() {
-                Some(c) => (
-                    c.daemon.client_bind.clone(),
-                    c.daemon.client_token.clone(),
-                    c.daemon.internal_bind.clone(),
-                ),
-                None => ("127.0.0.1".to_string(), None, "0.0.0.0".to_string()),
-            }
+            let c = self.setup_config.read().await;
+            (
+                c.daemon.client_bind.clone(),
+                c.daemon.client_token.clone(),
+                c.daemon.internal_bind.clone(),
+            )
         };
         let mut bind_is_loopback = client_bind == "127.0.0.1"
             || client_bind == "::1"
@@ -2635,8 +2430,8 @@ impl EmbeddedDaemon {
         // boot — forming the mesh from static seeds (`?relay=` /
         // `[discovery] seed_addrs`) instead.
         let mdns_enabled = {
-            let guard = self.setup_config.read().await;
-            mdns_enabled_effective(guard.as_ref().map(|c| c.discovery.mdns).unwrap_or(true))
+            let c = self.setup_config.read().await;
+            mdns_enabled_effective(c.discovery.mdns)
         };
         let (mdns, browse_handle): (Option<Arc<MdnsDiscovery>>, Option<BrowseHandle>) =
             if mdns_enabled {
@@ -2667,18 +2462,50 @@ impl EmbeddedDaemon {
                 (None, None)
             };
 
-        // Snapshot the MCP mount + installed mesh HTTP router (if any)
-        // before moving app_state into the spawn. Both are cheap:
-        // Option<McpMount> clones 3 Arc bumps, Option<axum::Router>
-        // clones internal Arcs.
-        let mcp_mount = self.mcp.read().await.clone();
-        let mesh_http = self.mesh_http_router.read().await.clone();
-        let admin_http = self.admin_http_router.read().await.clone();
-        let project_http = self.project_http_router.read().await.clone();
-        let knowledge_view_http = self.knowledge_view_http_router.read().await.clone();
-        let corpus_watch_http = self.corpus_watch_http_router.read().await.clone();
-        let reading_http = self.reading_http_router.read().await.clone();
-        let solve_http = self.solve_http_router.read().await.clone();
+        // Assemble every router this daemon serves, before moving `app_state`
+        // into the spawn. Cheap: `axum::Router` clones internal Arcs.
+        //
+        // The three routers that are pure functions of `Arc<Self>` — mesh,
+        // admin, reading — are built HERE from `self_weak`, not accepted from
+        // a host. That is the fix for the divergence this file used to
+        // document as ordinary: the desktop installed a different subset from
+        // the CLI daemon, and nothing could tell a declined router from a
+        // forgotten one. A serving daemon now always has its own control
+        // surface, and `mount_names` prints exactly what it has.
+        let mcp_mount = self
+            .services
+            .serving()
+            .and_then(|s| s.capability.mcp.mount())
+            .cloned();
+        let mut mounted: Vec<axum::Router> = Vec::new();
+        let mut mount_names: Vec<&'static str> = Vec::new();
+        if self.services.serves_host_surface() {
+            let self_arc = self
+                .self_weak
+                .upgrade()
+                .expect("EmbeddedDaemon::start_daemon runs behind the Arc that owns it");
+            mounted.push(crate::mesh_http::mesh_router(Arc::clone(&self_arc)));
+            mount_names.push("mesh_http");
+            mounted.push(crate::admin_http::admin_router(Arc::clone(&self_arc)));
+            mount_names.push("admin_http");
+            mounted.push(crate::reading_http::reading_router(self_arc));
+            mount_names.push("reading_http");
+            for (router, name) in self
+                .services
+                .host_routers()
+                .into_iter()
+                .zip(self.services.host_router_names())
+            {
+                mounted.push(router);
+                mount_names.push(name);
+            }
+        }
+        info!(
+            profile = self.services.label(),
+            mcp = mcp_mount.is_some(),
+            routers = ?mount_names,
+            "daemon: client router assembled"
+        );
 
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await
@@ -2709,26 +2536,8 @@ impl EmbeddedDaemon {
                     mcp_router::McpNotifier::new(),
                 ));
             }
-            if let Some(mesh_http_router) = mesh_http {
-                client_router = client_router.merge(mesh_http_router);
-            }
-            if let Some(admin_http_router) = admin_http {
-                client_router = client_router.merge(admin_http_router);
-            }
-            if let Some(project_http_router) = project_http {
-                client_router = client_router.merge(project_http_router);
-            }
-            if let Some(knowledge_view_http_router) = knowledge_view_http {
-                client_router = client_router.merge(knowledge_view_http_router);
-            }
-            if let Some(corpus_watch_http_router) = corpus_watch_http {
-                client_router = client_router.merge(corpus_watch_http_router);
-            }
-            if let Some(reading_http_router) = reading_http {
-                client_router = client_router.merge(reading_http_router);
-            }
-            if let Some(solve_http_router) = solve_http {
-                client_router = client_router.merge(solve_http_router);
+            for router in mounted {
+                client_router = client_router.merge(router);
             }
             let internal_router = commonwealth_api::server::internal_router(app_state_clone);
 
@@ -2984,9 +2793,8 @@ impl EmbeddedDaemon {
             .setup_config
             .read()
             .await
-            .as_ref()
-            .map(|cfg| cfg.daemon.freshness_watchers_enabled)
-            .unwrap_or(true);
+            .daemon
+            .freshness_watchers_enabled;
         if !freshness_enabled {
             info!(
                 "freshness watchers skipped — [daemon].freshness_watchers_enabled = false in config.toml"
@@ -3065,18 +2873,15 @@ impl EmbeddedDaemon {
         // path untouched. Forwarding is lazy per stream, so binding
         // after the listener spawn (which races to bind) is safe.
         let (cfg_iroh_enabled, iroh_transport_cfg, iroh_relay_cfg) = {
-            let guard = self.setup_config.read().await;
-            match guard.as_ref() {
-                Some(c) => (
-                    c.iroh.enabled,
-                    c.iroh.transport.clone(),
-                    commonwealth_transport::iroh::RelayConfig::from_parts(
-                        c.iroh.relay_urls.clone(),
-                        c.iroh.discovery.as_deref(),
-                    ),
+            let c = self.setup_config.read().await;
+            (
+                c.iroh.enabled,
+                c.iroh.transport.clone(),
+                commonwealth_transport::iroh::RelayConfig::from_parts(
+                    c.iroh.relay_urls.clone(),
+                    c.iroh.discovery.as_deref(),
                 ),
-                None => (None, Default::default(), Default::default()),
-            }
+            )
         };
         // Enablement is tri-state: explicit `[iroh] enabled` wins;
         // otherwise mesh participation decides — the `client-exposed`
@@ -3644,15 +3449,6 @@ pub struct PeerInferenceEndpoint {
     pub transport: Option<crate::pinned_transport::PinnedTransport>,
 }
 
-impl Default for EmbeddedDaemon {
-    /// In-memory default — useful for tests and quick scripts, but
-    /// never used from the desktop app which calls
-    /// `EmbeddedDaemon::new(data_dir)` to get persistence.
-    fn default() -> Self {
-        Self::new_in_memory()
-    }
-}
-
 /// How RPC-worker discovery uses the iroh bridge for ggml's raw-TCP
 /// endpoint (`SOVEREIGN_RPC_TUNNEL`): `auto` (default) bridges only when
 /// no direct member IP answers; `always` prefers the bridge (E2E forcing,
@@ -4080,7 +3876,10 @@ mod tests {
         // The warm orchestrator resolves worker identity through this
         // directory; an unknown endpoint (env-configured worker) is None so
         // callers fall back to raw-IP addressing.
-        let daemon = EmbeddedDaemon::new_in_memory();
+        let daemon = EmbeddedDaemon::in_memory(
+            SetupConfig::unconfigured(),
+            crate::daemon_services::DaemonServices::MeshAdmin,
+        );
         assert_eq!(daemon.rpc_endpoint_node("10.0.0.7:50052"), None);
 
         let node = NodeId::from_u128(42);

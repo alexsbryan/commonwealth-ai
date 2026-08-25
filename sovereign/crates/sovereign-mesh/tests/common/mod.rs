@@ -390,3 +390,38 @@ impl InferenceProvider for TestProvider {
         self.capabilities.clone()
     }
 }
+
+// ── Daemon services fixtures ────────────────────────────────────
+
+/// A `DaemonServices::Desktop` around `engine` — the smallest variant that
+/// carries a corpus engine, which is what the reading and storage e2e tests
+/// need. Everything else is the honest empty value: no MCP mount, no embed
+/// advertisement, empty host routers.
+///
+/// Tests that need no engine use `DaemonServices::MeshAdmin` directly. There
+/// is deliberately no "daemon with only an engine" shortcut: that shape is not
+/// one any host builds, and offering it would put back a configuration nobody
+/// serves.
+pub fn desktop_services_with_engine(
+    engine: Arc<corpus_engine::CorpusEngine>,
+) -> sovereign_mesh::DaemonServices {
+    sovereign_mesh::DaemonServices::desktop(sovereign_mesh::DesktopServices {
+        serving: sovereign_mesh::ServingProfile {
+            core: sovereign_mesh::ServingCore {
+                corpus_engine: engine,
+                inference_provider: Arc::new(TestProvider::new()),
+            },
+            capability: sovereign_mesh::ServingCapability {
+                mcp: sovereign_mesh::McpSurface::Unavailable {
+                    reason: "test fixture: no tool registry".into(),
+                },
+                project_http: Router::new(),
+                corpus_watch_http: Router::new(),
+            },
+            advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                reason: "test fixture: no embed probe".into(),
+            },
+        },
+        state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+    })
+}

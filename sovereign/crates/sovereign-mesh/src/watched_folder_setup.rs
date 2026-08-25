@@ -40,7 +40,6 @@ const OBSIDIAN_DEFAULT_SWEEP_INTERVAL_SECS: u64 = 120;
 
 use corpus_engine::CorpusEngine;
 
-use crate::daemon::EmbeddedDaemon;
 
 /// Handle to the spawned scheduler loop. The caller holds it for the
 /// daemon's lifetime; dropping it (or calling `cancel()`) signals the
@@ -51,17 +50,20 @@ pub struct WatchedSubsystem {
 }
 
 impl WatchedSubsystem {
-    /// Wire up the full subsystem onto an `EmbeddedDaemon`. Returns
-    /// `Some(WatchedSubsystem)` when wiring succeeded, or `None` if
-    /// the manager was already populated by a prior call (the
-    /// `OnceLock` semantics make double-installation a no-op).
+    /// Install the watched-folder runtime singleton and spawn the scheduler.
+    ///
+    /// **No longer takes the daemon.** It used to, purely so it could call
+    /// `install_corpus_watch_http_router` — which meant the `/internal/corpus/
+    /// watch/*` routes existed only when this subsystem happened to come up.
+    /// The router is now part of [`crate::ServingCapability`], mounted by
+    /// every serving daemon; when this singleton was never installed the
+    /// handlers answer 503 with a named reason instead of 404 (ARCH §18.3).
     ///
     /// Pattern matches `daemon_cmd.rs::run_daemon`'s former inline
     /// block. Sink is a no-op by default — the worker emits
     /// structured tracing events itself, so the sink is purely an
     /// extension point for testing or a future progress drawer.
     pub async fn install(
-        daemon: Arc<EmbeddedDaemon>,
         engine: Arc<CorpusEngine>,
         manager: Arc<LocalCorpusManager>,
         max_concurrent_sweeps: usize,
@@ -211,13 +213,6 @@ impl WatchedSubsystem {
         // expectation: install once.
         crate::watched_folder_runtime::install(Arc::clone(&manager), Arc::clone(&registry));
         crate::watched_folder_runtime::set_cancel(cancel_tx);
-
-        // Mount the watched-folder HTTP routes on the daemon's
-        // loopback-only listener. Reads the singleton internally,
-        // so no Arc threading.
-        daemon
-            .install_corpus_watch_http_router(crate::corpus_watch_http::corpus_watch_router())
-            .await;
 
         let handle = Scheduler::spawn(registry, worker, cancel_token, scheduler_cfg);
         Self {

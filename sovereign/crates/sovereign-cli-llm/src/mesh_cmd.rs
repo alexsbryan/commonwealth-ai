@@ -7,9 +7,28 @@
 
 use std::path::PathBuf;
 
-use sovereign_cli_shared::dirs::mesh_data_dir;
+use sovereign_cli_shared::dirs::sovereign_root;
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_mesh::EmbeddedDaemon;
+
+/// The `SetupConfig` a `svrn mesh` one-shot binds with.
+///
+/// A missing `config.toml` is the ordinary first-run state and
+/// [`SetupConfig::unconfigured`] is its honest value: default ports, loopback
+/// client bind. A config that EXISTS but will not parse is not that state, and
+/// the substitution is named on stderr rather than applied silently — before
+/// this the daemon reached the same defaults through internal `None` fallbacks
+/// and said nothing, so a typo in `[daemon] client_port` looked like the port
+/// simply not taking effect (ARCH §18.3).
+fn one_shot_setup_config() -> sovereign_core::setup_config::SetupConfig {
+    match sovereign_core::setup_config::SetupConfig::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("(no usable ~/.svrnmesh/config.toml: {e} — binding the default :9741/:9742)");
+            sovereign_core::setup_config::SetupConfig::unconfigured()
+        }
+    }
+}
 
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
@@ -21,6 +40,7 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         sovereign_cli_shared::help::print(&HELP_MESH);
         return 0;
     }
+
 
     match args[0].as_str() {
         "create" => cmd_create(&args[1..]).await,
@@ -2549,7 +2569,7 @@ async fn cmd_create(args: &[String]) -> i32 {
     // is gone — we can't re-show it. Direct the user to `mesh rotate`
     // instead of blindly attempting another create_mesh (which errors
     // with AlreadyRunning or leaves them confused).
-    if sovereign_mesh::persist::load(&mesh_data_dir())
+    if sovereign_mesh::persist::load(&sovereign_root())
         .map(|opt| opt.is_some())
         .unwrap_or(false)
     {
@@ -2567,7 +2587,11 @@ async fn cmd_create(args: &[String]) -> i32 {
     });
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    let daemon = EmbeddedDaemon::new(
+        sovereign_root(),
+        one_shot_setup_config(),
+        sovereign_mesh::DaemonServices::MeshAdmin,
+    );
     // Explicit create = serve remote peers → expose the client API
     // (bind non-loopback + require a bearer token).
     daemon.expose_client_api();
@@ -2688,7 +2712,11 @@ async fn cmd_join(args: &[String]) -> i32 {
     }
 
     eprintln!("(no daemon detected on :9741 — running the join in-process)");
-    let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    let daemon = EmbeddedDaemon::new(
+        sovereign_root(),
+        one_shot_setup_config(),
+        sovereign_mesh::DaemonServices::MeshAdmin,
+    );
     daemon.expose_client_api();
     let Some(link) = parse_join_argument(arg) else {
         // Pre-validated above, so this is unreachable. Bail
@@ -2801,7 +2829,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
         sovereign_cli_shared::help::print(&HELP_MESH_ROTATE);
         return 0;
     }
-    match sovereign_mesh::persist::rotate_join_key(&mesh_data_dir()) {
+    match sovereign_mesh::persist::rotate_join_key(&sovereign_root()) {
         Ok(Some(rotated)) => {
             eprintln!();
             eprintln!("Note: existing members stay connected. Only future joins need the new key.");
@@ -3324,7 +3352,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
 /// the gossip-port endpoints (`:9742`), which is exactly what we
 /// want — the model-files routes live on the internal port.
 async fn collect_peer_internal_urls() -> std::io::Result<Vec<String>> {
-    let mesh_path = sovereign_cli_shared::dirs::mesh_data_dir().join("mesh.json");
+    let mesh_path = sovereign_root().join("mesh.json");
     let bytes = std::fs::read(&mesh_path)?;
     // Parse loosely — we only need the addresses array of each
     // non-self member. Using serde_json::Value avoids dragging in

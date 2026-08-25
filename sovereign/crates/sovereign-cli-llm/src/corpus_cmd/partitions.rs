@@ -659,14 +659,18 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
         return 1;
     };
 
-    // Resolve the sovereign index dir: same logic as the daemon uses.
-    let index_dir = sovereign_contracts::rebrand::mesh_data_dir().join("indexes");
+    // Resolve the sovereign index dir: same root the daemon's corpus engine
+    // writes to (`~/.svrnmesh/indexes`). This said `mesh_data_dir()` until
+    // 2026-08-24 and the comment claimed it matched the daemon — it did not.
+    // `alignment_cmd::mesh_indexes_dir` made the same correction on 2026-07-24
+    // after a fully-materialized 1930-chunk ingest reported "no local corpus".
+    let index_dir = sovereign_cli_shared::dirs::sovereign_indexes();
 
     // Build a no-op embed function — reconstruction reads metadata only.
     let noop_embed: corpus_engine::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
 
-    let recipes_dir = sovereign_contracts::rebrand::mesh_data_dir().join("recipes");
+    let recipes_dir = sovereign_cli_shared::dirs::sovereign_root().join("recipes");
 
     let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed);
 
@@ -751,8 +755,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
 
     // The manifest has already been written by reconstruct_source_manifest().
     // Confirm path for the user.
-    let index_path = sovereign_contracts::rebrand::mesh_data_dir()
-        .join("indexes")
+    let index_path = sovereign_cli_shared::dirs::sovereign_indexes()
         .join(&corpus_id)
         .join("_source_manifest.json");
     println!("Manifest written to: {}", index_path.display());

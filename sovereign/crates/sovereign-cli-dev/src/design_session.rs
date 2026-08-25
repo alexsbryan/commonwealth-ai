@@ -213,7 +213,7 @@ async fn preflight(req: &SessionRequest) -> Result<PreflightResult, i32> {
         );
         eprintln!("    ({reason})");
         eprintln!();
-        eprintln!("    Start it with:    commonwealth daemon start");
+        eprintln!("    Start it with:    svrn daemon start");
         eprintln!("    Or run `svrn project design --solo` to continue without the agent.");
         return Err(2);
     }

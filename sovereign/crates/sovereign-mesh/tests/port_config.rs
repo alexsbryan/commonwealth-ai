@@ -24,6 +24,7 @@ use std::path::PathBuf;
 
 use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 use sovereign_mesh::daemon::EmbeddedDaemon;
+use sovereign_mesh::DaemonServices;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {
@@ -59,7 +60,7 @@ async fn default_ports_used_when_setup_config_absent() {
     // No `set_setup_config` call → `resolved_ports()` returns the
     // historic (9741, 9742) defaults. After `create_mesh`,
     // `api_address()` exposes the chosen client bind decision.
-    let daemon = EmbeddedDaemon::new_in_memory();
+    let daemon = EmbeddedDaemon::in_memory(SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
     daemon
         .create_mesh("default-port test", "node")
         .await
@@ -84,8 +85,7 @@ async fn custom_client_port_from_setup_config_flows_to_api_address() {
     // After `set_setup_config` + `create_mesh`, the daemon's
     // bind decision must reflect it. Pre-fix this was a silent
     // no-op (operator changed the TOML, daemon still bound 9741).
-    let daemon = EmbeddedDaemon::new_in_memory();
-    daemon.set_setup_config(cfg_with_ports(39741, 39742)).await;
+    let daemon = EmbeddedDaemon::in_memory(cfg_with_ports(39741, 39742), DaemonServices::MeshAdmin);
     daemon
         .create_mesh("custom-port test", "node")
         .await

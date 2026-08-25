@@ -36,6 +36,7 @@ use sovereign_mesh::reading_http::reading_router;
 
 mod common;
 use common::spawn_router;
+use sovereign_core::setup_config::SetupConfig;
 
 const EMBED_DIM: usize = 8;
 const CHUNK_TEXT: &str = "Compatibilism: free will is compatible with determinism.";
@@ -114,8 +115,11 @@ async fn build_reading_daemon() -> (Arc<EmbeddedDaemon>, tempfile::TempDir, u64)
             .with_embedding_model("qwen3-embedding-0.6b"),
     );
 
-    let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-    daemon.set_corpus_engine(engine).await;
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        common::desktop_services_with_engine(engine),
+    );
     // The reading router reads `daemon.corpus_engine()` — we don't
     // need to fire up `create_mesh` because that path only matters
     // for routes that consult AppState (which reading_http does
@@ -262,8 +266,11 @@ async fn get_chunk_reports_unpromoted_partition_instead_of_masquerading_as_absen
         CorpusEngine::new(recipes, indexes, mock_embed_fn())
             .with_embedding_model("qwen3-embedding-0.6b"),
     );
-    let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-    daemon.set_corpus_engine(engine).await;
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        common::desktop_services_with_engine(engine),
+    );
 
     let addr = spawn_router(reading_router(Arc::clone(&daemon))).await;
     let resp = reqwest::Client::new()

@@ -47,6 +47,8 @@ use sovereign_mesh::mesh_http::mesh_router;
 use sovereign_mesh::project_http::project_router;
 use sovereign_mesh::reading_http::reading_router;
 use sovereign_mesh::reindexer::Reindexer;
+use sovereign_core::setup_config::SetupConfig;
+use sovereign_mesh::DaemonServices;
 
 /// Outer middleware that overrides `ConnectInfo<SocketAddr>` on the
 /// request to a *non-loopback* LAN address. Wraps a real router via
@@ -83,7 +85,7 @@ async fn spawn_with_spoof(router: Router) -> String {
 
 fn fresh_daemon() -> (tempfile::TempDir, Arc<EmbeddedDaemon>) {
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
+    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
     (tmp, daemon)
 }
 
