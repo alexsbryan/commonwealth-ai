@@ -85,7 +85,6 @@ PIN = "469cce54ea7f6a63c163d3d9fec879cf289ec484"
 
 SUBSET_IDS = [56, 58, 59, 62, 65, 69, 78, 83, 90, 95]
 SUBSET_ARTICLES_SHA = "b1ce57831916bd0e487b8816d3ef6b3fe3c3cb1ce73e26cdce4d6e9da4f3b0e7"
-DIMS = ["comprehensiveness", "insight", "instruction_following", "readability"]
 JUDGE_PIN = "Qwen3.8-27B-UD-Q6_K_XL"   # the daemon primary — the standard
 # stack (order deep-research-t7a amendment, directive 7f0e276b,
 # pre-registered pre-registration.md "T7a amendment — the DRB-I flight":
@@ -133,6 +132,14 @@ sys.path.insert(0, str(DRB / "vendor"))                            # vendored
 from utils.api import AIClient                                    # noqa: E402
 from utils.json_extractor import extract_json_from_markdown       # noqa: E402
 from utils.score_calculator import calculate_weighted_scores      # noqa: E402
+
+# The judge instrument — the greedy sampling pin (amendment N6) and the
+# scorable-verdict predicate — is ONE decider shared with
+# arms/lab/score_one.py (§10.6). A pinned reading is never compared
+# against an unpinned one, so both scorers must pin identically.
+sys.path.insert(0, str(REPO))
+from judge_instrument import (DIMS, JUDGE_TEMPERATURE, JUDGE_TOP_P,   # noqa: E402
+                             pin_sampling, unscorable)
 
 # byte-identity: vendored copies == the clone's (vendored verbatim)
 for name in ("score_calculator.py", "json_extractor.py", "api.py"):
@@ -234,9 +241,9 @@ def judge_call(client: AIClient, prompt: str, task_id: int) -> dict:
             if not extracted:
                 raise ValueError("no JSON extracted from judge response")
             out = json.loads(extracted)
-            missing = [d for d in DIMS if d not in out]
-            if missing:
-                raise ValueError(f"missing expected dimensions: {missing}")
+            why = unscorable(out)
+            if why:
+                raise ValueError(f"unscorable judge verdict: {why}")
             return out
         except Exception as e:                      # noqa: BLE001 — official recipe
             last_err = e
@@ -648,7 +655,8 @@ def main() -> None:
             sys.exit(f"exit 2: judge {JUDGE_PIN} not LOADED (have {models}) — "
                      f"the judge window is not open; no judge call made")
         print(f"judge guard: {JUDGE_PIN} loaded")
-        client = AIClient(model=JUDGE_PIN)
+        client = pin_sampling(AIClient(model=JUDGE_PIN))
+        print(f"judge pin: temperature={JUDGE_TEMPERATURE} top_p={JUDGE_TOP_P} (amendment N6)")
     elif not args.dry_run:
         print("resume: every arm derives from disk — no judge calls, no guard")
     else:
@@ -685,7 +693,28 @@ def main() -> None:
             "resumed_from": str(args.resume) if args.resume else None,
             "retry": ({"arm": retry_arm, "id": args.retry}
                       if args.retry is not None else None),
-            "judge": {"pin": JUDGE_PIN, "caveat": "different model from the "
+            "judge": {"pin": JUDGE_PIN,
+                      "sampling": {
+                          "temperature": JUDGE_TEMPERATURE,
+                          "top_p": JUDGE_TOP_P,
+                          "amendment": "greedy — N6, 2026-08-23",
+                          # Which tasks this run's pin actually covers. A
+                          # resumed arm is re-derived from a sidecar this run
+                          # did not produce, and a retry pins exactly ONE
+                          # task — stamping either "greedy" wholesale would
+                          # substitute a claim for a measurement (§18.3).
+                          "covers": {k: ("every task" if modes[k] == "fresh"
+                                         else f"task {args.retry} only"
+                                         if modes[k] == "retry"
+                                         else "no task — re-derived from a "
+                                              "sidecar this run did not judge")
+                                     for k in scored_counts},
+                          "note": "a manifest with NO sampling block was "
+                                  "flown before this amendment, at the daemon "
+                                  "default temperature 0.7. A pinned reading "
+                                  "is never compared against an unpinned one.",
+                      },
+                      "caveat": "different model from the "
                       "official judges (gemini-2.5-pro / GPT-5.5 era)"},
             "arms": {k: {"tasks": len(SUBSET_IDS) - len(skipped),
                          "scored": scored_counts[k],
