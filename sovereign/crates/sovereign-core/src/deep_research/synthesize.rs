@@ -295,6 +295,31 @@ pub(crate) const CHARS_PER_TOKEN: usize = 4;
 /// linearly.
 pub(crate) const ROUND_EVIDENCE_TOKENS: usize = 24_000;
 
+/// **The deliverable's length is a decision, not an accident of section
+/// count.** Measured 2026-08-24 on the outline A/B, and it cost that
+/// experiment its answer: the per-section budget was a fixed "300-380 words"
+/// regardless of how many sections there were, so the 20-section control
+/// wrote 9,084-9,354 words while the 7-section outline arm wrote 3,702-4,053
+/// — and `overall = T/(T+R)` compares head to head against references
+/// running 6,898-13,348 words. Control sat inside that band; the outline arm
+/// sat at roughly half its floor. Structure and length moved together, so
+/// the arm could not test structure.
+///
+/// The per-section budget is therefore DERIVED: target total / sections, so
+/// a 7-section and a 20-section plan produce comparable deliverables and an
+/// A/B over structure is an A/B over structure.
+pub(crate) const TARGET_REPORT_WORDS: usize = 9_000;
+/// Band for one section. The floor keeps a many-sectioned plan from writing
+/// stubs; the cap keeps a three-section plan from being asked for an essay
+/// the evidence window cannot support.
+pub(crate) const SECTION_WORDS_MIN: usize = 300;
+pub(crate) const SECTION_WORDS_MAX: usize = 1_400;
+
+/// Words to ask of one section, given how many the plan has.
+pub(crate) fn section_word_budget(sections: usize) -> usize {
+    (TARGET_REPORT_WORDS / sections.max(1)).clamp(SECTION_WORDS_MIN, SECTION_WORDS_MAX)
+}
+
 /// The outline's own evidence slice — enough to know what the evidence
 /// COVERS, not to read it. The writer reads properly, section by section.
 pub(crate) const OUTLINE_EVIDENCE_TOKENS: usize = 6_000;
@@ -869,10 +894,13 @@ pub async fn compose_report(
         if ev.trim().is_empty() {
             continue;
         }
+        // Derived from the plan's own size so length does not ride on structure.
+        let words = section_word_budget(kept.len());
+        let (lo, hi) = (words * 9 / 10, words * 11 / 10);
         let prompt = format!(
             "You are writing ONE section of an analytical research report that answers:\n{question}\n\n\
              THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n{WRITER_CONTRACT}\n\n\
-             Write 300-380 words. Start with a '## ' heading that is a short noun phrase, \
+             Write {lo}-{hi} words. Start with a '## ' heading that is a short noun phrase, \
              never the sub-question verbatim; use '### ' sub-headings where the material \
              has natural parts. No preamble and no commentary about the evidence itself."
         );
@@ -1721,6 +1749,45 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
 
     /// Retrieval granularity: a whole chunk is too coarse to rank
     /// against one sub-question, so the window is split with overlap.
+    #[test]
+    fn total_length_does_not_ride_on_section_count() {
+        // The defect this replaces, in one assertion. With a FIXED per-section
+        // budget the 20-section control wrote 9,084-9,354 words and the
+        // 7-section outline arm wrote 3,702-4,053 against references of
+        // 6,898-13,348 — so the outline A/B varied structure and length at
+        // once and could not answer the question it was run to answer.
+        //
+        // Watch-it-fail: return a constant from `section_word_budget` and the
+        // 7-vs-20 totals diverge by more than half.
+        let seven = 7 * section_word_budget(7);
+        let twenty = 20 * section_word_budget(20);
+        let ratio = seven as f32 / twenty as f32;
+        assert!(
+            (0.75..=1.33).contains(&ratio),
+            "a 7-section and a 20-section plan must target comparable totals: \
+             {seven} vs {twenty} words (ratio {ratio:.2})"
+        );
+    }
+
+    #[test]
+    fn the_section_budget_stays_inside_its_band() {
+        assert_eq!(
+            section_word_budget(1),
+            SECTION_WORDS_MAX,
+            "one section is capped"
+        );
+        assert_eq!(
+            section_word_budget(100),
+            SECTION_WORDS_MIN,
+            "many sections keep a floor"
+        );
+        assert_eq!(
+            section_word_budget(0),
+            SECTION_WORDS_MAX,
+            "zero must not divide by zero"
+        );
+    }
+
     #[test]
     fn the_outline_refuses_a_frontier_shaped_list() {
         // THE point of drb1-r5. The acquisition frontier is a list of search
