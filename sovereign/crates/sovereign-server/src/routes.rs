@@ -5,7 +5,9 @@ use axum::extract::{Extension, Path, Query};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Json, Response};
 
+use sovereign_core::registry::ToolRegistry;
 use sovereign_core::runtime::Runtime;
+use sovereign_core::traits::StateStore;
 
 use crate::approval::ServerApprovalChannel;
 use crate::auth::TenantId;
@@ -173,8 +175,12 @@ fn api_error(status: StatusCode, msg: &str) -> (StatusCode, Json<ErrorResponse>)
     )
 }
 
-fn tenant_runtime(runtime: &Arc<Runtime>, tenant: &TenantId) -> TenantRuntime {
-    TenantRuntime::new(Arc::clone(runtime), tenant.0.clone())
+fn tenant_runtime(
+    runtime: &Arc<Runtime>,
+    store: &Arc<dyn StateStore>,
+    tenant: &TenantId,
+) -> TenantRuntime {
+    TenantRuntime::new(Arc::clone(runtime), Arc::clone(store), tenant.0.clone())
 }
 
 // ─── Handlers ─────────────────────────────────────────────────
@@ -182,10 +188,11 @@ fn tenant_runtime(runtime: &Arc<Runtime>, tenant: &TenantId) -> TenantRuntime {
 /// POST /v1/conversations
 pub async fn create_conversation(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     body: axum::body::Bytes,
 ) -> ApiResult<CreateConversationResponse> {
-    let tr = tenant_runtime(&runtime, &tenant);
+    let tr = tenant_runtime(&runtime, &store, &tenant);
     // Body is optional + best-effort: an empty or malformed POST yields
     // an untagged conversation (the prior behaviour) rather than a 4xx.
     let req: CreateConversationRequest = if body.is_empty() {
@@ -226,6 +233,7 @@ pub async fn create_conversation(
 /// acceptance criterion.
 pub async fn send_message(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Extension(approval): Extension<Arc<ServerApprovalChannel>>,
     Extension(sched): Extension<FairScheduler>,
@@ -252,7 +260,7 @@ pub async fn send_message(
         }
     };
 
-    let tr = tenant_runtime(&runtime, &tenant);
+    let tr = tenant_runtime(&runtime, &store, &tenant);
 
     // Set task_id context for approval channel (will be updated by executor if needed).
     approval.set_task_id(&conversation_id).await;
@@ -285,13 +293,13 @@ pub async fn send_message(
 
 /// GET /v1/conversations/:id
 pub async fn get_conversation(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Path(conversation_id): Path<String>,
 ) -> ApiResult<ConversationResponse> {
     let scoped_id = format!("{}:{conversation_id}", tenant.0);
 
-    match runtime.store.get_conversation(&scoped_id).await {
+    match store.get_conversation(&scoped_id).await {
         Ok(convo) => Ok(Json(ConversationResponse {
             id: conversation_id,
             title: convo.title,
@@ -325,7 +333,7 @@ pub async fn get_conversation(
 
 /// GET /v1/conversations
 pub async fn list_conversations(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Query(params): Query<ListQuery>,
 ) -> ApiResult<ConversationListResponse> {
@@ -340,7 +348,7 @@ pub async fn list_conversations(
     // {tenant:id}` becomes `tenant:tenant:id`, which matches nothing, so
     // every existing conversation opened empty.
     let prefix = format!("{}:", tenant.0);
-    match runtime.store.list_conversations(limit, offset).await {
+    match store.list_conversations(limit, offset).await {
         Ok(convos) => Ok(Json(ConversationListResponse {
             conversations: convos
                 .into_iter()
@@ -359,13 +367,13 @@ pub async fn list_conversations(
 
 /// DELETE /v1/conversations/:id
 pub async fn delete_conversation(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Path(conversation_id): Path<String>,
 ) -> Result<StatusCode, (StatusCode, Json<ErrorResponse>)> {
     let scoped_id = format!("{}:{conversation_id}", tenant.0);
 
-    match runtime.store.delete_conversation(&scoped_id).await {
+    match store.delete_conversation(&scoped_id).await {
         Ok(()) => Ok(StatusCode::NO_CONTENT),
         Err(e) => Err(api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string())),
     }
@@ -385,9 +393,9 @@ pub async fn approve_task(
 
 /// GET /v1/tools
 pub async fn list_tools(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(tools): Extension<Arc<ToolRegistry>>,
 ) -> ApiResult<ToolListResponse> {
-    let descriptors = runtime.tools.descriptors();
+    let descriptors = tools.descriptors();
 
     Ok(Json(ToolListResponse {
         tools: descriptors
@@ -403,7 +411,7 @@ pub async fn list_tools(
 
 /// POST /v1/search
 pub async fn search(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Json(body): Json<SearchRequest>,
 ) -> ApiResult<SearchResponse> {
@@ -413,7 +421,7 @@ pub async fn search(
     // every tenant's messages — the cross-tenant leak that
     // `http_tests::search_does_not_leak_across_tenants` guards against.
     let prefix = format!("{}:", tenant.0);
-    match runtime.store.search_messages(&body.query).await {
+    match store.search_messages(&body.query).await {
         Ok(messages) => Ok(Json(SearchResponse {
             results: messages
                 .into_iter()
@@ -471,6 +479,7 @@ pub struct CorpusRefEntry {
 /// corpus engine is wired or none are installed.
 pub async fn list_corpora(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
 ) -> ApiResult<CorpusListResponse> {
     let Some(engine) = runtime.corpus_engine.as_ref() else {
@@ -482,7 +491,7 @@ pub async fn list_corpora(
     // Hide corpora this tenant may not see (another principal's Private
     // uploads). Fail closed: a store error rejects the request rather than
     // listing everything.
-    let forbidden = tenant_runtime(&runtime, &tenant)
+    let forbidden = tenant_runtime(&runtime, &store, &tenant)
         .forbidden_corpora()
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -553,6 +562,7 @@ pub struct ReadingWindowResponse {
 /// GET /v1/corpora/:corpus_id/chunks/:chunk_id?radius=1
 pub async fn read_chunk(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Path((corpus_id, chunk_id)): Path<(String, u64)>,
     Query(params): Query<ReadingQuery>,
@@ -561,7 +571,7 @@ pub async fn read_chunk(
     // A tenant may only read chunks from corpora it can see. Treat a
     // forbidden (another principal's Private) corpus as not-found — don't
     // reveal that it exists. Fail closed on a store error.
-    let forbidden = tenant_runtime(&runtime, &tenant)
+    let forbidden = tenant_runtime(&runtime, &store, &tenant)
         .forbidden_corpora()
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;

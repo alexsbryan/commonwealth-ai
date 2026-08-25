@@ -4,18 +4,30 @@ use std::sync::Arc;
 
 use sovereign_core::error::Result;
 use sovereign_core::runtime::{Runtime, StreamHandle};
+use sovereign_core::traits::StateStore;
 use sovereign_core::types::{CorpusVisibility, Response};
 
 /// Wraps a Runtime with tenant-scoped conversation IDs.
 /// Each tenant's conversations are prefixed to prevent cross-tenant access.
 pub struct TenantRuntime {
     pub runtime: Arc<Runtime>,
+    /// The server's own state-store handle — the same `Arc` `main.rs`
+    /// hands to `Runtime::new`, layered as its own Extension. The two
+    /// read-the-database methods below (`forbidden_corpora`,
+    /// `message_metadata`) use it instead of `runtime.store`, so the
+    /// Runtime is named here only for the four methods that answer a
+    /// turn. Daemon-convergence Phase 0.
+    pub store: Arc<dyn StateStore>,
     pub tenant_id: String,
 }
 
 impl TenantRuntime {
-    pub fn new(runtime: Arc<Runtime>, tenant_id: String) -> Self {
-        Self { runtime, tenant_id }
+    pub fn new(runtime: Arc<Runtime>, store: Arc<dyn StateStore>, tenant_id: String) -> Self {
+        Self {
+            runtime,
+            store,
+            tenant_id,
+        }
     }
 
     /// Scope a conversation ID to this tenant. Public so streaming
@@ -36,7 +48,7 @@ impl TenantRuntime {
     /// proceeding with an empty deny-set — a transient store error would
     /// otherwise open the gate.
     pub async fn forbidden_corpora(&self) -> Result<HashSet<String>> {
-        let states = self.runtime.store.list_corpus_states().await?;
+        let states = self.store.list_corpus_states().await?;
         Ok(states
             .into_iter()
             .filter(|s| s.deleted_at.is_none())
@@ -76,7 +88,7 @@ impl TenantRuntime {
         message_id: &str,
     ) -> Option<serde_json::Value> {
         let scoped = self.scoped_id(conversation_id);
-        let convo = self.runtime.store.get_conversation(&scoped).await.ok()?;
+        let convo = self.store.get_conversation(&scoped).await.ok()?;
         convo
             .messages
             .into_iter()

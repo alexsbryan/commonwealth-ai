@@ -383,7 +383,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
 
     // ---- commonwealth (the estate's own web app + shards; Mesh / LocalDaemon) ----
     ("commonwealth/crates/commonwealth-knowledge/src/shard_manager.rs", Class::Mesh, 3),
-    ("commonwealth/crates/commonwealth-daemon/src/main.rs", Class::LocalDaemon, 3),
     ("commonwealth/crates/commonwealth-knowledge/src/embed_http.rs", Class::LocalDaemon, 2),
     ("commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs", Class::Mesh, 2),
     ("commonwealth/crates/commonwealth-api/src/routes_knowledge.rs", Class::Mesh, 1),

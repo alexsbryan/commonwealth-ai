@@ -127,10 +127,14 @@ fn build_runtime(
 }
 
 /// Build the authed router mirroring `main.rs` (auth disabled → the
-/// middleware injects the `default` tenant), with the runtime, approval,
-/// scheduler, and reciprocity extensions every handler under test needs.
+/// middleware injects the `default` tenant), with the runtime, store,
+/// tool-registry, approval, scheduler, and reciprocity extensions every
+/// handler under test needs. `store` is layered separately from the
+/// Runtime — same handle, mirroring `main.rs` — because the non-chat
+/// handlers now extract it directly (daemon-convergence Phase 0).
 fn build_app(
     runtime: Arc<Runtime>,
+    store: Arc<dyn StateStore>,
     approval: Arc<ServerApprovalChannel>,
     sched: FairScheduler,
 ) -> Router {
@@ -167,6 +171,7 @@ fn build_app(
 
     authed
         .layer(Extension(runtime))
+        .layer(Extension(store))
         .layer(Extension(approval))
         .layer(Extension(sched))
         .layer(Extension(ReciprocityTable::new()))
@@ -187,6 +192,7 @@ fn build_app(
 /// request collapses to the `default` tenant.
 fn build_isolation_app(
     runtime: Arc<Runtime>,
+    store: Arc<dyn StateStore>,
     approval: Arc<ServerApprovalChannel>,
     sched: FairScheduler,
     auth: AuthState,
@@ -209,6 +215,7 @@ fn build_isolation_app(
         tokio::sync::broadcast::channel::<sovereign_core::types::TurnNarration>(64);
     authed
         .layer(Extension(runtime))
+        .layer(Extension(store))
         .layer(Extension(approval))
         .layer(Extension(sched))
         .layer(Extension(ReciprocityTable::new()))
@@ -250,9 +257,10 @@ async fn search_does_not_leak_across_tenants() {
     use axum::http::StatusCode;
 
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
-    let (runtime, _store, approval) = build_runtime(inference);
+    let (runtime, store, approval) = build_runtime(inference);
     let app = build_isolation_app(
         runtime,
+        store.clone() as Arc<dyn StateStore>,
         approval,
         FairScheduler::new(4, 1, 32, 2),
         two_tenant_auth(),
@@ -356,6 +364,7 @@ async fn documents_do_not_leak_across_tenants() {
 
     let app = build_isolation_app(
         runtime,
+        store.clone() as Arc<dyn StateStore>,
         approval,
         FairScheduler::new(4, 1, 32, 2),
         two_tenant_auth(),
@@ -425,8 +434,13 @@ async fn body_json(resp: axum::response::Response) -> serde_json::Value {
 #[tokio::test]
 async fn rest_send_message_surfaces_provenance() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
-    let (runtime, _store, approval) = build_runtime(inference);
-    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
+    let (runtime, store, approval) = build_runtime(inference);
+    let app = build_app(
+        runtime,
+        store.clone() as Arc<dyn StateStore>,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+    );
 
     let body = serde_json::json!({ "content": "hello there" }).to_string();
     let req = axum::http::Request::builder()
@@ -481,7 +495,12 @@ async fn rest_get_conversation_projects_citations() {
     };
     store.save_message(&msg).await.unwrap();
 
-    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
+    let app = build_app(
+        runtime,
+        store.clone() as Arc<dyn StateStore>,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+    );
     let req = axum::http::Request::builder()
         .method("GET")
         .uri("/v1/conversations/convX")
@@ -511,8 +530,13 @@ async fn rest_get_conversation_projects_citations() {
 async fn corpora_empty_without_engine() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
     // No corpus engine wired → endpoint must return an empty list, not error.
-    let (runtime, _store, approval) = build_runtime(inference);
-    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
+    let (runtime, store, approval) = build_runtime(inference);
+    let app = build_app(
+        runtime,
+        store.clone() as Arc<dyn StateStore>,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+    );
 
     let req = axum::http::Request::builder()
         .method("GET")
@@ -534,7 +558,7 @@ async fn corpora_empty_without_engine() {
 #[tokio::test]
 async fn busy_guard_returns_503_with_retry_after() {
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
-    let (runtime, _store, approval) = build_runtime(inference);
+    let (runtime, store, approval) = build_runtime(inference);
 
     // 1 slot, retry-after 7. Occupy the only slot via a held permit on a
     // distinct origin (the scheduler is Clone — same inner state), so the
@@ -544,7 +568,12 @@ async fn busy_guard_returns_503_with_retry_after() {
         .try_grant(UserKey::Tenant("occupier".into()), 1.0)
         .expect("first permit granted");
 
-    let app = build_app(runtime, approval, sched.clone());
+    let app = build_app(
+        runtime,
+        store.clone() as Arc<dyn StateStore>,
+        approval,
+        sched.clone(),
+    );
     let body = serde_json::json!({ "content": "hi" }).to_string();
     let req = axum::http::Request::builder()
         .method("POST")
@@ -572,8 +601,13 @@ async fn ws_streams_tokens_then_complete() {
     use tokio_tungstenite::tungstenite::Message as WsMessage;
 
     let inference: Arc<dyn InferenceProvider> = Arc::new(StreamingMockInference);
-    let (runtime, _store, approval) = build_runtime(inference);
-    let app = build_app(runtime, approval, FairScheduler::new(4, 1, 32, 2));
+    let (runtime, store, approval) = build_runtime(inference);
+    let app = build_app(
+        runtime,
+        store.clone() as Arc<dyn StateStore>,
+        approval,
+        FairScheduler::new(4, 1, 32, 2),
+    );
 
     // Bind an ephemeral port and serve in the background.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();

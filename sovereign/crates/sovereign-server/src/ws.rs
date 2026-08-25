@@ -10,6 +10,7 @@ use tokio::sync::broadcast::{self, error::RecvError};
 use tokio::sync::mpsc;
 
 use sovereign_core::runtime::Runtime;
+use sovereign_core::traits::StateStore;
 use sovereign_core::types::TurnNarration;
 
 use crate::approval::{ServerApprovalChannel, ServerEvent};
@@ -42,6 +43,7 @@ enum ClientEvent {
 pub async fn ws_handler(
     ws: WebSocketUpgrade,
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Extension(approval): Extension<Arc<ServerApprovalChannel>>,
     Extension(sched): Extension<FairScheduler>,
@@ -57,6 +59,7 @@ pub async fn ws_handler(
         handle_ws(
             socket,
             runtime,
+            store,
             tenant,
             approval,
             sched,
@@ -72,6 +75,7 @@ pub async fn ws_handler(
 async fn handle_ws(
     socket: WebSocket,
     runtime: Arc<Runtime>,
+    store: Arc<dyn StateStore>,
     tenant: TenantId,
     approval: Arc<ServerApprovalChannel>,
     sched: FairScheduler,
@@ -81,7 +85,7 @@ async fn handle_ws(
     conversation_id: String,
 ) {
     let (mut ws_tx, mut ws_rx) = socket.split();
-    let tr = TenantRuntime::new(Arc::clone(&runtime), tenant.0.clone());
+    let tr = TenantRuntime::new(Arc::clone(&runtime), store, tenant.0.clone());
 
     // Single writer to the socket. A forwarder task drains two sources:
     //   (a) this connection's per-turn token stream, via `out_rx`, and

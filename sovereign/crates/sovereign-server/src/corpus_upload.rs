@@ -246,6 +246,7 @@ pub fn corpus_upload_router() -> Router {
 /// POST /v1/corpora/upload
 async fn upload_private_corpus(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Json(body): Json<CorpusUploadRequest>,
 ) -> ApiResult<CorpusUploadResponse> {
@@ -258,7 +259,7 @@ async fn upload_private_corpus(
 
     let state = ingest_private_corpus(
         engine,
-        runtime.store.as_ref(),
+        store.as_ref(),
         Path::new(&body.file_path),
         &tenant.0,
         &body.name,

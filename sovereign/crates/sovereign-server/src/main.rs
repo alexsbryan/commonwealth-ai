@@ -625,7 +625,11 @@ async fn main() {
         router,
         Box::new(planner),
         Arc::clone(&tools),
-        store,
+        // Cloned, not moved: the same handle is layered as its own
+        // Extension below so the non-chat routes (conversations,
+        // documents, search, corpus upload) read the database directly
+        // instead of through `Runtime.store` — daemon-convergence Phase 0.
+        Arc::clone(&store),
         skills,
         approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
         // Honour the configured response-length budget ([inference]
@@ -914,6 +918,14 @@ async fn main() {
             }),
         )
         .layer(Extension(Arc::clone(&runtime)))
+        // The server's OWN handles, layered alongside the Runtime rather
+        // than reached through it. Same `Arc`s the Runtime was built with
+        // (see `Runtime::new` above), so nothing about what a route reads
+        // changes — only which object it asks. Phase 0 of daemon
+        // convergence: a route that only lists conversations or describes
+        // tools must not name `Runtime`.
+        .layer(Extension(Arc::clone(&store)))
+        .layer(Extension(Arc::clone(&tools)))
         .layer(Extension(approval))
         .layer(Extension(scheduler))
         .layer(Extension(reciprocity))

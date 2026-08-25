@@ -14,7 +14,7 @@ pub async fn print_mesh_status(commonwealth_url: &str) {
             tracing::warn!(
                 url = %commonwealth_url,
                 "Commonwealth not reachable. Activity reporting disabled. \
-                 Run `commonwealth daemon start` to enable mesh routing."
+                 Run `svrn daemon start` to enable mesh routing."
             );
         }
     }

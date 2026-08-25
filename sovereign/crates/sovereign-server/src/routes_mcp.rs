@@ -35,7 +35,6 @@ use futures::stream::{self, Stream};
 use serde_json::Value;
 
 use sovereign_core::registry::ToolRegistry;
-use sovereign_core::runtime::Runtime;
 use sovereign_core::types::{StepOutput, ToolContext};
 
 // ─── JSON-RPC 2.0 envelope ────────────────────────────────────
@@ -80,7 +79,7 @@ fn is_localhost(addr: &SocketAddr) -> bool {
 /// Notifications (requests without an `id`) receive an empty 202.
 async fn mcp_post(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(tools): Extension<Arc<ToolRegistry>>,
     Extension(tdd): Extension<crate::routes_tdd::TddState>,
     Json(body): Json<Value>,
 ) -> impl IntoResponse {
@@ -110,7 +109,7 @@ async fn mcp_post(
             for item in items {
                 match serde_json::from_value::<JsonRpcRequest>(item) {
                     Ok(req) => {
-                        if let Some(response) = dispatch_one(req, &runtime, &tdd).await {
+                        if let Some(response) = dispatch_one(req, &tools, &tdd).await {
                             responses.push(response);
                         }
                     }
@@ -129,7 +128,7 @@ async fn mcp_post(
             }
         }
         single => match serde_json::from_value::<JsonRpcRequest>(single) {
-            Ok(req) => match dispatch_one(req, &runtime, &tdd).await {
+            Ok(req) => match dispatch_one(req, &tools, &tdd).await {
                 Some(response) => (StatusCode::OK, Json(response)).into_response(),
                 None => StatusCode::ACCEPTED.into_response(),
             },
@@ -150,7 +149,7 @@ async fn mcp_post(
 /// (requests without an `id`) — per JSON-RPC 2.0 they get no reply.
 async fn dispatch_one(
     req: JsonRpcRequest,
-    runtime: &Arc<Runtime>,
+    tools: &Arc<ToolRegistry>,
     tdd: &crate::routes_tdd::TddState,
 ) -> Option<JsonRpcResponse> {
     // JSON-RPC 2.0 §4.1: a notification is a request with NO id, and it gets no
@@ -177,8 +176,8 @@ async fn dispatch_one(
             });
             JsonRpcResponse::result(id, result)
         }
-        "tools/list" => handle_tools_list_with_tdd(&runtime.tools, id),
-        "tools/call" => handle_tools_call_with_tdd(&runtime.tools, tdd, req.params, id).await,
+        "tools/list" => handle_tools_list_with_tdd(tools, id),
+        "tools/call" => handle_tools_call_with_tdd(tools, tdd, req.params, id).await,
         "ping" => JsonRpcResponse::result(id, serde_json::json!({})),
         other => JsonRpcResponse::error(id, -32601, format!("method not found: {other}")),
     })
@@ -240,7 +239,7 @@ async fn mcp_sse(
 
 async fn mcp_stats(
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(tools): Extension<Arc<ToolRegistry>>,
 ) -> impl IntoResponse {
     if !is_localhost(&peer) {
         return (
@@ -250,7 +249,7 @@ async fn mcp_stats(
             .into_response();
     }
 
-    let counts = runtime.tools.call_counts();
+    let counts = tools.call_counts();
     let total: u64 = counts.iter().map(|(_, n)| n).sum();
 
     let tools_json: Vec<serde_json::Value> = counts
