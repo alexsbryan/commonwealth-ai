@@ -1143,3 +1143,72 @@ mod tests {
             .starts_with("refused"));
     }
 }
+
+// ── Research notes (drb1-r4) ────────────────────────────────────────────
+//
+// The writer's input, distilled per sub-question. AIQ's DRB-II InfoRecall
+// lead (49.23 — above o3, Gemini-3-Pro and Grok) is attributed by our own
+// teardown (`research/deep-research/aiq-teardown.md` §1.3) to giving the
+// writer structured `ResearchNotes` — findings with source ids and an
+// evidence judgment — rather than raw retrieved passages. Ours composed
+// each section from the top-8 passages by cosine; a passage is text the
+// writer must still mine, and eight of them is what fits, not what is
+// known.
+//
+// The citation contract is UNCHANGED and is the reason this shape has
+// `evidence_ids` rather than quoted text: every finding names the window
+// chunks it rests on, the writer cites those same `ev-N` handles, and the
+// audit locates spans exactly as it does today. A finding whose ids do not
+// resolve against the window is REFUSED and recorded, never dropped and
+// never re-numbered (§18.3 — absence is reported, not defaulted).
+
+/// One distilled claim from one sub-question's evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Finding {
+    /// The claim, in the worker's words — one factual statement.
+    pub claim: String,
+    /// The window chunk ids it rests on (`ev-N`). Non-empty and every id
+    /// resolves: the parser refuses anything else.
+    pub evidence_ids: Vec<String>,
+    /// The worker's own 0-100 usefulness judgment for answering the
+    /// sub-question. Advisory — it ranks findings, it never gates a
+    /// citation (the corroboration floor and the audit still do that).
+    pub usefulness: u8,
+}
+
+/// A finding the parser would not admit, kept WITH its reason so a note
+/// that distilled badly is visible rather than merely short.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RefusedFinding {
+    pub claim: String,
+    pub reason: String,
+    /// Ids the worker cited that the window does not hold. Populated for
+    /// the unresolved-id refusal; empty for the others.
+    #[serde(default)]
+    pub unknown_ids: Vec<String>,
+}
+
+/// One sub-question's research note — the worker's whole output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchNote {
+    pub sub_question: String,
+    pub findings: Vec<Finding>,
+    /// Refused findings, with reasons. A note with zero findings and a
+    /// non-empty refusal list is a DISTILLATION FAILURE, not an empty
+    /// evidence window — the two must stay tellable apart.
+    #[serde(default)]
+    pub refused: Vec<RefusedFinding>,
+    /// How many window chunks this worker was shown.
+    pub passages_seen: usize,
+}
+
+/// The per-round research-note artifact (`research-notes-<round>.json`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchNotes {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub notes: Vec<ResearchNote>,
+}

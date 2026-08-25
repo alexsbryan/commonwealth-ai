@@ -1653,6 +1653,109 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - Default **on**, status shipped (`env-flags.toml`). Summary nodes as
   virtual chunks earned the default.
 
+## `SOVEREIGN_DR_REPORT_OUTLINE` — the report outline is not the search frontier (drb1-r5)
+
+**Landed 2026-08-24, DEFAULT OFF.** Campaign `drb1-race`. Requires
+`SOVEREIGN_DR_COMPOSED_REPORT=1`.
+
+**What it turns on.** The composed report's sections come from an outline
+planned over the gathered evidence — each distinct subject given standalone
+treatment where it needs explaining on its own terms, then the sections
+relating them, then what follows — instead of one section per planned
+sub-question.
+
+**Why.** The sub-questions ARE the acquisition frontier, and the planner
+prompt tunes that list for retrieval: it asks for "the specific measure or
+statistic it implies — an index, a ratio, a share, a rate, a count". Good
+search queries; bad section headings. The task-69 web arm's real section list
+included *"Count of distinct error handling states defined in the A2A message
+schema"*.
+
+**The evidence is the judge's own words**, on the arm with 98 sources and
+2.18M chars — so this is not an evidence gap:
+
+| criterion | ours | ref | the judge's reason |
+|---|---|---|---|
+| Breadth and Depth of MCP Protocol Description | 5.0 | 9.0 | "Article 2 dedicates Section III to MCP… Article 1 lacks a comprehensive standalone explanation" |
+| Clarity and Substantiation of A2A/MCP Connections | 6.0 | 9.5 | "Article 2 has a dedicated Section VI ('Interplay and Relationship')" |
+| Clarity and Logical Rigor in Problem-Solution Mapping | 6.5 | 9.5 | "Article 2 explicitly maps problems to solutions in Section IX" |
+| Depth and Nuance in Comparative Analysis | 7.0 | 9.0 | ours "risks being overly granular or speculative" |
+
+Three of the four largest weighted losses are structural. The fourth says the
+fragmentation costs **insight** — our worst dimension against AIQ (−18.06).
+It also explains why widening the frontier 8 → 20 did not help: it made the
+deliverable more fragmented, not better organised.
+
+**What does NOT change.** Acquisition. The frontier keeps its job and its
+width; this changes only what the writer is asked to build. Citations,
+corroboration floor, custody veto and the audit are untouched.
+
+**Refusal.** An outline parsing to fewer than 2 briefed sections is refused
+and the loop falls back to the frontier, naming the fallback. A bare heading
+with no brief is not a section — watched red in
+`deep_research::synthesize::tests::the_outline_refuses_a_frontier_shaped_list`,
+which under the permissive rule parses the literal task-69 frontier as a
+five-section outline.
+
+**Cost.** One extra `Speed::Slow` draft call per run.
+
+**Reversal condition.** Flips on only if, replayed against a FIXED cached
+estate (acquisition held constant, so writer variance is the only noise), the
+outline arm beats the frontier arm on RACE overall with the honesty floor
+intact — and the comprehensiveness and insight dimensions move, since those
+are what the diagnosis predicts. **Not yet measured.**
+
+## `SOVEREIGN_DR_RESEARCH_NOTES` — the researcher worker (drb1-r4)
+
+**Landed 2026-08-24, DEFAULT OFF.** Campaign `drb1-race`. Requires
+`SOVEREIGN_DR_COMPOSED_REPORT=1`: notes feed the composer's sections, so with
+the composed report off there is no writer to feed and this flag does nothing.
+
+**What it turns on.** One researcher worker per planned sub-question reads the
+WHOLE merged evidence window and returns structured findings — a claim, the
+`ev-N` window chunks it rests on, and a 0-100 usefulness judgment. The
+composer then writes each section from that sub-question's findings instead of
+from the top-`SECTION_PASSAGES` passages by cosine.
+
+**Why.** Our AIQ teardown (`research/deep-research/aiq-teardown.md` §1.3)
+attributes that system's DRB-II InfoRecall lead — 49.23, above o3 (39.98),
+Gemini-3-Pro (39.09) and Grok (33.52) — to exactly this: a dedicated worker per
+sub-question returning research notes, with the writer reading notes and
+holding no search tools. The teardown's own read is that "the ranking is the
+InfoRecall ranking" and that AIQ's lead is "a breadth result, not a scorer
+trick". Ours showed each section eight passages. On the logged task-69 flight
+(`dr-1787604870`) the window held 38 chunks, so most of what acquisition paid
+for never reached the writer.
+
+**What does NOT change: the citation contract, and therefore the gate.** A
+finding names the `ev-N` handles it rests on, the writer cites those same
+handles, and `audit` locates spans exactly as before — the corroboration floor
+still counts origins and the custody veto still sees a chunk. Distillation
+moves WHERE the reading happens, not what a citation means.
+
+**The refusal that carries the safety case.** A finding citing an id the
+window does not hold is refused WHOLE and recorded with its reason and the
+unknown ids. It is never admitted with the bad id dropped: that would leave a
+true-looking claim re-attributed to a chunk which never supported it. Watched
+red — `deep_research::notes::tests::a_finding_citing_an_unknown_chunk_is_refused`
+and `..::a_partly_resolvable_finding_is_refused_whole_never_re_attributed` both
+fail under exactly that wrong fix, the first printing the surviving
+`Finding { claim: "…", evidence_ids: ["ev-1"] }`. An uncited claim is refused
+too. A sub-question whose findings are ALL refused falls back to passages,
+named in the trace — never composed from nothing.
+
+**Cost.** One extra `Speed::Slow` draft call per sub-question per run. On the
+slow slot deliberately: this leg's output is what the writer reads instead of
+the evidence, so a fabricated finding here becomes a cited sentence the audit
+cannot locate.
+
+**Reversal condition.** The flag flips on only if, on the shipping Rust path
+with both arms otherwise identical, the notes arm beats the passage arm on
+RACE overall with the honesty floor intact (0.0 ungrounded on P4-v0 and R-12)
+and with the refused-finding count reported alongside the score. A win bought
+by refusing so little that unverifiable claims reach the writer is a failed
+arm, not a win. **Not yet measured — no arm has been flown.**
+
 ## `SOVEREIGN_DR_COMPOSED_REPORT` — the composed deep-research deliverable (drb1-t5)
 
 **Shipped 2026-08-22, DEFAULT OFF.** Campaign `drb1-race`, order `drb1-t5`,

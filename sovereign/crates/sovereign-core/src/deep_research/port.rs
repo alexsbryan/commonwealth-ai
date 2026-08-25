@@ -693,7 +693,9 @@ impl ResearchPort for LiveResearchPort {
         // (Speed::Slow, temperature 0.4) with NO url allowlist: the
         // frontier is a question list, not report content, and must not
         // cite. Lines are parsed deterministically (marker-stripped,
-        // deduped, capped at the shared FRONTIER_MAX).
+        // deduped, capped at the shared FRONTIER_MAX) — and the prompt
+        // now ASKS for that many, because the cap alone never made the
+        // model produce them.
         //
         // t1e (figure-hunting): the instruction asks, generically, what
         // measures and numbers each sub-question implies — an index, a
@@ -705,8 +707,17 @@ impl ResearchPort for LiveResearchPort {
         // its own knowledge. The loop's deterministic fold-in
         // (acquisition::figure_hunt_frontier) then guarantees every
         // sub-question carries a specifier structurally.
+        // The WIDTH is asked for, not left to the model's taste. With no
+        // target named, the 27B returned EIGHT lines on task 69 against a
+        // cap of twelve, and the loop's breadth was decided by that
+        // silence — gap rounds never recovered it (estate::FRONTIER_MAX
+        // carries the measurement). The number comes from the cap itself
+        // so the ask and the parser's ceiling cannot drift apart (§10.6).
+        let want = crate::deep_research::estate::FRONTIER_MAX;
         let prompt = format!(
-            "Decompose the research question into sub-questions that a web search could answer. \
+            "Decompose the research question into {want} sub-questions that a web search could \
+             answer. Cover every distinct facet the question raises, including ones it implies \
+             rather than names. \
              For each sub-question, name the specific measure or statistic it implies — an index, \
              a ratio, a share, a rate, a count, a median, a price, a percentage change — and the \
              entities it involves (cities, years), so a search for the data can retrieve it. If the \
@@ -994,8 +1005,17 @@ fn slot_for(leg: DraftLeg) -> Speed {
         DraftLeg::Plan => Speed::Slow,
         // One call per run, over the drafted report rather than evidence.
         DraftLeg::Synthesis => Speed::Slow,
+        // One call per run, and it decides the deliverable's structure —
+        // the dimension the criteria weigh most heavily.
+        DraftLeg::Outline => Speed::Slow,
         // One call per sub-question — the volume legs.
         DraftLeg::Round | DraftLeg::Section => Speed::Fast,
+        // One call per sub-question, so a volume leg by count — but it is
+        // the leg the WRITER then reads instead of the evidence, and a
+        // fabricated finding here becomes a cited sentence downstream that
+        // the audit cannot locate. Bought on the slow slot deliberately;
+        // the cost is named in the DEFAULTS_LEDGER row.
+        DraftLeg::Research => Speed::Slow,
     }
 }
 

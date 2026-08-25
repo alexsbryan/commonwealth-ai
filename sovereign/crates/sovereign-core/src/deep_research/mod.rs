@@ -22,6 +22,7 @@ pub mod fetch;
 pub mod gym;
 pub mod icd;
 pub mod launch;
+pub mod notes;
 pub mod port;
 pub mod render;
 pub mod search;
@@ -397,6 +398,29 @@ pub(crate) const AUDIT_CONCURRENCY: usize = 1;
 /// its `quality/env-flags.toml` entry.
 fn composed_report_enabled() -> bool {
     std::env::var("SOVEREIGN_DR_COMPOSED_REPORT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// drb1-r4: hand the writer distilled FINDINGS instead of retrieved
+/// passages (`deep_research::notes`). Default OFF, and it composes with
+/// the composed-report switch rather than replacing it: notes feed
+/// `compose_report`'s sections, so with the composed report off there is
+/// no writer to feed and this flag does nothing. Its
+/// `sovereign/DEFAULTS_LEDGER.md` row and `quality/env-flags.toml` entry
+/// carry the cost and the reversal condition.
+/// drb1-r5: plan the report's OUTLINE instead of writing one section per
+/// search query. Default OFF. Requires SOVEREIGN_DR_COMPOSED_REPORT=1 —
+/// there is no outline without a composed deliverable to structure. Row and
+/// reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+fn report_outline_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_REPORT_OUTLINE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn research_notes_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_RESEARCH_NOTES")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -2346,9 +2370,81 @@ impl Controller {
         // ledger row name it. When it composes, the gate runs over the
         // composed text, so the audited artefact and the delivered
         // artefact are the same document — never two.
+        // drb1-r4: one researcher worker per sub-question, reading the
+        // WHOLE merged window, returning findings whose evidence ids the
+        // parser resolved against that window. Gathered only when the
+        // composed report will actually consume them.
+        let notes: Vec<icd::ResearchNote> = if composed_report_enabled() && research_notes_enabled()
+        {
+            let n = notes::gather(&*self.port, &self.frontier, &window).await;
+            let admitted: usize = n.iter().map(|x| x.findings.len()).sum();
+            let refused: usize = n.iter().map(|x| x.refused.len()).sum();
+            tracing::info!(
+                target: "deep_research",
+                run_id = %self.config.run_id,
+                sub_questions = n.len(),
+                findings = admitted,
+                refused,
+                window_chunks = window.chunks.len(),
+                "research workers distilled the window"
+            );
+            self.write_artifact(
+                &format!("research-notes-{round}.json"),
+                &icd::ResearchNotes {
+                    icd: "research_notes".to_string(),
+                    version: icd::ICD_VERSION,
+                    run_id: self.config.run_id.clone(),
+                    charter_hash: self.charter_hash.clone(),
+                    round,
+                    notes: n.clone(),
+                },
+            )?;
+            n
+        } else {
+            Vec::new()
+        };
+
+        // drb1-r5: WHICH list becomes the deliverable's sections. The
+        // frontier is tuned for retrieval; an outline is planned for the
+        // reader. A refused or unusable outline falls back to the frontier
+        // and says so — never silently (§18.3).
+        let sections: Vec<String> = if composed_report_enabled() && report_outline_enabled() {
+            match synthesize::plan_outline(&*self.port, &self.question, &window).await {
+                Ok(o) => {
+                    tracing::info!(
+                        target: "deep_research",
+                        run_id = %self.config.run_id,
+                        sections = o.len(),
+                        frontier = self.frontier.len(),
+                        "report outline planned — sections come from the outline, not the \
+                         search frontier"
+                    );
+                    o
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        target: "deep_research",
+                        run_id = %self.config.run_id,
+                        error = %e,
+                        "outline unavailable — sections fall back to the search frontier \
+                         (named, never silent)"
+                    );
+                    self.frontier.clone()
+                }
+            }
+        } else {
+            self.frontier.clone()
+        };
+
         let composed = if composed_report_enabled() {
-            match synthesize::compose_report(&*self.port, &self.question, &window, &self.frontier)
-                .await
+            match synthesize::compose_report(
+                &*self.port,
+                &self.question,
+                &window,
+                &sections,
+                &notes,
+            )
+            .await
             {
                 Ok(md) => Some(md),
                 Err(e) => {

@@ -109,6 +109,18 @@ pub enum DraftLeg {
     /// The closing synthesis over the sections already drafted. Reads the
     /// report so far rather than the evidence.
     Synthesis,
+    /// The report's OUTLINE (drb1-r5): the sections the deliverable needs in
+    /// order to answer the question, planned over the evidence actually
+    /// gathered. One call per run, and like `Plan` it shapes everything
+    /// after it — but it is a DIFFERENT list from `Plan`'s, and that
+    /// separation is the whole point (see `synthesize::plan_outline`).
+    Outline,
+    /// One researcher worker (drb1-r4): one sub-question, the whole evidence
+    /// window in, structured findings out. Large input, short structured
+    /// output, one call per sub-question — and the leg whose output the
+    /// writer then reads INSTEAD of the passages, so its accuracy sets a
+    /// ceiling on everything downstream.
+    Research,
 }
 
 #[async_trait::async_trait]
@@ -250,7 +262,26 @@ pub trait ResearchPort: Send + Sync {
 /// sub-question decomposition honors it (one decider, one name, §10.6):
 /// the default split, the CLI's model decomposition, and the mock's
 /// Scripted lines.
-pub const FRONTIER_MAX: usize = 12;
+///
+/// **20, raised from 12 on 2026-08-24.** The AIQ teardown
+/// (`research/deep-research/aiq-teardown.md` §3) locates that system's
+/// InfoRecall lead — 49.23, above every frontier-lab entry on DRB-II —
+/// in the INITIAL DECOMPOSITION rather than the gap loop: "a task-level
+/// decomposition into 20 self-contained queries is where their breadth
+/// comes from". Our own ledger says the same thing from the other side.
+/// On the logged task-69 flight (`dr-1787604870`) the frontier came back
+/// **8 queries wide**, round 1 spent 10 searches and round 2 spent its
+/// other 10 to return **3** new pages while the gap count GREW 9 → 28 —
+/// the run ended `done-partial` with 62 of its 100 fetch pages unspent.
+/// Breadth the decomposition never asked for is not recoverable by
+/// gap rounds.
+///
+/// This is a CEILING, not a spend: the round split
+/// (`budget::round_allowance_cap`) still rations it, and a frontier
+/// wider than one round's search allowance is truncated, not run. A
+/// flight that wants the whole width must carry the search allowance
+/// for it.
+pub const FRONTIER_MAX: usize = 20;
 
 /// The deterministic plan_subquestions fallback: split the question on
 /// em-dash, semicolon, and ", and " boundaries into fragments (>= 12

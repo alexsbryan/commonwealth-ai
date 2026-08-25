@@ -9,7 +9,7 @@
 //! this code, never by the model.
 
 use super::estate::{DraftLeg, ResearchPort};
-use super::icd::{Draft, DraftCitation, EvidenceWindow, UrlConstraintPolicy};
+use super::icd::{Draft, DraftCitation, EvidenceWindow, ResearchNote, UrlConstraintPolicy};
 
 /// Assemble the round's evidence text (chunk id → content) for the
 /// prompt. Deterministic: chunks in window order, bounded by the
@@ -43,15 +43,37 @@ pub fn allowed_urls(window: &EvidenceWindow) -> Vec<String> {
 /// answer is measured by the battery, never assumed (§7.6). Empty
 /// window → empty block (nothing to enumerate, nothing to invent).
 pub fn figure_inventory(window: &EvidenceWindow) -> String {
+    let bodies: Vec<(String, String)> = window
+        .chunks
+        .iter()
+        .map(|c| (c.id.clone(), c.content.clone()))
+        .collect();
+    figure_inventory_of(&bodies)
+}
+
+/// The inventory over the bodies a prompt ACTUALLY carries.
+///
+/// The instruction attached to this list is "every evidence-supported figure
+/// must appear in the answer". Listing a figure the prompt's evidence no
+/// longer contains turns that into an instruction to produce a number the
+/// model cannot see — a demand to invent, aimed at the one part of the output
+/// the audit checks hardest. So the inventory is derived from the same
+/// admitted text the model reads, never from the full window.
+pub fn figure_inventory_of(bodies: &[(String, String)]) -> String {
     let mut out = String::new();
     let mut any = false;
-    for chunk in &window.chunks {
-        let tokens = super::figure_tokens(&chunk.content);
+    let mut seen: std::collections::BTreeMap<&str, Vec<String>> = Default::default();
+    for (id, body) in bodies {
+        let tokens = super::figure_tokens(body);
         if tokens.is_empty() {
             continue;
         }
+        seen.entry(id.as_str()).or_default().extend(tokens);
+    }
+    for (id, mut tokens) in seen {
+        tokens.dedup();
         any = true;
-        out.push_str(&format!("- [{}]: {}\n", chunk.id, tokens.join(", ")));
+        out.push_str(&format!("- [{id}]: {}\n", tokens.join(", ")));
     }
     if !any {
         return String::new();
@@ -259,6 +281,31 @@ pub(crate) fn draft_is_degenerate(text: &str) -> bool {
 // ---------------------------------------------------------------------
 
 /// Passage geometry for per-section retrieval.
+/// Chars per token, MEASURED rather than assumed: the web arm's own failure
+/// tokenized 1,360,782 chars to 302,153 tokens — 4.50. We divide by 4, which
+/// over-estimates the token cost of a char and therefore UNDER-fills the
+/// budget. Wrong in the safe direction, deliberately.
+pub(crate) const CHARS_PER_TOKEN: usize = 4;
+
+/// The round draft's evidence budget, against this deployment's 65,532-token
+/// window. 24k tokens leaves ample room for the system message, the figure
+/// inventory, the open-gap list and the output — and costs roughly 3.6 min of
+/// prefill at this host's measured ~110 tok/s, which is the real reason it is
+/// not simply set to the window: breadth per call is bought in wall clock,
+/// linearly.
+pub(crate) const ROUND_EVIDENCE_TOKENS: usize = 24_000;
+
+/// The outline's own evidence slice — enough to know what the evidence
+/// COVERS, not to read it. The writer reads properly, section by section.
+pub(crate) const OUTLINE_EVIDENCE_TOKENS: usize = 6_000;
+/// Section-count band. A report with fewer than five sections cannot give
+/// distinct subjects standalone treatment AND relate them; more than eight
+/// returns to the fragmentation this replaces.
+pub(crate) const OUTLINE_MIN: usize = 5;
+pub(crate) const OUTLINE_MAX: usize = 8;
+/// Below this a line is scaffolding, not a planned section.
+const OUTLINE_MIN_CHARS: usize = 25;
+
 const PASSAGE_CHARS: usize = 1400;
 const PASSAGE_OVERLAP: usize = 200;
 /// Passages handed to one section's writer.
@@ -292,15 +339,15 @@ in ONE short sentence and move on.";
 /// One retrieval passage: a span of a window chunk, tagged with the
 /// chunk it came from so the citation maps to a real fetched source.
 #[derive(Clone)]
-struct Passage {
-    chunk_id: String,
-    url: String,
-    text: String,
+pub(crate) struct Passage {
+    pub chunk_id: String,
+    pub url: String,
+    pub text: String,
 }
 
 /// Split the window into overlapping passages. Retrieval granularity:
 /// a whole chunk is too coarse to rank against one sub-question.
-fn window_passages(window: &EvidenceWindow) -> Vec<Passage> {
+pub(crate) fn window_passages(window: &EvidenceWindow) -> Vec<Passage> {
     let mut out = Vec::new();
     for c in &window.chunks {
         let joined: String = super::scrub_control(&c.content)
@@ -387,6 +434,137 @@ fn dedupe_subquestions(sub_vecs: &[Vec<f32>]) -> Vec<usize> {
     keep
 }
 
+/// **The ONE bound on how much evidence enters a single prompt** (§10.6),
+/// and it drops passages by RELEVANCE or by fair rotation — never by
+/// position in a document.
+///
+/// Watched red in the field, not theorised: the 2026-08-24 web arm on DRB-I
+/// task 69 pulled 50 chunks / 1,360,782 chars from Tavily in under two
+/// minutes and died on the round draft with
+///
+/// ```text
+/// Prompt too long: 302,153 tokens meets or exceeds the context window of 65,532
+/// ```
+///
+/// No cap was missing in the sense anyone had checked. `evidence_window_
+/// max_chunks` is 100 and the run held 50 — but that cap counts CHUNKS, and a
+/// web chunk is fifty times fatter than an estate one (measured on that run:
+/// median 26,766 chars against 521, with `fetch::CHUNK_CONTENT_CAP` allowing
+/// 50,000). Acquisition breadth and prompt size were coupled with nothing in
+/// between, so the first genuinely broad acquisition took the loop down.
+///
+/// **Why this works on passages instead of truncating chunks.** The obvious
+/// bound — give each chunk a share of the budget and cut it there — loses the
+/// TAIL of every long page, silently, and a page's most specific material is
+/// as likely to sit at the bottom as the top. That is the artificial-cutoff
+/// failure this codebase has been bitten by before: information disappears and
+/// nothing downstream can tell you it ever existed. Passages avoid it: the
+/// whole page is available as overlapping spans, and what loses is the span
+/// that ranks worst, not the span that happens to be late.
+///
+/// Two fill orders, and the caller says which it got:
+///
+/// - **Ranked** (an embedder was available): best passage first, capped per
+///   source so one large site cannot buy the whole budget.
+/// - **Rotation** (no embedder): round-robin across sources, so every source
+///   contributes its first passage before any source contributes its second.
+///   Document order is never the selector.
+///
+/// What did not fit is COUNTED and returned. Evidence a run paid to fetch and
+/// then never showed a model is reported, never silently absent (§18.3).
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct BoundedEvidence {
+    pub text: String,
+    /// The bodies actually admitted, `(chunk id, text)`, in block order.
+    ///
+    /// Anything ELSE derived from the evidence must be derived from THESE,
+    /// never from the window. `figure_inventory` walks every chunk in full,
+    /// so a bounded prompt would tell the model "every evidence-supported
+    /// figure must appear in the answer" while listing figures from text the
+    /// bound had removed — an instruction to cite what it cannot see, which
+    /// is a request to invent. The bound did not create that; it exposed it.
+    pub admitted: Vec<(String, String)>,
+    pub passages_used: usize,
+    pub passages_dropped: usize,
+    pub sources_used: usize,
+    pub chars_used: usize,
+}
+
+/// Passages from one source in a single prompt. A cap, not a budget: it
+/// stops one large site from crowding out the rest even when its passages
+/// legitimately rank best.
+pub(crate) const PER_SOURCE_PROMPT_CAP: usize = 6;
+
+pub(crate) fn bounded_evidence(
+    passages: &[Passage],
+    ranked: bool,
+    budget_chars: usize,
+) -> BoundedEvidence {
+    let mut out = BoundedEvidence {
+        text: String::new(),
+        admitted: Vec::new(),
+        passages_used: 0,
+        passages_dropped: 0,
+        sources_used: 0,
+        chars_used: 0,
+    };
+    if passages.is_empty() || budget_chars == 0 {
+        out.passages_dropped = passages.len();
+        return out;
+    }
+
+    // The fill ORDER. `ranked` means the caller already sorted best-first;
+    // otherwise rotate across sources so breadth, not position, decides.
+    let order: Vec<usize> = if ranked {
+        (0..passages.len()).collect()
+    } else {
+        let mut by_source: std::collections::BTreeMap<&str, Vec<usize>> = Default::default();
+        for (i, p) in passages.iter().enumerate() {
+            by_source.entry(p.url.as_str()).or_default().push(i);
+        }
+        let mut lanes: Vec<Vec<usize>> = by_source.into_values().collect();
+        let deepest = lanes.iter().map(|l| l.len()).max().unwrap_or(0);
+        let mut order = Vec::with_capacity(passages.len());
+        for depth in 0..deepest {
+            for lane in lanes.iter_mut() {
+                if let Some(i) = lane.get(depth) {
+                    order.push(*i);
+                }
+            }
+        }
+        order
+    };
+
+    let mut per_source: std::collections::HashMap<&str, usize> = Default::default();
+    let mut taken = vec![false; passages.len()];
+    for i in order {
+        let p = &passages[i];
+        let n = per_source.entry(p.url.as_str()).or_insert(0);
+        if *n >= PER_SOURCE_PROMPT_CAP {
+            continue;
+        }
+        let cost = p.text.chars().count();
+        if out.chars_used + cost > budget_chars {
+            continue;
+        }
+        *n += 1;
+        taken[i] = true;
+        out.chars_used += cost;
+        out.passages_used += 1;
+        out.text
+            .push_str(&format!("[{}] {}\n\n", p.chunk_id, p.text));
+        out.admitted.push((p.chunk_id.clone(), p.text.clone()));
+    }
+    out.passages_dropped = taken.iter().filter(|t| !**t).count();
+    out.sources_used = out
+        .admitted
+        .iter()
+        .map(|(id, _)| id.as_str())
+        .collect::<std::collections::BTreeSet<_>>()
+        .len();
+    out
+}
+
 /// The highest question-to-passage cosine in the window — how well the
 /// evidence we actually hold answers what was actually asked.
 fn peak_relevance(question_vec: &[f32], passage_vecs: &[Vec<f32>]) -> f32 {
@@ -441,6 +619,110 @@ fn unanswered_report(question: &str, peak: f32, chunks: usize) -> String {
     )
 }
 
+/// **The report's outline is not the search frontier** (drb1-r5).
+///
+/// `compose_report` wrote one section per PLANNED SUB-QUESTION, and those
+/// sub-questions come from the acquisition frontier — a list the planner
+/// prompt deliberately tunes for retrieval, asking for "the specific measure
+/// or statistic it implies — an index, a ratio, a share, a rate, a count".
+/// Those make good search queries and bad section headings. The task-69 web
+/// arm's actual section list included "Count of distinct error handling
+/// states defined in the A2A message schema" and "Number of documented
+/// failure modes unique to asynchronous communication channels".
+///
+/// The judge said so directly. Three of that arm's four largest weighted
+/// losses were structural, not evidential — with 98 sources and 2.18M chars
+/// in hand:
+///
+/// - *"Article 2 dedicates Section III to MCP, detailing its definition,
+///   origins, core architecture, key primitives… Article 1 lacks a
+///   comprehensive standalone explanation."* (ours 5.0 / ref 9.0)
+/// - *"Article 2 has a dedicated Section VI ('Interplay and Relationship')."*
+///   (ours 6.0 / ref 9.5)
+/// - *"Article 2 explicitly maps problems to solutions in Section IX."*
+///   (ours 6.5 / ref 9.5)
+///
+/// And a fourth says the fragmentation costs INSIGHT, our worst dimension:
+/// *"Article 1 offers deep dives into technical metrics (latency bytes,
+/// token counts)… risks being overly granular or speculative."*
+///
+/// It also explains a result we could not otherwise account for: widening
+/// the frontier 8 → 20 made the deliverable MORE fragmented, and the
+/// frontier-20 arms did not beat the frontier-8 ones.
+///
+/// So the frontier keeps its job — finding things — and the outline gets its
+/// own: deciding what the report must establish. The prompt describes a
+/// SHAPE and never the answer (no criterion vocabulary, no worked example
+/// carrying content): give each distinct subject its own standing where it
+/// needs explaining on its own terms, then relate them, then say what
+/// follows. It is planned over the evidence actually gathered, so it cannot
+/// promise sections nothing can support.
+pub async fn plan_outline(
+    port: &dyn ResearchPort,
+    question: &str,
+    window: &EvidenceWindow,
+) -> Result<Vec<String>, String> {
+    // A small slice: the outline needs to know what the evidence COVERS, not
+    // to read it. The writer reads it properly, section by section.
+    let bounded = bounded_evidence(
+        &window_passages(window),
+        false,
+        OUTLINE_EVIDENCE_TOKENS * CHARS_PER_TOKEN,
+    );
+    let prompt = format!(
+        "Plan the sections of a report that answers this question, using the evidence below.\n\n         Give each distinct subject the question names its own section wherever it needs \
+         explaining on its own terms before it can be compared. Then the sections that relate \
+         those subjects to each other. Then what follows from that for someone acting on it. \
+         Plan only sections the evidence can support.\n\n         One section per line: a short noun-phrase title, then ' — ', then one sentence naming \
+         what that section must establish. Between {OUTLINE_MIN} and {OUTLINE_MAX} sections. \
+         No numbering, no commentary.\n\n         Question: {question}\n\nEvidence:\n{}",
+        bounded.text
+    );
+    let raw = port
+        .draft(DraftLeg::Outline, &prompt, None, &[])
+        .await
+        .map_err(|e| format!("outline draft: {e}"))?;
+    parse_outline(&raw)
+}
+
+/// The outline parser — PURE, so every admission rule is decidable without a
+/// model in the loop (§18.1: a check with a failing input you can name).
+pub(crate) fn parse_outline(raw: &str) -> Result<Vec<String>, String> {
+    let mut out: Vec<String> = Vec::new();
+    for line in raw.lines() {
+        let line = line
+            .trim()
+            .trim_start_matches(['-', '*', '•', '#', ' '])
+            .trim_start_matches(|c: char| c.is_ascii_digit())
+            .trim_start_matches(['.', ')', ' '])
+            .trim();
+        // A bare heading is a title, not a section plan — the brief after the
+        // separator is what tells the writer what to establish, and a section
+        // with no brief is exactly the frontier-shaped heading this replaces.
+        if line.chars().count() < OUTLINE_MIN_CHARS || (!line.contains('—') && !line.contains(':'))
+        {
+            continue;
+        }
+        if out.iter().any(|e| e == line) {
+            continue;
+        }
+        out.push(line.to_string());
+        if out.len() >= OUTLINE_MAX {
+            break;
+        }
+    }
+    if out.len() < 2 {
+        // Refuse rather than compose from a one-line outline: the caller
+        // falls back to the frontier and NAMES the fallback (§18.3).
+        return Err(format!(
+            "outline unusable — {} section(s) parsed from {} chars of draft",
+            out.len(),
+            raw.chars().count()
+        ));
+    }
+    Ok(out)
+}
+
 /// The composed deliverable: one section per sub-question plus a closing
 /// synthesis, with a `## Sources` list whose numbers the section text
 /// cites. Returns the markdown and the ordered source list.
@@ -449,6 +731,7 @@ pub async fn compose_report(
     question: &str,
     window: &EvidenceWindow,
     subquestions: &[String],
+    notes: &[ResearchNote],
 ) -> Result<String, String> {
     if window.chunks.is_empty() {
         return Err("compose_report: empty evidence window".to_string());
@@ -543,12 +826,48 @@ pub async fn compose_report(
                 .cloned()
                 .collect()
         };
-        if picked.is_empty() {
+        // drb1-r4: the writer reads FINDINGS when a researcher worker
+        // distilled this sub-question, and passages when it did not. One
+        // section, one input — never both, because a section handed both
+        // would double-count its evidence and an ablation would measure
+        // nothing. The choice is per sub-question and NAMED in the trace:
+        // a note whose findings were ALL refused falls back to passages
+        // rather than writing a section from nothing (§18.3 — the
+        // substitution is reported, never silent).
+        let note = notes.iter().find(|n| n.sub_question == *sub);
+        let ev = match note.filter(|n| !n.findings.is_empty()) {
+            Some(n) => {
+                tracing::debug!(
+                    target: "deep_research",
+                    sub_question = %sub,
+                    findings = n.findings.len(),
+                    refused = n.refused.len(),
+                    passages_seen = n.passages_seen,
+                    "compose_report: section written from distilled findings"
+                );
+                super::notes::findings_block(n)
+            }
+            None => {
+                if picked.is_empty() {
+                    continue;
+                }
+                if note.is_some() {
+                    tracing::info!(
+                        target: "deep_research",
+                        sub_question = %sub,
+                        "compose_report: worker admitted no finding — \
+                         section falls back to passages"
+                    );
+                }
+                let mut ev = String::new();
+                for p in picked.iter() {
+                    ev.push_str(&format!("[{}] ({})\n{}\n\n", p.chunk_id, p.url, p.text));
+                }
+                ev
+            }
+        };
+        if ev.trim().is_empty() {
             continue;
-        }
-        let mut ev = String::new();
-        for p in picked.iter() {
-            ev.push_str(&format!("[{}] ({})\n{}\n\n", p.chunk_id, p.url, p.text));
         }
         let prompt = format!(
             "You are writing ONE section of an analytical research report that answers:\n{question}\n\n\
@@ -677,13 +996,35 @@ pub async fn draft_round(
                   figures are listed in the inventory). Use only chunk ids present in the evidence \
                   block. If the evidence cannot answer a part, say so explicitly rather than guessing."
         .to_string();
+    // The evidence is BOUNDED before it becomes a prompt, and what loses is
+    // the worst-ranked passage rather than the tail of a long page (see
+    // `bounded_evidence`). No embedder on this leg, so the fill rotates
+    // across sources: every source contributes before any source repeats.
+    let bounded = bounded_evidence(
+        &window_passages(evidence),
+        false,
+        ROUND_EVIDENCE_TOKENS * CHARS_PER_TOKEN,
+    );
+    if bounded.passages_dropped > 0 {
+        tracing::info!(
+            target: "deep_research",
+            run_id, round,
+            window_chunks = evidence.chunks.len(),
+            passages_used = bounded.passages_used,
+            passages_dropped = bounded.passages_dropped,
+            sources_used = bounded.sources_used,
+            chars_used = bounded.chars_used,
+            budget_chars = ROUND_EVIDENCE_TOKENS * CHARS_PER_TOKEN,
+            "round draft: evidence bounded — passages dropped are NAMED, never silently absent"
+        );
+    }
     let mut prompt = String::new();
     if round == 1 {
-        prompt.push_str(&format!("Estate evidence:\n{}", evidence_block(evidence)));
+        prompt.push_str(&format!("Estate evidence:\n{}", bounded.text));
     } else {
         prompt.push_str(&format!(
             "Evidence gathered so far:\n{}\n\nQuestion: {question}",
-            evidence_block(evidence)
+            bounded.text
         ));
         if !open_gaps.is_empty() {
             prompt.push_str(
@@ -709,7 +1050,7 @@ pub async fn draft_round(
     let inventory = if resolve_only {
         String::new()
     } else {
-        figure_inventory(evidence)
+        figure_inventory_of(&bounded.admitted)
     };
     if !inventory.is_empty() {
         prompt.push_str(&format!("\n\n{inventory}"));
@@ -1380,6 +1721,190 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
 
     /// Retrieval granularity: a whole chunk is too coarse to rank
     /// against one sub-question, so the window is split with overlap.
+    #[test]
+    fn the_outline_refuses_a_frontier_shaped_list() {
+        // THE point of drb1-r5. The acquisition frontier is a list of search
+        // queries — bare noun phrases with no brief — and feeding it to the
+        // writer as a section plan is what produced sections titled "Count of
+        // distinct error handling states defined in the A2A message schema".
+        // A line with no brief after the separator is not a planned section.
+        //
+        // Watch-it-fail: drop the separator requirement and these parse as a
+        // five-section outline.
+        let frontier = "Number of major AI agent protocols released by Google in 2024\n\
+             Count of distinct error handling states defined in the A2A message schema\n\
+             Name and release date of the A2A protocol announced by Google\n\
+             Number of documented failure modes unique to asynchronous channels\n\
+             Percentage increase in developer adoption metrics for MCP\n";
+        let got = parse_outline(frontier);
+        assert!(
+            got.is_err(),
+            "a frontier-shaped list must not pass as an outline: {got:?}"
+        );
+        assert!(got.unwrap_err().contains("unusable"));
+    }
+
+    #[test]
+    fn a_real_outline_parses_and_keeps_its_briefs() {
+        let raw = "Sections:\n\n\
+            - The MCP Protocol — establish its architecture, primitives and transport.\n\
+            - The A2A Protocol — establish its task lifecycle and agent discovery model.\n\
+            3. Interplay and Overlap — relate the two and name where they compete.\n\
+            * What Follows for Adopters — say what a team should do with the distinction.\n";
+        let out = parse_outline(raw).expect("a briefed outline parses");
+        assert_eq!(out.len(), 4, "got {out:?}");
+        assert!(out[0].starts_with("The MCP Protocol"), "{:?}", out[0]);
+        assert!(
+            out[0].contains("architecture"),
+            "the brief survives — it is what tells the writer what to establish: {:?}",
+            out[0]
+        );
+        assert!(
+            !out.iter().any(|s| s.starts_with('-') || s.starts_with('3')),
+            "list markers are stripped: {out:?}"
+        );
+    }
+
+    #[test]
+    fn the_outline_is_capped_and_deduped() {
+        let mut raw = String::new();
+        for _ in 0..3 {
+            for i in 0..5 {
+                raw.push_str(&format!(
+                    "Section {i} — establish the thing numbered {i}.\n"
+                ));
+            }
+        }
+        let out = parse_outline(&raw).expect("parses");
+        assert!(
+            out.len() <= OUTLINE_MAX,
+            "capped at {OUTLINE_MAX}: {}",
+            out.len()
+        );
+        let mut uniq = out.clone();
+        uniq.sort();
+        uniq.dedup();
+        assert_eq!(uniq.len(), out.len(), "no repeated section: {out:?}");
+    }
+
+    #[test]
+    fn a_long_page_keeps_its_tail_when_the_budget_bites() {
+        // THE anti-cutoff property. A budget spent by truncating each chunk
+        // loses the END of every long page, silently — and a page's most
+        // specific material is as likely to sit at the bottom as the top.
+        // Here the only passage that answers the question is the last span of
+        // a long document, and the budget admits barely two passages.
+        //
+        // Watch-it-fail: select by document order (drop `ranked`, feed the
+        // passages unsorted) and the needle is never admitted.
+        let mut w = window();
+        let filler = "padding sentence with no bearing on the question. ".repeat(120);
+        w.chunks[0].content = format!("{filler}THE-NEEDLE sits at the very end.");
+        let passages = window_passages(&w);
+        assert!(
+            passages.len() > 3,
+            "the page must split into several passages"
+        );
+        // Rank: the needle passage first, as an embedder would order it.
+        let mut ordered = passages.clone();
+        ordered.sort_by_key(|p| !p.text.contains("THE-NEEDLE"));
+        let out = bounded_evidence(&ordered, true, 2 * PASSAGE_CHARS);
+        assert!(
+            out.text.contains("THE-NEEDLE"),
+            "the tail of a long page must survive a tight budget:\n{}",
+            out.text
+        );
+        assert!(
+            out.passages_dropped > 0,
+            "this budget must actually bite, or the test proves nothing"
+        );
+    }
+
+    #[test]
+    fn rotation_gives_every_source_a_turn_before_any_source_repeats() {
+        // The no-embedder fill. Position in the window must never be the
+        // selector: a run that fetched forty sources and showed the model the
+        // first two is the information loss this bound exists to prevent.
+        let mut w = window();
+        w.chunks.clear();
+        for i in 0..4 {
+            let mut c = crate::deep_research::icd::WindowChunk {
+                id: format!("ev-{i}"),
+                locator: format!("https://s{i}.example/p"),
+                source_url: format!("https://s{i}.example/p"),
+                custody: "public-web".to_string(),
+                provenance_class: "known".to_string(),
+                content: String::new(),
+                ingested_into: None,
+                tags: Vec::new(),
+            };
+            c.content = format!("source {i} body. ").repeat(300);
+            w.chunks.push(c);
+        }
+        let passages = window_passages(&w);
+        let out = bounded_evidence(&passages, false, 4 * PASSAGE_CHARS);
+        for i in 0..4 {
+            assert!(
+                out.text.contains(&format!("source {i} body")),
+                "every source contributes before any repeats; source {i} missing:\n{}",
+                out.text
+            );
+        }
+    }
+
+    #[test]
+    fn the_budget_holds_and_what_it_dropped_is_counted() {
+        let mut w = window();
+        w.chunks[0].content = "long body sentence here. ".repeat(500);
+        let passages = window_passages(&w);
+        let budget = 3 * PASSAGE_CHARS;
+        let out = bounded_evidence(&passages, false, budget);
+        assert!(
+            out.chars_used <= budget,
+            "budget {budget} exceeded: {} chars",
+            out.chars_used
+        );
+        assert_eq!(
+            out.passages_used + out.passages_dropped,
+            passages.len(),
+            "every passage is either admitted or counted as dropped — never \
+             unaccounted for"
+        );
+    }
+
+    #[test]
+    fn the_admitted_bodies_are_exactly_what_the_prompt_carries() {
+        // The figure inventory is built from `admitted`. If admitted and text
+        // could disagree, the inventory would name figures the model cannot
+        // see — an instruction to invent, aimed at the numbers the audit
+        // checks hardest.
+        let mut w = window();
+        w.chunks[0].content = "the value was 42 percent in 2024. ".repeat(200);
+        let passages = window_passages(&w);
+        let out = bounded_evidence(&passages, false, 2 * PASSAGE_CHARS);
+        for (_, body) in out.admitted.iter() {
+            assert!(
+                out.text.contains(body.as_str()),
+                "an admitted body must appear verbatim in the prompt text"
+            );
+        }
+        let inv = figure_inventory_of(&out.admitted);
+        if !inv.is_empty() {
+            assert!(
+                inv.contains("ev-1"),
+                "the inventory names the chunk the admitted body came from"
+            );
+        }
+    }
+
+    #[test]
+    fn an_empty_window_yields_an_empty_block_not_a_panic() {
+        let out = bounded_evidence(&[], false, 10_000);
+        assert_eq!(out.passages_used, 0);
+        assert_eq!(out.chars_used, 0);
+        assert!(out.text.is_empty());
+    }
+
     #[test]
     fn window_passages_split_long_chunks_with_overlap() {
         let mut w = window();
