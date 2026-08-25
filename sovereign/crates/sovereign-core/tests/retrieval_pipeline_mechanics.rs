@@ -107,6 +107,9 @@ async fn runner_executes_steps_in_order_threading_state() {
         Vec::new(),
         "KnowledgeQuery",
         "KnowledgeQuery".to_string(),
+        // A stage under test needs no providers — which is the point of
+        // Phase 4a: a turn is drivable without wiring an enrichment stack.
+        sovereign_core::runtime::Lane::none(),
     );
     let pipeline = RetrievalPipeline {
         name: "test",
@@ -140,6 +143,9 @@ async fn runner_survives_steps_that_shrink_the_pool() {
         Vec::new(),
         "DeepQuery",
         "DeepQuery".to_string(),
+        // A stage under test needs no providers — which is the point of
+        // Phase 4a: a turn is drivable without wiring an enrichment stack.
+        sovereign_core::runtime::Lane::none(),
     );
     let pipeline = RetrievalPipeline {
         name: "test",

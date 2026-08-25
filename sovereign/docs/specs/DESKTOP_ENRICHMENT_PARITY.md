@@ -3,6 +3,17 @@
 
 # Desktop Enrichment Parity
 
+> **2026-08-25 — the drift class this document tracks is now structural, and
+> the `with_*` seam names below no longer exist.** daemon-convergence Phase 4b
+> deleted the eight enrichment builders and made `LaneSources` a REQUIRED
+> argument to `Runtime::new`, because a builder cannot enforce installation:
+> from inside the Runtime, a forgotten `with_gliner` and a host with no GLiNER
+> are the same state, which is exactly how the gaps catalogued here opened.
+> A host now names its providers or names `LaneSources::none()`. The
+> *measurement* half of this document (which corpus has which enrichment, and
+> whether a leg pays off) stands; the seam-by-seam wiring audit is superseded
+> by the constructor. See `quality/TOPOLOGY.md` §10, Phase 4b.
+
 ## Context
 
 Commonwealth AI has **four enrichment systems** (`corpus-engine/ENRICHMENT.md`):

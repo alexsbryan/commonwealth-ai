@@ -394,29 +394,21 @@ pub async fn build_session_with_skills(
         }
     };
 
-    let mut runtime = Runtime::new(
-        Arc::clone(&inference),
-        router,
-        Box::new(planner),
-        Arc::clone(&tools),
-        Arc::clone(&store),
-        skills,
-        approval,
-        inference_config,
-    )
-    .with_corpus_engine(Arc::clone(&corpus_engine));
-    if let Some(ns) = notes_store.as_ref() {
-        runtime = runtime.with_note_store(Arc::clone(ns));
-    }
-    // Conv-tiered briefing reader — same SqliteStateStore handle
-    // already opened above also impls ConvTieredReader. Spec
+    // ── The turn's enrichment stack, gathered BEFORE the Runtime ─────────
+    //
+    // daemon-convergence Phase 4b: `LaneSources` is a required argument to
+    // `Runtime::new`, not eight `with_*` calls a host can forget. The
+    // gathering below used to run AFTER construction and mutate the Runtime;
+    // it does not need one (every provider is a function of `corpus_engine`,
+    // `inference`, `store_concrete` and the indexes dir), so the constructor
+    // moved down to where the stack is complete.
+    let mut lane = sovereign_core::runtime::lane::LaneSources::none();
+    // Conv-tiered briefing reader — the same SqliteStateStore handle already
+    // opened above also impls ConvTieredReader. Spec
     // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
-    runtime = runtime.with_conv_tiered_reader(
+    lane.conv_tiered = Some(
         Arc::clone(&store_concrete) as Arc<dyn sovereign_store::sqlite::ConvTieredReader>
     );
-    if let Some(m) = mesh_knowledge {
-        runtime = runtime.with_mesh_knowledge(m);
-    }
     // GLiNER entity extractor for entity-aware retrieval-over-history
     // (`Runtime::maybe_retrieve_relevant_history`). Best-effort: probe
     // the default model id; if installed, load it and wire it onto
@@ -428,7 +420,7 @@ pub async fn build_session_with_skills(
             match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
                 Ok(g) => {
                     let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
-                    runtime = runtime.with_gliner(arc);
+                    lane.gliner = Some(arc);
                     tracing::info!(
                         model = model_id,
                         "bootstrap: GLiNER entity extractor loaded"
@@ -457,7 +449,7 @@ pub async fn build_session_with_skills(
             graph.article_count().await,
             graph.edge_count().await,
         );
-        runtime = runtime.with_wikipedia_graph(graph);
+        lane.wikipedia_graph = Some(graph);
     }
 
     // Atlas-grounded retrieval: build the per-process atlas context
@@ -474,10 +466,8 @@ pub async fn build_session_with_skills(
             embed_model.clone(),
         ),
     );
-    runtime =
-        runtime
-            .with_atlas_context_provider(Arc::clone(&atlas_mgr)
-                as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
+    lane.atlas_context = Some(Arc::clone(&atlas_mgr)
+        as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
     atlas_mgr.init_from_cache().await;
     eprintln!(
         "Atlas: {} corpus context(s) loaded from cache",
@@ -512,7 +502,7 @@ pub async fn build_session_with_skills(
         meta_atlas.len(),
         meta_atlas.corpus_count(),
     );
-    runtime = runtime.with_meta_atlas(Arc::clone(&meta_atlas));
+    lane.meta_atlas.store(Some(Arc::clone(&meta_atlas)));
 
     // Cross-corpus bridge edges (Phase 6). Loads
     // `~/.svrnmesh/meta-atlas/bridge_edges.json` produced by `sovereign
@@ -526,7 +516,7 @@ pub async fn build_session_with_skills(
         }
     };
     eprintln!("Bridge:      {} cross-corpus edges", bridge_index.len());
-    runtime = runtime.with_bridge(Arc::clone(&bridge_index));
+    lane.bridge = Some(Arc::clone(&bridge_index));
 
     // Optional cross-encoder reranker. When `SOVEREIGN_RERANK_MODEL_PATH`
     // is set, load that GGUF into a `StandaloneReranker` and wire it
@@ -578,7 +568,10 @@ pub async fn build_session_with_skills(
                 v
             })
         );
-        runtime = runtime.with_rerank_config(cfg);
+        // Dedup-only ablation: a config with no cross-encoder. `Rerank`
+        // holds both halves and `Rerank::active()` is the one place they
+        // are read together.
+        lane.rerank.config = cfg;
     } else if let Ok(rerank_path) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") {
         let path = PathBuf::from(&rerank_path);
         // NATIVE_GROUNDING.md §8 residency plan — fit check BEFORE the
@@ -654,7 +647,8 @@ pub async fn build_session_with_skills(
                     }),
                     cfg.min_score
                 );
-                runtime = runtime.with_rerank(rerank_fn, cfg);
+                lane.rerank.f = Some(rerank_fn);
+                lane.rerank.config = cfg;
             }
             Err(e) => {
                 eprintln!(
@@ -663,6 +657,30 @@ pub async fn build_session_with_skills(
                 );
             }
         }
+    }
+
+    // ── Commission ───────────────────────────────────────────────────────
+    // Everything the Runtime enriches with exists by now, so it is named in
+    // ONE total value and there is no window in which a turn can run against
+    // a half-wired stack — the shape Phase 2 gave `EmbeddedDaemon`, applied
+    // to the `Runtime`.
+    let mut runtime = Runtime::new(
+        Arc::clone(&inference),
+        router,
+        Box::new(planner),
+        Arc::clone(&tools),
+        Arc::clone(&store),
+        skills,
+        approval,
+        inference_config,
+        lane,
+    )
+    .with_corpus_engine(Arc::clone(&corpus_engine));
+    if let Some(ns) = notes_store.as_ref() {
+        runtime = runtime.with_note_store(Arc::clone(ns));
+    }
+    if let Some(m) = mesh_knowledge {
+        runtime = runtime.with_mesh_knowledge(m);
     }
 
     Ok(ChatSession {

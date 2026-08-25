@@ -111,6 +111,9 @@ async fn runtime_with_digest_provider() -> (Runtime, Arc<StubDigestProvider>) {
         skills,
         approval,
         InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     )
     .with_landscape_digests(Arc::clone(&provider) as Arc<dyn LandscapeDigestProvider>);
 

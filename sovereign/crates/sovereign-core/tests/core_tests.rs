@@ -753,6 +753,9 @@ fn build_runtime(response: &str) -> (Runtime, Arc<MockStore>) {
         Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     );
     (runtime, store)
 }
@@ -1293,6 +1296,9 @@ async fn runtime_complex_task_end_to_end() {
         skills,
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     );
 
     let response = runtime
@@ -1832,6 +1838,9 @@ fn build_runtime_with_finish(
         Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     );
     (runtime, store)
 }
@@ -1991,6 +2000,9 @@ fn build_conation_runtime(
         Arc::new(SkillRegistry::new()),
         Arc::new(SpyLessonChannel { tx }),
         sovereign_core::types::InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     );
     (runtime, store, rx)
 }
@@ -2264,6 +2276,9 @@ async fn lessons_shape_the_synthesis_request() {
         Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     )
     .with_note_store(notes);
 
@@ -2314,6 +2329,9 @@ async fn streaming_turn_applies_term_avoid_and_whispers_once() {
         Arc::new(SkillRegistry::new()),
         Arc::new(AutoApprovalChannel),
         sovereign_core::types::InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     )
     .with_note_store(notes);
 

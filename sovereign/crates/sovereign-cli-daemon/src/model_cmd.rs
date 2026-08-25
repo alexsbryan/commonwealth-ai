@@ -341,7 +341,15 @@ async fn apply(cfg: SetupConfig, field: &str, human: &str) -> i32 {
         // Reuse the daemon reload path (POST /v1/admin/reload). It compares the
         // running config to what we just wrote, hot-swaps changed model slots,
         // and reports which fields reloaded / whether a restart is still needed.
-        crate::daemon_cmd::run(&["reload".to_string()]).await
+        // `reload` touches no launch-mode branch; naming the launch this
+        // in-process call stands in for keeps `run` total.
+        crate::daemon_cmd::run(
+            &sovereign_contracts::launch::Launch::Daemon {
+                args: vec!["reload".to_string()],
+            },
+            &["reload".to_string()],
+        )
+        .await
     } else {
         println!("daemon isn't running — this applies on the next `svrn daemon start`.");
         0

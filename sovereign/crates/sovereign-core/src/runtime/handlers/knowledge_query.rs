@@ -340,6 +340,10 @@ impl Runtime {
             message_chars = message.len(),
             "handle_knowledge_query: begin"
         );
+        // The turn's enrichment providers, resolved ONCE (daemon-convergence
+        // Phase 4a). Handed to the pipeline on the state; every step reads
+        // `st.lane` rather than reaching through `rt`.
+        let lane = self.lane();
 
         // 1. Embed the query using the query-side function (applies
         //    instruction prefix for asymmetric models like Qwen3-Embedding).
@@ -389,6 +393,7 @@ impl Runtime {
             embedding,
             "KnowledgeQuery",
             "KnowledgeQuery".to_string(),
+            lane.clone(),
         );
         kq_pipeline().run(self, &mut pipeline_state).await;
         let PipelineState {
@@ -678,7 +683,7 @@ impl Runtime {
         // the chunks, the call failed — it says so and nothing is
         // substituted (ARCH §18.3).
         use crate::runtime::grounding::native_grounding::admission::{self, AdmissionOutcome};
-        let admission = admission::admit(message, &chunks, self.rerank_fn.as_ref()).await;
+        let admission = admission::admit(message, &chunks, lane.rerank.f()).await;
         let native_verdict: Option<crate::types::GroundingVerdict> = match &admission {
             // Flag off: `admit` returned before doing anything at all.
             AdmissionOutcome::Disabled => None,
@@ -1025,9 +1030,9 @@ impl Runtime {
         // graph absent → empty set → no markers, behaviour
         // unchanged.
         let contested_titles: std::collections::HashSet<String> =
-            self.contested_titles_for_chunks(&chunks).await;
+            self.contested_titles_for_chunks(&chunks, &lane).await;
         let folder_meta = self.folder_metadata_snapshot().await;
-        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories)
+        self.rerank_conv_chunks_via_ppr(message, &mut chunks, &display_categories, &lane)
             .await;
         // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE): inject summaries AFTER
         // the full leaf pipeline (reweight → … → ppr-rerank) so they cannot
@@ -1054,6 +1059,7 @@ impl Runtime {
                 &mut chunks,
                 "KnowledgeQuery",
                 context.conversation.enabled_corpora.as_deref(),
+                &lane,
             )
             .await;
             chunks = reserve_raptor_chunks(std::mem::take(&mut chunks));
@@ -1089,7 +1095,7 @@ impl Runtime {
             agentic_corpus_anchored = corpus_anchored;
         }
         let conv_briefing = self
-            .build_conv_briefing_block(&chunks, &display_categories)
+            .build_conv_briefing_block(&chunks, &display_categories, &lane)
             .await;
         let formatted_doc = format_scored_chunks_counted(
             &chunks,

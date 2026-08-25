@@ -1924,6 +1924,7 @@ pub(super) async fn start_freshness_pipeline(
 /// subsystem handle.
 pub(super) async fn setup_watched_folders(
     engine: Arc<CorpusEngine>,
+    state_store: Arc<dyn sovereign_core::traits::StateStore>,
     data_dir: &Path,
     config: &SetupConfig,
     folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps>,
@@ -1937,20 +1938,20 @@ pub(super) async fn setup_watched_folders(
     // corpus on its configured cadence (default 120 s, floored at
     // 60 s) and applies the diff through CorpusUpdater.
     //
-    // The local-corpus subsystem requires a StateStore but only
-    // touches it on `remove` (delete_corpus_state). The persistent
-    // source of truth for corpus metadata is `{data_dir}/local-corpora/*.json`,
-    // which the manager loads at construction. An in-memory store
-    // is therefore sufficient for the daemon — `remove`'s
-    // delete_corpus_state becomes a benign no-op against the empty
-    // in-memory map.
+    // The local-corpus subsystem touches the store on `remove`
+    // (delete_corpus_state). It was handed a fresh `InMemoryStateStore`
+    // until daemon-convergence Phase 3, on the reasoning that the
+    // persistent source of truth for corpus metadata is
+    // `{data_dir}/local-corpora/*.json` — true, and it made
+    // `delete_corpus_state` a no-op against an empty map, so removing a
+    // watched folder left its state rows behind in the real db forever.
+    // The daemon now has ONE state store (§10.6, one decider one name) and
+    // this is it, so the delete lands where the rows actually are.
     // Watched-folder reconciliation subsystem. The full wiring (build
     // registry → resume corpora → install runtime singleton → mount
     // HTTP routes → spawn scheduler) is factored into
     // `sovereign_mesh::watched_folder_setup` so the desktop's
     // embedded daemon can call the same path.
-    let lc_store: Arc<dyn sovereign_core::traits::StateStore> =
-        Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     // Critical: pass the same `recipes_dir` the `CorpusEngine`
     // was constructed with (see the `let recipes_dir = …` block
     // above where the engine is built). Otherwise the manager
@@ -1960,7 +1961,7 @@ pub(super) async fn setup_watched_folders(
     let lc_recipes_dir = data_dir.join("recipes");
     match sovereign_tools::local_corpus::LocalCorpusManager::init_with_recipes_dir(
         Arc::clone(&engine),
-        lc_store,
+        state_store,
         None,
         data_dir.to_path_buf(),
         data_dir.join("vault-snapshots"),

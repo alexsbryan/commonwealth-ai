@@ -150,6 +150,11 @@ impl Runtime {
         intent: &Intent,
         scope: Option<&str>,
     ) -> (Vec<corpus_engine::ScoredChunk>, bool, bool, bool) {
+        // Resolved ONCE for the turn and passed to every stage below
+        // (daemon-convergence Phase 4a) — no stage reaches back into the
+        // Runtime for a provider.
+        let lane = self.lane();
+
         dbg(&format!(
             "agentic loop ENTERED: round0_chunks={} (judge next)",
             chunks.len()
@@ -262,7 +267,7 @@ impl Runtime {
         }
 
         let queries = match self
-            .formulate_evidence_queries(message, &chunks, context)
+            .formulate_evidence_queries(message, &chunks, context, &lane)
             .await
         {
             Some(q) if !q.is_empty() => q,
@@ -394,6 +399,7 @@ impl Runtime {
                 embedding,
                 "KnowledgeQuery",
                 "KnowledgeQuery".to_string(),
+                lane.clone(),
             );
             kq_pipeline().run(self, &mut state).await;
             let mut new_for_query = 0usize;
@@ -561,6 +567,7 @@ impl Runtime {
         message: &str,
         round0: &[corpus_engine::ScoredChunk],
         context: &ConversationContext,
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<String>> {
         let mut titles: Vec<String> = Vec::new();
         for c in round0 {
@@ -593,7 +600,7 @@ impl Runtime {
             corpora.clone()
         };
         let mut entities: Vec<String> = Vec::new();
-        if let Some(provider) = self.atlas_context_provider.as_ref() {
+        if let Some(provider) = lane.atlas_context.as_ref() {
             for cid in &lookup_ids {
                 if let Some(ctx) = provider.get(cid) {
                     for e in &ctx.entries {

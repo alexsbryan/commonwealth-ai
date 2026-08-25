@@ -281,6 +281,9 @@ impl TestHarness {
             skills,
             approval,
             sovereign_core::types::InferenceConfig::default(),
+            // Phase 4b: enrichment is a required argument, not eight
+            // forgettable builders.
+            sovereign_core::runtime::lane::LaneSources::none(),
         );
 
         Self {
@@ -359,6 +362,9 @@ impl TestHarness {
             skills,
             approval,
             config,
+            // Phase 4b: enrichment is a required argument, not eight
+            // forgettable builders.
+            sovereign_core::runtime::lane::LaneSources::none(),
         );
 
         Self {

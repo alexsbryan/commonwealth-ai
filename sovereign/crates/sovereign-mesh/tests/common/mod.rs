@@ -405,23 +405,31 @@ impl InferenceProvider for TestProvider {
 pub fn desktop_services_with_engine(
     engine: Arc<corpus_engine::CorpusEngine>,
 ) -> sovereign_mesh::DaemonServices {
-    sovereign_mesh::DaemonServices::desktop(sovereign_mesh::DesktopServices {
-        serving: sovereign_mesh::ServingProfile {
-            core: sovereign_mesh::ServingCore {
-                corpus_engine: engine,
-                inference_provider: Arc::new(TestProvider::new()),
+    // Through THE assembler, like every production site — a fixture that
+    // composed a variant directly would be the one place able to build a shape
+    // no launch can produce, which is exactly what Falsifier 3 forbids.
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Desktop,
+        sovereign_mesh::LaunchParts::Serving {
+            headless: None,
+            serving: sovereign_mesh::ServingProfile {
+        core: sovereign_mesh::ServingCore {
+            corpus_engine: engine,
+            inference_provider: Arc::new(TestProvider::new()),
+            state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+        },
+        capability: sovereign_mesh::ServingCapability {
+            mcp: sovereign_mesh::McpSurface::Unavailable {
+                reason: "test fixture: no tool registry".into(),
             },
-            capability: sovereign_mesh::ServingCapability {
-                mcp: sovereign_mesh::McpSurface::Unavailable {
-                    reason: "test fixture: no tool registry".into(),
-                },
-                project_http: Router::new(),
-                corpus_watch_http: Router::new(),
-            },
+            project_http: Router::new(),
+            corpus_watch_http: Router::new(),
+        },
             advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
                 reason: "test fixture: no embed probe".into(),
             },
+            },
         },
-        state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-    })
+    )
+    .expect("Launch::Desktop assembles a serving profile with no rails")
 }

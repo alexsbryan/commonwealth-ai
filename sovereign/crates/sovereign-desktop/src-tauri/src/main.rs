@@ -19,6 +19,7 @@ mod health;
 mod import_commands;
 mod insight_commands;
 mod invoke_coverage;
+mod launch_mode;
 mod local_corpus_commands;
 mod mesh_commands;
 mod meshapp;
@@ -107,7 +108,12 @@ fn main() -> ExitCode {
     // than two accidental ones.
     let argv: Vec<String> = std::env::args().collect();
     let args: Vec<String> = argv.iter().skip(1).cloned().collect();
-    match Launch::parse(&args, Launch::Desktop) {
+    let launch = Launch::parse(&args, Launch::Desktop);
+    // Publish it before dispatching: `state::bootstrap` commissions the
+    // in-process daemon through `sovereign_mesh::assemble` and must name the
+    // SAME launch this match saw, not re-derive one.
+    launch_mode::publish(launch.clone());
+    match launch {
         // Skip Tauri entirely: load one model, decode one token, exit. The
         // parent spawns this to detect ggml backend crashes (e.g. the Gemma 4
         // Metal SIGSEGV) before loading into the user-facing slot.

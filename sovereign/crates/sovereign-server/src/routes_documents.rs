@@ -99,7 +99,7 @@ pub fn document_router() -> Router {
 /// falls back to the LLM per window, so this is safe unconditionally.
 fn manager_from_runtime(runtime: &Runtime, store: &Arc<dyn StateStore>) -> DocumentAssetManager {
     let manager = DocumentAssetManager::new(Arc::clone(&runtime.inference), Arc::clone(store));
-    match &runtime.gliner {
+    match &runtime.lane_sources.gliner {
         Some(extractor) => manager.with_entity_extractor(Arc::clone(extractor)),
         None => manager,
     }

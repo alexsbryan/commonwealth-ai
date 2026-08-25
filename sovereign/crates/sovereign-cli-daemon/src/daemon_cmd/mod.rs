@@ -28,6 +28,7 @@ use std::sync::Arc;
 use corpus_engine::CorpusEngine;
 use corpus_engine_notes::NoteStore;
 use corpus_engine_watchers::{LintResultStore, TestResultStore};
+use sovereign_contracts::launch::Launch;
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
@@ -82,13 +83,13 @@ use workspace::resolve_workspace_dir;
 ///                                    the explicit `run` token.
 /// - `svrn daemon <known>`     → start/stop/restart/reload/status as
 ///                                    before.
-pub async fn run(args: &[String]) -> i32 {
+pub async fn run(launch: &Launch, args: &[String]) -> i32 {
     if sovereign_cli_shared::help::wants_help(args) {
         sovereign_cli_shared::help::print(&HELP);
         return 0;
     }
     match args.first().map(String::as_str) {
-        Some("run") => run_daemon(&args[1..]).await,
+        Some("run") => run_daemon(launch, &args[1..]).await,
         Some("start") => start_daemon(&args[1..]).await,
         Some("stop") => stop_daemon().await,
         Some("restart") => restart_daemon(&args[1..]).await,
@@ -98,7 +99,7 @@ pub async fn run(args: &[String]) -> i32 {
             // Bare flags like `svrn daemon --setup-only` route
             // straight to run_daemon — the user means "start the
             // daemon (or its first-boot wizard) with these flags."
-            run_daemon(args).await
+            run_daemon(launch, args).await
         }
         Some(other) => {
             eprintln!("error: unknown daemon subcommand '{other}'");
@@ -111,7 +112,7 @@ pub async fn run(args: &[String]) -> i32 {
             // without hunting for the magic `run` keyword. launchd
             // and systemd unit files keep using `daemon run`
             // explicitly; both paths land in the same place.
-            run_daemon(&[]).await
+            run_daemon(launch, &[]).await
         }
     }
 }
@@ -153,7 +154,7 @@ const HELP: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help 
     ],
 };
 
-async fn run_daemon(args: &[String]) -> i32 {
+async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // ── Worker-mode branch (ephemeral pod) ────────────────────────
     //
     // `svrn daemon run --worker-mode` runs an ephemeral worker
@@ -169,7 +170,19 @@ async fn run_daemon(args: &[String]) -> i32 {
     // /v1/chat/completions exposure. The binary is the same, but the
     // wiring branches here and stays in worker_daemon.rs from this
     // point forward.
-    if args.iter().any(|a| a == "--worker-mode") {
+    //
+    // THE LAUNCH ANSWERS THIS, not a second argv scan. Until 2026-08-25 this
+    // line read `args.iter().any(|a| a == "--worker-mode")` — the last
+    // surviving launch-mode READER outside `Launch::parse`, and a §10.6
+    // duplicate created by the refactor that introduced `Launch`: `dispatch`
+    // collapsed `Daemon` and `Worker` into one `daemon_cmd::run` call, so
+    // `Launch` answered and this function asked again. Threading the `Launch`
+    // itself (rather than re-deriving from `args`) is what makes the two
+    // agree by construction — and it sidesteps the arg-shape mismatch that
+    // deferred this fix, since `Launch::Worker` carries argv INCLUDING the
+    // `run` subcommand while `run_worker_daemon` wants it stripped.
+    // Falsifier 1, readers: 1 -> 0.
+    if matches!(launch, Launch::Worker { .. }) {
         return run_worker_daemon(args).await;
     }
 
@@ -461,6 +474,37 @@ async fn run_daemon(args: &[String]) -> i32 {
         eprintln!("error: cannot create data dir {}: {e}", data_dir.display());
         return 1;
     }
+    // ── The state store — `sovereign.db` (daemon-convergence Phase 3) ────
+    //
+    // Until now `sovereign daemon run` opened this file NOWHERE, while still
+    // mounting `reading_http`: every `conversation-history` chunk it served
+    // came back with `title: null`, because the handler resolved the title
+    // through a `state_store()` that answered `None` on this variant. That was
+    // the single crossing in an otherwise nesting variant lattice — Desktop
+    // carried a store, Headless did not, and neither was a superset of the
+    // other (`quality/TOPOLOGY.md` §3.5, class D).
+    //
+    // It is opened HERE, beside `notes.db`, and a failure is fatal rather than
+    // degraded: the store is `ServingCore` now, and CORE means the process
+    // cannot serve at all without it. Falling back to `InMemoryStateStore`
+    // would reproduce exactly the defect being closed — a daemon that answers
+    // every conversation lookup with a well-formed nothing (ARCH §18.3).
+    //
+    // Safe to open unconditionally because of Phase 1: `RunLock` above is
+    // keyed on THIS data root, so at most one process is writing this file.
+    let state_db_path = data_dir.join("sovereign.db");
+    let state_store: Arc<dyn sovereign_core::traits::StateStore> =
+        match sovereign_store::sqlite::SqliteStateStore::open(&state_db_path) {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                eprintln!(
+                    "error: cannot open state db {}: {e}",
+                    state_db_path.display()
+                );
+                return 1;
+            }
+        };
+
     let notes_path = data_dir.join("notes.db");
     let notes_store = match NoteStore::open(&notes_path) {
         Ok(s) => Arc::new(s),
@@ -814,21 +858,36 @@ async fn run_daemon(args: &[String]) -> i32 {
     // serving, but the ROUTE is now part of the daemon's declared capability
     // rather than something this call installs — so a failed subsystem yields
     // handlers that answer 503 with a named reason, not routes that 404.
-    let _watched_subsystem =
-        bootstrap::setup_watched_folders(Arc::clone(&engine), &data_dir, &config, folder_tiered_deps)
-            .await;
+    let _watched_subsystem = bootstrap::setup_watched_folders(
+        Arc::clone(&engine),
+        Arc::clone(&state_store),
+        &data_dir,
+        &config,
+        folder_tiered_deps,
+    )
+    .await;
 
-    // ── Commission ────────────────────────────────────────────────────
-    let daemon = sovereign_mesh::EmbeddedDaemon::new(
-        data_dir.clone(),
-        config.clone(),
-        sovereign_mesh::DaemonServices::headless(sovereign_mesh::HeadlessServices {
+    // ── Commission, through THE assembler ─────────────────────────────
+    //
+    // This bootstrap no longer names its own variant. It hands its parts to
+    // `sovereign_mesh::assemble`, the one exhaustive match over `Launch` that
+    // constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3), and that
+    // match decides what `sovereign daemon run` composes into. A refusal is
+    // fatal and names both sides — a daemon that came up as the wrong shape is
+    // the hazard, so there is nothing to degrade to (§18.3).
+    let services = match sovereign_mesh::assemble(
+        launch,
+        sovereign_mesh::LaunchParts::Serving {
             serving: sovereign_mesh::ServingProfile {
                 core: sovereign_mesh::ServingCore {
                     // The engine the auto_ingest loop and the
                     // /internal/corpus/* surface both read.
                     corpus_engine: Arc::clone(&engine),
                     inference_provider: Arc::clone(&routed_provider),
+                    // Phase 3: the headless daemon's own `sovereign.db`,
+                    // opened at the top of this function. `reading_http` now
+                    // resolves conversation titles on this variant too.
+                    state_store: Arc::clone(&state_store),
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),
@@ -837,7 +896,8 @@ async fn run_daemon(args: &[String]) -> i32 {
                 },
                 advertise_embed,
             },
-            rails: sovereign_mesh::HeadlessRails {
+            headless: Some(sovereign_mesh::HeadlessExtras {
+                rails: sovereign_mesh::HeadlessRails {
                 // Rebuilds the provider when `models.*` changes on disk. Holds
                 // the same deferred handle, bound below.
                 provider_factory: Arc::new(provider::LlamaCppFactory {
@@ -847,13 +907,21 @@ async fn run_daemon(args: &[String]) -> i32 {
                 // gossip's `all_entries_for_gossip` enumeration. Without it the
                 // daemon builds a private in-memory store and atlas data is
                 // invisible across the mesh.
-                mesh_store: Arc::clone(&work_atlas_mesh_store),
-                convergence_recorder: Arc::clone(&convergence_recorder),
-            },
-            knowledge_view_http,
-            solve_http: solve_http::solve_router(Arc::clone(&solve_jobs)),
-        }),
-    );
+                    mesh_store: Arc::clone(&work_atlas_mesh_store),
+                    convergence_recorder: Arc::clone(&convergence_recorder),
+                },
+                knowledge_view_http,
+                solve_http: solve_http::solve_router(Arc::clone(&solve_jobs)),
+            }),
+        },
+    ) {
+        Ok(s) => s,
+        Err(refusal) => {
+            eprintln!("error: {refusal}");
+            return 1;
+        }
+    };
+    let daemon = sovereign_mesh::EmbeddedDaemon::new(data_dir.clone(), config.clone(), services);
     deferred_daemon.bind(Arc::clone(&daemon));
 
     // Host side of distributed-inference auto-warm. When this node distributes a

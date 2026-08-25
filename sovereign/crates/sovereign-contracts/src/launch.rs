@@ -223,6 +223,95 @@ impl Launch {
     }
 }
 
+/// Where the desktop's daemon RUNS — the one structural question the two
+/// launch-topology env flags answer, as a value resolved at construction.
+///
+/// ## Why this is a type and not two `env::var` calls
+///
+/// `quality/TOPOLOGY.md` §10 Phase 10: a flag whose value selects *which code
+/// path runs* is structural and folds into a profile variant (§2.1 — a closed
+/// set belongs in an enum); a flag that merely tunes a value the same path uses
+/// is data and becomes a field read **once at construction**. These two are the
+/// first kind, and they were being read at THREE points of use through
+/// `supervisor_setup::is_enabled()`, which is invisible to go-to-definition:
+/// a reader following "does the desktop supervise a child?" landed on a
+/// predicate over the process environment rather than on a decision the
+/// process made.
+///
+/// It lives beside [`Launch`] because it is the same family of question —
+/// what shape this process takes — and `Launch::parse` is already the one
+/// place that answers it. Phase 10's falsifier is *no `env::var` read selects
+/// behaviour after construction*; this is one flag pair off that count.
+///
+/// ## What it is NOT
+///
+/// It is not a second topology. §10 decision 2: embedded versus supervised is
+/// only *where* the daemon runs — same construction, same routes. That is why
+/// this is a separate question from `Launch`, rather than two more `Launch`
+/// variants: both shapes still assemble `DaemonServices::Desktop`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DaemonHost {
+    /// A supervised child process (`current_exe() --daemon-child`, the
+    /// desktop binary re-entering as a headless daemon). The default since the
+    /// W1 flip (DAEMON_RESILIENCE.md P0.1, 2026-07-18): a ggml/llama.cpp crash
+    /// kills the child, not the window.
+    SupervisedChild,
+    /// An in-process `EmbeddedDaemon` — this process owns the data root and
+    /// runs the weights. Carries WHY, because the two reasons have different
+    /// operational meanings and a log line saying only "supervisor disabled"
+    /// cannot tell an operator which one they are in (§18.3).
+    InProcess(InProcessReason),
+}
+
+/// Why a desktop process hosts its own daemon instead of supervising one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InProcessReason {
+    /// `SOVEREIGN_FORCE_LOCAL=1` — "THIS process runs the weights": the
+    /// real-mode desktop harnesses and the run-local-while-a-daemon-is-up
+    /// power case. Takes precedence, because a child daemon contradicts it.
+    ForceLocal,
+    /// `SOVEREIGN_USE_SUPERVISOR=0` (or `false`) — the kill-switch back to the
+    /// pre-W1 shape. (`=1`/`true`, the old opt-IN spelling, is accepted and
+    /// redundant.)
+    KillSwitch,
+}
+
+impl DaemonHost {
+    /// Resolve from the environment. **Call this once, at construction** —
+    /// that is the entire point of the type, and a second call site is the
+    /// defect it removes.
+    pub fn from_env() -> Self {
+        // Order is load-bearing and matches the predicate this replaced:
+        // FORCE_LOCAL wins, because "this process runs the weights" is
+        // incompatible with a child daemon however the other flag is set.
+        if std::env::var("SOVEREIGN_FORCE_LOCAL").is_ok_and(|v| v == "1") {
+            return Self::InProcess(InProcessReason::ForceLocal);
+        }
+        if std::env::var("SOVEREIGN_USE_SUPERVISOR")
+            .is_ok_and(|v| v == "0" || v.eq_ignore_ascii_case("false"))
+        {
+            return Self::InProcess(InProcessReason::KillSwitch);
+        }
+        Self::SupervisedChild
+    }
+
+    /// True when the desktop spawns and supervises a daemon child.
+    pub fn is_supervised(self) -> bool {
+        matches!(self, Self::SupervisedChild)
+    }
+
+    /// Stable name for logs. Closed set — ARCH §2.1.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::SupervisedChild => "supervised-child",
+            Self::InProcess(InProcessReason::ForceLocal) => "in-process (SOVEREIGN_FORCE_LOCAL=1)",
+            Self::InProcess(InProcessReason::KillSwitch) => {
+                "in-process (SOVEREIGN_USE_SUPERVISOR=0)"
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -321,5 +410,90 @@ mod tests {
         // assertion whose absence left an orphaned server unlocked and
         // unreaped for six days.
         assert!(Launch::Server.is_resident());
+    }
+}
+
+#[cfg(test)]
+mod daemon_host_tests {
+    use super::*;
+
+    /// The precedence is the whole content of `from_env`, and it is the half a
+    /// reader is most likely to get wrong: both flags set is not a
+    /// contradiction, it is FORCE_LOCAL winning.
+    ///
+    /// Env is process-global, so this drives the classification directly
+    /// rather than mutating the environment — a test that sets vars races
+    /// every other test in the binary, and the thing worth pinning is the
+    /// ORDER, not `std::env`.
+    fn classify(force_local: Option<&str>, use_supervisor: Option<&str>) -> DaemonHost {
+        if force_local == Some("1") {
+            return DaemonHost::InProcess(InProcessReason::ForceLocal);
+        }
+        if use_supervisor.is_some_and(|v| v == "0" || v.eq_ignore_ascii_case("false")) {
+            return DaemonHost::InProcess(InProcessReason::KillSwitch);
+        }
+        DaemonHost::SupervisedChild
+    }
+
+    #[test]
+    fn supervised_is_the_default_and_the_legacy_opt_in_is_redundant() {
+        assert_eq!(classify(None, None), DaemonHost::SupervisedChild);
+        assert_eq!(classify(None, Some("1")), DaemonHost::SupervisedChild);
+        assert_eq!(classify(None, Some("true")), DaemonHost::SupervisedChild);
+    }
+
+    #[test]
+    fn the_kill_switch_names_itself() {
+        assert_eq!(
+            classify(None, Some("0")),
+            DaemonHost::InProcess(InProcessReason::KillSwitch)
+        );
+        assert_eq!(
+            classify(None, Some("FALSE")),
+            DaemonHost::InProcess(InProcessReason::KillSwitch)
+        );
+    }
+
+    #[test]
+    fn force_local_wins_over_the_supervisor_default_and_over_an_explicit_opt_in() {
+        assert_eq!(
+            classify(Some("1"), None),
+            DaemonHost::InProcess(InProcessReason::ForceLocal)
+        );
+        assert_eq!(
+            classify(Some("1"), Some("1")),
+            DaemonHost::InProcess(InProcessReason::ForceLocal)
+        );
+    }
+
+    /// Every shape says which one it is. A single "supervisor disabled" line
+    /// cannot tell an operator whether a harness set FORCE_LOCAL or a user
+    /// tripped the kill-switch (§18.3).
+    #[test]
+    fn every_shape_names_itself_distinctly() {
+        let all = [
+            DaemonHost::SupervisedChild,
+            DaemonHost::InProcess(InProcessReason::ForceLocal),
+            DaemonHost::InProcess(InProcessReason::KillSwitch),
+        ];
+        let mut seen = std::collections::HashSet::new();
+        for h in all {
+            assert!(seen.insert(h.as_str()), "duplicate label: {}", h.as_str());
+        }
+        assert!(!DaemonHost::InProcess(InProcessReason::KillSwitch).is_supervised());
+        assert!(DaemonHost::SupervisedChild.is_supervised());
+    }
+
+    /// `from_env` must agree with the classification the tests above pin —
+    /// otherwise they pin a function nothing calls (§18.4). Read whatever the
+    /// ambient environment happens to be and require the two to match.
+    #[test]
+    fn from_env_agrees_with_the_pinned_classification() {
+        let fl = std::env::var("SOVEREIGN_FORCE_LOCAL").ok();
+        let us = std::env::var("SOVEREIGN_USE_SUPERVISOR").ok();
+        assert_eq!(
+            DaemonHost::from_env(),
+            classify(fl.as_deref(), us.as_deref())
+        );
     }
 }

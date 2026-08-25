@@ -12311,6 +12311,7 @@ dependencies = [
 name = "sovereign-core"
 version = "0.5.0"
 dependencies = [
+ "arc-swap",
  "async-trait",
  "chrono",
  "corpus-engine",

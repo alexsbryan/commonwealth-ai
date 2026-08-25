@@ -154,6 +154,11 @@ impl Runtime {
         fields(conversation_id = %conversation_id, message_chars = message.len())
     )]
     pub async fn handle_turn(&self, message: &str, conversation_id: &str) -> Result<Response> {
+        // The turn's enrichment providers, resolved ONCE here and passed
+        // down (daemon-convergence Phase 4a). Every stage below receives
+        // this value; none of them reaches back into the Runtime for a
+        // provider, which is what lets the Runtime collapse to core.
+        let lane = self.lane();
         let turn_start = std::time::Instant::now();
         let has_doc_prefix = message.starts_with("[Document attached: ");
         tracing::info!(has_doc_prefix, "runtime: turn begin");
@@ -307,7 +312,7 @@ impl Runtime {
                 &scope,
                 message,
                 5,
-                self.rerank_fn.as_ref(),
+                lane.rerank.f(),
             )
             .await
             {

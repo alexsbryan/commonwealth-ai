@@ -24,7 +24,7 @@
 //!   corpus_engine                Y           Y               .
 //!   inference_provider           Y           Y               .
 //!   embed_model                  Y*          Y*              .
-//!   state_store                  .           Y               .
+//!   state_store                  Y†          Y               .
 //!   mcp                          Y           Y*              .
 //!   mesh/admin/reading routers   Y           Y               .
 //!   project_http_router          Y           Y               .
@@ -35,6 +35,13 @@
 //!   knowledge_view_http_router   Y           .               .
 //!   solve_http_router            Y           .               .
 //! ```
+//!
+//! `†` marks the one row the measurement itself changed: `daemon run` had no
+//! store on 2026-08-24, and that hole is exactly where the two serving shapes
+//! CROSSED rather than nested — it mounted `reading_http` while owning nothing
+//! to resolve a conversation title with. daemon-convergence Phase 3 gave it
+//! one, so the column is now a strict subset relation and
+//! [`DaemonServices::Desktop`] is *nothing but* a [`ServingProfile`].
 //!
 //! `Y*` marks a slot whose absence is a *disk or probe failure*, never a
 //! topology choice — those keep a named-absence type ([`EmbedAdvertisement`],
@@ -155,6 +162,19 @@ impl EmbedAdvertisement {
 /// this struct or anywhere downstream.
 pub struct ServingCore {
     pub corpus_engine: Arc<CorpusEngine>,
+    /// `sovereign.db` at this daemon's data root — conversations, sessions,
+    /// tiered-memory rows. CORE, not an optional extra: the reading surface
+    /// resolves `conversation-history` chunks through it, and a turn cannot be
+    /// titled, resumed or cancelled without it.
+    ///
+    /// It lived on the desktop variant until daemon-convergence Phase 3. That
+    /// placement was the single crossing in an otherwise nesting lattice:
+    /// `sovereign daemon run` served `reading_http` with no store, so every
+    /// conversation chunk rendered title-less on a headless daemon — a defect
+    /// the type reported as a legitimate topology. One writer per data root is
+    /// what makes this safe, and the run lock (Phase 1, keyed on the data root)
+    /// is what makes THAT true.
+    pub state_store: Arc<dyn StateStore>,
     /// The provider that answers peers hitting `/v1/chat/completions`. The
     /// daemon holds it behind a lock only because `POST /v1/admin/reload`
     /// swaps it; a host installs it here, once, or not at all.
@@ -214,26 +234,18 @@ pub struct HeadlessRails {
     pub convergence_recorder: Arc<commonwealth_api::state::ConvergenceRecord>,
 }
 
-/// Everything the desktop's in-process daemon supplies.
-///
-/// No [`HeadlessRails`]: the desktop has never carried a provider factory, a
-/// shared mesh store or a convergence recorder. That absence is now a property
-/// of this shape rather than three empty slots.
-pub struct DesktopServices {
-    pub serving: ServingProfile,
-    /// Resolves `conversation-history` chunks back to their conversation for
-    /// the reading surface. Required here and absent on [`HeadlessServices`] —
-    /// the one place the two serving shapes cross rather than nest
-    /// (daemon-convergence Phase 3 closes it by giving the headless daemon a
-    /// state store of its own).
-    pub state_store: Arc<dyn StateStore>,
-}
+// `DesktopServices` WAS HERE, and is deleted (daemon-convergence Phase 3).
+//
+// Once `state_store` moved into `ServingCore` the struct held exactly one
+// field — a `ServingProfile` — so it was a name wrapped around a name. The
+// deletion is the point rather than tidying: `Desktop(Box<ServingProfile>)`
+// states in the type what §3.5 could previously only assert in prose, that
+// the desktop's daemon is a serving profile and NOTHING else, and that
+// Headless is that same profile plus rails. The variants nest, visibly.
 
-/// Everything `sovereign daemon run` supplies.
+/// Everything `sovereign daemon run` supplies **beyond** a [`ServingProfile`].
 ///
-/// No `state_store`: the headless daemon opens no `sovereign.db` today, so
-/// reading-surface conversation chunks render without a title. Declared, not
-/// silent.
+/// This is the nesting made literal: Headless = Desktop + rails + two routes.
 pub struct HeadlessServices {
     pub serving: ServingProfile,
     pub rails: HeadlessRails,
@@ -258,18 +270,24 @@ pub enum DaemonServices {
     /// inference and no host routes — and that emptiness is the shape, not a
     /// set of holes.
     MeshAdmin,
-    /// The desktop's in-process daemon (`Local` bootstrap mode).
-    Desktop(Box<DesktopServices>),
+    /// The desktop's in-process daemon (`Local` bootstrap mode) — a
+    /// [`ServingProfile`] and nothing more.
+    Desktop(Box<ServingProfile>),
     /// `sovereign daemon run`.
     Headless(Box<HeadlessServices>),
 }
 
 impl DaemonServices {
-    pub fn desktop(services: DesktopServices) -> Self {
-        Self::Desktop(Box::new(services))
+    // `pub` -> `pub(crate)` (daemon-convergence Phase 4b). Nothing outside this
+    // crate composes a serving daemon any more; hosts hand parts to
+    // [`assemble`] and it decides the shape. Phase 7 closes the remaining
+    // door — `MeshAdmin` is a bare variant and so still nameable — but these
+    // two are the composite ones, and they are shut now rather than later.
+    pub(crate) fn desktop(serving: ServingProfile) -> Self {
+        Self::Desktop(Box::new(serving))
     }
 
-    pub fn headless(services: HeadlessServices) -> Self {
+    pub(crate) fn headless(services: HeadlessServices) -> Self {
         Self::Headless(Box::new(services))
     }
 
@@ -315,17 +333,19 @@ impl DaemonServices {
     pub fn serving(&self) -> Option<&ServingProfile> {
         match self {
             Self::MeshAdmin => None,
-            Self::Desktop(d) => Some(&d.serving),
+            Self::Desktop(serving) => Some(serving),
             Self::Headless(h) => Some(&h.serving),
         }
     }
 
-    pub fn state_store(&self) -> Option<&Arc<dyn StateStore>> {
-        match self {
-            Self::Desktop(d) => Some(&d.state_store),
-            Self::MeshAdmin | Self::Headless(_) => None,
-        }
-    }
+    // `state_store()` WAS HERE, and is deleted (daemon-convergence Phase 3).
+    //
+    // It was the third and last REAL fork on this enum, and Phase 3 is what
+    // made it artifactual: with the store in `ServingCore`, both serving
+    // variants carry one, so the accessor became `self.serving().map(..)`
+    // over a field that is not optional one level down — the exact shape of
+    // the seven deleted above. Accessors 3 -> 2. Callers read
+    // `services.serving()?.core.state_store` and land on a struct field.
 
     /// The headless-only rails, or `None` on a variant that declares it has
     /// none. Callers must name the variant in any refusal they derive from a
@@ -357,9 +377,9 @@ impl DaemonServices {
     pub fn host_routers(&self) -> Vec<axum::Router> {
         match self {
             Self::MeshAdmin => Vec::new(),
-            Self::Desktop(d) => vec![
-                d.serving.capability.project_http.clone(),
-                d.serving.capability.corpus_watch_http.clone(),
+            Self::Desktop(serving) => vec![
+                serving.capability.project_http.clone(),
+                serving.capability.corpus_watch_http.clone(),
             ],
             Self::Headless(h) => vec![
                 h.serving.capability.project_http.clone(),
@@ -367,6 +387,166 @@ impl DaemonServices {
                 h.knowledge_view_http.clone(),
                 h.solve_http.clone(),
             ],
+        }
+    }
+}
+
+/// What a host supplies to [`assemble`] — the parts, without the shape.
+///
+/// The host knows what it BUILT; only [`assemble`] decides what that composes
+/// into, and only for the invocation this process actually is.
+pub enum LaunchParts {
+    /// This invocation serves nothing. `svrn mesh create` / `svrn mesh join`
+    /// mutate membership, print, and exit — the emptiness is the shape.
+    Admin,
+    /// A serving daemon's parts. `headless` is `Some` exactly on the
+    /// `sovereign daemon run` bootstrap, which is the only one that owns a
+    /// `ProviderFactory`, a shared mesh store, a convergence recorder, a
+    /// `KnowledgeViewManager` and the solve job table.
+    Serving {
+        serving: ServingProfile,
+        headless: Option<HeadlessExtras>,
+    },
+}
+
+/// The parts only `sovereign daemon run` has. Named as one value so "this host
+/// is headless" is a single question rather than four independent `Option`s
+/// that could disagree.
+pub struct HeadlessExtras {
+    pub rails: HeadlessRails,
+    pub knowledge_view_http: axum::Router,
+    pub solve_http: axum::Router,
+}
+
+/// Why a launch mode and a set of parts could not be composed.
+///
+/// A refusal, never a default (ARCH §18.3): substituting a plausible variant
+/// here would produce a daemon serving routes this invocation was never meant
+/// to serve, which is the entire hazard class this program exists to close.
+#[derive(Debug)]
+pub enum AssemblyRefusal {
+    /// A launch mode that assembles no daemon was handed daemon parts.
+    NotAnAssembler { launch: &'static str },
+    /// The parts do not match the shape this launch mode assembles.
+    Mismatch {
+        launch: &'static str,
+        wanted: &'static str,
+        got: &'static str,
+    },
+}
+
+impl std::fmt::Display for AssemblyRefusal {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotAnAssembler { launch } => write!(
+                f,
+                "launch mode `{launch}` assembles no daemon runtime — three of \
+                 the eight do (daemon/worker, desktop, the mesh verb)"
+            ),
+            Self::Mismatch {
+                launch,
+                wanted,
+                got,
+            } => write!(
+                f,
+                "launch mode `{launch}` assembles {wanted}, but was handed {got}"
+            ),
+        }
+    }
+}
+
+impl std::error::Error for AssemblyRefusal {}
+
+/// **THE ASSEMBLER — the one exhaustive match over [`Launch`] that constructs
+/// anything** (`quality/TOPOLOGY.md` §10, Falsifier 3; the middle file of the
+/// acceptance criterion's three-file spine).
+///
+/// `Launch::parse` answers *what this process is*. This answers *what that
+/// invocation assembles*. Eight ways to start; three of them build a daemon
+/// runtime; three assembled shapes. Both numbers are visible here, in one
+/// match, and adding a `Launch` variant makes the compiler walk this function.
+///
+/// It is deliberately NOT a builder and does not construct the parts: a host
+/// still opens its own corpus engine and provider, because those need the
+/// host's own I/O. What moves here is the DECISION — which variant this
+/// invocation is allowed to be — so that the four sites which used to answer
+/// it independently now ask one place, and the illegal pairs (a desktop launch
+/// carrying headless rails; a verb launch carrying a serving profile) are
+/// refused rather than silently accepted.
+pub fn assemble(
+    launch: &sovereign_contracts::launch::Launch,
+    parts: LaunchParts,
+) -> Result<DaemonServices, AssemblyRefusal> {
+    use sovereign_contracts::launch::Launch;
+    let name = launch.as_str();
+    match launch {
+        // `sovereign daemon run`, and the desktop's supervised child, which is
+        // the identical entry (`--daemon-child` IS `daemon run`; pinned by
+        // `Launch::parse`'s own tests). `Worker` routes with it: it is the same
+        // bootstrap with distributed inference on.
+        Launch::Daemon { .. } | Launch::Worker { .. } => match parts {
+            LaunchParts::Serving {
+                serving,
+                headless: Some(extras),
+            } => Ok(DaemonServices::headless(HeadlessServices {
+                serving,
+                rails: extras.rails,
+                knowledge_view_http: extras.knowledge_view_http,
+                solve_http: extras.solve_http,
+            })),
+            LaunchParts::Serving { headless: None, .. } => Err(AssemblyRefusal::Mismatch {
+                launch: name,
+                wanted: "a headless daemon (rails + knowledge-view + solve)",
+                got: "a serving profile with no rails",
+            }),
+            LaunchParts::Admin => Err(AssemblyRefusal::Mismatch {
+                launch: name,
+                wanted: "a headless daemon",
+                got: "mesh-admin parts",
+            }),
+        },
+
+        // The desktop's in-process daemon: a serving profile and nothing more.
+        // It has never carried a provider factory, a shared mesh store or a
+        // convergence recorder, and since Phase 3 it is not distinguished by a
+        // state store either — so the shape it assembles is exactly
+        // `ServingProfile`.
+        Launch::Desktop => match parts {
+            LaunchParts::Serving {
+                serving,
+                headless: None,
+            } => Ok(DaemonServices::desktop(serving)),
+            LaunchParts::Serving {
+                headless: Some(_), ..
+            } => Err(AssemblyRefusal::Mismatch {
+                launch: name,
+                wanted: "a serving profile",
+                got: "headless rails, which the desktop has never had",
+            }),
+            LaunchParts::Admin => Err(AssemblyRefusal::Mismatch {
+                launch: name,
+                wanted: "a serving profile",
+                got: "mesh-admin parts",
+            }),
+        },
+
+        // `svrn mesh create` / `svrn mesh join` reaching this far means no
+        // daemon was listening, so the verb builds a one-shot that mutates
+        // membership and exits.
+        Launch::Verb { .. } => match parts {
+            LaunchParts::Admin => Ok(DaemonServices::MeshAdmin),
+            LaunchParts::Serving { .. } => Err(AssemblyRefusal::Mismatch {
+                launch: name,
+                wanted: "a mesh-admin one-shot",
+                got: "a serving profile",
+            }),
+        },
+
+        // The remaining four assemble nothing. `Server` is RESIDENT but is a
+        // surface, not an assembler — the distinction that widened the first
+        // number from seven to eight without touching the second (§10).
+        Launch::Server | Launch::ComputeChild { .. } | Launch::Smoketest { .. } | Launch::Bare => {
+            Err(AssemblyRefusal::NotAnAssembler { launch: name })
         }
     }
 }
@@ -436,6 +616,7 @@ pub(crate) mod fixtures {
             core: ServingCore {
                 corpus_engine: engine(),
                 inference_provider: Arc::new(NullProvider),
+                state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
             },
             capability: ServingCapability {
                 mcp: McpSurface::Unavailable {
@@ -451,10 +632,7 @@ pub(crate) mod fixtures {
     }
 
     pub(crate) fn desktop() -> DaemonServices {
-        DaemonServices::desktop(DesktopServices {
-            serving: serving(),
-            state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-        })
+        DaemonServices::desktop(serving())
     }
 
     pub(crate) fn headless() -> DaemonServices {
@@ -489,6 +667,162 @@ pub(crate) mod fixtures {
 mod tests {
     use super::*;
 
+    use sovereign_contracts::launch::Launch;
+
+    fn headless_extras() -> HeadlessExtras {
+        HeadlessExtras {
+            rails: HeadlessRails {
+                provider_factory: std::sync::Arc::new(fixtures::NullFactory),
+                mesh_store: Arc::new(
+                    commonwealth_state::MeshStore::in_memory().expect("in-memory MeshStore"),
+                ),
+                convergence_recorder: Arc::new(commonwealth_api::state::ConvergenceRecord::new()),
+            },
+            knowledge_view_http: axum::Router::new(),
+            solve_http: axum::Router::new(),
+        }
+    }
+
+    /// **Soundness, behaviourally.** Every variant is produced by some launch —
+    /// run, not grepped. The census in `tests/daemon_variant_census.rs` can
+    /// only see that an ARM EXISTS; this sees what the arm returns, which is
+    /// the half that catches an arm wired to the wrong variant.
+    #[test]
+    fn each_assembling_launch_produces_its_variant() {
+        let cases: Vec<(Launch, LaunchParts, &str)> = vec![
+            (
+                Launch::Daemon {
+                    args: vec!["run".into()],
+                },
+                LaunchParts::Serving {
+                    serving: fixtures::serving(),
+                    headless: Some(headless_extras()),
+                },
+                "headless",
+            ),
+            (
+                Launch::Worker {
+                    args: vec!["run".into(), "--worker-mode".into()],
+                },
+                LaunchParts::Serving {
+                    serving: fixtures::serving(),
+                    headless: Some(headless_extras()),
+                },
+                "headless",
+            ),
+            (
+                Launch::Desktop,
+                LaunchParts::Serving {
+                    serving: fixtures::serving(),
+                    headless: None,
+                },
+                "desktop",
+            ),
+            (
+                Launch::Verb {
+                    name: "mesh".into(),
+                    args: vec!["create".into()],
+                },
+                LaunchParts::Admin,
+                "mesh-admin",
+            ),
+        ];
+        let mut produced = std::collections::HashSet::new();
+        for (launch, parts, expected) in cases {
+            let got = assemble(&launch, parts)
+                .unwrap_or_else(|e| panic!("{} should assemble: {e}", launch.as_str()));
+            assert_eq!(got.label(), expected, "launch {}", launch.as_str());
+            produced.insert(got.label());
+        }
+        // Every declared shape came out of some launch. A variant nobody can
+        // produce is the representable-but-dead configuration TOPOLOGY §4
+        // calls unsound.
+        assert_eq!(produced.len(), fixtures::every_variant().len());
+    }
+
+    /// The four launches that assemble NOTHING say so rather than being given
+    /// a plausible daemon. `Server` is the one worth naming: it is RESIDENT —
+    /// it binds a long-lived listener and owns tenant state — and it is still
+    /// not an assembler. Conflating those two questions is what left an
+    /// orphaned server on `0.0.0.0:8080` for six days with no run lock and no
+    /// crash reporting (§10, hazards 4 and 10).
+    #[test]
+    fn a_launch_that_assembles_nothing_refuses() {
+        for launch in [
+            Launch::Server,
+            Launch::Bare,
+            Launch::ComputeChild { args: Vec::new() },
+            Launch::Smoketest { argv: Vec::new() },
+        ] {
+            let err = assemble(&launch, LaunchParts::Admin)
+                .err()
+                .unwrap_or_else(|| panic!("{} must not assemble a daemon", launch.as_str()));
+            assert!(
+                matches!(err, AssemblyRefusal::NotAnAssembler { .. }),
+                "{} refused with the wrong reason: {err}",
+                launch.as_str()
+            );
+        }
+    }
+
+    /// The mismatches, which are the states the assembler exists to make
+    /// unrepresentable-in-practice: a desktop launch carrying headless rails,
+    /// a daemon launch with none, and a verb launch carrying a serving
+    /// profile. Each refuses and NAMES both sides (§18.3) rather than
+    /// substituting the nearest plausible variant — a daemon that came up as
+    /// the wrong shape is the hazard itself.
+    #[test]
+    fn every_illegal_pairing_refuses_and_names_both_sides() {
+        let cases: Vec<(Launch, LaunchParts)> = vec![
+            (
+                Launch::Desktop,
+                LaunchParts::Serving {
+                    serving: fixtures::serving(),
+                    headless: Some(headless_extras()),
+                },
+            ),
+            (
+                Launch::Daemon {
+                    args: vec!["run".into()],
+                },
+                LaunchParts::Serving {
+                    serving: fixtures::serving(),
+                    headless: None,
+                },
+            ),
+            (
+                Launch::Verb {
+                    name: "mesh".into(),
+                    args: Vec::new(),
+                },
+                LaunchParts::Serving {
+                    serving: fixtures::serving(),
+                    headless: None,
+                },
+            ),
+            (Launch::Desktop, LaunchParts::Admin),
+        ];
+        for (launch, parts) in cases {
+            let name = launch.as_str();
+            let err = assemble(&launch, parts)
+                .err()
+                .unwrap_or_else(|| panic!("{name} + mismatched parts must refuse"));
+            assert!(
+                matches!(err, AssemblyRefusal::Mismatch { .. }),
+                "{name} refused with the wrong reason: {err}"
+            );
+            let text = err.to_string();
+            assert!(
+                text.contains(name),
+                "a refusal must name the launch it refused; got: {text}"
+            );
+            assert!(
+                text.contains("but was handed"),
+                "a refusal must name what it was handed, not only what it wanted; got: {text}"
+            );
+        }
+    }
+
     /// The differential falsifier of `TOPOLOGY.md §4`, soundness half: every
     /// variant carries exactly the capability set measured on its live path,
     /// no more and no less. Written as a table so a reader checks it against
@@ -497,11 +831,19 @@ mod tests {
     /// states what it carries.
     #[test]
     fn each_variant_declares_exactly_its_measured_capability_set() {
-        // label, core, state_store, rails, host routers
-        let expected: &[(&str, bool, bool, bool, usize)] = &[
-            ("mesh-admin", false, false, false, 0),
-            ("desktop", true, true, false, 2),
-            ("headless", true, false, true, 4),
+        // label, core, rails, host routers
+        //
+        // The `state_store` column was DELETED here by Phase 3, and its
+        // deletion is the proof the phase landed. It read `. Y .` — the one
+        // column that was not a subset relation down the rows, which is what
+        // "the two serving shapes cross rather than nest" meant concretely.
+        // The store now sits in `ServingCore`, so the column is the `core`
+        // column and asserting it separately would be a check that cannot
+        // disagree with its neighbour (the defect retired above).
+        let expected: &[(&str, bool, bool, usize)] = &[
+            ("mesh-admin", false, false, 0),
+            ("desktop", true, false, 2),
+            ("headless", true, true, 4),
         ];
         let variants = fixtures::every_variant();
         assert_eq!(
@@ -510,7 +852,7 @@ mod tests {
             "a variant was added without a row in the measured table"
         );
 
-        for (s, (label, core, store, rails, routers)) in variants.iter().zip(expected) {
+        for (s, (label, core, rails, routers)) in variants.iter().zip(expected) {
             assert_eq!(s.label(), *label);
             // ONE question, not three. Until 2026-08-24 this asserted
             // `corpus_engine().is_some()`, `inference_provider().is_some()` and
@@ -519,7 +861,6 @@ mod tests {
             // variant through one-line `.map()` wrappers. Deleting the wrappers
             // is what made that visible.
             assert_eq!(s.serving().is_some(), *core, "{label}: serving profile");
-            assert_eq!(s.state_store().is_some(), *store, "{label}: state_store");
             // Likewise ONE question, not four: `provider_factory`, `mesh_store`
             // and `convergence_recorder` all read `rails`.
             assert_eq!(s.rails().is_some(), *rails, "{label}: rails");

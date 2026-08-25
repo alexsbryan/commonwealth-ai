@@ -163,6 +163,7 @@ fn build_runtime(store: Arc<SqliteStateStore>) -> Runtime {
         skills,
         approval,
         InferenceConfig::default(),
+        sovereign_core::runtime::lane::LaneSources::none(),
     )
 }
 

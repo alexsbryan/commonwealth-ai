@@ -81,11 +81,12 @@ impl Runtime {
         scope: Option<&str>,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) {
         if !atlas_grounding_enabled() {
             return;
         }
-        let Some(provider) = self.atlas_context_provider.as_ref() else {
+        let Some(provider) = lane.atlas_context.as_ref() else {
             return;
         };
         if embedding.is_empty() {
@@ -290,6 +291,7 @@ impl Runtime {
                         None,
                         Some(&req_scope),
                         corpus_ceiling,
+                        lane,
                     )
                     .await;
                 for hit in fts_hits {

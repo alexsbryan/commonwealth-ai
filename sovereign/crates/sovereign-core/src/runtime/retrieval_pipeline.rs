@@ -405,6 +405,17 @@ pub struct PipelineState<'ctx> {
     /// and found nothing anywhere. It deliberately does NOT scope the
     /// expansions to nothing — see `expansion_corpora`.
     pub main_fanout_corpora: Option<Vec<String>>,
+    // ── what this turn may enrich with ──
+    /// The turn's enrichment providers, resolved ONCE by [`Runtime::lane`]
+    /// before the first step runs (daemon-convergence Phase 4a).
+    ///
+    /// Steps read `st.lane` instead of reaching through `rt` into seven
+    /// Runtime fields. That is what lets the Runtime collapse to core: a
+    /// stage that receives its providers as a value cannot make the object
+    /// that answers questions fat by wanting one more of them. It also makes
+    /// the pool consistent — `meta_atlas` is snapshotted here, so a
+    /// background index warm cannot land between two steps of one turn.
+    pub lane: crate::runtime::Lane,
 }
 
 impl<'ctx> PipelineState<'ctx> {
@@ -417,6 +428,7 @@ impl<'ctx> PipelineState<'ctx> {
         embedding: Vec<f32>,
         label: &'static str,
         search_label: String,
+        lane: crate::runtime::Lane,
     ) -> Self {
         Self {
             message,
@@ -443,6 +455,7 @@ impl<'ctx> PipelineState<'ctx> {
             local_hits: 0,
             sources_expanded: 0,
             main_fanout_corpora: None,
+            lane,
         }
     }
 
@@ -1121,6 +1134,7 @@ fn step_bridge_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                 &st.embedding,
                 st.enabled_corpora,
                 st.corpus_ceiling,
+                &st.lane,
             )
             .await;
         StepOutcome {
@@ -1145,6 +1159,7 @@ fn step_meta_atlas_boost<'a, 'ctx>(
                 &st.entities,
                 st.enabled_corpora,
                 st.corpus_ceiling,
+                &st.lane,
             )
             .await;
         if !st.meta_atlas_hits.is_empty() {
@@ -1208,6 +1223,7 @@ fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) 
                 "DemandPlan",
                 scope.as_deref(),
                 st.corpus_ceiling,
+                &st.lane,
             )
             .await
         } else {
@@ -1250,6 +1266,7 @@ fn step_query_decomp<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                     "QueryDecomp",
                     scope.as_deref(),
                     st.corpus_ceiling,
+                    &st.lane,
                 )
                 .await;
             tracing::info!(
@@ -1282,6 +1299,7 @@ fn step_title_expand<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                     "TitleExpand",
                     scope.as_deref(),
                     st.corpus_ceiling,
+                    &st.lane,
                 )
                 .await;
             tracing::info!(
@@ -1436,6 +1454,7 @@ fn step_atom_enum<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
                 st.enabled_corpora,
                 st.corpus_ceiling,
                 &pool_corpora,
+                &st.lane,
             )
             .await
         {
@@ -1515,7 +1534,13 @@ fn step_raptor_grounding_early<'a, 'ctx>(
         // on) injects post-rerank instead — that call stays with the
         // prompt-assembly code in the handlers, outside this pipeline.
         if !raptor_late_inject_enabled() {
-            rt.apply_raptor_grounding(&st.embedding, &mut st.chunks, st.label, st.enabled_corpora)
+            rt.apply_raptor_grounding(
+                &st.embedding,
+                &mut st.chunks,
+                st.label,
+                st.enabled_corpora,
+                &st.lane,
+            )
                 .await;
             StepOutcome::default()
         } else {
@@ -1542,6 +1567,7 @@ fn step_atlas_grounding<'a, 'ctx>(
             st.scope,
             st.enabled_corpora,
             st.corpus_ceiling,
+            &st.lane,
         )
         .await;
         // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding
@@ -1596,7 +1622,13 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
         // needs.
         let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
         if let Some(neighbors) = rt
-            .expand_via_wikipedia_graph(&st.chunks, st.message, scope.as_deref(), st.corpus_ceiling)
+            .expand_via_wikipedia_graph(
+                &st.chunks,
+                st.message,
+                scope.as_deref(),
+                st.corpus_ceiling,
+                &st.lane,
+            )
             .await
         {
             if !neighbors.is_empty() {
@@ -1636,9 +1668,20 @@ fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         // concealing them.
         let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
         st.ppr_pending =
-            rt.spawn_ppr_lane(&st.chunks, st.message, scope.as_deref(), st.corpus_ceiling);
+            rt.spawn_ppr_lane(
+                &st.chunks,
+                st.message,
+                scope.as_deref(),
+                st.corpus_ceiling,
+                &st.lane,
+            );
         st.obligations_pending =
-            rt.spawn_entity_obligations(st.message, scope.as_deref(), st.corpus_ceiling);
+            rt.spawn_entity_obligations(
+                st.message,
+                scope.as_deref(),
+                st.corpus_ceiling,
+                &st.lane,
+            );
         let spawned = match (st.ppr_pending.is_some(), st.obligations_pending.is_some()) {
             (true, true) => Some("ppr + obligations spawned".to_string()),
             (true, false) => Some("ppr lane spawned".to_string()),
@@ -1868,6 +1911,7 @@ fn step_entity_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                         // fan-out wall at n=1000 (§8.3.3).
                         scope.as_deref(),
                         st.corpus_ceiling,
+                        &st.lane,
                     )
                     .await;
                 entity_added += entity_chunks.len();
@@ -2054,6 +2098,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
             per_corpus_overrides.as_ref(),
             st.enabled_corpora,
             st.corpus_ceiling,
+            &st.lane,
         );
         // Sealed conversations: subtract locally-installed corpora from
         // the mesh seal before fanning out. The local leg above already

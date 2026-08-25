@@ -122,7 +122,8 @@ pub mod pinned_worker_source;
 pub use daemon::EmbeddedDaemon;
 pub use peer_inference::DeferredDaemon;
 pub use daemon_services::{
-    DaemonServices, DesktopServices, EmbedAdvertisement, HeadlessRails, HeadlessServices, McpMount,
+    assemble, AssemblyRefusal, DaemonServices, EmbedAdvertisement, HeadlessExtras, HeadlessRails,
+    HeadlessServices, LaunchParts, McpMount,
     McpSurface, ServingCapability, ServingCore, ServingProfile,
 };
 pub use deep_link::{parse_deep_link, DeepLink};

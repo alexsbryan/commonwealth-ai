@@ -33,6 +33,7 @@ impl Runtime {
         message: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         if std::env::var("SOVEREIGN_GRAPH_NEIGHBOR_EXPAND")
             .ok()
@@ -41,7 +42,7 @@ impl Runtime {
         {
             return None;
         }
-        let graph = self.wikipedia_graph.as_ref()?;
+        let graph = lane.wikipedia_graph.as_ref()?;
 
         let already_present: std::collections::HashSet<String> =
             chunks.iter().filter_map(|c| c.title.clone()).collect();
@@ -143,6 +144,7 @@ impl Runtime {
                     None,
                     enabled_corpora,
                     corpus_ceiling,
+                    lane,
                 )
                 .await;
             for mut c in hits {
@@ -222,6 +224,7 @@ impl Runtime {
         message: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>> {
         // Default ON (promoted 2026-07-17 after the v10 battery:
         // +2 wiki sources, facts held, +182ms p50 = harness noise;
@@ -236,9 +239,9 @@ impl Runtime {
                 return None;
             }
         }
-        let graph = self.wikipedia_graph.clone()?;
+        let graph = lane.wikipedia_graph.clone()?;
         let engine = self.corpus_engine.clone()?;
-        let Some(rerank_fn) = self.rerank_fn.clone() else {
+        let Some(rerank_fn) = lane.rerank.f.clone() else {
             // The gate IS the feature — ungated structural injection
             // is a measured regression. No reranker ⇒ the lane stays
             // dark (debug, not warn: the flag defaults ON and most
@@ -257,7 +260,7 @@ impl Runtime {
             graph,
             engine,
             rerank_fn,
-            gliner: self.gliner.clone(),
+            gliner: lane.gliner.clone(),
         };
         let pool_titles: Vec<String> = chunks.iter().filter_map(|c| c.title.clone()).collect();
         let message = message.to_string();
@@ -296,12 +299,13 @@ impl Runtime {
         message: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> Option<tokio::task::JoinHandle<Vec<corpus_engine::ScoredChunk>>> {
         if !merge_select_enabled() {
             return None;
         }
         let engine = self.corpus_engine.clone()?;
-        let rerank_fn = self.rerank_fn.clone();
+        let rerank_fn = lane.rerank.f.clone();
         let message = message.to_string();
         let enabled = enabled_corpora.map(|s| s.to_vec());
         let ceiling = corpus_ceiling.map(|s| s.to_vec());
@@ -309,7 +313,7 @@ impl Runtime {
         // pipeline setup path) to surface lowercase concept articles the
         // uppercase-only heuristic can't. `None` when the model isn't
         // installed → no concept obligations, unchanged behavior.
-        let gliner = self.gliner.clone();
+        let gliner = lane.gliner.clone();
         Some(tokio::spawn(fetch_entity_obligations(
             engine, rerank_fn, message, enabled, ceiling, gliner,
         )))
@@ -1116,6 +1120,7 @@ impl Runtime {
         label: &str,
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> usize {
         // Score-decay for fanned-out (sub-query) hits. Default 1.0 keeps
         // the original "compete on equal footing" behaviour. A value <1
@@ -1144,6 +1149,7 @@ impl Runtime {
                     None,
                     enabled_corpora,
                     corpus_ceiling,
+                    lane,
                 )
                 .await;
             if decay < 1.0 {

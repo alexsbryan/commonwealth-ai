@@ -46,7 +46,7 @@ adjacency. The columnar store is therefore the **drop-in replacement for the SQL
   `neighbors_for_axis` / `has_contested_section` **identically** to the SQLite graph.
 - **W3** — `WikipediaGraphApi` trait (`#[async_trait]`, `dyn`-safe) implemented by both
   backends; the runtime holds `Option<Arc<dyn WikipediaGraphApi>>`
-  (`runtime.rs::with_wikipedia_graph`); a shared `corpus_engine::open_wikipedia_graph`
+  (`LaneSources::wikipedia_graph`; was `runtime.rs::with_wikipedia_graph` until daemon-convergence Phase 4b); a shared `corpus_engine::open_wikipedia_graph`
   per-corpus gate (columnar-store-present → columnar, else SQLite) routes **all three**
   loaders (chat/bootstrap, server, desktop — previously duplicated). Gate unit test +
   lint clean across 24 crates. **Live verify (chaos QA over wiki-grounded questions)

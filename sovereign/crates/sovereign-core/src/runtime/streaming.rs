@@ -3635,6 +3635,11 @@ impl Runtime {
         conversation_id: &str,
         preset: Option<RouterClassification>,
     ) -> Result<StreamHandle> {
+        // The turn's enrichment providers, resolved ONCE here and passed
+        // down (daemon-convergence Phase 4a). Every stage below receives
+        // this value; none of them reaches back into the Runtime for a
+        // provider, which is what lets the Runtime collapse to core.
+        let lane = self.lane();
         tracing::info!("runtime: stream turn begin");
         // PR2e — reject oversized turn messages before any Fast-slot
         // work runs. Document-sized inputs belong in the attached-
@@ -3724,7 +3729,7 @@ impl Runtime {
                 &scope,
                 message,
                 5,
-                self.rerank_fn.as_ref(),
+                lane.rerank.f(),
             )
             .await
             {
@@ -3984,6 +3989,7 @@ impl Runtime {
             message,
             conversation_id,
             Some(&_session_id),
+            &lane,
         )
         .await;
 

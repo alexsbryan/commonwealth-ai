@@ -1329,7 +1329,7 @@ async fn run_question(
     // weight to zero (the default) or when no atlases are loaded —
     // baseline-A/B remains byte-equivalent to prior runs.
     let atlas_article_scores: HashMap<String, f32> =
-        if session.runtime.rerank_config.atlas_weight.abs() > f32::EPSILON
+        if session.runtime.lane_sources.rerank.config.atlas_weight.abs() > f32::EPSILON
             && !atlases.is_empty()
             && !embedding.is_empty()
         {
@@ -1411,8 +1411,8 @@ async fn run_question(
                 query_vec,
                 &q.question,
                 search_limit,
-                session.runtime.rerank_fn.as_ref(),
-                &session.runtime.rerank_config,
+                session.runtime.lane_sources.rerank.f(),
+                &session.runtime.lane_sources.rerank.config,
                 atlas_scores_opt,
             )
             .await

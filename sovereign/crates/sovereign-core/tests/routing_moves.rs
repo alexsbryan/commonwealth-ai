@@ -134,6 +134,7 @@ async fn build_runtime_with_store(
         skills,
         approval,
         InferenceConfig::default(),
+        sovereign_core::runtime::lane::LaneSources::none(),
     )
     .with_routing_events(sink);
     (runtime, shared_store)
@@ -788,6 +789,7 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
         skills,
         approval,
         InferenceConfig::default(),
+        sovereign_core::runtime::lane::LaneSources::none(),
     )
     .with_session_store(sessions)
     .with_routing_events(sink as Arc<dyn RoutingEventSink>);

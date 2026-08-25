@@ -20,6 +20,40 @@ use sovereign_mesh::EmbeddedDaemon;
 /// this the daemon reached the same defaults through internal `None` fallbacks
 /// and said nothing, so a typo in `[daemon] client_port` looked like the port
 /// simply not taking effect (ARCH §18.3).
+/// The `DaemonServices` a `svrn mesh create` / `svrn mesh join` one-shot
+/// assembles — obtained from THE assembler, not named here.
+///
+/// `sovereign_mesh::assemble` is the one exhaustive match over `Launch` that
+/// constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3). These two
+/// sites used to name `DaemonServices::MeshAdmin` directly, which is a fourth
+/// place answering "what does this invocation assemble". They now supply
+/// parts and let the match answer — so a mesh verb that somehow ran under a
+/// different launch mode is refused rather than quietly given a daemon.
+///
+/// `Launch::parse` is called here rather than threaded because this binary is
+/// `exec`d by the dispatcher and its argv IS the verb invocation; parse is the
+/// one sanctioned reader of that (Falsifier 1 forbids OTHER code deciding what
+/// the process is, not calling the decider).
+fn mesh_admin_services() -> sovereign_mesh::DaemonServices {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let launch = sovereign_contracts::launch::Launch::parse(
+        &args,
+        // A mesh verb reaching this code path IS a verb invocation; `Bare` is
+        // the honest default for "argv named nothing this parser knows".
+        sovereign_contracts::launch::Launch::Verb {
+            name: "mesh".to_string(),
+            args: args.clone(),
+        },
+    );
+    match sovereign_mesh::assemble(&launch, sovereign_mesh::LaunchParts::Admin) {
+        Ok(services) => services,
+        Err(refusal) => {
+            eprintln!("error: {refusal}");
+            std::process::exit(1);
+        }
+    }
+}
+
 fn one_shot_setup_config() -> sovereign_core::setup_config::SetupConfig {
     match sovereign_core::setup_config::SetupConfig::load() {
         Ok(cfg) => cfg,
@@ -2590,7 +2624,7 @@ async fn cmd_create(args: &[String]) -> i32 {
     let daemon = EmbeddedDaemon::new(
         sovereign_root(),
         one_shot_setup_config(),
-        sovereign_mesh::DaemonServices::MeshAdmin,
+        mesh_admin_services(),
     );
     // Explicit create = serve remote peers → expose the client API
     // (bind non-loopback + require a bearer token).
@@ -2715,7 +2749,7 @@ async fn cmd_join(args: &[String]) -> i32 {
     let daemon = EmbeddedDaemon::new(
         sovereign_root(),
         one_shot_setup_config(),
-        sovereign_mesh::DaemonServices::MeshAdmin,
+        mesh_admin_services(),
     );
     daemon.expose_client_api();
     let Some(link) = parse_join_argument(arg) else {

@@ -237,7 +237,9 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
     }
 
     match launch {
-        Launch::Daemon { args } | Launch::Worker { args } => daemon_cmd::run(&args).await,
+        Launch::Daemon { ref args } | Launch::Worker { ref args } => {
+            daemon_cmd::run(&launch, &args.clone()).await
+        }
         Launch::Verb { name, args } => match name.as_str() {
             "model" => model_cmd::run(&args).await,
             "setup" => setup_cmd::run_setup(&args).await,

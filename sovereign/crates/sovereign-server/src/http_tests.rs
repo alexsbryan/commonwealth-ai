@@ -122,6 +122,9 @@ fn build_runtime(
         skills,
         approval.clone() as Arc<dyn ApprovalChannel>,
         InferenceConfig::default(),
+        // Phase 4b: enrichment is a required argument, not eight
+        // forgettable builders.
+        sovereign_core::runtime::lane::LaneSources::none(),
     );
     (Arc::new(runtime), store_concrete, approval)
 }

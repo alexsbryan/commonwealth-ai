@@ -72,6 +72,7 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         pool_corpora: &[String],
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
         let atom_enum_on = std::env::var("SOVEREIGN_ATOM_ENUM").ok().as_deref() == Some("1");
         // Default ON (parity push — surface atlas Claims for overview questions
@@ -99,6 +100,7 @@ impl Runtime {
                     enabled_corpora,
                     corpus_ceiling,
                     pool_corpora,
+                    lane,
                 )
                 .await;
         }
@@ -108,7 +110,7 @@ impl Runtime {
         // Need the atlas graph to enumerate against; bail before the
         // classify call if no provider is attached — otherwise we would
         // pay an LLM round-trip only to find nothing to enumerate.
-        let provider = self.atlas_context_provider.as_ref()?;
+        let provider = lane.atlas_context.as_ref()?;
 
         // ---- Stage 1: classify enumeration vs lookup (+ target type).
         // Question-shape only, no conversation context: whether a
@@ -666,6 +668,7 @@ impl Runtime {
                                 None,
                                 Some(&own_scope[..]),
                                 corpus_ceiling,
+                                lane,
                             )
                             .await
                             .into_iter()
@@ -735,8 +738,9 @@ impl Runtime {
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
         pool_corpora: &[String],
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<corpus_engine::ScoredChunk>> {
-        let provider = self.atlas_context_provider.as_ref()?;
+        let provider = lane.atlas_context.as_ref()?;
         let top_k: usize = std::env::var("SOVEREIGN_ATOM_ENUM_TOPK")
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
@@ -994,6 +998,7 @@ impl Runtime {
                                         None,
                                         Some(&own_scope[..]),
                                         corpus_ceiling,
+                                        lane,
                                     )
                                     .await
                                     .into_iter()

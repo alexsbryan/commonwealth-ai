@@ -597,14 +597,14 @@ name = "SOVEREIGN_USE_SUPERVISOR"
 cluster = "daemon-lifecycle"
 default = "on"
 status = "guard"
-purpose = "Desktop kill-switch for supervised-child mode: `0`/`false` drops the daemon CHILD process and runs an in-process EmbeddedDaemon instead. Unset (and the redundant legacy `1`) means supervised child — the default since DAEMON_RESILIENCE P0.1, the W1 flip. It has nothing to do with distributed-inference workers, which is what this entry claimed until 2026-08-24."
+purpose = "Desktop kill-switch for supervised-child mode: `0`/`false` drops the daemon CHILD process and runs an in-process EmbeddedDaemon instead. Unset (and the redundant legacy `1`) means supervised child — the default since DAEMON_RESILIENCE P0.1, the W1 flip. It has nothing to do with distributed-inference workers, which is what this entry claimed until 2026-08-24. CONSTRUCTION-TIME since 2026-08-25 (TOPOLOGY Phase 10): read once by `sovereign_contracts::launch::DaemonHost::from_env`, published by the desktop's `main`, and never consulted at a point of use again."
 
 [[flag]]
 name = "SOVEREIGN_FORCE_LOCAL"
 cluster = "daemon-lifecycle"
 default = "off"
 status = "guard"
-purpose = "`1` means THIS process runs the weights — the real-mode desktop harnesses and the run-local-while-a-daemon-is-up case. Implies the in-process EmbeddedDaemon, since a child daemon would contradict it (supervisor_setup::is_enabled)."
+purpose = "`1` means THIS process runs the weights — the real-mode desktop harnesses and the run-local-while-a-daemon-is-up case. Implies the in-process EmbeddedDaemon, since a child daemon would contradict it, and it TAKES PRECEDENCE over SOVEREIGN_USE_SUPERVISOR. CONSTRUCTION-TIME since 2026-08-25 (TOPOLOGY Phase 10): `DaemonHost::from_env` is the one reader; `bootstrap::detect` and `supervisor_setup::is_enabled` were two independent parses of it and now read the resolved value."
 
 # ── inference ───────────────────────────────────────────────────────
 

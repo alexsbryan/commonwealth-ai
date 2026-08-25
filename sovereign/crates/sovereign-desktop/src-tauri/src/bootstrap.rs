@@ -134,7 +134,17 @@ pub async fn detect() -> BootstrapMode {
     // daemon is up set this; the first-launch real-mode journey needs it so the
     // setup wizard actually renders (the Attach short-circuit below would
     // otherwise skip straight past onboarding to the running daemon).
-    let force_local = std::env::var("SOVEREIGN_FORCE_LOCAL").is_ok_and(|v| v == "1");
+    // Read from the decision `main` resolved, not from the environment again.
+    // This was the SECOND place in the tree parsing `SOVEREIGN_FORCE_LOCAL`
+    // (the other being `supervisor_setup::is_enabled`), and two sites deciding
+    // what one flag means is §10.6 whatever the two currently agree on — they
+    // agreed here by coincidence of both spelling the same `== "1"`.
+    let force_local = matches!(
+        crate::launch_mode::daemon_host(),
+        sovereign_contracts::launch::DaemonHost::InProcess(
+            sovereign_contracts::launch::InProcessReason::ForceLocal
+        )
+    );
 
     if !force_local && is_daemon_live(port).await {
         tracing::info!(

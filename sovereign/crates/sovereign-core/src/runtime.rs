@@ -198,6 +198,10 @@ pub use grounding::native_grounding;
 pub use grounding::{claim_violation_joint, scan_unsupported_specifics};
 mod formatters;
 mod handlers;
+/// What enriches a turn, as a value stages receive rather than seven fields
+/// they reach back into the `Runtime` to read (daemon-convergence Phase 4a).
+pub mod lane;
+pub use lane::{Lane, Rerank};
 mod intent_helpers;
 /// Public for the inner-chaos bench's verifier-calibration gate —
 /// rubric changes to the recall grounding verifier must pass a
@@ -279,16 +283,6 @@ pub struct Runtime {
     /// `collaboration::PostStreamPreemption`.
     pub(crate) post_stream_preemption: collaboration::PostStreamPreemption,
     pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
-    /// Optional structural link graph for a corpus that exposes one
-    /// (today: Wikipedia, via metadata `outgoing_links` /
-    /// `pov_count` / `section_path`). Populated by the bootstrap
-    /// when a `wikipedia_graph.db` is found alongside the corpus's
-    /// LanceDB table. When present, the retrieval path can opt into
-    /// one-hop neighbor expansion (env-gated) and surfaces
-    /// `(contested)` markers on chunks whose source has at least
-    /// one editor-flagged contested section. `None` preserves the
-    /// pre-graph behaviour.
-    pub wikipedia_graph: Option<Arc<dyn corpus_engine::WikipediaGraphApi>>,
     /// Optional note store. Populated by the daemon bootstrap; absent
     /// in the chat-CLI path where commitment persistence isn't wired.
     /// Consumed by `handle_commissive_query` to write `kind="commitment"`
@@ -302,16 +296,6 @@ pub struct Runtime {
     /// the background. `None` preserves the pre-2026-05-23
     /// uncompacted behaviour exactly.
     pub compaction: Option<Arc<crate::memory_compaction::CompactionWorker>>,
-    /// Read-side handle for conversation tiered-retrieval enrichment
-    /// (`conv_skeletons` / `conv_raptor_nodes` / `conv_motifs`). Spec
-    /// `sovereign/docs/specs/CONV_TIERED_PORT.md`. When present, the
-    /// prompt-assembly path renders per-conversation briefings ahead
-    /// of the raw chunk block via
-    /// [`crate::conv_briefing::build_conv_tiered_briefings`].
-    /// `None` preserves the pre-tiered behaviour exactly — the model
-    /// gets only the standard `format_scored_chunks_with_kinds`
-    /// output for conv corpora.
-    pub conv_tiered_reader: Option<Arc<dyn crate::conv_tiered::ConvTieredReader>>,
     /// Optional mesh-knowledge client. Populated by the desktop
     /// bootstrap when an `EmbeddedDaemon` is running — the Runtime
     /// fans out knowledge queries through its local Commonwealth
@@ -343,13 +327,6 @@ pub struct Runtime {
     /// Desktop bootstrap injects a `TauriRoutingEventSink`; headless
     /// test/CLI harnesses get the default `NoOpRoutingEventSink`.
     pub routing_events: Arc<dyn RoutingEventSink>,
-    /// Source of pre-embedded atlas Entity contexts, looked up at
-    /// query time and fused into chunk-retrieval results as virtual
-    /// `ScoredChunk`s. The daemon's `AtlasContextManager` populates
-    /// this once at boot per installed corpus that has an `atlas/`
-    /// dir. `None` = atlas-grounded retrieval is off (the pre-atlas
-    /// chunk-only behaviour is preserved exactly).
-    pub atlas_context_provider: Option<Arc<dyn crate::atlas_context::AtlasContextProvider>>,
     /// Reports which `corpus_id`s are flagged sensitive (e.g.
     /// folder-ingest v1 §3.4 watched-folder sensitivity). Consulted
     /// by [`Runtime::search_corpus_indexes`] before fanning out
@@ -373,21 +350,6 @@ pub struct Runtime {
     /// `None` = no folder corpora known (CLI fallback / tests),
     /// which preserves the pre-Phase-F label rendering exactly.
     pub folder_metadata: Option<Arc<dyn crate::traits::FolderMetadataOracle>>,
-    /// Optional cross-encoder reranker. When `Some`, every call to
-    /// `search_corpus_indexes` (and its filtered companion) hits
-    /// `CorpusIndex::search_with_rerank` instead of `search`; the
-    /// hybrid result gets re-ordered by a model trained to score
-    /// (query, doc) relevance directly. `None` preserves baseline
-    /// fusion-only behaviour exactly.
-    ///
-    /// Bootstrapped from `SOVEREIGN_RERANK=1` (or wired explicitly
-    /// by the daemon when models.toml carries a `[rerank]` slot).
-    pub rerank_fn: Option<corpus_engine::RerankFn>,
-    /// Configuration for the rerank pass — overfetch size, optional
-    /// threshold. Always present; `enabled = false` makes
-    /// `search_with_rerank` no-op back to baseline regardless of
-    /// `rerank_fn`'s presence.
-    pub rerank_config: corpus_engine::RerankConfig,
     /// Sticky in-conversation memory pins (relational recall).
     /// conv_id → the memory ids most recently RENDERED to the user in
     /// that conversation. Once the witness has shown the user an
@@ -400,27 +362,6 @@ pub struct Runtime {
     /// local by design (a resumed conversation re-pins on its first
     /// recall); capped per conversation at the render window.
     pub(crate) recall_pins: std::sync::Mutex<std::collections::HashMap<String, Vec<String>>>,
-    /// Cross-corpus meta-atlas index (Move 5). Built at bootstrap
-    /// from `~/.svrnmesh/meta-atlas/canonical_atoms.json` (produced
-    /// by `sovereign meta-atlas build`). The chat-path boost pass
-    /// `Self::meta_atlas_boost` consults the index on every
-    /// knowledge-query turn to surface stream-tagged anchors per
-    /// question entity. `None` (or empty index) = no boost; retrieval
-    /// falls back to cosine + entity-boost search exactly as before.
-    /// `RwLock` (not a plain `Option`) so the desktop can DEFER this
-    /// load off the boot critical path: `canonical_atoms.json` is ~900MB
-    /// and parsing+indexing it was the bulk of the splash's
-    /// `BuildingRuntime` phase (2026-06-29 boot trace). The Runtime is
-    /// constructed with `None` (boost short-circuits, retrieval unchanged)
-    /// and a background warm attaches the index into the live
-    /// `Arc<Runtime>` via [`Self::install_meta_atlas`] once the app is
-    /// already interactive. CLI/server still attach eagerly via
-    /// [`Self::with_meta_atlas`].
-    pub meta_atlas: std::sync::RwLock<Option<Arc<corpus_engine::meta_atlas::MetaAtlasIndex>>>,
-    /// Cross-corpus bridge edges (typed topic-to-topic alignment from
-    /// `sovereign meta-atlas align`), consumed by [`Self::bridge_boost`].
-    /// `None`/empty → no-op (retrieval behaves as before).
-    pub bridge: Option<Arc<corpus_engine::meta_atlas::BridgeIndex>>,
     /// Per-conversation last-turn provenance snapshot, written at
     /// dispatch inside [`Self::handle_expressive_query_stream`] and
     /// read by [`Self::get_last_turn_provenance`]. Last-write-wins
@@ -434,12 +375,25 @@ pub struct Runtime {
     /// path needs the same surface later, mirror the capture in
     /// `handle_expressive_query`.
     pub turn_provenance: Arc<std::sync::RwLock<HashMap<String, TurnProvenance>>>,
-    /// Optional GLiNER entity extractor. Wired by the CLI/daemon bootstrap
-    /// when the gliner_small-v2.1 ONNX model is installed. Used by
-    /// `maybe_retrieve_relevant_history` for entity-aware query
-    /// enrichment + hybrid cosine/jaccard scoring. `None` = pre-GLiNER
-    /// behaviour preserved (pure cosine + MMR).
-    pub gliner: Option<Arc<dyn crate::traits::EntityExtractor>>,
+    /// Everything that ENRICHES a turn, as one value the host names at
+    /// construction (daemon-convergence Phase 4b).
+    ///
+    /// Was seven independent `Option` fields filled by eight `with_*`
+    /// builders. The pair-independence pass over all three live
+    /// `Runtime::new` sites found no variant structure among them — the
+    /// divergence between hosts was omission, not topology, and a builder
+    /// cannot prevent an omission because a forgotten call is
+    /// indistinguishable from a host that genuinely has no such provider.
+    /// So it is a constructor argument: a host names its providers, or names
+    /// `LaneSources::none()`.
+    ///
+    /// Stages never read this. They receive [`Lane`] — the per-turn snapshot
+    /// — as a parameter, and `tests/lane_reach_through_census.rs` fails if
+    /// one reaches back in. Grouping alone would have bought nothing (§3.5:
+    /// `self.gliner` becoming `self.lane.gliner` is the same coupling down a
+    /// longer path); the grouping is only honest BECAUSE the reads went to
+    /// zero first, in Phase 4a.
+    pub lane_sources: lane::LaneSources,
 }
 
 impl Runtime {
@@ -524,6 +478,10 @@ impl Runtime {
         skills: Arc<SkillRegistry>,
         approval: Arc<dyn ApprovalChannel>,
         inference_config: InferenceConfig,
+        // REQUIRED, not a builder. See [`Runtime::lane`] and the field docs:
+        // eight `with_*` calls a host could forget became one value a host
+        // must name.
+        lane: lane::LaneSources,
     ) -> Self {
         Self {
             inference,
@@ -535,29 +493,22 @@ impl Runtime {
             approval,
             inference_config,
             corpus_engine: None,
-            wikipedia_graph: None,
             note_store: None,
             assembly_memo: std::sync::RwLock::new(std::collections::HashMap::new()),
             history_unit_memo: std::sync::Mutex::new(std::collections::HashMap::new()),
             post_stream_preemption: collaboration::PostStreamPreemption::default(),
             compaction: None,
-            conv_tiered_reader: None,
             mesh_knowledge: None,
             landscape_digests: None,
             sessions: Arc::new(SessionStore::new()),
             confidence_thresholds: ConfidenceThresholds::default(),
             routing_events: Arc::new(NoOpRoutingEventSink),
-            atlas_context_provider: None,
             sensitive_corpora: None,
             corpus_principal: None,
             folder_metadata: None,
-            rerank_fn: None,
-            rerank_config: corpus_engine::RerankConfig::default(),
+            lane_sources: lane,
             recall_pins: std::sync::Mutex::new(std::collections::HashMap::new()),
-            meta_atlas: std::sync::RwLock::new(None),
-            bridge: None,
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
-            gliner: None,
         }
     }
 
@@ -649,46 +600,28 @@ impl Runtime {
         }
     }
 
-    /// Install a GLiNER entity extractor for entity-aware retrieval
-    /// over conversation history. Used by
-    /// `maybe_retrieve_relevant_history` to compute a hybrid
-    /// cosine/jaccard score: 0.6·cosine(query, pair) +
-    /// 0.4·jaccard(query_entities, pair_entities). When `None`,
-    /// retrieval falls back to pure cosine + MMR (pre-GLiNER
-    /// behaviour preserved).
-    pub fn with_gliner(mut self, gliner: Arc<dyn crate::traits::EntityExtractor>) -> Self {
-        self.gliner = Some(gliner);
-        self
-    }
+    // EIGHT `with_*` ENRICHMENT BUILDERS WERE DELETED HERE
+    // (daemon-convergence Phase 4b, 2026-08-25): `with_gliner`,
+    // `with_rerank`, `with_rerank_config`, `with_meta_atlas`, `with_bridge`,
+    // `with_atlas_context_provider`, `with_wikipedia_graph` and
+    // `with_conv_tiered_reader`. Every one is now a field on the
+    // [`lane::LaneSources`] value `new` requires.
+    //
+    // THE COUNT IS NOT THE POINT; THE FORGETTABILITY IS. A builder cannot
+    // enforce that a host installs a provider, because from inside the
+    // Runtime a forgotten call and a host that has no such provider are the
+    // same state. That is not hypothetical here — it shipped: for months the
+    // desktop and the hub server ran baseline fusion ordering because only
+    // `svrn chat` called `with_rerank`, and the capability ledger recorded
+    // the reranker as available on all three (see the comments still standing
+    // at `sovereign-server/src/main.rs` and `sovereign-desktop/state.rs`).
+    // The measurement banked on 2026-08-25 shows the same shape across all 19
+    // builders: no variant structure, only omissions.
+    //
+    // `install_meta_atlas` SURVIVES and is below. It is the one member that
+    // legitimately arrives after construction, and it is now a cell rather
+    // than a second storage.
 
-    /// Install a cross-encoder reranker. Pure-additive: when enabled,
-    /// every corpus search overfetches `config.candidates_k` candidates
-    /// from the hybrid fusion path, scores them with `fn`, sorts by
-    /// rerank score, and truncates to the caller's limit. When `fn`
-    /// errors at runtime, the search-side fallback preserves baseline
-    /// fusion ordering — enabling the reranker can never make retrieval
-    /// worse than without it.
-    pub fn with_rerank(
-        mut self,
-        rerank_fn: corpus_engine::RerankFn,
-        config: corpus_engine::RerankConfig,
-    ) -> Self {
-        self.rerank_fn = Some(rerank_fn);
-        self.rerank_config = config;
-        self
-    }
-
-    /// Install rerank *config* without a reranker function. Used by
-    /// the per-article-dedup-only ablation: overfetch + dedup using
-    /// fusion scores only, no cross-encoder calls. Validates whether
-    /// the SEP source-recall lift attributed to the reranker
-    /// experiment is actually driven by dedup or by the
-    /// cross-encoder logits.
-    pub fn with_rerank_config(mut self, config: corpus_engine::RerankConfig) -> Self {
-        self.rerank_fn = None;
-        self.rerank_config = config;
-        self
-    }
 
     /// Fetch the most recent witness-turn provenance for `conversation_id`,
     /// if any. Returns `None` when no provenance has been captured for
@@ -725,18 +658,6 @@ impl Runtime {
         self
     }
 
-    /// Install the cross-corpus meta-atlas index. Built by the
-    /// bootstrap by loading `~/.svrnmesh/meta-atlas/canonical_atoms.json`
-    /// (produced by `sovereign meta-atlas build`). Optional — when
-    /// `None`, [`Self::meta_atlas_boost`] short-circuits and retrieval
-    /// behaves exactly as before the meta-atlas substrate landed.
-    pub fn with_meta_atlas(
-        mut self,
-        index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>,
-    ) -> Self {
-        self.meta_atlas = std::sync::RwLock::new(Some(index));
-        self
-    }
 
     /// Attach the cross-corpus meta-atlas AFTER construction. Lets the
     /// desktop fire `backend-ready` fast and warm the ~900MB index in the
@@ -745,43 +666,11 @@ impl Runtime {
     /// overwrites any prior index. A poisoned lock is recovered rather
     /// than panicking — a failed warm must never wedge retrieval.
     pub fn install_meta_atlas(&self, index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>) {
-        match self.meta_atlas.write() {
-            Ok(mut g) => *g = Some(index),
-            Err(poisoned) => *poisoned.into_inner() = Some(index),
-        }
+        self.lane_sources.meta_atlas.store(Some(index));
     }
 
-    /// Install the cross-corpus bridge index (typed topic-to-topic edges
-    /// from `sovereign meta-atlas align`). Optional — `None` short-
-    /// circuits [`Self::bridge_boost`] and retrieval is unchanged.
-    pub fn with_bridge(mut self, index: Arc<corpus_engine::meta_atlas::BridgeIndex>) -> Self {
-        self.bridge = Some(index);
-        self
-    }
 
-    /// Install a source of pre-embedded atlas Entity contexts.
-    /// Usually `sovereign-tools::AtlasContextManager` constructed by
-    /// the daemon bootstrap; the eval CLI builds inline contexts and
-    /// can call this with a one-shot provider for symmetry.
-    pub fn with_atlas_context_provider(
-        mut self,
-        provider: Arc<dyn crate::atlas_context::AtlasContextProvider>,
-    ) -> Self {
-        self.atlas_context_provider = Some(provider);
-        self
-    }
 
-    /// Install a structural link graph. The bootstrap does this
-    /// when a graph DB is found alongside a corpus's LanceDB table;
-    /// callers that don't wire one (e.g. tests, code-corpus chat)
-    /// leave it `None` and retrieval behaves exactly as before.
-    pub fn with_wikipedia_graph(
-        mut self,
-        graph: Arc<dyn corpus_engine::WikipediaGraphApi>,
-    ) -> Self {
-        self.wikipedia_graph = Some(graph);
-        self
-    }
 
     /// Install a note store for commitment persistence. Daemon bootstrap
     /// wires this; CLI eval path leaves it `None`, in which case the
@@ -807,18 +696,6 @@ impl Runtime {
         self
     }
 
-    /// Install the conversation tiered-retrieval reader so the
-    /// prompt-assembly path surfaces per-conv briefings + signposts
-    /// alongside the raw chunk block. The daemon wires this with the
-    /// same `Arc<SqliteStateStore>` it hands to the
-    /// `FolderTieredProvider` writer — one store, two views.
-    pub fn with_conv_tiered_reader(
-        mut self,
-        reader: Arc<dyn crate::conv_tiered::ConvTieredReader>,
-    ) -> Self {
-        self.conv_tiered_reader = Some(reader);
-        self
-    }
 
     /// Install a `KnowledgeView` landscape-digest provider. Typically
     /// the `sovereign-tools::knowledge_view::KnowledgeViewManager`,
@@ -1127,34 +1004,85 @@ mod relational_intent_override_tests {
 mod enrichment_seam_invariant {
     use super::*;
 
-    /// Field-existence change detector. Compiling IS the assertion; never run.
-    #[allow(dead_code)]
-    fn read_enrichment_seams(rt: &Runtime) -> Vec<(&'static str, bool)> {
+    /// Field-existence change detector over the LANE. Takes `&LaneSources`
+    /// rather than `&Runtime` since daemon-convergence Phase 4b, which is what
+    /// makes it RUNNABLE — the old version could only ever be compiled,
+    /// because it needed a full Runtime (inference provider + corpus engine)
+    /// to call.
+    fn lane_seams(l: &lane::LaneSources) -> Vec<(&'static str, bool)> {
         vec![
-            ("gliner", rt.gliner.is_some()),
-            (
-                "meta_atlas",
-                rt.meta_atlas.read().map(|g| g.is_some()).unwrap_or(false),
-            ),
-            (
-                "atlas_context_provider",
-                rt.atlas_context_provider.is_some(),
-            ),
-            ("wikipedia_graph", rt.wikipedia_graph.is_some()),
-            ("conv_tiered_reader", rt.conv_tiered_reader.is_some()),
-            ("landscape_digests", rt.landscape_digests.is_some()),
-            ("mesh_knowledge", rt.mesh_knowledge.is_some()),
-            ("bridge", rt.bridge.is_some()),
+            ("atlas_context", l.atlas_context.is_some()),
+            ("wikipedia_graph", l.wikipedia_graph.is_some()),
+            ("meta_atlas", l.meta_atlas.load().is_some()),
+            ("bridge", l.bridge.is_some()),
+            ("rerank", l.rerank.f.is_some()),
+            ("gliner", l.gliner.is_some()),
+            ("conv_tiered", l.conv_tiered.is_some()),
         ]
     }
 
+    /// The two seams that are NOT lane members and still sit on the Runtime:
+    /// §3.5 has both leaving the Runtime entirely (`mesh_knowledge` dissolves
+    /// into a loopback call to the daemon's own knowledge route;
+    /// `landscape_digests` is a per-connection wire concern). Compiling IS the
+    /// assertion; never run.
+    #[allow(dead_code)]
+    fn departing_seams(rt: &Runtime) -> Vec<(&'static str, bool)> {
+        vec![
+            ("landscape_digests", rt.landscape_digests.is_some()),
+            ("mesh_knowledge", rt.mesh_knowledge.is_some()),
+        ]
+    }
+
+    /// Adding or removing a lane member is a deliberate edit.
+    ///
+    /// This assertion USED TO BE `assert_eq!(ENRICHMENT_SEAM_COUNT, 8)` against
+    /// a const defined three lines above it — a check with no input that could
+    /// make it fail (ARCH §18.1), which is to say not a check. It is now taken
+    /// from the reader, so removing a seam fails here rather than passing
+    /// silently.
     #[test]
-    fn seam_count_is_stable() {
-        // The 8 enrichment seams `read_enrichment_seams` enumerates. Bump this
-        // ONLY together with: (a) the reader above, (b) the desktop bootstrap
-        // (`state.rs`), (c) the bench bootstrap (`bootstrap.rs`), and (d) a
-        // `bench parity-compare` run. The deliberate friction is the point.
-        const ENRICHMENT_SEAM_COUNT: usize = 8;
-        assert_eq!(ENRICHMENT_SEAM_COUNT, 8);
+    fn lane_seam_count_is_stable() {
+        assert_eq!(lane_seams(&lane::LaneSources::none()).len(), 7);
+    }
+
+    /// An empty lane reports every seam absent — the instrument reads real
+    /// state rather than returning a fixed shape.
+    #[test]
+    fn an_empty_lane_reports_every_seam_absent() {
+        assert!(lane_seams(&lane::LaneSources::none())
+            .iter()
+            .all(|(_, present)| !*present));
+    }
+
+    /// And a filled one reports it present, which is the half that catches a
+    /// reader or a `snapshot` that hard-codes `false` — the failure mode where
+    /// every host wires a provider and every stage still sees `None`.
+    #[test]
+    fn a_wired_seam_is_reported_present() {
+        let mut l = lane::LaneSources::none();
+        l.rerank.f = Some(std::sync::Arc::new(|_q: &str, docs: Vec<String>| {
+            Box::pin(async move { Ok(vec![0.0_f32; docs.len()]) })
+                as std::pin::Pin<
+                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                >
+        }));
+        assert!(lane_seams(&l).iter().any(|(n, p)| *n == "rerank" && *p));
+    }
+
+    /// The snapshot is what stages actually receive, so it — not the source —
+    /// is where a dropped member would bite.
+    #[test]
+    fn the_snapshot_preserves_a_wired_seam() {
+        let mut l = lane::LaneSources::none();
+        l.rerank.config.enabled = true;
+        l.rerank.f = Some(std::sync::Arc::new(|_q: &str, docs: Vec<String>| {
+            Box::pin(async move { Ok(vec![0.0_f32; docs.len()]) })
+                as std::pin::Pin<
+                    Box<dyn std::future::Future<Output = corpus_engine::Result<Vec<f32>>> + Send>,
+                >
+        }));
+        assert!(l.snapshot().rerank.active(), "snapshot dropped `rerank`");
+        assert!(!lane::Lane::none().rerank.active());
     }
 }

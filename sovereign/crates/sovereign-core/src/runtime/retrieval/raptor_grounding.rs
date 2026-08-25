@@ -14,10 +14,14 @@ impl Runtime {
     /// the brute-force scan performs. Staleness never triggers an inline
     /// rebuild (that latency spike is exactly what late injection avoids); the
     /// operator rebuilds via `sovereign enrich raptor-index`.
-    async fn raptor_index_dim_if_fresh(&self, corpus_id: &str) -> Option<usize> {
+    async fn raptor_index_dim_if_fresh(
+        &self,
+        corpus_id: &str,
+        lane: &crate::runtime::Lane,
+    ) -> Option<usize> {
         let engine = self.corpus_engine.as_ref()?;
         let meta = engine.raptor_index_meta(corpus_id)?;
-        let reader = self.conv_tiered_reader.as_ref()?;
+        let reader = lane.conv_tiered.as_ref()?;
         let live = reader.corpus_raptor_version(corpus_id).await.ok()?;
         if meta.source_version >= live {
             Some(meta.dim)
@@ -45,9 +49,10 @@ impl Runtime {
         fetch_m: usize,
         top_m: usize,
         min_level: i64,
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<RaptorCand>> {
         let engine = self.corpus_engine.as_ref()?;
-        let dim = self.raptor_index_dim_if_fresh(corpus_id).await?;
+        let dim = self.raptor_index_dim_if_fresh(corpus_id, lane).await?;
         if dim != embedding.len() {
             tracing::warn!(
                 corpus = %corpus_id,
@@ -103,6 +108,7 @@ impl Runtime {
         chunks: &mut Vec<corpus_engine::ScoredChunk>,
         label: &str,
         enabled_corpora: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) {
         let enabled = std::env::var("SOVEREIGN_RAPTOR_GROUNDING")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
@@ -110,7 +116,7 @@ impl Runtime {
         if !enabled {
             return;
         }
-        let Some(reader) = self.conv_tiered_reader.as_ref() else {
+        let Some(reader) = lane.conv_tiered.as_ref() else {
             return;
         };
         if embedding.is_empty() {
@@ -165,7 +171,7 @@ impl Runtime {
             // funnel into the same `RaptorCand` → byte-identical injected
             // chunks via `raptor_scored_chunk`.
             if let Some(cands) = self
-                .raptor_index_candidates(corpus_id, embedding, fetch_m, top_m, min_level)
+                .raptor_index_candidates(corpus_id, embedding, fetch_m, top_m, min_level, lane)
                 .await
             {
                 via_index += 1;

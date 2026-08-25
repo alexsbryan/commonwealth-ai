@@ -332,8 +332,8 @@ impl EmbeddedDaemon {
         // Answer the variant question ONCE, at the top.
         //
         // This block used to ask it SEVEN times through seven `Option`-
-        // returning accessors. `DaemonServices` exposes ten; three are real
-        // forks (`serving`, `rails`, `state_store`) and seven are artifactual,
+        // returning accessors. `DaemonServices` exposed ten; two are real
+        // forks (`serving`, `rails`) and eight are artifactual,
         // wrapping fields that are not optional one level down
         // (`quality/TOPOLOGY.md §10`). Reading through an artifactual one means
         // a click lands on `.map()` rather than on a struct field — and worse,
@@ -358,10 +358,11 @@ impl EmbeddedDaemon {
                     // exactly what made them read as checks rather than facts.
                     corpus_engine = true,
                     inference = true,
-                    // A REAL fork, and the one place the two serving shapes
-                    // cross rather than nest: Desktop carries a store, Headless
-                    // does not (Phase 3 closes it).
-                    state_store = services.state_store().is_some(),
+                    // Structural since Phase 3 as well: the crossing this line
+                    // used to report (`Desktop` has a store, `Headless` does
+                    // not) is closed, so every serving daemon has one and the
+                    // `.is_some()` here could no longer report false either.
+                    state_store = true,
                     "daemon: commissioned"
                 );
                 match &serving.capability.mcp {
@@ -438,11 +439,11 @@ impl EmbeddedDaemon {
     }
 
     /// Borrow the `StateStore` the reading surface uses to resolve
-    /// `conversation-history` chunks back to their conversation. `Some` only
-    /// on [`DaemonServices::Desktop`] — the headless daemon opens no
-    /// `sovereign.db` (daemon-convergence Phase 3).
+    /// `conversation-history` chunks back to their conversation. `None` only
+    /// on [`DaemonServices::MeshAdmin`], which serves nothing — since
+    /// daemon-convergence Phase 3 BOTH serving variants own a store.
     pub fn state_store(&self) -> Option<&Arc<dyn StateStore>> {
-        self.services.state_store()
+        self.services.serving().map(|s| &s.core.state_store)
     }
 
     /// Swap the serving `InferenceProvider`. Private on purpose: the ONLY
