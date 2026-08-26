@@ -20,7 +20,8 @@ Reading a number off this lane (bench/external/README.md conventions):
 import argparse, csv, json, pathlib, sys, time, urllib.error, urllib.request
 from collections import Counter, defaultdict
 
-from prompts import OMNISCIENCE_ANSWER_PROMPT, OMNISCIENCE_GRADER_TEMPLATE
+from prompts import (FORCED_ANSWER_PROMPT, OMNISCIENCE_ANSWER_PROMPT,
+                     OMNISCIENCE_GRADER_TEMPLATE)
 from score import DEFAULT_TAX, GRADES, summarize
 
 BANK = pathlib.Path(__file__).parent / "AA-Omniscience_dataset_public.csv"
@@ -59,13 +60,29 @@ def harness_naked(item, args):
                 args.max_tokens, args.temperature, args.timeout, args.seed)
 
 
-HARNESSES = {"naked": harness_naked}
+def harness_forced(item, args):
+    """DIAGNOSTIC, outside AA's protocol. Same as `naked` but with abstention
+    removed from the prompt. Point it at A0's NOT_ATTEMPTED pool with
+    --subset-from to measure forced-guess precision q on the questions the
+    model declined -- the number that decides whether the remaining harness
+    lift is elicitation (in-weights, free) or retrieval (expensive)."""
+    sys_prompt = FORCED_ANSWER_PROMPT.format(
+        domain=item["domain"], topic=item["topic"])
+    return chat(args.base_url, args.model,
+                [{"role": "system", "content": sys_prompt},
+                 {"role": "user", "content": item["question"]}],
+                args.max_tokens, args.temperature, args.timeout, args.seed)
+
+
+HARNESSES = {"naked": harness_naked, "forced": harness_forced}
 
 
 # ── bank ─────────────────────────────────────────────────────────────────────
 
-def load_bank(limit):
+def load_bank(limit, subset_ids=None):
     rows = list(csv.DictReader(BANK.open()))
+    if subset_ids is not None:
+        rows = [r for r in rows if int(r["question_id"]) in subset_ids]
     if not limit or limit >= len(rows):
         return rows
     by_domain = defaultdict(list)
@@ -103,6 +120,11 @@ def main():
     p.add_argument("--base-url", default="http://localhost:9741/v1")
     p.add_argument("--out", default=None)
     p.add_argument("--limit", type=int, default=0, help="stratified subsample; 0 = all 600")
+    p.add_argument("--subset-from", default=None,
+                   help="run dir whose rows.jsonl selects the items to ask")
+    p.add_argument("--subset-grade", default="NOT_ATTEMPTED",
+                   choices=sorted(GRADES),
+                   help="with --subset-from: keep only items graded this in that run")
     p.add_argument("--tax", type=float, default=DEFAULT_TAX)
     p.add_argument("--max-tokens", type=int, default=512)
     p.add_argument("--judge-max-tokens", type=int, default=8)
@@ -126,7 +148,23 @@ def main():
                 r = json.loads(line)
                 prior[r["question_id"]] = r
 
-    bank = load_bank(args.limit)
+    subset_ids = None
+    if args.subset_from:
+        ref = pathlib.Path(args.subset_from) / "rows.jsonl"
+        if not ref.exists():
+            print(f"--subset-from: no rows.jsonl at {ref}", file=sys.stderr)
+            return 2
+        subset_ids = {json.loads(l)["question_id"]
+                      for l in ref.read_text().splitlines() if l.strip()
+                      and json.loads(l).get("grade") == args.subset_grade}
+        if not subset_ids:
+            print(f"--subset-from: no items graded {args.subset_grade} in {ref}",
+                  file=sys.stderr)
+            return 2
+        print(f"subset: {len(subset_ids)} items graded {args.subset_grade} "
+              f"in {args.subset_from}", flush=True)
+
+    bank = load_bank(args.limit, subset_ids)
     print(f"bank {len(bank)} · harness {args.harness} · model {args.model} · "
           f"judge {args.judge_model} · tax {args.tax}", flush=True)
 

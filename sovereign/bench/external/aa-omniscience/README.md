@@ -15,16 +15,23 @@ grader template is the rubric the published numbers were produced under.
 
 ```bash
 python3 run.py --model Qwen3.8-27B-UD-Q6_K_XL                 # full 600, naked
-python3 run.py --model <id> --limit 60                        # stratified cut, ~26 min
+python3 run.py --model <id> --limit 60                        # stratified cut, ~4 min
 python3 run.py --model <id> --rejudge --out runs/naked--<id>  # re-grade, ask nothing
 python3 test_score.py                                         # the tax's assertions
 ```
 
-Measured 2026-08-21 on Qwen3.8-27B-UD-Q6_K_XL: **~26 s/item** end to end
-(answer + judge), so a full arm is **~4.4 h** at concurrency 1. Cheaper than
-RewardBench 2's 103 s/item because the official prompt asks for *just* the
-answer — 9-20 completion tokens, no reasoning prefix. Long arms go out as
-launchd one-shots.
+Measured 2026-08-25 on the full 600-item A0 run, Qwen3.8-27B-UD-Q6_K_XL:
+**4.2 s/item** end to end (answer + judge), so a full arm is **~42 min** at
+concurrency 1. Cheaper than RewardBench 2's 103 s/item because the official
+prompt asks for *just* the answer — 9-20 completion tokens, no reasoning prefix.
+
+**The earlier figure here was ~26 s/item and ~4.4 h, and it was wrong by 6x.**
+Two separate effects, both measured rather than inferred. Re-running the
+identical 6-item cut on 2026-08-25 gave 5.8 s/item against the 26.4 s/item the
+same cut gave on 2026-08-21, with byte-identical grades — a daemon-side speedup
+in that window (cause not confirmed here). Going from that cut to the full bank
+took it to 4.2, consistent with prefix reuse across the 100 items that share a
+domain. Long arms still go out as launchd one-shots.
 
 ## It is a (harness, model) leaderboard
 

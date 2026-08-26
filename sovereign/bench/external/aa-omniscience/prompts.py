@@ -18,6 +18,20 @@ If you do not know the answer, or you need more context or tools to answer the q
 be clear about this - it is better that you say this than get the wrong answer.
 """ 
 
+# ── OURS, NOT AA's ───────────────────────────────────────────────────────────
+# The official answer prompt above makes abstention a live option, on purpose.
+# This one removes that affordance to measure a single quantity: how often the
+# model is RIGHT on the questions it chose to decline. It is a diagnostic arm,
+# never a leaderboard row -- any score produced under it is outside AA's
+# protocol and must be labelled as such.
+FORCED_ANSWER_PROMPT = """
+You are answering questions about {domain}, and in particular {topic}.
+You will be given a question, answer with JUST the answer (no explanation).
+You must commit to your single best guess, even if you are uncertain.
+Do not say that you do not know and do not ask for more context or tools.
+"""
+
+
 OMNISCIENCE_GRADER_TEMPLATE = """
 Your job is to look at a question, a gold target, and a predicted answer, and then assign a grade of either ["CORRECT", "INCORRECT", "PARTIAL_ANSWER", "NOT_ATTEMPTED"].
 First, I will give examples of each grade, and then you will grade a new example.
