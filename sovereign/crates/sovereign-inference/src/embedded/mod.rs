@@ -12,6 +12,8 @@ mod engine;
 pub mod ffi_trace;
 pub mod gates;
 mod grammar;
+/// What one slot's KV cache costs, from the gguf's own metadata.
+pub(crate) mod kv_budget;
 pub mod kv_ops;
 mod model_slot;
 mod prefix_state;

@@ -453,6 +453,25 @@ impl Runtime {
                 let short_history = format_history_as_prompt(context, 4);
                 format!("{short_history}\n\nRelevant knowledge:\n{knowledge_block}\n\nAssistant:")
             }
+        } else if let Some(guidance) =
+            crate::runtime::unavailability::unavailability_guidance(&unavailable_corpora)
+        {
+            // Empty pool over a LOST corpus. Until 2026-08-25 this arm was
+            // unreachable in that case: `readiness_disclosure` injected the
+            // same guidance as a `score: 1.0` chunk, so `all_chunks` was
+            // non-empty and the turn took the grounded arm above with one
+            // fabricated passage in it. The disclosure now rides the prompt
+            // and the pool stays empty, which is what it actually was.
+            tracing::info!(
+                target: "retrieval.pipeline",
+                lost = unavailable_corpora.len(),
+                "DeepQuery: empty pool over a lost corpus — disclosing in the prompt"
+            );
+            if history.is_empty() {
+                format!("User: {message}\n\n{guidance}\n\nAssistant:")
+            } else {
+                format!("{history}\n\n{guidance}\n\nAssistant:")
+            }
         } else if history.is_empty() {
             message.to_string()
         } else {

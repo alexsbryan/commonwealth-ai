@@ -15,6 +15,8 @@ use serde::{Deserialize, Serialize};
 use tauri::{Emitter, State};
 use tokio::io::AsyncWriteExt;
 
+use sovereign_core::runtime::message_metadata;
+
 use crate::state::{self, AppState, DesktopConfig};
 
 // ─── Commands ────────────────────────────────────────────────
@@ -183,19 +185,11 @@ pub async fn send_message_stream(
 
                 // Fetch the saved message's metadata (includes retrieved_chunks
                 // and provenance, persisted by handle_message_stream).
-                let metadata = if let Some(ref store) = store_ref {
-                    store
-                        .get_conversation(&conversation_id_owned)
-                        .await
-                        .ok()
-                        .and_then(|c| {
-                            c.messages
-                                .iter()
-                                .find(|m| m.id == message_id)
-                                .and_then(|m| m.metadata.clone())
-                        })
-                } else {
-                    None
+                let metadata = match store_ref {
+                    Some(ref store) => {
+                        message_metadata(store.as_ref(), &conversation_id_owned, &message_id).await
+                    }
+                    None => None,
                 };
 
                 // Strip phantom tool-call envelopes the chat model reflexes
@@ -711,19 +705,11 @@ pub async fn redirect_turn(
             }
         }
 
-        let metadata = if let Some(ref store) = store_ref {
-            store
-                .get_conversation(&conversation_id_owned)
-                .await
-                .ok()
-                .and_then(|c| {
-                    c.messages
-                        .iter()
-                        .find(|m| m.id == message_id)
-                        .and_then(|m| m.metadata.clone())
-                })
-        } else {
-            None
+        let metadata = match store_ref {
+            Some(ref store) => {
+                message_metadata(store.as_ref(), &conversation_id_owned, &message_id).await
+            }
+            None => None,
         };
 
         let _ = app.emit(
@@ -816,19 +802,11 @@ pub async fn resume_session(
             }
         }
 
-        let metadata = if let Some(ref store) = store_ref {
-            store
-                .get_conversation(&conversation_id_owned)
-                .await
-                .ok()
-                .and_then(|c| {
-                    c.messages
-                        .iter()
-                        .find(|m| m.id == message_id)
-                        .and_then(|m| m.metadata.clone())
-                })
-        } else {
-            None
+        let metadata = match store_ref {
+            Some(ref store) => {
+                message_metadata(store.as_ref(), &conversation_id_owned, &message_id).await
+            }
+            None => None,
         };
 
         let _ = app.emit(

@@ -382,6 +382,7 @@ mod tests {
                 embed: PathBuf::from("/m/qwen-embedding-0.6b.gguf"),
                 code: None,
                 context_size: Some(16384),
+                fast_context_size: None,
                 extra: Default::default(),
                 max_extras_memory_gb: None,
                 primary_pool: None,

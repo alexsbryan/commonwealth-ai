@@ -1403,7 +1403,7 @@ Drive one peer past the ceiling with concurrent requests.
 > `eta`, a per-origin anti-hog `cap`, runtime `set_slots`, and a `Shed` carrying
 > `would_be_position`. `sovereign-server/src/scheduler.rs` is the async shell
 > over it (`FairScheduler`, `Notify`-per-waiter), already emitting
-> `ServerEvent::QueuePosition` on the WS chat path and shedding with a position
+> `TurnFrame::QueuePosition` on the WS chat path and shedding with a position
 > hint on REST. This is the same discovery shape as M6's "Experiments A and B
 > need NO CODE".
 >

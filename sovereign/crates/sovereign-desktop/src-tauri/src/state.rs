@@ -1648,9 +1648,23 @@ pub async fn bootstrap_with_progress(
     // ordering and `SOVEREIGN_PPR_EXPAND` logged "lane dark" here for
     // want of the same `rerank_fn`. Opt-in via
     // `SOVEREIGN_RERANK_MODEL_PATH`; soft-fails to baseline.
-    if let Some(reranker) = sovereign_inference::reranker_standalone::load_from_env() {
-        lane.rerank.f = Some(sovereign_tools::corpus::inference_to_rerank_fn(reranker));
-        lane.rerank.config = sovereign_tools::corpus::rerank_config_from_env();
+    // Since 2026-08-25 this loader also runs the VRAM pre-flight (note
+    // `b57b0cd5`, the 64 GB SIGTERM incident). It did not before, and only the
+    // CLI's private copy did — so the desktop could load a rerank slot beside a
+    // resident primary with nothing checking whether the two fit, and find out
+    // from the OOM killer mid-turn. The refusal is a named arm rather than a
+    // bare `None`, so "no reranker configured" and "the reranker was refused"
+    // stop reading identically.
+    match sovereign_inference::reranker_standalone::load_from_env() {
+        sovereign_inference::reranker_standalone::RerankLoad::Loaded(reranker) => {
+            lane.rerank.f = Some(sovereign_tools::corpus::inference_to_rerank_fn(reranker));
+            lane.rerank.config = sovereign_tools::corpus::rerank_config_from_env();
+        }
+        // All three absences run baseline fusion ordering. `load_from_env`
+        // has already logged which one this is.
+        sovereign_inference::reranker_standalone::RerankLoad::NotConfigured
+        | sovereign_inference::reranker_standalone::RerankLoad::Refused { .. }
+        | sovereign_inference::reranker_standalone::RerankLoad::Failed { .. } => {}
     }
     // Discover + register each corpus's atlas dir (and warm any cached
     // contexts) so the atom-enum path's `graph()` can lazy-load a corpus's
@@ -1660,6 +1674,17 @@ pub async fn bootstrap_with_progress(
     let t_atlas_init = std::time::Instant::now();
     atlas_ctx_mgr.init_from_cache().await;
     substep("atlas_init_from_cache", t_atlas_init);
+    // Adaptive triage (Phase B2) — flush query-time bumps to disk so they feed
+    // the next triage rebuild.
+    //
+    // The CLI and the hub server have spawned this since B2 landed; the
+    // DESKTOP never did, and it is the surface where it matters most. Without
+    // it `record_match` accumulates bumps in an in-memory map that is never
+    // written, so on the one long-lived interactive surface the signal was
+    // permanently dead AND the map grew for the life of the session. Found
+    // 2026-08-25 by diffing this bootstrap against `sovereign-runtime-recipe`,
+    // which is the point of having one recipe to diff against.
+    let _bump_flusher = Arc::clone(&atlas_ctx_mgr).spawn_bump_flusher(30);
     // NOTE (2026-06-26): a background atlas-graph pre-warm was tried here to hide
     // the ~38s first-query cold parse of a wiki-scale (1.6M-atom) atlas, but it
     // REGRESSED the racing first query: `graph()` parses synchronously on the
@@ -1781,22 +1806,15 @@ pub async fn bootstrap_with_progress(
     // ── Commission ───────────────────────────────────────────────────────
     // Every provider this host enriches with exists by now, so the Runtime is
     // built ONCE, total. Nothing below this line can add one.
-    let mut runtime = Runtime::new(
-        Arc::clone(&inference),
-        router,
-        Box::new(planner),
-        Arc::clone(&tools),
-        Arc::clone(&store),
-        skills,
-        approval,
-        inference_config,
-        lane,
-    )
-    .with_corpus_engine(Arc::clone(&corpus_engine))
-    .with_compaction(compaction_worker);
-    if let Some(ns) = note_store_for_runtime {
-        runtime = runtime.with_note_store(ns);
-    }
+    // ── Resolve every host-settable slot BEFORE commissioning ────────────
+    //
+    // Phase 5 (2026-08-25): the ten `with_*` builders are gone and
+    // `RuntimeParts` is total, so each slot below is decided here as a VALUE
+    // and written once. The desktop called eleven builders — more than the
+    // other two hosts combined — and which of the other hosts' omissions were
+    // policy versus oversight could not be read off any of the three. Now the
+    // three commissioning sites are diffable.
+
     // Landscape-digest provider wiring. Three branches:
     //
     // 1. **Local mode + KnowledgeView enabled** — install the local
@@ -1806,62 +1824,76 @@ pub async fn bootstrap_with_progress(
     //    `MeshLandscapeDigestClient`. The desktop sends the
     //    caller-resolved `active_is_local_only` so the daemon
     //    doesn't have to introspect the skill registry.
-    // 3. **KnowledgeView disabled** — `Runtime.landscape_digests`
-    //    stays `None`, the splice path is a no-op (identical to
-    //    pre-KnowledgeView behaviour).
-    if let Some(ref mgr) = knowledge_view_manager {
-        runtime = runtime.with_landscape_digests(
-            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>
-        );
-    } else if state.is_attach_mode() && config.knowledge_view_enabled {
-        let digest_base = state.client_base_url();
-        match sovereign_mesh::landscape_digest_client::MeshLandscapeDigestClient::new(
-            &digest_base,
-            local_only_skill_ids_for_digests,
-        ) {
-            Ok(client) => {
-                tracing::info!(
-                    base_url = %digest_base,
-                    "knowledge_view: attach mode — landscape digest client wired \
-                     to {digest_base}/v1/knowledge/landscape_digest"
-                );
-                runtime = runtime
-                    .with_landscape_digests(Arc::new(client)
-                        as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>);
+    // 3. **KnowledgeView disabled** — the slot stays `None`, the splice path
+    //    is a no-op (identical to pre-KnowledgeView behaviour).
+    let landscape_digests: Option<Arc<dyn sovereign_core::traits::LandscapeDigestProvider>> =
+        if let Some(ref mgr) = knowledge_view_manager {
+            Some(Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>)
+        } else if state.is_attach_mode() && config.knowledge_view_enabled {
+            let digest_base = state.client_base_url();
+            match sovereign_mesh::landscape_digest_client::MeshLandscapeDigestClient::new(
+                &digest_base,
+                local_only_skill_ids_for_digests,
+            ) {
+                Ok(client) => {
+                    tracing::info!(
+                        base_url = %digest_base,
+                        "knowledge_view: attach mode — landscape digest client wired \
+                         to {digest_base}/v1/knowledge/landscape_digest"
+                    );
+                    Some(Arc::new(client) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>)
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        error = %e,
+                        "knowledge_view: attach-mode landscape digest client build \
+                         failed; chat splice will run without digests this session"
+                    );
+                    None
+                }
             }
-            Err(e) => tracing::warn!(
-                error = %e,
-                "knowledge_view: attach-mode landscape digest client build \
-                 failed; chat splice will run without digests this session"
-            ),
-        }
-    }
-    if let Some(m) = mesh_knowledge {
-        runtime = runtime.with_mesh_knowledge(m);
-    }
-    // Folder-ingest v1 §3.4 + §6.3: wire the watched-folder manager
-    // as both the sensitive-corpus oracle (which corpora to drop
-    // from ambient retrieval) and the folder-metadata oracle (the
-    // user-typed display names + skipped/failed counters that the
-    // synthesis prompt and chat coverage chip depend on). When the
-    // manager isn't ready (init failed earlier), the runtime falls
-    // back to no-op behaviour for both — same shape as the
-    // landscape-digest wiring above.
-    if let Some(mgr) = state.local_corpus.read().await.as_ref() {
-        runtime = runtime.with_sensitive_corpora(
-            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>
-        );
-        runtime = runtime.with_folder_metadata(
-            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::FolderMetadataOracle>
-        );
-    }
-    // PR2 — install the Tauri routing-events sink so the runtime can
-    // fire interpretation-proposed / clarification-request /
-    // turn-narration back to the desktop UI.
-    runtime =
-        runtime
-            .with_routing_events(Arc::clone(&state.routing_events)
-                as Arc<dyn sovereign_core::traits::RoutingEventSink>);
+        } else {
+            None
+        };
+
+    // Folder-ingest v1 §3.4 + §6.3: the watched-folder manager is both the
+    // sensitive-corpus oracle (which corpora to drop from ambient retrieval)
+    // and the folder-metadata oracle (the user-typed display names + skipped/
+    // failed counters the synthesis prompt and chat coverage chip depend on).
+    // When the manager isn't ready (init failed earlier) both stay absent —
+    // same shape as the landscape-digest wiring above.
+    let local_corpus_mgr = state.local_corpus.read().await.as_ref().map(Arc::clone);
+
+    let runtime = Runtime::new(sovereign_core::RuntimeParts {
+        corpus_engine: Some(Arc::clone(&corpus_engine)),
+        compaction: Some(compaction_worker),
+        note_store: note_store_for_runtime,
+        landscape_digests,
+        mesh_knowledge,
+        sensitive_corpora: local_corpus_mgr
+            .as_ref()
+            .map(|m| Arc::clone(m) as Arc<dyn sovereign_core::traits::SensitiveCorpusOracle>),
+        folder_metadata: local_corpus_mgr
+            .as_ref()
+            .map(|m| Arc::clone(m) as Arc<dyn sovereign_core::traits::FolderMetadataOracle>),
+        // PR2 — the Tauri routing-events sink, so the runtime can fire
+        // interpretation-proposed / clarification-request / turn-narration
+        // back to the desktop UI.
+        routing_events: Arc::clone(&state.routing_events)
+            as Arc<dyn sovereign_core::traits::RoutingEventSink>,
+        // Named absence: the desktop is single-user, so no principal resolver.
+        ..sovereign_core::RuntimeParts::new(
+            Arc::clone(&inference),
+            router,
+            Box::new(planner),
+            Arc::clone(&tools),
+            Arc::clone(&store),
+            skills,
+            approval,
+            inference_config,
+            lane,
+        )
+    });
 
     let runtime_arc = Arc::new(runtime);
     *state.runtime.write().await = Some(Arc::clone(&runtime_arc));
@@ -1956,6 +1988,12 @@ pub async fn bootstrap_with_progress(
                     // daemon are one writer of one `sovereign.db`, which is
                     // the invariant `RunLock` keys on the data root to hold.
                     state_store: Arc::clone(&store),
+                    // Phase 5c: THE SAME `Runtime` this process commissioned
+                    // above — not a second one for the in-process daemon.
+                    // One process, one thing that answers; the desktop's chat
+                    // commands and anything the daemon serves are the same
+                    // assembly by construction rather than by review.
+                    runtime: Arc::clone(&runtime_arc),
                 },
                     capability,
                     advertise_embed,

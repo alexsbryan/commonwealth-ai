@@ -126,8 +126,7 @@ fn daemon_tracing_filter(iroh_debug: bool, llama_debug: bool) -> String {
 /// but those lines are `GGML_LOG_DEBUG` and would still die at our callback
 /// and again at this filter. One env var, all three gates.
 fn llama_debug_requested() -> bool {
-    std::env::var_os("GGML_RPC_DEBUG").is_some()
-        || std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() == Some("1")
+    sovereign_inference::llama_logs::LlamaLogs::from_env().is_verbose()
 }
 
 /// Process-level entry shared by the `sovereign-cli-daemon` binary and

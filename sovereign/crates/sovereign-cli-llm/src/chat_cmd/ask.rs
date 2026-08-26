@@ -14,6 +14,7 @@
 //! first visible answer character. Users should see progress
 //! immediately, not after 30 s of apparent silence.
 
+use sovereign_core::runtime::message_metadata;
 use std::io::{self, Write};
 
 use futures::StreamExt;
@@ -246,17 +247,10 @@ async fn run_turn(
     // Metadata is persisted by `handle_message_stream` after the
     // stream closes — fetch the saved row so we can render the full
     // provenance block exactly like the desktop does.
-    let metadata = session
-        .store
-        .get_conversation(conversation_id)
-        .await
-        .ok()
-        .and_then(|c| {
-            c.messages
-                .iter()
-                .find(|m| m.id == message_id)
-                .and_then(|m| m.metadata.clone())
-        });
+    // THE lookup (ARCH §10.6). This was hand-rolled here, in `session.rs`,
+    // and three times over in the desktop — five copies of "find the message
+    // the turn just wrote and read its metadata".
+    let metadata = message_metadata(session.store.as_ref(), conversation_id, &message_id).await;
 
     match format {
         OutputFormat::Text => render_text(&raw, metadata.as_ref(), show_reasoning),

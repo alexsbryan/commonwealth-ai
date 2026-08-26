@@ -24,6 +24,9 @@ pub mod frame;
 pub mod health;
 pub mod intent_policy;
 pub mod launch;
+/// Which checkout this host's code tools operate on — one reading of the
+/// two configured sources (`TOPOLOGY.md` §10 phase 10).
+pub mod workspace;
 pub mod mcp_config;
 pub mod memory_config;
 pub mod observer;

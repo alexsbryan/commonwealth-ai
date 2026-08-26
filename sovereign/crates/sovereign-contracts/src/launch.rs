@@ -312,9 +312,238 @@ impl DaemonHost {
     }
 }
 
+/// The shared-model fleet this node belongs to — one reading of the two
+/// values that decide it, instead of three.
+///
+/// ## The split this closes
+///
+/// `SOVEREIGN_SHARED_MODEL_ID` is not configuration a user sets; on the
+/// daemon path it is written by `apply_shared_model_role_to_env` from
+/// `[shared_model] model_id` and read back by three modules in two crates.
+/// That makes the process environment an inter-module contract, which is
+/// `TOPOLOGY.md` §2's point exactly: a value read at the point of use is not
+/// configuration, it is *state*.
+///
+/// The three readers had also drifted apart on what counts as a value. Two
+/// filtered on `!s.is_empty()`; the third on `!s.trim().is_empty()`. So a
+/// configured id of `"  "` made this node **advertise a fleet it does not
+/// join**: `capabilities` published `model_resident: Some("  ")` and
+/// `/v1/mesh/status` reported a shared-model fleet, while the inference
+/// provider declined to route into it. One accessor, one trim rule, and that
+/// disagreement has nowhere to live (ARCH §10.6, principle 8).
+///
+/// ## Where it belongs
+///
+/// Beside [`DaemonHost`], for the same reason: it is a fact about what this
+/// process IS, resolved once, and `launch.rs` is where those live. Phase 10's
+/// falsifier is *no `env::var` read selects behaviour after construction* —
+/// this is two more reads off that count, and the remaining work is to hold
+/// the resolved value on the daemon rather than re-resolving it per request.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SharedModelFleet {
+    /// This node answers from its own weights. Nothing is advertised, and
+    /// `/v1/mesh/status` carries no shared-model section.
+    Solo,
+    /// This node is in a fleet serving one model across pooled anchors.
+    Member {
+        /// The fleet's model id, trimmed and non-empty by construction.
+        model_id: String,
+        /// Eligible anchors required before the host will distribute.
+        quorum_anchors: u32,
+    },
+}
+
+/// Anchors required when nothing says otherwise — the historic
+/// `unwrap_or(1)` at the status site, named.
+pub const DEFAULT_QUORUM_ANCHORS: u32 = 1;
+
+impl SharedModelFleet {
+    /// Resolve from the environment. **Call this once, at construction** —
+    /// same rule as [`DaemonHost::from_env`], and for the same reason.
+    pub fn from_env() -> Self {
+        Self::resolve(
+            std::env::var("SOVEREIGN_SHARED_MODEL_ID").ok().as_deref(),
+            std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS").ok().as_deref(),
+        )
+    }
+
+    /// THE decider, separated from the environment so it can be tested
+    /// against the inputs that produced the split — process env is global
+    /// state and a test that sets it is a test that races its neighbours.
+    pub fn resolve(model_id: Option<&str>, quorum_anchors: Option<&str>) -> Self {
+        let Some(model_id) = model_id
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+        else {
+            return Self::Solo;
+        };
+        Self::Member {
+            model_id,
+            quorum_anchors: quorum_anchors
+                .and_then(|s| s.trim().parse().ok())
+                .unwrap_or(DEFAULT_QUORUM_ANCHORS),
+        }
+    }
+
+    /// The fleet's model id, or `None` when this node is [`Self::Solo`].
+    pub fn model_id(&self) -> Option<&str> {
+        match self {
+            Self::Solo => None,
+            Self::Member { model_id, .. } => Some(model_id),
+        }
+    }
+
+    /// Anchors required before the host distributes. Defined for `Solo` too,
+    /// because a caller asking the question has a number to use either way.
+    pub fn quorum_anchors(&self) -> u32 {
+        match self {
+            Self::Solo => DEFAULT_QUORUM_ANCHORS,
+            Self::Member { quorum_anchors, .. } => *quorum_anchors,
+        }
+    }
+}
+
+/// Whether this node lends its GPU into a shared-model layer-split, and where
+/// it accepts — one reading of `SOVEREIGN_RPC_SERVE` instead of four.
+///
+/// ## The lie this closes
+///
+/// Four modules in four crates parsed this variable independently and did not
+/// agree on what "set" means:
+///
+/// | site | rule |
+/// |---|---|
+/// | `sovereign-inference::rpc_distribution` (the one that BINDS) | trim, reject empty |
+/// | `sovereign-mesh::iroh_access` | trim, reject empty, parse port |
+/// | `commonwealth-api::routes_status` | parse port (empty fails it incidentally) |
+/// | `sovereign-mesh::capabilities` | **`var_os(..).is_some()` — any value at all** |
+///
+/// So `SOVEREIGN_RPC_SERVE=""` made this node gossip `can_anchor: true` with
+/// its full VRAM while nothing bound, nothing advertised a port, and the iroh
+/// acceptor routed no `RPC_ALPN`. A host running discovery would count it as
+/// an eligible anchor and reach a worker that does not exist — the anchor
+/// equivalent of the whitespace-model-id split [`SharedModelFleet`] closes.
+///
+/// The rule kept is the binding site's, because that is the only one with
+/// ground truth: if `serve_rpc_worker_if_configured` would not bind on it, no
+/// surface may advertise it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RpcServe {
+    /// Not an RPC worker. Advertise nothing.
+    Off,
+    /// Accepting ggml RPC on `bind`.
+    On {
+        /// The bind string as configured, trimmed (e.g. `0.0.0.0:50052`).
+        bind: String,
+    },
+}
+
+impl RpcServe {
+    /// Resolve from the environment. **Call this once, at construction.**
+    pub fn from_env() -> Self {
+        Self::resolve(std::env::var("SOVEREIGN_RPC_SERVE").ok().as_deref())
+    }
+
+    /// THE decider, separated from the environment so the disagreement above
+    /// can be tested without racing another test's `set_var`.
+    pub fn resolve(raw: Option<&str>) -> Self {
+        match raw.map(str::trim).filter(|s| !s.is_empty()) {
+            Some(bind) => Self::On {
+                bind: bind.to_string(),
+            },
+            None => Self::Off,
+        }
+    }
+
+    /// The bind address, or `None` when this node serves nothing.
+    pub fn bind(&self) -> Option<&str> {
+        match self {
+            Self::Off => None,
+            Self::On { bind } => Some(bind),
+        }
+    }
+
+    /// The TCP port from the bind address. `None` when off, or when the bind
+    /// carries no parseable port — a malformed bind is not a worker, and
+    /// reporting it as one is the failure this type exists to prevent.
+    pub fn port(&self) -> Option<u16> {
+        self.bind()?.rsplit(':').next()?.parse().ok()
+    }
+
+    /// True when this node lends a GPU shard to the layer-split.
+    pub fn is_serving(&self) -> bool {
+        matches!(self, Self::On { .. })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The input the four readers disagreed on: an empty bind made
+    /// `capabilities` gossip `can_anchor: true` while nothing bound.
+    #[test]
+    fn an_empty_bind_is_not_a_worker() {
+        assert_eq!(RpcServe::resolve(Some("")), RpcServe::Off);
+        assert_eq!(RpcServe::resolve(Some("   ")), RpcServe::Off);
+        assert_eq!(RpcServe::resolve(None), RpcServe::Off);
+        assert!(!RpcServe::resolve(Some("")).is_serving());
+        assert_eq!(RpcServe::resolve(Some("")).port(), None);
+    }
+
+    #[test]
+    fn a_configured_worker_reports_its_bind_and_port() {
+        let serve = RpcServe::resolve(Some("  0.0.0.0:50052\n"));
+        assert!(serve.is_serving());
+        assert_eq!(serve.bind(), Some("0.0.0.0:50052"));
+        assert_eq!(serve.port(), Some(50052));
+    }
+
+    /// A bind with no parseable port is serving-but-unadvertisable: the type
+    /// says so rather than publishing a port nobody listens on.
+    #[test]
+    fn a_portless_bind_advertises_nothing() {
+        let serve = RpcServe::resolve(Some("not-an-address"));
+        assert!(serve.is_serving());
+        assert_eq!(serve.port(), None);
+    }
+
+    /// The exact input the three divergent readers disagreed on. Two treated
+    /// `"  "` as a model id and one did not, so the node advertised a fleet
+    /// its own inference provider refused to join.
+    #[test]
+    fn a_whitespace_model_id_is_not_a_fleet() {
+        assert_eq!(SharedModelFleet::resolve(Some("  "), None), SharedModelFleet::Solo);
+        assert_eq!(SharedModelFleet::resolve(Some(""), None), SharedModelFleet::Solo);
+        assert_eq!(SharedModelFleet::resolve(None, Some("3")), SharedModelFleet::Solo);
+    }
+
+    /// A named id is trimmed once, here, so no downstream reader has to.
+    #[test]
+    fn a_named_fleet_carries_a_trimmed_id_and_its_quorum() {
+        assert_eq!(
+            SharedModelFleet::resolve(Some(" qwen3.8-27b \n"), Some(" 3 ")),
+            SharedModelFleet::Member {
+                model_id: "qwen3.8-27b".to_string(),
+                quorum_anchors: 3,
+            }
+        );
+        // An unparseable quorum falls back rather than refusing the fleet —
+        // matching the `unwrap_or(1)` the status site always had.
+        assert_eq!(
+            SharedModelFleet::resolve(Some("m"), Some("not-a-number")).quorum_anchors(),
+            DEFAULT_QUORUM_ANCHORS
+        );
+    }
+
+    /// `Solo` still answers the quorum question, so a caller never has to
+    /// invent a number when there is no fleet.
+    #[test]
+    fn solo_has_no_model_and_the_default_quorum() {
+        assert_eq!(SharedModelFleet::Solo.model_id(), None);
+        assert_eq!(SharedModelFleet::Solo.quorum_anchors(), DEFAULT_QUORUM_ANCHORS);
+    }
 
     fn v(args: &[&str]) -> Vec<String> {
         args.iter().map(|s| (*s).to_string()).collect()

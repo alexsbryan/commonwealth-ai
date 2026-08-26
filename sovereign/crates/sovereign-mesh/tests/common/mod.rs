@@ -165,6 +165,10 @@ pub struct TestProvider {
     code_model_id: Option<String>,
     complete_text: Option<String>,
     stream_chunks: Option<Vec<String>>,
+    /// Wall-clock delay before each streamed chunk. Lets a test hold a turn
+    /// open long enough to assert on what the host does WHILE one is running
+    /// — the receive loop staying responsive, principally.
+    stream_delay: Option<std::time::Duration>,
     embed_fn: Option<Arc<dyn Fn(&str) -> Vec<f32> + Send + Sync>>,
     /// When set, `complete_stream_with_finish` returns exactly these
     /// frames. Use to test finish_reason wire fidelity (Length,
@@ -186,6 +190,7 @@ impl TestProvider {
             code_model_id: None,
             complete_text: None,
             stream_chunks: None,
+            stream_delay: None,
             embed_fn: None,
             typed_frames: None,
             on_complete: None,
@@ -221,6 +226,14 @@ impl TestProvider {
     /// [`Self::with_typed_frames`].
     pub fn with_stream_chunks(mut self, chunks: Vec<String>) -> Self {
         self.stream_chunks = Some(chunks);
+        self
+    }
+
+    /// Sleep this long before each chunk, so a turn takes a knowable amount of
+    /// wall clock. Used to make "while a turn is in flight" a testable window
+    /// rather than a race.
+    pub fn with_stream_delay(mut self, d: std::time::Duration) -> Self {
+        self.stream_delay = Some(d);
         self
     }
 
@@ -308,8 +321,17 @@ impl InferenceProvider for TestProvider {
         self.fire_on_complete();
         match self.stream_chunks.as_ref() {
             Some(chunks) => {
-                let items: Vec<SovResult<String>> = chunks.iter().cloned().map(Ok).collect();
-                Ok(Box::pin(futures::stream::iter(items)))
+                let delay = self.stream_delay;
+                let items: Vec<String> = chunks.clone();
+                Ok(Box::pin(futures::StreamExt::then(
+                    futures::stream::iter(items),
+                    move |c| async move {
+                        if let Some(d) = delay {
+                            tokio::time::sleep(d).await;
+                        }
+                        Ok(c)
+                    },
+                )))
             }
             None => Err(Error::NotImplemented(
                 "TestProvider::complete_stream not configured — \
@@ -398,7 +420,7 @@ impl InferenceProvider for TestProvider {
 /// need. Everything else is the honest empty value: no MCP mount, no embed
 /// advertisement, empty host routers.
 ///
-/// Tests that need no engine use `DaemonServices::MeshAdmin` directly. There
+/// Tests that need no engine use `mesh_admin_services()` directly. There
 /// is deliberately no "daemon with only an engine" shortcut: that shape is not
 /// one any host builds, and offering it would put back a configuration nobody
 /// serves.
@@ -417,6 +439,7 @@ pub fn desktop_services_with_engine(
             corpus_engine: engine,
             inference_provider: Arc::new(TestProvider::new()),
             state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            runtime: stub_runtime(Arc::new(TestProvider::new()), None),
         },
         capability: sovereign_mesh::ServingCapability {
             mcp: sovereign_mesh::McpSurface::Unavailable {
@@ -432,4 +455,92 @@ pub fn desktop_services_with_engine(
         },
     )
     .expect("Launch::Desktop assembles a serving profile with no rails")
+}
+
+/// The cheapest `Runtime` that is still a real one — core's stub router and
+/// planner, an empty tool registry, no enrichment lane. It loads no model and
+/// touches no disk, which is the point: a fixture that had to run the
+/// production recipe (`sovereign-runtime-recipe`) would turn every mesh
+/// variant test into a boot test.
+///
+/// `store` lets a caller hand in the SAME store the daemon's `ServingCore`
+/// carries, so a test can assert on rows a turn wrote. `None` gets a private
+/// in-memory one.
+pub fn stub_runtime(
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+    store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
+) -> Arc<sovereign_core::runtime::Runtime> {
+    let store = store
+        .unwrap_or_else(|| Arc::new(sovereign_store::memory::InMemoryStateStore::new()));
+    Arc::new(sovereign_core::runtime::Runtime::new(
+        sovereign_core::RuntimeParts::new(
+            provider,
+            Box::new(sovereign_core::stubs::PassthroughRouter),
+            Box::new(sovereign_core::stubs::NoOpPlanner),
+            Arc::new(sovereign_core::ToolRegistry::new()),
+            store,
+            Arc::new(sovereign_core::SkillRegistry::new()),
+            Arc::new(sovereign_core::executor::AutoApprovalChannel),
+            sovereign_core::types::InferenceConfig::default(),
+            sovereign_core::runtime::lane::LaneSources::none(),
+        ),
+    ))
+}
+
+/// A `Desktop` serving daemon whose `ServingCore` carries the given store and
+/// a `Runtime` built over the SAME store — which is what a turn test needs:
+/// the route reads the store the turn wrote to.
+pub fn desktop_services_with_store(
+    engine: Arc<corpus_engine::CorpusEngine>,
+    store: Arc<dyn sovereign_core::traits::StateStore>,
+    provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
+) -> sovereign_mesh::DaemonServices {
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Desktop,
+        sovereign_mesh::LaunchParts::Serving {
+            headless: None,
+            serving: sovereign_mesh::ServingProfile {
+                core: sovereign_mesh::ServingCore {
+                    corpus_engine: engine,
+                    inference_provider: Arc::clone(&provider),
+                    state_store: Arc::clone(&store),
+                    runtime: stub_runtime(provider, Some(store)),
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: sovereign_mesh::McpSurface::Unavailable {
+                        reason: "test fixture: no tool registry".into(),
+                    },
+                    project_http: Router::new(),
+                    corpus_watch_http: Router::new(),
+                },
+                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                    reason: "test fixture: no embed probe".into(),
+                },
+            },
+        },
+    )
+    .expect("Launch::Desktop assembles a serving profile with no rails")
+}
+
+/// Commission a `MeshAdmin` daemon THE WAY PRODUCTION DOES.
+///
+/// `svrn mesh create` / `join` reach this shape through exactly one door —
+/// `sovereign_mesh::assemble` — and since daemon-convergence Phase 7 that is
+/// the only door there is: `DaemonServices::MeshAdmin` carries a private
+/// [`sovereign_mesh::MeshAdminWitness`], so no crate outside `sovereign-mesh`
+/// can name the variant into being.
+///
+/// These tests used to write `DaemonServices::MeshAdmin` directly, which meant
+/// 21 sites commissioned a daemon by a route no user can take. Driving the
+/// real door is strictly better evidence: every one of these tests now also
+/// proves the assembler accepts a verb launch and returns the admin shape.
+pub fn mesh_admin_services() -> sovereign_mesh::DaemonServices {
+    sovereign_mesh::assemble(
+        &sovereign_contracts::launch::Launch::Verb {
+            name: "mesh".to_string(),
+            args: Vec::new(),
+        },
+        sovereign_mesh::LaunchParts::Admin,
+    )
+    .expect("a verb launch with admin parts assembles to MeshAdmin")
 }

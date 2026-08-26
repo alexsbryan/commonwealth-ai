@@ -59,6 +59,13 @@ members = [
     # 2026-08-20 (noun-convergence rung nc-16-shared-capability) after the
     # schema was found implemented three times because it lived in a binary.
     "sovereign/crates/sovereign-enrichment-catalog",
+    # THE recipe that commissions a `Runtime` — the router stack, the turn
+    # tool registry and the enrichment lane, below every host. Minted
+    # 2026-08-25 (TOPOLOGY.md §10 phase 5c) after the same recipe was found
+    # implemented three times, for the same reason as the catalog above: it
+    # needs sovereign-tools + sovereign-gliner, and every crate that could
+    # already see both was a host binary.
+    "sovereign/crates/sovereign-runtime-recipe",
     "studio/crates/sovereign-tools-base",
     "studio/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
@@ -209,6 +216,7 @@ sovereign-time = { path = "sovereign/crates/sovereign-time" }
 sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
+sovereign-runtime-recipe = { path = "sovereign/crates/sovereign-runtime-recipe" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }

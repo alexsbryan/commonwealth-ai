@@ -12,7 +12,9 @@ use sovereign_core::traits::StateStore;
 use crate::approval::ServerApprovalChannel;
 use crate::auth::TenantId;
 use crate::busy::busy_response_hint;
-use crate::projection::{project_epistemic_state, project_message_metadata, Citation, Provenance};
+use sovereign_contracts::types::projection::{
+    project_epistemic_state, project_message_metadata, Citation, Provenance,
+};
 use crate::reciprocity::{user_key, ReciprocityTable};
 use crate::scheduler::FairScheduler;
 use crate::tenant::TenantRuntime;
@@ -50,7 +52,7 @@ pub struct MessageResponse {
     /// Host-side provenance (model + serving node, routing tier,
     /// latency). `None` on turns whose handler doesn't persist
     /// provenance. Projected from `Message.metadata` — see
-    /// `crate::projection`.
+    /// `sovereign_contracts::types::projection`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub provenance: Option<Provenance>,
     /// Corpus-grounded citations carrying the host's

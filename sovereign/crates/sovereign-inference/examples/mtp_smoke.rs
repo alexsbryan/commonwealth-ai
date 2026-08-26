@@ -45,7 +45,7 @@ use std::time::Instant;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::CompletionRequest;
 use sovereign_inference::embedded::ffi_trace::{self, FfiCall};
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
+use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 
 /// Distinct, factual, and mutually unrelated on purpose: if request N's
 /// answer drifts toward request N-1's topic, that is the stale-draft
@@ -139,7 +139,7 @@ async fn main() {
     eprintln!("gpu_layers: {gpu_layers:?}");
 
     let t_load = Instant::now();
-    let provider = match EmbeddedLlamaCpp::load_full(&model, None, None, ctx, gpu_layers) {
+    let provider = match EmbeddedLlamaCpp::load_full(&model, None, None, SlotWindows::uniform(ctx), gpu_layers) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("FAIL: model load: {e}");

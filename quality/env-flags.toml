@@ -1227,3 +1227,19 @@ cluster = "demo"
 default = "unset (real flows are byte-identical)"
 status = "guard"
 purpose = "Appended verb flags for the desktop's `dr_start` spawn (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. The desktop remains a driver — every token passes the verb's own closed-set parsing and run-dir verification. Only the demo global-setup writes it; every real flow leaves it unset."
+
+# ── daemon-lifecycle: host headroom, the resource that actually runs out ──
+
+[[flag]]
+name = "SOVEREIGN_HEADROOM_SOFT_MB"
+cluster = "daemon-lifecycle"
+default = "max(4096, 15% of RAM)"
+status = "guard"
+purpose = "Warn threshold for HOST memory headroom (MemAvailable on Linux; free+inactive+purgeable on macOS), sampled by memory_watch beside the process-RSS limits. Added 2026-08-25 because the RSS hard limit could not fire on the host it guarded: the kernel killed the daemon at anon-rss 36.4 GiB against a 36.0 GiB steady state, with `=auto` resolving to ~108 GB — six OOM kills in 24h and the guard silent through every one (note 05cbffed). RSS is the wrong noun; the exhausted resource was GTT (GPU-mapped host memory), which RSS does not count. Warn-only and always on: saying 'the box is running out' costs nothing and is the signal that was missing. The 15% default is derived, not chosen — the pre-restart daemon sat at 19.1 GB MemAvailable on a 125 GB box (15.3%), which is the regime the kills happened in."
+
+[[flag]]
+name = "SOVEREIGN_HEADROOM_HARD_MB"
+cluster = "daemon-lifecycle"
+default = "off"
+status = "guard"
+purpose = "Graceful self-restart floor for host memory headroom; `auto` derives half the soft threshold. Default OFF for the same reason SOVEREIGN_RSS_HARD_LIMIT_MB is: a self-SIGTERM only helps under a supervisor that relaunches (launchd KeepAlive.SuccessfulExit=false / systemd Restart=on-failure). Distinct from the inert-guard problem it was added beside — the RSS limit measured a quantity that could not reach its threshold, whereas this one is opt-in but fires on the quantity that does. The log line states explicitly that low headroom is not an accusation: headroom is shared (an unrelated gnome-shell held 12.55 GB on the measured host), and the daemon exits because it is the process that can come back cleanly, not because it is the culprit."

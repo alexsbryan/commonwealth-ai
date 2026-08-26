@@ -19,12 +19,14 @@
 //! the test — but the `api_address()` value is the *decision* the
 //! daemon committed to before spawning the listener, which is the
 //! assertion that matters: did the SetupConfig flow through?
+mod common;
+use common::mesh_admin_services;
+
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use sovereign_core::setup_config::{DaemonSection, DataSection, ModelsSection, SetupConfig};
 use sovereign_mesh::daemon::EmbeddedDaemon;
-use sovereign_mesh::DaemonServices;
 
 fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
     SetupConfig {
@@ -35,6 +37,7 @@ fn cfg_with_ports(client_port: u16, internal_port: u16) -> SetupConfig {
             embed: PathBuf::from("/models/embed.gguf"),
             code: None,
             context_size: None,
+            fast_context_size: None,
             max_extras_memory_gb: None,
             extra: BTreeMap::new(),
             primary_pool: None,
@@ -60,7 +63,7 @@ async fn default_ports_used_when_setup_config_absent() {
     // No `set_setup_config` call → `resolved_ports()` returns the
     // historic (9741, 9742) defaults. After `create_mesh`,
     // `api_address()` exposes the chosen client bind decision.
-    let daemon = EmbeddedDaemon::in_memory(SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
+    let daemon = EmbeddedDaemon::in_memory(SetupConfig::unconfigured(), mesh_admin_services());
     daemon
         .create_mesh("default-port test", "node")
         .await
@@ -85,7 +88,7 @@ async fn custom_client_port_from_setup_config_flows_to_api_address() {
     // After `set_setup_config` + `create_mesh`, the daemon's
     // bind decision must reflect it. Pre-fix this was a silent
     // no-op (operator changed the TOML, daemon still bound 9741).
-    let daemon = EmbeddedDaemon::in_memory(cfg_with_ports(39741, 39742), DaemonServices::MeshAdmin);
+    let daemon = EmbeddedDaemon::in_memory(cfg_with_ports(39741, 39742), mesh_admin_services());
     daemon
         .create_mesh("custom-port test", "node")
         .await

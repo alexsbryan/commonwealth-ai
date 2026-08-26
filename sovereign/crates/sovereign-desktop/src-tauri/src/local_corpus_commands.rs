@@ -380,8 +380,8 @@ fn resolve_paddle_model_dir(resource_dir: Option<&std::path::Path>) -> Option<Pa
     use sovereign_tools::local_corpus::ocr::paddle::DEFAULT_MODEL_ID;
 
     let mut roots: Vec<PathBuf> = Vec::new();
-    if let Ok(env_path) = std::env::var("SOVEREIGN_PADDLE_OCR_MODEL_DIR") {
-        roots.push(PathBuf::from(env_path));
+    if let Some(env_path) = sovereign_tools::local_corpus::ocr::paddle::model_root_override() {
+        roots.push(env_path);
     }
     if let Some(rd) = resource_dir {
         roots.push(rd.join("binaries").join("paddle-ocr"));

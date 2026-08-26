@@ -273,14 +273,10 @@ pub struct SharedModelStatusDto {
 /// daemon and the fleet's model id / quorum from the RPC env the role
 /// translation set (`apply_shared_model_role_to_env`).
 async fn shared_model_status(daemon: &EmbeddedDaemon) -> Option<SharedModelStatusDto> {
-    let model_id = std::env::var("SOVEREIGN_SHARED_MODEL_ID")
-        .ok()
-        .filter(|s| !s.is_empty())?;
+    let fleet = sovereign_contracts::launch::SharedModelFleet::from_env();
+    let model_id = fleet.model_id()?.to_string();
     let eligible_anchors = daemon.eligible_anchors().await.len();
-    let quorum_anchors = std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS")
-        .ok()
-        .and_then(|s| s.trim().parse().ok())
-        .unwrap_or(1);
+    let quorum_anchors = fleet.quorum_anchors();
     Some(SharedModelStatusDto {
         model_id,
         eligible_anchors,
@@ -1017,6 +1013,7 @@ mod tests {
                 embed: PathBuf::from("/models/embed.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 max_extras_memory_gb: None,
                 extra: BTreeMap::new(),
                 primary_pool: None,
@@ -1051,7 +1048,7 @@ mod tests {
         let daemon = EmbeddedDaemon::new(
             tmp.path().to_path_buf(),
             hermetic_cfg(),
-            crate::daemon_services::DaemonServices::MeshAdmin,
+            crate::daemon_services::DaemonServices::mesh_admin(),
         );
         let app = mesh_router(Arc::clone(&daemon));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -1211,7 +1208,7 @@ mod tests {
         let daemon = EmbeddedDaemon::new(
             tmp.path().to_path_buf(),
             cfg,
-            crate::daemon_services::DaemonServices::MeshAdmin,
+            crate::daemon_services::DaemonServices::mesh_admin(),
         );
 
         daemon.create_mesh("test mesh", "alice").await.unwrap();

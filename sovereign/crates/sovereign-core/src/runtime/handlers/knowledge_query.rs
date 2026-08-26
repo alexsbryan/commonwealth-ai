@@ -454,9 +454,30 @@ impl Runtime {
         // until bench fixtures are updated to a broader refusal-
         // vocabulary expected set.
         if chunks.is_empty() {
+            // The turn LOST a corpus it would have searched — say why, rather
+            // than "found nothing relevant", which reads as "there is nothing".
+            //
+            // Until 2026-08-25 this case never reached here: the
+            // `readiness_disclosure` pipeline step made the pool non-empty by
+            // injecting the same guidance as a `score: 1.0` chunk, so an
+            // unavailable corpus produced a turn that looked grounded, counted
+            // a hit it never retrieved, and handed the grounding gate a
+            // quotable leaf. Deleting the injector is what routes the case
+            // here; the disclosure rides the prompt, where instructions live.
+            let guidance =
+                crate::runtime::unavailability::unavailability_guidance(&unavailable_corpora);
+            if guidance.is_some() {
+                tracing::info!(
+                    target: "retrieval.pipeline",
+                    lost = unavailable_corpora.len(),
+                    "KnowledgeQuery: empty pool over a lost corpus — disclosing in the prompt"
+                );
+            }
             tracing::info!("KnowledgeQuery: no chunks — answering from parametric knowledge");
             let corpora = context.installed_corpora_display();
-            let prompt = format!(
+            let prompt = match &guidance {
+                Some(g) => format!("The user asked: \"{message}\"\n\n{g}"),
+                None => format!(
                 "The user asked: \"{message}\"\n\n\
                  A search of the installed sources ({corpora}) found nothing \
                  relevant, so you have no evidence from the user's own material. \
@@ -478,7 +499,8 @@ impl Runtime {
                  \"<symbols>\", function calls) and never say you will \"search the \
                  codebase\" or \"look it up\" — you cannot. Answer directly or say \
                  plainly you don't have it."
-            );
+                ),
+            };
             let request = CompletionRequest {
                 prompt,
                 system_message: None,
@@ -506,7 +528,17 @@ impl Runtime {
                 // slot; this was the holdout bank's whole honesty gap,
                 // 0.64 vs a 0.91 counterfactual). The KQ stream spawn
                 // emits the prefix as visible text.
-                assistant_prefix: Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
+                //
+                // EXCEPT on the disclosure branch. "Not in your sources — from
+                // general knowledge:" promises the very answer the guidance
+                // forbids ("do not answer from general knowledge or invent an
+                // answer"), so committing it there would make the structural
+                // prefix contradict the prompt it prefixes. A lost corpus is
+                // not a general-knowledge turn; it is a refusal.
+                assistant_prefix: match &guidance {
+                    Some(_) => None,
+                    None => Some(crate::runtime::prompts::GK_CAVEAT_PREFIX.to_string()),
+                },
                 cmd_prefix: None,
                 url_allowlist: None,
                 evidence_id_allowlist: None,
@@ -541,7 +573,14 @@ impl Runtime {
                 // Zero-retrieval parametric decline — a short honest
                 // "no sources" answer; lessons don't engage here.
                 lessons: crate::runtime::types::TurnLessons::default(),
-                general_knowledge: Some(crate::runtime::types::GkReason::ZeroChunk),
+                // Same fork, same reason: the disclosure branch is not
+                // answering from parametric knowledge, so labelling it
+                // `ZeroChunk` would tell every downstream reader of this
+                // field that it did.
+                general_knowledge: match &guidance {
+                    Some(_) => None,
+                    None => Some(crate::runtime::types::GkReason::ZeroChunk),
+                },
                 demands,
                 query_embedding: embedding,
                 // Zero retrieval never reaches the admission stage — there

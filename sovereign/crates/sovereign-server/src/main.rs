@@ -8,7 +8,6 @@ mod config;
 mod corpus_upload;
 mod iroh_access;
 mod narration;
-mod projection;
 mod reciprocity;
 mod routes;
 mod routes_documents;
@@ -130,7 +129,13 @@ async fn main() {
                 &config.inference.model,
                 config.inference.primary_model.as_deref(),
                 embed_model.as_deref(),
-                config.inference.context_size,
+                // `sovereign-server` carries its OWN config type, which has
+                // not grown a per-slot key. `uniform` names that honestly
+                // rather than leaving it indistinguishable from a host that
+                // simply forgot to split its windows.
+                sovereign_inference::embedded::SlotWindows::uniform(
+                    config.inference.context_size,
+                ),
                 None,
             ) {
                 Ok(p) => Arc::new(p),
@@ -163,7 +168,9 @@ async fn main() {
                             model,
                             bc.primary_model.as_deref(),
                             embed_model.as_deref(),
-                            bc.context_size,
+                            sovereign_inference::embedded::SlotWindows::uniform(
+                                bc.context_size,
+                            ),
                             None,
                         ) {
                             Ok(p) => {
@@ -659,9 +666,20 @@ async fn main() {
     // `SOVEREIGN_PPR_EXPAND` logged "lane dark" here because its
     // admission gate needs the same `rerank_fn`. Opt-in via
     // `SOVEREIGN_RERANK_MODEL_PATH`; soft-fails to baseline.
-    if let Some(reranker) = sovereign_inference::reranker_standalone::load_from_env() {
-        lane.rerank.f = Some(sovereign_tools::corpus::inference_to_rerank_fn(reranker));
-        lane.rerank.config = sovereign_tools::corpus::rerank_config_from_env();
+    // Since 2026-08-25 this loader also runs the VRAM pre-flight (note
+    // `b57b0cd5`). The hub is the surface where it matters most: a rerank slot
+    // that does not fit is discovered by the OOM killer, and here that takes
+    // every tenant's in-flight turn with it.
+    match sovereign_inference::reranker_standalone::load_from_env() {
+        sovereign_inference::reranker_standalone::RerankLoad::Loaded(reranker) => {
+            lane.rerank.f = Some(sovereign_tools::corpus::inference_to_rerank_fn(reranker));
+            lane.rerank.config = sovereign_tools::corpus::rerank_config_from_env();
+        }
+        // All three absences run baseline fusion ordering; `load_from_env` has
+        // already logged which one.
+        sovereign_inference::reranker_standalone::RerankLoad::NotConfigured
+        | sovereign_inference::reranker_standalone::RerankLoad::Refused { .. }
+        | sovereign_inference::reranker_standalone::RerankLoad::Failed { .. } => {}
     }
     // Install the landscape-digest provider only when KnowledgeView
     // is enabled. When disabled, the splice path stays a no-op —
@@ -744,47 +762,46 @@ async fn main() {
     // The enrichment stack above is complete, so the Runtime is built once,
     // total. This call used to sit ~140 lines higher and be mutated on the
     // way down.
-    let mut runtime_builder = Runtime::new(
-        Arc::clone(&inference),
-        router,
-        Box::new(planner),
-        Arc::clone(&tools),
-        // Cloned, not moved: the same handle is layered as its own
-        // Extension below so the non-chat routes (conversations,
-        // documents, search, corpus upload) read the database directly
-        // instead of through `Runtime.store` — daemon-convergence Phase 0.
-        Arc::clone(&store),
-        skills,
-        approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
-        // Honour the configured response-length budget ([inference]
-        // max_tokens) instead of hardcoding the 2048 default — the
-        // server-side equivalent of the desktop "Response length"
-        // setting. All other knobs keep their core defaults.
-        sovereign_core::types::InferenceConfig {
-            max_tokens: config.inference.max_tokens,
-            ..sovereign_core::types::InferenceConfig::default()
-        },
-        // Everything this host enriches with, in ONE value. Required, so a
-        // provider the server means to wire cannot be silently skipped.
-        lane,
-    )
-    .with_corpus_engine(Arc::clone(&corpus_engine))
-    .with_routing_events(std::sync::Arc::new(narration_sink));
-    // Scope corpus retrieval per tenant (multi-user hub isolation): the
-    // resolver maps a `"{tenant}:{conv}"` conversation id to its owning
-    // principal, and `build_context` then hides other principals' Private
-    // corpora from this turn's evidence.
-    runtime_builder =
-        runtime_builder.with_corpus_principal(std::sync::Arc::new(tenant::TenantPrincipalResolver));
-    // Note store for commitment persistence (CommissiveQuery handler).
-    if let Some(store) = note_store_for_runtime {
-        runtime_builder = runtime_builder.with_note_store(store);
-    }
-    if let Some(mgr) = landscape_digests {
-        runtime_builder = runtime_builder.with_landscape_digests(mgr);
-    }
-
-    let runtime = Arc::new(runtime_builder);
+    let runtime = Arc::new(Runtime::new(sovereign_core::RuntimeParts {
+        corpus_engine: Some(Arc::clone(&corpus_engine)),
+        routing_events: std::sync::Arc::new(narration_sink),
+        // Scope corpus retrieval per tenant (multi-user hub isolation): the
+        // resolver maps a `"{tenant}:{conv}"` conversation id to its owning
+        // principal, and `build_context` then hides other principals' Private
+        // corpora from this turn's evidence. The server is the ONLY host that
+        // resolves a principal, which is now legible at a glance instead of
+        // being one builder call in a chain of five.
+        corpus_principal: Some(std::sync::Arc::new(tenant::TenantPrincipalResolver)),
+        // Note store for commitment persistence (CommissiveQuery handler).
+        note_store: note_store_for_runtime,
+        landscape_digests,
+        // Named absences: no compaction worker, no mesh-knowledge source (the
+        // server IS the shared hub), no sensitivity oracle, no folder metadata.
+        ..sovereign_core::RuntimeParts::new(
+            Arc::clone(&inference),
+            router,
+            Box::new(planner),
+            Arc::clone(&tools),
+            // Cloned, not moved: the same handle is layered as its own
+            // Extension below so the non-chat routes (conversations,
+            // documents, search, corpus upload) read the database directly
+            // instead of through `Runtime.store` — daemon-convergence Phase 0.
+            Arc::clone(&store),
+            skills,
+            approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
+            // Honour the configured response-length budget ([inference]
+            // max_tokens) instead of hardcoding the 2048 default — the
+            // server-side equivalent of the desktop "Response length"
+            // setting. All other knobs keep their core defaults.
+            sovereign_core::types::InferenceConfig {
+                max_tokens: config.inference.max_tokens,
+                ..sovereign_core::types::InferenceConfig::default()
+            },
+            // Everything this host enriches with, in ONE value. Required, so a
+            // provider the server means to wire cannot be silently skipped.
+            lane,
+        )
+    }));
 
     // Auth state (`auth_enabled` was decided at startup, next to the
     // exposure check that depends on it).

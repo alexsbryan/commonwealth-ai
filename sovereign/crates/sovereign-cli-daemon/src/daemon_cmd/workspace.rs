@@ -28,18 +28,27 @@ pub(super) fn resolve_workspace_dir() -> Option<PathBuf> {
     // 1. Explicit env override — preferred for launchd / systemd /
     //    container setups where the daemon doesn't know its own
     //    repo path at build time.
-    if let Ok(val) = std::env::var("SOVEREIGN_WORKSPACE_DIR") {
-        let trimmed = val.trim();
-        if !trimmed.is_empty() {
-            let path = PathBuf::from(trimmed);
-            if path.is_dir() {
-                return Some(path);
-            } else {
-                tracing::warn!(
-                    path = %path.display(),
-                    "SOVEREIGN_WORKSPACE_DIR set but not a directory — ignoring"
-                );
-            }
+    // Both configured sources resolve through `sovereign_contracts::workspace`
+    // (ARCH §10.6) — `sovereign-tools`'s notes resolver used to carry a second
+    // copy under a comment claiming it mirrored this one, and it did not.
+    // What stays here is the WARNING: a misconfiguration must be visible in
+    // the daemon log without breaking startup, and only this caller has a log.
+    {
+        use sovereign_contracts::workspace::WorkspaceSource;
+        let (resolved, why) = sovereign_contracts::workspace::explain();
+        match why {
+            WorkspaceSource::EnvNotADirectory(path) => tracing::warn!(
+                path = %path.display(),
+                "SOVEREIGN_WORKSPACE_DIR set but not a directory — ignoring"
+            ),
+            WorkspaceSource::PinFileNotADirectory(path) => tracing::warn!(
+                path = %path.display(),
+                "~/.svrnmesh/workspace path is not a directory — ignoring"
+            ),
+            _ => {}
+        }
+        if let Some(path) = resolved {
+            return Some(path);
         }
     }
 

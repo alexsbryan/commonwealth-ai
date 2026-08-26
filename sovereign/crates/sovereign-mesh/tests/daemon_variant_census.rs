@@ -136,7 +136,7 @@ fn every_variant_is_constructed_by_the_assembler() {
     );
     for variant in &variants {
         let constructed = body.contains(&format!("DaemonServices::{variant}"))
-            || body.contains(&format!("DaemonServices::{}(", variant.to_lowercase()));
+            || body.contains(&format!("DaemonServices::{}(", snake_case(variant)));
         assert!(
             constructed,
             "DaemonServices::{variant} is declared but `assemble` has no arm that \
@@ -144,6 +144,32 @@ fn every_variant_is_constructed_by_the_assembler() {
              soundness). Either give it an arm or delete the variant."
         );
     }
+}
+
+/// `MeshAdmin` -> `mesh_admin`. The variant's canonical `pub(crate)`
+/// constructor is the snake_case of its name, and since Phase 7 the assembler
+/// calls THAT rather than naming the variant — `MeshAdmin` carries a private
+/// witness, so `DaemonServices::MeshAdmin` is no longer a expression anyone,
+/// including this crate, writes by hand.
+///
+/// This used to be `variant.to_lowercase()`, which is right only for
+/// single-word variants: it maps `MeshAdmin` to `meshadmin` and would have
+/// silently stopped matching the moment the assembler switched to the
+/// constructor. It never fired because every variant was matched by the FIRST
+/// clause until Phase 7 landed.
+fn snake_case(variant: &str) -> String {
+    let mut out = String::with_capacity(variant.len() + 2);
+    for (i, c) in variant.chars().enumerate() {
+        if c.is_ascii_uppercase() {
+            if i > 0 {
+                out.push('_');
+            }
+            out.push(c.to_ascii_lowercase());
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 /// Source with comment lines removed.

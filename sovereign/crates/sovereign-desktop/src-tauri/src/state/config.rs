@@ -567,6 +567,7 @@ impl DesktopConfig {
                 embed: PathBuf::new(),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 extra: std::collections::BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
@@ -665,8 +666,11 @@ pub struct ResolvedModelSlots {
     pub embed: PathBuf,
     /// Optional code specialist, hot-swapped into the primary slot.
     pub code: Option<PathBuf>,
-    /// Effective chat context window (configured value or safe default).
-    pub context_size: u32,
+    /// Effective context window PER SLOT. Was a single `context_size: u32`
+    /// until 2026-08-25, which is precisely how the fast slot came to carry
+    /// the primary's 64k window: one resolved scalar, four contexts built
+    /// from it, and KV linear in the window.
+    pub windows: sovereign_inference::embedded::SlotWindows,
 }
 
 impl ResolvedModelSlots {
@@ -689,7 +693,7 @@ impl ResolvedModelSlots {
                 primary: None,
                 embed: PathBuf::new(),
                 code: None,
-                context_size: 16_384,
+                windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
             },
         }
     }
@@ -701,7 +705,7 @@ impl ResolvedModelSlots {
             primary: Some(m.primary.clone()),
             embed: m.embed.clone(),
             code: m.code.clone(),
-            context_size: m.effective_context_size(),
+            windows: sovereign_inference::embedded::SlotWindows::from_models(m),
         }
     }
 

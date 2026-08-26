@@ -179,6 +179,19 @@ pub struct ServingCore {
     /// daemon holds it behind a lock only because `POST /v1/admin/reload`
     /// swaps it; a host installs it here, once, or not at all.
     pub inference_provider: Arc<dyn InferenceProvider>,
+    /// The thing that ANSWERS — routing, retrieval, tools, synthesis.
+    ///
+    /// CORE, and the field `quality/TOPOLOGY.md` §3.5 turns on: "DAEMON — the
+    /// only process that assembles a Runtime". Before 2026-08-25 every serving
+    /// daemon held the three fields above and no `Runtime`, so a turn could
+    /// only be served by whichever HOST had built one around its own copy of
+    /// the recipe — and the type reported that as a legitimate topology.
+    ///
+    /// Not an `Option`, for the same reason `state_store` is not: a serving
+    /// daemon that cannot answer a question is not a shape anybody deploys,
+    /// and an `Option` here would put the crossing back that Phase 3 closed.
+    /// Both serving variants carry one, so the lattice still nests.
+    pub runtime: Arc<sovereign_core::runtime::Runtime>,
 }
 
 /// **Ring 2 — CAPABILITY.** What the daemon can *do* beyond answering: the
@@ -269,7 +282,11 @@ pub enum DaemonServices {
     /// membership, prints, and the process exits. It serves no knowledge, no
     /// inference and no host routes — and that emptiness is the shape, not a
     /// set of holes.
-    MeshAdmin,
+    ///
+    /// The payload is a [`MeshAdminWitness`], which carries no data and exists
+    /// only so this variant cannot be *named into being* outside this crate.
+    /// See that type for why a bare variant was the last open door.
+    MeshAdmin(MeshAdminWitness),
     /// The desktop's in-process daemon (`Local` bootstrap mode) — a
     /// [`ServingProfile`] and nothing more.
     Desktop(Box<ServingProfile>),
@@ -277,12 +294,44 @@ pub enum DaemonServices {
     Headless(Box<HeadlessServices>),
 }
 
+/// Proof that a `MeshAdmin` daemon came out of [`assemble`].
+///
+/// # Why a variant needed a witness at all
+///
+/// `DaemonServices::MeshAdmin` was a bare unit variant, and a bare variant is
+/// constructible wherever the enum is nameable. `sovereign-mesh` re-exports
+/// `DaemonServices` publicly, so until 2026-08-25 *any* crate in the workspace
+/// could write `DaemonServices::MeshAdmin` and commission a daemon without
+/// going through the one exhaustive `Launch` match. Phase 4b shut the two
+/// composite doors by making [`DaemonServices::desktop`] and
+/// [`DaemonServices::headless`] `pub(crate)`; there is no such thing as a
+/// `pub(crate)` enum variant, so this one stayed open and was covered by a
+/// source-scanning test (`tests/launch_assembler_census.rs`) instead.
+///
+/// A test that greps for a string is not an invariant (ARCH §7.1, §18.1) — and
+/// that particular test matched raw text, so a file merely *mentioning*
+/// `assemble(` in a comment satisfied it. This type replaces the grep with the
+/// compiler: the single field is private, there is no public constructor and
+/// no `Default`, so the only `MeshAdminWitness` that can exist is the one
+/// [`assemble`] mints.
+///
+/// Matching is deliberately still open. Reading which shape a daemon has is
+/// not the hazard; *deciding* it outside the assembler is. So
+/// `matches!(services, DaemonServices::MeshAdmin(_))` compiles anywhere, and
+/// `DaemonServices::MeshAdmin(..)` cannot be built anywhere but here.
+#[derive(Debug)]
+pub struct MeshAdminWitness(());
+
 impl DaemonServices {
     // `pub` -> `pub(crate)` (daemon-convergence Phase 4b). Nothing outside this
     // crate composes a serving daemon any more; hosts hand parts to
-    // [`assemble`] and it decides the shape. Phase 7 closes the remaining
-    // door — `MeshAdmin` is a bare variant and so still nameable — but these
-    // two are the composite ones, and they are shut now rather than later.
+    // [`assemble`] and it decides the shape. Phase 7 closed the last door on
+    // 2026-08-25: `MeshAdmin` now carries a [`MeshAdminWitness`] whose only
+    // mint is [`assemble`], so all three variants are unreachable from outside.
+    pub(crate) fn mesh_admin() -> Self {
+        Self::MeshAdmin(MeshAdminWitness(()))
+    }
+
     pub(crate) fn desktop(serving: ServingProfile) -> Self {
         Self::Desktop(Box::new(serving))
     }
@@ -294,7 +343,7 @@ impl DaemonServices {
     /// Stable name for logs and `/status`. Closed set — ARCH §2.1.
     pub fn label(&self) -> &'static str {
         match self {
-            Self::MeshAdmin => "mesh-admin",
+            Self::MeshAdmin(_) => "mesh-admin",
             Self::Desktop(_) => "desktop",
             Self::Headless(_) => "headless",
         }
@@ -304,7 +353,7 @@ impl DaemonServices {
     /// mesh-admin one-shot mounts nothing beyond the base client/internal
     /// routers.
     pub fn serves_host_surface(&self) -> bool {
-        !matches!(self, Self::MeshAdmin)
+        !matches!(self, Self::MeshAdmin(_))
     }
 
     /// Rings 1-3 as this variant carries them; `None` on the mesh-admin
@@ -332,7 +381,7 @@ impl DaemonServices {
 
     pub fn serving(&self) -> Option<&ServingProfile> {
         match self {
-            Self::MeshAdmin => None,
+            Self::MeshAdmin(_) => None,
             Self::Desktop(serving) => Some(serving),
             Self::Headless(h) => Some(&h.serving),
         }
@@ -353,7 +402,7 @@ impl DaemonServices {
     pub fn rails(&self) -> Option<&HeadlessRails> {
         match self {
             Self::Headless(h) => Some(&h.rails),
-            Self::MeshAdmin | Self::Desktop(_) => None,
+            Self::MeshAdmin(_) | Self::Desktop(_) => None,
         }
     }
 
@@ -362,7 +411,7 @@ impl DaemonServices {
     /// reader to infer it from a 404.
     pub fn host_router_names(&self) -> Vec<&'static str> {
         match self {
-            Self::MeshAdmin => Vec::new(),
+            Self::MeshAdmin(_) => Vec::new(),
             Self::Desktop(_) => vec!["project_http", "corpus_watch_http"],
             Self::Headless(_) => vec![
                 "project_http",
@@ -376,7 +425,7 @@ impl DaemonServices {
     /// Every host-built router this variant mounts, in merge order.
     pub fn host_routers(&self) -> Vec<axum::Router> {
         match self {
-            Self::MeshAdmin => Vec::new(),
+            Self::MeshAdmin(_) => Vec::new(),
             Self::Desktop(serving) => vec![
                 serving.capability.project_http.clone(),
                 serving.capability.corpus_watch_http.clone(),
@@ -534,7 +583,7 @@ pub fn assemble(
         // daemon was listening, so the verb builds a one-shot that mutates
         // membership and exits.
         Launch::Verb { .. } => match parts {
-            LaunchParts::Admin => Ok(DaemonServices::MeshAdmin),
+            LaunchParts::Admin => Ok(DaemonServices::mesh_admin()),
             LaunchParts::Serving { .. } => Err(AssemblyRefusal::Mismatch {
                 launch: name,
                 wanted: "a mesh-admin one-shot",
@@ -611,12 +660,34 @@ pub(crate) mod fixtures {
         ))
     }
 
+    /// The cheapest `Runtime` that is still a real one: core's own stub
+    /// router and planner, an empty tool registry, no enrichment lane. It
+    /// loads no model and touches no disk, which is the whole point — a
+    /// fixture that had to commission the production recipe would make every
+    /// variant test a boot test.
+    pub(crate) fn runtime() -> Arc<sovereign_core::runtime::Runtime> {
+        Arc::new(sovereign_core::runtime::Runtime::new(
+            sovereign_core::RuntimeParts::new(
+                Arc::new(NullProvider),
+                Box::new(sovereign_core::stubs::PassthroughRouter),
+                Box::new(sovereign_core::stubs::NoOpPlanner),
+                Arc::new(sovereign_core::ToolRegistry::new()),
+                Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+                Arc::new(sovereign_core::SkillRegistry::new()),
+                Arc::new(sovereign_core::executor::AutoApprovalChannel),
+                sovereign_core::types::InferenceConfig::default(),
+                sovereign_core::runtime::lane::LaneSources::none(),
+            ),
+        ))
+    }
+
     pub(crate) fn serving() -> ServingProfile {
         ServingProfile {
             core: ServingCore {
                 corpus_engine: engine(),
                 inference_provider: Arc::new(NullProvider),
                 state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+                runtime: runtime(),
             },
             capability: ServingCapability {
                 mcp: McpSurface::Unavailable {
@@ -659,7 +730,7 @@ pub(crate) mod fixtures {
     /// Every variant, so a test can enumerate the whole space rather than
     /// spot-check the arms it happened to think of.
     pub(crate) fn every_variant() -> Vec<DaemonServices> {
-        vec![DaemonServices::MeshAdmin, desktop(), headless()]
+        vec![DaemonServices::mesh_admin(), desktop(), headless()]
     }
 }
 

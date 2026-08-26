@@ -135,7 +135,10 @@ pub(crate) fn load_provider(
         // touching code, while a 64 GB Mac stays at the safe 16384
         // default. 16384 halves KV to ~8 GB and keeps headroom on a Mac;
         // the atlas Phase 1 pipeline benefits from 32k on Strix Halo.
-        config.models.effective_context_size(),
+        // Per-slot windows (2026-08-25). `from_models` honours
+        // `[models].fast_context_size` and falls back to the primary's
+        // window when it is unset, so an existing config.toml is unchanged.
+        sovereign_inference::embedded::SlotWindows::from_models(&config.models),
         None, // gpu_layers — auto-detect
         ModelFamily::Unknown,
         ModelFamily::Unknown,

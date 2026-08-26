@@ -48,7 +48,10 @@ impl ProviderFactory for LlamaCppFactory {
             Some(&cfg.models.primary),
             Some(&cfg.models.embed),
             cfg.models.code.as_deref(),
-            cfg.models.effective_context_size(),
+            // Per-slot windows (2026-08-25). `from_models` honours
+            // `[models].fast_context_size` and falls back to the primary's
+            // window when it is unset, so an existing config.toml is unchanged.
+            sovereign_inference::embedded::SlotWindows::from_models(&cfg.models),
             None,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
@@ -144,11 +147,8 @@ impl ProviderFactory for LlamaCppFactory {
         // Route this node's primary turns into the mesh-hosted shared model, if
         // one is configured (SOVEREIGN_SHARED_MODEL_ID, from [shared_model]
         // model_id). Survives reload — the env is set once at daemon entry.
-        if let Some(id) = std::env::var("SOVEREIGN_SHARED_MODEL_ID")
-            .ok()
-            .filter(|s| !s.trim().is_empty())
-        {
-            mesh_provider.set_shared_model_id(Some(id));
+        if let Some(id) = sovereign_contracts::launch::SharedModelFleet::from_env().model_id() {
+            mesh_provider.set_shared_model_id(Some(id.to_string()));
         }
         let routed: Arc<dyn InferenceProvider> = mesh_provider;
         Ok(routed)

@@ -8,16 +8,19 @@
 //!
 //! # Why this is code and not a prompt
 //!
-//! ARCH §7.6: never ask a model to guarantee what code can enforce. The
-//! readiness-disclosure step in `retrieval_pipeline` injects assistant
-//! guidance asking the model to phrase a refusal, and that is fine as far as
-//! it goes — but it only fires when the pool is EMPTY, and a model can always
-//! decline to relay it. The failure this module exists to close is the
-//! opposite shape (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6): the pool was
-//! FULL, of an unrelated corpus, and the answer read as confidently grounded
-//! while five named corpora had gone missing. No prompt fixes that, because
-//! the model was never told anything was missing. The marker below is
-//! appended by code, on a branch the model cannot influence.
+//! ARCH §7.6: never ask a model to guarantee what code can enforce.
+//! [`unavailability_guidance`] asks the model to phrase a refusal, and that is
+//! fine as far as it goes — but it only fires when the pool is EMPTY, and a
+//! model can always decline to relay it. The failure this module exists to
+//! close is the opposite shape (`MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6):
+//! the pool was FULL, of an unrelated corpus, and the answer read as
+//! confidently grounded while five named corpora had gone missing. No prompt
+//! fixes that, because the model was never told anything was missing. The
+//! marker below is appended by code, on a branch the model cannot influence.
+//!
+//! Both renderings live here so the two halves cannot drift apart, and so the
+//! guidance half cannot be mistaken for evidence: it returns a `String` bound
+//! for a prompt, never a chunk bound for a pool.
 //!
 //! # The no-regression contract
 //!
@@ -60,6 +63,53 @@ pub(crate) fn unavailability_marker(losses: &[CorpusUnavailable]) -> Option<Stri
     line.push_str(if losses.len() == 1 { "it." } else { "them." });
     line.push('_');
     Some(line)
+}
+
+/// Render the turn's losses as an INSTRUCTION to the model, or `None` when
+/// nothing was lost — the prompt-side half of the same contract the marker
+/// above closes on the answer surface.
+///
+/// This replaces the `readiness_disclosure` pipeline step deleted on
+/// 2026-08-25 (daemon-convergence Phase 9, first rung). That step said the
+/// same thing, but said it by pushing a synthetic `ScoredChunk` carrying
+/// model-directed prose into the EVIDENCE pool at `score: 1.0`. Seven
+/// downstream consumers read that pool and every one of them was told a
+/// falsehood: it was counted as a retrieval hit in `source_map`, stamped for
+/// epistemic coverage, shaped by `compute_evidence_shape`, ranked by
+/// `admission::admit`, projected into the UI's `retrieved_chunks`, and — the
+/// one that matters — handed to the grounding gate as a citable `Grain::Leaf`
+/// with no custody stamp. It was quotable: its empty `metadata` map made the
+/// RAPTOR filter read it as source text, and because the pool was otherwise
+/// EMPTY whenever it fired, `custody_engaged` was false and the custody
+/// refusal never ran. Hazard 1's named failing input, exactly.
+///
+/// Guidance is not knowledge. It belongs in the prompt, where instructions to
+/// a model live, and it travels here as the same typed `CorpusUnavailable`
+/// the marker reads — one signal, one owner, two renderings. Nothing citable
+/// is minted, so nothing citable can be wrong.
+///
+/// Pure, like the marker: same losses, same text, no model, no I/O, no clock.
+pub(crate) fn unavailability_guidance(losses: &[CorpusUnavailable]) -> Option<String> {
+    // First loss is the one we phrase; the full set still reaches the answer
+    // through the marker. `unavailable_corpora` is already narrowed to corpora
+    // this turn would actually have searched (sensitivity, allow-list and
+    // principal ceiling all applied at the filter), so there is no "scoped?"
+    // question left to ask here.
+    let loss = losses.first()?;
+    let corpus = &loss.corpus_id;
+    let cause = loss.reason.user_phrase();
+    let remedy = loss.reason.user_remedy();
+    // Warm, brief and actionable. The text this replaced was prefixed
+    // "SYSTEM NOTE" and carried the dim mismatch verbatim, which the model
+    // parroted ("...skipped entirely [Source: X]") — a cold refusal the UX
+    // judge scored as broken.
+    Some(format!(
+        "The \"{corpus}\" knowledge base the user is asking about cannot be \
+         searched right now because it {cause}. In one or two warm, plain \
+         sentences, let them know you cannot answer from it yet and that \
+         {remedy}. Do not mention indexes, embedding models, or dimensions, \
+         and do not answer from general knowledge or invent an answer."
+    ))
 }
 
 /// Append the marker to a rendered answer.

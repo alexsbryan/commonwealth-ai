@@ -351,6 +351,7 @@ mod tests {
                 embed: "/e".into(),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,

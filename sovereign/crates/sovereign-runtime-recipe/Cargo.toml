@@ -1,0 +1,61 @@
+[package]
+name = "sovereign-runtime-recipe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The one recipe that commissions a Runtime: the router, the planner, the turn tool registry and the enrichment lane every host shares."
+
+# WHY THIS CRATE EXISTS (quality/TOPOLOGY.md §10, phase 5c).
+#
+# `Runtime::new` had three callers and each one carried its OWN ~600-line
+# recipe for what to hand it — `svrn chat` (chat_cmd/bootstrap.rs), the desktop
+# (state.rs) and `sovereign-server` (main.rs). Phase 5a made the ARGUMENT total
+# (`RuntimeParts`, one value, no builder chain); it could not make the RECIPE
+# one, because the recipe needs `sovereign-tools` and `sovereign-gliner` and
+# every crate that could already see both was a host binary. So the three
+# copies drifted exactly the way `sovereign-enrichment-catalog`'s three copies
+# of `config.json` drifted, and for the same structural reason: the shared
+# thing lived inside a host, where nothing below it could reach.
+#
+# The measured drift, 2026-08-25: only `corpus_engine` was wired by all three.
+# `routing_events` was silently absent in chat for the life of the builder
+# surface; `compaction` existed in the desktop alone; `corpus_principal` in the
+# server alone. None of those was a decision anyone took — a builder chain
+# records a call and records nothing at all about a call not made.
+#
+# Layer `capabilities`: above `sovereign-tools` (whose tools it registers) and
+# `sovereign-gliner` (whose extractor it probes for), below every host. It
+# deliberately does NOT depend on `sovereign-mesh`: `mesh_knowledge` is a host
+# input, because inside the daemon it is a loopback call to itself and
+# dissolves (§3.5, "five capabilities leave the Runtime entirely").
+
+[dependencies]
+# The `Runtime` this crate commissions, plus `RuntimeParts`, `LaneSources`,
+# the shared router-classifier bootstrap (`router_bootstrap::build_llm_router`
+# — already the one implementation, and the precedent for this crate) and the
+# egress boundary that builds the web-search client. Runtime layer — down.
+sovereign-core = { workspace = true }
+# Every tool the turn registry registers, the atlas-context manager, and the
+# rerank config/dedup readers. Same layer (capabilities), like
+# sovereign-gliner -> sovereign-core one layer down.
+sovereign-tools = { workspace = true }
+# `StandaloneReranker` + the capacity pre-flight that refuses a rerank slot
+# which does not fit. Runtime layer — down.
+sovereign-inference = { workspace = true }
+# The optional GLiNER entity extractor behind entity-aware
+# retrieval-over-history. Probed, never required. Runtime layer — down.
+sovereign-gliner = { workspace = true }
+# `CorpusEngine`, `open_wikipedia_graph`, `MetaAtlasIndex`, `BridgeIndex`,
+# `RerankConfig`. Knowledge layer — down.
+corpus-engine = { workspace = true }
+# `NoteStore` — the per-conversation tool-decision write hook's backing store,
+# passed in by the host rather than opened here (one writer per data root,
+# TOPOLOGY phase 1). Knowledge layer — down.
+corpus-engine-notes = { workspace = true }
+tracing = { workspace = true }
+# `LaneWarmth::Deferred` spawns the meta-atlas warm on a blocking thread so a
+# service's boot does not block on a ~1 GB JSON parse.
+tokio = { workspace = true }
+
+[lints]
+workspace = true

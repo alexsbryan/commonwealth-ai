@@ -1,0 +1,214 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! The falsifier for TOPOLOGY.md §10 phase 5b: moving the turn protocol out
+//! of the `sovereign-server` binary must not have changed one byte of it.
+//!
+//! # What this catches that the compiler cannot
+//!
+//! rustc is exhaustive over types and blind to encoding
+//! (`kernel_types::wire`'s standing lesson). Renaming a variant, renaming a
+//! field, dropping a `skip_serializing_if`, or swapping the envelope from
+//! externally-tagged to internally-tagged all compile clean and all break
+//! every client mid-turn. The mobile client reads these exact strings, and
+//! `sovereign-server/src/http_tests.rs::ws_streams_tokens_then_complete`
+//! only covers `token` and `complete` — the other three frames and the
+//! whole inbound half had no wire guard at all before this file.
+//!
+//! # The bytes are the assertion
+//!
+//! Each case pins the literal JSON rather than round-tripping through a
+//! `serde_json::json!` value, because a value-to-value comparison passes
+//! when both sides move together. A future edit that means to change the
+//! protocol changes these strings and says so in its commit; an edit that
+//! did not mean to fails here.
+
+use sovereign_contracts::types::NarrationPhase;
+use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
+use sovereign_contracts::types::{TurnFrame, TurnRequest};
+
+/// Serialise, compare against the bytes a client actually reads, then parse
+/// back and confirm the value survived. A frame that serialises correctly
+/// but cannot be read back is not a protocol — that is the half `ServerEvent`
+/// never had, being `Serialize`-only inside a binary nobody could import.
+fn pin_frame(frame: TurnFrame, expected: &str) {
+    let json = serde_json::to_string(&frame).expect("frame serialises");
+    assert_eq!(json, expected, "wire form changed for {frame:?}");
+    let back: TurnFrame = serde_json::from_str(&json).expect("frame parses back");
+    assert_eq!(back, frame, "frame did not survive its own wire form");
+}
+
+#[test]
+fn token_frame_wire_form() {
+    pin_frame(
+        TurnFrame::Token {
+            message_id: "m1".into(),
+            chunk: "Compat".into(),
+        },
+        r#"{"type":"token","data":{"message_id":"m1","chunk":"Compat"}}"#,
+    );
+}
+
+#[test]
+fn complete_frame_wire_form() {
+    // The lean case: a handler that persisted no provenance. Both optional
+    // fields must vanish from the envelope rather than appear as `null` —
+    // `projection`'s documented graceful-degradation contract, and what the
+    // client keys "no citations" off.
+    pin_frame(
+        TurnFrame::Complete {
+            message_id: "m2".into(),
+            provenance: None,
+            citations: vec![],
+            epistemic_state: None,
+        },
+        r#"{"type":"complete","data":{"message_id":"m2"}}"#,
+    );
+}
+
+#[test]
+fn complete_frame_carries_provenance_and_citations() {
+    pin_frame(
+        TurnFrame::Complete {
+            message_id: "m3".into(),
+            provenance: Some(Provenance {
+                inference_backend: "Qwen3.5-9B.Q8_0 @ peer mac-peer".into(),
+                routing_tier: Some("LOOKUP".into()),
+                ttft_ms: None,
+                total_ms: Some(1234),
+                finish_reason: Some("length".into()),
+                max_tokens_budget: None,
+                completion_tokens: None,
+                sources: vec![ProvenanceSource {
+                    origin: "sep".into(),
+                    count: 6,
+                    from_peer: Some("mac-peer".into()),
+                }],
+            }),
+            citations: vec![Citation {
+                corpus_id: "sep".into(),
+                chunk_id: "1396570".into(),
+                title: Some("Free Will".into()),
+                snippet: "Compatibilism holds that...".into(),
+                score: 0.91,
+                rank: 0,
+            }],
+            epistemic_state: None,
+        },
+        concat!(
+            r#"{"type":"complete","data":{"message_id":"m3","#,
+            r#""provenance":{"inference_backend":"Qwen3.5-9B.Q8_0 @ peer mac-peer","#,
+            r#""routing_tier":"LOOKUP","total_ms":1234,"finish_reason":"length","#,
+            r#""sources":[{"origin":"sep","count":6,"from_peer":"mac-peer"}]},"#,
+            r#""citations":[{"corpus_id":"sep","chunk_id":"1396570","title":"Free Will","#,
+            r#""snippet":"Compatibilism holds that...","score":0.91,"rank":0}]}}"#,
+        ),
+    );
+}
+
+#[test]
+fn stream_error_frame_wire_form() {
+    // The shed case. `retry_after_secs` is what makes the client mirror the
+    // REST 503 "host busy" state instead of showing a generic failure, so
+    // its presence is load-bearing, not decorative.
+    pin_frame(
+        TurnFrame::StreamError {
+            message: "host busy".into(),
+            retry_after_secs: Some(7),
+        },
+        r#"{"type":"stream_error","data":{"message":"host busy","retry_after_secs":7}}"#,
+    );
+    pin_frame(
+        TurnFrame::StreamError {
+            message: "boom".into(),
+            retry_after_secs: None,
+        },
+        r#"{"type":"stream_error","data":{"message":"boom"}}"#,
+    );
+}
+
+#[test]
+fn narration_frame_wire_form_survived_becoming_typed() {
+    // `phase` was a `serde_json::Value` while this enum lived in the server:
+    // the server could name `NarrationPhase` but not put it in a type it
+    // shared with nobody, so it re-encoded the phase at every emit. Typing
+    // it is only wire-safe if the same derive produces the same bytes —
+    // these two cases are that claim, one per NarrationPhase shape.
+    pin_frame(
+        TurnFrame::Narration {
+            message_id: "m4".into(),
+            phase: NarrationPhase::RoutingCommitted,
+            text: "Routing committed".into(),
+            elapsed_ms: 12,
+        },
+        concat!(
+            r#"{"type":"narration","data":{"message_id":"m4","#,
+            r#""phase":"routing_committed","text":"Routing committed","elapsed_ms":12}}"#,
+        ),
+    );
+    pin_frame(
+        TurnFrame::Narration {
+            message_id: String::new(),
+            phase: NarrationPhase::ModelLoad {
+                model_id: "qwen3.5-35b".into(),
+                size_bytes: None,
+            },
+            text: "Loading weights".into(),
+            elapsed_ms: 0,
+        },
+        concat!(
+            r#"{"type":"narration","data":{"#,
+            r#""phase":{"model_load":{"model_id":"qwen3.5-35b","size_bytes":null}},"#,
+            r#""text":"Loading weights","elapsed_ms":0}}"#,
+        ),
+    );
+}
+
+#[test]
+fn queue_position_frame_wire_form() {
+    pin_frame(
+        TurnFrame::QueuePosition {
+            position: 3,
+            estimated_wait_ms: 9000,
+        },
+        r#"{"type":"queue_position","data":{"position":3,"estimated_wait_ms":9000}}"#,
+    );
+}
+
+#[test]
+fn turn_request_wire_form() {
+    // Pinned as PARSES, not as serialises: this half is what a client sends,
+    // so the guarantee owed is that the bytes a client already emits still
+    // land. `http_tests::ws_streams_tokens_then_complete` sends the first of
+    // these literally.
+    let cases = [
+        (
+            r#"{"type":"message","data":{"content":"hello"}}"#,
+            TurnRequest::Message {
+                content: "hello".into(),
+            },
+        ),
+        (
+            r#"{"type":"approve","data":{"task_id":"t1","step_id":2,"approved":true}}"#,
+            TurnRequest::Approve {
+                task_id: "t1".into(),
+                step_id: 2,
+                approved: true,
+            },
+        ),
+        (
+            r#"{"type":"user_reply","data":{"task_id":"t1","content":"yes"}}"#,
+            TurnRequest::UserReply {
+                task_id: "t1".into(),
+                content: "yes".into(),
+            },
+        ),
+    ];
+    for (wire, expected) in cases {
+        let parsed: TurnRequest = serde_json::from_str(wire).expect("client message parses");
+        assert_eq!(parsed, expected, "inbound wire form changed for {wire}");
+        assert_eq!(
+            serde_json::to_string(&parsed).expect("re-serialises"),
+            wire,
+            "inbound frame is not symmetric"
+        );
+    }
+}

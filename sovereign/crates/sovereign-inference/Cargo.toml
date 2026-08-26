@@ -5,6 +5,12 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# The launch-shape vocabulary. `RpcServe` is the ONE reading of
+# `SOVEREIGN_RPC_SERVE`, shared with the two mesh surfaces and
+# commonwealth-api's `/status`, so nothing can advertise a worker this
+# crate would not bind (sovereign-contracts is a serde/DTO leaf — no
+# runtime, no layer inversion).
+sovereign-contracts = { workspace = true }
 # Pid-liveness probe (kill(pid, 0)) for the prefix-state stale-dir sweep.
 libc = "0.2"
 sovereign-core = { workspace = true }

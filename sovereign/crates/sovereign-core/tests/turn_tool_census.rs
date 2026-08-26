@@ -1,0 +1,276 @@
+// SPDX-License-Identifier: AGPL-3.0-or-later
+//! `adopted` for the TURN TOOL REGISTRY — how far the three hosts disagree
+//! about what a turn may do.
+//!
+//! # Why a number, and why this one
+//!
+//! `quality/TOPOLOGY.md` §3.5 lists "a capability wired in 2 of 3 hosts" among
+//! the states the target topology forbids, and its reason is one line: *there
+//! is one host*. Until Phase 6 makes that true, nothing in the build reports
+//! how far from it we are — the same blind spot `runtime_commission_census`
+//! covers for `Runtime::new`, one level down. A tool missing from a host is
+//! not a compile error, not a test failure, and not visible in any diff
+//! smaller than all three bootstraps side by side.
+//!
+//! Measured when this file was written (2026-08-25): **33 tools in the union,
+//! 7 common to all three, 26 divergent.** `svrn chat` registers 11, the
+//! desktop 21, the server 31. Two of the divergences read as defects rather
+//! than policy and are worth naming, because a number alone does not make
+//! anyone act:
+//!
+//! - `KnowledgeLookupTool` — the "unified knowledge-lookup front door" — is on
+//!   the CLI and on NEITHER user-facing host.
+//! - `AttachedDocumentSearchTool` is CLI-only. Its own comment says it is "the
+//!   lever the book-report bench exposed as missing"; the desktop is where a
+//!   user attaches a document.
+//!
+//! # This is a RATCHET, not a target
+//!
+//! It fails when the hosts diverge FURTHER. It does not fail on 26, because
+//! collapsing them is a change to what a model may call on every turn — a
+//! quality change wearing a refactor's clothes, and §18.4's warning about
+//! tuning an unmeasured whole applies directly. The convergence belongs to
+//! Phase 6, where the hosts stop having registries at all.
+//!
+//! # Named failing input (ARCH §18.1)
+//!
+//! Register a tool on one host's turn registry and not the other two. Nothing
+//! else in the workspace notices — which is precisely how a 26-wide split came
+//! to exist. This fails, prints the full matrix, and makes the author say
+//! whether they meant to widen the split.
+//!
+//! # Instrument defects this file already survived
+//!
+//! Reusing the checklist `runtime_commission_census` paid for:
+//!
+//! - **The desktop builds TWO registries in one span.** `state.rs:1129` opens
+//!   `mcp_tools` for the `/mcp` surface INSIDE the turn registry's span, and a
+//!   bare `\.register\(` scan counted its nine code-intel tools as the
+//!   desktop's turn tools — inflating it 21 → 30 and quietly making the split
+//!   look narrower than it is. The receiver is bound to `tools` for that
+//!   reason; do not relax it.
+//! - **A comment naming a tool satisfies a text scan.** Comments are stripped
+//!   before matching.
+//! - **A registry that scans to zero is not agreement.** Each host must yield
+//!   at least `MIN_TOOLS_PER_HOST`, or the extractor is broken and the census
+//!   is reporting a fiction rather than a finding (ARCH §18.2).
+
+use std::collections::{BTreeMap, BTreeSet};
+use std::path::{Path, PathBuf};
+
+/// The three hosts that build a turn tool registry, and where each starts.
+///
+/// These are the same three sites `runtime_commission_census` tracks — a host
+/// that commissions a `Runtime` is exactly a host that must hand it tools.
+const TURN_REGISTRIES: &[(&str, &str)] = &[
+    // Was `sovereign-cli-llm/src/chat_cmd/bootstrap.rs` until 2026-08-25.
+    // The registry moved into the shared recipe (TOPOLOGY §10 phase 5c), so
+    // this row is no longer one host: it is what `svrn chat` AND
+    // `sovereign daemon run` both register, from one list. That is the census
+    // shrinking by construction rather than by anyone editing a baseline —
+    // two of the columns this file was built to compare cannot disagree any
+    // more, because there is nothing left for them to disagree with.
+    (
+        "recipe",
+        "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
+    ),
+    (
+        "desktop",
+        "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs",
+    ),
+    ("server", "sovereign/crates/sovereign-server/src/main.rs"),
+];
+
+/// The divergence measured on 2026-08-25. May shrink freely; a growth is the
+/// failure this file exists to produce.
+///
+/// RE-MEASURED the same day, after the turn registry moved into
+/// `sovereign-runtime-recipe` and one row started covering both `svrn chat`
+/// and `sovereign daemon run`: **union 33, common 7, divergent 26 —
+/// unchanged.** Worth writing down, because "we merged two hosts and the
+/// number did not move" is the result, not a null one: the divergence was
+/// never between those two. It is between the recipe and the desktop/server,
+/// which is exactly where Phase 6 has to work. A baseline lowered on the
+/// strength of a refactor that did not move it would be a ratchet with slack
+/// pretending to be a gate.
+const DIVERGENT_BASELINE: usize = 26;
+
+/// Below this, the extractor found nothing and the run proves nothing.
+const MIN_TOOLS_PER_HOST: usize = 8;
+
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .ancestors()
+        .nth(3)
+        .expect("repo root is four levels above sovereign-core")
+        .to_path_buf()
+}
+
+/// Strip `//` line comments. A doc comment naming a tool is prose, not a
+/// registration, and counting it is the defect two prior censuses hit.
+fn strip_comments(src: &str) -> String {
+    src.lines()
+        .map(|l| match l.find("//") {
+            Some(i) => &l[..i],
+            None => l,
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// The span from the turn registry's construction to the line that freezes it.
+fn registry_span(src: &str) -> Option<String> {
+    let lines: Vec<&str> = src.lines().collect();
+    let start = lines
+        .iter()
+        .position(|l| l.contains("ToolRegistry::new().with_cache("))?;
+    // The freeze point is "the registry becomes an `Arc`", and it is spelled
+    // two ways: a host binds it (`let tools = Arc::new(tools);`) while the
+    // shared recipe RETURNS it (`Arc::new(tools)` as the tail expression).
+    // Matching only the first is how this scanner failed the day the recipe
+    // landed — and the right fix is to widen the marker, never to reshape the
+    // production code so a scanner can find it.
+    let end = lines[start..]
+        .iter()
+        .position(|l| l.contains("Arc::new(tools)"))?;
+    Some(lines[start..=start + end].join("\n"))
+}
+
+/// Tool type names registered on `tools` within `span`.
+///
+/// The receiver is matched explicitly. `mcp_tools.register(...)` must NOT
+/// count — see the instrument note in the module docs.
+fn registered_tools(span: &str) -> BTreeSet<String> {
+    let mut out = BTreeSet::new();
+    let bytes = span.as_bytes();
+    let mut at = 0usize;
+    while let Some(rel) = span[at..].find(".register(") {
+        let idx = at + rel;
+        at = idx + ".register(".len();
+
+        // Receiver must be exactly `tools`, not a longer identifier ending in it.
+        let before = &span[..idx];
+        let recv = before.trim_end();
+        if !recv.ends_with("tools") {
+            continue;
+        }
+        let head = &recv[..recv.len() - "tools".len()];
+        if head
+            .chars()
+            .next_back()
+            .is_some_and(|c| c.is_alphanumeric() || c == '_')
+        {
+            continue;
+        }
+
+        // `Box::new(<Path>` — the constructed tool.
+        let rest = span[at..].trim_start();
+        let Some(after_box) = rest.strip_prefix("Box::new(") else {
+            continue;
+        };
+        let path: String = after_box
+            .trim_start()
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
+            .collect();
+        let _ = bytes; // span is ASCII source; indexing above is byte-safe
+
+        // Drop the constructor segment so `X::new` and `X::with_web` agree.
+        let mut parts: Vec<&str> = path.split("::").filter(|s| !s.is_empty()).collect();
+        while parts.len() > 1 && is_ctor(parts[parts.len() - 1]) {
+            parts.pop();
+        }
+        let Some(name) = parts.last() else { continue };
+        // A lowercase head is a variable — the desktop registers MCP-discovered
+        // tools from a loop. Those are not a named capability and are counted
+        // by neither side.
+        if name.chars().next().is_some_and(char::is_lowercase) {
+            continue;
+        }
+        out.insert((*name).to_string());
+    }
+    out
+}
+
+fn is_ctor(seg: &str) -> bool {
+    seg == "new"
+        || seg == "declared"
+        || seg.starts_with("with_")
+        || seg.starts_with("from_")
+        || seg.starts_with("new_")
+}
+
+fn read(root: &Path, rel: &str) -> String {
+    std::fs::read_to_string(root.join(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
+}
+
+fn census(root: &Path) -> BTreeMap<&'static str, BTreeSet<String>> {
+    TURN_REGISTRIES
+        .iter()
+        .map(|(host, rel)| {
+            let src = strip_comments(&read(root, rel));
+            let span = registry_span(&src)
+                .unwrap_or_else(|| panic!("{host}: no turn registry span in {rel}"));
+            (*host, registered_tools(&span))
+        })
+        .collect()
+}
+
+fn matrix(sets: &BTreeMap<&'static str, BTreeSet<String>>) -> String {
+    let union: BTreeSet<&String> = sets.values().flatten().collect();
+    let mut out = format!("{:34}", "TOOL");
+    for host in sets.keys() {
+        out.push_str(&format!("{host:>12}"));
+    }
+    out.push('\n');
+    for t in &union {
+        out.push_str(&format!("{t:34}"));
+        for s in sets.values() {
+            out.push_str(&format!("{:>12}", if s.contains(*t) { "x" } else { "." }));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// The instrument check, and it runs first: an extractor that finds nothing
+/// would report perfect agreement.
+#[test]
+fn every_host_yields_a_registry() {
+    let sets = census(&repo_root());
+    for (host, tools) in &sets {
+        assert!(
+            tools.len() >= MIN_TOOLS_PER_HOST,
+            "{host}: extracted only {} tools (min {MIN_TOOLS_PER_HOST}). \
+             The scan is broken, not the hosts — a census that finds nothing \
+             reports agreement it did not measure (ARCH §18.2).",
+            tools.len()
+        );
+    }
+}
+
+#[test]
+fn the_hosts_do_not_diverge_further_on_what_a_turn_may_do() {
+    let sets = census(&repo_root());
+    let union: BTreeSet<&String> = sets.values().flatten().collect();
+    let common: BTreeSet<&String> = union
+        .iter()
+        .copied()
+        .filter(|t| sets.values().all(|s| s.contains(*t)))
+        .collect();
+    let divergent = union.len() - common.len();
+
+    assert!(
+        divergent <= DIVERGENT_BASELINE,
+        "turn tool registries diverged further: {divergent} tools are not on \
+         every host (baseline {DIVERGENT_BASELINE}).\n\n{}\n\
+         union {} · common {} · divergent {divergent}\n\n\
+         A tool on one host and not the others is `TOPOLOGY.md` §3.5's \
+         forbidden state 'a capability wired in 2 of 3 hosts'. Either register \
+         it everywhere, or raise the baseline and say in the commit why this \
+         host is different.",
+        matrix(&sets),
+        union.len(),
+        common.len(),
+    );
+}

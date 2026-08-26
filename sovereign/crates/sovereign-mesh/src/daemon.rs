@@ -446,6 +446,15 @@ impl EmbeddedDaemon {
         self.services.serving().map(|s| &s.core.state_store)
     }
 
+    /// Borrow the `Runtime` this daemon serves turns with. `None` only on
+    /// [`DaemonServices::MeshAdmin`] — the same real fork the two accessors
+    /// above answer to, and the reason all three keep an `Option` where the
+    /// seven deleted in Phase 2 did not: `serving()` is a genuine question,
+    /// and the field one level down is not optional.
+    pub fn runtime(&self) -> Option<&Arc<sovereign_core::runtime::Runtime>> {
+        self.services.serving().map(|s| &s.core.runtime)
+    }
+
     /// Swap the serving `InferenceProvider`. Private on purpose: the ONLY
     /// caller is `reload_from_setup_config`, which is itself reachable only
     /// on the variant that carries a `ProviderFactory`. A host cannot install
@@ -2489,8 +2498,13 @@ impl EmbeddedDaemon {
             mount_names.push("mesh_http");
             mounted.push(crate::admin_http::admin_router(Arc::clone(&self_arc)));
             mount_names.push("admin_http");
-            mounted.push(crate::reading_http::reading_router(self_arc));
+            mounted.push(crate::reading_http::reading_router(Arc::clone(&self_arc)));
             mount_names.push("reading_http");
+            // Phase 5c — the daemon answers. Built here from `Arc<Self>` like
+            // the three above, not accepted from a host, so a serving daemon
+            // cannot come up unable to serve a turn.
+            mounted.push(crate::turn_http::turn_router(self_arc));
+            mount_names.push("turn_http");
             for (router, name) in self
                 .services
                 .host_routers()
@@ -3879,7 +3893,7 @@ mod tests {
         // callers fall back to raw-IP addressing.
         let daemon = EmbeddedDaemon::in_memory(
             SetupConfig::unconfigured(),
-            crate::daemon_services::DaemonServices::MeshAdmin,
+            crate::daemon_services::DaemonServices::mesh_admin(),
         );
         assert_eq!(daemon.rpc_endpoint_node("10.0.0.7:50052"), None);
 
@@ -3957,6 +3971,7 @@ mod tests {
                 embed: PathBuf::from("/m/qwen3-embedding-0.6b.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 max_extras_memory_gb: None,
                 extra: std::collections::BTreeMap::new(),
                 primary_pool: None,

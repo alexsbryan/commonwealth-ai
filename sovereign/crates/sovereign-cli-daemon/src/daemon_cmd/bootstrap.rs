@@ -113,7 +113,13 @@ pub(super) fn build_corpus_engine(
     chunk_entity_extractor: &Option<
         Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
     >,
-) -> Arc<CorpusEngine> {
+) -> (Arc<CorpusEngine>, String) {
+    // Returned alongside the engine rather than re-derived by the caller. The
+    // `config.models.embed.file_stem()` expression below already had five
+    // copies tree-wide (ARCH §10.6); the daemon's `Runtime` needs the same
+    // string to key its atlas embedding cache, and a sixth copy is how the
+    // cache and the shards start disagreeing about which model wrote them.
+    let mut derived_embed_model = String::new();
     let engine: Arc<CorpusEngine> = {
         let indexes_dir = data_dir.join("indexes");
         let provider_for_embed = Arc::clone(&provider);
@@ -293,9 +299,10 @@ pub(super) fn build_corpus_engine(
         // SEC filings. Registration is cheap and unconditional; a
         // recipe that never names the kind never invokes it.
         sovereign_tools::sec_edgar::register(&engine_builder);
+        derived_embed_model = embed_model_name.clone();
         Arc::new(engine_builder)
     };
-    engine
+    (engine, derived_embed_model)
 }
 
 /// Build the watched-folder tiered-enrichment deps (its own

@@ -13,6 +13,7 @@
 //! fires on `quit` so any memory-extraction side effects match the
 //! desktop's "close the tab" behaviour.
 
+use sovereign_core::runtime::message_metadata;
 use std::io::{self, BufRead, Write};
 
 use futures::StreamExt;
@@ -167,17 +168,10 @@ async fn run_one(
     let _ = writeln!(stdout);
     let _ = writeln!(stdout);
 
-    let metadata = session
-        .store
-        .get_conversation(conversation_id)
-        .await
-        .ok()
-        .and_then(|c| {
-            c.messages
-                .iter()
-                .find(|m| m.id == message_id)
-                .and_then(|m| m.metadata.clone())
-        });
+    // THE lookup (ARCH §10.6). This was hand-rolled here, in `session.rs`,
+    // and three times over in the desktop — five copies of "find the message
+    // the turn just wrote and read its metadata".
+    let metadata = message_metadata(session.store.as_ref(), conversation_id, &message_id).await;
 
     let header = render::provenance_header(metadata.as_ref());
     if !header.is_empty() {

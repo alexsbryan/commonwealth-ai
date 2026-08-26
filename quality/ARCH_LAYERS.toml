@@ -154,6 +154,15 @@ crates = [
     # the other two could only re-derive it, and both had (rung
     # nc-16-shared-capability, 2026-08-20).
     "sovereign-enrichment-catalog",
+    # THE `Runtime` recipe — router stack, turn tool registry, enrichment
+    # lane. Here rather than with the hosts for the same reason as the
+    # catalog above: THREE hosts commissioned a Runtime and each carried
+    # its own copy of the recipe, because the recipe needs sovereign-tools
+    # (same layer) and sovereign-gliner (down) and every crate that could
+    # see both was a host binary. Measured drift 2026-08-25: of eleven
+    # optional slots, exactly one was wired by all three
+    # (quality/TOPOLOGY.md §10 phase 5c).
+    "sovereign-runtime-recipe",
     "sovereign-work-atlas",
     "sovereign-workflow-host",
     "sovereign-atos",

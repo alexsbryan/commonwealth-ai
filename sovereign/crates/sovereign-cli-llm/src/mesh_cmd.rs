@@ -142,7 +142,10 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
     let cache_dir = match cache_dir.or_else(sovereign_inference::embedded::default_cache_dir) {
         Some(d) => d,
         None => {
-            eprintln!("could not resolve a cache dir (pass --cache-dir or set HOME)");
+            eprintln!(
+                "no cache dir: SOVEREIGN_RPC_CACHE_DIR is off/0/empty (caching \
+                 disabled), or HOME is unset. Pass --cache-dir to warm one anyway."
+            );
             return 1;
         }
     };

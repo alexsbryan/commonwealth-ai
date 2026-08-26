@@ -78,6 +78,7 @@ pub mod projects;
 pub mod prompt_compactor;
 pub mod reading_formatters;
 pub mod reading_http;
+pub mod turn_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod rpc_warm_http;
@@ -124,7 +125,7 @@ pub use peer_inference::DeferredDaemon;
 pub use daemon_services::{
     assemble, AssemblyRefusal, DaemonServices, EmbedAdvertisement, HeadlessExtras, HeadlessRails,
     HeadlessServices, LaunchParts, McpMount,
-    McpSurface, ServingCapability, ServingCore, ServingProfile,
+    McpSurface, MeshAdminWitness, ServingCapability, ServingCore, ServingProfile,
 };
 pub use deep_link::{parse_deep_link, DeepLink};
 pub use state::MeshState;

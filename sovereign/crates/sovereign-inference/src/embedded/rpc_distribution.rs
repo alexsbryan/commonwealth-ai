@@ -2087,13 +2087,16 @@ static RPC_SERVE_STARTED: std::sync::Once = std::sync::Once::new();
 /// the life of the process.
 pub(crate) fn serve_rpc_worker_if_configured() {
     RPC_SERVE_STARTED.call_once(|| {
-        let Ok(bind) = std::env::var("SOVEREIGN_RPC_SERVE") else {
+        // THE reading of this variable (ARCH §10.6). This site is the
+        // authority — if it would not bind, no surface may advertise a
+        // worker — so the rule lives in `RpcServe` and the three advertising
+        // sites read the same value rather than each re-deriving "set".
+        let Some(bind) = sovereign_contracts::launch::RpcServe::from_env()
+            .bind()
+            .map(str::to_string)
+        else {
             return;
         };
-        let bind = bind.trim().to_string();
-        if bind.is_empty() {
-            return;
-        }
 
         // Collect local GPU devices (skip CPU and any already-registered remote
         // RPC devices, so a host+worker hybrid never re-serves a peer).
@@ -2261,16 +2264,10 @@ fn rpc_worker_restart_backoff(consecutive_fast_exits: u32) -> std::time::Duratio
 /// `off` / `0` / empty to disable caching. Returns `None` (caching off) when the
 /// directory can't be created.
 fn rpc_cache_dir() -> Option<std::path::PathBuf> {
-    let dir = match std::env::var("SOVEREIGN_RPC_CACHE_DIR") {
-        Ok(v) => {
-            let v = v.trim();
-            if v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0" {
-                return None;
-            }
-            std::path::PathBuf::from(v)
-        }
-        Err(_) => sovereign_core::rebrand::svrnmesh_root().join("rpc-cache"),
-    };
+    // Resolution lives in `rpc_warm_cache::default_cache_dir` — one rule, so
+    // the bytes the host warms land where this worker looks. Creating the
+    // directory stays here: only the reader needs it to exist.
+    let dir = super::rpc_warm_cache::default_cache_dir()?;
     if let Err(e) = std::fs::create_dir_all(&dir) {
         tracing::warn!(dir = %dir.display(), error = %e, "could not create RPC cache dir — caching disabled");
         return None;

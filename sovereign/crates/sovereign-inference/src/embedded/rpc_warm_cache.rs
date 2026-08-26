@@ -44,13 +44,68 @@ pub struct WarmCacheStats {
     pub cache_dir: PathBuf,
 }
 
-/// Default cache directory the in-process worker reads
-/// (`serve_rpc_worker_if_configured` → `rpc_cache_dir`).
+/// Where the in-process RPC worker looks for cached tensors — or `None` when
+/// the operator turned caching off (`SOVEREIGN_RPC_CACHE_DIR` = `off` / `0` /
+/// empty). Default: `~/.svrnmesh/rpc-cache`.
+///
+/// THE resolution of that variable (ARCH §10.6). There were three, and the
+/// third existed *because* this one was wrong: `sovereign-mesh`'s
+/// `rpc_warm_http::worker_cache_dir` carried a note saying
+/// "`sovereign-inference`'s `default_cache_dir` doesn't model the disabled
+/// case, which is why this lives here". It didn't — it returned
+/// `Some(PathBuf::from("off"))`, so with caching disabled the warm path wrote
+/// shards into a directory literally named `off` while the worker, which DOES
+/// model the disabled case, read nothing. The upload the cache exists to avoid
+/// happened anyway, into a junk directory.
 pub fn default_cache_dir() -> Option<PathBuf> {
-    std::env::var("SOVEREIGN_RPC_CACHE_DIR")
-        .ok()
-        .map(PathBuf::from)
-        .or_else(|| Some(sovereign_core::rebrand::svrnmesh_root().join("rpc-cache")))
+    resolve_cache_dir(
+        std::env::var("SOVEREIGN_RPC_CACHE_DIR").ok().as_deref(),
+        || sovereign_core::rebrand::svrnmesh_root().join("rpc-cache"),
+    )
+}
+
+/// The rule itself, with the environment and the home directory split off so
+/// the disabling spellings are testable.
+fn resolve_cache_dir(raw: Option<&str>, default: impl FnOnce() -> PathBuf) -> Option<PathBuf> {
+    match raw {
+        Some(v) => {
+            let v = v.trim();
+            (!(v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0"))
+                .then(|| PathBuf::from(v))
+        }
+        None => Some(default()),
+    }
+}
+
+#[cfg(test)]
+mod cache_dir_tests {
+    use super::*;
+
+    /// Every spelling that means "off". The writer used to accept all of them
+    /// as directory NAMES and warm shards into `./off`.
+    #[test]
+    fn the_disabling_spellings_yield_no_directory() {
+        let d = || PathBuf::from("/default");
+        for off in ["off", "OFF", "0", "", "  ", " off "] {
+            assert_eq!(
+                resolve_cache_dir(Some(off), d),
+                None,
+                "{off:?} must disable the cache, not name a directory"
+            );
+        }
+    }
+
+    #[test]
+    fn unset_is_the_default_and_a_path_is_taken_trimmed() {
+        assert_eq!(
+            resolve_cache_dir(None, || PathBuf::from("/default")),
+            Some(PathBuf::from("/default"))
+        );
+        assert_eq!(
+            resolve_cache_dir(Some("  /tmp/cache  "), || PathBuf::from("/default")),
+            Some(PathBuf::from("/tmp/cache"))
+        );
+    }
 }
 
 #[derive(Debug)]

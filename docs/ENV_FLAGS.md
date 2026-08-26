@@ -46,6 +46,21 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_CORPUS_MAINTENANCE_PRUNE_DAYS` | 7 | shipped | Age below which superseded dataset versions are KEPT by the maintenance sweep. Compaction is non-destructive — superseded fragments stay readable under old manifests — so without pruning the directory grows without bound, which on a desktop install is its own product failure. Seven days is far outside any in-flight reader while still bounding growth. 0 disables pruning and retains every version. |
 | `SOVEREIGN_CORPUS_MAINTENANCE_UNINDEXED_FLOOR` | 5000 | shipped | Rows-outside-the-index a corpus must exceed before the daemon's maintenance sweep rewrites it. Not zero: folding an index costs seconds-to-minutes on a large corpus and a few hundred straggler rows are genuinely cheap to flat-scan; the cost only becomes visible in the thousands. |
 
+## daemon-lifecycle
+
+| flag | default | status | purpose |
+|---|---|---|---|
+| `SOVEREIGN_FORCE_LOCAL` | off | guard | `1` means THIS process runs the weights — the real-mode desktop harnesses and the run-local-while-a-daemon-is-up case. Implies the in-process EmbeddedDaemon, since a child daemon would contradict it, and it TAKES PRECEDENCE over SOVEREIGN_USE_SUPERVISOR. CONSTRUCTION-TIME since 2026-08-25 (TOPOLOGY Phase 10): `DaemonHost::from_env` is the one reader; `bootstrap::detect` and `supervisor_setup::is_enabled` were two independent parses of it and now read the resolved value. |
+| `SOVEREIGN_HEADROOM_HARD_MB` | off | guard | Graceful self-restart floor for host memory headroom; `auto` derives half the soft threshold. Default OFF for the same reason SOVEREIGN_RSS_HARD_LIMIT_MB is: a self-SIGTERM only helps under a supervisor that relaunches (launchd KeepAlive.SuccessfulExit=false / systemd Restart=on-failure). Distinct from the inert-guard problem it was added beside — the RSS limit measured a quantity that could not reach its threshold, whereas this one is opt-in but fires on the quantity that does. The log line states explicitly that low headroom is not an accusation: headroom is shared (an unrelated gnome-shell held 12.55 GB on the measured host), and the daemon exits because it is the process that can come back cleanly, not because it is the culprit. |
+| `SOVEREIGN_HEADROOM_SOFT_MB` | max(4096, 15% of RAM) | guard | Warn threshold for HOST memory headroom (MemAvailable on Linux; free+inactive+purgeable on macOS), sampled by memory_watch beside the process-RSS limits. Added 2026-08-25 because the RSS hard limit could not fire on the host it guarded: the kernel killed the daemon at anon-rss 36.4 GiB against a 36.0 GiB steady state, with `=auto` resolving to ~108 GB — six OOM kills in 24h and the guard silent through every one (note 05cbffed). RSS is the wrong noun; the exhausted resource was GTT (GPU-mapped host memory), which RSS does not count. Warn-only and always on: saying 'the box is running out' costs nothing and is the signal that was missing. The 15% default is derived, not chosen — the pre-restart daemon sat at 19.1 GB MemAvailable on a 125 GB box (15.3%), which is the regime the kills happened in. |
+| `SOVEREIGN_USE_SUPERVISOR` | on | guard | Desktop kill-switch for supervised-child mode: `0`/`false` drops the daemon CHILD process and runs an in-process EmbeddedDaemon instead. Unset (and the redundant legacy `1`) means supervised child — the default since DAEMON_RESILIENCE P0.1, the W1 flip. It has nothing to do with distributed-inference workers, which is what this entry claimed until 2026-08-24. CONSTRUCTION-TIME since 2026-08-25 (TOPOLOGY Phase 10): read once by `sovereign_contracts::launch::DaemonHost::from_env`, published by the desktop's `main`, and never consulted at a point of use again. |
+
+## demo
+
+| flag | default | status | purpose |
+|---|---|---|---|
+| `SOVEREIGN_DEMO_DR_FLAGS` | unset (real flows are byte-identical) | guard | Appended verb flags for the desktop's `dr_start` spawn (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. The desktop remains a driver — every token passes the verb's own closed-set parsing and run-dir verification. Only the demo global-setup writes it; every real flow leaves it unset. |
+
 ## dev-gates
 
 | flag | default | status | purpose |
@@ -173,7 +188,6 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 | `SOVEREIGN_SEAT` | unset | shipped | Seat sessions only: makes the ambient notes read (inject-notes.py) pass include_operational=true, so seat coordination records are PRESENT instead of withheld (order seat-durable-rail UC-D4 inverse). Ordinary sessions never set it. |
 | `SOVEREIGN_SHARED_MODEL_HOST_NODE_ID` | unset | shipped | Distributed-inference host node id override. *(shadows `SetupConfig.shared_model.host_node_id`)* |
 | `SOVEREIGN_SHARED_MODEL_ID` | unset | shipped | Distributed-inference shared model id override (bootstrap.rs env-or-config). *(shadows `SetupConfig.shared_model.model_id`)* |
-| `SOVEREIGN_USE_SUPERVISOR` | unset | shipped | Route distributed-inference workers through the supervisor. |
 | `SOVEREIGN_WORKER_RUNNER` | unset | shipped | Distributed-inference worker runner selector. |
 
 ## notes-hook

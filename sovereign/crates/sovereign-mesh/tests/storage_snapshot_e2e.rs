@@ -33,8 +33,8 @@ use corpus_engine::index::{CorpusIndex, InsertChunk};
 use corpus_engine::{CorpusEngine, EmbedFn};
 use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::DaemonServices;
 mod common;
+use common::mesh_admin_services;
 
 const EMBED_DIM: usize = 8;
 
@@ -175,7 +175,7 @@ async fn snapshot_emits_nothing_when_no_corpus_engine_attached() {
     // on the engine field would silently produce empty snapshots
     // every hour.
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
+    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), mesh_admin_services());
     // Intentionally NO `set_corpus_engine` call.
     daemon
         .create_mesh("no-engine test", "node")

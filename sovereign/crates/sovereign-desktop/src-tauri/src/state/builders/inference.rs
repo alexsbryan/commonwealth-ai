@@ -80,7 +80,7 @@ pub(crate) async fn load_inference(
 
             // Canonical chat-slot ctx lives in `~/.svrnmesh/config.toml`'s
             // `[models].context_size` — already resolved into `slots`.
-            let effective_ctx = slots.context_size;
+            let windows = slots.windows;
 
             // If the GPU probe below forces a CPU fallback AND the configured
             // chat model is a recurrent arch that crashes ggml's CPU prefill,
@@ -105,7 +105,7 @@ pub(crate) async fn load_inference(
             if !env_force_cpu {
                 let smoke_gpu_layers =
                     sovereign_inference::hardware::HardwareProfile::detect().recommended_gpu_layers;
-                let smoke_ctx = effective_ctx.min(2048);
+                let smoke_ctx = windows.fast.min(2048);
                 if smoke_gpu_layers > 0
                     && crate::smoketest::cached_ok(&slots.fast, smoke_gpu_layers, smoke_ctx)
                 {
@@ -235,7 +235,7 @@ pub(crate) async fn load_inference(
                     primary_path,
                     embed_opt,
                     slots.code.as_deref(),
-                    effective_ctx,
+                    windows,
                     None,
                     ModelFamily::Unknown,        // fast slot
                     ModelFamily::Unknown,        // primary slot (lazy-loaded)
@@ -304,7 +304,7 @@ fn build_attach_provider(slots: &ResolvedModelSlots) -> Result<Arc<dyn Inference
     let setup = sovereign_core::setup_config::SetupConfig::load()
         .map_err(|e| format!("Attach mode: load SetupConfig for daemon routing: {e}"))?;
     let v1 = format!("http://127.0.0.1:{}/v1", setup.daemon.client_port);
-    let ctx = slots.context_size;
+    let ctx = slots.windows.primary;
 
     let stem = |p: &std::path::Path| p.file_stem().and_then(|s| s.to_str()).map(str::to_string);
     let chat_id = slots
@@ -366,7 +366,7 @@ mod tests {
             primary: None,
             embed: std::path::PathBuf::new(),
             code: None,
-            context_size: 16_384,
+            windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
         };
 
         let (raw, inference) = load_inference(&slot, None, &slots, &config, |_| {})

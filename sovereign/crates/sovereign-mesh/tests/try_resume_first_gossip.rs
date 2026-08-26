@@ -29,11 +29,13 @@
 //!    mesh members.** This is the integration-level confirmation that
 //!    the full state graph (mesh + members + join_key + node_id) all
 //!    came back coherent, not just one slice.
+mod common;
+use common::mesh_admin_services;
+
 use std::time::Duration;
 
 use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_core::setup_config::SetupConfig;
-use sovereign_mesh::DaemonServices;
 
 // Requires exclusive ownership of the daemon's bound ports
 // (`9741` / `9742` by default). When a local dev daemon is running
@@ -52,7 +54,7 @@ async fn try_resume_brings_back_persisted_mesh_and_serves_internal_http() {
 
     // Round 1: create the mesh, snapshot what we'll compare against.
     let (mesh_name, member_count_before, invite_before) = {
-        let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
+        let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), mesh_admin_services());
         daemon
             .create_mesh("resume-gossip test", "founder")
             .await
@@ -72,7 +74,7 @@ async fn try_resume_brings_back_persisted_mesh_and_serves_internal_http() {
 
     // Round 2: resume. The fresh daemon must bring back the same
     // mesh state AND immediately start serving internal HTTP.
-    let daemon = EmbeddedDaemon::new(data_dir, SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
+    let daemon = EmbeddedDaemon::new(data_dir, SetupConfig::unconfigured(), mesh_admin_services());
     let resumed = daemon
         .try_resume()
         .await
@@ -164,7 +166,7 @@ async fn try_resume_returns_false_on_clean_data_dir_without_error() {
     // started treating missing-file as Err would brick first-run
     // bootstrap (every fresh install would fail to start).
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), DaemonServices::MeshAdmin);
+    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), mesh_admin_services());
     let resumed = daemon
         .try_resume()
         .await

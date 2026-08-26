@@ -165,6 +165,18 @@ pub use narration::{
     NarrationEvent, NarrationPhase, NextStepOffer, OfferContext, ProposedAlternative,
     ResumeSession, RouterClassification, RoutingPolicy, RoutingTiming, TurnNarration,
 };
+// The client-facing projection of a persisted message's `metadata` blob.
+// Kept module-qualified rather than re-exported: it owns a `Provenance`
+// that is NOT `epistemic::Provenance` above, and two types of one name at
+// one path is the §10.6 smell this crate is supposed to prevent. Callers
+// write `projection::Provenance`, which says which one they mean.
+pub mod projection;
+// The turn protocol — what a client and a serving host say to each other
+// while one turn runs. Moved out of the `sovereign-server` BINARY on
+// 2026-08-25 (TOPOLOGY.md §10 phase 5b): a protocol private to a binary
+// crate is one no other process can speak.
+mod turn;
+pub use turn::{TurnFrame, TurnRequest};
 
 // ─── Plan Types ────────────────────────────────────────────────
 

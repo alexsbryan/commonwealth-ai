@@ -7,7 +7,7 @@
 //! "retrieved_chunks": [{title, corpus_id, url, snippet, score,
 //! chunk_id, source_doc_id}], ...}` (see
 //! `sovereign_core::runtime` streaming + synthesis persistence sites and
-//! `sovereign_core::types::ResponseProvenance`).
+//! [`crate::types::ResponseProvenance`]).
 //!
 //! The REST + WebSocket surfaces project that blob into a stable shape
 //! matching the mobile data model (`MOBILE.md` → `RESPONSE_PROVENANCE`
@@ -21,69 +21,71 @@
 //! all (e.g. a user message) does the same. Callers must treat both
 //! fields as optional.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 /// Client-facing provenance — the spec's `RESPONSE_PROVENANCE`.
 ///
-/// A reduction of `sovereign_core::types::ResponseProvenance`: the
+/// A reduction of [`crate::types::ResponseProvenance`]: the
 /// fields the thin client needs to *show the work ran on the host/mesh*
 /// (acceptance criterion 5), plus the per-corpus `sources` the routing
 /// footer renders. Richer desktop-only fields (token budgets, finish
 /// reason, context window) are intentionally dropped here — the desktop
 /// reads the raw blob directly; the mobile contract is this subset.
 ///
-/// NOT `sovereign_contracts::types::epistemic::Provenance`, which is the
+/// NOT [`crate::types::epistemic::Provenance`], which is the
 /// evidence-BASIS enum (Corpus/Memory/…); this is the mobile projection of
 /// `ResponseProvenance` described above.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Provenance {
     /// Model + serving node, e.g. `"Qwen3.5-9B.Q8_0 @ peer mac-peer"`.
     /// Maps from `ResponseProvenance.inference_backend`.
     pub inference_backend: String,
     /// Coarse routing tier / intent label (e.g. `"KnowledgeQuery"`).
     /// Prefers `coarse_intent`, falling back to `intent`.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub routing_tier: Option<String>,
     /// Time-to-first-token (ms). `None` today — the runtime does not
     /// yet stamp TTFT on the persisted provenance (documented gap;
     /// populated once the streaming path captures it).
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ttft_ms: Option<u64>,
     /// Total turn latency (ms). Maps from `total_latency_ms`.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub total_ms: Option<u64>,
     /// OpenAI-style finish reason ("stop", "length", "error", …). The
     /// mobile cutoff affordance keys on `"length"` to show the
     /// "response was cut off" chip + Continue button. Dropped from the
     /// "desktop-only" exclusion above precisely because the thin client
     /// has no other way to know the answer was truncated.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub finish_reason: Option<String>,
     /// `max_tokens` budget the turn ran under — lets the cutoff chip
     /// say "hit the N-token limit". Maps from `max_tokens_budget`.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_tokens_budget: Option<u64>,
     /// Completion tokens generated (provider-reported or estimated).
     /// Maps from `completion_tokens`.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub completion_tokens: Option<u64>,
     /// Per-corpus retrieval origins (origin + count [+ peer]). Lets the
     /// client render "From <corpus> (N)" without re-deriving it from
     /// the citation list.
-    #[serde(skip_serializing_if = "Vec::is_empty")]
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<ProvenanceSource>,
 }
 
 /// One retrieval origin within [`Provenance::sources`]. Mirrors the
-/// load-bearing fields of `sovereign_core::types::SourceSummary`.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+/// load-bearing fields of [`crate::types::SourceSummary`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvenanceSource {
+    /// Corpus this slice of the retrieval came from (e.g. `"sep"`).
     pub origin: String,
+    /// How many retrieved chunks it contributed.
     pub count: u64,
     /// Human-readable peer name when this corpus's hits were served by
     /// a mesh peer (e.g. `"mac-peer"`); `None` for locally-hosted.
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub from_peer: Option<String>,
 }
 
@@ -96,13 +98,18 @@ pub struct ProvenanceSource {
 /// must carry both a non-empty `corpus_id` and a non-empty `chunk_id`.
 /// Web-fetch results (which carry a `url` but no corpus handle) are not
 /// emitted here — they are not citations into an installed corpus.
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Citation {
+    /// Installed corpus the chunk belongs to.
     pub corpus_id: String,
+    /// Handle for the chunk within that corpus.
     pub chunk_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    /// Document title, when the chunk carries one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub title: Option<String>,
+    /// The quoted text the client renders on tap.
     pub snippet: String,
+    /// Retrieval score as the host ranked it.
     pub score: f64,
     /// 0-based retrieval rank — the chunk's position in the runtime's
     /// scored `retrieved_chunks` list (preserved even when earlier
@@ -130,7 +137,7 @@ pub fn project_message_metadata(meta: &Option<Value>) -> (Option<Provenance>, Ve
 /// the wire gap so the ledger reaches the REST + WS surfaces.
 pub fn project_epistemic_state(
     meta: &Option<Value>,
-) -> Option<sovereign_core::types::EpistemicState> {
+) -> Option<crate::types::epistemic::EpistemicState> {
     let es = meta.as_ref()?.get("epistemic_state")?;
     if es.is_null() {
         return None;
@@ -378,7 +385,7 @@ mod tests {
         let ledger = project_epistemic_state(&Some(meta)).expect("ledger present");
         assert_eq!(ledger.version, 1);
         assert_eq!(ledger.holdings.len(), 1);
-        assert_eq!(ledger.verdict, sovereign_core::types::TurnVerdict::Grounded);
+        assert_eq!(ledger.verdict, crate::types::TurnVerdict::Grounded);
     }
 
     #[test]

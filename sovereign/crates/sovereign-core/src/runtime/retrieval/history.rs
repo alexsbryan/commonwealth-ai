@@ -893,11 +893,34 @@ mod tests {
         )
     }
 
+    /// Same rig, with a routing-event sink installed. Since Phase 5 collapsed
+    /// the builder surface a sink is a FIELD, so it is chosen here rather than
+    /// chained on afterwards.
+    fn runtime_with_events(
+        inference: Arc<CountingEmbed>,
+        events: Arc<dyn crate::traits::RoutingEventSink>,
+    ) -> Runtime {
+        Runtime::new(crate::runtime::RuntimeParts {
+            routing_events: events,
+            ..parts_for(
+                inference,
+                Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+            )
+        })
+    }
+
     fn runtime_with_store(
         inference: Arc<CountingEmbed>,
         store: Arc<sovereign_store::memory::InMemoryStateStore>,
     ) -> Runtime {
-        Runtime::new(
+        Runtime::new(parts_for(inference, store))
+    }
+
+    fn parts_for(
+        inference: Arc<CountingEmbed>,
+        store: Arc<sovereign_store::memory::InMemoryStateStore>,
+    ) -> crate::runtime::RuntimeParts {
+        crate::runtime::RuntimeParts::new(
             inference,
             Box::new(crate::stubs::PassthroughRouter),
             Box::new(crate::stubs::NoOpPlanner),
@@ -1002,8 +1025,10 @@ mod tests {
     async fn recall_emits_a_narration_chip_naming_the_turns() {
         let inference = Arc::new(CountingEmbed::new());
         let events = Arc::new(RecordingEvents::default());
-        let runtime = runtime_with(Arc::clone(&inference))
-            .with_routing_events(Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>);
+        let runtime = runtime_with_events(
+            Arc::clone(&inference),
+            Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>,
+        );
 
         let mut ctx = context_with_turns(12);
         runtime
@@ -1051,8 +1076,10 @@ mod tests {
     async fn recall_without_a_session_still_retrieves_but_stays_silent() {
         let inference = Arc::new(CountingEmbed::new());
         let events = Arc::new(RecordingEvents::default());
-        let runtime = runtime_with(Arc::clone(&inference))
-            .with_routing_events(Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>);
+        let runtime = runtime_with_events(
+            Arc::clone(&inference),
+            Arc::clone(&events) as Arc<dyn crate::traits::RoutingEventSink>,
+        );
 
         let mut ctx = context_with_turns(12);
         runtime

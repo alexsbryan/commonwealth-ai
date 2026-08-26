@@ -54,6 +54,11 @@ sovereign-gliner = { workspace = true }
 sovereign-workflow = { workspace = true }
 sovereign-workflow-host = { workspace = true }
 sovereign-mesh = { workspace = true, features = ["treesitter"] }
+# THE `Runtime` recipe (TOPOLOGY.md §10 phase 5c). `chat_cmd::bootstrap`
+# carried its own ~450-line copy of it until 2026-08-25; what remains here
+# is only what this host resolves — which daemon, which models, which data
+# root. Capabilities layer — down.
+sovereign-runtime-recipe = { workspace = true }
 sovereign-pipeline = { workspace = true }
 sovereign-work-atlas = { workspace = true }
 # `recipe test` renders the deterministic authoring ladder. It reaches the

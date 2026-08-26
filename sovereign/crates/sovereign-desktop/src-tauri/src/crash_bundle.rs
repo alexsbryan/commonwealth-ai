@@ -508,6 +508,7 @@ mod tests {
                 embed: "/home/alex/.sovereign/models/embed.gguf".into(),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 max_extras_memory_gb: None,
                 extra: BTreeMap::new(),
                 primary_pool: None,

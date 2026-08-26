@@ -181,6 +181,60 @@ impl Default for InferenceConfig {
     }
 }
 
+/// The window each slot is built with — one value, named per slot.
+///
+/// # Why this is a struct and not a scalar
+///
+/// It WAS a scalar. `context_size: u32` was threaded from config into every
+/// `ModelSlot::load` in this file, so the fast slot, the primary, the primary
+/// sibling pool and the fast/primary alias all got the same number. KV cache
+/// is linear in `n_ctx`, so a 4B fast model carried a 27B primary's window and
+/// paid a 27B primary's cache for it.
+///
+/// The fix is not a second scalar parameter — that reintroduces the same
+/// question one slot later ("and what about embed?"). It is a value whose
+/// fields are the slots, so adding a slot means adding a field and the
+/// compiler asks every construction site what that slot's window should be.
+/// Same move as `LaneSources` and `RuntimeParts`: totality over a surface a
+/// caller could otherwise forget half of.
+///
+/// `FastShort` is deliberately absent. It already owns `FAST_SHORT_N_CTX` next
+/// to `FAST_SHORT_N_SEQ_MAX`, because its window is not a free choice — the
+/// two divide to give the per-sequence budget `pick_slot` gates on, so they
+/// have to move together and belong in one place.
+#[derive(Debug, Clone, Copy)]
+pub struct SlotWindows {
+    /// The primary (deep-reasoning) slot, and the default for embed / code /
+    /// extras.
+    pub primary: u32,
+    /// The fast slot. Note this is the OVERFLOW path — `pick_slot` sends any
+    /// prompt too large for FastShort here — so it must cover the largest
+    /// prompt that lands on it, not the typical one.
+    pub fast: u32,
+}
+
+impl SlotWindows {
+    /// Every slot gets the same window. This is what the scalar did, kept as a
+    /// NAMED constructor so the call sites that genuinely mean it (a compute
+    /// child, where one slot is the only slot) say so, and the ones that were
+    /// merely inheriting a global stop being indistinguishable from them.
+    pub fn uniform(n_ctx: u32) -> Self {
+        Self {
+            primary: n_ctx,
+            fast: n_ctx,
+        }
+    }
+
+    /// Resolve from config: the primary's window, and the fast slot's own if
+    /// `[models].fast_context_size` is set.
+    pub fn from_models(models: &sovereign_core::setup_config::ModelsSection) -> Self {
+        Self {
+            primary: models.effective_context_size(),
+            fast: models.effective_fast_context_size(),
+        }
+    }
+}
+
 /// Triple-slot inference provider wrapping llama.cpp via FFI.
 ///
 /// - **Fast slot**: always loaded, small model for classification and simple queries.
@@ -939,7 +993,10 @@ impl EmbeddedLlamaCpp {
             fast_model_path,
             primary_model_path,
             None,
-            context_size,
+            // A dual load has no separate fast budget to spend: both slots are
+            // this one model. `uniform` says that, where the bare scalar used
+            // to make it indistinguishable from a slot inheriting a global.
+            SlotWindows::uniform(context_size),
             gpu_layers,
         )
     }
@@ -951,7 +1008,7 @@ impl EmbeddedLlamaCpp {
         fast_model_path: &Path,
         primary_model_path: Option<&Path>,
         embed_model_path: Option<&Path>,
-        context_size: u32,
+        windows: SlotWindows,
         gpu_layers: Option<u32>,
     ) -> Result<Self> {
         Self::load_full_with_families(
@@ -959,7 +1016,7 @@ impl EmbeddedLlamaCpp {
             primary_model_path,
             embed_model_path,
             None,
-            context_size,
+            windows,
             gpu_layers,
             ModelFamily::Unknown,
             ModelFamily::Unknown,
@@ -984,7 +1041,7 @@ impl EmbeddedLlamaCpp {
         primary_model_path: Option<&Path>,
         embed_model_path: Option<&Path>,
         code_model_path: Option<&Path>,
-        context_size: u32,
+        windows: SlotWindows,
         gpu_layers: Option<u32>,
         fast_family: ModelFamily,
         primary_family: ModelFamily,
@@ -996,7 +1053,7 @@ impl EmbeddedLlamaCpp {
             primary_model_path,
             embed_model_path,
             code_model_path,
-            context_size,
+            windows,
             gpu_layers,
             fast_family,
             primary_family,
@@ -1036,7 +1093,10 @@ impl EmbeddedLlamaCpp {
             None,
             None,
             None,
-            context_size,
+            // A compute child's one slot IS the only slot — there is no second
+            // window to size, and `uniform` is the honest name for that rather
+            // than an omission.
+            SlotWindows::uniform(context_size),
             gpu_layers,
             family,
             ModelFamily::Unknown,
@@ -1052,7 +1112,7 @@ impl EmbeddedLlamaCpp {
         primary_model_path: Option<&Path>,
         embed_model_path: Option<&Path>,
         code_model_path: Option<&Path>,
-        context_size: u32,
+        windows: SlotWindows,
         gpu_layers: Option<u32>,
         fast_family: ModelFamily,
         primary_family: ModelFamily,
@@ -1060,6 +1120,12 @@ impl EmbeddedLlamaCpp {
         code_family: ModelFamily,
         only_slot_distributable: bool,
     ) -> Result<Self> {
+        // Unpacked once, at the top, so every `ModelSlot::load` below names
+        // WHICH window it is spending rather than reading one ambient scalar.
+        let SlotWindows {
+            primary: context_size,
+            fast: fast_context_size,
+        } = windows;
         let hardware = HardwareProfile::detect();
         // GPU offload layer count. Precedence: explicit config > env override
         // > hardware default (999 when a GPU is detected, else 0).
@@ -1107,15 +1173,7 @@ impl EmbeddedLlamaCpp {
         // instrument. Honour the var so it means what upstream says it means.
         // An explicit `SOVEREIGN_LLAMA_LOGS=0` still wins: asking for silence
         // is unambiguous, and should not be overridden by a debug var.
-        let llama_logs = std::env::var("SOVEREIGN_LLAMA_LOGS").ok();
-        match llama_logs.as_deref() {
-            Some("0") => backend.void_logs(),
-            Some("1") => crate::llama::install_log_tracing(),
-            _ if std::env::var_os("GGML_RPC_DEBUG").is_some() => {
-                crate::llama::install_log_tracing();
-            }
-            _ => crate::llama::install_log_tracing_errors_only(),
-        }
+        crate::llama_logs::LlamaLogs::from_env().install(&mut backend);
         let backend = Arc::new(backend);
 
         // Distributable mesh worker: if SOVEREIGN_RPC_SERVE is set, expose this
@@ -1148,9 +1206,12 @@ impl EmbeddedLlamaCpp {
 
         tracing::info!(slot = "fast", family = ?fast_family, "loading slot");
         let fast = Arc::new(ModelSlot::load(
+            "fast",
             &backend,
             fast_model_path,
-            context_size,
+            // The fast slot's OWN window. Identical to the primary's unless
+            // `[models].fast_context_size` says otherwise — see `SlotWindows`.
+            fast_context_size,
             n_gpu_layers,
             // The fast slot stays local — never distributed across the mesh —
             // EXCEPT in a compute child loaded via `load_single_distributed`,
@@ -1255,6 +1316,7 @@ impl EmbeddedLlamaCpp {
                 );
             }
             match ModelSlot::from_existing_model(
+                "fast_short",
                 &backend,
                 Arc::clone(&fast.model),
                 fast.model_id.clone(),
@@ -1368,7 +1430,7 @@ impl EmbeddedLlamaCpp {
             // resident copy, N contexts) — incoherent with distribution, which
             // splits the weights across remote workers. Keep it local.
             let primary_0 =
-                ModelSlot::load(&backend, primary_path, context_size, n_gpu_layers, false)?;
+                ModelSlot::load("primary", &backend, primary_path, context_size, n_gpu_layers, false)?;
             let shared_model = Arc::clone(&primary_0.model);
             let shared_id = primary_0.model_id.clone();
             let shared_size = primary_0.size_bytes;
@@ -1376,6 +1438,7 @@ impl EmbeddedLlamaCpp {
             slots.push(Arc::new(primary_0));
             for i in 1..n {
                 let sibling = ModelSlot::from_existing_model(
+                    "primary_sibling",
                     &backend,
                     Arc::clone(&shared_model),
                     shared_id.clone(),
@@ -1433,6 +1496,7 @@ impl EmbeddedLlamaCpp {
                     "fast and primary share a GGUF; aliasing primary slot to fast's loaded weights (one VRAM copy, separate KV)"
                 );
                 match ModelSlot::from_existing_model(
+                    "primary_alias",
                     &backend,
                     Arc::clone(&fast.model),
                     fast.model_id.clone(),
@@ -1545,6 +1609,7 @@ impl EmbeddedLlamaCpp {
                 "loading extras slot"
             );
             match ModelSlot::load(
+                "primary",
                 &self.primary_backend,
                 &path,
                 context_size,
@@ -1866,6 +1931,7 @@ impl EmbeddedLlamaCpp {
         }
 
         let slot = ModelSlot::load(
+            "extra",
             &self.primary_backend,
             &path,
             context_size,
@@ -2593,7 +2659,7 @@ impl EmbeddedLlamaCpp {
             // enumeration includes the just-registered RPC worker(s).
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
+            let s = ModelSlot::load("primary", &backend, &target_path, ctx_size, gpu_layers, distributable)?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(
@@ -3090,6 +3156,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                         }
                         *primary = None;
                         let s = ModelSlot::load(
+                            "primary",
                             &backend,
                             &target_path,
                             ctx_size,
@@ -3512,6 +3579,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
                     *primary = None;
                     *loaded = None;
                     match ModelSlot::load(
+                        "primary",
                         &backend,
                         &target_path,
                         ctx_size,
@@ -3945,7 +4013,7 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // path runs on hot-swap.
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load(&backend, &target_path, ctx_size, gpu_layers, distributable)?;
+            let s = ModelSlot::load("primary", &backend, &target_path, ctx_size, gpu_layers, distributable)?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(

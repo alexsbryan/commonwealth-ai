@@ -493,17 +493,23 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // Safe to open unconditionally because of Phase 1: `RunLock` above is
     // keyed on THIS data root, so at most one process is writing this file.
     let state_db_path = data_dir.join("sovereign.db");
-    let state_store: Arc<dyn sovereign_core::traits::StateStore> =
-        match sovereign_store::sqlite::SqliteStateStore::open(&state_db_path) {
-            Ok(s) => Arc::new(s),
-            Err(e) => {
-                eprintln!(
-                    "error: cannot open state db {}: {e}",
-                    state_db_path.display()
-                );
-                return 1;
-            }
-        };
+    // The CONCRETE handle is kept as well as the trait object: the same
+    // `SqliteStateStore` is also the `ConvTieredReader` the turn's enrichment
+    // lane reads briefings through (spec CONV_TIERED_PORT.md), and that view
+    // is not reachable from `dyn StateStore`. One open, two views — never two
+    // opens (TOPOLOGY phase 1: one writer per data root).
+    let state_store_concrete = match sovereign_store::sqlite::SqliteStateStore::open(&state_db_path)
+    {
+        Ok(s) => Arc::new(s),
+        Err(e) => {
+            eprintln!(
+                "error: cannot open state db {}: {e}",
+                state_db_path.display()
+            );
+            return 1;
+        }
+    };
+    let state_store: Arc<dyn sovereign_core::traits::StateStore> = state_store_concrete.clone();
 
     let notes_path = data_dir.join("notes.db");
     let notes_store = match NoteStore::open(&notes_path) {
@@ -715,7 +721,7 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // it as a `GlinerFn` adapter without re-loading the model.
     let (gliner_raw, chunk_entity_extractor) = bootstrap::load_gliner_extractor(&data_dir);
 
-    let engine: Arc<CorpusEngine> = bootstrap::build_corpus_engine(
+    let (engine, embed_model_id): (Arc<CorpusEngine>, String) = bootstrap::build_corpus_engine(
         &data_dir,
         Arc::clone(&provider),
         Arc::clone(&notes_store),
@@ -867,6 +873,73 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     )
     .await;
 
+    // ── The daemon commissions the ONE Runtime ────────────────────────────
+    //
+    // `quality/TOPOLOGY.md` §3.5: "DAEMON — the only process that assembles a
+    // Runtime". Until now `sovereign daemon run` held every ingredient — the
+    // corpus engine, the state store, the routed inference provider — and no
+    // thing that ANSWERS, so a turn could only be served by a host that had
+    // built its own `Runtime` around its own copy of the recipe. That is what
+    // made "the daemon serves the turn" impossible to state in the type.
+    //
+    // The recipe is `sovereign-runtime-recipe`, the same one `svrn chat` uses,
+    // so the daemon cannot acquire a private dialect of the retrieval stack.
+    // Two host inputs differ from the CLI's and both are decisions, not
+    // defaults:
+    //
+    //   * `shell: Withheld` — §10 "Decisions taken" 1. Shell execution does
+    //     not move into a long-lived daemon running as a different user with a
+    //     different cwd.
+    //   * `mesh_knowledge` left at the recipe's `None`. §3.5 lists it among
+    //     the five capabilities that leave the Runtime entirely: the client
+    //     posts to `127.0.0.1:9741/v1/knowledge/search`, which INSIDE this
+    //     process is a loopback call to itself.
+    let common = sovereign_runtime_recipe::common_parts(
+        sovereign_runtime_recipe::RecipeInputs {
+            inference: Arc::clone(&routed_provider),
+            store: Arc::clone(&state_store),
+            conv_tiered: Some(Arc::clone(&state_store_concrete)
+                as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
+            corpus_engine: Arc::clone(&engine),
+            note_store: Some(Arc::clone(&notes_store)),
+            // No workspace skills on the daemon: skill activation is a surface
+            // concern (a conversation is tagged by the surface that created
+            // it) and the daemon serves every surface. Empty is the same
+            // registry `svrn chat` passes.
+            skills: Arc::new(sovereign_core::SkillRegistry::new()),
+            // Approvals are out of scope for v1 of the turn protocol — the
+            // same posture `sovereign-server` ships. `TurnRequest::Approve`
+            // exists on the wire; routing it to a daemon-side session owner is
+            // Phase 5's remaining work (hazard 12).
+            approval: Arc::new(sovereign_core::executor::AutoApprovalChannel),
+            inference_config: sovereign_core::types::InferenceConfig::default(),
+            indexes_dir: data_dir.join("indexes"),
+            // Derived ONCE, by the corpus-engine builder, and handed here —
+            // see `build_corpus_engine`. The atlas embedding cache keys on it.
+            embed_model: embed_model_id.clone(),
+            shell: sovereign_runtime_recipe::ShellAccess::Withheld,
+            // A service must reach `listening` promptly. The meta-atlas is a
+            // ~1 GB JSON parse (981 MB on the authoring host) and blocking
+            // boot on it is a daemon that looks hung to `svrn daemon start`;
+            // the desktop reached the same conclusion in 2026-06 and has
+            // warmed it in the background ever since.
+            warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
+            // `build::inference::load_provider` above already installed a
+            // rerank slot INSIDE the embedded engine from the same
+            // `SOVEREIGN_RERANK_MODEL_PATH`. A standalone one here would put
+            // the same GGUF in this process twice, and the VRAM pre-flight
+            // would not catch it — it plans one rerank slot.
+            rerank: sovereign_runtime_recipe::RerankWiring::AlreadyInProvider,
+        },
+        &sovereign_runtime_recipe::TracingProgress,
+    )
+    .await;
+    let runtime = sovereign_runtime_recipe::commission(common.parts);
+    tracing::info!(
+        tools = runtime.tools.count(),
+        "daemon: Runtime commissioned — this process can serve a turn"
+    );
+
     // ── Commission, through THE assembler ─────────────────────────────
     //
     // This bootstrap no longer names its own variant. It hands its parts to
@@ -888,6 +961,9 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                     // opened at the top of this function. `reading_http` now
                     // resolves conversation titles on this variant too.
                     state_store: Arc::clone(&state_store),
+                    // Phase 5c: the thing that answers. Commissioned just
+                    // above, from the one shared recipe.
+                    runtime: Arc::clone(&runtime),
                 },
                 capability: sovereign_mesh::ServingCapability {
                     mcp: bootstrap::build_mcp_surface(tools, Arc::clone(&notes_store)),

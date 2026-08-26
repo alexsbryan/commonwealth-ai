@@ -1193,6 +1193,11 @@ impl ModelSlot {
     }
 
     pub(crate) fn load(
+        // Which slot this context IS — "fast", "primary", "embed", …
+        // FIRST and required, rather than derived: the KV budget line is only
+        // useful if it says which context spent the memory, and a constructor
+        // cannot work that out from a path when two slots share one gguf.
+        slot: &'static str,
         backend: &Arc<LlamaBackend>,
         model_path: &Path,
         context_size: u32,
@@ -1835,6 +1840,10 @@ impl ModelSlot {
             file_size
         };
 
+        // Price this context against the window it was actually built with.
+        // The daemon's total KV is the sum of these lines — see `kv_budget`.
+        crate::embedded::kv_budget::trace_kv_footprint(&model, slot, context_size);
+
         Ok(Self {
             model: model.clone(),
             context: Mutex::new(SlotContext {
@@ -1874,6 +1883,8 @@ impl ModelSlot {
     /// Phase 1b prompt overhead; the overflow tail falls through to
     /// the FastLong claim via OICP-v0.3 §2.4 hard gates.
     pub(crate) fn from_existing_model(
+        // Which slot this sibling context IS. See `ModelSlot::load`.
+        slot: &'static str,
         backend: &Arc<LlamaBackend>,
         model: Arc<LlamaModel>,
         model_id: String,
@@ -1988,6 +1999,11 @@ impl ModelSlot {
             },
             capabilities::Provenance::Unknown,
         );
+        // Sibling contexts share WEIGHTS but each carries its OWN KV cache, so
+        // each one is priced separately. This is the line that makes "the 4B
+        // carries two contexts" a number instead of an inference.
+        crate::embedded::kv_budget::trace_kv_footprint(&model, slot, context_size);
+
         Ok(Self {
             model: Arc::clone(&model),
             context: Mutex::new(SlotContext {

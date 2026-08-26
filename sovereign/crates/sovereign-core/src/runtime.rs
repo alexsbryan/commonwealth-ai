@@ -224,6 +224,12 @@ mod retrieval_helpers;
 /// (two `sovereign_core` identities). Not a supported external API.
 #[doc(hidden)]
 pub mod retrieval_pipeline;
+/// Serving one turn — drive the stream, forward the narration, emit the
+/// terminal metadata frame (`TOPOLOGY.md §10` phase 5c). The one place
+/// that turns a `Runtime` into `TurnFrame`s, so a host does not have to be
+/// in the same process as the store to learn what a turn concluded.
+pub mod serve;
+pub use serve::{message_metadata, serve_turn, TurnSink};
 /// G4 — the per-turn stage attribution ledger
 /// (`NATIVE_GROUNDING_ECONOMY.md` §3.4, §9 Phase 1). Measurement and
 /// reporting only; nothing in the runtime branches on it.
@@ -396,6 +402,122 @@ pub struct Runtime {
     pub lane_sources: lane::LaneSources,
 }
 
+/// Everything a host supplies to commission a [`Runtime`] — total, by
+/// construction.
+///
+/// # The split brain this replaces
+///
+/// Measured 2026-08-25 across the three live commissioning sites (desktop
+/// `state.rs`, server `main.rs`, `svrn chat` `bootstrap.rs`), the builder
+/// surface was used like this:
+///
+/// | slot | desktop | server | chat |
+/// |---|---|---|---|
+/// | `corpus_engine` | yes | yes | yes |
+/// | `routing_events` | yes | yes | **no** |
+/// | `note_store` | conditional | conditional | conditional |
+/// | `landscape_digests` | conditional | conditional | **no** |
+/// | `mesh_knowledge` | conditional | **no** | conditional |
+/// | `compaction` | yes | **no** | **no** |
+/// | `sensitive_corpora` | conditional | **no** | **no** |
+/// | `folder_metadata` | conditional | **no** | **no** |
+/// | `corpus_principal` | **no** | yes | **no** |
+/// | `sessions` | **no** | **no** | **no** |
+///
+/// Only one row is common to all three. Every **no** was indistinguishable
+/// from an oversight, because a builder chain records a call and records
+/// nothing at all about a call not made. Here each is a field the host must
+/// write, so "this host has no folder metadata" and "this host forgot folder
+/// metadata" stop being the same text.
+///
+/// `sessions` is the one row no host sets at all — its only caller anywhere is
+/// a single test that needs the narration threshold wound to zero. It kept a
+/// field rather than being deleted so that fact is written down instead of
+/// rediscovered; a builder nobody called said nothing about why.
+///
+/// # Two things this does NOT yet fix, stated rather than implied
+///
+/// - `corpus_engine` is `Option` here even though all three hosts supply one
+///   unconditionally, so §3.5 is right that it "was never optional". Making
+///   the *field* non-optional means giving every test harness a real engine,
+///   which is a separate change; naming the absence is what this one buys.
+/// - `sensitive_corpora: None` still means "no sensitivity gate applied, all
+///   corpora eligible" — a privacy control whose absence is permissive, which
+///   §3.5 flags as §7 inverted. A host must now write the `None`, so the
+///   choice is at least visible at the call site. The semantics are unchanged
+///   and still wrong.
+pub struct RuntimeParts {
+    pub inference: Arc<dyn InferenceProvider>,
+    pub router: Box<dyn Router>,
+    pub planner: Box<dyn Planner>,
+    pub tools: Arc<ToolRegistry>,
+    pub store: Arc<dyn StateStore>,
+    pub skills: Arc<SkillRegistry>,
+    pub approval: Arc<dyn ApprovalChannel>,
+    pub inference_config: InferenceConfig,
+    /// The turn's enrichment stack, in one value (Phase 4b).
+    pub lane: lane::LaneSources,
+    pub corpus_engine: Option<Arc<corpus_engine::CorpusEngine>>,
+    pub note_store: Option<Arc<corpus_engine_notes::NoteStore>>,
+    pub compaction: Option<Arc<crate::memory_compaction::CompactionWorker>>,
+    pub mesh_knowledge: Option<Arc<dyn crate::traits::MeshKnowledgeSource>>,
+    pub landscape_digests: Option<Arc<dyn crate::traits::LandscapeDigestProvider>>,
+    pub sensitive_corpora: Option<Arc<dyn crate::traits::SensitiveCorpusOracle>>,
+    pub corpus_principal: Option<Arc<dyn crate::traits::PrincipalResolver>>,
+    pub folder_metadata: Option<Arc<dyn crate::traits::FolderMetadataOracle>>,
+    /// Where narration, interpretation and clarification go. Not an `Option`:
+    /// a host that wants none writes `Arc::new(NoOpRoutingEventSink)` and says
+    /// so. `svrn chat` silently had no sink for the whole life of the builder
+    /// surface, which is why this is the one absence that must be typed out.
+    pub routing_events: Arc<dyn RoutingEventSink>,
+    /// Per-conversation session table. `None` ⇒ the `Runtime` makes its own,
+    /// which is what every host does — **no host sets this**. It is a field
+    /// rather than a deleted builder because one test needs a store with the
+    /// narration threshold wound down to zero, and a testing seam named in the
+    /// shape is honest where a builder nobody called was not.
+    pub sessions: Option<SharedSessionStore>,
+}
+
+impl RuntimeParts {
+    /// The nine slots every host must resolve, with the nine optional ones set
+    /// to named absence. Hosts override what they have with struct-update
+    /// syntax, so the overrides read as a diff against this baseline.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        inference: Arc<dyn InferenceProvider>,
+        router: Box<dyn Router>,
+        planner: Box<dyn Planner>,
+        tools: Arc<ToolRegistry>,
+        store: Arc<dyn StateStore>,
+        skills: Arc<SkillRegistry>,
+        approval: Arc<dyn ApprovalChannel>,
+        inference_config: InferenceConfig,
+        lane: lane::LaneSources,
+    ) -> Self {
+        Self {
+            inference,
+            router,
+            planner,
+            tools,
+            store,
+            skills,
+            approval,
+            inference_config,
+            lane,
+            corpus_engine: None,
+            note_store: None,
+            compaction: None,
+            mesh_knowledge: None,
+            landscape_digests: None,
+            sensitive_corpora: None,
+            corpus_principal: None,
+            folder_metadata: None,
+            routing_events: Arc::new(NoOpRoutingEventSink),
+            sessions: None,
+        }
+    }
+}
+
 impl Runtime {
     /// Resolve the active-mode skill id for a conversation.
     ///
@@ -469,20 +591,55 @@ impl Runtime {
         prompt_budget::allocate(self.last_assembly(conversation_id).as_ref())
     }
 
-    pub fn new(
-        inference: Arc<dyn InferenceProvider>,
-        router: Box<dyn Router>,
-        planner: Box<dyn Planner>,
-        tools: Arc<ToolRegistry>,
-        store: Arc<dyn StateStore>,
-        skills: Arc<SkillRegistry>,
-        approval: Arc<dyn ApprovalChannel>,
-        inference_config: InferenceConfig,
-        // REQUIRED, not a builder. See [`Runtime::lane`] and the field docs:
-        // eight `with_*` calls a host could forget became one value a host
-        // must name.
-        lane: lane::LaneSources,
-    ) -> Self {
+    /// Commission a `Runtime` from ONE total value.
+    ///
+    /// # Why there are no builders
+    ///
+    /// Phase 4b (2026-08-25) folded the eight enrichment builders into a
+    /// required [`lane::LaneSources`] after measuring that a builder cannot
+    /// enforce installation. The measurement's headline was not hypothetical:
+    /// for months only `svrn chat` called `with_rerank`, while the ledger
+    /// reported the reranker available on all three hosts.
+    ///
+    /// The remaining ten builders had exactly the same defect and it showed up
+    /// as a THREE-WAY SPLIT BRAIN. Measured across the three live hosts on
+    /// 2026-08-25, no two commissioned the same `Runtime`: the desktop called
+    /// eleven builders, the server five, `svrn chat` three, and only
+    /// `with_corpus_engine` was common to all three. Nothing in the type
+    /// system said which were host-specific policy and which were simply
+    /// forgotten, because a builder chain records neither.
+    ///
+    /// So the same move applies: every host-settable slot is a FIELD of
+    /// [`RuntimeParts`], named at the call site whether it is supplied or not.
+    /// The three hosts now differ in the DATA they write, which is diffable,
+    /// instead of in which methods they remembered to call, which was not.
+    ///
+    /// `install_meta_atlas` deliberately survives as the one `&self`
+    /// installer: the desktop's background index warm genuinely completes
+    /// after commissioning, and that is a real deferral rather than a
+    /// forgotten call.
+    pub fn new(parts: RuntimeParts) -> Self {
+        let RuntimeParts {
+            inference,
+            router,
+            planner,
+            tools,
+            store,
+            skills,
+            approval,
+            inference_config,
+            lane,
+            corpus_engine,
+            note_store,
+            compaction,
+            mesh_knowledge,
+            landscape_digests,
+            sensitive_corpora,
+            corpus_principal,
+            folder_metadata,
+            routing_events,
+            sessions,
+        } = parts;
         Self {
             inference,
             router,
@@ -492,20 +649,20 @@ impl Runtime {
             skills,
             approval,
             inference_config,
-            corpus_engine: None,
-            note_store: None,
+            corpus_engine,
+            note_store,
             assembly_memo: std::sync::RwLock::new(std::collections::HashMap::new()),
             history_unit_memo: std::sync::Mutex::new(std::collections::HashMap::new()),
             post_stream_preemption: collaboration::PostStreamPreemption::default(),
-            compaction: None,
-            mesh_knowledge: None,
-            landscape_digests: None,
-            sessions: Arc::new(SessionStore::new()),
+            compaction,
+            mesh_knowledge,
+            landscape_digests,
+            sessions: sessions.unwrap_or_else(|| Arc::new(SessionStore::new())),
             confidence_thresholds: ConfidenceThresholds::default(),
-            routing_events: Arc::new(NoOpRoutingEventSink),
-            sensitive_corpora: None,
-            corpus_principal: None,
-            folder_metadata: None,
+            routing_events,
+            sensitive_corpora,
+            corpus_principal,
+            folder_metadata,
             lane_sources: lane,
             recall_pins: std::sync::Mutex::new(std::collections::HashMap::new()),
             turn_provenance: Arc::new(std::sync::RwLock::new(HashMap::new())),
@@ -633,31 +790,6 @@ impl Runtime {
         guard.get(conversation_id).cloned()
     }
 
-    /// Test-only knob: replace the default `SessionStore` so a
-    /// suite can drive the runtime with a relaxed narration gate
-    /// (e.g. `Duration::ZERO` so an instant stubbed turn still
-    /// emits its `NarrationPhase` events). Production callers
-    /// inherit the `NARRATION_MIN_ELAPSED` const default from
-    /// [`SessionStore::new`].
-    pub fn with_session_store(mut self, sessions: SharedSessionStore) -> Self {
-        self.sessions = sessions;
-        self
-    }
-
-    /// Install a `RoutingEventSink` to receive interpretation,
-    /// clarification, and narration events. The desktop bootstrap
-    /// calls this with a `TauriRoutingEventSink`; headless harnesses
-    /// inherit the `NoOpRoutingEventSink` default from `new`.
-    pub fn with_routing_events(mut self, sink: Arc<dyn RoutingEventSink>) -> Self {
-        self.routing_events = sink;
-        self
-    }
-
-    pub fn with_corpus_engine(mut self, engine: Arc<corpus_engine::CorpusEngine>) -> Self {
-        self.corpus_engine = Some(engine);
-        self
-    }
-
 
     /// Attach the cross-corpus meta-atlas AFTER construction. Lets the
     /// desktop fire `backend-ready` fast and warm the ~900MB index in the
@@ -672,110 +804,6 @@ impl Runtime {
 
 
 
-    /// Install a note store for commitment persistence. Daemon bootstrap
-    /// wires this; CLI eval path leaves it `None`, in which case the
-    /// commissive handler degrades to a clear "no notes store wired"
-    /// reply rather than dropping the commitment silently.
-    pub fn with_note_store(mut self, store: Arc<corpus_engine_notes::NoteStore>) -> Self {
-        self.note_store = Some(store);
-        self
-    }
-
-    /// Install the rolling-summary compaction worker. The daemon
-    /// bootstrap constructs the worker via
-    /// [`crate::memory_compaction::CompactionWorker::spawn`] (which
-    /// starts the background drain task) and hands the resulting
-    /// `Arc` here. The CLI eval path leaves `None`; `end_conversation`
-    /// then skips the enqueue and the pre-compaction shape is
-    /// preserved exactly.
-    pub fn with_compaction(
-        mut self,
-        worker: Arc<crate::memory_compaction::CompactionWorker>,
-    ) -> Self {
-        self.compaction = Some(worker);
-        self
-    }
-
-
-    /// Install a `KnowledgeView` landscape-digest provider. Typically
-    /// the `sovereign-tools::knowledge_view::KnowledgeViewManager`,
-    /// constructed alongside the `StateStore` so the same `Arc` can
-    /// also be passed as a `StateStoreObserver`.
-    ///
-    /// Opt-in: leaving this `None` preserves the pre-KnowledgeView
-    /// behaviour exactly. Test harnesses that don't wire KnowledgeView
-    /// inherit the no-op.
-    pub fn with_landscape_digests(
-        mut self,
-        provider: Arc<dyn crate::traits::LandscapeDigestProvider>,
-    ) -> Self {
-        self.landscape_digests = Some(provider);
-        self
-    }
-
-    /// Install a sensitive-corpus oracle (folder-ingest v1 §3.4).
-    /// When wired, [`Runtime::search_corpus_indexes`] consults the
-    /// oracle for each ambient retrieval and drops any corpus the
-    /// oracle reports as sensitive *before* fanning out the search.
-    /// Leaving this `None` preserves the pre-v1 behaviour exactly
-    /// (no corpus is treated as sensitive).
-    ///
-    /// Per ARCH §7.4 (defence in depth), this is the runtime-side
-    /// layer of enforcement — sovereign-tools' `WatchedFolderConfig`
-    /// holds the flag, the on-disk state mirrors it, and the
-    /// runtime applies the structural exclusion at the assembly
-    /// seam. A failure at any single layer doesn't compromise the
-    /// invariant because the other layers still apply.
-    pub fn with_sensitive_corpora(
-        mut self,
-        oracle: Arc<dyn crate::traits::SensitiveCorpusOracle>,
-    ) -> Self {
-        self.sensitive_corpora = Some(oracle);
-        self
-    }
-
-    /// Install the principal resolver that scopes corpus retrieval per
-    /// principal on a multi-user hub (see [`crate::traits::PrincipalResolver`]).
-    /// Unset by default — single-user surfaces hide nothing.
-    pub fn with_corpus_principal(
-        mut self,
-        resolver: Arc<dyn crate::traits::PrincipalResolver>,
-    ) -> Self {
-        self.corpus_principal = Some(resolver);
-        self
-    }
-
-    /// Install the per-folder metadata oracle (Folder-ingest v1
-    /// §6.3 source attribution + coverage). The runtime uses the
-    /// snapshot to (a) replace `corpus_id`-as-label with the user's
-    /// typed display name in the prompt's `[Source: …]` headers
-    /// and (b) surface a "what I don't have" line when matched
-    /// folders carry many failed/skipped files.
-    ///
-    /// `None` (the default) preserves the pre-Phase-F behaviour
-    /// exactly, so test harnesses and the bare CLI path don't have
-    /// to wire sovereign-tools' `LocalCorpusManager` to keep
-    /// running.
-    pub fn with_folder_metadata(
-        mut self,
-        oracle: Arc<dyn crate::traits::FolderMetadataOracle>,
-    ) -> Self {
-        self.folder_metadata = Some(oracle);
-        self
-    }
-
-    /// Install a mesh-knowledge client. Only called when the desktop
-    /// has an `EmbeddedDaemon` actually running — tests and the
-    /// bare CLI path leave this `None`, in which case
-    /// `prepare_knowledge_context` behaves exactly as before
-    /// (local-only search, `search_method = "LocalOnly"`).
-    pub fn with_mesh_knowledge(
-        mut self,
-        mesh: Arc<dyn crate::traits::MeshKnowledgeSource>,
-    ) -> Self {
-        self.mesh_knowledge = Some(mesh);
-        self
-    }
 
     /// Spawn a background task that generates an auto-title for the
     /// conversation if one isn't already set. Non-blocking — failures are

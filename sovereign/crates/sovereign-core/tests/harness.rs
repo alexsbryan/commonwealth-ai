@@ -272,7 +272,7 @@ impl TestHarness {
         let approval: Arc<dyn sovereign_core::traits::ApprovalChannel> =
             Arc::new(AutoApprovalChannel);
 
-        let runtime = Runtime::new(
+        let runtime = Runtime::new(sovereign_core::RuntimeParts::new(
             inference,
             router,
             Box::new(planner),
@@ -284,7 +284,7 @@ impl TestHarness {
             // Phase 4b: enrichment is a required argument, not eight
             // forgettable builders.
             sovereign_core::runtime::lane::LaneSources::none(),
-        );
+        ));
 
         Self {
             runtime,
@@ -353,7 +353,7 @@ impl TestHarness {
         let mut config = sovereign_core::types::InferenceConfig::default();
         config.auto_collaborate = true;
 
-        let runtime = Runtime::new(
+        let runtime = Runtime::new(sovereign_core::RuntimeParts::new(
             inference,
             router,
             Box::new(planner),
@@ -365,7 +365,7 @@ impl TestHarness {
             // Phase 4b: enrichment is a required argument, not eight
             // forgettable builders.
             sovereign_core::runtime::lane::LaneSources::none(),
-        );
+        ));
 
         Self {
             runtime,

@@ -201,6 +201,12 @@ tempfile = "3"
 # a synthetic axum Request through the router without spinning up a
 # TcpListener. Same pattern as commonwealth's HTTP unit tests.
 tower = { workspace = true }
+# WebSocket client for the turn-surface falsifier (`tests/turn_surface.rs`).
+# Pinned at 0.29 to match `sovereign-server`'s, which is the version axum
+# 0.8 already pulls in — two versions of one transport in one workspace is
+# ARCH §8.2's smell, and this is a test-only dep on the SAME wire protocol
+# the server's `ws_streams_tokens_then_complete` drives.
+tokio-tungstenite = "0.29"
 # `tracing-subscriber` is used in integration tests (e.g.
 # `injection_order.rs`) to capture tracing events emitted by the
 # library under test and assert on them. Keeping it scoped to

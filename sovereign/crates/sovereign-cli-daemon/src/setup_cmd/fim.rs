@@ -486,6 +486,7 @@ fn write_config(plan: &Plan) -> Result<(), String> {
                 embed: plan.embed_path.clone(),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 extra: std::collections::BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,

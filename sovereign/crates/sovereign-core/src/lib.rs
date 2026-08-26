@@ -57,8 +57,8 @@ pub mod tool_loop;
 // observer, health, skills, intent_policy, mcp_config, setup_config, rebrand,
 // tool_manifest, tool_result_cache}` path so every existing importer is unaffected.
 pub use sovereign_contracts::{
-    error, health, intent_policy, mcp_config, observer, rebrand, registry, setup_config, skills,
-    slot_policy, tool_manifest, tool_result_cache, traits, types,
+    error, health, intent_policy, launch, mcp_config, observer, rebrand, registry, setup_config,
+    skills, slot_policy, tool_manifest, tool_result_cache, traits, types,
 };
 
 // Re-export commonly used items at the crate root.
@@ -75,7 +75,7 @@ pub use model_family::{
     RerankQuirks, ThinkingControl,
 };
 pub use registry::ToolRegistry;
-pub use runtime::Runtime;
+pub use runtime::{Runtime, RuntimeParts};
 pub use skills::SkillRegistry;
 pub use traits::*;
 pub use types::*;

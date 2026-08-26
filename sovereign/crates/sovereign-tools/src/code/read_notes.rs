@@ -76,19 +76,14 @@ fn resolve_workspace_root(explicit: Option<&std::path::Path>) -> Option<std::pat
     if let Some(p) = explicit {
         return Some(p.to_path_buf());
     }
-    if let Ok(env) = std::env::var("SOVEREIGN_WORKSPACE_DIR") {
-        if !env.is_empty() {
-            return Some(std::path::PathBuf::from(env));
-        }
-    }
-    if let Ok(home) = std::env::var("HOME") {
-        let f = std::path::PathBuf::from(&home).join(".svrnmesh/workspace");
-        if let Ok(content) = std::fs::read_to_string(&f) {
-            let p = std::path::PathBuf::from(content.trim());
-            if p.is_dir() {
-                return Some(p);
-            }
-        }
+    // The two CONFIGURED sources, resolved the daemon's way because there is
+    // now only one way (`sovereign_contracts::workspace`). This block used to
+    // re-derive them under a comment claiming it mirrored the daemon: it
+    // accepted an untrimmed `" "` as a workspace, returned paths that do not
+    // exist, and read `$HOME/.svrnmesh/workspace` directly — so on a host with
+    // a relocated root it read a DIFFERENT pin file than the daemon wrote.
+    if let Some(p) = sovereign_contracts::workspace::configured_workspace_dir() {
+        return Some(p);
     }
     if let Ok(cwd) = std::env::current_dir() {
         for dir in cwd.ancestors() {

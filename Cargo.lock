@@ -12123,6 +12123,7 @@ dependencies = [
  "sovereign-gliner",
  "sovereign-inference",
  "sovereign-mesh",
+ "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
@@ -12224,6 +12225,7 @@ dependencies = [
  "sovereign-mesh",
  "sovereign-meshapp",
  "sovereign-pipeline",
+ "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
  "sovereign-work-atlas",
@@ -12476,6 +12478,7 @@ dependencies = [
  "reqwest 0.12.28",
  "serde",
  "serde_json",
+ "sovereign-contracts",
  "sovereign-core",
  "sysinfo 0.34.2",
  "tempfile",
@@ -12534,6 +12537,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
+ "tokio-tungstenite",
  "tokio-util",
  "toml 0.8.2",
  "tower",
@@ -12594,6 +12598,20 @@ dependencies = [
  "tokio",
  "toml 0.8.2",
  "uuid",
+]
+
+[[package]]
+name = "sovereign-runtime-recipe"
+version = "0.5.0"
+dependencies = [
+ "corpus-engine",
+ "corpus-engine-notes",
+ "sovereign-core",
+ "sovereign-gliner",
+ "sovereign-inference",
+ "sovereign-tools",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]

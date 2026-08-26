@@ -113,7 +113,7 @@ fn build_runtime(
     let (approval_chan, _rx) = ServerApprovalChannel::new();
     let approval = Arc::new(approval_chan);
 
-    let runtime = Runtime::new(
+    let runtime = Runtime::new(sovereign_core::RuntimeParts::new(
         inference,
         router,
         Box::new(planner),
@@ -125,7 +125,7 @@ fn build_runtime(
         // Phase 4b: enrichment is a required argument, not eight
         // forgettable builders.
         sovereign_core::runtime::lane::LaneSources::none(),
-    );
+    ));
     (Arc::new(runtime), store_concrete, approval)
 }
 

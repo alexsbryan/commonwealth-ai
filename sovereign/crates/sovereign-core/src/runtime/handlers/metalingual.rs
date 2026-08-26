@@ -846,7 +846,7 @@ mod tests {
         inference: Arc<RecordingInference>,
         store: Arc<sovereign_store::memory::InMemoryStateStore>,
     ) -> Runtime {
-        Runtime::new(
+        Runtime::new(crate::runtime::RuntimeParts::new(
             inference,
             Box::new(crate::stubs::PassthroughRouter),
             Box::new(crate::stubs::NoOpPlanner),
@@ -858,7 +858,7 @@ mod tests {
             // Phase 4b: enrichment is a required argument, not eight
             // forgettable builders.
             crate::runtime::lane::LaneSources::none(),
-        )
+        ))
     }
 
     fn context_with(messages: Vec<Message>) -> ConversationContext {
