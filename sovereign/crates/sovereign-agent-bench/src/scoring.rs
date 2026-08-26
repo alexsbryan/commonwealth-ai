@@ -25,6 +25,21 @@ pub enum ScoreSource {
         auto_score: u8,
         judge_score: u8,
         coverage_mean: f64,
+        /// How far BELOW the auto floor the judge landed, when it did.
+        ///
+        /// The floor is authoritative and stays so — an executable
+        /// witness outranks an opinion about the same artifact. But the
+        /// judge's downward disagreement is not noise and discarding it
+        /// silently loses the only signal in this harness that can see
+        /// past the tests. Measured 2026-08-19: the judge lowered on
+        /// 13/43 banked dims (30.2%) against a same-model noise floor of
+        /// 6.4%, typically by 2 anchor steps where the observed noise
+        /// ceiling is 1 — and on `3.2-lights-out-python` it was right:
+        /// the rubric was the Rust sibling's, so its top anchors were
+        /// unsatisfiable while the witness scored 0.92 → 3.
+        ///
+        /// `None` when the judge met or exceeded the floor.
+        judge_dissent: Option<u8>,
     },
 }
 
@@ -250,6 +265,10 @@ pub fn dim_from_hybrid(auto_score: u8, judge: &MultiTrialOutcome) -> DimensionSc
             auto_score,
             judge_score: judge.majority_anchor,
             coverage_mean: judge.coverage_mean,
+            // Floored away from `raw`, but no longer thrown away.
+            judge_dissent: auto_score
+                .checked_sub(judge.majority_anchor)
+                .filter(|d| *d > 0),
         },
         anchor_majority: Some(judge.majority_anchor),
         anchor_per_trial: judge.trials.iter().map(|t| t.anchor).collect(),
@@ -312,6 +331,7 @@ mod tests {
         let trials = anchors
             .iter()
             .map(|a| JudgeTrialOutcome {
+                raw: String::new(),
                 anchor: *a,
                 rationale: String::new(),
             })
@@ -328,6 +348,31 @@ mod tests {
         let judge2 = outcome(&[3, 3, 3]);
         let d2 = dim_from_hybrid(1, &judge2);
         assert_eq!(d2.raw, 3, "judge must lift when higher");
+    }
+
+    #[test]
+    fn hybrid_records_judge_dissent_without_letting_it_lower_the_score() {
+        // The floor still wins the SCORE...
+        let d = dim_from_hybrid(3, &outcome(&[1, 1, 1]));
+        assert_eq!(d.raw, 3, "the executable witness stays authoritative");
+        // ...but the disagreement is on the record, not discarded.
+        match d.source {
+            ScoreSource::Hybrid { judge_dissent, .. } => assert_eq!(
+                judge_dissent,
+                Some(2),
+                "a 2-step downward disagreement must survive to the report"
+            ),
+            other => panic!("expected Hybrid, got {other:?}"),
+        }
+        // No dissent when the judge meets or clears the floor.
+        match dim_from_hybrid(1, &outcome(&[3, 3, 3])).source {
+            ScoreSource::Hybrid { judge_dissent, .. } => assert_eq!(judge_dissent, None),
+            other => panic!("expected Hybrid, got {other:?}"),
+        }
+        match dim_from_hybrid(2, &outcome(&[2, 2, 2])).source {
+            ScoreSource::Hybrid { judge_dissent, .. } => assert_eq!(judge_dissent, None),
+            other => panic!("expected Hybrid, got {other:?}"),
+        }
     }
 
     #[test]

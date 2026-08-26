@@ -111,10 +111,15 @@ mod tests {
     }
     #[async_trait]
     impl JudgeClient for StubClient {
+        fn model_name(&self) -> &str {
+            "stub"
+        }
+
         async fn judge(&self, _req: &JudgeRequest) -> Result<JudgeTrialOutcome, JudgeError> {
             let mut guard = self.anchors.lock().unwrap();
             let next = guard.remove(0);
             Ok(JudgeTrialOutcome {
+                raw: String::new(),
                 anchor: next,
                 rationale: format!("trial-anchor-{next}"),
             })

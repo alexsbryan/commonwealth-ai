@@ -663,22 +663,18 @@ pub async fn verify_grounding(
     // Cross-passage assembly is the known blind spot of per-chunk
     // checking; accepted for v1 (the bank's fabrications are
     // single-relation claims).
-    let claim_prompt = format!(
-        "A user asked: {}\n\nAn assistant answered:\n\"\"\"\n{}\n\"\"\"\n\n\
-         State the single central factual claim the assistant asserts as its answer, \
-         as one short standalone sentence that names BOTH sides of the relation \
-         (who/what is claimed to be/do what). Do not add qualifiers or sources.\n\
-         Reply with exactly NO_CLAIM if the assistant declined, said the information \
-         is not in its sources, or explicitly attributed the fact to general \
-         knowledge rather than the sources.",
-        question.chars().take(400).collect::<String>(),
-        answer.chars().take(2000).collect::<String>(),
-    );
+    // STEP 1'S REGISTER, rendered by the runtime gate's own code rather
+    // than by a copy of it — the same move step 2 (`chunk_judge_prompt`)
+    // already made. This was a duplicate literal in two crates and it had
+    // DIVERGED: production grew an `entity_anchored` branch while this
+    // copy kept the unanchored rule, so tau was calibrated on a prompt
+    // production does not send for entity-anchored turns (measured
+    // 2026-08-19). The bench critic judges unanchored, which is what it
+    // always did — but the string is now the one the gate ships.
+    let claim_prompt = sovereign_core::runtime::claim_extraction_prompt(question, answer, false);
     let claim_req = CompletionRequest {
         prompt: claim_prompt,
-        system_message: Some(
-            "You extract claims precisely. Reply with one sentence or NO_CLAIM.".into(),
-        ),
+        system_message: Some(sovereign_core::runtime::CLAIM_EXTRACTION_SYSTEM.into()),
         preferred_speed: Speed::Slow,
         max_tokens: Some(64),
         temperature: Some(0.0),

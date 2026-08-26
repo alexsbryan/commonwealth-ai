@@ -765,6 +765,19 @@ async fn run(rest: &[String]) -> i32 {
                 "id": q.id,
                 "qtype": q.qtype.label(),
                 "question": q.question,
+                // WHICH INSTRUMENT PRODUCED THIS ROW. The generator was
+                // already recoverable (`model_id` in the results file);
+                // the CRITIC was not, and `violation_prob` is the
+                // critic's output. Two runs of the same bank under
+                // different critics were indistinguishable in the bank
+                // and read as re-runs of one configuration (measured
+                // 2026-08-19: that misreading produced a wrong
+                // stability verdict before `model_id` was checked).
+                // The judge belongs in the key, exactly like the embed
+                // model — a vp is not comparable across critics.
+                "critic_model": args.critic_model,
+                "judge_model": args.judge_model,
+                "gv_threshold": args.gv_threshold,
                 "expected_action": format!("{:?}", q.qtype.expected_action()),
                 "agent_action": format!("{:?}", row.agent_action),
                 "pass": row.is_pass(),

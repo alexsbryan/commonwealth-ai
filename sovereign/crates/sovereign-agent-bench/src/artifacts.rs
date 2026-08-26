@@ -96,10 +96,17 @@ impl ArtifactSink {
     }
 
     /// Persist one judge trial's prompt + outcome.
+    /// `judge_model` names the instrument. Without it a banked trial is
+    /// unattributable: two runs under different judges are
+    /// indistinguishable on disk, and an anchor difference between them
+    /// cannot be told from sampling variance (measured 2026-08-19 —
+    /// same-model drift is 6.4%, banked-vs-replay drift was 21%, and the
+    /// gap was unattributable for exactly this reason).
     pub fn persist_judge_trial(
         &self,
         dim_id: &str,
         trial: u8,
+        judge_model: &str,
         req: &JudgeRequest,
         result: Result<&JudgeTrialOutcome, &JudgeError>,
     ) -> std::io::Result<()> {
@@ -110,16 +117,21 @@ impl ArtifactSink {
             Ok(outcome) => serde_json::json!({
                 "dim": dim_id,
                 "trial": trial,
+                "judge_model": judge_model,
                 "prompt": req,
                 "outcome": {
                     "anchor": outcome.anchor,
                     "rationale": outcome.rationale,
                 },
+                // Verbatim reply, so the parse-fallback rate is
+                // recoverable from the bank instead of by replay.
+                "raw": outcome.raw,
                 "ok": true,
             }),
             Err(err) => serde_json::json!({
                 "dim": dim_id,
                 "trial": trial,
+                "judge_model": judge_model,
                 "prompt": req,
                 "error": format!("{err}"),
                 "ok": false,
@@ -270,13 +282,16 @@ mod tests {
             final_assistant_text: "FT".into(),
         };
         let ok = JudgeTrialOutcome {
+            raw: String::new(),
             anchor: 2,
             rationale: "good".into(),
         };
-        sink.persist_judge_trial("dim_b", 0, &req, Ok(&ok)).unwrap();
+        sink.persist_judge_trial("dim_b", 0, "test-judge", &req, Ok(&ok))
+            .unwrap();
         sink.persist_judge_trial(
             "dim_c",
             1,
+            "test-judge",
             &req,
             Err(&JudgeError::Http("connection refused".into())),
         )

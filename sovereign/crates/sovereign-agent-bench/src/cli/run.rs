@@ -548,7 +548,7 @@ async fn run_judge_trials_glassbox(
         match judge.judge(req).await {
             Ok(outcome) => {
                 if let Some(s) = sink {
-                    let _ = s.persist_judge_trial(dim_id, i, req, Ok(&outcome));
+                    let _ = s.persist_judge_trial(dim_id, i, judge.model_name(), req, Ok(&outcome));
                 }
                 outcomes.push(outcome);
             }
@@ -560,11 +560,12 @@ async fn run_judge_trials_glassbox(
                     "agent_bench: judge trial failed — scored 0"
                 );
                 if let Some(s) = sink {
-                    let _ = s.persist_judge_trial(dim_id, i, req, Err(&e));
+                    let _ = s.persist_judge_trial(dim_id, i, judge.model_name(), req, Err(&e));
                 }
                 outcomes.push(JudgeTrialOutcome {
                     anchor: 0,
                     rationale: format!("judge unavailable: {e}"),
+                    raw: String::new(),
                 });
             }
         }

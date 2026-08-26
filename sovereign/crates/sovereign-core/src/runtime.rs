@@ -156,6 +156,7 @@ pub use grounding::grounding_gate_threshold;
 // transfer argument is enforced by the compiler rather than by two matching
 // string literals. See `grounding::judge::CHUNK_JUDGE_SYSTEM`.
 pub use grounding::{chunk_judge_prompt, CHUNK_JUDGE_PASSAGE_CHARS, CHUNK_JUDGE_SYSTEM};
+pub use grounding::{claim_extraction_prompt, CLAIM_EXTRACTION_SYSTEM};
 // The gate's claim-extraction primitive — public so the Stream B corruption
 // harness and `svrn bench verifier extract-claims` produce claims in the
 // EXACT production register (same prompt, parser, claim budget) instead of

@@ -64,6 +64,26 @@ impl BenchReport {
                 wall = p.wall_ms,
                 partial = if p.is_partial { "  (partial)" } else { "" },
             ));
+            // Judge dissent, where the auto-witness floor overruled a
+            // LOWER judge anchor. The score is unchanged — the witness
+            // is authoritative — but a judge that disagrees downward is
+            // the only thing here that can see past the tests, and
+            // burying it is how a Rust rubric sat on a Python problem
+            // for three runs while the witness scored it 3/3.
+            for (dim_name, d) in [("dim_b", &p.dim_b), ("dim_c", &p.dim_c)] {
+                if let crate::scoring::ScoreSource::Hybrid {
+                    auto_score,
+                    judge_score,
+                    judge_dissent: Some(gap),
+                    ..
+                } = &d.source
+                {
+                    out.push_str(&format!(
+                        "      ! {dim_name}: judge said {judge_score}, witness floor {auto_score}                          (dissent {gap}) — score kept at {kept}, read the rationale\n",
+                        kept = d.raw,
+                    ));
+                }
+            }
             // Multi-trial supplement: per-trial totals + mean ± stdev
             // + exit_reason histogram. Surfaces the "lucky vs stable"
             // signal the operator needs to read variance honestly.

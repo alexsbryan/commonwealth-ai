@@ -123,7 +123,10 @@ pub(crate) struct PrefixCacheGate {
 /// **wrong on 4** (three dense `qwen35`, plus `nemotron_h_moe`, a
 /// Mamba2 hybrid whose arch string carries no ssm marker) and
 /// **load-bearing on 0**: there was no model it vetoed that libllama's
-/// flags did not already veto. It could only ever be wrong.
+/// flags did not already veto. It could only ever be wrong. (Three of
+/// those four have since been corrected — dense `qwen35` joined the
+/// ladder by exact match on 2026-08-17 — which changes the cross-check
+/// line, not the demotion: still load-bearing on 0.)
 ///
 /// **`SOVEREIGN_PREFIX_CACHE_FORCE=1` (diagnostic only)** overrides
 /// the recurrent/hybrid veto (clauses 0–1) so the underlying hazard
@@ -566,7 +569,11 @@ mod tests {
 
     #[test]
     fn recurrent_arch_rejects_pure_attention_and_unknown() {
-        for arch in ["qwen3", "llama", "gemma3", "phi4", ""] {
+        // The ladder still cannot see a hybrid whose arch string
+        // carries no marker — `nemotron_h_moe` is the local zoo's
+        // Mamba2 example. libllama's is_hybrid() flag covers those
+        // (see prefix_cache_gate clause 0).
+        for arch in ["qwen3", "llama", "gemma3", "phi4", "nemotron_h_moe", ""] {
             assert!(
                 !is_recurrent_arch(arch),
                 "{arch} must NOT classify recurrent"
@@ -574,21 +581,21 @@ mod tests {
         }
     }
 
-    /// `qwen35` moved from the reject list to a deliberate match in
-    /// `f807e0d5f` (operator directive `be605da4`, 2026-08-17): the 3.8
-    /// generation carries Gated DeltaNet in the DENSE stack, so the
-    /// hazard is real and the ladder was widened to name it.
-    ///
-    /// This is stated as its own test because the move is easy to read
-    /// as a regression and is not one: the arch is now caught by BOTH
-    /// libllama's flags and the ladder where it used to be caught by
-    /// libllama alone. Strictly more veto, never less.
     #[test]
-    fn dense_qwen35_is_a_deliberate_ladder_match_not_a_ladder_bug() {
-        assert!(
-            is_recurrent_arch("qwen35"),
-            "dense Qwen3.5+ carries Gated DeltaNet — the ladder names it since f807e0d5f"
-        );
+    fn recurrent_arch_matches_dense_qwen35_exactly_and_nothing_near_it() {
+        // 2026-08-17 (f807e0d5): dense `qwen35` joined the ladder. The
+        // Qwen3.8 generation carries Gated DeltaNet in the DENSE stack,
+        // and `tests/rs_rollback_spike.rs` reproduces the recurrent-state
+        // corruption on it. Exact match only — every other dense variant
+        // gets verified per-model before joining.
+        assert!(is_recurrent_arch("qwen35"));
+        assert!(is_recurrent_arch("QWEN35"), "match is case-insensitive");
+        for near in ["qwen3", "qwen35b", "qwen350", "qwen3-5"] {
+            assert!(
+                !is_recurrent_arch(near),
+                "{near} must NOT ride in on the qwen35 exact match"
+            );
+        }
     }
 
     // ── prefix_cache_gate ────────────────────────────────────────
@@ -641,29 +648,25 @@ mod tests {
     }
 
     #[test]
-    fn prefix_cache_unsafe_when_only_libllama_sees_the_hybrid() {
-        // 2026-06-09 P0: a dense hybrid whose gguf arch string looks
-        // like plain attention. The ladder cannot see hybrids at all —
-        // only libllama's is_hybrid() knows. Without this clause, every
-        // lcp>0 prefill returns Decode Error -1.
-        //
-        // The arch here is a ladder-clearing string ON PURPOSE. This
-        // test's whole subject is "libllama's flag ALONE vetoes", so it
-        // must be stated on an arch the ladder misses — using `qwen35`
-        // stopped expressing that in f807e0d5f, when the ladder was
-        // widened to name `qwen35` deliberately (see
-        // `dense_qwen35_is_a_deliberate_ladder_match_not_a_ladder_bug`).
+    fn prefix_cache_unsafe_for_hybrid_whose_arch_string_the_ladder_misses() {
+        // 2026-06-09 P0: dense Qwen3.5 (gguf arch plain `qwen35`) took
+        // a Decode Error -1 on every lcp>0 prefill; the string ladder
+        // missed it and libllama's is_hybrid() knew. The ladder has
+        // since learned `qwen35` by name (2026-08-17), so the clause is
+        // pinned here on the zoo's other member of the same shape:
+        // `nemotron_h_moe`, a Mamba2 hybrid whose arch carries no ssm
+        // marker and no qwen prefix.
         let g = prefix_cache_gate(
-            &slot("gemma3", true, PartialKvVerdict::Refused),
+            &slot("nemotron_h_moe", true, PartialKvVerdict::Refused),
             false,
             false,
             no_env,
         );
-        assert!(!g.safe, "libllama's flag alone must veto");
+        assert!(!g.safe);
         assert!(g.model_says_recurrent);
         assert!(
             !g.arch_says_recurrent,
-            "the ladder must NOT be what catches this — that is the point of the case"
+            "ladder must NOT be what catches this"
         );
     }
 
@@ -745,30 +748,25 @@ mod tests {
         assert_eq!(ladder_vetoes.measured, "could-not-judge");
 
         // The June 2026 shape, on the path that has no measurement to
-        // fall back on: a hybrid whose arch string clears the LADDER and
-        // is caught only by libllama's flags. Turning the probe off must
-        // not reopen that hole — this is the one case where the fallback
-        // being an OR rather than the ladder alone is load-bearing.
-        // The arch is ladder-clearing on purpose, for the same reason as
-        // `prefix_cache_unsafe_when_only_libllama_sees_the_hybrid`.
-        let dense_hybrid =
-            prefix_cache_gate(&slot("gemma3", true, none.clone()), false, false, no_env);
-        assert!(
-            !dense_hybrid.safe,
-            "probe off must still veto a dense hybrid — libllama's flags are part \
-             of the fallback, not just the arch ladder"
+        // fall back on: a hybrid the LADDER clears, caught only by
+        // libllama's flags. Turning the probe off must not reopen that
+        // hole — this is the one case where the fallback being an OR
+        // rather than the ladder alone is load-bearing.
+        let ladder_blind_hybrid = prefix_cache_gate(
+            &slot("nemotron_h_moe", true, none.clone()),
+            false,
+            false,
+            no_env,
         );
         assert!(
-            !dense_hybrid.arch_says_recurrent,
+            !ladder_blind_hybrid.safe,
+            "probe off must still veto a hybrid the ladder cannot see — libllama's \
+             flags are part of the fallback, not just the arch ladder"
+        );
+        assert!(
+            !ladder_blind_hybrid.arch_says_recurrent,
             "ladder misses it (that is the point)"
         );
-
-        // And the arch the ladder now DOES name still vetoes on this
-        // path, from the ladder rather than from libllama.
-        let ladder_names_dense_qwen35 =
-            prefix_cache_gate(&slot("qwen35", false, none.clone()), false, false, no_env);
-        assert!(!ladder_names_dense_qwen35.safe);
-        assert!(ladder_names_dense_qwen35.arch_says_recurrent);
 
         let ladder_clears = prefix_cache_gate(&slot("llama", false, none), false, false, no_env);
         assert!(ladder_clears.safe);
