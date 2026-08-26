@@ -31,7 +31,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 use corpus_engine_atos::{AtosRunRow, FeatureRow, FeatureStore, MilestoneRow};
-use corpus_engine_notes::{NoteRow, NoteStore};
+use corpus_engine_notes::{Note, NoteStore};
 
 pub mod approval;
 pub mod charter;
@@ -369,7 +369,7 @@ pub trait AtosOrchestrator: Send + Sync {
 
     /// Pull active global invariants — the subset every fresh session
     /// should see. Used by [`PreparedBrief`] composition.
-    async fn active_global_invariants(&self) -> Result<Vec<NoteRow>>;
+    async fn active_global_invariants(&self) -> Result<Vec<Note>>;
 }
 
 // ─── Public re-exports ───────────────────────────────────────────────────────

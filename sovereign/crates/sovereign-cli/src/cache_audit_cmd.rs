@@ -100,6 +100,9 @@ impl Pricing {
 }
 
 /// How a tool call is classified for the raw-acquisition analysis.
+///
+/// NOT `corpus_engine::pii`'s private `Bucket` (a surface-token table);
+/// this classifies one tool call for the raw-acquisition analysis.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Bucket {
     /// Read / Glob / Grep — raw file/search acquisition into context.

@@ -210,7 +210,6 @@ pub const MCP_TOOLS_RETIRED: &[&str] = &[
     "promote_note",
     "suggest_note",
     "session_reflection",
-    "check_doc_paths",
     "design_signals_extract",
     "provision_feature",
     "archive_feature",

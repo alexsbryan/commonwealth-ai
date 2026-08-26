@@ -158,7 +158,6 @@ impl core::clone::Clone for sovereign_contracts::recipe::notes::NoteSource
 impl core::clone::Clone for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::clone::Clone for sovereign_contracts::recipe::registry::CatalogRow
 impl core::clone::Clone for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::clone::Clone for sovereign_contracts::recipe::sections::DetectedSection
 impl core::clone::Clone for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::clone::Clone for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::clone::Clone for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -227,7 +226,6 @@ impl core::cmp::Eq for sovereign_contracts::intent_policy::PolicySource
 impl core::cmp::Eq for sovereign_contracts::memory_config::CompactionMode
 impl core::cmp::Eq for sovereign_contracts::recipe::notes::NoteScope
 impl core::cmp::Eq for sovereign_contracts::recipe::notes::NoteSource
-impl core::cmp::Eq for sovereign_contracts::recipe::sections::DetectedSection
 impl core::cmp::Eq for sovereign_contracts::setup_config::IrohSection
 impl core::cmp::Eq for sovereign_contracts::setup_config::ShardFetch
 impl core::cmp::Eq for sovereign_contracts::setup_config::SharedModelRole
@@ -279,7 +277,6 @@ impl core::cmp::PartialEq for sovereign_contracts::intent_policy::PolicySource
 impl core::cmp::PartialEq for sovereign_contracts::memory_config::CompactionMode
 impl core::cmp::PartialEq for sovereign_contracts::recipe::notes::NoteScope
 impl core::cmp::PartialEq for sovereign_contracts::recipe::notes::NoteSource
-impl core::cmp::PartialEq for sovereign_contracts::recipe::sections::DetectedSection
 impl core::cmp::PartialEq for sovereign_contracts::setup_config::IrohSection
 impl core::cmp::PartialEq for sovereign_contracts::setup_config::ShardFetch
 impl core::cmp::PartialEq for sovereign_contracts::setup_config::SharedModelRole
@@ -316,8 +313,6 @@ impl core::default::Default for sovereign_contracts::mcp_config::McpAuthConfig
 impl core::default::Default for sovereign_contracts::memory_config::CompactionConfig
 impl core::default::Default for sovereign_contracts::memory_config::CompactionMode
 impl core::default::Default for sovereign_contracts::recipe::notes::ScopeFilter
-impl core::default::Default for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::default::Default for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::default::Default for sovereign_contracts::recipe::testing::RecipeTestParams
 impl core::default::Default for sovereign_contracts::recipe::testing::ValidationOutcome
 impl core::default::Default for sovereign_contracts::registry::ToolRegistry
@@ -493,7 +488,6 @@ impl core::fmt::Debug for sovereign_contracts::recipe::notes::NoteSource
 impl core::fmt::Debug for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::fmt::Debug for sovereign_contracts::recipe::registry::CatalogRow
 impl core::fmt::Debug for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::fmt::Debug for sovereign_contracts::recipe::sections::DetectedSection
 impl core::fmt::Debug for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::fmt::Debug for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::fmt::Debug for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -721,9 +715,6 @@ impl core::marker::Freeze for sovereign_contracts::recipe::notes::NoteSource
 impl core::marker::Freeze for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::marker::Freeze for sovereign_contracts::recipe::registry::CatalogRow
 impl core::marker::Freeze for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::marker::Freeze for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::marker::Freeze for sovereign_contracts::recipe::sections::DetectedSection
-impl core::marker::Freeze for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::marker::Freeze for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::marker::Freeze for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::marker::Freeze for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -912,9 +903,6 @@ impl core::marker::Send for sovereign_contracts::recipe::notes::NoteSource
 impl core::marker::Send for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::marker::Send for sovereign_contracts::recipe::registry::CatalogRow
 impl core::marker::Send for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::marker::Send for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::marker::Send for sovereign_contracts::recipe::sections::DetectedSection
-impl core::marker::Send for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::marker::Send for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::marker::Send for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::marker::Send for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -990,7 +978,6 @@ impl core::marker::StructuralPartialEq for sovereign_contracts::intent_policy::P
 impl core::marker::StructuralPartialEq for sovereign_contracts::memory_config::CompactionMode
 impl core::marker::StructuralPartialEq for sovereign_contracts::recipe::notes::NoteScope
 impl core::marker::StructuralPartialEq for sovereign_contracts::recipe::notes::NoteSource
-impl core::marker::StructuralPartialEq for sovereign_contracts::recipe::sections::DetectedSection
 impl core::marker::StructuralPartialEq for sovereign_contracts::setup_config::IrohSection
 impl core::marker::StructuralPartialEq for sovereign_contracts::setup_config::ShardFetch
 impl core::marker::StructuralPartialEq for sovereign_contracts::setup_config::SharedModelRole
@@ -1156,9 +1143,6 @@ impl core::marker::Sync for sovereign_contracts::recipe::notes::NoteSource
 impl core::marker::Sync for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::marker::Sync for sovereign_contracts::recipe::registry::CatalogRow
 impl core::marker::Sync for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::marker::Sync for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::marker::Sync for sovereign_contracts::recipe::sections::DetectedSection
-impl core::marker::Sync for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::marker::Sync for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::marker::Sync for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::marker::Sync for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -1349,9 +1333,6 @@ impl core::marker::Unpin for sovereign_contracts::recipe::notes::NoteSource
 impl core::marker::Unpin for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::marker::Unpin for sovereign_contracts::recipe::registry::CatalogRow
 impl core::marker::Unpin for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::marker::Unpin for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::marker::Unpin for sovereign_contracts::recipe::sections::DetectedSection
-impl core::marker::Unpin for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::marker::Unpin for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::marker::Unpin for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::marker::Unpin for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -1542,9 +1523,6 @@ impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::notes::NoteSourc
 impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::registry::CatalogRow
 impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::sections::DetectedSection
-impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::marker::UnsafeUnpin for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -1734,9 +1712,6 @@ impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::no
 impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::registry::CatalogRow
 impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::sections::DetectedSection
-impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::panic::unwind_safe::RefUnwindSafe for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -1925,9 +1900,6 @@ impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::notes
 impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::notes::ScopeFilter
 impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::registry::CatalogRow
 impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::registry::RegistryEntryView
-impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::sections::DetectedSection
-impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::testing::ExtractionOutcome
 impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl core::panic::unwind_safe::UnwindSafe for sovereign_contracts::recipe::testing::RecipeTestParams
@@ -2141,11 +2113,6 @@ impl sovereign_contracts::intent_policy::ToolFilter
 impl sovereign_contracts::observer::StateStoreObserver for sovereign_contracts::observer::NoopObserver
 impl sovereign_contracts::recipe::notes::NoteScope
 impl sovereign_contracts::recipe::notes::NoteSource
-impl sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl sovereign_contracts::recipe::sections::SectionDetector for alloc::boxed::Box<dyn sovereign_contracts::recipe::sections::SectionDetector>
-impl sovereign_contracts::recipe::sections::SectionDetector for sovereign_contracts::recipe::sections::ChapterRegexDetector
-impl sovereign_contracts::recipe::sections::SectionDetector for sovereign_contracts::recipe::sections::TocAnchoredDetector
-impl sovereign_contracts::recipe::sections::TocAnchoredDetector
 impl sovereign_contracts::recipe::testing::RecipeTestOutcome
 impl sovereign_contracts::registry::ToolRegistry
 impl sovereign_contracts::setup_config::ModelsSection
@@ -2328,9 +2295,6 @@ pub const sovereign_contracts::intent_policy::MODE_WORKFLOW_AUTHOR: &str
 pub const sovereign_contracts::memory_config::DEFAULT_SYNTHESIS_PROMPT: &str
 pub const sovereign_contracts::recipe::registry::RECIPE_REGISTRY_TOML: &str
 pub const sovereign_contracts::recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON: &str
-pub const sovereign_contracts::recipe::sections::ChapterRegexDetector::DEFAULT_PATTERN: &'static str
-pub const sovereign_contracts::recipe::sections::TocAnchoredDetector::DEFAULT_END: &'static str
-pub const sovereign_contracts::recipe::sections::TocAnchoredDetector::DEFAULT_START: &'static str
 pub const sovereign_contracts::slot_policy::Workload::ALL: [sovereign_contracts::slot_policy::Workload; 7]
 pub const sovereign_contracts::tool_result_cache::DEFAULT_MAX_AGE_TURNS: usize
 pub enum sovereign_contracts::AssetState
@@ -2435,7 +2399,6 @@ pub enum sovereign_contracts::types::StepOutput
 pub enum sovereign_contracts::types::StreamFrame
 pub enum sovereign_contracts::types::TaskStatus
 pub enum sovereign_contracts::types::TrustLevel
-pub fn alloc::boxed::Box<dyn sovereign_contracts::recipe::sections::SectionDetector>::detect(&self, &str) -> alloc::vec::Vec<sovereign_contracts::recipe::sections::DetectedSection>
 pub fn sovereign_contracts::ActionAtom::clone(&self) -> sovereign_contracts::ActionAtom
 pub fn sovereign_contracts::ActionAtom::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
 pub fn sovereign_contracts::ActionAtom::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -3303,19 +3266,6 @@ pub fn sovereign_contracts::recipe::registry::RegistryEntryView::fmt(&self, &mut
 pub fn sovereign_contracts::recipe::registry::default_local_registry_path() -> core::option::Option<std::path::PathBuf>
 pub fn sovereign_contracts::recipe::registry::merged_catalog() -> alloc::vec::Vec<sovereign_contracts::recipe::registry::CatalogRow>
 pub fn sovereign_contracts::recipe::registry::parse_registry(&str) -> alloc::vec::Vec<sovereign_contracts::recipe::registry::RegistryEntryView>
-pub fn sovereign_contracts::recipe::sections::ChapterRegexDetector::default() -> Self
-pub fn sovereign_contracts::recipe::sections::ChapterRegexDetector::detect(&self, &str) -> alloc::vec::Vec<sovereign_contracts::recipe::sections::DetectedSection>
-pub fn sovereign_contracts::recipe::sections::ChapterRegexDetector::new() -> Self
-pub fn sovereign_contracts::recipe::sections::ChapterRegexDetector::with_min_body_words(self, usize) -> Self
-pub fn sovereign_contracts::recipe::sections::ChapterRegexDetector::with_pattern(&str) -> core::result::Result<Self, regex::error::Error>
-pub fn sovereign_contracts::recipe::sections::DetectedSection::clone(&self) -> sovereign_contracts::recipe::sections::DetectedSection
-pub fn sovereign_contracts::recipe::sections::DetectedSection::eq(&self, &sovereign_contracts::recipe::sections::DetectedSection) -> bool
-pub fn sovereign_contracts::recipe::sections::DetectedSection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub fn sovereign_contracts::recipe::sections::SectionDetector::detect(&self, &str) -> alloc::vec::Vec<sovereign_contracts::recipe::sections::DetectedSection>
-pub fn sovereign_contracts::recipe::sections::TocAnchoredDetector::default() -> Self
-pub fn sovereign_contracts::recipe::sections::TocAnchoredDetector::detect(&self, &str) -> alloc::vec::Vec<sovereign_contracts::recipe::sections::DetectedSection>
-pub fn sovereign_contracts::recipe::sections::TocAnchoredDetector::new() -> Self
-pub fn sovereign_contracts::recipe::sections::TocAnchoredDetector::with_markers(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn sovereign_contracts::recipe::testing::ExtractionOutcome::clone(&self) -> sovereign_contracts::recipe::testing::ExtractionOutcome
 pub fn sovereign_contracts::recipe::testing::ExtractionOutcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub fn sovereign_contracts::recipe::testing::RecipeTestOutcome::clone(&self) -> sovereign_contracts::recipe::testing::RecipeTestOutcome
@@ -3663,7 +3613,6 @@ pub mod sovereign_contracts::recipe::notes
 pub mod sovereign_contracts::recipe::paths
 pub mod sovereign_contracts::recipe::registry
 pub mod sovereign_contracts::recipe::schema
-pub mod sovereign_contracts::recipe::sections
 pub mod sovereign_contracts::recipe::testing
 pub mod sovereign_contracts::recipe::url_template
 pub mod sovereign_contracts::registry
@@ -4636,11 +4585,6 @@ pub sovereign_contracts::recipe::registry::RegistryEntryView::license: alloc::st
 pub sovereign_contracts::recipe::registry::RegistryEntryView::name: alloc::string::String
 pub sovereign_contracts::recipe::registry::RegistryEntryView::size_compressed_gb: f64
 pub sovereign_contracts::recipe::registry::RegistryEntryView::size_indexed_gb: f64
-pub sovereign_contracts::recipe::sections::DetectedSection::end_byte: usize
-pub sovereign_contracts::recipe::sections::DetectedSection::id: alloc::string::String
-pub sovereign_contracts::recipe::sections::DetectedSection::metadata: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
-pub sovereign_contracts::recipe::sections::DetectedSection::start_byte: usize
-pub sovereign_contracts::recipe::sections::DetectedSection::title: alloc::string::String
 pub sovereign_contracts::recipe::testing::ExtractionOutcome::extraction_rate: f32
 pub sovereign_contracts::recipe::testing::ExtractionOutcome::records_attempted: usize
 pub sovereign_contracts::recipe::testing::ExtractionOutcome::records_succeeded: usize
@@ -5612,9 +5556,6 @@ pub struct sovereign_contracts::recipe::notes::NoteRow
 pub struct sovereign_contracts::recipe::notes::ScopeFilter
 pub struct sovereign_contracts::recipe::registry::CatalogRow
 pub struct sovereign_contracts::recipe::registry::RegistryEntryView
-pub struct sovereign_contracts::recipe::sections::ChapterRegexDetector
-pub struct sovereign_contracts::recipe::sections::DetectedSection
-pub struct sovereign_contracts::recipe::sections::TocAnchoredDetector
 pub struct sovereign_contracts::recipe::testing::ExtractionOutcome
 pub struct sovereign_contracts::recipe::testing::RecipeTestOutcome
 pub struct sovereign_contracts::recipe::testing::RecipeTestParams
@@ -5762,7 +5703,6 @@ pub trait sovereign_contracts::Tool: core::marker::Send + core::marker::Sync
 pub trait sovereign_contracts::health::HealthCheckable: core::marker::Send + core::marker::Sync + 'static
 pub trait sovereign_contracts::observer::StateStoreObserver: core::marker::Send + core::marker::Sync
 pub trait sovereign_contracts::recipe::notes::RecipeNotes: core::marker::Send + core::marker::Sync
-pub trait sovereign_contracts::recipe::sections::SectionDetector: core::marker::Send + core::marker::Sync
 pub trait sovereign_contracts::recipe::testing::RecipeTester: core::marker::Send + core::marker::Sync
 pub trait sovereign_contracts::traits::ApprovalChannel: core::marker::Send + core::marker::Sync
 pub trait sovereign_contracts::traits::BudgetStore: core::marker::Send + core::marker::Sync

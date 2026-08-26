@@ -1,0 +1,22 @@
+# Gold adjudication for the `name` detector's DEV split. Hand-adjudicated from
+# the type definitions and the code-intel summaries, 2026-08-24.
+#
+# Only groups defensible from evidence are here. `WorkUnit` is deliberately
+# ABSENT: its three definitions (a shard-index enum, an RPC payload struct, a
+# persisted worklist row) are plausibly one concept at three altitudes, which
+# is `layered` — a disposition the model's answer set cannot express. Scoring
+# excludes what gold does not adjudicate, so omitting it costs coverage and
+# not correctness; guessing would calibrate the model against a coin flip.
+{"key":"name/gold/ChunkRange","dest":"","disp":"converge","why":"both are {start_id,end_id} with identical doc comments - one struct, forked","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/ClaimRecord","dest":"","disp":"distinct","why":"sovereign-eval holds a judge model's epistemic claim; work-atlas holds a session work claim (claim_id/session_id). Same word, unrelated ideas","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/Error","dest":"","disp":"idiom","why":"per-crate error enum - the convention every Rust crate repeats","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/Gap","dest":"","disp":"distinct","why":"mixed family: contracts/corpus-engine/core are all knowledge-gaps, cli-dev's is a report row of three strings. The group is not one concept and needs splitting - matches the register's composite","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/IngestProgress","dest":"","disp":"converge","why":"both enumerate the same download/parse/embed phases of one ingest","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/NoteScope","dest":"","disp":"converge","why":"both are enum {Global,Feature,Session} - identical","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/NoteSource","dest":"","disp":"converge","why":"both are enum {Agent,Committed,Extracted} - identical","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/Recipe","dest":"","disp":"converge","why":"corpus-engine 'how to ingest, process and serve a corpus' and sovereign-pipeline 'all the config needed to build a pipeline' are one concept forked across crates","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/Registry","dest":"","disp":"distinct","why":"a registry of env flags, of primitive kinds, of mesh apps, of projects - four unrelated contents sharing a container word","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/Result","dest":"","disp":"idiom","why":"per-crate Result alias - the textbook Rust convention","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/Source","dest":"","disp":"distinct","why":"kernel-types Source is answer provenance; recipe/workflow/meshapp Sources are where data comes from. Different domains, one word","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/StepKind","dest":"","disp":"converge","why":"both enumerate kinds of pipeline step (prompt-template call vs daemon-routed completion) - one concept forked","by":"seat","at":"2026-08-24"}
+{"key":"name/gold/WorkerPlacement","dest":"","disp":"converge","why":"both are {endpoint,blocks,holds_output} - identical","by":"seat","at":"2026-08-24"}

@@ -148,12 +148,7 @@ async fn build_mesh_endpoint(
 /// `routes_status::rpc_worker_port`). `None` = not an RPC worker; the
 /// acceptor then neither advertises nor routes [`RPC_ALPN`].
 fn rpc_serve_port() -> Option<u16> {
-    let bind = std::env::var("SOVEREIGN_RPC_SERVE").ok()?;
-    let bind = bind.trim();
-    if bind.is_empty() {
-        return None;
-    }
-    bind.rsplit(':').next()?.parse().ok()
+    sovereign_contracts::launch::RpcServe::from_env().port()
 }
 
 /// Resolve whether this daemon's iroh endpoint turns on. Explicit

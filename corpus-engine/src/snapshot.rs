@@ -263,7 +263,7 @@ pub fn default_snapshot_filename(manifest: &SnapshotManifest) -> String {
 /// the subset of fields the snapshot manifest needs. Helper used by
 /// the publisher; not part of the manifest itself.
 pub fn read_local_index_meta(index_dir: &Path) -> Result<LocalIndexMetaSummary> {
-    let meta_path = index_dir.join("_corpus_meta.json");
+    let meta_path = crate::corpus::Corpus::meta_in(&index_dir);
     let bytes = std::fs::read(&meta_path)?;
     let raw: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|e| Error::Serialization(format!("parse {}: {e}", meta_path.display())))?;
@@ -955,7 +955,7 @@ mod tests {
         std::fs::write(inv.join("entities.json"), b"{}").unwrap();
         std::fs::write(inv.join("entities.json.orig"), b"{}").unwrap();
         std::fs::write(inv.join("_phase1_checkpoint.jsonl"), b"{}").unwrap();
-        std::fs::write(dir.path().join("_corpus_meta.json"), b"{}").unwrap();
+        std::fs::write(crate::corpus::Corpus::meta_in(dir.path()), b"{}").unwrap();
 
         let mut buf = Vec::new();
         {
@@ -1085,7 +1085,7 @@ mod tests {
             "scope": { "filter_signature": "sig-xyz" }
         });
         std::fs::write(
-            root.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&root),
             serde_json::to_vec_pretty(&meta).unwrap(),
         )
         .unwrap();
@@ -1199,7 +1199,7 @@ mod tests {
             "scope": { "filter_signature": "sig" },
         });
         std::fs::write(
-            index_dir.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&index_dir),
             serde_json::to_vec_pretty(&meta).unwrap(),
         )
         .unwrap();
@@ -1262,7 +1262,7 @@ mod tests {
             "embedding_dimensions": 1024,
         });
         std::fs::write(
-            dir.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&dir),
             serde_json::to_vec_pretty(&meta).unwrap(),
         )
         .unwrap();
@@ -1359,7 +1359,7 @@ mod tests {
         write_fake_sibling_index_dir(&atlas_sibling, "parent-article");
         // A sibling with a (fake) chunks.lance dataset present -> must be skipped.
         std::fs::create_dir_all(lance_sibling.join("chunks.lance")).unwrap();
-        std::fs::write(lance_sibling.join("_corpus_meta.json"), b"{}").unwrap();
+        std::fs::write(crate::corpus::Corpus::meta_in(&lance_sibling), b"{}").unwrap();
 
         let outcome = publish_snapshot(PublishOptions {
             index_dir,
@@ -1422,7 +1422,7 @@ mod tests {
 
         assert_eq!(result.manifest.corpus_id, "wikitest");
         assert!(result.enrichment_dir.is_some());
-        assert!(result.index_dir.join("_corpus_meta.json").exists());
+        assert!(crate::corpus::Corpus::meta_in(&result.index_dir).exists());
         assert!(result.index_dir.join("atlas/_summary.json").exists());
         assert!(result
             .enrichment_dir
@@ -1472,7 +1472,8 @@ mod tests {
             .exists());
         assert!(!restore_tmp.path().join("enrichment/wikitest").exists());
         // Patched _corpus_meta.json points at the new id.
-        let meta = std::fs::read_to_string(result.index_dir.join("_corpus_meta.json")).unwrap();
+        let meta =
+            std::fs::read_to_string(crate::corpus::Corpus::meta_in(&result.index_dir)).unwrap();
         let v: serde_json::Value = serde_json::from_str(&meta).unwrap();
         assert_eq!(
             v.get("corpus_id").and_then(|x| x.as_str()),

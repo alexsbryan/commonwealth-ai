@@ -88,6 +88,42 @@ pub enum EdgeType {
     Attaches,
 }
 
+impl EdgeType {
+    /// Compact lowercase tag for this edge kind. The single decider for the
+    /// LABEL spelling, distinct from the PascalCase serde tag carried on the
+    /// wire.
+    ///
+    /// This existed as two copies — `sovereign-mesh::reading_formatters::
+    /// edge_type_label` and `sovereign-desktop`'s `edge_type_label_dto` — AND
+    /// THEY DISAGREED. The desktop copy answered
+    /// `unreachable!("typed edges wired in Gap B Stage 4")` for `EvidenceFor`,
+    /// `Concedes` and `OpposesIn`, three kinds the Gap-B resolver has emitted
+    /// since it landed (`atlas::resolution` builds all three) and which
+    /// round-trip through the CSR type byte. So the desktop's reading surface
+    /// PANICKED on any atlas containing one, while the mesh rendered it
+    /// correctly. Two copies of one closed set, one of them frozen against a
+    /// stale assumption — the failure ARCH §10.6 exists to prevent, and the
+    /// reason the labels live here now.
+    pub fn label(&self) -> &'static str {
+        match self {
+            EdgeType::Transition => "transition",
+            EdgeType::Causes => "causes",
+            EdgeType::Grounds => "grounds",
+            EdgeType::Tension => "tension",
+            EdgeType::Involves => "involves",
+            EdgeType::Composes => "composes",
+            EdgeType::Configures => "configures",
+            EdgeType::Grounding => "grounding",
+            EdgeType::Framing => "framing",
+            EdgeType::Provenance => "provenance",
+            EdgeType::EvidenceFor => "evidence_for",
+            EdgeType::Concedes => "concedes",
+            EdgeType::OpposesIn => "opposes_in",
+            EdgeType::Attaches => "attaches",
+        }
+    }
+}
+
 // ── Provenance ───────────────────────────────────────────────
 
 /// How the edge was produced. Callers of the traversal engine use
@@ -245,5 +281,48 @@ mod tests {
     #[test]
     fn edge_id_format_is_zero_padded() {
         assert_eq!(EdgeId::new(3).as_str(), "edge-00003");
+    }
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::*;
+
+    /// The three kinds `sovereign-desktop`'s deleted `edge_type_label_dto`
+    /// answered with `unreachable!("typed edges wired in Gap B Stage 4")`.
+    /// They have been emitted by `atlas::resolution` since Gap B landed, so
+    /// that copy panicked on any atlas containing one. Named individually
+    /// here so the regression cannot come back quietly.
+    #[test]
+    fn gap_b_edge_kinds_have_labels_and_do_not_panic() {
+        assert_eq!(EdgeType::EvidenceFor.label(), "evidence_for");
+        assert_eq!(EdgeType::Concedes.label(), "concedes");
+        assert_eq!(EdgeType::OpposesIn.label(), "opposes_in");
+    }
+
+    #[test]
+    fn every_edge_kind_has_a_distinct_label() {
+        let all = [
+            EdgeType::Transition,
+            EdgeType::Causes,
+            EdgeType::Grounds,
+            EdgeType::Tension,
+            EdgeType::Involves,
+            EdgeType::Composes,
+            EdgeType::Configures,
+            EdgeType::Grounding,
+            EdgeType::Framing,
+            EdgeType::Provenance,
+            EdgeType::EvidenceFor,
+            EdgeType::Concedes,
+            EdgeType::OpposesIn,
+            EdgeType::Attaches,
+        ];
+        let mut labels: Vec<&str> = all.iter().map(|e| e.label()).collect();
+        let n = labels.len();
+        labels.sort();
+        labels.dedup();
+        assert_eq!(labels.len(), n, "two edge kinds share a label");
+        assert!(labels.iter().all(|l| !l.is_empty()));
     }
 }

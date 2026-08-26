@@ -8,14 +8,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::NoteStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ReadNoteByIdTool {
     store: Arc<NoteStore>,
@@ -27,63 +26,30 @@ impl ReadNoteByIdTool {
     }
 }
 
-#[async_trait]
-impl Tool for ReadNoteByIdTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "read_note_by_id".to_string(),
-            name: "Read Note By ID".to_string(),
-            description: "Return a single note row by its UUID. Use when a digest or compliance \
-                          report references a note by id and you want the full content without \
-                          re-running a filtered search."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Note id (as returned by write_note or present in \
-                                        read_notes results)."
-                    }
-                },
-                "required": ["id"]
-            }),
-            examples: vec![ToolExample {
-                situation: "A compaction digest said 'see note #abc-123'. Fetch the full row \
-                            before relying on it."
-                    .into(),
-                call: serde_json::json!({ "id": "abc-123" }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "note": {
-                        "type": ["object", "null"],
-                        "description": "The full note row, or null if id not found"
-                    }
-                }
-            })),
-        }
+impl ReadNoteByIdTool {
+    /// Bind this tool's state to its `read_note_by_id` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("read_note_by_id", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("id")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("read_note_by_id requires 'id'".to_string()))?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `read_note_by_id`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let id = params
             .get("id")
             .and_then(|v| v.as_str())
@@ -115,5 +81,15 @@ impl Tool for ReadNoteByIdTool {
             }))),
             None => Ok(StepOutput::Json(json!({ "found": false, "id": id }))),
         }
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("read_note_by_id requires 'id'".to_string()))?;
+        Ok(())
     }
 }

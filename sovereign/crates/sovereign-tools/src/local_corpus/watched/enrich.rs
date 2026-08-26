@@ -42,6 +42,10 @@ use tokio::sync::{Mutex, OwnedSemaphorePermit, RwLock, Semaphore};
 use tokio::task::JoinHandle;
 
 use crate::enrich::{new_cancellation_flag, run_enrich_build, CancellationFlag, EnrichBuildConfig};
+// The enrichment store, below every host that reads it (rung
+// nc-16-shared-capability). Both the schema and the path layout were
+// re-derived in this file until 2026-08-20.
+use sovereign_enrichment_catalog::{paths, EnrichConfig};
 
 /// Daemon-side defaults the driver needs to synthesize an enrich
 /// config when the user enables enrichment on a folder. Populated
@@ -65,121 +69,73 @@ pub struct EnrichmentDefaults {
     pub cli_path: Option<PathBuf>,
 }
 
-/// Wire-shaped enrich config the driver writes to
-/// `~/.svrnmesh/enrichment/<corpus_id>/config.json`.
+/// Synthesize a watched-folder enrich config.
 ///
-/// Mirrors `sovereign_cli::enrich_cmd::config::EnrichConfig` field-
-/// for-field. Kept separate so this crate doesn't depend on the
-/// CLI; round-trip is by-JSON shape, pinned by a serde test.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct EnrichConfigJson {
-    pub schema_version: u32,
-    pub corpus_id: String,
-    pub pipeline_id: String,
-    pub source_path: PathBuf,
-    pub chapter_regex: String,
-    pub chat_model: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub chat_models: Option<BTreeMap<String, String>>,
-    pub embed_model: String,
-    pub base_url: String,
-    pub min_section_body_words: usize,
-    pub max_output_tokens: u32,
-    pub created_at: String,
-}
-
-impl EnrichConfigJson {
-    /// CLI's CONFIG_SCHEMA_VERSION at the time of writing. The CLI
-    /// rejects configs with a higher schema_version than its own
-    /// build, so the driver MUST stay at the version sovereign-cli
-    /// ships with — bumping this here would lock out the
-    /// subprocess.
-    const SCHEMA_VERSION: u32 = 1;
-
-    /// Synthesize a watched-folder enrich config. The defaults are
-    /// chosen to match what `enrich init --source <folder>` would
-    /// produce for an arbitrary text-bearing folder:
-    ///
-    /// - `chapter_regex = "^.*$"` — every doc is its own chapter.
-    ///   Watched folders have no per-doc section structure for the
-    ///   pipeline to discover; treating each file as one chapter
-    ///   matches how the chunker already segments them.
-    /// - `min_section_body_words = 0` — bypass the section-body
-    ///   floor that's meaningful for SEP-style index pages but
-    ///   spurious for arbitrary file collections.
-    /// - `max_output_tokens = 16_384` — same default the CLI ships
-    ///   with; covers thinking-model traces.
-    /// - `chat_models = None` — no per-phase overrides. Operators
-    ///   who care can hand-edit the config later.
-    /// - `created_at = now (RFC3339)`.
-    pub fn synthesize(
-        corpus_id: &str,
-        pipeline_id: &str,
-        source_path: &Path,
-        defaults: &EnrichmentDefaults,
-    ) -> Self {
-        let created_at = chrono::Utc::now().to_rfc3339();
-        Self {
-            schema_version: Self::SCHEMA_VERSION,
-            corpus_id: corpus_id.to_string(),
-            pipeline_id: pipeline_id.to_string(),
-            source_path: source_path.to_path_buf(),
-            chapter_regex: "^.*$".to_string(),
-            chat_model: defaults.chat_model.clone(),
-            chat_models: None,
-            embed_model: defaults.embed_model.clone(),
-            base_url: defaults.base_url.clone(),
-            min_section_body_words: 0,
-            max_output_tokens: 16_384,
-            created_at,
-        }
-    }
-
-    /// Atomic save to `~/.svrnmesh/enrichment/<corpus_id>/config.json`.
-    /// Mirrors `sovereign_cli::enrich_cmd::config::EnrichConfig::save`
-    /// (tmp + rename). Same path layout so the CLI subprocess we
-    /// spawn next reads exactly what we wrote.
-    pub fn save(&self) -> Result<PathBuf> {
-        let path = config_path(&self.corpus_id);
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| {
-                Error::Execution(format!(
-                    "create enrich config dir {}: {e}",
-                    parent.display()
-                ))
-            })?;
-        }
-        let json =
-            serde_json::to_string_pretty(self).map_err(|e| Error::Serialization(e.to_string()))?;
-        let tmp = path.with_extension("json.tmp");
-        std::fs::write(&tmp, json).map_err(|e| {
-            Error::Execution(format!("write enrich config tmp {}: {e}", tmp.display()))
-        })?;
-        std::fs::rename(&tmp, &path).map_err(|e| {
-            Error::Execution(format!("rename enrich config to {}: {e}", path.display()))
-        })?;
-        Ok(path)
+/// The SCHEMA is `sovereign_enrichment_catalog::EnrichConfig` — the one the
+/// CLI reads and the desktop lists. This crate used to carry a hand-written
+/// mirror of it whose doc comment read "Mirrors
+/// `sovereign_cli::enrich_cmd::config::EnrichConfig` field-for-field. Kept
+/// separate so this crate doesn't depend on the CLI." It had drifted four
+/// fields behind (`toc_markers`, `phase1b_max_output_tokens`,
+/// `phase_overrides`, `ontology`), which is what a mirror does. The schema now
+/// lives BELOW both, so there is nothing to mirror.
+///
+/// What stays here is the watched-folder POLICY, which is this driver's
+/// product decision and not the schema's:
+///
+/// - `chapter_regex = "^.*$"` — every doc is its own chapter. Watched folders
+///   have no per-doc section structure for the pipeline to discover; treating
+///   each file as one chapter matches how the chunker already segments them.
+/// - `min_section_body_words = 0` — bypass the section-body floor that's
+///   meaningful for SEP-style index pages but spurious for arbitrary file
+///   collections.
+/// - `max_output_tokens = 16_384` — covers thinking-model traces.
+/// - `chat_models = None` — no per-phase overrides. Operators who care can
+///   hand-edit the config later.
+/// - `created_at = now (RFC3339)`.
+fn synthesize_watched_config(
+    corpus_id: &str,
+    pipeline_id: &str,
+    source_path: &Path,
+    defaults: &EnrichmentDefaults,
+) -> EnrichConfig {
+    EnrichConfig {
+        // The CLI refuses a config whose `schema_version` exceeds its own
+        // build, so the driver must stay at the version the shared crate
+        // declares — which is now literally the same constant, not a copy.
+        schema_version: sovereign_enrichment_catalog::CONFIG_SCHEMA_VERSION,
+        corpus_id: corpus_id.to_string(),
+        pipeline_id: pipeline_id.to_string(),
+        source_path: source_path.to_path_buf(),
+        chapter_regex: "^.*$".to_string(),
+        chat_model: defaults.chat_model.clone(),
+        chat_models: None,
+        embed_model: defaults.embed_model.clone(),
+        base_url: defaults.base_url.clone(),
+        min_section_body_words: 0,
+        toc_markers: None,
+        max_output_tokens: 16_384,
+        phase1b_max_output_tokens: None,
+        phase_overrides: None,
+        ontology: None,
+        created_at: chrono::Utc::now().to_rfc3339(),
     }
 }
 
-/// `~/.svrnmesh/enrichment/<corpus_id>/config.json` — same path
-/// the CLI's `paths::config_path` resolves to. Watched-folder
-/// driver MUST agree with the CLI on this layout because
-/// `EnrichConfig::require(corpus_id)` inside `enrich build` reads
-/// from this exact location.
-pub fn config_path(corpus_id: &str) -> PathBuf {
-    sovereign_root()
-        .join("enrichment")
-        .join(corpus_id)
-        .join("config.json")
-}
-
-fn sovereign_root() -> PathBuf {
-    // `SOVEREIGN_HOME` was a THIRD spelling of the data root and was dropped
-    // 2026-08-10 along with its registry row. Overriding the data root is
-    // `SVRNMESH_DATA_DIR` (legacy `SOVEREIGN_DATA_DIR`), which `data_dir()`
-    // already honours — one name for one thing (ARCH_PRINCIPLES §10.6).
-    sovereign_contracts::rebrand::data_dir()
+/// Write the synthesized config and return where it landed.
+///
+/// `EnrichConfig::save` is the shared atomic writer (tmp + rename) and the
+/// path comes from the shared accessor, so the subprocess spawned on the next
+/// line reads exactly this file. Both used to be re-derived here, and the path
+/// re-derivation disagreed with the CLI's under `SVRNMESH_DATA_DIR`.
+fn save_watched_config(cfg: &EnrichConfig) -> Result<PathBuf> {
+    cfg.save().map_err(|e| {
+        Error::Execution(format!(
+            "write enrich config for corpus '{}': {e}",
+            cfg.corpus_id
+        ))
+    })?;
+    Ok(paths::config_path(&cfg.corpus_id))
 }
 
 /// Folder-ingest v1 §3.3 cost-estimate range surfaced to the user
@@ -428,8 +384,8 @@ impl EnrichmentDriver {
 
         // Synthesize + write the enrich config. The subprocess
         // reads from this exact path on the very next line.
-        let cfg = EnrichConfigJson::synthesize(corpus_id, pipeline_id, source_path, &defaults);
-        cfg.save()?;
+        let cfg = synthesize_watched_config(corpus_id, pipeline_id, source_path, &defaults);
+        save_watched_config(&cfg)?;
 
         // Acquire a global permit. With capacity = 1 this means a
         // build for any other corpus is queued behind this one;
@@ -763,7 +719,7 @@ mod tests {
 
     #[test]
     fn synthesize_defaults_match_v1_posture() {
-        let cfg = EnrichConfigJson::synthesize(
+        let cfg = synthesize_watched_config(
             "test-corpus",
             "philosophy_atlas",
             Path::new("/tmp/notes"),
@@ -787,7 +743,7 @@ mod tests {
         // so a refactor that breaks JSON compatibility surfaces
         // before the subprocess reads the file.
         let cfg =
-            EnrichConfigJson::synthesize("c1", "literary_atlas", Path::new("/tmp/x"), &defaults());
+            synthesize_watched_config("c1", "literary_atlas", Path::new("/tmp/x"), &defaults());
         let json = serde_json::to_value(&cfg).unwrap();
         // CLI required fields:
         for field in [
@@ -869,13 +825,13 @@ mod tests {
         // the operator's real ~/.svrnmesh.
         let dir = tempdir().unwrap();
         std::env::set_var("SVRNMESH_DATA_DIR", dir.path());
-        let cfg = EnrichConfigJson::synthesize(
+        let cfg = synthesize_watched_config(
             "watched-test",
             "philosophy_atlas",
             Path::new("/tmp/notes"),
             &defaults(),
         );
-        let path = cfg.save().unwrap();
+        let path = save_watched_config(&cfg).unwrap();
         assert_eq!(
             path,
             dir.path()
@@ -885,7 +841,7 @@ mod tests {
         );
         assert!(path.exists());
         let raw = std::fs::read_to_string(&path).unwrap();
-        let parsed: EnrichConfigJson = serde_json::from_str(&raw).unwrap();
+        let parsed: EnrichConfig = serde_json::from_str(&raw).unwrap();
         assert_eq!(parsed.corpus_id, "watched-test");
         std::env::remove_var("SVRNMESH_DATA_DIR");
     }

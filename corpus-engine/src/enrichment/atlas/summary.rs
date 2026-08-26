@@ -121,25 +121,12 @@ pub fn compute_summary(atlas_dir: &Path) -> io::Result<AtlasSummary> {
     let mut tier2_count: u64 = 0;
     let mut atom_counts: BTreeMap<AtomType, u64> = BTreeMap::new();
     for a in &atoms.atoms {
-        let t = match a {
-            AtomEnvelope::Entity(e) => {
-                if matches!(e.enrichment_depth, EnrichmentDepth::Extracted) {
-                    tier2_count += 1;
-                }
-                AtomType::Entity
+        if let AtomEnvelope::Entity(e) = a {
+            if matches!(e.enrichment_depth, EnrichmentDepth::Extracted) {
+                tier2_count += 1;
             }
-            AtomEnvelope::Event(_) => AtomType::Event,
-            AtomEnvelope::State(_) => AtomType::State,
-            AtomEnvelope::Relation(_) => AtomType::Relation,
-            AtomEnvelope::Claim(_) => AtomType::Claim,
-            AtomEnvelope::Question(_) => AtomType::Question,
-            AtomEnvelope::Configuration(_) => AtomType::Configuration,
-            AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
-            AtomEnvelope::Position(_) => AtomType::Position,
-            AtomEnvelope::Opposition(_) => AtomType::Opposition,
-            AtomEnvelope::Asset(_) => AtomType::Asset,
-        };
-        *atom_counts.entry(t).or_insert(0) += 1;
+        }
+        *atom_counts.entry(a.atom_type()).or_insert(0) += 1;
     }
 
     Ok(AtlasSummary {

@@ -32,12 +32,12 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct AtosPlanEmitTool {}
 
@@ -53,178 +53,30 @@ impl Default for AtosPlanEmitTool {
     }
 }
 
-#[async_trait]
-impl Tool for AtosPlanEmitTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atos_plan_emit".to_string(),
-            name: "ATOS plan emit (structured)".to_string(),
-            description:
-                "Emit a structured implementation plan for the ATOS Runner during PLAN or \
-                 REASSESS phases. Pass `workdir` (the absolute path the runner gave you in \
-                 the atos-context block) and `steps` (an array of step objects). The tool \
-                 validates the schema, auto-increments the revision against any prior \
-                 plan, and writes the canonical plan.json to <workdir>/.sovereign/. Use \
-                 this tool INSTEAD of writing a JSON code block in your reply — \
-                 free-form prose JSON is brittle for plan-shaped data and the runner's \
-                 parser will struggle with it. The tool is the deterministic path."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "workdir": {
-                        "type": "string",
-                        "description": "Absolute path to the workdir. Read from the \
-                                        atos-context block — it lists the canonical workdir \
-                                        path verbatim. Must be absolute (start with `/`)."
-                    },
-                    "steps": {
-                        "type": "array",
-                        "minItems": 1,
-                        "maxItems": 32,
-                        "description": "Plan steps in execution order. 3-12 steps for a \
-                                        normal feature; 32 is a hard cap.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "id": {
-                                    "type": "string",
-                                    "description": "Stable id like `step-01`. The runner's merge \
-                                                    logic keys execution state on this — keep ids \
-                                                    consistent across REASSESS revisions."
-                                },
-                                "goal": {
-                                    "type": "string",
-                                    "description": "One sentence describing what this step delivers \
-                                                    in code terms."
-                                },
-                                "files_touched": {
-                                    "type": "array",
-                                    "items": { "type": "string" },
-                                    "description": "Workdir-relative paths the step will write or \
-                                                    edit. The hollow-file gate uses this to verify \
-                                                    real work happened."
-                                },
-                                "verify_cmd": {
-                                    "type": "string",
-                                    "description": "Shell command that exits 0 when the step is \
-                                                    complete. Runs from workdir root. Strict \
-                                                    verification: a step is not done until this \
-                                                    command passes."
-                                },
-                                "rationale": {
-                                    "type": "string",
-                                    "description": "Why this step before/after others. Optional but \
-                                                    surfaces in PLAN.md."
-                                }
-                            },
-                            "required": ["id", "goal", "verify_cmd"]
-                        }
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Optional. The runner carries it over from any prior \
-                                        plan; only set on first PLAN if you know the id."
-                    }
-                },
-                "required": ["workdir", "steps"]
-            }),
-            examples: vec![ToolExample {
-                situation: "PLAN phase: the agent has read DESIGN.md and decomposed the work \
-                            into 5 steps. Emit the plan as a tool call instead of prose JSON."
-                    .into(),
-                call: json!({
-                    "workdir": "/Users/me/dev/myproject",
-                    "steps": [
-                        {
-                            "id": "step-01",
-                            "goal": "Scaffold Cargo.toml + src/lib.rs",
-                            "files_touched": ["Cargo.toml", "src/lib.rs"],
-                            "verify_cmd": "cargo check",
-                            "rationale": "Phase 0 skeleton must build before any types"
-                        },
-                        {
-                            "id": "step-02",
-                            "goal": "Define core wire types with serde annotations",
-                            "files_touched": ["src/lib.rs"],
-                            "verify_cmd": "cargo check",
-                            "rationale": "Phase 1: types before behaviour"
-                        }
-                    ]
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "plan_path": { "type": "string" },
-                    "steps": { "type": "integer" },
-                    "revision": { "type": "integer" },
-                    "feature_id": { "type": "string" }
-                }
-            })),
-        }
+impl AtosPlanEmitTool {
+    /// Bind this tool's state to its `atos_plan_emit` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("atos_plan_emit", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &Value) -> Result<()> {
-        let workdir = params
-            .get("workdir")
-            .and_then(Value::as_str)
-            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs string `workdir`".into()))?;
-        if !workdir.starts_with('/') {
-            return Err(Error::InvalidInput(format!(
-                "atos_plan_emit `workdir` must be absolute path; got `{workdir}`"
-            )));
-        }
-        let steps = params
-            .get("steps")
-            .and_then(Value::as_array)
-            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs array `steps`".into()))?;
-        if steps.is_empty() {
-            return Err(Error::InvalidInput(
-                "atos_plan_emit `steps` is empty".into(),
-            ));
-        }
-        if steps.len() > 32 {
-            return Err(Error::InvalidInput(format!(
-                "atos_plan_emit `steps` has {} entries; cap is 32",
-                steps.len()
-            )));
-        }
-        let mut seen = std::collections::HashSet::new();
-        for (i, step) in steps.iter().enumerate() {
-            let obj = step
-                .as_object()
-                .ok_or_else(|| Error::InvalidInput(format!("step {i} is not an object")))?;
-            for required in ["id", "goal", "verify_cmd"] {
-                let v = obj
-                    .get(required)
-                    .and_then(Value::as_str)
-                    .filter(|s| !s.trim().is_empty());
-                if v.is_none() {
-                    return Err(Error::InvalidInput(format!(
-                        "step {i} missing required non-empty `{required}`"
-                    )));
-                }
-            }
-            let id = obj.get("id").and_then(Value::as_str).unwrap();
-            if !seen.insert(id.to_string()) {
-                return Err(Error::InvalidInput(format!(
-                    "step {i} has duplicate id `{id}`"
-                )));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atos_plan_emit`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let workdir = params
             .get("workdir")
             .and_then(Value::as_str)
@@ -333,6 +185,58 @@ impl Tool for AtosPlanEmitTool {
             "feature_id": feature_id,
         })))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let workdir = params
+            .get("workdir")
+            .and_then(Value::as_str)
+            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs string `workdir`".into()))?;
+        if !workdir.starts_with('/') {
+            return Err(Error::InvalidInput(format!(
+                "atos_plan_emit `workdir` must be absolute path; got `{workdir}`"
+            )));
+        }
+        let steps = params
+            .get("steps")
+            .and_then(Value::as_array)
+            .ok_or_else(|| Error::InvalidInput("atos_plan_emit needs array `steps`".into()))?;
+        if steps.is_empty() {
+            return Err(Error::InvalidInput(
+                "atos_plan_emit `steps` is empty".into(),
+            ));
+        }
+        if steps.len() > 32 {
+            return Err(Error::InvalidInput(format!(
+                "atos_plan_emit `steps` has {} entries; cap is 32",
+                steps.len()
+            )));
+        }
+        let mut seen = std::collections::HashSet::new();
+        for (i, step) in steps.iter().enumerate() {
+            let obj = step
+                .as_object()
+                .ok_or_else(|| Error::InvalidInput(format!("step {i} is not an object")))?;
+            for required in ["id", "goal", "verify_cmd"] {
+                let v = obj
+                    .get(required)
+                    .and_then(Value::as_str)
+                    .filter(|s| !s.trim().is_empty());
+                if v.is_none() {
+                    return Err(Error::InvalidInput(format!(
+                        "step {i} missing required non-empty `{required}`"
+                    )));
+                }
+            }
+            let id = obj.get("id").and_then(Value::as_str).unwrap();
+            if !seen.insert(id.to_string()) {
+                return Err(Error::InvalidInput(format!(
+                    "step {i} has duplicate id `{id}`"
+                )));
+            }
+        }
+        Ok(())
+    }
 }
 
 fn read_prior_plan_meta(plan_path: &Path) -> (Option<u32>, Option<String>) {
@@ -378,8 +282,8 @@ mod tests {
                 {"id": "step-01", "goal": "scaffold", "verify_cmd": "true", "files_touched": ["Cargo.toml"]}
             ]
         });
-        tool.validate(&params).unwrap();
-        let out = tool.execute(&params, &ctx()).await.unwrap();
+        tool.validate_extra(&params).unwrap();
+        let out = tool.run(&params, &ctx()).await.unwrap();
         let written = tmp.path().join(".sovereign").join("plan.json");
         assert!(written.exists());
         let body = std::fs::read_to_string(&written).unwrap();
@@ -403,9 +307,9 @@ mod tests {
             "workdir": tmp.path().to_string_lossy(),
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        tool.execute(&params, &ctx()).await.unwrap();
-        tool.execute(&params, &ctx()).await.unwrap();
-        let third = tool.execute(&params, &ctx()).await.unwrap();
+        tool.run(&params, &ctx()).await.unwrap();
+        tool.run(&params, &ctx()).await.unwrap();
+        let third = tool.run(&params, &ctx()).await.unwrap();
         if let StepOutput::Json(v) = third {
             assert_eq!(v["revision"], 3);
         } else {
@@ -423,13 +327,13 @@ mod tests {
             "feature_id": "carry-me",
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        tool.execute(&first, &ctx()).await.unwrap();
+        tool.run(&first, &ctx()).await.unwrap();
         // Second call without feature_id should carry it over.
         let second = json!({
             "workdir": tmp.path().to_string_lossy(),
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        let out = tool.execute(&second, &ctx()).await.unwrap();
+        let out = tool.run(&second, &ctx()).await.unwrap();
         if let StepOutput::Json(v) = out {
             assert_eq!(v["feature_id"], "carry-me");
         }
@@ -442,7 +346,7 @@ mod tests {
             "workdir": "relative/path",
             "steps": [{"id": "s1", "goal": "g", "verify_cmd": "true"}]
         });
-        let err = tool.validate(&params).unwrap_err();
+        let err = tool.validate_extra(&params).unwrap_err();
         assert!(format!("{err}").contains("absolute"));
     }
 
@@ -450,7 +354,7 @@ mod tests {
     fn validate_rejects_empty_steps() {
         let tool = AtosPlanEmitTool::new();
         let params = json!({"workdir": "/tmp/x", "steps": []});
-        assert!(tool.validate(&params).is_err());
+        assert!(tool.validate_extra(&params).is_err());
     }
 
     #[test]
@@ -463,7 +367,7 @@ mod tests {
                 {"id": "s1", "goal": "b", "verify_cmd": "true"}
             ]
         });
-        let err = tool.validate(&params).unwrap_err();
+        let err = tool.validate_extra(&params).unwrap_err();
         assert!(format!("{err}").contains("duplicate"));
     }
 
@@ -474,7 +378,7 @@ mod tests {
             "workdir": "/tmp/x",
             "steps": [{"id": "s1", "verify_cmd": "true"}]
         });
-        let err = tool.validate(&params).unwrap_err();
+        let err = tool.validate_extra(&params).unwrap_err();
         assert!(format!("{err}").contains("goal"));
     }
 }

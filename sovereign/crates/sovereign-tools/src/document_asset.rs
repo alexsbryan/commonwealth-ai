@@ -1104,8 +1104,7 @@ impl DocumentAssetManager {
         // SLOT_POLICY §3 Route: operation classification consumed by
         // parse_route_response (control flow), never shown to the user.
         // Route's Some(0) think budget matches this site verbatim.
-        let mut req =
-            CompletionRequest::for_workload(Workload::Route, prompt).with_output_budget(128);
+        let mut req = Workload::Route.request(prompt).with_output_budget(128);
         req.temperature = Some(0.0);
         let response = self.inference.complete(&req).await?;
 
@@ -1425,8 +1424,9 @@ impl DocumentAssetManager {
 
         // SLOT_POLICY §3 Synthesize: full-document synthesis composed for
         // the user (traces a focus across the text).
-        let mut req =
-            CompletionRequest::for_workload(Workload::Synthesize, prompt).with_output_budget(2048);
+        let mut req = Workload::Synthesize
+            .request(prompt)
+            .with_output_budget(2048);
         req.temperature = Some(0.5);
         // POLICY-DEBT(SLOT_POLICY §3 Synthesize): Some(0) preserved for P1
         // neutrality (bundle is None); P5 confirms.
@@ -1679,8 +1679,7 @@ async fn detect_document_type(
     // SLOT_POLICY §3 Route: document-type classification consumed by
     // control flow (DocumentTypeTag), never shown to the user. Route's
     // Some(0) think budget matches this site verbatim.
-    let mut request =
-        CompletionRequest::for_workload(Workload::Route, prompt).with_output_budget(16);
+    let mut request = Workload::Route.request(prompt).with_output_budget(16);
     request.temperature = Some(0.0);
     let response = inference.complete(&request).await;
 
@@ -1883,7 +1882,7 @@ async fn build_skeleton(
                 // 2026-07-23 enrichment-model ladder (skeleton quality
                 // is not model-bound above 4B).
                 let mut request =
-                    CompletionRequest::for_workload(Workload::EnrichBulk, prompt)
+                    Workload::EnrichBulk.request(prompt)
                         .with_output_budget(120);
                 request.temperature = Some(0.1);
                 // Grammar constraint preserved verbatim (see lark_grammar above).
@@ -2252,7 +2251,7 @@ async fn extract_segments(
                 );
                 // SLOT_POLICY §3 ExtractDurable: segment naming written to the
                 // durable skeleton.
-                let mut request = CompletionRequest::for_workload(Workload::ExtractDurable, prompt)
+                let mut request = Workload::ExtractDurable.request(prompt)
                     .with_output_budget((((n * 24) + 40) as u32).min(2048));
                 request.temperature = Some(0.1);
                 request.lark_grammar = Some(lark_grammar);
@@ -2823,8 +2822,9 @@ async fn classify_motifs(
 
     // SLOT_POLICY §3 ExtractDurable: recurring-motif classification written
     // to the durable skeleton; corruption outlives the session.
-    let mut request =
-        CompletionRequest::for_workload(Workload::ExtractDurable, prompt).with_output_budget(400);
+    let mut request = Workload::ExtractDurable
+        .request(prompt)
+        .with_output_budget(400);
     request.temperature = Some(0.1);
     // POLICY-DEBT(SLOT_POLICY §3 ExtractDurable): Some(0) preserved for P1
     // neutrality (bundle is None); P5 confirms.
@@ -3264,7 +3264,7 @@ async fn extract_action_atoms(
                 // advisory enrichment kept on the Fast slot (P1 neutrality).
                 // Housekeep's Some(0) think budget matches this site verbatim.
                 let mut request =
-                    CompletionRequest::for_workload(Workload::Housekeep, call.prompt.clone())
+                    Workload::Housekeep.request(call.prompt.clone())
                         // POLICY-DEBT(SLOT_POLICY §4.5 Housekeep): 768 > 512 forfeits the
                         // batched FastShort claim; the JSON action array needs the room.
                         .with_output_budget(768);
@@ -3370,8 +3370,7 @@ async fn generate_overview(
     // SLOT_POLICY §3 Housekeep: one-paragraph document overview —
     // advisory context, not durable truth. Housekeep's Some(0) think
     // budget matches this site verbatim.
-    let mut request =
-        CompletionRequest::for_workload(Workload::Housekeep, prompt).with_output_budget(256);
+    let mut request = Workload::Housekeep.request(prompt).with_output_budget(256);
     request.temperature = Some(0.3);
     inference
         .complete(&request)

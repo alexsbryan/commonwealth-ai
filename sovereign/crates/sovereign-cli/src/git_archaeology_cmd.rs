@@ -19,6 +19,7 @@ use corpus_engine_archaeology::git_archaeology::{
     batch_harvest_all_commits, compute_co_evolution, discover_repo_root, enrich_atom,
     source_to_repo_relative, AtomProvenance, GitArchaeologyReport, Staleness, StalenessSummary,
 };
+use sovereign_cli_shared::dirs::sovereign_root;
 
 const DEFAULT_THRESHOLD: f32 = 0.5;
 const DEFAULT_MIN_JOINT: u32 = 5;
@@ -363,13 +364,6 @@ fn resolve_source_path(args: &Args, source_corpus_id: &str) -> Result<PathBuf, S
         ));
     }
     Ok(p)
-}
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn atlas_dir_for(corpus_id: &str) -> PathBuf {

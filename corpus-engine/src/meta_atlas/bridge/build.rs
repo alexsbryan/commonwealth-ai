@@ -30,8 +30,8 @@ use crate::wikipedia_graph::WikipediaGraph;
 
 use super::adjudicate::{AdjudicateFn, AdjudicationRequest};
 use super::edges::{
-    default_bridge_edges_path, write_bridge_edges, BridgeEdge, BridgeEdgesFile, BridgeOp,
-    BridgeOplog, BridgeRelation, EdgeSource, TopicRef,
+    default_bridge_edges_path, write_bridge_edges, BridgeAct, BridgeEdge, BridgeEdgesFile,
+    BridgeRelation, EdgeSource, TopicRef,
 };
 use super::signals::{AlignmentBand, SignalContext, SignalStack};
 use super::topic_node::{topic_from_atlas, topic_from_chunk, BridgeTopic};
@@ -184,7 +184,7 @@ pub async fn build_bridge(
     };
 
     let stack = SignalStack::default_stack();
-    let oplog = dir.as_ref().map(BridgeOplog::new);
+    let oplog = dir.as_ref().map(crate::oplog::Oplog::<BridgeAct>::new);
 
     // Rebuild topics_seen / seen_keys from any resumed edges.
     let mut topics_seen: Vec<TopicRef> = Vec::new();
@@ -329,7 +329,7 @@ pub async fn build_bridge(
             (out_path.as_ref(), oplog.as_ref(), progress_path.as_ref())
         {
             for e in &topic_edges {
-                if let Err(err) = log.append(&BridgeOp::add(e)) {
+                if let Err(err) = log.append(&crate::oplog::Op::add(e)) {
                     tracing::warn!(error = %err, "bridge: oplog append failed");
                 }
             }

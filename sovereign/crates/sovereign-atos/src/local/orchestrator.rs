@@ -18,7 +18,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 
 use corpus_engine_atos::{AtosRunRow, FeatureRow, FeatureState, FeatureStore, MilestoneRow};
-use corpus_engine_notes::{NoteRow, NoteScope, NoteStore, ScopeFilter};
+use corpus_engine_notes::{Note, NoteScope, NoteStore, ScopeFilter};
 
 use super::helpers;
 use crate::{
@@ -367,7 +367,7 @@ impl AtosOrchestrator for LocalAtosOrchestrator {
         Ok(report)
     }
 
-    async fn active_global_invariants(&self) -> Result<Vec<NoteRow>> {
+    async fn active_global_invariants(&self) -> Result<Vec<Note>> {
         helpers::global_invariants_rows(&self.notes).await
     }
 }
@@ -413,7 +413,7 @@ impl LocalAtosOrchestrator {
     pub async fn teardown_candidates(
         &self,
         feature_id: &str,
-    ) -> Result<Vec<corpus_engine_notes::NoteRow>> {
+    ) -> Result<Vec<corpus_engine_notes::Note>> {
         let filter = ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(feature_id.to_string()),
@@ -447,7 +447,7 @@ impl LocalAtosOrchestrator {
             .collect();
         // The WriteRedteamFindingTool writes with session_id="redteam"
         // as a literal — exclude that too.
-        let mut filtered: Vec<corpus_engine_notes::NoteRow> = notes
+        let mut filtered: Vec<corpus_engine_notes::Note> = notes
             .into_iter()
             .filter(|n| n.session_id != "redteam")
             .filter(|n| !redteam_sessions.contains(&n.session_id))

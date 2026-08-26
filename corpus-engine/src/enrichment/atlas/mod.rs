@@ -30,6 +30,7 @@ pub mod atoms;
 pub mod atoms_delta;
 pub mod axis_catalog;
 pub mod citation;
+pub mod context;
 pub mod cross_corpus;
 pub mod doc_to_atoms;
 pub mod edges;
@@ -41,6 +42,7 @@ pub mod registry;
 pub mod resolution;
 pub mod schema_validation;
 pub mod section_cache;
+pub mod stable_key;
 pub mod store;
 pub mod strategies;
 pub mod summary;
@@ -53,7 +55,7 @@ pub use atoms::{
     Question, Relation, ResolutionStatus, SectionPosition, SectionRange, State,
 };
 pub use axis_catalog::{
-    all_axes, axes_for_mode, axis_by_key, AtomKind, GatingField, TypedAxis, AXIS_CATALOG,
+    all_axes, axes_for_mode, axis_by_key, AxisAtomShape, GatingField, TypedAxis, AXIS_CATALOG,
 };
 pub use citation::{apply_citation, SourceCitation};
 pub use cross_corpus::{
@@ -73,6 +75,7 @@ pub use schema_validation::{
     count_transitions_without_trigger, count_ungrounded_claims, SchemaComparison,
     SchemaValidationInput, SchemaValidationReport,
 };
+pub use stable_key::StableAtomKey;
 pub use summary::{
     compute_summary as compute_atlas_summary,
     read_or_compute_summary as read_or_compute_atlas_summary, AtlasSummary,

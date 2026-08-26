@@ -8,21 +8,17 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 use uuid::Uuid;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 
 use crate::config::WorkAtlasConfig;
 use crate::model::{AgentKind, ClaimRecord, Privacy, SymbolRef};
 use crate::store::{SessionIdentity, WorkAtlasError, WorkAtlasStore};
 use crate::tools::broadcast::ClaimBroadcaster;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 #[derive(Debug)]
 pub struct DeclareScopeTool {
@@ -57,69 +53,25 @@ impl DeclareScopeTool {
     }
 }
 
-#[async_trait]
-impl Tool for DeclareScopeTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "declare_scope".to_string(),
-            name: "Declare Scope".to_string(),
-            description: "Claim a scope (a symbol id or file path) so other agents on the \
-                          same mesh can see you're working on it. Use BEFORE non-trivial \
-                          work on a function or file the rest of the team also touches; \
-                          drop with `release_scope` when done. \
-                          Claims expire on TTL (default 4h, configurable) and are dropped \
-                          when your session ends. Empty intent is rejected — the intent is \
-                          what tells colliding agents what you're trying to do."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "symbols": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "One or more SCIP symbol ids or file paths. Mixed list OK."
-                    },
-                    "intent": {
-                        "type": "string",
-                        "description": "What you're trying to do. Non-empty."
-                    },
-                    "ttl_seconds": {
-                        "type": "integer",
-                        "description": "Override the default TTL. Clamped to the configured max.",
-                        "minimum": 1
-                    }
-                },
-                "required": ["symbols", "intent"]
-            }),
-            examples: vec![ToolExample {
-                situation: "Before refactoring a function several files reference.".into(),
-                call: json!({
-                    "symbols": ["CorpusEngine::ingest"],
-                    "intent": "split ingest into recipe-driven phases",
-                    "ttl_seconds": 7200
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "claim_id":        { "type": "string" },
-                    "session_id":      { "type": "string" },
-                    "ttl_expires_at":  { "type": "integer" },
-                    "intent":          { "type": "string" }
-                }
-            })),
-        }
+impl DeclareScopeTool {
+    /// Bind this tool's state to its `declare_scope` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("declare_scope", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `declare_scope`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let intent_raw = params
             .get("intent")
             .and_then(|v| v.as_str())

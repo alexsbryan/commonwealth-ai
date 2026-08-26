@@ -53,7 +53,7 @@ pub use sec_facts::{
 };
 pub use tension_classifier::{
     classification_to_edge, parse_phase6_classifier_response, phase6_classifier_response_schema,
-    resolve_candidate_content, AtomIndex, AtomKind, CandidateContent, Phase6Classification,
+    resolve_candidate_content, AtomIndex, CandidateContent, Phase6Classification, TensionSide,
 };
 pub use tensions::{
     select_candidates, select_embedding_topk, CandidateSource, TensionCandidate,

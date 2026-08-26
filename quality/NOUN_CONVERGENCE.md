@@ -734,7 +734,7 @@ recall.
 
 | Metric | Today (snapshot) | Target |
 |---|---:|---:|
-| Census names with no disposition | 272 (2026-08-17, first-party production) | 0 |
+| Census names with no disposition | 279 (2026-08-20, first-party production, segment-scoped) — was 272 on 2026-08-17, when the scope filter still hid `deep_research/` | 0 |
 | Register rows converged | 0 | all `in_program` rows |
 | God-object score (`Runtime`, methods × files) | 133 × 32 (2026-08-17) | < 40 × 5 |
 | Reconciliation machinery | ~21,500 first-party lines (2026-08-17, incl. the v1 table's own exclusions) | ≤ ⅓ of the minted baseline |
@@ -775,3 +775,477 @@ stale, by design of the universe).
 Roughly a week, and at the end the disease is visible on a dashboard and
 monotonically decreasing — which is the thing currently missing, not
 analysis.
+
+---
+
+## 10. The unnamed half
+
+**Status:** addendum, 2026-08-20. Proposed, not approved, nothing landed.
+Measured at HEAD `66ef25bf` against the SCIP graph re-exported 19:20:53Z
+(1,631,325 refs, all with spans, `last_indexed_head` = HEAD) plus `git log`
+and `cargo metadata`.
+
+**These figures were hand-measured and therefore NOT MINTED**, which by this
+document's own rule (§1, "the numbers are minted, not typed") made them week-old
+fish on arrival. Each subsection named the tool that should own its number.
+
+**§10.1, §10.2 and §10.3 now have theirs**, landed 2026-08-20:
+`svrn code converge roles` (population and adoption per role) and
+`arch_metrics::type_spreads` (the per-crate share, rendered by `arch-report`).
+Every figure in those three subsections below is re-derived from the SCIP graph
+at `6a6b1317` and carries that stamp. Where the instrument disagreed with the
+hand figure the instrument won, and the correction is stated in place rather
+than quietly applied — three of them are large. The remaining subsections are
+still hand-measured.
+
+### 10.1 The census keys on names, and the larger half has none
+
+§1 says the system re-derives what it should carry, and counts it by name:
+278 concepts typed in more than one crate. That count is real and the loop in
+§3 is the right response to it. It is also structurally blind to the bigger
+half.
+
+Three concept families, measured as distinct first-party production type
+definitions with `reach` = distinct referencing crates:
+
+Minted by `svrn code converge roles` at graph `6a6b1317`. Membership is the
+family's head nouns — for the first row, the campaign ladder's own published
+`*Result *Outcome *Verdict *Status` — matched against the last CamelCase
+segment of every type name. No list of member types exists or is maintained.
+
+| family | types | crates | reach ≥ 3 | best |
+|---|---:|---:|---:|---|
+| verdict / judgement | 334 | 39 | 10% | `Result`, reach 20 |
+| citation / provenance | 79 | 23 | 10% | `NoteSource`, reach 9 |
+| freshness / staleness | 3 | 3 | **0%** | `Freshness`, reach 2 |
+
+416 types at 10% adoption by NAME. The hand figures were 198 / 112 / 41 at
+roughly 2%, and all three moved: the verdict family is 69% larger than the hand
+count, citation 29% smaller, and freshness collapses from 41 to **3** — because
+almost nothing in that family is NAMED for it, which is the section's own
+thesis arriving as a number.
+
+The name half is not the whole population. Counting instead by FIELD — a type
+declaring `generated_at` is answering a freshness question whatever it is
+called — the same run reports:
+
+| family | carriers | named for some OTHER role |
+|---|---:|---:|
+| verdict / judgement | 89 | 63 (71%) |
+| citation / provenance | 78 | 75 (96%) |
+| freshness / staleness | 22 | **22 (100%)** |
+
+That last column is the size of the blind spot, measured rather than asserted.
+Every single freshness carrier in the workspace is called something else, so no
+name-keyed census can ever reach one. `AuditReport` and `DriftReport` are not
+the same name; neither are `StalenessSummary` and `lags_graph`.
+
+Four exhibits that this is one concern and not three:
+
+- `sovereign posture` prints seven rows in **seven status vocabularies**
+  (`fresh`, `stale`, `fail (stale)`, `off (by design)`, `present`,
+  `present (gaps)`) and **seven age formats** (`12d`, `1h`, `16d`, `7d ago`,
+  `-`, `6d`, `9d..95d`). It is an aggregator over a concept with no type, so
+  each subsystem it aggregates invented its own.
+- **26 hand-written freshness fields in 10 spellings** (graph `6a6b1317`):
+  `generated_at` 5, `age_hours` 4, `stale` 3, `built_at` 3, `as_of` 3,
+  `staleness` 3, `age_secs` 2, `indexed_at` 2, `computed_at` 1; `age_days`,
+  `freshness`, `lags_graph` and `commits_behind` are declared on no type at
+  all. Three concepts — when was it made, how old is that, is it too old —
+  ten ways.
+
+  **This row read "172 fields in 13 spellings" until 2026-08-20**, and 172 was
+  a count of something else: a bare substring grep over every `.rs` file, which
+  returns 175 today and is mostly struct-literal initializers, JSON keys and
+  comments rather than field declarations. The graph's field rows were checked
+  against `RegistrySnapshot` by hand — four fields declared, four rows — before
+  the correction was accepted. The spellings were right and the shape of the
+  finding survives; the magnitude was 6.6x too big, and four of the thirteen
+  spellings name no field anywhere.
+- ARCH §18.2's four verdicts appear in **17 files**, against 198
+  verdict-shaped types. The most-cited principle in the house is the
+  least-typed concern in the codebase.
+- `concept_gate.rs` carries an arm that REFUSES a response with no
+  `freshness` field — added after observing the failure live on 2026-08-20.
+  It wants the envelope badly enough to hand-check for it.
+
+**Owner:** `svrn code converge roles` — the role tier beneath `census` (names)
+and `dry-report` (behaviour). Landed 2026-08-20; `corpus-engine-scip/src/roles.rs`.
+A mirror, not a gate: no threshold, no exit code, nothing to ratchet.
+
+### 10.2 The sprawl is inside crates, not between them
+
+The program's mental image is crates re-deriving each other's nouns. Measured,
+the crate graph is healthy and the mass is intra-crate.
+
+Healthy, four ways: **0** of 441 load-bearing types carry an upward edge;
+`layer-gate` exits 0; **18** of 28,847 co-changing file pairs cross a crate
+boundary with no structural reference behind them; the adapter tax is 26
+`impl From` plus 57 `#[from]` workspace-wide. Crate boundaries match the
+change patterns. There is also a real downtown — `sovereign-contracts` +
+`oicp-types` + `kernel-types` are 22k lines, 2.6% of the code, carrying 57%
+of cross-crate type traffic at 773–1,266 refs per kloc.
+
+The defect is one number: **44% of all 5,139 first-party production types are
+referenced by no other file at all.** Used only in the file that declares
+them. 28% are exported; 28% are used in 2+ files of their own crate.
+
+Minted by `arch_metrics::type_spreads` at graph `6a6b1317`, rendered by
+`svrn code arch-report`. A type is bucketed by the WIDEST reference to it, so
+the three buckets partition the population exactly — which the hand figures did
+not (46 + 29 + 18 = 93).
+
+| crate | types | private | crate-local | exported |
+|---|---:|---:|---:|---:|
+| sovereign-contracts | 284 | **13%** | 2% | 85% |
+| oicp-types | 70 | **0%** | 4% | 96% |
+| corpus-engine | 887 | 28% | 38% | 34% |
+| sovereign-tools | 454 | 37% | 26% | 36% |
+| sovereign-core | 367 | 39% | 32% | 28% |
+| sovereign-mesh | 343 | 59% | 27% | 14% |
+| **sovereign-cli-llm** | 608 | **75%** | 25% | **0%** |
+| sovereign-cli-dev | 135 | 76% | 24% | 0% |
+| sovereign-desktop | 213 | 78% | 22% | 0% |
+| sovereign-server | 84 | 80% | 20% | 0% |
+| sovereign-cli | 93 | **85%** | 15% | 0% |
+
+Same authorship, same five months, 0% to 85% private. Some of that spread is
+correct Rust — a one-endpoint DTO should be private — but it is not idiom that
+five crates export literally nothing; it is the absence of anything to reach
+for.
+
+**Two corrections, and the hand figures held up better than §10.1's.** Every
+private and exported SHARE above lands within 6 points of the hand-measured
+one, on all seven crates it named — the shape of this section was right. What
+was wrong is the denominator: **8,882 counted enum variants as types.** Types
+plus variants at this commit is 8,764; top-level type definitions, the
+population `converge census` and `converge roles` both use, is 5,139. The
+crate-local figure moves with it, 18% to 28%.
+
+`sovereign-cli-llm` is the extreme and it is not a CLI: `enrich_cmd` is 32,813
+lines and `bench_cmd` is 29,460, whole subsystems inside a leaf binary that
+exports nothing. Neither the desktop nor the daemon nor MCP can reach them, so
+anyone needing enrichment orchestration re-derives it. And
+`sovereign-desktop` depends on `sovereign-cli-daemon` — a **binary** — while
+not depending on `sovereign-cli-shared` at all, yet carries
+`enrich_commands.rs`, `atlas_commands.rs`, `mesh_commands.rs`,
+`recipe_commands.rs`, `governance_commands.rs`. Two hosts implementing the
+same subject areas, sharing nothing.
+
+**Owner:** `arch_metrics::type_spreads`, landed 2026-08-20 beside
+`instability` as `CrateMetrics::types` and rendered by the one
+`render_markdown` — as this row specified. `None` there means the census did
+not run, which is not the same as a crate whose types are all private.
+
+### 10.3 Adoption is predicted by work carried, not by shape
+
+Why did some concepts converge without any program telling them to?
+
+Minted by `svrn code converge roles` at graph `6a6b1317`. A role is the last
+CamelCase segment of a type's name, so `AuditReport`, `DriftReport` and
+`FieldglassReport` are one role and nobody maintains a list saying so.
+Adoption is the share of a role's types reaching 3+ distinct crates — the same
+cut §10.1's table uses, computed once.
+
+| role | what the abstraction does for you | population | adoption |
+|---|---|---:|---:|
+| Scope | admission | 11 | **55%** |
+| Tool | dispatch + execution | 110 | 53% |
+| Store | persistence + query | 39 | 44% |
+| Registry | dispatch | 27 | 30% |
+| Config | nothing | 130 | 15% |
+| Error | ~nothing (`thiserror` makes minting free) | 86 | 10% |
+| Entry / Args | nothing | 83 / 55 | 5% |
+| Summary / Report | nothing | 63 / 102 | 3% |
+| **Response** | nothing | 134 | **2%** |
+
+Still monotone in work carried and in nothing else — the ordering the hand
+table asserted is the ordering the instrument returns, which is the part of
+this section that mattered. Three details changed:
+
+- **Every adoption share is higher than the hand figure**, and the high-work
+  end moved most: Tool 29% → 53%, Store 35% → 44%, Config 7% → 15%. The gap
+  between "carries work" and "carries none" is wider than §10.3 claimed, not
+  narrower.
+- **`Registry` and `Scope` should never have shared a row.** Hand-grouped at
+  17%, they measure 30% and 55% — Scope is the single best-adopted role in the
+  workspace, and burying it in a slash-pair hid that.
+- **`Args` is not 0%.** Three of 55 reach three crates. The claim "no shared
+  type exists" still holds; the adoption figure was too clean.
+
+`Report` at 3 of 102 remains the control experiment, and it still reads the
+same way: the most obvious "shared vocabulary" candidate in the codebase, and
+it never spread.
+
+**One row of the hand table has no instrument and is left as measured:**
+`Recipe`, at "46 TOMLs, ~100%". Those are recipe DATA files, not Rust types, so
+a type-graph census cannot see them — it reports the `Recipe` type role at 2
+types / 50%, which is a different fact about a different population. A
+data-file census is a different instrument and this one does not substitute for
+it (§18.3).
+
+This is the design criterion the program has been missing:
+
+> **Extract work, not shape.** A shared struct saves an author nothing and
+> loses to bespoke every time, gate or no gate. A shared thing that renders,
+> persists, dispatches or admits wins on cost with no enforcement at all.
+
+`Report` at 3 of 102 is the control experiment, already run. It is the most
+obvious "shared vocabulary" candidate in the codebase and it never spread,
+because a report is data and data-shaped abstractions do not pay.
+
+### 10.4 Why convergence alone will not hold
+
+§6.1 has the diagnosis half right — an agent "has no cheap way to know the
+concept already exists three crates over." The other half is that knowing
+does not pay. From the author's seat:
+
+```
+mint bespoke : write the struct in the file already open.
+               seconds, zero discovery, zero blast radius, no peer collision.
+reach shared : discover it -> read it -> judge fit -> maybe edit a crate you
+               do not own -> callers() -> wider diff -> review.
+```
+
+Fifty to a hundred times the cost, carrying risk the bespoke path does not.
+A cost-minimising author picks bespoke, and is right to. **No ratchet changes
+that inequality; it only adds a penalty to the losing option.**
+
+The register closes the rename-apart hatch for names it tracks — §1 is right
+that a `distinct` rename must record its rationale. It cannot close it for a
+concern that never had a name, and `concept_gate.rs`'s own remediation text
+offers "converge it onto one owner, **or rename it apart**" as equal
+branches. `AuditReport`, `DriftReport`, `ArchReport`, `DryReport`,
+`FieldglassReport`.
+
+Four places an intervention can land, by cost to the author:
+
+| where | mechanism | cost | status |
+|---|---|---|---|
+| the order | `seams:` in `order.md` | zero, it is in the prompt | field exists, unpopulated |
+| context | `session-boot` / `inject-notes` | zero | needs a vocabulary to inject |
+| the decision | `PreToolUse` on Edit/Write | near zero, answer precomputed | proven by `prefer-code-intel.py` |
+| after the edit | `concept-gate` | rework | weakest; teaches rename-apart |
+
+The first three narrow the inequality. Only one reverses it: **a scaffold.**
+`svrn code scaffold <role> --name Foo` emitting a file already wired to the
+shared trait makes reaching *cheaper* than minting. The precedent is native —
+recipe authoring works this way, which is exactly why the corpus axis of
+`nc-extends` is the one that scores DATA.
+
+### 10.5 The three blocks
+
+**Complete `kernel-types`.** ARCH_LAYERS.toml:85 already declares it "the
+NEUTRAL kernel — identity + provenance." It holds `Custody`, `Grain`,
+`Source`, `Attribution`, `ContentHash`, `CorpusId`, `Locator`, `Origin` —
+1,210 lines at 897 refs/kloc — and stopped before freshness and verdict. The
+envelope's home exists and was minted for it. Likely shape is an embedded
+`Provenance` field plus an accessor trait, **not** a `Judged<T>` wrapper;
+generic wrapping is painful in Rust and `fieldglass::Honesty` (25 fields) is
+already a hand-rolled instance of the flat version. Only three crates depend
+on `kernel-types` today, so this is a distribution problem as much as a
+design one.
+
+**Move `sovereign-cli-shared` to `capabilities` (L4), then give it `Report`
+and `Args`.** The layer move is a precondition, not hygiene: hosts are
+terminal, so at L6 the desktop cannot legally depend on it — it is why the
+two hosts share nothing. `Report` is then the *renderer of the envelope*, not
+a peer abstraction: the honesty footer is the envelope rendered. Targets are
+64 `fn render_markdown`, 549 fixed-width column specs, 118 `to_string_pretty`.
+`Args` targets 1,075 flag match arms over 553 distinct flags — and
+`cli_contract.rs` is already 1,473 lines that AUDIT the CLI surface they
+cannot generate.
+
+**Relocate `enrich_cmd` and `bench_cmd` into `capabilities`.** 62k lines,
+no design work, largest single mass available. The CLI verb collapses to arg
+parsing over a library call and the desktop gets the capability for free.
+
+### 10.6 The behaviour half — converge and delete
+
+`dry-report` is the third tier and it needs an instrument fix before its
+numbers are usable. **It has no source scope.** Headline: 3,151 exact groups,
+1,056 near clusters, ~96,381 redundant lines. Filtered to first-party
+production Rust: **540 clusters, ~13,974 lines — 14.5% of the headline.** The
+rest is `target/` build artifacts (one vendored llama.cpp Python function
+counted seven times across build-hash dirs), `vendor/`, `research/`, and
+`bench/external/` SWE-bench fixtures. `converge::SourceScope`
+(`converge.rs:86`) already carries exactly these exclusions — repaired
+2026-08-20 when this campaign's own instrument-validation rung found
+`"research/"` swallowing `deep_research/`. `dry_report` does not use it.
+§10.6-of-ARCH finding, one-line fix, and until it lands anyone acting on the
+headline deduplicates build output.
+
+Corrected, duplicated behaviour concentrates where the type census cannot
+look, because these are functions:
+
+| concern | clusters | redundant lines |
+|---|---:|---:|
+| parse / args | 49 | ~1,430 |
+| stream / inference | 24 | ~1,163 |
+| text extraction | 39 | ~1,043 |
+| freshness / stale | 13 | ~402 |
+| render / format | 10 | ~229 |
+| verdict / judge | 9 | ~206 |
+
+Named targets, deletable with `code redirect` today:
+
+- `cmd_index` (2×111), `run_incremental` (2×91), `cmd_watch_status` (2×68),
+  `decide` (2×41) — four verbs implemented twice, split
+  `sovereign-cli-dev` / `sovereign-cli`. ~311 redundant lines.
+- `strip_html` (2×118) and `strip_mediawiki` (2×139), both split
+  `corpus-engine` / `sovereign-tools`. The `strip_html` pair has DRIFTED —
+  one copy lacks a `</script>` fix and silently truncates crawled HTML. A
+  live correctness bug living in a clone pair.
+- `complete_stream` — **LANDED, rung `nc-17`, 2026-08-21. "12 copies" was a
+  clone-detector artifact and the real shape is better.** The 12 are mostly
+  12-14 line `#[cfg(test)]` `unimplemented!()` stubs, which rhyme without
+  sharing a concept. What the report was actually pointing at is a
+  **with-finish / without-finish SPLIT**: one streaming decider written twice
+  per call shape, because someone needed a finish-reason out-parameter and
+  copied the body rather than adapting it.
+
+  - `sovereign-inference/src/embedded/engine.rs` — `complete_stream` was a
+    285-line mirror of `complete_stream_with_finish`, and its own doc comment
+    said so ("Mirrors `complete_stream`'s slot-routing dance"). Cosines
+    0.952-0.965 across three sub-region pairs at 120 / 110 / 101 lines.
+  - `sovereign-mesh/src/peer_inference.rs` — the same split one level up:
+    `complete_stream_with_id` was a 197-line mirror of
+    `complete_stream_with_id_and_finish`, cosine 0.969.
+
+  **All four copies had DRIFTED, and the drift was the prize (§10.6's
+  `strip_html` shape, four more times):**
+
+  1. The typed twin grew the Raw/FIM `generate_stream_sync_fim` fork
+     (`INLINE_COMPLETION.md` §4/D8); the legacy copy never did, so inline
+     completion arriving on `complete_stream` re-prefilled the whole window
+     on every keystroke instead of the typing delta.
+  2. `generate_stream_dispatch`'s legacy arm passed `slot_ctx.ctx_mut()`
+     rather than `slot_ctx` — the raw-context downgrade that costs the
+     prefix cache, on a comment that already flagged it.
+  3. `sovereign-core/src/pipeline/runner.rs`'s inline frames→text adapter
+     matched `Finish { .. }` and dropped it, but `EmbeddedLlamaCpp` reports a
+     mid-stream failure ONLY as `Finish { reason: FinishReason::Error(_) }`,
+     never as `StreamFrame::Error`. **Every engine-side stream failure on the
+     presenter path arrived as a clean end of stream.** The user saw a short
+     answer, not an error.
+  4. **The worst one.** `send_stream_piece` — the deadline-bounded send that
+     converts a half-open SSE client's *indefinite* slot pin into a bounded
+     one (`MESH_SCALE_100_USERS_1000_CORPORA.md` §7.2; one such client takes
+     the node out) — existed ONLY on the legacy `Result<String>` path. The
+     typed path, which is every streaming chat completion, used a bare
+     `blocking_send`. The hardening, and the RED-FIRST test that proved it,
+     were guarding the half nothing streamed on.
+
+  Converged to one body per shape: `complete_stream` delegates to
+  `complete_stream_with_finish` through `frames_to_text_stream`
+  (`sovereign-contracts/src/traits.rs`), the ONE frames→text adapter, which
+  had been hand-written three times. `StreamSink` stopped being an enum,
+  `generate_stream_sync` (260 lines) went with the arm that reached it, and
+  the send policy now lives in the one sink every decode loop goes through.
+  The liveness tests were retargeted onto it and watched to fail first.
+- `ctx` construction — 24 copies across two clusters.
+
+Note the complement: verdict, freshness and render are near the BOTTOM of
+this table and the TOP of §10.1. Those concerns are re-declared as types
+everywhere while each instance's logic stays small and locally different, so
+the clone detector barely registers them. **The two instruments see different
+halves and the halves need different fixes** — §10.1 needs an abstraction
+minted, §10.6 needs losers deleted.
+
+### 10.7 Instruments are mirrors here, not gates
+
+Operator direction, 2026-08-20: **win by being useful and better, not through
+force — applied as a software architecture.**
+
+That retires two things this addendum's drafting had proposed: a per-crate
+private-type ratchet and a crate-mass ratchet. Both are force. Both would sit
+red on `sovereign-cli-llm` indefinitely and be switched off inside a week —
+the failure mode `concept_gate.rs`'s own doc comment already names.
+
+What replaces them is a pre-registered adoption test, stated before the work:
+
+> Build the envelope and `Report`. Convert three commands — `atlas_drift_report.rs`
+> (48 single-use types), `atos_cmd/run.rs` (43), `cache_audit_cmd.rs` (25).
+> Then **do not mandate it.** No gate, no ratchet, no preflight check. Measure
+> adoption across the next N new or edited commands. If authors pick it up
+> unprompted it earned its place. If they do not, it was not better than what
+> they would have written, and it is deleted rather than enforced.
+
+That is the same standard `Report` already failed at 1 of 105, applied
+honestly and in advance.
+
+**`nc-extends` reads 2 of 3, and the third axis is blocked by a decision, not
+by a missing instrument.** Note `d8cd40a1` found the tool axis unmovable by the
+rung meant to serve it: 30 of 112 `impl Tool for` sites sat in `studio/`, which
+this campaign declares out of scope by name, so a perfect `nc-13` would still
+have left it failing. `c102eb05` put `studio/` into SKIP and reported both
+halves per §18.6 — **by RE-CLASSIFICATION 112 → 82, by CODE 0, score 1/3
+unchanged.** `nc-13` and `nc-18` then moved it by CODE, and the axis now reads
+**0 sites, PASSES**: every tool is a manifest row plus a handler, with one
+shared `DeclaredTool` adapter carrying the trait.
+
+The intent axis was re-specified the same day by `nc-14`, which built the
+policy-vs-pattern-match discriminator the old spec lacked
+(`scripts/nc-extends.py`, with `--self-test` fixtures watched failing in three
+directions per §18.1), found and fixed a false pass in its own first cut, and
+reported both halves: by RE-CLASSIFICATION 33 files → 13 policy blocks, by CODE
+14 → 1. The one block remaining is `guard_story` in
+`runtime/authority_guard.rs`, which `nc-14` declined to tabulate **on the
+merits** — its column values name sovereign-core's internal file layout, so
+publishing them is the leak this campaign's kill clause fires on, and the block
+already has the property the rung exists to create. So this axis sits one
+deliberate refusal from passing. Whether that refusal stands, and therefore
+whether `nc-extends` can reach 3/3 at all, is an operator call under §18.6 and
+not a rung's to make. Until it is made, the measures below stand as this
+section's outcome metrics.
+
+| Metric | Today (snapshot, 2026-08-20, un-minted) | Direction | Owner |
+|---|---:|---|---|
+| Types referenced by no other file | 46% (8,882 types) | down | `arch_metrics` |
+| Role adoption, `Report` | 1% (1 of 105) | up | `converge roles` |
+| Role adoption, `Args` | 0% (0 of 58) | up | `converge roles` |
+| Congestion: distinct crates per `.rs` commit | 2.30 (Aug, part month) | flat or down | git, monthly |
+| First-party redundant lines | ~13,974 | down | `dry-report` + `SourceScope` |
+
+Congestion by author month, which is the one trend measurable without new
+tooling: **1.84 (Apr) → 2.82 → 3.08 → 3.21 (Jul) → 2.30 (Aug, through the
+20th).** It rose 74% across the accretion period and has bent down in the
+month this campaign has been running. Hold it loosely — the month is
+incomplete and composition may explain it — but that is the number that says
+whether any of this works. Bucket by **author** date: this history was
+rewritten around 2026-08-11 and committer dates all cluster there, which
+silently collapses five months into two quarters.
+
+### 10.8 What makes this fail
+
+| Failure | Tell it is happening | Guard |
+|---|---|---|
+| The envelope is data-shaped and does not pay | it lands at 2–3% like `Report` or `Response` | it must carry rendering, age computation, staleness banding and the footer, or it is not worth building |
+| `sovereign-contracts` becomes the megablock | already absorbs 38.9% of inbound type traffic | the envelope goes to `kernel-types`, not contracts; `Report`/`Args` go to `cli-shared` at L4 |
+| Premature convergence — everything crammed into one mediocre type | adoption rises only where mandated | adoption is measured, never required; the delete branch is real |
+| Acting on an instrument that overstates | `dry-report` at 7× | scope every instrument before quoting it; §10.6 |
+| A gate teaches the workaround | rename-apart is free and unmeasured | `converge roles` counts it from the other end — shipped 2026-08-20, and it sees `AuditReport`/`DriftReport`/`ArchReport` as one role however they are spelled |
+| Numbers in this section rot | they already are | every row above names its owning tool; §10.1, §10.2 and §10.3 are minted and re-runnable, the rest are not yet |
+
+### 10.9 Sequence
+
+1. **`sovereign-cli-shared` → L4 `capabilities`** (note `c0c2f007`). Narrow
+   the `"sovereign-cli*"` glob at ARCH_LAYERS.toml:174 to the four binaries
+   AND add the explicit entry — both halves, because
+   `arch-layers/src/lib.rs:298-313` has no specific-beats-glob precedence and
+   two matches is `AmbiguousCrate`. Half a day, and it is what makes the
+   shared crate reachable by the second host.
+2. **`SourceScope` into `dry-report`.** One-line reuse; makes tier three
+   quotable.
+3. **The four twin verbs and `strip_html`.** Proves the kill-chain end to end
+   on already-duplicated behaviour, needs no new abstraction, and closes a
+   live HTML-truncation bug.
+4. **The envelope in `kernel-types`**, then `Report` as its renderer in
+   `cli-shared`, then the three-command conversion and the un-mandated
+   adoption window.
+5. **`Args` as data** — `nc-13`'s medicine pointed at CLI verbs.
+6. **Relocate `enrich_cmd` and `bench_cmd`.**
+
+1 through 3 are mechanical and independently landable. 4 is the only one that
+requires design judgement, and it is the only one whose success is uncertain —
+which is why it is measured rather than mandated.

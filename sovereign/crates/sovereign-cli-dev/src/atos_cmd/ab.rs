@@ -15,18 +15,28 @@
 
 use sovereign_atos::AtosOrchestrator;
 
-use super::args::{get_flag, split_args};
+use super::args::parse_args;
 use super::stores::open_orchestrator;
 
 // ─── diff ────────────────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_diff(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("diff: missing <feature-id>");
         return 2;
     };
-    let ordinal: Option<i64> = get_flag(&flags, "--ordinal").and_then(|s| s.parse::<i64>().ok());
+    let ordinal: Option<i64> = flags
+        .value("ordinal")
+        .map(|s| s.to_string())
+        .and_then(|s| s.parse::<i64>().ok());
 
     let orc = match open_orchestrator() {
         Ok(o) => o,
@@ -258,16 +268,26 @@ fn classify_delta(counts: &[usize], parse_errors: bool) -> String {
 // ─── run-ab ──────────────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_run_ab(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("run-ab: missing <feature-id>");
         return 2;
     };
-    let Some(brief_path) = get_flag(&flags, "--brief") else {
+    let Some(brief_path) = flags.value("brief").map(|s| s.to_string()) else {
         eprintln!("run-ab: --brief <path> is required");
         return 2;
     };
-    let drivers_flag = get_flag(&flags, "--drivers").unwrap_or_else(|| "claude,opencode".into());
+    let drivers_flag = flags
+        .value("drivers")
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "claude,opencode".into());
     let drivers: Vec<String> = drivers_flag
         .split(',')
         .map(|s| s.trim().to_string())
@@ -325,8 +345,16 @@ pub(crate) async fn cmd_run_ab(args: &[String]) -> i32 {
 // ─── probe-driver ────────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_probe_driver(args: &[String]) -> i32 {
-    let (_positional, flags) = split_args(args);
-    let url = get_flag(&flags, "--url")
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let url = flags
+        .value("url")
+        .map(|s| s.to_string())
         .unwrap_or_else(|| "http://localhost:9741/v1/chat/completions".to_string());
 
     let probe = serde_json::json!({

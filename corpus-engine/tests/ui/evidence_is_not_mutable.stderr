@@ -1,0 +1,5 @@
+error[E0616]: field `score` of struct `corpus_engine::Evidence` is private
+ --> tests/ui/evidence_is_not_mutable.rs:5:8
+  |
+5 |     ev.score = 1.0;
+  |        ^^^^^ private field

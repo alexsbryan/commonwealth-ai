@@ -46,7 +46,7 @@ use crate::recipe::Recipe;
 
 pub use extract::{ChunkInput, ExtractedRelationship};
 pub use graph::{
-    Entity, Evidence, PatternFinding, PatternKind, Relationship, ENTITIES_FILENAME,
+    Entity, ExtractionExcerpt, PatternFinding, PatternKind, Relationship, ENTITIES_FILENAME,
     FINDINGS_FILENAME, INVESTIGATION_DIRNAME, RELATIONSHIPS_FILENAME,
 };
 
@@ -270,7 +270,7 @@ pub async fn run_investigation<'a>(
             to_entity_id: to_id,
             relationship_type: ex.relationship_type.clone(),
             attributes: ex.attributes.clone(),
-            evidence: Evidence {
+            evidence: ExtractionExcerpt {
                 chunk_id: chunk_id.clone(),
                 excerpt: ex.verbatim_excerpt.clone(),
             },

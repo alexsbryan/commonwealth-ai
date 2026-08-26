@@ -16,19 +16,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::TestResultStore;
 use corpus_engine_watchers::WatcherHeartbeat;
 
-use super::watcher_health::{
-    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
-};
+use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct TestStatusTool {
     store: Arc<TestResultStore>,
@@ -87,123 +84,34 @@ impl TestStatusTool {
     }
 }
 
-#[async_trait]
-impl Tool for TestStatusTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "test_status".to_string(),
-            name: "Test Status".to_string(),
-            description: "Return test suite status from the background watcher. \
-                          NEVER run `cargo test` via Bash — the watcher holds the Cargo \
-                          file lock continuously; running cargo test alongside it causes \
-                          BOTH processes to stall indefinitely waiting for the lock. \
-                          This call reads cached results in microseconds with zero contention. \
-                          Response fields to trust the result: \
-                          `age_seconds` — how old the result is (if 0-60s, the watcher \
-                          ran on your current changes); \
-                          `watched_scope` — the exact command the watcher runs (e.g. \
-                          'cargo test --workspace'), confirming which crates are covered; \
-                          `watcher` — the liveness object: `{live, reason, configured, \
-                          heartbeat_age_secs, hint}`. Read this FIRST. When `live` is \
-                          false the result below is orphaned (the watcher isn't running \
-                          to keep it current); `reason` says why (not_configured / \
-                          watcher_dead / unknown) and `hint` says what to do. \
-                          `watcher_active` mirrors `watcher.live` for back-compat. \
-                          Status: 'fresh_passing' (all pass — safe to proceed), \
-                          'fresh_failing' (failures in response), 'stale' (files changed \
-                          since last run — call run_tests then poll), 'running' (in \
-                          progress — check again in 30-60s), 'watcher_down' (a completed \
-                          run exists but NO live watcher — do not trust it as current; \
-                          fall back to scripts/sovereign-test.sh per `watcher.hint`), \
-                          'never_run' (no run yet — see `watcher.reason`)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {},
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You've made a change and want to know if tests pass. Do NOT run `cargo test` — it contends with the background watcher for the Cargo file lock. This reads the watcher's result instantly. If status is 'stale', call run_tests to force a fresh run, then poll back here in ~30s.".into(),
-                    call: serde_json::json!({}),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
-                    "age_seconds":     { "type": "integer" },
-                    "pass_count":      { "type": "integer" },
-                    "fail_count":      { "type": "integer" },
-                    "watcher_active":  { "type": "boolean" },
-                    "watcher": {
-                        "type": "object",
-                        "description": "Watcher liveness. Read before trusting `status`. When `live` is false the run below is orphaned.",
-                        "properties": {
-                            "live":               { "type": "boolean" },
-                            "reason":             { "type": "string", "enum": ["live","not_configured","watcher_dead","legacy_active","inferred_from_age","unknown"] },
-                            "configured":         { "type": "boolean" },
-                            "heartbeat_age_secs": { "type": ["integer","null"] },
-                            "hint":               { "type": ["string","null"] }
-                        }
-                    },
-                    "watched_scope":   { "type": "string" },
-                    "failures":        { "type": "array" },
-                    "run_id":          { "type": "integer" },
-                    "output_truncated":{ "type": "boolean" },
-                    // `previous_run` is populated whenever `status` is
-                    // `running` and a prior completed run exists. Lets
-                    // callers see "in flight, but the last completed
-                    // run failed with these errors" rather than polling
-                    // `null` indefinitely on a watcher wedged against
-                    // a stable compile error. Mirrors the prior_run
-                    // surface on `lint_status`.
-                    "previous_run":    {
-                        "type": "object",
-                        "properties": {
-                            "status":           { "type": "string", "enum": ["fresh_passing","fresh_failing"] },
-                            "run_id":           { "type": "integer" },
-                            "pass_count":       { "type": "integer" },
-                            "fail_count":       { "type": "integer" },
-                            "exit_code":        { "type": "integer" },
-                            "age_seconds":      { "type": "integer" },
-                            "looks_like_compile_failure": { "type": "boolean" },
-                            "failures":         { "type": "array" }
-                        }
-                    }
-                }
-            })),
-        }
+impl TestStatusTool {
+    /// Bind this tool's state to its `test_status` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("test_status", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    /// Signal: one-liner when the last test run failed. Silent on a
-    /// clean run. SQLite point lookup — no extra work.
-    async fn signal(&self) -> Option<String> {
-        let summary = self.store.latest_run().await.ok().flatten()?;
-        if summary.passed() {
-            return None;
-        }
-        let age = summary
-            .finished_at
-            .elapsed()
-            .ok()
-            .map(|d| format!(" age {}s", d.as_secs()))
-            .unwrap_or_default();
-        Some(format!(
-            "last test run: {} passed, {} failed{age}",
-            summary.pass_count, summary.fail_count
-        ))
-    }
-
-    async fn execute(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `test_status`.
+    async fn run(
+        &self,
+        _params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let legacy_active = read_legacy(&self.watcher_active);
         let configured = self.watched_scope.is_some();
 
@@ -344,6 +252,24 @@ impl Tool for TestStatusTool {
             "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
         })))
     }
+
+    async fn signal_now(&self) -> Option<String> {
+
+        let summary = self.store.latest_run().await.ok().flatten()?;
+        if summary.passed() {
+            return None;
+        }
+        let age = summary
+            .finished_at
+            .elapsed()
+            .ok()
+            .map(|d| format!(" age {}s", d.as_secs()))
+            .unwrap_or_default();
+        Some(format!(
+            "last test run: {} passed, {} failed{age}",
+            summary.pass_count, summary.fail_count
+        ))
+    }
 }
 
 /// Build the `previous_run` payload returned alongside `status:
@@ -440,7 +366,7 @@ mod tests {
         let _r2 = store.begin_run().await.unwrap();
 
         let tool = TestStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
@@ -473,7 +399,7 @@ mod tests {
         let _r = store.begin_run().await.unwrap();
 
         let tool = TestStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
@@ -511,7 +437,7 @@ mod tests {
             .with_watched_scope("cargo test --workspace".into())
             .with_heartbeat(hb);
 
-        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+        let v = match tool.run(&json!({}), &ctx()).await.unwrap() {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
         };
@@ -547,7 +473,7 @@ mod tests {
             .with_watched_scope("cargo test --workspace".into())
             .with_heartbeat(hb);
 
-        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+        let v = match tool.run(&json!({}), &ctx()).await.unwrap() {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
         };
@@ -569,7 +495,7 @@ mod tests {
         hb.stamp();
         let tool = TestStatusTool::new(Arc::clone(&store)).with_heartbeat(hb);
 
-        let v = match tool.execute(&json!({}), &ctx()).await.unwrap() {
+        let v = match tool.run(&json!({}), &ctx()).await.unwrap() {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
         };
@@ -599,7 +525,7 @@ mod tests {
         let _r2 = store.begin_run().await.unwrap();
 
         let tool = TestStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),

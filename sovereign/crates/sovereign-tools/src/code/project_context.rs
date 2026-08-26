@@ -10,15 +10,14 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_atos::FeatureStore;
 use corpus_engine_notes::ProjectDocsStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct ProjectContextTool {
     store: Arc<ProjectDocsStore>,
@@ -42,92 +41,30 @@ impl ProjectContextTool {
     }
 }
 
-#[async_trait]
-impl Tool for ProjectContextTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "project_context".to_string(),
-            name: "Project Context".to_string(),
-            description: "Search indexed project documentation (*.md files, \
-                          .sovereign/conventions/) for relevant context. \
-                          Use to check architectural decisions, coding conventions, \
-                          API contracts, or onboarding guides before making changes. \
-                          Results are BM25 keyword-ranked — use specific terms from \
-                          your change context for best results. \
-                          If results seem incomplete, call \
-                          read_notes(kinds=[\"reflection\"], query=\"project_context\") \
-                          to check for known gaps recorded by previous sessions."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "What to look for in project docs"
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Optional ATOS feature id. When set, the feature's \
-                                        charter and SOVEREIGN.md are returned as the first \
-                                        result (relevance=1.0) before BM25 matches. Use when \
-                                        you're running inside a provisioned feature."
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're about to implement something and want to check whether the project has established conventions for it before you guess or invent your own. Do this before writing any code.".into(),
-                    call: serde_json::json!({ "query": "error handling conventions" }),
-                },
-                ToolExample {
-                    situation: "You're unsure about the architectural boundary between two subsystems. Pull the documented decisions rather than inferring from code.".into(),
-                    call: serde_json::json!({ "query": "corpus engine vs sovereign tools boundary" }),
-                },
-                ToolExample {
-                    situation: "You got empty or low-relevance results from a code search. Check here — the answer may be in conventions docs rather than source code.".into(),
-                    call: serde_json::json!({ "query": "testing strategy integration vs unit" }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query":         { "type": "string" },
-                    "total_results": { "type": "integer" },
-                    "results":       {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "file_path": { "type": "string" },
-                                "snippet":   { "type": "string" },
-                                "score":     { "type": "number" }
-                            }
-                        }
-                    }
-                }
-            })),
-        }
+impl ProjectContextTool {
+    /// Bind this tool's state to its `project_context` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("project_context", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("query")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("project_context requires 'query'".to_string()))?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `project_context`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -230,5 +167,15 @@ impl Tool for ProjectContextTool {
             "hint": hint,
             "index_health": index_health
         })))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("query")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("project_context requires 'query'".to_string()))?;
+        Ok(())
     }
 }

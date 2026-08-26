@@ -362,7 +362,7 @@ pub struct MemorySection {
 /// (Qwen3-Embedding vs Darwin/Qwen-instruct); the primary can't
 /// substitute, so embed-less configs raise an invariant exception
 /// at the first embed call.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct ModelsSection {
     /// The "primary" model — what the UX calls the Main responder.
     /// Internally this is the `thoughtful` profile slot.
@@ -395,10 +395,39 @@ pub struct ModelsSection {
     /// primary's KV cache + weights + fast slot still fit comfortably:
     /// 32768 roughly doubles output budget for atlas Phase 1, where
     /// long structured outputs were truncating against the 16384 cap.
-    /// Applies to all loaded slots (fast / primary / embed / code /
-    /// extras) — per-slot override would need a richer schema.
+    /// The PRIMARY slot's window, and the default for every other slot
+    /// that does not name its own (see `fast_context_size` and the
+    /// `[edit]` section's `context_size`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context_size: Option<u32>,
+
+    /// The FAST slot's window. `None` falls back to `context_size`, so
+    /// omitting it is byte-identical to the behaviour before this key
+    /// existed.
+    ///
+    /// # Why this key exists
+    ///
+    /// KV cache scales LINEARLY in `n_ctx`, and until 2026-08-25
+    /// `context_size` was one global applied to every slot — so a 4B fast
+    /// model carried the same 64k cache as a 27B primary, whether or not
+    /// anything ever filled it. Measured on this host, the four live
+    /// contexts held ~17.7 GB of KV + compute between them.
+    ///
+    /// The `[edit]` section already had exactly this key for exactly this
+    /// reason ("inline completion never needs the chat slot's 16k window,
+    /// and a small ctx keeps KV cost tiny"). The mechanism was not missing;
+    /// it had simply never been extended to the slot that costs the most.
+    ///
+    /// # Sizing it is a measurement, not a guess
+    ///
+    /// The fast slot is the OVERFLOW path: `pick_slot` routes any prompt
+    /// too large for FastShort's per-sequence budget here, so its window
+    /// must cover the largest prompt that lands on it, not the typical one.
+    /// Read the `kv budget: slot context built` trace lines (one per
+    /// context, emitted at load) before choosing a value — that is what
+    /// they are for.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fast_context_size: Option<u32>,
 
     /// Additional named chat slots loaded eagerly at daemon startup
     /// alongside primary/fast/embed/code. Keys are operator-chosen
@@ -685,6 +714,14 @@ impl ModelsSection {
     /// cold-start and reload paths can't drift.
     pub fn effective_context_size(&self) -> u32 {
         self.context_size.unwrap_or_else(default_context_size)
+    }
+
+    /// Effective n_ctx for the FAST slot — its own value when set,
+    /// otherwise the primary's. Defaulting to the primary is what keeps
+    /// adding this key a no-op for every existing config on disk.
+    pub fn effective_fast_context_size(&self) -> u32 {
+        self.fast_context_size
+            .unwrap_or_else(|| self.effective_context_size())
     }
 
     /// Path the fast-slot loader should use, with primary as the
@@ -1171,6 +1208,37 @@ fn default_data_dir() -> PathBuf {
 }
 
 impl SetupConfig {
+    /// A config for a process that has **no `config.toml`** — no model slots
+    /// configured, every other section at its documented default (`:9741` /
+    /// `:9742`, loopback client bind, `0.0.0.0` internal bind, no bearer
+    /// token). This is the real state of `svrn mesh create` on a machine that
+    /// has not run `svrn setup`, and of any test that does not care about
+    /// models.
+    ///
+    /// Deliberately **not** an `impl Default`: `load().unwrap_or_default()`
+    /// would silently substitute this for a `config.toml` that exists but
+    /// would not parse, which is the substitution ARCH §18.3 forbids. A caller
+    /// has to type the name, and a caller reaching for it after a failed load
+    /// must report the failure first.
+    pub fn unconfigured() -> Self {
+        Self {
+            models: ModelsSection::default(),
+            daemon: DaemonSection::default(),
+            data: DataSection::default(),
+            watched_folders: WatchedFoldersSection::default(),
+            memory: MemorySection::default(),
+            iroh: IrohSection::default(),
+            shared_model: SharedModelSection::default(),
+            discovery: DiscoverySection::default(),
+            compute: ComputeSection::default(),
+            // Added on main while this branch was out. `unconfigured()`'s
+            // contract is "every other section at its documented default",
+            // so the default is the answer here, not a judgement call.
+            search: SearchSection::default(),
+            mcp_servers: Vec::new(),
+        }
+    }
+
     /// The canonical config path: `~/.svrnmesh/config.toml`. Co-located
     /// with `~/.svrnmesh/`'s other user-scoped state (corpora, indexes,
     /// notes db, mesh.json) so operators only have one user directory
@@ -1379,6 +1447,47 @@ mod tests {
         );
     }
 
+    /// THE NO-REGRESSION BAR for per-slot windows (2026-08-25).
+    ///
+    /// Adding `fast_context_size` must be invisible to every config.toml
+    /// already on disk. An omitted key resolves to the primary's window, which
+    /// is exactly what the single global scalar did — so a host that does not
+    /// set it builds byte-identical contexts to the ones it built before the
+    /// key existed. If this ever fails, the change has stopped being additive
+    /// and every existing install's fast slot has silently been resized.
+    #[test]
+    fn an_unset_fast_window_is_the_primary_window() {
+        let mut m = models("/p.gguf", None, "/e.gguf");
+        m.fast_context_size = None;
+
+        m.context_size = None; // and the default path too
+        assert_eq!(m.effective_fast_context_size(), m.effective_context_size());
+
+        for ctx in [4096, 16_384, 65_536] {
+            m.context_size = Some(ctx);
+            assert_eq!(m.effective_fast_context_size(), ctx);
+            assert_eq!(m.effective_fast_context_size(), m.effective_context_size());
+        }
+    }
+
+    /// The lever itself: when set, the fast slot's window is its own and the
+    /// primary's is untouched. Named failing input for the inverse defect —
+    /// wiring `fast_context_size` to BOTH slots would shrink the primary's
+    /// window on any host that set it, which is the more damaging mistake.
+    #[test]
+    fn a_set_fast_window_moves_only_the_fast_slot() {
+        let mut m = models("/p.gguf", None, "/e.gguf");
+        m.context_size = Some(65_536);
+        m.fast_context_size = Some(8_192);
+
+        assert_eq!(m.effective_fast_context_size(), 8_192);
+        assert_eq!(
+            m.effective_context_size(),
+            65_536,
+            "the primary keeps its window — this key sizes the fast slot only"
+        );
+    }
+
     fn models(primary: &str, fast: Option<&str>, embed: &str) -> ModelsSection {
         ModelsSection {
             primary: PathBuf::from(primary),
@@ -1386,6 +1495,7 @@ mod tests {
             embed: PathBuf::from(embed),
             code: None,
             context_size: None,
+            fast_context_size: None,
             extra: BTreeMap::new(),
             max_extras_memory_gb: None,
             primary_pool: None,
@@ -1503,6 +1613,7 @@ embed = "/m/e.gguf"
                 embed: PathBuf::from("/models/embed.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 extra: BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
@@ -1543,6 +1654,7 @@ embed = "/m/e.gguf"
                 embed: PathBuf::from("/m/e.gguf"),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 extra: BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,

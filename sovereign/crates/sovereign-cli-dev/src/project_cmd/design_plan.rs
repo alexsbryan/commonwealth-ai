@@ -28,7 +28,7 @@ const HELP_DESIGN: sovereign_cli_shared::help::Help = sovereign_cli_shared::help
             ("svrn project design --solo",                  "No agent — CLI prompts driven by the structural parser"),
         ]),
         sovereign_cli_shared::help::HelpSection::Notes(
-            "Requires the Commonwealth daemon (start it with `commonwealth daemon start`).\n\
+            "Requires the mesh daemon (start it with `svrn daemon start`).\n\
              The session writes DESIGN.md and OPEN_QUESTIONS.md at repo root; artifacts live in\n\
              .sovereign/.atos/design/<session-id>/.",
         ),

@@ -304,7 +304,14 @@ pub struct SearchBackendConfig {
 }
 
 fn default_data_dir() -> PathBuf {
-    sovereign_contracts::rebrand::mesh_data_dir()
+    // THE SSOT accessor (`rebrand::data_dir`), whose own doc says "read sites
+    // must not re-derive it". This returned `mesh_data_dir()` (the platform
+    // data dir) until 2026-08-24, so a FRESH install put its data in
+    // `~/Library/Application Support/svrnmesh` while the daemon used
+    // `~/.svrnmesh` — which is how that directory's stale 15G was created.
+    // `desktop.toml` is unaffected: it is a settings file and still resolves
+    // through `mesh_config_dir()`, which is deliberately platform-native.
+    sovereign_contracts::rebrand::data_dir()
 }
 
 fn default_skills_dir() -> PathBuf {
@@ -313,7 +320,7 @@ fn default_skills_dir() -> PathBuf {
     // directory is now `modes/` (only inner-work + recipe-author),
     // but the user-overlay slot is unchanged so existing custom
     // skill files still load.
-    sovereign_contracts::rebrand::mesh_data_dir().join("skills")
+    sovereign_contracts::rebrand::data_dir().join("skills")
 }
 
 fn default_enabled_tools() -> Vec<String> {
@@ -609,6 +616,7 @@ impl DesktopConfig {
                 embed: PathBuf::new(),
                 code: None,
                 context_size: None,
+                fast_context_size: None,
                 extra: std::collections::BTreeMap::new(),
                 max_extras_memory_gb: None,
                 primary_pool: None,
@@ -707,8 +715,11 @@ pub struct ResolvedModelSlots {
     pub embed: PathBuf,
     /// Optional code specialist, hot-swapped into the primary slot.
     pub code: Option<PathBuf>,
-    /// Effective chat context window (configured value or safe default).
-    pub context_size: u32,
+    /// Effective context window PER SLOT. Was a single `context_size: u32`
+    /// until 2026-08-25, which is precisely how the fast slot came to carry
+    /// the primary's 64k window: one resolved scalar, four contexts built
+    /// from it, and KV linear in the window.
+    pub windows: sovereign_inference::embedded::SlotWindows,
 }
 
 impl ResolvedModelSlots {
@@ -731,7 +742,7 @@ impl ResolvedModelSlots {
                 primary: None,
                 embed: PathBuf::new(),
                 code: None,
-                context_size: 16_384,
+                windows: sovereign_inference::embedded::SlotWindows::uniform(16_384),
             },
         }
     }
@@ -743,7 +754,7 @@ impl ResolvedModelSlots {
             primary: Some(m.primary.clone()),
             embed: m.embed.clone(),
             code: m.code.clone(),
-            context_size: m.effective_context_size(),
+            windows: sovereign_inference::embedded::SlotWindows::from_models(m),
         }
     }
 

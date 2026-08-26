@@ -9,7 +9,7 @@
 
 use std::path::{Path, PathBuf};
 
-use corpus_engine_notes::{NoteRow, NoteScope, NoteSource, NoteStore};
+use corpus_engine_notes::{Note, NoteScope, NoteSource, NoteStore};
 
 use super::ruler::Ruler;
 use super::score::Score;
@@ -220,7 +220,7 @@ pub async fn land(
     // less than the header already does.
     let session_id = "backlog-add";
 
-    let existing: Option<NoteRow> = match draft.key {
+    let existing: Option<Note> = match draft.key {
         None => None,
         Some(k) => store
             .read_notes_by_related_entity("backlog", &["todo"])

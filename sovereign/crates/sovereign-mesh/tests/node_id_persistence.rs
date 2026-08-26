@@ -28,8 +28,12 @@
 //!    → confirm the on-disk `node_id` file still exists → build
 //!    a new daemon against the same data_dir → `create_mesh` →
 //!    assert id matches the pre-leave id.
+mod common;
+use common::mesh_admin_services;
+
 use std::time::Duration;
 
+use sovereign_core::setup_config::SetupConfig;
 use sovereign_mesh::daemon::EmbeddedDaemon;
 
 #[tokio::test]
@@ -38,7 +42,11 @@ async fn node_id_survives_daemon_restart_against_same_data_dir() {
 
     // Round 1: create the mesh, record the node_id, drop everything.
     let id_before = {
-        let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf());
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            SetupConfig::unconfigured(),
+            mesh_admin_services(),
+        );
         daemon
             .create_mesh("persistence test", "node-A")
             .await
@@ -58,7 +66,11 @@ async fn node_id_survives_daemon_restart_against_same_data_dir() {
     // Round 2: build a fresh daemon against the same data_dir and
     // resume. The resume path calls `persist::load_or_generate_self_node_id`,
     // which must find the file written in round 1.
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf());
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
     let resumed = daemon
         .try_resume()
         .await
@@ -89,7 +101,11 @@ async fn node_id_survives_mesh_leave_and_is_reused_on_next_create() {
 
     // Pre-leave: create + record id.
     let id_before = {
-        let daemon = EmbeddedDaemon::new(data_dir.clone());
+        let daemon = EmbeddedDaemon::new(
+            data_dir.clone(),
+            SetupConfig::unconfigured(),
+            mesh_admin_services(),
+        );
         daemon
             .create_mesh("pre-leave mesh", "node-A")
             .await
@@ -113,7 +129,7 @@ async fn node_id_survives_mesh_leave_and_is_reused_on_next_create() {
 
     // Post-leave: build a new daemon, create a new mesh, assert the
     // founder id matches the pre-leave value.
-    let daemon = EmbeddedDaemon::new(data_dir);
+    let daemon = EmbeddedDaemon::new(data_dir, SetupConfig::unconfigured(), mesh_admin_services());
     daemon
         .create_mesh("post-leave mesh", "node-A-still")
         .await

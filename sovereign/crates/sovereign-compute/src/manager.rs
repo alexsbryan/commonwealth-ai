@@ -306,7 +306,7 @@ struct ChildSpec {
 impl ChildSpec {
     fn for_slot(slot: &ComputeSlotConfig) -> Self {
         let mut args = vec![
-            "--compute-child".to_string(),
+            sovereign_contracts::launch::COMPUTE_CHILD_FLAG.to_string(),
             "--role".to_string(),
             slot.role.clone(),
             "--name".to_string(),
@@ -353,7 +353,7 @@ impl ChildSpec {
         handoff_path: &Path,
     ) -> Self {
         let mut args = vec![
-            "--compute-child".to_string(),
+            sovereign_contracts::launch::COMPUTE_CHILD_FLAG.to_string(),
             "--role".to_string(),
             "generate".to_string(),
             "--name".to_string(),
@@ -387,7 +387,7 @@ impl ChildSpec {
     /// A model-free mock child (crash-isolation e2e).
     fn mock_slot(name: &str, mock_tokens: usize, mock_token_delay_ms: u64) -> Self {
         let args = vec![
-            "--compute-child".to_string(),
+            sovereign_contracts::launch::COMPUTE_CHILD_FLAG.to_string(),
             "--role".to_string(),
             "mock".to_string(),
             "--name".to_string(),

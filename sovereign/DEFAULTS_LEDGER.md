@@ -30,6 +30,44 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `[models].fast_context_size` — per-slot KV windows, shipped UNSET (2026-08-25)
+
+**What is dark.** The mechanism, not the value. Until now `[models].context_size`
+was one global applied to every `LlamaContext` this daemon builds — the fast
+slot, the primary, the primary sibling pool and the fast/primary alias — with a
+doc comment that said so outright ("Applies to all loaded slots … per-slot
+override would need a richer schema"). KV cache is linear in `n_ctx`, so a 4B
+fast model carried a 27B primary's window and paid a 27B primary's cache for it.
+`SlotWindows` makes the window a per-slot value; `fast_context_size` is the key
+that uses it. It ships unset, which resolves to the primary's window and is
+byte-identical to the old behaviour (pinned by
+`an_unset_fast_window_is_the_primary_window`).
+
+**Why it is not just set.** The fast slot is the OVERFLOW path — `pick_slot`
+routes any prompt too large for FastShort's per-sequence budget here — so its
+window must cover the largest prompt that actually lands on it, not the typical
+one. Nobody has measured that. Shipping a guessed value would trade a known
+memory cost for an unknown `NoKvCacheSlot` failure at decode time, which is the
+worse trade.
+
+**FLIP CONDITION (falsifiable).** With the `kv budget: slot context built`
+trace lines now emitted per context at load, and a distribution of prompt sizes
+that reach the `fast` slot (not FastShort) over a real soak:
+set `fast_context_size` to the observed p100 fast-slot prompt + the output cap,
+rounded up to a multiple of 256 (llama.cpp pads there anyway — see
+`ctx_n_batch`). The flip is settled when a soak at that value shows **zero**
+`NoKvCacheSlot` errors on the fast slot and the summed `kv_ceiling_mib` across contexts
+drops. Both halves are required: a smaller number that starts failing decodes is
+a regression, not a win.
+
+**Settled by.** The same daemon restart that takes the per-slot KV
+measurement — the trace lines exist precisely so this does not need its own run.
+
+**Review by 2026-09-25.** If unmeasured by then the honest options are to take
+the measurement or to delete the key; a per-slot knob nobody sizes is the
+withering this ledger exists to stop.
+
+
 
 ### `sec-filings-company` install-by-ticker — `catalog_status = "featured"` since 2026-08-18 (was **preview**)
 

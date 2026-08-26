@@ -11,6 +11,10 @@ pub mod health;
 pub mod hybrid;
 pub mod json_grammar;
 pub mod llama;
+/// One decision about how much llama.cpp says, applied at every backend
+/// init — the ggml log callback is process-global, so the last init used to
+/// decide for all of them (`TOPOLOGY.md` §10 phase 10).
+pub mod llama_logs;
 pub mod llguidance_constraint;
 // `remote.rs` was extracted wholesale to the `oicp-client` crate (pure-HTTP
 // OICP client, no llama.cpp). Re-exported here so `sovereign_inference::remote::*`

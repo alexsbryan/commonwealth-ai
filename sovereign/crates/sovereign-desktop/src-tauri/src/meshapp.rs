@@ -65,6 +65,10 @@ pub struct MeshAppInstall {
 
 /// One bridge capability, named so the gate reads declaratively at each
 /// call site (`authorize(.., Permission::MeshStoreRead)`).
+///
+/// NOT `sovereign_contracts::types::routing::Permission` (the tool-consent
+/// set: Network, FileRead, Shell, …); this is the four mesh-app BRIDGE
+/// capabilities, over the local `MeshAppPermissions` mirror above.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Permission {
     MeshStoreRead,

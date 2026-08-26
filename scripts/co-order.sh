@@ -76,6 +76,15 @@ serves: (unattributed)
 Done when:
 Not worth continuing if:
 
+<!-- IF Done-when NAMES A NUMBER, DERIVE IT FROM THE SCOPE, HERE, IN ONE LINE.
+     Three orders in three waves stated a target their own Scope could not
+     reach (nc-16's 0.4-0.8 points needed a god object to exist; nc-14's "3/3"
+     covered one of three axes; nc-17's 600-1,100 lines had a measured ceiling
+     of 504). Every one was caught by the WORKER, after the order was approved.
+     A citation is not a derivation: "§10.6 names 331 lines" is a component,
+     not a target. Enumerate the scope or state the number as an open question. -->
+Target derived from scope:
+
 ## Lane
 
 <!-- The measurement that proves the work. "(none)" is honest for work
@@ -236,6 +245,27 @@ else:
         problems.append("Objective has an empty 'Done when:' — it is not falsifiable yet")
     if not re.search(r"Not worth continuing if:[ \t]*\S", obj):
         problems.append("Objective has an empty 'Not worth continuing if:'")
+    # A NUMERIC done-when with no derivation is the drafting defect that has
+    # bitten three times, always caught by the worker and never by the drafter.
+    # Advisory, like everything here — but never silent.
+    dw = re.search(r"Done when:(.*?)(?:\nNot worth continuing if:|\Z)", obj, re.S)
+    # The number is as often in a "Pre-registered prediction" section as in the
+    # Done-when line — nc-17 carried its 600-1,100 there and the first version of
+    # this check sailed past it. Scan both (watched failing before this line was
+    # written).
+    # Prefix match: real orders title this section
+    # "## Pre-registered prediction — write your result against THIS", and an
+    # exact-name lookup sails straight past it (watched, on nc-17).
+    _pre_m = re.search(r"^## Pre-registered prediction.*?\n(.*?)(?=^## |\Z)", body, re.M | re.S)
+    pre = _pre_m.group(1) if _pre_m else ""
+    numeric = bool(dw and re.search(r"\d", dw.group(1))) or bool(re.search(r"\d", pre))
+    if numeric:
+        if not re.search(r"Target derived from scope:[ \t]*\S", obj + pre):
+            nudges.append(
+                "Done-when names a NUMBER but no 'Target derived from scope:' line — "
+                "three orders in three waves stated a target their Scope could not reach, "
+                "each caught by the worker after approval. A citation is not a derivation."
+            )
 for name in ("Lane", "Scope", "Engine", "Budget", "Seams"):
     s = section(name)
     if s in (None, "", "(none)"):

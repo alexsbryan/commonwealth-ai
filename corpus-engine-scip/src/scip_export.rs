@@ -917,6 +917,17 @@ pub fn parse_scip_file(
             }
 
             let occ_line = occ.range.first().copied().unwrap_or(0);
+            // Precise character span of the identifier token. rust-analyzer has
+            // always emitted it; until 2026-08-20 the ingest decoded the line
+            // and discarded the columns, which is why every reference in the
+            // graph was a line pointer rather than a rewritable anchor. A range
+            // we cannot decode records -1 (see `ScipRefRecord::has_span`) — a
+            // defaulted 0 would point a rewriter at the head of the line.
+            let (occ_start_col, occ_end_line, occ_end_col) =
+                match scip_proto::range_span(&occ.range) {
+                    Some((_, sc, el, ec)) => (sc, el, ec),
+                    None => (-1, -1, -1),
+                };
 
             // Find the enclosing definition scope (caller).
             let caller = def_scopes
@@ -960,6 +971,9 @@ pub fn parse_scip_file(
                     callee_qualified: occ.symbol.clone(),
                     file_path: file_path.clone(),
                     line: occ_line,
+                    start_col: occ_start_col,
+                    end_line: occ_end_line,
+                    end_col: occ_end_col,
                     ref_kind: "direct".to_string(),
                 });
             }

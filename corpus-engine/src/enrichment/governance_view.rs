@@ -35,12 +35,12 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::governance::{
-    derive_active, ActiveSet, GovernanceOp, GovernanceOpKind, GovernanceOplog, OpId, PairKey,
-    RuleStatus, TensionStatus,
+    derive_active, ActiveSet, GovernanceOpKind, PairKey, RuleStatus, TensionStatus,
 };
 use crate::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomsFile, ChunkRef, Claim};
 use crate::enrichment::atlas::edges::{Edge, EdgeId, EdgeType, EdgesFile};
 use crate::error::{Error, Result};
+use crate::oplog::{Op, OpId, Oplog};
 
 // ── Inputs: minimal projections of the atlas graph ───────────
 
@@ -219,7 +219,7 @@ impl GovernanceView {
         let dir = atlas_dir.as_ref();
         let rules = read_rule_atoms(dir)?;
         let tensions = read_tensions(dir)?;
-        let ops = GovernanceOplog::new(dir).read_all()?;
+        let ops = Oplog::<GovernanceOpKind>::new(dir).read_all()?;
         Ok(build_view(&rules, &tensions, &ops))
     }
 }
@@ -443,7 +443,7 @@ fn tension_disposition(
 pub fn build_view(
     rules: &[RuleAtom],
     tensions: &[RuleTension],
-    ops: &[GovernanceOp],
+    ops: &[Op<GovernanceOpKind>],
 ) -> GovernanceView {
     let active = derive_active(ops);
     let by_id: BTreeMap<&AtomId, &RuleAtom> = rules.iter().map(|r| (&r.id, r)).collect();
@@ -660,10 +660,10 @@ mod tests {
             confidence: conf,
         }
     }
-    fn op(kind: GovernanceOpKind, ts: i64, actor: &str) -> GovernanceOp {
-        GovernanceOp::new(kind, ts, actor)
+    fn op(kind: GovernanceOpKind, ts: i64, actor: &str) -> Op<GovernanceOpKind> {
+        Op::new(kind, ts, actor)
     }
-    fn assert_rule(n: usize, ts: i64) -> GovernanceOp {
+    fn assert_rule(n: usize, ts: i64) -> Op<GovernanceOpKind> {
         op(
             GovernanceOpKind::AssertRule {
                 rule: AtomId::claim(n),
@@ -1144,7 +1144,7 @@ mod tests {
         .unwrap();
 
         // Both rules asserted by ingest → governance_oplog.jsonl.
-        let log = GovernanceOplog::new(dir.path());
+        let log = Oplog::<GovernanceOpKind>::new(dir.path());
         log.append(&assert_rule(1, 1000)).unwrap();
         log.append(&assert_rule(2, 1001)).unwrap();
 

@@ -7,14 +7,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::NoteStore;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct DeleteNoteTool {
     store: Arc<NoteStore>,
@@ -26,59 +25,30 @@ impl DeleteNoteTool {
     }
 }
 
-#[async_trait]
-impl Tool for DeleteNoteTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "delete_note".to_string(),
-            name: "Delete Note".to_string(),
-            description: "Delete a working note by its ID (returned by write_note \
-                          or visible in read_notes results). Returns an error if \
-                          the note does not exist."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "The note ID to delete"
-                    }
-                },
-                "required": ["id"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You just completed the work described in a todo note, or a decision note has been superseded by a better approach. Clean it up so it doesn't mislead future sessions. The ID comes from the read_notes response.".into(),
-                    call: serde_json::json!({ "id": "note_abc123" }),
-                },
-            ],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "deleted": { "type": "boolean" }
-                }
-            })),
-        }
+impl DeleteNoteTool {
+    /// Bind this tool's state to its `delete_note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("delete_note", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("id")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("delete_note requires 'id'".to_string()))?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `delete_note`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let id = params
             .get("id")
             .and_then(|v| v.as_str())
@@ -97,5 +67,15 @@ impl Tool for DeleteNoteTool {
                 message: format!("note '{id}' not found"),
             })
         }
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("delete_note requires 'id'".to_string()))?;
+        Ok(())
     }
 }

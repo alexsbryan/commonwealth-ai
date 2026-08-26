@@ -10,12 +10,20 @@ oicp-types = { path = "../../../oicp-types" }
 # setup_config, types) was carved out here; sovereign-core re-exports every
 # item at its historical path so importers are unaffected.
 sovereign-contracts = { workspace = true }
+# The neutral kernel — `deep_research::icd` re-exports `Verdict` from here
+# rather than re-declaring the same four variants and the same wire form
+# (noun-convergence rung nc-10-judgement). Layer 0: this edge points DOWN.
+kernel-types = { workspace = true }
 # `treesitter` feature dropped 2026-05-22: sovereign-core's
 # corpus-engine usages (FeatureStore, NoteStore, EmbedFn, etc) are
 # not treesitter-gated. The only "ScipGraph" / "symbol_lookup"
 # strings here are tool-name literals in intent_policy + dossier;
 # no source-level dependency on the gated APIs.
 corpus-engine = { workspace = true }
+# `LaneSources::meta_atlas` is a CELL, not a value: the desktop fires
+# `backend-ready` and warms the ~900MB index in the background, then fills it
+# in an already-shared `Arc<Runtime>`. One storage, lock-free snapshot per turn.
+arc-swap = { workspace = true }
 corpus-engine-notes = { workspace = true }
 # Read-only SCIP call-graph access for code-intelligence-in-chat: the chat
 # runtime opens a code corpus's `scip_graph.db` and renders a caller/callee

@@ -128,18 +128,6 @@ impl Tool for RecipeWriteTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     fn make_root(home: &std::path::Path) -> PathBuf {
         let recipes = home.join(".sovereign/recipes");
         std::fs::create_dir_all(&recipes).unwrap();
@@ -156,7 +144,7 @@ mod tests {
         let out = tool
             .execute(
                 &serde_json::json!({"path": "demo", "content": body}),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -178,7 +166,7 @@ mod tests {
         let err = tool
             .execute(
                 &serde_json::json!({"path": "/tmp/elsewhere.toml", "content": ""}),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();

@@ -287,7 +287,7 @@
                   <span class="type-pill compact" data-type={r.atom_type}>
                     {ATOM_TYPE_LABEL[r.atom_type]}
                   </span>
-                  <span class="related-name">{r.display_name}</span>
+                  <span class="related-name">{r.canonical_name}</span>
                   <span class="related-confidence">
                     {r.confidence.toFixed(2)}
                   </span>

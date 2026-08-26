@@ -196,11 +196,58 @@ fn save_node_id(data_dir: &Path, id: &NodeId) -> std::io::Result<()> {
 /// the CLI derived its atlas identity from `<root>/indexes`, so one
 /// machine ran as two nodes and self-filtering misfired (2026-07-31).
 pub fn resolve_self_node_id(data_dir: &Path) -> NodeId {
-    match load_node_id(data_dir) {
-        Ok(Some(id)) => id,
-        _ => match load(data_dir) {
-            Ok(Some(persisted)) => persisted.self_node_id,
-            _ => load_or_generate_self_node_id(data_dir),
+    let from_file = load_node_id(data_dir).ok().flatten();
+    let persisted = load(data_dir).ok().flatten();
+
+    // ── The file may hold ANOTHER MACHINE's id ──────────────────────────────
+    // File-first precedence assumes the `node_id` file is either correct or
+    // absent. There is a third state: it holds an id belonging to a DIFFERENT
+    // member of this mesh — a data dir copied between workstations, a restored
+    // backup, a bind-mount pointed at the wrong host. That is not a stale
+    // self-id, it is a collision, and adopting it makes two nodes claim one
+    // identity: self-filtering inverts (your own edits read as a peer's),
+    // attribution lands on the wrong machine, and peers coordinating around
+    // the atlas steer around a node that is not the one editing.
+    //
+    // Observed 2026-08-20 on this workstation: `<data_dir>/node_id` had held a
+    // peer's id since April while `mesh.json` and `/status` both reported the
+    // real one, so every locally-observed work-atlas row was stamped with the
+    // peer's id and the pre-commit collision guard warned on its own author's
+    // edits. Same family as the 2026-07-31 incident above; that one minted a
+    // second identity from the wrong directory, this one adopts a real peer's.
+    //
+    // `mesh.json` wins here and only here. It is the identity the mesh agreed
+    // on and the one the daemon presents, and the tie-break is not a guess: an
+    // id that names a known peer cannot also be us. Outside this case the file
+    // keeps precedence, so a fresh join cannot rotate a stable identity.
+    if let (Some(file_id), Some(mesh)) = (from_file, persisted.as_ref()) {
+        if file_id != mesh.self_node_id && mesh.members.iter().any(|m| m.node_id == file_id) {
+            tracing::error!(
+                node_id_file = %file_id,
+                mesh_self = %mesh.self_node_id,
+                data_dir = %data_dir.display(),
+                "node_id: the node_id file holds a PEER's identity — adopting mesh.json's \
+                 self_node_id and repairing the file. Two nodes sharing one id breaks \
+                 self-filtering and misattributes this machine's work to that peer."
+            );
+            if let Err(e) = save_node_id(data_dir, &mesh.self_node_id) {
+                // Non-fatal: the returned id is already correct for this
+                // process. Unrepaired, the warning simply fires again next boot.
+                tracing::warn!(
+                    error = %e,
+                    "node_id: could not repair the node_id file; identity is correct \
+                     for this process but the divergence will recur on restart"
+                );
+            }
+            return mesh.self_node_id;
+        }
+    }
+
+    match from_file {
+        Some(id) => id,
+        None => match persisted {
+            Some(p) => p.self_node_id,
+            None => load_or_generate_self_node_id(data_dir),
         },
     }
 }
@@ -582,5 +629,66 @@ mod tests {
         fs::create_dir_all(tmp.path()).unwrap();
         fs::write(mesh_file(tmp.path()), b"not json").unwrap();
         assert!(load(tmp.path()).is_err());
+    }
+
+    /// `sample_mesh` plus a second member, so a test can put a REAL peer's id
+    /// into the node_id file — the shape of the 2026-08-20 failure.
+    fn mesh_with_peer() -> (Mesh, NodeId, NodeId) {
+        let (mut mesh, self_id) = sample_mesh();
+        let peer_id = NodeId::generate();
+        let mut peer = mesh.members.values().next().unwrap().clone();
+        peer.node_id = peer_id;
+        peer.name = "BeefyMac".into();
+        mesh.members.insert(peer_id, peer);
+        (mesh, self_id, peer_id)
+    }
+
+    /// The bug: `<data_dir>/node_id` holds a PEER's identity. Adopting it makes
+    /// two machines claim one id — self-filtering inverts and this node's work
+    /// is attributed to that peer across the mesh.
+    #[test]
+    fn node_id_file_holding_a_peers_id_loses_to_mesh_json() {
+        let tmp = TempDir::new().unwrap();
+        let (mesh, self_id, peer_id) = mesh_with_peer();
+        save(tmp.path(), &mesh, self_id).unwrap();
+        save_node_id(tmp.path(), &peer_id).unwrap();
+
+        assert_eq!(
+            resolve_self_node_id(tmp.path()),
+            self_id,
+            "must not adopt a known peer's id as its own"
+        );
+        assert_eq!(
+            load_node_id(tmp.path()).unwrap(),
+            Some(self_id),
+            "and must repair the file so the divergence cannot recur on restart"
+        );
+    }
+
+    /// The guard is narrow on purpose. An id that is simply not in the mesh is
+    /// this node's own stable identity, and file precedence still holds — a
+    /// fresh join must never rotate it.
+    #[test]
+    fn node_id_file_still_wins_when_it_is_not_a_peer() {
+        let tmp = TempDir::new().unwrap();
+        let (mesh, self_id, _peer_id) = mesh_with_peer();
+        save(tmp.path(), &mesh, self_id).unwrap();
+        let stable = NodeId::generate();
+        save_node_id(tmp.path(), &stable).unwrap();
+
+        assert_eq!(resolve_self_node_id(tmp.path()), stable);
+        assert_eq!(
+            load_node_id(tmp.path()).unwrap(),
+            Some(stable),
+            "an uncontested file is left alone"
+        );
+    }
+
+    #[test]
+    fn mesh_json_id_is_used_when_no_node_id_file_exists() {
+        let tmp = TempDir::new().unwrap();
+        let (mesh, self_id, _peer_id) = mesh_with_peer();
+        save(tmp.path(), &mesh, self_id).unwrap();
+        assert_eq!(resolve_self_node_id(tmp.path()), self_id);
     }
 }

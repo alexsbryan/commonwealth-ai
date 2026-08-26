@@ -1,7 +1,24 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! Flag parser for `svrn tools`. Same shape as
-//! [`crate::atos_cmd::args`] so agents see consistent `--k=v` / `--k v`
-//! argument handling across subcommands.
+//! Flag parser for `svrn tools`. Accepts `--k=v` and `--k v` alike.
+//!
+//! This used to claim it was "the same shape as `crate::atos_cmd::args`".
+//! It was not: until 2026-08-21 this was the ONLY splitter in the family
+//! with the `=` branch, and `atos_cmd` / `awareness_cmd` / `inner_chaos` /
+//! `voice_eval` silently dropped that form.
+//!
+//! **This is the one that does not convert, and the reason is
+//! structural.** The other four moved onto
+//! `sovereign_cli_shared::args::parse` (nc-25, 33 call sites). This one
+//! cannot: `svrn tools call <id> --key=value …` forwards every flag it
+//! does not recognise as a JSON param of the named tool, so its flag set
+//! is the union of every registered tool's parameter schema — discovered
+//! at runtime from the `ToolRegistry` manifest, not knowable at compile
+//! time. `ArgSpec` is a CLOSED set; making it express this would mean
+//! "accept anything", which is exactly the property whose absence makes
+//! the shared parser worth adopting. Closed sets are enums, open sets are
+//! registries (ARCH_PRINCIPLES §2, §4) — `tools call` is the registry
+//! side. `--format` is the only flag this command owns, and it is read
+//! by name after the split.
 
 /// Split `args` into `(positional, flag_pairs)`. Boolean flags (listed
 /// below) stand alone; value-taking flags consume the following token

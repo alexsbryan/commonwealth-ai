@@ -16,7 +16,63 @@
 #   cargo run -p xtask -- layer-gate     Cargo-DECLARED edges (CI, <1s)
 #   sovereign code arch-report           SCIP-OBSERVED symbol references
 
-schema_version = 1
+schema_version = 2
+
+# ── Back-of-house: the quality controls ──────────────────────────────────────
+# eval, benches, judges, gates, harnesses, archaeology, ATOS. These sit OUTSIDE
+# the ordered stack rather than on top of it, because their rule is sharper
+# than direction: back-of-house may observe every layer, and NOTHING may depend
+# on it. A bench you cannot ship without is not a bench.
+#
+# Declared once, here. The rule is synthesized from this list in
+# quality/arch-layers (ARCH §10.6 — one decider, one name), so layer-gate and
+# arch-report cannot drift on it.
+#
+# The test is "does the product ship without it?", and it is answered
+# MECHANICALLY rather than by taste: a product crate may reach a back-of-house
+# crate only through an `optional = true` dependency that `default` does not
+# turn on. Eight such edges already existed as convention before this rule
+# named them (sovereign-cli/dev-tools, sovereign-tools/atos,
+# commonwealth-api/atos …); the rule makes them contract.
+#
+# ── WHAT THIS RULE CANNOT ENFORCE — read before trusting it ──────────────────
+# Its unit is the CRATE. Where quality-control code shares a crate with product
+# code it cannot tell which MODULE named the type, and every [[exception]]
+# below leaves the back-of-house crate LINKED INTO THE PRODUCT BINARY. So an
+# exception here is weaker than it looks: it does not say "this edge is fine",
+# it says "the boundary is drawn in the wrong place and the crate split that
+# would fix it has not been paid for". `sovereign-cli-llm` is the live example
+# — `bench_cmd` (51 files, 31k lines) sits beside `chat_cmd` and `corpus_cmd`,
+# so the shipped binary carries `sovereign-eval` no matter what this gate says.
+# layer-gate repeats this warning whenever the rule fires; do not delete it
+# from either place while an exception is outstanding.
+backstage = [
+    "sovereign-eval",
+    "sovereign-cli-dev",
+    "sovereign-agent-bench",
+    "sovereign-atos",
+    "corpus-engine-atos",
+    "corpus-engine-archaeology",
+    "xtask",
+]
+# NOT back-of-house, adjudicated 2026-08-20 (noun-convergence rung 3):
+#   sovereign-authoring-harness — reads as a harness and is not one. It was
+#     carved out of `sovereign-eval` precisely so `sovereign-desktop` could
+#     consume it without dragging rusqlite/reqwest/clap into the Tauri build,
+#     and the desktop's recipe-testing panel is a shipped end-user feature.
+#     The product does NOT ship without it, so it stays a capability.
+#   sovereign-tools — the MCP tool surface agents call at work time. Product.
+#     Its ATOS and archaeology reach is optional and off by default, which is
+#     the rule being satisfied, not evaded.
+#   commonwealth-tdd — `scripts/nc-boundary.py` classifies it back-of-house and
+#     that is WRONG; this rule caught it as a false positive on first run, from
+#     `sovereign-server` and `sovereign-cli-daemon`. It backs two SHIPPED MCP
+#     tools — `tdd_solve` and `tdd_bdd_cycle`, listed in `tools/list`
+#     (routes_mcp.rs:469) — and the `solve` verb's daemon route
+#     (daemon_cmd/solve_http.rs). The product does not ship without those.
+#     The distinction that decides it: a quality control measures SOVEREIGN,
+#     while this drives red-green-refactor over the USER's repo and emits their
+#     code. It is a feature about tests, not a test of the product.
 
 # ── Layers (bottom → top) ────────────────────────────────────────────────────
 
@@ -25,12 +81,40 @@ schema_version = 1
 # sovereign-time is the Tier-0 wall-clock leaf (zero deps by design — its own
 # doc comment is the contract); it lives at the bottom so the light app crates
 # can share it without pulling sovereign-core.
+#
+# kernel-types is the NEUTRAL kernel — identity + provenance (ContentHash,
+# CorpusId, NodeId, Origin, Custody, Attribution) owned by no product domain.
+# It is the second layer-0 membrane and deliberately NOT merged with
+# oicp-types: oicp is what one node ADVERTISES to another, kernel-types is what
+# a piece of content IS and where it came from. Minted 2026-08-20
+# (noun-convergence rung nc-1-kernel) after measurement showed the 23 types all
+# three product domains speak were 22-owned by corpus-engine. It may name
+# nothing above it — that is the whole contract, and scripts/nc-boundary.py
+# scores an edge out of it as a BACKFLOW violation.
 [[layer]]
 name = "contract"
-crates = ["oicp-types", "sovereign-contracts", "oicp-client", "arch-layers", "sovereign-time"]
+crates = [
+    "oicp-types",
+    "kernel-types",
+    "sovereign-contracts",
+    "oicp-client",
+    # The CLIENT half of the turn protocol, here for the same reason
+    # `oicp-client` is: protocol types plus the client that speaks them. Its
+    # only non-leaf dependency is `sovereign-contracts` — it cannot see a
+    # Runtime, a store or a corpus, which is what lets a surface depend on it
+    # without dragging a serving host's world along (TOPOLOGY §10 phase 6).
+    "sovereign-turn-client",
+    "arch-layers",
+    "sovereign-time",
+]
 
-# The knowledge layer: corpus-engine + its carve-outs. Self-contained by
-# design — neither sovereign nor commonwealth types appear here.
+# The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
+# design — neither sovereign nor commonwealth types appear here" was the claim
+# here until 2026-08-20, and it was false: four types (DetectedSection,
+# SectionDetector, ChapterRegexDetector, TocAnchoredDetector) were owned by
+# `sovereign-contracts` and named from `corpus-engine`. They now live in
+# `corpus-engine-sections`, and the claim is enforced below rather than asserted
+# here (noun-convergence rung 2).
 [[layer]]
 name = "knowledge"
 crates = ["corpus-engine", "corpus-engine-*"]
@@ -76,6 +160,22 @@ crates = [
 name = "capabilities"
 crates = [
     "sovereign-tools",
+    # The enrichment store's layout + `config.json` schema + inventory. Sits
+    # here and not with the CLI because THREE hosts read that file (the CLI,
+    # the daemon's watched-folder driver via sovereign-tools, and the desktop)
+    # and hosts are terminal — while the schema lived in `sovereign-cli-llm`
+    # the other two could only re-derive it, and both had (rung
+    # nc-16-shared-capability, 2026-08-20).
+    "sovereign-enrichment-catalog",
+    # THE `Runtime` recipe — router stack, turn tool registry, enrichment
+    # lane. Here rather than with the hosts for the same reason as the
+    # catalog above: THREE hosts commissioned a Runtime and each carried
+    # its own copy of the recipe, because the recipe needs sovereign-tools
+    # (same layer) and sovereign-gliner (down) and every crate that could
+    # see both was a host binary. Measured drift 2026-08-25: of eleven
+    # optional slots, exactly one was wired by all three
+    # (quality/TOPOLOGY.md §10 phase 5c).
+    "sovereign-runtime-recipe",
     "sovereign-work-atlas",
     "sovereign-workflow-host",
     "sovereign-atos",
@@ -107,7 +207,6 @@ crates = [
     "sovereign-pipeline",
     "sovereign-agent-bench",
     "sovereign-studio",
-    "commonwealth-daemon",
     "oicp-conformance",
     "xtask",
 ]
@@ -122,6 +221,73 @@ crates = [
 # (naming predates the monorepo merge) — their sovereign deps are exempted
 # here rather than grandfathered, since the crates are sovereign-side in all
 # but name.
+# The knowledge layer meets sovereign at the contracts seam and nowhere else.
+# Layer ordering cannot say this on its own: `sovereign-contracts` is declared
+# in the `contract` layer above, so every `corpus-engine-* → sovereign-*` edge
+# reads as downward and legal. `nc-boundary.py` disagrees — it classifies by
+# PATH, so anything under `sovereign/` is domain `sovereign` at layer 2, and a
+# knowledge-layer crate naming it is BACKFLOW. This rule records which of the
+# two readings binds new code: the seam is permitted, a second sovereign
+# dependency is not.
+#
+# What crosses today, census 2026-08-20. Four TYPES stopped crossing when the
+# section detectors moved to `corpus-engine-sections`
+# (`nc-boundary --edge corpus-engine:sovereign`: 4 → 0). The crate dependency
+# SURVIVES, on three modules that carry no types at all — which is why the type
+# census never showed them (`nc-boundary.py` selects `qualified_name LIKE '%#'`,
+# so free functions and consts are invisible to it):
+#   rebrand::svrnmesh_root                          4 sites (+2 in examples)
+#   recipe::url_template::render_template           1 site
+#   recipe::schema::RECIPE_SCHEMA_DESCRIPTOR_JSON   1 site (re-exported)
+# These stay deliberately. `svrnmesh_root` is the workspace path SSOT — 220 call
+# sites over 15 crates, and clippy `disallowed_methods = "deny"` makes
+# hand-rolling the path a build error, so it must remain ONE accessor (ARCH
+# §10.6); relocating it is its own rung. The other two are agreements the engine
+# and the recipe package must hold bit-for-bit, with no home below.
+[[forbid]]
+from = "corpus-engine*"
+to = "sovereign-*"
+except = ["sovereign-contracts"]
+reason = "the knowledge layer must stay consumable without the agent runtime; it meets sovereign at the contracts seam only, and must never again name a sovereign-owned TYPE"
+
+# The wire contract is the floor. `nc-boundary.py` reads the workspace as four
+# systems — oicp(0) < corpus-engine/commonwealth(1) < sovereign(2) < studio(3) —
+# and an `oicp-* → sovereign-*` edge is BACKFLOW under it: the crate that exists
+# to decouple the systems depending on one of them. Layer ordering alone cannot
+# say this, because `sovereign-contracts` is declared in the `contract` layer
+# here; these rules make the direction structural instead of remembered.
+# (noun-convergence rung 2, 2026-08-20.)
+
+[[forbid]]
+from = "oicp-types"
+to = "sovereign-*"
+reason = "the wire contract is the floor — a protocol crate that names the runtime cannot be lifted, versioned, or implemented by a third party"
+
+# oicp-client's ONE surviving sovereign edge, with the finding that keeps it.
+# Census 2026-08-20, `scripts/nc-boundary.py --edge oicp:sovereign`: 12 types /
+# 103 refs, every one of them from `oicp-client/src/lib.rs`, every one defined
+# in `sovereign-contracts` —
+#   traits.rs            InferenceProvider, ResidentSlot
+#   types/completion.rs  CompletionRequest, CompletionResponse, StreamFrame,
+#                        FinishReason, StreamUsage, ProviderCapabilities
+#   types/mod.rs         Speed, Depth
+#   error.rs             Error, Result
+# THE FINDING: the trait and the completion value types belong to oicp —
+# `oicp-client` is the Open Inference Capabilities Protocol client and that IS
+# the inference wire vocabulary; the home is oicp-types, and the fix is a MOVE.
+# `Error`/`Result` do NOT move with them: error.rs is a 150-line sovereign
+# RUNTIME error enum (Planning, Execution, Tool, ToolNotFound, Storage,
+# PermissionDenied, CorpusUpdateNotAuthorised, QueueShed). Every
+# `InferenceProvider` method returns it, so the move needs an oicp-owned error
+# plus conversions across 79 `impl InferenceProvider for` sites — its own rung,
+# not a side effect of another. Until it lands the edge is permitted HERE and
+# nowhere else: oicp-client may not acquire a second sovereign dependency.
+[[forbid]]
+from = "oicp-client"
+to = "sovereign-*"
+except = ["sovereign-contracts"]
+reason = "the OICP client meets the runtime at the contracts seam only; the inference vocabulary it borrows is oicp's own and moves down in its own rung"
+
 [[forbid]]
 from = "commonwealth-core"
 to = "sovereign-*"
@@ -157,12 +323,36 @@ from = "commonwealth-app"
 to = "sovereign-*"
 reason = "mesh foundation must stay consumable without the agent runtime"
 
-[[forbid]]
-from = "commonwealth-daemon"
-to = "sovereign-*"
-except = ["sovereign-contracts"]
-reason = "the standalone mesh daemon must not drag the agent runtime"
-
+# WHAT actually crosses, so R6 has a size rather than a feeling. Census
+# 2026-08-20, `scripts/nc-boundary.py --edge commonwealth:sovereign`: 11 types /
+# 38 refs, all from `commonwealth-api` —
+#   sovereign-contracts (5, permitted by the `except` below — the declared seam)
+#     next_edit_journal.rs NextEditEpisode, JournalLine, NextEditOutcome,
+#                          NextEditOutcomeLine
+#     journal.rs           JournalStream
+#   sovereign-tools (6, grandfathered below)
+#     atlas_postinstall.rs Tier2LaunchOutcome, StructuralAtlasOutcome, TriageOutcome
+#     atlas_peer_advice.rs PeerAtlasView, PeerAtlasPullCandidate
+#     atlas_status.rs      AtlasStatusRow
+#   sovereign-atos (grandfathered below; named from the ATOS-feature middleware,
+#   which is off in default builds so the type census does not count it)
+#     session.rs           ArtifactDelta, MilestonePassEvent, SessionStore
+#     approval.rs          FeatureApproval, ApprovalSource
+# The 5 contract types are the seam working as designed. The other 6 are the
+# in-process runtime embed, and they are what R6 has to delete.
+#
+# Burn-down: 22/122 -> 16/98 (rung 2b moved the inference vocabulary to
+# oicp-types) -> 11/38 (rung 2c family A moved the tool vocabulary — Effect,
+# Scope, ToolDescriptor, Idempotency, Latency, ToolExample — to oicp-types
+# too). The `except` below stays for now, and the reason is worth stating
+# because the two halves of this rule measure different things: the `except`
+# is CRATE-level and is already inert — no commonwealth crate carries a direct
+# `sovereign-contracts` dep, so it grants nothing today. What is still live is
+# the TYPE-level reach: the next-edit journal family (rung 2c/B) names
+# sovereign-contracts types through `sovereign_core`'s re-exports, which the
+# `commonwealth-api -> sovereign-core` exception below already covers. Dropping
+# the `except` is therefore a free ratchet against a dep nobody has taken yet —
+# it belongs with the family that makes the type census zero, not with this one.
 # The mesh API's reach into the agent runtime is real, load-bearing debt —
 # the OICP-only seam is the goal state (remediation R6). Forbidden so every
 # such edge must be individually grandfathered below and burns down visibly.
@@ -181,6 +371,18 @@ reason = "cross-family reach — harness should simulate against the OICP/contra
 # ── Grandfathered violations (the burn-down list) ────────────────────────────
 # Populated by the first layer-gate census, 2026-07-11. Removing an entry —
 # with its edge — is the win condition; see the remediation roadmap (R6).
+
+# ── Back-of-house exceptions ─────────────────────────────────────────────────
+# Read these as "the boundary is drawn in the wrong place here", never as "this
+# edge is fine". Each one leaves a back-of-house crate LINKED into a product
+# binary; the crate gate cannot do better, and the module rule named alongside
+# is what actually holds the line until the split is paid for.
+
+[[exception]]
+from = "sovereign-cli-llm"
+to = "sovereign-eval"
+reason = "bench_cmd (51 files, ~31k lines) shares this crate with chat/corpus/mesh, so the shipped binary links the instrument. Priced 2026-08-20 and declined: extracting it needs pub churn through enrich_cmd/eval_cmd/chat_cmd. CONTAINED meanwhile by the module rule bench_cmd_is_the_only_module_naming_the_eval_harness (src/lib.rs) — one module names it, and a test fails if that changes. The product verb that used to cross (recipe_cmd, via the harness alias on the eval crate) was repointed at sovereign-authoring-harness directly and no longer does. UPDATE 2026-08-21 (nc-26): the crate is no longer bin-only — it gained a [lib] target so awareness_cmd could move to the crate whose enrich_cmd it was importing. Half of the declined price is therefore already paid; what remains is the pub-visibility churn, not the lib target."
+tracking = "nc-3-backstage"
 
 [[exception]]
 from = "commonwealth-api"

@@ -10,7 +10,6 @@ use std::sync::Arc;
 
 use super::discovery_policy;
 use super::lifecycle::daemon_pid_path;
-use super::provider::LlamaCppFactory;
 use super::warn_orphaned_indexes;
 use commonwealth_core::ids::NodeId;
 use corpus_engine::{CorpusEngine, EmbedFn};
@@ -114,7 +113,13 @@ pub(super) fn build_corpus_engine(
     chunk_entity_extractor: &Option<
         Arc<dyn corpus_engine::enrichment::tiered::ChunkEntityExtractor>,
     >,
-) -> Arc<CorpusEngine> {
+) -> (Arc<CorpusEngine>, String) {
+    // Returned alongside the engine rather than re-derived by the caller. The
+    // `config.models.embed.file_stem()` expression below already had five
+    // copies tree-wide (ARCH §10.6); the daemon's `Runtime` needs the same
+    // string to key its atlas embedding cache, and a sixth copy is how the
+    // cache and the shards start disagreeing about which model wrote them.
+    let mut derived_embed_model = String::new();
     let engine: Arc<CorpusEngine> = {
         let indexes_dir = data_dir.join("indexes");
         let provider_for_embed = Arc::clone(&provider);
@@ -294,9 +299,10 @@ pub(super) fn build_corpus_engine(
         // SEC filings. Registration is cheap and unconditional; a
         // recipe that never names the kind never invokes it.
         sovereign_tools::sec_edgar::register(&engine_builder);
+        derived_embed_model = embed_model_name.clone();
         Arc::new(engine_builder)
     };
-    engine
+    (engine, derived_embed_model)
 }
 
 /// Build the watched-folder tiered-enrichment deps (its own
@@ -507,16 +513,25 @@ fn worker_allowlist() -> Option<Vec<String>> {
 /// separated). These never enter the eligible-worker snapshot — discovery only
 /// ever adds to them — so any gate reading that snapshot has to union them back
 /// in or it would permanently hold a manual setup.
+/// THE reader of `SOVEREIGN_RPC_DISCOVER` (TOPOLOGY §10 phase 10, ARCH §10.6).
+///
+/// A PRESENCE check — any value, including empty, arms discovery. That is the
+/// established semantics and it is preserved here rather than tightened;
+/// changing what counts as "set" is a behaviour change and this rung is about
+/// having one answer, not a new one.
+///
+/// Three sites asked independently (`bootstrap`, `build/containment`,
+/// `doctor_cmd`), and two of them feed a containment VERDICT — so a divergence
+/// would mean the doctor reporting a containment posture the daemon does not
+/// actually run under.
+pub(crate) fn rpc_discovery_armed() -> bool {
+    std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok()
+}
+
 fn env_rpc_workers() -> Vec<String> {
-    std::env::var("SOVEREIGN_RPC_WORKERS")
-        .ok()
-        .map(|raw| {
-            raw.split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
+    // One reader, in `sovereign_inference::embedded` — this function used to
+    // carry a byte-identical copy (TOPOLOGY §10 phase 10).
+    sovereign_inference::embedded::rpc_workers_from_env()
 }
 
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
@@ -531,7 +546,7 @@ pub(super) fn spawn_rpc_worker_discovery(
     // model across the cluster needs no manual `SOVEREIGN_RPC_WORKERS` list.
     // (Applies on the next model load after discovery populates; an eagerly
     // loaded model picks workers up on reload — see register_rpc_workers.)
-    if std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok() {
+    if rpc_discovery_armed() {
         let snapshot = Arc::new(std::sync::RwLock::new(Vec::<String>::new()));
         sovereign_inference::embedded::set_rpc_worker_provider({
             let snap = Arc::clone(&snapshot);
@@ -1714,8 +1729,7 @@ pub(super) async fn advertise_embed_model(
     provider: Arc<dyn InferenceProvider>,
     config: &SetupConfig,
     resolved_embed_family: ModelFamily,
-    daemon: Arc<EmbeddedDaemon>,
-) {
+) -> sovereign_mesh::EmbedAdvertisement {
     // Publish this node's embed model fingerprint so peers can filter
     // us in/out of collaborative ingestion.
     //
@@ -1794,82 +1808,55 @@ pub(super) async fn advertise_embed_model(
                 normalization = ?normalization,
                 "embed model info: advertising to mesh peers"
             );
-            daemon.set_embed_model_info(embed_info).await;
+            sovereign_mesh::EmbedAdvertisement::Advertised(embed_info)
         }
-        Err(e) => {
-            tracing::warn!(
-                error = %e,
-                "embed probe failed — peers will NOT route collaborative ingestion to this node"
-            );
-        }
+        Err(e) => sovereign_mesh::EmbedAdvertisement::Unavailable {
+            reason: format!("embed probe failed: {e}"),
+        },
     }
 }
 
-/// Install the MCP surface, the mesh/admin/reading/solve HTTP routers, the
-/// provider factory, and the setup config onto the daemon.
-pub(super) async fn install_http_and_mcp(
-    daemon: Arc<EmbeddedDaemon>,
+/// Build the `/mcp` mount for the daemon's [`sovereign_mesh::ServingCapability`].
+///
+/// It used to also install the mesh, admin, reading and solve routers, the
+/// provider factory and the setup config — six separate calls, each of which a
+/// host could omit. The first four are now built by the daemon itself or
+/// declared on the headless variant; only the tool mount is genuinely
+/// host-specific, because only the host knows which tools it registered.
+pub(super) fn build_mcp_surface(
     tools: ToolRegistry,
     notes_store: Arc<NoteStore>,
-    config: &SetupConfig,
-    solve_jobs: Arc<super::solve_http::SolveJobs>,
-) {
+) -> sovereign_mesh::McpSurface {
     let session_id = format!("daemon-{}", uuid::Uuid::new_v4());
-    daemon
-        .set_mcp(Arc::new(tools), Arc::clone(&notes_store), session_id)
-        .await;
-
-    // Mount the mesh HTTP API so the desktop (when running in Attach
-    // mode) can drive `create/join/rotate/leave` against this daemon
-    // without starting its own colliding EmbeddedDaemon.
-    daemon
-        .install_mesh_http_router(sovereign_mesh::mesh_http::mesh_router(Arc::clone(&daemon)))
-        .await;
-
-    // Admin HTTP surface — POST /v1/admin/reload. The factory below
-    // tells the reload handler how to rebuild an InferenceProvider
-    // when models.* changes on disk; without it, reload would error
-    // out on any model-path change.
-    daemon
-        .install_admin_http_router(sovereign_mesh::admin_http::admin_router(Arc::clone(
-            &daemon,
-        )))
-        .await;
-    // Reading-surface HTTP routes — `/internal/corpus/{c}/chunks/...`.
-    // Backs the desktop's glass-box reading UI when running against a
-    // standalone daemon (CLI-mode) instead of the in-process Tauri
-    // daemon. Loopback-only.
-    daemon
-        .install_reading_http_router(sovereign_mesh::reading_http::reading_router(Arc::clone(
-            &daemon,
-        )))
-        .await;
-    // Solve-job surface — `/v1/solve/jobs*` (docs/specs/SOLVE_UX.md).
-    // Loopback-only: the solver executes workdir test commands.
-    daemon
-        .install_solve_http_router(super::solve_http::solve_router(solve_jobs))
-        .await;
-    daemon
-        .set_provider_factory(Arc::new(LlamaCppFactory {
-            daemon: Arc::clone(&daemon),
-        }))
-        .await;
-    daemon.set_setup_config(config.clone()).await;
+    sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
+        tools: Arc::new(tools),
+        notes: notes_store,
+        session_id,
+    })
 }
 
 /// Build the project-freshness reindexer (commit harvester + project/knowledge-view
 /// HTTP routers), resume persisted projects, and return the reindexer handle to
 /// hold for the daemon's life.
+/// Returns the reindexer handle to hold for the daemon's life, plus the two
+/// routers it owns — `/v1/projects/*` and
+/// `POST /v1/knowledge/landscape_digest`. Both used to be installed onto the
+/// daemon from in here; they are now returned so the caller can name them in
+/// the daemon's variant, which is what makes "the daemon serves a knowledge
+/// digest" a fact of the type rather than of whether this function ran.
 pub(super) async fn start_freshness_pipeline(
     data_dir: &Path,
     notes_store: Arc<NoteStore>,
-    daemon: Arc<EmbeddedDaemon>,
     engine: Arc<CorpusEngine>,
     provider: Arc<dyn InferenceProvider>,
     // The merged SCIP graph the MCP tools also hold. Shared (not rebuilt here)
     // so the reindexer's overlay + full-rebuild updates are live to `symbols()`.
     merged_handle: sovereign_mesh::reindexer::ScipGraphHandle,
-) -> Arc<sovereign_mesh::reindexer::Reindexer> {
+) -> (
+    Arc<sovereign_mesh::reindexer::Reindexer>,
+    axum::Router,
+    axum::Router,
+) {
     // ── Project freshness pipeline ────────────────────────────────
     //
     // The Reindexer owns per-project FS watchers, git-HEAD pollers,
@@ -1896,11 +1883,7 @@ pub(super) async fn start_freshness_pipeline(
         &mut reindexer,
         Arc::clone(&notes_store),
     );
-    daemon
-        .install_project_http_router(sovereign_mesh::project_http::project_router(Arc::clone(
-            &reindexer,
-        )))
-        .await;
+    let project_http = sovereign_mesh::project_http::project_router(Arc::clone(&reindexer));
 
     // Knowledge-view HTTP surface — POST /v1/knowledge/landscape_digest.
     //
@@ -1932,13 +1915,9 @@ pub(super) async fn start_freshness_pipeline(
         )
         .await,
     );
-    daemon
-        .install_knowledge_view_http_router(
-            sovereign_mesh::landscape_digest_http::landscape_digest_router(Arc::clone(
-                &knowledge_view_manager,
-            )),
-        )
-        .await;
+    let knowledge_view_http = sovereign_mesh::landscape_digest_http::landscape_digest_router(
+        Arc::clone(&knowledge_view_manager),
+    );
 
     // Resume any previously-registered projects so FS watchers
     // come back up without the user running `project register`
@@ -1953,7 +1932,7 @@ pub(super) async fn start_freshness_pipeline(
         tracing::info!(corpus = %entry.corpus_id, "resumed registered project");
     }
     warn_orphaned_indexes(&freshness_indexes_dir, &registry);
-    reindexer
+    (reindexer, project_http, knowledge_view_http)
 }
 
 /// Build the watched-folder reconciliation subsystem (LocalCorpusManager +
@@ -1961,10 +1940,10 @@ pub(super) async fn start_freshness_pipeline(
 /// subsystem handle.
 pub(super) async fn setup_watched_folders(
     engine: Arc<CorpusEngine>,
+    state_store: Arc<dyn sovereign_core::traits::StateStore>,
     data_dir: &Path,
     config: &SetupConfig,
     folder_tiered_deps: Option<sovereign_tools::local_corpus::watched::enrich::TieredDeps>,
-    daemon: Arc<EmbeddedDaemon>,
 ) -> Option<sovereign_mesh::watched_folder_setup::WatchedSubsystem> {
     // ── Watched-folder reconciliation scheduler ─────────────────
     //
@@ -1975,20 +1954,20 @@ pub(super) async fn setup_watched_folders(
     // corpus on its configured cadence (default 120 s, floored at
     // 60 s) and applies the diff through CorpusUpdater.
     //
-    // The local-corpus subsystem requires a StateStore but only
-    // touches it on `remove` (delete_corpus_state). The persistent
-    // source of truth for corpus metadata is `{data_dir}/local-corpora/*.json`,
-    // which the manager loads at construction. An in-memory store
-    // is therefore sufficient for the daemon — `remove`'s
-    // delete_corpus_state becomes a benign no-op against the empty
-    // in-memory map.
+    // The local-corpus subsystem touches the store on `remove`
+    // (delete_corpus_state). It was handed a fresh `InMemoryStateStore`
+    // until daemon-convergence Phase 3, on the reasoning that the
+    // persistent source of truth for corpus metadata is
+    // `{data_dir}/local-corpora/*.json` — true, and it made
+    // `delete_corpus_state` a no-op against an empty map, so removing a
+    // watched folder left its state rows behind in the real db forever.
+    // The daemon now has ONE state store (§10.6, one decider one name) and
+    // this is it, so the delete lands where the rows actually are.
     // Watched-folder reconciliation subsystem. The full wiring (build
     // registry → resume corpora → install runtime singleton → mount
     // HTTP routes → spawn scheduler) is factored into
     // `sovereign_mesh::watched_folder_setup` so the desktop's
     // embedded daemon can call the same path.
-    let lc_store: Arc<dyn sovereign_core::traits::StateStore> =
-        Arc::new(sovereign_store::memory::InMemoryStateStore::new());
     // Critical: pass the same `recipes_dir` the `CorpusEngine`
     // was constructed with (see the `let recipes_dir = …` block
     // above where the engine is built). Otherwise the manager
@@ -1998,7 +1977,7 @@ pub(super) async fn setup_watched_folders(
     let lc_recipes_dir = data_dir.join("recipes");
     match sovereign_tools::local_corpus::LocalCorpusManager::init_with_recipes_dir(
         Arc::clone(&engine),
-        lc_store,
+        state_store,
         None,
         data_dir.to_path_buf(),
         data_dir.join("vault-snapshots"),
@@ -2083,7 +2062,6 @@ pub(super) async fn setup_watched_folders(
             ));
             Some(
                 sovereign_mesh::watched_folder_setup::WatchedSubsystem::install(
-                    Arc::clone(&daemon),
                     Arc::clone(&engine),
                     Arc::new(manager),
                     config.watched_folders.max_concurrent_sweeps,
@@ -2102,21 +2080,23 @@ pub(super) async fn setup_watched_folders(
     }
 }
 
-/// Build the EmbeddedDaemon + the mesh-routed inference provider (gossip peers
-/// composited with pinned worker pods loaded from disk). Returns both to wire.
-pub(super) async fn build_mesh_providers(
-    data_dir: &Path,
+/// Build the mesh-routed inference provider (gossip peers composited with
+/// pinned worker pods loaded from disk), plus the [`DeferredDaemon`] handle it
+/// routes through.
+///
+/// **The daemon is NOT built here.** It used to be — first thing, empty, so the
+/// provider had something to hold — and that inversion is what forced every
+/// other dependency to arrive through a setter. The wiring is genuinely cyclic
+/// (the daemon serves peers through a provider that routes to peers), so the
+/// cycle is broken by the handle: `run_daemon` builds every service, commissions
+/// the daemon with all of them at once, then calls `DeferredDaemon::bind`.
+pub(super) async fn build_mesh_provider(
     provider: Arc<dyn InferenceProvider>,
 ) -> (
-    Arc<EmbeddedDaemon>,
+    Arc<sovereign_mesh::DeferredDaemon>,
     Arc<sovereign_mesh::peer_inference::MeshInferenceProvider>,
 ) {
-    // ── EmbeddedDaemon ────────────────────────────────────────────
-    // Wrap in Arc so the mesh HTTP router can clone it for axum
-    // handlers (see `install_mesh_http_router` — the router needs an
-    // owned `Arc<EmbeddedDaemon>` to drive `create/join/rotate/leave`
-    // from HTTP callers).
-    let daemon = Arc::new(sovereign_mesh::EmbeddedDaemon::new(data_dir.to_path_buf()));
+    let daemon = Arc::new(sovereign_mesh::DeferredDaemon::new());
 
     // Wrap the raw `EmbeddedLlamaCpp` in `MeshInferenceProvider`
     // before installing it as the daemon's serving provider.

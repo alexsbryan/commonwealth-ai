@@ -11,6 +11,11 @@ rust-version.workspace = true
 # the exact dependency budget a third-party implementation can lift.
 
 [dependencies]
+# The neutral kernel (layer 0). `Custody` and its join moved there in
+# noun-convergence rung nc-1-kernel — provenance is layer-0 business, and
+# while it lived here the knowledge layer could not name it without a
+# backflow edge. Re-exported from types::custody so callers are unchanged.
+kernel-types = { workspace = true }
 oicp-types = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -24,11 +29,18 @@ uuid = { workspace = true }
 chrono = { workspace = true }
 # Home-dir + platform config-dir resolution for setup_config's path helpers.
 dirs = "5"
-# Line-anchored section detection (recipe::sections). The detector half of
-# corpus-engine's sectioned chunker lives here so the workflow SectionTool and
-# the bespoke ingest path share ONE segmentation implementation — a pure-CPU
-# contract, no document-shipping over MCP.
+# `recipe::url_template` placeholder substitution. (It used to also carry
+# `recipe::sections`, corpus-engine's section detectors — those moved DOWN to
+# the `corpus-engine-sections` leaf on 2026-08-20 so the knowledge layer stops
+# naming a type owned by the layer above it; noun-convergence rung 2.)
 regex = { workspace = true }
+
+# `run_lock`: flock(2) for the single-writer claim on a data root. A leaf
+# third-party crate, so it adds no workspace layer edge — and unix-gated,
+# because the lock has no enforcement to offer anywhere else
+# (`RunLock::is_enforced`).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
 
 [dev-dependencies]
 tempfile = { workspace = true }

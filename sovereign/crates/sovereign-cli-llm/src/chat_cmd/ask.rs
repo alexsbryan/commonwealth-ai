@@ -1,25 +1,46 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn chat ask "<question>"` — one-shot streaming turn.
+//! `svrn chat ask "<question>"` — one-shot turn, asked of the daemon.
 //!
-//! Same shape as the desktop's `sendMessageStream` flow:
-//!   1. Bootstrap the Runtime.
+//! # This is a surface now (TOPOLOGY §10 phase 6)
+//!
+//! It used to be:
+//!   1. Bootstrap a `Runtime` in this process.
 //!   2. Call `handle_message_stream(message, conversation_id)`.
-//!   3. Drain the chunk stream straight to stdout.
-//!   4. Read the persisted assistant message back out of the store
-//!      so we can render provenance + retrieved chunks + reasoning.
+//!   3. Drain the chunk stream to stdout.
+//!   4. Go back to the store and read the assistant message it just wrote,
+//!      to learn what the turn had done.
 //!
-//! The stream-and-read pattern (rather than buffering the whole
-//! answer in RAM) matters for the `<think>...</think>` traces:
-//! reasoning-heavy models stream thousands of tokens before the
-//! first visible answer character. Users should see progress
-//! immediately, not after 30 s of apparent silence.
+//! Step 4 is the one that made this a host rather than a surface: "find the
+//! row the turn produced" only works from inside the process that owns the
+//! store, so the answer to "what did this turn do" could not cross a process
+//! boundary. Now the turn runs on the daemon and its result ARRIVES — as
+//! `TurnFrame::Complete`, a value that serializes — and this file holds no
+//! `Runtime`, no store, no corpus engine.
+//!
+//! The streaming shape is unchanged and still load-bearing for the same
+//! reason: reasoning-heavy models emit thousands of `<think>` tokens before
+//! the first visible answer character, and users should see progress
+//! immediately rather than after 30 s of apparent silence. `TurnFrame::Token`
+//! arrives per delta, so the live echo below is byte-for-byte what it was.
+//!
+//! # What moved to the daemon with it
+//!
+//! `--naked` is [`TurnMode::Naked`] on the wire — it had no wire form at all
+//! before phase 6, so converting this file was blocked on adding one. The
+//! non-streamable-intent fallback that used to live HERE (matching the error
+//! string and re-running `handle_turn`) is now inside
+//! `sovereign_core::runtime::serve_turn`, decided before the turn starts
+//! rather than caught after it fails — see its doc comment for the
+//! double-persist bug the two host copies disagreed about.
 
 use std::io::{self, Write};
 
-use futures::StreamExt;
 use serde_json::json;
 
-use crate::chat_cmd::bootstrap::{build_session, ChatSession};
+use sovereign_contracts::types::projection::{Citation, Provenance};
+use sovereign_contracts::types::TurnMode;
+use sovereign_turn_client::{TurnClient, TurnObserver, TurnOutcome};
+
 use crate::chat_cmd::config::parse_globals;
 use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -119,25 +140,38 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
         return 2;
     };
 
-    let session = match build_session(&globals).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("bootstrap failed: {e}");
-            return 1;
-        }
+    let client = TurnClient::new(&globals.daemon_base);
+
+    // A caller-supplied id is reused as-is; otherwise the DAEMON mints one,
+    // because minting it here and hoping the host agrees is how an id and the
+    // row it names come into existence separately. `POST /v1/conversations`
+    // seeds the row and returns the id it seeded.
+    let conversation_id = match conversation_id {
+        Some(id) => id,
+        None => match client.create_conversation(None).await {
+            Ok(c) => c.id,
+            Err(e) => {
+                eprintln!("could not start a conversation on the daemon: {e}");
+                eprintln!("hint: is the daemon running? `svrn daemon start`");
+                return 1;
+            }
+        },
     };
 
-    let conversation_id = conversation_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-    let exit = run_turn(
-        &session,
+    let mode = if naked_mode {
+        TurnMode::Naked
+    } else {
+        TurnMode::Grounded
+    };
+    run_turn(
+        &client,
         &question,
         &conversation_id,
         format,
         show_reasoning,
-        naked_mode,
+        mode,
     )
-    .await;
-    exit
+    .await
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -147,133 +181,107 @@ enum OutputFormat {
 }
 
 async fn run_turn(
-    session: &ChatSession,
+    client: &TurnClient,
     question: &str,
     conversation_id: &str,
     format: OutputFormat,
     show_reasoning: bool,
-    naked_mode: bool,
+    mode: TurnMode,
 ) -> i32 {
     eprintln!();
     eprintln!("{BAR}");
     eprintln!("conversation: {conversation_id}");
     eprintln!("> {question}");
     eprintln!("{BAR}");
-
-    let handle_result = if naked_mode {
+    if mode == TurnMode::Naked {
         eprintln!("· raw model — Sovereign affordances bypassed ·");
-        session
-            .runtime
-            .handle_message_stream_naked(question, conversation_id)
-            .await
-    } else {
-        session
-            .runtime
-            .handle_message_stream(question, conversation_id)
+    }
+
+    // In `text` mode we echo deltas as they arrive. In `json` mode the user
+    // wants one structured payload at the end, so we buffer silently and dump
+    // on completion. `TurnOutcome` accumulates the full text either way.
+    let echo_live = matches!(format, OutputFormat::Text);
+    if echo_live {
+        eprintln!();
+    }
+
+    // Locked per write rather than for the whole turn: `TurnObserver`'s hooks
+    // are `Send` so a caller can drive a turn from a spawned task, and a held
+    // `StdoutLock` is not. Per-delta locking costs nothing at token cadence.
+    let mut echo = |chunk: &str| {
+        if echo_live {
+            let mut out = io::stdout();
+            let _ = out.write_all(chunk.as_bytes());
+            let _ = out.flush();
+        }
+    };
+    // Progress the in-process path never showed: the daemon narrates what it
+    // is doing while the answer is still being retrieved. Stderr, so it stays
+    // out of a piped `--format json` payload.
+    let mut narrate = |_phase: &sovereign_contracts::types::NarrationPhase,
+                       text: &str,
+                       elapsed_ms: u64| {
+        if echo_live && !text.is_empty() {
+            eprintln!("· {text} ({:.1}s)", elapsed_ms as f64 / 1000.0);
+        }
+    };
+    let mut queued = |position: u32, wait_ms: u64| {
+        eprintln!("· queued #{position} · ~{:.0}s", wait_ms as f64 / 1000.0);
+    };
+
+    let outcome = {
+        let mut observer = TurnObserver {
+            on_token: Some(&mut echo),
+            on_narration: Some(&mut narrate),
+            on_queue_position: Some(&mut queued),
+        };
+        client
+            .run_turn(conversation_id, question, mode, None, &mut observer)
             .await
     };
-    let handle = match handle_result {
-        Ok(h) => h,
-        // Non-streamable intents (ComplexTask, document-attached, …) are not
-        // token-streamable: the runtime signals this with a NotImplemented
-        // "Streaming not supported for this intent" and expects the caller to
-        // fall back to the non-streaming turn (the same contract the desktop
-        // honors). Run `handle_turn`, which dispatches the agentic path
-        // (planner → executor → cited synthesis + the numeric-audit gate),
-        // and render its Response exactly like the streamed path.
-        Err(e) if e.to_string().contains("Streaming not supported") => {
-            eprintln!();
-            eprintln!("· non-streamed agentic turn (planning + tool calls — output appears once complete) ·");
-            return match session.runtime.handle_turn(question, conversation_id).await {
-                Ok(resp) => {
-                    let raw = resp.message.content.clone();
-                    let metadata = resp.message.metadata.clone();
-                    match format {
-                        OutputFormat::Text => render_text(&raw, metadata.as_ref(), show_reasoning),
-                        OutputFormat::Json => {
-                            render_json(&resp.message.id, conversation_id, &raw, metadata.as_ref())
-                        }
-                    }
-                    0
-                }
-                Err(e) => {
-                    eprintln!("turn failed: {e}");
-                    1
-                }
-            };
-        }
+
+    let outcome = match outcome {
+        Ok(o) => o,
         Err(e) => {
-            eprintln!("stream start failed: {e}");
+            if echo_live {
+                println!();
+            }
+            eprintln!("turn failed: {e}");
             return 1;
         }
     };
 
-    let message_id = handle.message_id.clone();
-    let mut stream = handle.stream;
-    let mut raw = String::new();
-    let mut stdout = io::stdout().lock();
-
-    // In `text` mode we stream chunks as they arrive. In `json` mode
-    // the user wants one structured payload at the end, so we buffer
-    // silently and dump on stream close.
-    let echo_live = matches!(format, OutputFormat::Text);
     if echo_live {
-        let _ = writeln!(stdout);
+        println!();
     }
-
-    while let Some(item) = stream.next().await {
-        match item {
-            Ok(chunk) => {
-                raw.push_str(&chunk);
-                if echo_live {
-                    let _ = stdout.write_all(chunk.as_bytes());
-                    let _ = stdout.flush();
-                }
-            }
-            Err(e) => {
-                if echo_live {
-                    let _ = writeln!(stdout);
-                }
-                eprintln!("stream error: {e}");
-                return 1;
-            }
-        }
-    }
-    if echo_live {
-        let _ = writeln!(stdout);
-    }
-
-    // Metadata is persisted by `handle_message_stream` after the
-    // stream closes — fetch the saved row so we can render the full
-    // provenance block exactly like the desktop does.
-    let metadata = session
-        .store
-        .get_conversation(conversation_id)
-        .await
-        .ok()
-        .and_then(|c| {
-            c.messages
-                .iter()
-                .find(|m| m.id == message_id)
-                .and_then(|m| m.metadata.clone())
-        });
 
     match format {
-        OutputFormat::Text => render_text(&raw, metadata.as_ref(), show_reasoning),
-        OutputFormat::Json => render_json(&message_id, conversation_id, &raw, metadata.as_ref()),
+        OutputFormat::Text => render_text_typed(&outcome, show_reasoning),
+        OutputFormat::Json => render_json_typed(conversation_id, &outcome),
     }
 
     0
 }
 
-fn render_text(raw: &str, metadata: Option<&serde_json::Value>, show_reasoning: bool) {
-    let (reasoning, _visible) = render::split_reasoning(raw);
-    // The `visible` portion is already on screen via the live-echo
-    // path — no need to re-print it. We only append the summary
-    // metadata below the answer.
+/// The provenance block, rendered from the turn's terminal frame.
+///
+/// One field the in-process renderer showed is not here: the per-segment
+/// grounding footer (`render::answer_segments_footer`, NATIVE_GROUNDING §6).
+/// It reads an `answer_segments` array that `TurnFrame::Complete` does not
+/// carry, and unlike `url` and `provenance_tier` — which were two `Option`
+/// fields on an existing type — putting it on the wire means designing a
+/// typed per-segment provenance surface, which is bigger than phase 6.
+///
+/// The capability is not lost, only moved: `svrn chat show` reads the
+/// persisted blob and renders it there. Named in both places rather than
+/// silently dropped, so nobody has to wonder where their footer went.
+fn render_text_typed(outcome: &TurnOutcome, show_reasoning: bool) {
+    let (reasoning, _visible) = render::split_reasoning(&outcome.text);
+    // The visible portion is already on screen via the live echo — only the
+    // summary metadata is appended below the answer.
     eprintln!();
     eprintln!("{BAR}");
-    let header = render::provenance_header(metadata);
+    let header = render::provenance_header_typed(outcome.provenance.as_ref());
     if !header.is_empty() {
         eprintln!("{header}");
     }
@@ -281,40 +289,67 @@ fn render_text(raw: &str, metadata: Option<&serde_json::Value>, show_reasoning: 
     if !reasoning_out.is_empty() {
         eprintln!("{reasoning_out}");
     }
-    let footer = render::retrieved_chunks_footer(metadata);
+    let footer = render::citations_footer(&outcome.citations);
     if !footer.is_empty() {
         eprint!("{footer}");
-    }
-    // NATIVE_GROUNDING.md §6 — per-segment provenance. Prints nothing
-    // unless the native path ran, so flag-off output is unchanged.
-    let provenance = render::answer_segments_footer(metadata);
-    if !provenance.is_empty() {
-        eprint!("{provenance}");
     }
     eprintln!("{BAR}");
 }
 
-fn render_json(
-    message_id: &str,
-    conversation_id: &str,
-    raw: &str,
-    metadata: Option<&serde_json::Value>,
-) {
-    let (reasoning, visible) = render::split_reasoning(raw);
+/// The JSON payload, rendered from the turn's terminal frame.
+///
+/// `metadata` used to be the raw persisted blob. It is now the typed
+/// projection of it — the same facts, in the shape the protocol defines,
+/// which is what a consumer on the other side of a socket can actually rely
+/// on. `epistemic_state` rides along for the first time here: it was always
+/// in the blob and this renderer never surfaced it.
+fn render_json_typed(conversation_id: &str, outcome: &TurnOutcome) {
+    let (reasoning, visible) = render::split_reasoning(&outcome.text);
     let payload = json!({
-        "message_id": message_id,
+        "message_id": outcome.message_id,
         "conversation_id": conversation_id,
-        "raw": raw,
+        "raw": outcome.text,
         "visible": visible,
         "reasoning": reasoning,
-        "metadata": metadata,
+        "provenance": outcome.provenance.as_ref().map(provenance_json),
+        "citations": outcome.citations.iter().map(citation_json).collect::<Vec<_>>(),
+        "epistemic_state": outcome.epistemic_state,
     });
-    // Print JSON on stdout so it's pipe-friendly; the conversational
-    // chrome stays on stderr.
+    // JSON on stdout so it is pipe-friendly; the conversational chrome stays
+    // on stderr.
     println!(
         "{}",
         serde_json::to_string_pretty(&payload).unwrap_or_default()
     );
+}
+
+fn provenance_json(p: &Provenance) -> serde_json::Value {
+    json!({
+        "inference_backend": p.inference_backend,
+        "routing_tier": p.routing_tier,
+        "total_ms": p.total_ms,
+        "ttft_ms": p.ttft_ms,
+        "finish_reason": p.finish_reason,
+        "completion_tokens": p.completion_tokens,
+        "sources": p.sources.iter().map(|s| json!({
+            "origin": s.origin,
+            "count": s.count,
+            "from_peer": s.from_peer,
+        })).collect::<Vec<_>>(),
+    })
+}
+
+fn citation_json(c: &Citation) -> serde_json::Value {
+    json!({
+        "corpus_id": c.corpus_id,
+        "chunk_id": c.chunk_id,
+        "title": c.title,
+        "snippet": c.snippet,
+        "score": c.score,
+        "rank": c.rank,
+        "url": c.url,
+        "provenance_tier": c.provenance_tier,
+    })
 }
 
 const BAR: &str = "─────────────────────────────────────────────────────────────";

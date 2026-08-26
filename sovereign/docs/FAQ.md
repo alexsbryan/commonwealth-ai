@@ -43,7 +43,7 @@ Sovereign is the assistant you use: chat, knowledge bases, code intelligence, sk
 
 ## How do I set a web search API key?
 
-For now you pass it when you start the REPL — `sovereign --model <path> --brave-api-key <key>`, or `--tavily-api-key`. Storing it through setup is on the list; until then, keep it in your shell environment and expand it yourself.
+Through the environment: `SVRNMESH_TAVILY_API_KEY` (the legacy `SOVEREIGN_TAVILY_API_KEY` spelling is still bridged at startup). There were `--brave-api-key` / `--tavily-api-key` flags on the old interactive REPL; that REPL became `svrn chat` in the 2026-05-22 split and the flags stopped being read then, so they were removed on 2026-08-23. Storing the key through setup is still on the list.
 
 ## What's the difference between `project init` and `code index`?
 

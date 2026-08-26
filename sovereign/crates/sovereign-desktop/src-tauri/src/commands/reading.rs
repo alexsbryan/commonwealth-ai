@@ -530,7 +530,7 @@ pub async fn read_get_atom_elsewhere(
         return Ok(None);
     };
 
-    let evidence = atom_evidence_section_refs_dto(atom);
+    let evidence = atom.evidence_anchors();
     let unique_sections: Vec<String> = {
         let mut seen = std::collections::HashSet::new();
         evidence
@@ -603,7 +603,7 @@ fn build_atom_card_dto(
                 atom_id: other_id.as_str().to_string(),
                 atom_type: other_type,
                 canonical_name: other_name,
-                edge_type: edge_type_label_dto(e.edge_type),
+                edge_type: e.edge_type.label(),
                 role,
                 confidence: e.confidence,
             })
@@ -722,87 +722,12 @@ fn atom_surface_dto(
     }
 }
 
-fn edge_type_label_dto(t: corpus_engine::enrichment::atlas::EdgeType) -> &'static str {
-    use corpus_engine::enrichment::atlas::EdgeType;
-    match t {
-        EdgeType::Transition => "transition",
-        EdgeType::Causes => "causes",
-        EdgeType::Grounds => "grounds",
-        EdgeType::Tension => "tension",
-        EdgeType::Involves => "involves",
-        EdgeType::Composes => "composes",
-        EdgeType::Configures => "configures",
-        EdgeType::Grounding => "grounding",
-        EdgeType::Framing => "framing",
-        EdgeType::Provenance => "provenance",
-        EdgeType::EvidenceFor | EdgeType::Concedes | EdgeType::OpposesIn => {
-            unreachable!("typed edges wired in Gap B Stage 4")
-        }
-        EdgeType::Attaches => "attaches",
-    }
-}
-
 fn truncate_dto(s: &str, max_chars: usize) -> String {
     let trimmed: String = s.chars().take(max_chars).collect();
     if trimmed.chars().count() < s.chars().count() {
         format!("{trimmed}…")
     } else {
         trimmed
-    }
-}
-
-fn atom_evidence_section_refs_dto(
-    atom: &corpus_engine::enrichment::atlas::AtomEnvelope,
-) -> Vec<(String, Option<String>)> {
-    use corpus_engine::enrichment::atlas::AtomEnvelope;
-    match atom {
-        AtomEnvelope::Entity(e) => vec![(
-            e.first_appearance.chunk_id.clone(),
-            e.first_appearance.passage_preview.clone(),
-        )],
-        AtomEnvelope::Event(e) => {
-            let mut out = vec![(e.section_position.section_id.clone(), None)];
-            for c in &e.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-        AtomEnvelope::State(s) => s
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Relation(r) => r
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Claim(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Question(q) => q
-            .raised_at
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Configuration(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::ArgumentReconstruction(a) => {
-            let mut out = vec![(a.section_position.section_id.clone(), None)];
-            for c in &a.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-        AtomEnvelope::Position(_) | AtomEnvelope::Opposition(_) => {
-            unreachable!("typed atoms wired in Gap B Stage 4")
-        }
-        AtomEnvelope::Asset(_) => Vec::new(),
     }
 }
 
@@ -817,7 +742,7 @@ fn cross_corpus_links_dto(
             peer_corpus_id: e.peer.corpus_id.clone(),
             peer_atom_id: e.peer.atom_id.as_str().to_string(),
             peer_canonical_name: e.peer.canonical_name.clone(),
-            edge_type: edge_type_label_dto(e.edge.edge_type),
+            edge_type: e.edge.edge_type.label(),
             signal: e.trace.signal.clone(),
             confidence: e.trace.confidence,
         })

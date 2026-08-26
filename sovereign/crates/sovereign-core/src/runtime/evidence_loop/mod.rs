@@ -80,13 +80,12 @@ fn insufficiency_threshold() -> f64 {
 /// — without this the loop is invisible exactly where it's being
 /// evaluated.
 fn dbg(msg: &str) {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    let on = *ON.get_or_init(|| {
-        std::env::var("SOVEREIGN_AGENTIC_KQ_DEBUG")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false)
-    });
-    if on {
+    // ONE reader of the flag (TOPOLOGY §10 phase 10, ARCH §10.6). This
+    // function used to carry its own `OnceLock` and its own parse — the same
+    // three lines as `grounding::config::debug_enabled`, cached separately, so
+    // the gate's glassbox and the loop's glassbox could in principle disagree
+    // about whether debugging was on.
+    if crate::runtime::grounding::config::debug_enabled() {
         eprintln!("    [agentic_kq] {msg}");
         // Mirror to tracing too: a detached daemon discards stderr, so the loop
         // was invisible in daemon.err. Default target (`sovereign_core::…`)
@@ -150,6 +149,11 @@ impl Runtime {
         intent: &Intent,
         scope: Option<&str>,
     ) -> (Vec<corpus_engine::ScoredChunk>, bool, bool, bool) {
+        // Resolved ONCE for the turn and passed to every stage below
+        // (daemon-convergence Phase 4a) — no stage reaches back into the
+        // Runtime for a provider.
+        let lane = self.lane();
+
         dbg(&format!(
             "agentic loop ENTERED: round0_chunks={} (judge next)",
             chunks.len()
@@ -262,7 +266,7 @@ impl Runtime {
         }
 
         let queries = match self
-            .formulate_evidence_queries(message, &chunks, context)
+            .formulate_evidence_queries(message, &chunks, context, &lane)
             .await
         {
             Some(q) if !q.is_empty() => q,
@@ -362,6 +366,10 @@ impl Runtime {
                     chunk_id: None,
                     source_doc_id: None,
                     vector_distance: None,
+                    // A knowledge-atlas record composed here from a corpus
+                    // description plus previews — not a row an index vouched
+                    // for (TOPOLOGY §10 rung 9.1).
+                    provenance: corpus_engine::index::ChunkProvenance::manufactured("atlas_atom"),
                 };
                 if seen.insert(key(&chunk)) {
                     dbg(&format!("atlas atom hits={hits} desc={desc:?}"));
@@ -394,6 +402,7 @@ impl Runtime {
                 embedding,
                 "KnowledgeQuery",
                 "KnowledgeQuery".to_string(),
+                lane.clone(),
             );
             kq_pipeline().run(self, &mut state).await;
             let mut new_for_query = 0usize;
@@ -561,6 +570,7 @@ impl Runtime {
         message: &str,
         round0: &[corpus_engine::ScoredChunk],
         context: &ConversationContext,
+        lane: &crate::runtime::Lane,
     ) -> Option<Vec<String>> {
         let mut titles: Vec<String> = Vec::new();
         for c in round0 {
@@ -593,7 +603,7 @@ impl Runtime {
             corpora.clone()
         };
         let mut entities: Vec<String> = Vec::new();
-        if let Some(provider) = self.atlas_context_provider.as_ref() {
+        if let Some(provider) = lane.atlas_context.as_ref() {
             for cid in &lookup_ids {
                 if let Some(ctx) = provider.get(cid) {
                     for e in &ctx.entries {
@@ -664,7 +674,8 @@ impl Runtime {
         );
         // SLOT_POLICY §3 Housekeep: alternative-query generation for
         // re-retrieval — schema-constrained, consumed by the loop.
-        let mut req = CompletionRequest::for_workload(Workload::Housekeep, prompt)
+        let mut req = Workload::Housekeep
+            .request(prompt)
             .with_system("You write precise search queries.")
             .with_output_budget(160);
         req.temperature = Some(0.0);
@@ -758,6 +769,8 @@ mod tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

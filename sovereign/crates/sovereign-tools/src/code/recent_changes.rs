@@ -8,15 +8,14 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine::CorpusEngine;
 
 use super::{group_by_file, query_all_code_indexes};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Default window if the caller omits `hours`.
 const DEFAULT_HOURS: u64 = 24;
@@ -38,65 +37,30 @@ impl RecentChangesTool {
     }
 }
 
-#[async_trait]
-impl Tool for RecentChangesTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "recent_changes".to_string(),
-            name: "Recent Changes".to_string(),
-            description: "List symbols in files modified within the last N \
-                          hours. Exact — based on file mtime at index time. \
-                          Useful for orientation after a pull or reviewing \
-                          recent work."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "hours": {
-                        "type": "integer",
-                        "description": "How far back to look (hours).",
-                        "default": 24,
-                        "minimum": 1
-                    }
-                }
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You're starting a session and want to understand what's been actively worked on before diving in. More useful than 'git log' because it shows the actual symbols changed, not just file names.".into(),
-                    call: serde_json::json!({ "hours": 24 }),
-                },
-                ToolExample {
-                    situation: "Something broke and you want to know what changed recently that could have caused it. Narrows the search to files actually modified in the last hour.".into(),
-                    call: serde_json::json!({ "hours": 2 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Markdown, grouped by file, showing symbols modified \
-                                within the last N hours. Each symbol line includes \
-                                `name  [kind]  mtime_ago`."
-            })),
-        }
+impl RecentChangesTool {
+    /// Bind this tool's state to its `recent_changes` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("recent_changes", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if let Some(h) = params.get("hours").and_then(|v| v.as_u64()) {
-            if h == 0 {
-                return Err(Error::InvalidInput("hours must be positive".into()));
-            }
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `recent_changes`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let hours = params
             .get("hours")
             .and_then(|v| v.as_u64())
@@ -152,5 +116,15 @@ impl Tool for RecentChangesTool {
         }
 
         Ok(StepOutput::Text(out))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if let Some(h) = params.get("hours").and_then(|v| v.as_u64()) {
+            if h == 0 {
+                return Err(Error::InvalidInput("hours must be positive".into()));
+            }
+        }
+        Ok(())
     }
 }

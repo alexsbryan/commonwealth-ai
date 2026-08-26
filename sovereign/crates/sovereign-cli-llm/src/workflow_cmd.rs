@@ -612,18 +612,18 @@ pub(crate) async fn run_assembled(
 /// uses only the standard set + MCP).
 fn enrich_tools() -> Vec<Box<dyn Tool>> {
     vec![
-        Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool),
-        Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::PipelineAssembleTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool),
-        Box::new(crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool),
+        Box::new(crate::enrich_cmd::atlas_resolve::AtlasResolveTool.declared()),
+        Box::new(crate::enrich_cmd::atlas_phase_cmd::AtlasClusterTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::ExemplarSelectTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineComposeTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineParseTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasChaptersTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSeedTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClustersTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasClusterExcerptsTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::PipelineAssembleTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasSummaryTool.declared()),
+        Box::new(crate::enrich_cmd::workflow_primitives::AtlasWriteConfigurationsTool.declared()),
     ]
 }
 
@@ -687,6 +687,7 @@ mod artifact_tests {
 
 #[cfg(test)]
 mod tests {
+    use sovereign_core::tool_manifest::DeclaredTool;
     use std::pin::Pin;
     use std::sync::Arc;
 
@@ -694,10 +695,10 @@ mod tests {
     use futures::Stream;
     use sovereign_core::error::Result as CoreResult;
     use sovereign_core::registry::ToolRegistry;
-    use sovereign_core::traits::{InferenceProvider, Tool};
+    use sovereign_core::traits::InferenceProvider;
     use sovereign_core::types::{
-        CompletionRequest, CompletionResponse, Depth, Effect, Idempotency, Latency, Permission,
-        ProviderCapabilities, Scope as ToolScope, Speed, StepOutput, ToolContext, ToolDescriptor,
+        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed, StepOutput,
+        ToolContext,
     };
     use sovereign_tools::mcp::config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
     use sovereign_tools::mcp::McpServerManager;
@@ -926,7 +927,7 @@ input = "{element.text}"
 
         let mk_registry = || {
             let mut tools = ToolRegistry::new();
-            tools.register(Box::new(ChunkerTool));
+            tools.register(Box::new(ChunkerTool.declared()));
             StepRegistry::new(
                 Some(Arc::new(DeterministicEmbed) as Arc<dyn InferenceProvider>),
                 Arc::new(tools),
@@ -1298,29 +1299,21 @@ structured_output = { type = "object", properties = { questions = { type = "arra
     /// not a stand-in. Reads its `path` param and emits the `1→N` collection.
     struct ChunkerTool;
 
-    #[async_trait]
-    impl Tool for ChunkerTool {
-        fn descriptor(&self) -> ToolDescriptor {
-            ToolDescriptor {
-                id: "chunk".to_string(),
-                name: "chunk".to_string(),
-                description: "split a file into the corpus chunker's chunks".to_string(),
-                parameters: serde_json::json!({
-                    "type": "object",
-                    "properties": { "path": { "type": "string" } }
-                }),
-                examples: vec![],
-                effect: Effect::Read,
-                idempotency: Idempotency::Idempotent,
-                latency: Latency::Fast,
-                scope: ToolScope::Session,
-                output_schema: None,
-            }
+    impl ChunkerTool {
+        /// Bind this tool's state to its `chunk` manifest row.
+        ///
+        /// The declared half — id, schema, permissions, retry — is the row in
+        /// `tool-manifests/`. What is left here is the part that runs.
+        pub fn declared(self) -> DeclaredTool {
+            let state = Arc::new(self);
+            sovereign_core::tool_manifest::declared("chunk", move |params, ctx| {
+                let state = Arc::clone(&state);
+                async move { state.run(&params, &ctx).await }
+            })
         }
-        fn required_permissions(&self) -> Vec<Permission> {
-            vec![]
-        }
-        async fn execute(
+
+        /// The executable half of `chunk`.
+        async fn run(
             &self,
             params: &serde_json::Value,
             _ctx: &ToolContext,

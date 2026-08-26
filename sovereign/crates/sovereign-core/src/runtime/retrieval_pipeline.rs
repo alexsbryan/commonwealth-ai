@@ -368,8 +368,9 @@ pub struct PipelineState<'ctx> {
     /// in ONE list of ONE type.
     ///
     /// Written only by `main_retrieval_mesh`, which owns both loss sites; read
-    /// by `readiness_disclosure` and rendered onto the answer by
-    /// `unavailability_marker`. EMPTY means "nothing was lost" — never
+    /// by `unavailability::unavailability_guidance` (the prompt-side refusal)
+    /// and `unavailability::unavailability_marker` (the code-appended answer
+    /// line). EMPTY means "nothing was lost" — never
     /// "nobody looked". This field is the fix for the defect family in
     /// `MESH_SCALE_100_USERS_1000_CORPORA.md` §9.6 and note 89d5f75a: the
     /// signal existed at the point of loss and died before the answer surface.
@@ -405,6 +406,17 @@ pub struct PipelineState<'ctx> {
     /// and found nothing anywhere. It deliberately does NOT scope the
     /// expansions to nothing — see `expansion_corpora`.
     pub main_fanout_corpora: Option<Vec<String>>,
+    // ── what this turn may enrich with ──
+    /// The turn's enrichment providers, resolved ONCE by [`Runtime::lane`]
+    /// before the first step runs (daemon-convergence Phase 4a).
+    ///
+    /// Steps read `st.lane` instead of reaching through `rt` into seven
+    /// Runtime fields. That is what lets the Runtime collapse to core: a
+    /// stage that receives its providers as a value cannot make the object
+    /// that answers questions fat by wanting one more of them. It also makes
+    /// the pool consistent — `meta_atlas` is snapshotted here, so a
+    /// background index warm cannot land between two steps of one turn.
+    pub lane: crate::runtime::Lane,
 }
 
 impl<'ctx> PipelineState<'ctx> {
@@ -417,6 +429,7 @@ impl<'ctx> PipelineState<'ctx> {
         embedding: Vec<f32>,
         label: &'static str,
         search_label: String,
+        lane: crate::runtime::Lane,
     ) -> Self {
         Self {
             message,
@@ -443,6 +456,7 @@ impl<'ctx> PipelineState<'ctx> {
             local_hits: 0,
             sources_expanded: 0,
             main_fanout_corpora: None,
+            lane,
         }
     }
 
@@ -885,86 +899,6 @@ fn step_governance_active_set<'a, 'ctx>(
     })
 }
 
-/// Corpus-unavailability glassbox: when retrieval comes up EMPTY and the turn
-/// LOST a corpus it would have searched, inject a synthetic disclosure chunk
-/// so EVERY synthesis path sharing this core relays the actionable cause —
-/// and the now-non-empty result also stops the deep path from going agentic.
-/// The user learns their corpus is stale/unbuilt/unreachable instead of
-/// getting a confident wrong answer.
-///
-/// This step reads `st.unavailable_corpora` and DOES NOT re-derive
-/// availability. Until 2026-08-14 it re-walked `installed_indexes()` with its
-/// own hand-mirrored copy of the eligibility filter's `if` chain — two
-/// implementations of one decision (ARCH §10.6). The single decider is now
-/// `corpus_search::corpus_unavailability`, called once at the filter, and this
-/// step is a pure reader.
-///
-/// **It is not the whole disclosure.** This step covers the EMPTY-pool case
-/// only, and it works by asking the model to phrase the refusal — which ARCH
-/// §7.6 forbids relying on for a guarantee. The substituted case (§9.6: the
-/// pool is FULL, of some other corpus entirely) is handled by
-/// `unavailability::unavailability_marker`, which CODE appends to the rendered
-/// answer. Nothing here is load-bearing for the marker.
-fn step_readiness_disclosure<'a, 'ctx>(
-    _rt: &'a Runtime,
-    st: &'a mut PipelineState<'ctx>,
-) -> StepFuture<'a> {
-    Box::pin(async move {
-        if !st.chunks.is_empty() {
-            return StepOutcome::default();
-        }
-        // First loss is the one we phrase; the full set still reaches the
-        // answer through the marker. `unavailable_corpora` is already narrowed
-        // to corpora this turn would actually have searched (sensitivity,
-        // allow-list and principal ceiling all applied at the filter), so
-        // there is no "scoped?" question left to ask here.
-        let Some(loss) = st.unavailable_corpora.first().cloned() else {
-            return StepOutcome::default();
-        };
-        let (corpus, cause, remedy) = (
-            loss.corpus_id,
-            loss.reason.user_phrase(),
-            loss.reason.user_remedy(),
-        );
-        tracing::info!(
-            target: "retrieval.pipeline",
-            corpus = %corpus,
-            reason = loss.reason.log_tag(),
-            loaded_dims = st.embedding.len(),
-            "{}: unavailability glassbox — empty pool over a lost corpus; injecting disclosure",
-            st.label
-        );
-        // Assistant GUIDANCE, not a knowledge passage: the model must relay it in
-        // its own warm words and never quote/cite it. The old text was prefixed
-        // "SYSTEM NOTE" and carried the dim mismatch verbatim, which the model
-        // parroted ("...skipped entirely [Source: X]") — a cold refusal the UX
-        // judge scored as broken. Keep it brief, warm, and actionable.
-        let content = format!(
-            "(Assistant guidance — relay this in your own words; do NOT quote it \
-             or attach a [Source: ...] citation to it.) The \"{corpus}\" knowledge \
-             base the user is asking about can't be searched right now because it \
-             {cause}. In one or two warm, plain sentences, let them know you can't \
-             answer from it yet and that {remedy}. Do not mention indexes, embedding \
-             models, or dimensions, and do not answer from general knowledge or \
-             invent an answer."
-        );
-        st.chunks.push(corpus_engine::ScoredChunk {
-            content,
-            title: Some("Knowledge base status".to_string()),
-            url: None,
-            corpus_id: corpus,
-            score: 1.0,
-            metadata: std::collections::HashMap::new(),
-            chunk_id: None,
-            source_doc_id: None,
-            vector_distance: None,
-        });
-        StepOutcome {
-            note: Some("injected corpus-readiness rebuild disclosure".to_string()),
-        }
-    })
-}
-
 fn shared_core_steps() -> Vec<RetrievalStep> {
     vec![
         // I4-A: the demand planner runs FIRST in the core so its
@@ -1029,7 +963,6 @@ fn shared_core_steps() -> Vec<RetrievalStep> {
         // isn't ready (index not built, vector index missing, or embed-model/
         // dims mismatch) — inject a rebuild disclosure. Shared by
         // KnowledgeQuery + DeepQuery + ComparisonQuery (all run this core).
-        step("readiness_disclosure", None, step_readiness_disclosure),
     ]
 }
 
@@ -1121,6 +1054,7 @@ fn step_bridge_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                 &st.embedding,
                 st.enabled_corpora,
                 st.corpus_ceiling,
+                &st.lane,
             )
             .await;
         StepOutcome {
@@ -1145,6 +1079,7 @@ fn step_meta_atlas_boost<'a, 'ctx>(
                 &st.entities,
                 st.enabled_corpora,
                 st.corpus_ceiling,
+                &st.lane,
             )
             .await;
         if !st.meta_atlas_hits.is_empty() {
@@ -1208,6 +1143,7 @@ fn step_demand_plan<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) 
                 "DemandPlan",
                 scope.as_deref(),
                 st.corpus_ceiling,
+                &st.lane,
             )
             .await
         } else {
@@ -1250,6 +1186,7 @@ fn step_query_decomp<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                     "QueryDecomp",
                     scope.as_deref(),
                     st.corpus_ceiling,
+                    &st.lane,
                 )
                 .await;
             tracing::info!(
@@ -1282,6 +1219,7 @@ fn step_title_expand<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                     "TitleExpand",
                     scope.as_deref(),
                     st.corpus_ceiling,
+                    &st.lane,
                 )
                 .await;
             tracing::info!(
@@ -1436,6 +1374,7 @@ fn step_atom_enum<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
                 st.enabled_corpora,
                 st.corpus_ceiling,
                 &pool_corpora,
+                &st.lane,
             )
             .await
         {
@@ -1515,8 +1454,14 @@ fn step_raptor_grounding_early<'a, 'ctx>(
         // on) injects post-rerank instead — that call stays with the
         // prompt-assembly code in the handlers, outside this pipeline.
         if !raptor_late_inject_enabled() {
-            rt.apply_raptor_grounding(&st.embedding, &mut st.chunks, st.label, st.enabled_corpora)
-                .await;
+            rt.apply_raptor_grounding(
+                &st.embedding,
+                &mut st.chunks,
+                st.label,
+                st.enabled_corpora,
+                &st.lane,
+            )
+            .await;
             StepOutcome::default()
         } else {
             StepOutcome {
@@ -1542,6 +1487,7 @@ fn step_atlas_grounding<'a, 'ctx>(
             st.scope,
             st.enabled_corpora,
             st.corpus_ceiling,
+            &st.lane,
         )
         .await;
         // Per-corpus snapshot RIGHT AFTER apply_atlas_grounding
@@ -1596,7 +1542,13 @@ fn step_graph_neighbor_expand<'a, 'ctx>(
         // needs.
         let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
         if let Some(neighbors) = rt
-            .expand_via_wikipedia_graph(&st.chunks, st.message, scope.as_deref(), st.corpus_ceiling)
+            .expand_via_wikipedia_graph(
+                &st.chunks,
+                st.message,
+                scope.as_deref(),
+                st.corpus_ceiling,
+                &st.lane,
+            )
             .await
         {
             if !neighbors.is_empty() {
@@ -1635,10 +1587,15 @@ fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         // ledger. The lanes were always this expensive; the waste was
         // concealing them.
         let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
-        st.ppr_pending =
-            rt.spawn_ppr_lane(&st.chunks, st.message, scope.as_deref(), st.corpus_ceiling);
+        st.ppr_pending = rt.spawn_ppr_lane(
+            &st.chunks,
+            st.message,
+            scope.as_deref(),
+            st.corpus_ceiling,
+            &st.lane,
+        );
         st.obligations_pending =
-            rt.spawn_entity_obligations(st.message, scope.as_deref(), st.corpus_ceiling);
+            rt.spawn_entity_obligations(st.message, scope.as_deref(), st.corpus_ceiling, &st.lane);
         let spawned = match (st.ppr_pending.is_some(), st.obligations_pending.is_some()) {
             (true, true) => Some("ppr + obligations spawned".to_string()),
             (true, false) => Some("ppr lane spawned".to_string()),
@@ -1868,6 +1825,7 @@ fn step_entity_boost<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                         // fan-out wall at n=1000 (§8.3.3).
                         scope.as_deref(),
                         st.corpus_ceiling,
+                        &st.lane,
                     )
                     .await;
                 entity_added += entity_chunks.len();
@@ -2054,6 +2012,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
             per_corpus_overrides.as_ref(),
             st.enabled_corpora,
             st.corpus_ceiling,
+            &st.lane,
         );
         // Sealed conversations: subtract locally-installed corpora from
         // the mesh seal before fanning out. The local leg above already
@@ -2267,6 +2226,18 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                 metadata.insert("peer".to_string(), name.clone());
                 metadata.insert("source".to_string(), "mesh".to_string());
             }
+            // A PEER's index vouched for this, and since 2026-08-26 the wire
+            // carries what it stamped (TOPOLOGY §10 rung 9.1). The door joins
+            // the peer's custody claim with this node's own "arrived from
+            // another node" fact and reads a missing grain as `Summary`, so an
+            // un-upgraded peer's hits stay exactly as unquotable as they were
+            // while they were `Manufactured` — no loosening, ever, from a peer
+            // that says nothing.
+            let provenance = corpus_engine::index::ChunkProvenance::acquired_from_peer(
+                hit.corpus_id.clone(),
+                hit.custody,
+                hit.grain,
+            );
             st.chunks.push(corpus_engine::ScoredChunk {
                 content: hit.content,
                 title: hit.title,
@@ -2280,6 +2251,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                 // wire today; the cross-corpus merge falls back to
                 // score-sort for them.
                 vector_distance: None,
+                provenance,
             });
         }
         if mesh_sealed_out > 0 {
@@ -2323,29 +2295,29 @@ fn step_store_search<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                     continue;
                 }
             }
-            // The estate stamp (custody.md §2, red R-2): StateStore
-            // corpus documents ARE estate material — stamped `personal`
-            // with the estate path as the source URL at acquisition, by
-            // this code, never by a model (ARCH §7.6). The stamp rides
-            // the chunk's metadata under the ONE shared key
-            // (`CUSTODY_META_KEY`) and the gate's evidence builder reads
-            // the same key, so the judge sees the same provenance the
-            // release carries.
-            let mut metadata = HashMap::new();
-            metadata.insert(
-                crate::types::CUSTODY_META_KEY.to_string(),
-                crate::types::Custody::Personal.as_str().to_string(),
-            );
+            // The estate stamp (custody.md §2, red R-2): StateStore corpus
+            // documents ARE estate material — `personal`, stamped by this
+            // code at acquisition, never by a model (ARCH §7.6).
+            //
+            // It used to be written into `metadata[CUSTODY_META_KEY]` here
+            // and read back out by a string compare in the gate's evidence
+            // builder. It is now the store's acquisition door, so the class
+            // is not something this call site chooses — walking through
+            // `acquired_from_estate` is the only way to get it, and there is
+            // no argument that could ask for another (TOPOLOGY §10 rung 9.1).
             st.chunks.push(corpus_engine::ScoredChunk {
                 content: doc.content.clone(),
                 title: Some(doc.source.clone()),
                 url: Some(format!("estate:{corpus_id}")),
                 corpus_id: corpus_id.clone(),
                 score: 0.5,
-                metadata,
+                metadata: HashMap::new(),
                 chunk_id: None,
                 source_doc_id: None,
                 vector_distance: None,
+                provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate(
+                    corpus_id.clone(),
+                ),
             });
         }
         StepOutcome::default()
@@ -2603,6 +2575,8 @@ mod tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -2799,7 +2773,6 @@ mod tests {
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
-                "readiness_disclosure",
                 "truncate_merged",
                 // Always-on cross-corpus bleed audit. LAST on purpose: it
                 // audits the FINAL pool, so it sees every injector including
@@ -2838,7 +2811,6 @@ mod tests {
                 "dedupe_merged",
                 "cap_and_reserve",
                 "governance_active_set",
-                "readiness_disclosure",
                 "truncate_merged",
                 "top_sources_expand",
                 "scope_audit",
@@ -2853,22 +2825,29 @@ mod tests {
     fn kq_and_deep_share_head_and_core() {
         let kq = kq_pipeline().step_names();
         let deep = deep_pipeline(true).step_names();
-        // Shared 3-step head + shared 19-step core (the last core step is
-        // `readiness_disclosure` — inert when retrieval found anything;
-        // `demand_plan` is the new first core step, I4-A); the pipelines
-        // differ ONLY in their tails (KQ: audited truncate; deep: plain
-        // truncate + strategy-driven top-sources expansion).
+        // Shared 3-step head + shared 18-step core (`demand_plan` is the
+        // first core step, I4-A); the pipelines differ ONLY in their tails
+        // (KQ: audited truncate; deep: plain truncate + strategy-driven
+        // top-sources expansion).
         //
         // The core gained `searched_corpora_snapshot` on 2026-08-05 when
         // `atom_enum` moved after `reweight_and_sort` (audit D1): the
         // bleed-audit baseline has to stay ahead of every injector, so the
         // snapshot stayed put while the injection moved down.
-        assert_eq!(&kq[..22], &deep[..22]);
-        assert_eq!(kq.len(), 24);
-        assert_eq!(deep.len(), 25);
-        assert_eq!(&kq[22..], &["truncate_merged", "scope_audit"]);
+        //
+        // It LOST `readiness_disclosure` on 2026-08-25 (Phase 9, first rung).
+        // That step was the last core step and it was an INJECTOR: it pushed
+        // model-directed prose into the evidence pool at `score: 1.0`. The
+        // signal it carried — `PipelineState::unavailable_corpora` — already
+        // travelled to both consumers as typed data, so the chunk was a
+        // weaker duplicate of a fact the prompt builders could read directly.
+        // It now renders through `unavailability::unavailability_guidance`.
+        assert_eq!(&kq[..21], &deep[..21]);
+        assert_eq!(kq.len(), 23);
+        assert_eq!(deep.len(), 24);
+        assert_eq!(&kq[21..], &["truncate_merged", "scope_audit"]);
         assert_eq!(
-            &deep[22..],
+            &deep[21..],
             &["truncate_merged", "top_sources_expand", "scope_audit"]
         );
         // BOTH tails must END with the audit: it audits the final pool, so a

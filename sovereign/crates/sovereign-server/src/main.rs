@@ -8,7 +8,6 @@ mod config;
 mod corpus_upload;
 mod iroh_access;
 mod narration;
-mod projection;
 mod reciprocity;
 mod routes;
 mod routes_documents;
@@ -130,7 +129,11 @@ async fn main() {
                 &config.inference.model,
                 config.inference.primary_model.as_deref(),
                 embed_model.as_deref(),
-                config.inference.context_size,
+                // `sovereign-server` carries its OWN config type, which has
+                // not grown a per-slot key. `uniform` names that honestly
+                // rather than leaving it indistinguishable from a host that
+                // simply forgot to split its windows.
+                sovereign_inference::embedded::SlotWindows::uniform(config.inference.context_size),
                 None,
             ) {
                 Ok(p) => Arc::new(p),
@@ -163,7 +166,7 @@ async fn main() {
                             model,
                             bc.primary_model.as_deref(),
                             embed_model.as_deref(),
-                            bc.context_size,
+                            sovereign_inference::embedded::SlotWindows::uniform(bc.context_size),
                             None,
                         ) {
                             Ok(p) => {
@@ -394,14 +397,14 @@ async fn main() {
     // and an availability risk. Omitted by `--no-default-features`.
     #[cfg(feature = "dev-routes")]
     tools.register(Box::new(ShellTool));
-    tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    )));
-    tools.register(Box::new(sovereign_tools::DocumentOperationTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::document::DocumentTool::new(Arc::clone(&store), Arc::clone(&inference))
+            .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::DocumentOperationTool::new(Arc::clone(&store), Arc::clone(&inference))
+            .declared(),
+    ));
     // Search over installed corpora. The `net-tools` build additionally
     // gives it a web fallback that fires whenever the top local score is
     // below SCORE_SUFFICIENT — POST html.duckduckgo.com, then
@@ -437,24 +440,25 @@ async fn main() {
     #[cfg(feature = "net-tools")]
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     #[cfg(feature = "net-tools")]
-    tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
-        Arc::clone(&corpus_engine),
-    )));
-    tools.register(Box::new(sovereign_tools::compute::ComputeTool));
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
-        &corpus_engine,
-    ))));
-    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
-        Arc::clone(&corpus_engine),
-    )));
     tools.register(Box::new(
-        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine)),
+        sovereign_tools::WikipediaFetchTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
+    tools.register(Box::new(sovereign_tools::compute::ComputeTool.declared()));
+    tools.register(Box::new(
+        sovereign_tools::ClaimSearchTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::EpistemicLandscapeTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine))
+            .declared(),
     ));
     // Typed SEC-filing figures with basis + accession, or first-class
     // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
-    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     // SCIP call graph database + tools (v2).
     //
     // The call-graph tools take `Arc<ArcSwap<ScipGraph>>` so the CLI's
@@ -477,25 +481,31 @@ async fn main() {
     // Code Intelligence tools.
     tools.register(Box::new(
         sovereign_tools::SymbolLookupTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .declared(),
     ));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
-            .with_inference(Arc::clone(&inference)),
+            .with_inference(Arc::clone(&inference))
+            .declared(),
     ));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-        Arc::clone(&corpus_engine),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::RecentChangesTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     tools.register(Box::new(
         sovereign_tools::FindCalleesTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .declared(),
     ));
     tools.register(Box::new(
         sovereign_tools::FindCallersTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .declared(),
     ));
     // Capability map — derived "what the codebase does" overview.
-    tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
+    tools.register(Box::new(
+        sovereign_tools::CapabilityMapTool::new().declared(),
+    ));
 
     // Working notes tools — persist across sessions, used for session attribution.
     let notes_db_path = home.join("notes.db");
@@ -503,15 +513,15 @@ async fn main() {
         match corpus_engine_notes::NoteStore::open(&notes_db_path) {
             Ok(store) => {
                 let store = Arc::new(store);
-                tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
-                    &store,
-                ))));
-                tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
-                    &store,
-                ))));
-                tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
-                    &store,
-                ))));
+                tools.register(Box::new(
+                    sovereign_tools::WriteNoteTool::new(Arc::clone(&store)).declared(),
+                ));
+                tools.register(Box::new(
+                    sovereign_tools::ReadNotesTool::new(Arc::clone(&store)).declared(),
+                ));
+                tools.register(Box::new(
+                    sovereign_tools::DeleteNoteTool::new(Arc::clone(&store)).declared(),
+                ));
                 tracing::info!("Notes: tools registered ({})", notes_db_path.display());
                 Some(store)
             }
@@ -624,35 +634,15 @@ async fn main() {
     let router: Box<dyn sovereign_core::traits::Router> =
         Box::new(llm_router.with_authority_probe(Arc::clone(&tools)));
 
-    let mut runtime_builder = Runtime::new(
-        Arc::clone(&inference),
-        router,
-        Box::new(planner),
-        Arc::clone(&tools),
-        store,
-        skills,
-        approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
-        // Honour the configured response-length budget ([inference]
-        // max_tokens) instead of hardcoding the 2048 default — the
-        // server-side equivalent of the desktop "Response length"
-        // setting. All other knobs keep their core defaults.
-        sovereign_core::types::InferenceConfig {
-            max_tokens: config.inference.max_tokens,
-            ..sovereign_core::types::InferenceConfig::default()
-        },
-    )
-    .with_corpus_engine(Arc::clone(&corpus_engine))
-    .with_routing_events(std::sync::Arc::new(narration_sink));
-    // Scope corpus retrieval per tenant (multi-user hub isolation): the
-    // resolver maps a `"{tenant}:{conv}"` conversation id to its owning
-    // principal, and `build_context` then hides other principals' Private
-    // corpora from this turn's evidence.
-    runtime_builder =
-        runtime_builder.with_corpus_principal(std::sync::Arc::new(tenant::TenantPrincipalResolver));
-    // Note store for commitment persistence (CommissiveQuery handler).
-    if let Some(store) = note_store_for_runtime {
-        runtime_builder = runtime_builder.with_note_store(store);
-    }
+    // ── The turn's enrichment stack, gathered BEFORE the Runtime ─────────
+    //
+    // daemon-convergence Phase 4b: `LaneSources` is a required argument, not
+    // six `with_*` calls this host could forget — and it DID forget them. The
+    // comment on the rerank block below is the record: until 2026-08-03 only
+    // `svrn chat` installed a reranker, so this server shipped baseline fusion
+    // ordering while the capability ledger reported the reranker available.
+    let mut lane = sovereign_core::runtime::lane::LaneSources::none();
+
     // GLiNER entity extractor for retrieval-over-history. Probe the
     // default model id; if installed, load it and wire it onto the
     // Runtime. Failures soft-fall-through to pure cosine + MMR.
@@ -662,7 +652,7 @@ async fn main() {
             match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
                 Ok(g) => {
                     let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
-                    runtime_builder = runtime_builder.with_gliner(arc);
+                    lane.gliner = Some(arc);
                     tracing::info!(model = model_id, "server: GLiNER entity extractor loaded");
                 }
                 Err(e) => {
@@ -683,20 +673,32 @@ async fn main() {
     // `SOVEREIGN_PPR_EXPAND` logged "lane dark" here because its
     // admission gate needs the same `rerank_fn`. Opt-in via
     // `SOVEREIGN_RERANK_MODEL_PATH`; soft-fails to baseline.
-    if let Some(reranker) = sovereign_inference::reranker_standalone::load_from_env() {
-        runtime_builder = runtime_builder.with_rerank(
-            sovereign_tools::corpus::inference_to_rerank_fn(reranker),
-            sovereign_tools::corpus::rerank_config_from_env(),
-        );
+    // Since 2026-08-25 this loader also runs the VRAM pre-flight (note
+    // `b57b0cd5`). The hub is the surface where it matters most: a rerank slot
+    // that does not fit is discovered by the OOM killer, and here that takes
+    // every tenant's in-flight turn with it.
+    match sovereign_inference::reranker_standalone::load_from_env() {
+        sovereign_inference::reranker_standalone::RerankLoad::Loaded(reranker) => {
+            lane.rerank.f = Some(sovereign_tools::corpus::inference_to_rerank_fn(reranker));
+            lane.rerank.config = sovereign_tools::corpus::rerank_config_from_env();
+        }
+        // All three absences run baseline fusion ordering; `load_from_env` has
+        // already logged which one.
+        sovereign_inference::reranker_standalone::RerankLoad::NotConfigured
+        | sovereign_inference::reranker_standalone::RerankLoad::Refused { .. }
+        | sovereign_inference::reranker_standalone::RerankLoad::Failed { .. } => {}
     }
     // Install the landscape-digest provider only when KnowledgeView
     // is enabled. When disabled, the splice path stays a no-op —
     // identical to pre-KnowledgeView behaviour.
-    if let Some(ref mgr) = knowledge_view_manager {
-        runtime_builder = runtime_builder.with_landscape_digests(
-            Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>
-        );
-    }
+    // Captured here, applied at the commission below — `landscape_digests` is
+    // one of the five capabilities §3.5 has LEAVING the Runtime (a
+    // per-connection wire concern; the core holds no sink), so it is
+    // deliberately not folded into `LaneSources`.
+    let landscape_digests: Option<Arc<dyn sovereign_core::traits::LandscapeDigestProvider>> =
+        knowledge_view_manager
+            .as_ref()
+            .map(|mgr| Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>);
     // Atlas Layer 0: load any installed Wikipedia link graph at
     // `<indexes_dir>/<corpus>/wikipedia_graph.db`. Build via
     // `sovereign atlas wikipedia build-graph <corpus-id>`. Absent =
@@ -707,7 +709,7 @@ async fn main() {
             edges = graph.edge_count().await,
             "wikipedia link graph: loaded"
         );
-        runtime_builder = runtime_builder.with_wikipedia_graph(graph);
+        lane.wikipedia_graph = Some(graph);
     }
 
     // Atlas-grounded retrieval: scan installed corpora for `atlas/`
@@ -738,9 +740,11 @@ async fn main() {
                 embed_model_id,
             ),
         );
-        runtime_builder = runtime_builder
-            .with_atlas_context_provider(Arc::clone(&atlas_mgr)
-                as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
+        lane.atlas_context =
+            Some(Arc::clone(&atlas_mgr)
+                as Arc<
+                    dyn sovereign_core::atlas_context::AtlasContextProvider,
+                >);
         let _atlas_init = Arc::clone(&atlas_mgr).spawn_init();
         // Phase B2 — bump flusher writes adaptive triage priors to
         // disk every 30s so the next rebuild picks them up.
@@ -757,14 +761,57 @@ async fn main() {
                 corpora = idx.corpus_count(),
                 "meta-atlas loaded"
             );
-            runtime_builder = runtime_builder.with_meta_atlas(Arc::new(idx));
+            lane.meta_atlas.store(Some(Arc::new(idx)));
         }
         Err(e) => {
             tracing::warn!(error = %e, "meta-atlas load failed; boost disabled");
         }
     }
 
-    let runtime = Arc::new(runtime_builder);
+    // ── Commission ───────────────────────────────────────────────────────
+    // The enrichment stack above is complete, so the Runtime is built once,
+    // total. This call used to sit ~140 lines higher and be mutated on the
+    // way down.
+    let runtime = Arc::new(Runtime::new(sovereign_core::RuntimeParts {
+        corpus_engine: Some(Arc::clone(&corpus_engine)),
+        routing_events: std::sync::Arc::new(narration_sink),
+        // Scope corpus retrieval per tenant (multi-user hub isolation): the
+        // resolver maps a `"{tenant}:{conv}"` conversation id to its owning
+        // principal, and `build_context` then hides other principals' Private
+        // corpora from this turn's evidence. The server is the ONLY host that
+        // resolves a principal, which is now legible at a glance instead of
+        // being one builder call in a chain of five.
+        corpus_principal: Some(std::sync::Arc::new(tenant::TenantPrincipalResolver)),
+        // Note store for commitment persistence (CommissiveQuery handler).
+        note_store: note_store_for_runtime,
+        landscape_digests,
+        // Named absences: no compaction worker, no mesh-knowledge source (the
+        // server IS the shared hub), no sensitivity oracle, no folder metadata.
+        ..sovereign_core::RuntimeParts::new(
+            Arc::clone(&inference),
+            router,
+            Box::new(planner),
+            Arc::clone(&tools),
+            // Cloned, not moved: the same handle is layered as its own
+            // Extension below so the non-chat routes (conversations,
+            // documents, search, corpus upload) read the database directly
+            // instead of through `Runtime.store` — daemon-convergence Phase 0.
+            Arc::clone(&store),
+            skills,
+            approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
+            // Honour the configured response-length budget ([inference]
+            // max_tokens) instead of hardcoding the 2048 default — the
+            // server-side equivalent of the desktop "Response length"
+            // setting. All other knobs keep their core defaults.
+            sovereign_core::types::InferenceConfig {
+                max_tokens: config.inference.max_tokens,
+                ..sovereign_core::types::InferenceConfig::default()
+            },
+            // Everything this host enriches with, in ONE value. Required, so a
+            // provider the server means to wire cannot be silently skipped.
+            lane,
+        )
+    }));
 
     // Auth state (`auth_enabled` was decided at startup, next to the
     // exposure check that depends on it).
@@ -918,6 +965,14 @@ async fn main() {
             }),
         )
         .layer(Extension(Arc::clone(&runtime)))
+        // The server's OWN handles, layered alongside the Runtime rather
+        // than reached through it. Same `Arc`s the Runtime was built with
+        // (see `Runtime::new` above), so nothing about what a route reads
+        // changes — only which object it asks. Phase 0 of daemon
+        // convergence: a route that only lists conversations or describes
+        // tools must not name `Runtime`.
+        .layer(Extension(Arc::clone(&store)))
+        .layer(Extension(Arc::clone(&tools)))
         .layer(Extension(approval))
         .layer(Extension(scheduler))
         .layer(Extension(reciprocity))

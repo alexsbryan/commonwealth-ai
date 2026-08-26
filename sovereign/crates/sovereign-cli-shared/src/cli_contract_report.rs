@@ -26,7 +26,9 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use crate::cli_contract::{Contract, Evidence, Journey};
+use kernel_types::{Freshness, Judgement, Reason};
+
+use crate::cli_contract::{AssertionStrength, Contract, Journey};
 
 /// The evidence census, rendered. The numbers are computed by
 /// [`Contract::assertion_census`] — this only lays them out.
@@ -109,7 +111,7 @@ pub fn render_experience_map(contract: &Contract) -> String {
         let asserts: usize = serving
             .iter()
             .flat_map(|j| j.steps.iter())
-            .filter(|st| st.evidence() == Evidence::Output)
+            .filter(|st| st.evidence() == AssertionStrength::Output)
             .count();
         steps_total += steps;
         asserts_total += asserts;
@@ -192,38 +194,70 @@ pub struct NightlyPosture {
     pub commit: String,
     /// Verdict of the read-only capability lane, when the field is present.
     pub capability_lane: Option<String>,
-    /// Age of the report, from the file's mtime — deliberately not parsed from
-    /// the `stamp` field, which is a local-time string with no offset.
-    pub age: Option<Duration>,
+    /// When the report was written, from the file's mtime — deliberately not
+    /// parsed from the `stamp` field, which is a local-time string with no
+    /// offset. Age, formatting and the staleness band are
+    /// [`Judgement`]'s job; this carries the date and nothing else.
+    pub written_at: Option<SystemTime>,
 }
 
+/// How old this report may be before it should not be quoted as current.
+/// 48h, whatever the trigger: past that the report describes a commit nobody
+/// is working on any more. What an old report MEANS depends on the trigger —
+/// see [`NightlyTrigger`], which is why staleness and cadence are two
+/// separate questions here.
+pub const NIGHTLY_HORIZON: Duration = Duration::from_secs(48 * 3600);
+
 impl NightlyPosture {
-    /// Human age, e.g. `"11h ago"`. `"unknown"` when the mtime was unreadable.
-    pub fn age_human(&self) -> String {
-        match self.age {
-            None => "unknown".to_string(),
-            Some(d) => {
-                let h = d.as_secs() / 3600;
-                if h < 1 {
-                    format!("{}m ago", d.as_secs() / 60)
-                } else if h < 48 {
-                    format!("{h}h ago")
-                } else {
-                    format!("{}d ago", h / 24)
-                }
-            }
-        }
+    /// This report as one [`Judgement`] — the lane's own word mapped onto the
+    /// four verdicts (ARCH §18.2), dated, with the 48h horizon attached.
+    ///
+    /// ONE decider (ARCH §10.6): `svrn contract nightly` and `svrn posture`
+    /// both render the lane, and before this they each mapped the verdict
+    /// string, formatted the age and decided staleness on their own. `posture`
+    /// printed `fail (stale)` as a free string that no aggregation could
+    /// count, which is how a FAIL verdict came to sit unread for three days.
+    ///
+    /// `pass` and `fail` are the two words the lane writes on a completed run.
+    /// Anything else — `no-daemon`, an unrecognised string — is a
+    /// could-not-judge and is NAMED in the reason; never folded into a pass,
+    /// never into a failure (ARCH §18.3).
+    pub fn judgement(&self) -> Judgement {
+        // `read_nightly` fills a missing field with the `-` sentinel, which is
+        // one of the spellings `Reason` refuses — so ask the type rather than
+        // re-deriving the check, and say so out loud when the lane wrote no
+        // summary instead of rendering a bare dash.
+        let head = if Reason::is_placeholder(&self.summary) {
+            "the lane recorded no summary".to_string()
+        } else {
+            self.summary.clone()
+        };
+        let reason = Reason::new(format!(
+            "{head} — trigger: {} — detail: svrn contract nightly",
+            nightly_trigger().label()
+        ))
+        .expect("a trigger label and a detail command is never a placeholder");
+        let j = match self.verdict.as_str() {
+            "pass" => Judgement::passed("contract-nightly", reason),
+            "fail" => Judgement::failed("contract-nightly", reason),
+            other => Judgement::could_not_judge(
+                "contract-nightly",
+                Reason::new(format!("lane reported `{other}` — {reason}")).unwrap_or(reason),
+            ),
+        };
+        let j = match self.written_at {
+            Some(at) => j.as_of(at),
+            None => j,
+        };
+        j.stale_after(NIGHTLY_HORIZON)
     }
 
     /// Is this report old enough that it should not be quoted as current?
-    /// 48h, whatever the trigger: past that the report describes a commit
-    /// nobody is working on any more. What an old report MEANS depends on the
-    /// trigger — see [`NightlyTrigger`], which is why staleness and cadence
-    /// are two separate questions here.
+    /// An unreadable mtime is [`Freshness::Undated`], not stale — the old
+    /// hand-rolled `is_stale` answered `true` there, which is a verdict about
+    /// something it did not know.
     pub fn is_stale(&self) -> bool {
-        self.age
-            .map(|d| d > Duration::from_secs(48 * 3600))
-            .unwrap_or(true)
+        self.judgement().freshness() == Freshness::Stale
     }
 }
 
@@ -353,10 +387,7 @@ fn read_nightly(path: &Path) -> Result<NightlyPosture, String> {
     let v: serde_json::Value =
         serde_json::from_str(&text).map_err(|e| format!("parse {}: {e}", path.display()))?;
     let field = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("-").to_string();
-    let age = std::fs::metadata(path)
-        .and_then(|m| m.modified())
-        .ok()
-        .and_then(|t| SystemTime::now().duration_since(t).ok());
+    let written_at = std::fs::metadata(path).and_then(|m| m.modified()).ok();
     let dirty = v.get("dirty").and_then(|x| x.as_bool()).unwrap_or(false);
     Ok(NightlyPosture {
         path: path.to_path_buf(),
@@ -372,7 +403,7 @@ fn read_nightly(path: &Path) -> Result<NightlyPosture, String> {
             .get("capability_lane")
             .and_then(|x| x.as_str())
             .map(str::to_string),
-        age,
+        written_at,
     })
 }
 
@@ -410,13 +441,16 @@ pub fn render_nightly(nightly: Option<&NightlyPosture>) -> String {
             }
         }
         Some(n) => {
+            let j = n.judgement();
             s.push_str(&format!(
-                "  nightly lane   {} · {} · {}\n",
-                n.verdict,
-                n.age_human(),
+                "  nightly lane   {} · {} ago · {}\n",
+                j.label(),
+                j.age_label(),
                 n.commit
             ));
-            s.push_str(&format!("  {}\n", n.summary));
+            if !Reason::is_placeholder(&n.summary) {
+                s.push_str(&format!("  {}\n", n.summary));
+            }
             if n.coverage != "-" {
                 s.push_str(&format!("  {}\n", n.coverage));
             }
@@ -605,5 +639,75 @@ mod trigger_tests {
     fn detection_returns_something_on_this_host() {
         let t = nightly_trigger();
         assert!(!t.label().is_empty());
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use kernel_types::Verdict;
+
+    use super::*;
+
+    fn posture(verdict: &str, summary: &str, written_at: Option<SystemTime>) -> NightlyPosture {
+        NightlyPosture {
+            path: PathBuf::from("/tmp/latest.json"),
+            verdict: verdict.to_string(),
+            summary: summary.to_string(),
+            coverage: "-".to_string(),
+            commit: "abc1234".to_string(),
+            capability_lane: None,
+            written_at,
+        }
+    }
+
+    #[test]
+    fn the_lanes_word_maps_onto_the_four_verdicts() {
+        let now = SystemTime::now();
+        assert_eq!(
+            posture("pass", "67/75 steps", Some(now))
+                .judgement()
+                .verdict(),
+            Verdict::Passed
+        );
+        assert_eq!(
+            posture("fail", "3 steps failed", Some(now))
+                .judgement()
+                .verdict(),
+            Verdict::Failed
+        );
+        // Anything that is not the lane's two completed-run words is a
+        // could-not-judge, and the raw word is NAMED rather than dropped.
+        let j = posture("no-daemon", "daemon unreachable", Some(now)).judgement();
+        assert_eq!(j.verdict(), Verdict::CouldNotJudge);
+        assert!(j.reason().as_str().contains("no-daemon"));
+    }
+
+    #[test]
+    fn an_unreadable_mtime_is_undated_not_stale() {
+        // The hand-rolled `is_stale` answered `true` here — a verdict about
+        // something it did not know. Undated is the honest answer.
+        let j = posture("pass", "67/75 steps", None).judgement();
+        assert_eq!(j.freshness(), Freshness::Undated);
+        assert!(!posture("pass", "67/75 steps", None).is_stale());
+    }
+
+    #[test]
+    fn past_the_horizon_the_verdict_says_stale_in_its_own_word() {
+        let old = SystemTime::now() - NIGHTLY_HORIZON - Duration::from_secs(3_600);
+        let j = posture("fail", "3 steps failed", Some(old)).judgement();
+        assert_eq!(j.label(), "failed (stale)");
+        assert!(posture("fail", "3 steps failed", Some(old)).is_stale());
+    }
+
+    #[test]
+    fn a_missing_summary_says_so_rather_than_rendering_the_sentinel() {
+        // `read_nightly` fills an absent field with `-`, which `Reason`
+        // refuses. The row must not print a bare dash as though it were prose.
+        let j = posture("pass", "-", Some(SystemTime::now())).judgement();
+        assert!(j
+            .reason()
+            .as_str()
+            .starts_with("the lane recorded no summary"));
+        assert!(!j.reason().as_str().starts_with('-'));
     }
 }

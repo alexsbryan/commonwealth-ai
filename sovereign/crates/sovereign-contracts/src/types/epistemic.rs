@@ -49,6 +49,34 @@ pub struct EpistemicState {
     pub citations: Vec<ReleasedCitation>,
 }
 
+impl EpistemicState {
+    /// The ledger rows for a released turn, projected from the answer itself.
+    ///
+    /// This module's first line calls an [`EpistemicState`] *"the answer as a
+    /// typed object"*, and since rung `nc-20-turn-adoption` the citation half
+    /// of that claim is literal: the rows come from the
+    /// [`kernel_types::Answer`]'s own citations — each already vouched for by
+    /// the seal it was minted against — rather than from a second list
+    /// assembled next to it.
+    ///
+    /// `headings` is index-parallel to [`kernel_types::Answer::citations`] and
+    /// may be shorter; a missing entry reads as no heading, which is the same
+    /// legitimate silence [`ReleasedCitation::locator`] already documents.
+    /// A citation that cannot become an openable row is DROPPED — see
+    /// [`ReleasedCitation::released`].
+    pub fn citations_of(
+        answer: &kernel_types::Answer,
+        headings: &[Option<String>],
+    ) -> Vec<ReleasedCitation> {
+        answer
+            .citations()
+            .iter()
+            .enumerate()
+            .filter_map(|(i, c)| ReleasedCitation::released(c, headings.get(i).cloned().flatten()))
+            .collect()
+    }
+}
+
 /// One verbatim passage the gate released, with the handle needed to
 /// open it in a reading surface.
 ///
@@ -81,6 +109,49 @@ pub struct ReleasedCitation {
     /// produces no citation row at all rather than one pointing
     /// somewhere plausible — refusal over guess, as the locator does.
     pub target: CitationTarget,
+}
+
+impl ReleasedCitation {
+    /// Project one vouched-for [`kernel_types::Citation`] onto the wire.
+    ///
+    /// The ONE place a kernel citation becomes a ledger row (ARCH §10.6), and
+    /// the only place [`CitationTarget`] is read back out of a
+    /// [`kernel_types::Origin`]. Minted 2026-08-21, rung `nc-20-turn-adoption`:
+    /// before it, the gate hand-filled this struct beside the answer's own
+    /// citations and the two could disagree with nothing to catch it.
+    ///
+    /// `None` — a row that is not emitted at all — whenever the citation does
+    /// not point into a corpus with a numeric chunk handle: a web fetch, an
+    /// attachment, a tool output, or a corpus locator that is not a chunk id.
+    /// That is the same refusal the field's own doc states for a cross-boundary
+    /// match: a row here promises that clicking it opens the passage quoted,
+    /// and a row that cannot keep the promise is worse than no row (§18.3).
+    ///
+    /// `heading` is the human section title ("CHAPTER VII"). It is a SEPARATE
+    /// argument rather than something read off the citation because the kernel
+    /// [`kernel_types::Locator`] is the machine handle — which span inside the
+    /// document — and the two facts fail independently: a corpus with no
+    /// section structure yields a handle and no heading, and a synthetic chunk
+    /// yields neither.
+    pub fn released(
+        citation: &kernel_types::Citation,
+        heading: Option<String>,
+    ) -> Option<ReleasedCitation> {
+        let kernel_types::Source::Corpus {
+            corpus, locator, ..
+        } = &citation.source().source
+        else {
+            return None;
+        };
+        Some(ReleasedCitation {
+            text: citation.quote().to_string(),
+            locator: heading,
+            target: CitationTarget {
+                corpus_id: corpus.as_str().to_string(),
+                chunk_id: locator.as_str().parse().ok()?,
+            },
+        })
+    }
 }
 
 /// The structurally-unique handle for one passage: `(corpus, chunk)`.

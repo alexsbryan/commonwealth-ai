@@ -41,10 +41,13 @@
 mod call_census;
 mod citation;
 mod citation_attribution;
-mod config;
+// `pub(crate)` so the evidence loop can reach `debug_enabled` — one reader of
+// `SOVEREIGN_AGENTIC_KQ_DEBUG` for the whole crate (TOPOLOGY §10 phase 10).
+pub(crate) mod config;
 mod judge;
 pub mod native_grounding;
 mod pipeline;
+mod sealed;
 mod search;
 mod surgical;
 mod value_presence;
@@ -104,6 +107,13 @@ pub(crate) use search::{
 
 use std::collections::HashSet;
 use std::sync::Arc;
+
+// The kernel's grain, reached through the crate that publishes `Evidence`
+// rather than by a second direct dep on the kernel leaf (ARCH §8.3) — the
+// same door this file already takes `ScoredChunk` through. Replaced the
+// local `EvidenceSource` enum 2026-08-20 (rung nc-4-evidence): two
+// variants, identical meaning, one of them a copy.
+use corpus_engine::Grain;
 
 use crate::traits::InferenceProvider;
 use crate::types::CitationTarget;
@@ -309,7 +319,7 @@ pub(crate) struct EvidenceContext {
     /// row and default to `Leaf` via [`EvidenceContext::source_of`].
     /// EMPTY = provenance unknown → the gate behaves exactly as before
     /// this field existed (additive, mesh-safe).
-    pub chunk_sources: Vec<EvidenceSource>,
+    pub chunk_sources: Vec<Grain>,
     /// Per-chunk custody aligned with `chunks` by index (custody.md
     /// §1-§2, reds R-2/R-3). May be SHORTER than `chunks`: entries
     /// appended after the builder ran (sealed conversation evidence,
@@ -345,34 +355,19 @@ pub(crate) struct EvidenceContext {
     pub native_verdict: Option<crate::types::GroundingVerdict>,
 }
 
-/// Where an evidence chunk's text came from (T1 P1.4).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum EvidenceSource {
-    /// A real retrieved source chunk — verbatim corpus text.
-    Leaf,
-    /// A derived RAPTOR summary node — LLM prose ABOUT source text.
-    /// May support thematic/structural claims; never factual ones.
-    Summary,
-}
-
 impl EvidenceContext {
     /// Provenance of chunk `idx`. Indices past `chunk_sources` (late
     /// appends, or an empty vec entirely) read as `Leaf` — the
     /// conservative pre-P1.4 degradation.
-    pub(crate) fn source_of(&self, idx: usize) -> EvidenceSource {
-        self.chunk_sources
-            .get(idx)
-            .copied()
-            .unwrap_or(EvidenceSource::Leaf)
+    pub(crate) fn source_of(&self, idx: usize) -> Grain {
+        self.chunk_sources.get(idx).copied().unwrap_or(Grain::Leaf)
     }
 
     /// True when any chunk is Summary-class — i.e. the P1.4 policy has
     /// something to decide. False short-circuits the claim loop to the
     /// exact pre-P1.4 code path.
     pub(crate) fn has_summary_evidence(&self) -> bool {
-        self.chunk_sources
-            .iter()
-            .any(|s| *s == EvidenceSource::Summary)
+        self.chunk_sources.iter().any(|s| *s == Grain::Summary)
     }
 }
 
@@ -389,7 +384,7 @@ impl EvidenceContext {
 /// baselines.
 pub(crate) struct GateEvidenceParts {
     pub chunks: Vec<String>,
-    pub chunk_sources: Vec<EvidenceSource>,
+    pub chunk_sources: Vec<Grain>,
     pub chunk_labels: Vec<Vec<String>>,
     /// Human section locators, built HERE rather than at the call sites so
     /// they pass through the same summary filter and Leaf-first reordering as
@@ -451,15 +446,13 @@ pub(crate) fn gate_evidence_with_sources(
         }
         labels
     };
-    // The custody stamp + URL ride the metadata/url the acquisition path
-    // wrote under the ONE shared key (`CUSTODY_META_KEY`); `parse_wire`
-    // is the single parser, so a stamp typo reads as `None` (unstamped)
-    // rather than a new class.
-    let custody_of = |c: &corpus_engine::ScoredChunk| {
-        c.metadata
-            .get(crate::types::CUSTODY_META_KEY)
-            .and_then(|v| crate::types::Custody::parse_wire(v))
-    };
+    // The custody class the ACQUISITION DOOR recorded, read off the typed
+    // stamp rather than re-parsed from the metadata bag (TOPOLOGY §10 rung
+    // 9.1). `None` still means unstamped and still leaves the custody
+    // machinery disengaged below — `stamped_custody` is `Option` precisely
+    // so this site keeps that distinction; a pool where nothing is stamped
+    // must not become a pool where everything refuses.
+    let custody_of = |c: &corpus_engine::ScoredChunk| c.provenance.stamped_custody();
     let url_of = |c: &corpus_engine::ScoredChunk| c.url.clone();
     let exclude_raptor = std::env::var("SOVEREIGN_GATE_EXCLUDE_RAPTOR")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
@@ -468,7 +461,7 @@ pub(crate) fn gate_evidence_with_sources(
         // Historical pre-Fix-B baseline: summaries are source-equivalent.
         return GateEvidenceParts {
             chunks: chunks.iter().map(|c| c.content.clone()).collect(),
-            chunk_sources: vec![EvidenceSource::Leaf; chunks.len()],
+            chunk_sources: vec![Grain::Leaf; chunks.len()],
             chunk_labels: chunks.iter().map(labels_of).collect(),
             chunk_locators: gate_evidence_locators(chunks),
             chunk_targets: gate_evidence_targets(chunks),
@@ -479,9 +472,11 @@ pub(crate) fn gate_evidence_with_sources(
     let summary_evidence = std::env::var("SOVEREIGN_GATE_SUMMARY_EVIDENCE")
         .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
         .unwrap_or(true);
-    let is_summary = |c: &corpus_engine::ScoredChunk| {
-        c.metadata.get("source").map(String::as_str) == Some("raptor")
-    };
+    // Leaf or summary, off the same typed stamp. Was
+    // `metadata["source"] == "raptor"`, which matched an indexed rollup row
+    // and an in-process one by accident of a shared tag; `grain()` answers
+    // for both arms on purpose.
+    let is_summary = |c: &corpus_engine::ScoredChunk| c.provenance.grain() == Grain::Summary;
     // Resolved once over the ORIGINAL indices, then carried through the same
     // filter and reordering below, so `chunk_locators[i]` always names
     // `chunks[i]`.
@@ -505,7 +500,7 @@ pub(crate) fn gate_evidence_with_sources(
     };
     for (i, c) in chunks.iter().enumerate().filter(|(_, c)| !is_summary(c)) {
         parts.chunks.push(c.content.clone());
-        parts.chunk_sources.push(EvidenceSource::Leaf);
+        parts.chunk_sources.push(Grain::Leaf);
         parts.chunk_labels.push(labels_of(c));
         parts.chunk_locators.push(locator_at(i));
         parts.chunk_targets.push(target_at(i));
@@ -515,7 +510,7 @@ pub(crate) fn gate_evidence_with_sources(
     if summary_evidence {
         for (i, c) in chunks.iter().enumerate().filter(|(_, c)| is_summary(c)) {
             parts.chunks.push(c.content.clone());
-            parts.chunk_sources.push(EvidenceSource::Summary);
+            parts.chunk_sources.push(Grain::Summary);
             parts.chunk_labels.push(labels_of(c));
             parts.chunk_locators.push(locator_at(i));
             parts.chunk_targets.push(target_at(i));
@@ -743,7 +738,19 @@ pub(crate) fn retry_system_note(claim: &str, corrective: &[String]) -> String {
 
 /// Final outcome of a full gate ladder over one draft answer.
 pub(crate) struct GateOutcome {
-    pub text: String,
+    /// What the turn releases, and what it stands on.
+    ///
+    /// Was `text: String` until 2026-08-26 (TOPOLOGY phase 9, rung 9.2 —
+    /// hazard 2). An [`Answer`](kernel_types::Answer) has no door that does
+    /// not take a [`Judgement`](kernel_types::Judgement) by value, so a gate
+    /// exit can no longer release text without saying how far the gate got
+    /// with it. Sixteen exits constructed this struct and exactly ONE went
+    /// through `Draft::release`; the other fifteen assigned a `String`, and
+    /// the one that released flattened its `Answer` back to a `String` on the
+    /// next line.
+    ///
+    /// Read the text with `outcome.answer.text()`.
+    pub answer: kernel_types::Answer,
     /// `grounding_gate` metadata for the message (action, retried,
     /// violation_prob / failed_claims, threshold).
     pub meta: serde_json::Value,
@@ -918,6 +925,217 @@ fn retry_floor_env() -> Option<f32> {
         .ok()
         .and_then(|v| v.parse::<f32>().ok())
         .filter(|f| *f > 0.0 && *f < 1.0)
+}
+
+/// How far the gate got with the text it is about to release.
+///
+/// Until 2026-08-26 this was derived by PREFIX-MATCHING the wire action
+/// string (`!action.starts_with("abstained") && !action.starts_with("judge_failed")`,
+/// the old `:2297`), which is §2.1's smell and, worse, meant the verdict was
+/// re-derived downstream from a value chosen upstream. One value now carries
+/// both, so the wire id and the verdict cannot disagree (ARCH §10.6).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GateReach {
+    /// Judged, and it held.
+    Held,
+    /// Judged, and at least one claim was flagged. Released with its caveat.
+    Flawed,
+    /// The turn declined to answer.
+    Declined,
+    /// The gate ran and could not reach a verdict — extraction failed, the
+    /// judge was unavailable, the ladder fell open. ARCH §18.2: not a pass.
+    Unjudged,
+}
+
+/// What the gate did with this turn: the `meta["action"]` wire value, and how
+/// far the gate got. The ids are byte-identical to the string literals they
+/// replaced, so nothing on the wire moved.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) struct GateAction {
+    pub id: &'static str,
+    pub reach: GateReach,
+}
+
+impl GateAction {
+    const fn new(id: &'static str, reach: GateReach) -> Self {
+        Self { id, reach }
+    }
+}
+
+pub(crate) const ACT_RELEASED: GateAction = GateAction::new("released", GateReach::Held);
+pub(crate) const ACT_RETRY_RELEASED: GateAction =
+    GateAction::new("retry_released", GateReach::Held);
+pub(crate) const ACT_RETRY_RELEASED_SPECIFICS: GateAction =
+    GateAction::new("retry_released_specifics", GateReach::Held);
+pub(crate) const ACT_ABSTAINED: GateAction = GateAction::new("abstained", GateReach::Declined);
+pub(crate) const ACT_ABSTAINED_NO_RETRY: GateAction =
+    GateAction::new("abstained_no_retry", GateReach::Declined);
+pub(crate) const ACT_ABSTAINED_WEAK_EVIDENCE: GateAction =
+    GateAction::new("abstained_weak_evidence", GateReach::Declined);
+pub(crate) const ACT_ABSTAINED_DECLINE: GateAction =
+    GateAction::new("abstained_decline", GateReach::Declined);
+pub(crate) const ACT_ABSTAINED_RETRY_ERROR: GateAction =
+    GateAction::new("abstained_retry_error", GateReach::Declined);
+pub(crate) const ACT_ABSTAINED_SPECIFICS: GateAction =
+    GateAction::new("abstained_specifics", GateReach::Declined);
+pub(crate) const ACT_JUDGE_FAILED_OPEN: GateAction =
+    GateAction::new("judge_failed_open", GateReach::Unjudged);
+/// A retry that released text the gate never got to verify. It used to share
+/// a door with a verified release; §18.2 says those are different words.
+pub(crate) const ACT_RETRY_RELEASED_UNVERIFIED: GateAction =
+    GateAction::new("retry_released_unverified", GateReach::Unjudged);
+
+// ─── The LONGFORM ladder's exits ─────────────────────────────────────────
+//
+// Added 2026-08-26. These six wire ids existed as bare string literals sitting
+// beside a hand-picked `release_*` call, so the id and the verdict were chosen
+// at two places and nothing stopped them disagreeing — the §10.6 defect the
+// short-form path closed on 2026-08-26 and this one did not. The tell was a
+// compiler warning: `GateReach::Flawed` was never constructed, because the
+// three exits that ARE flawed released through `release_flawed` directly and
+// never named a reach at all.
+//
+// The ids are byte-identical to the literals they replace.
+
+/// The repair ladder is tombstoned; the audited draft is released with its
+/// failed claims marked.
+pub(crate) const ACT_ANNOTATED_MARKED: GateAction =
+    GateAction::new("annotated_marked", GateReach::Flawed);
+/// Claims flagged and released with a caveat, retry disarmed.
+pub(crate) const ACT_ANNOTATED_NO_RETRY: GateAction =
+    GateAction::new("annotated_no_retry", GateReach::Flawed);
+/// The surgical rewrite itself errored; the flagged draft is released with a
+/// caveat rather than lost.
+pub(crate) const ACT_ANNOTATED_REWRITE_ERROR: GateAction =
+    GateAction::new("annotated_rewrite_error", GateReach::Flawed);
+/// Rewritten, re-audited, and it held.
+pub(crate) const ACT_REWRITE_RELEASED: GateAction =
+    GateAction::new("rewrite_released", GateReach::Held);
+/// Rewritten, re-audited, and claims are still flagged — released with the
+/// caveat.
+pub(crate) const ACT_REWRITE_ANNOTATED: GateAction =
+    GateAction::new("rewrite_annotated", GateReach::Flawed);
+/// The rewrite produced text the gate never re-audited.
+pub(crate) const ACT_REWRITE_RELEASED_UNVERIFIED: GateAction =
+    GateAction::new("rewrite_released_unverified", GateReach::Unjudged);
+
+/// The one dispatch from "how far did the gate get" to a `kernel-types` door.
+///
+/// Every gate exit goes through here, so there is exactly one answer to "what
+/// judgement does a turn that ended THIS way carry" (ARCH §10.6).
+fn release_as(
+    action: GateAction,
+    text: impl Into<String>,
+    citations: Vec<kernel_types::Citation>,
+    inference: &Arc<dyn InferenceProvider>,
+    speed: crate::oicp::Speed,
+) -> kernel_types::Answer {
+    let why = format!("grounding gate: {}", action.id);
+    release_as_because(action, text, citations, inference, speed, why)
+}
+
+/// [`release_as`] with the reason stated rather than derived from the id.
+///
+/// The longform ladder's exits know things the id cannot say — how many claims
+/// were flagged, whether a rewrite ran — and that sentence becomes the
+/// `Judgement`'s `Reason`. Same single dispatch: this is where the match
+/// lives, and `release_as` is the caller that supplies a default.
+fn release_as_because(
+    action: GateAction,
+    text: impl Into<String>,
+    citations: Vec<kernel_types::Citation>,
+    inference: &Arc<dyn InferenceProvider>,
+    speed: crate::oicp::Speed,
+    why: String,
+) -> kernel_types::Answer {
+    match action.reach {
+        GateReach::Held => release_held(text, citations, inference, speed, why),
+        GateReach::Flawed => release_flawed(text, citations, inference, speed, why),
+        GateReach::Declined => abstain(text, inference, speed, why),
+        GateReach::Unjudged => release_unjudged(text, citations, inference, speed, why),
+    }
+}
+
+/// Release text this gate judged and found held.
+///
+/// One of the four doors out of this module, each wrapping exactly one
+/// `kernel-types` constructor. They exist to NAME the four cases, not to
+/// decide anything: the fold stays `Judgement::roll_up` inside
+/// `Draft::release`, and no second reducer is written here (ARCH §10.6).
+fn release_held(
+    text: impl Into<String>,
+    citations: Vec<kernel_types::Citation>,
+    inference: &Arc<dyn InferenceProvider>,
+    speed: crate::oicp::Speed,
+    why: String,
+) -> kernel_types::Answer {
+    kernel_types::Draft::composed(text, citations).release(
+        sealed::engine_attribution(&**inference, speed),
+        &[kernel_types::Judgement::passed(
+            kernel_types::TURN_SUBJECT,
+            reason_or(why, "the gate found the released text held"),
+        )],
+    )
+}
+
+/// Release text the gate judged and found wanting — a known-failed claim
+/// travels with its caveat, and now with its verdict.
+fn release_flawed(
+    text: impl Into<String>,
+    citations: Vec<kernel_types::Citation>,
+    inference: &Arc<dyn InferenceProvider>,
+    speed: crate::oicp::Speed,
+    why: String,
+) -> kernel_types::Answer {
+    kernel_types::Draft::composed(text, citations).release(
+        sealed::engine_attribution(&**inference, speed),
+        &[kernel_types::Judgement::failed(
+            kernel_types::TURN_SUBJECT,
+            reason_or(why, "the gate flagged at least one released claim"),
+        )],
+    )
+}
+
+/// The turn declined to answer, and the text says so.
+fn abstain(
+    text: impl Into<String>,
+    inference: &Arc<dyn InferenceProvider>,
+    speed: crate::oicp::Speed,
+    why: String,
+) -> kernel_types::Answer {
+    kernel_types::Answer::abstained(
+        text,
+        sealed::engine_attribution(&**inference, speed),
+        reason_or(why, "the gate declined to release an answer"),
+    )
+}
+
+/// The gate ran and could not reach a verdict — claim extraction failed, the
+/// judge was unavailable, the ladder fell open.
+///
+/// ARCH §18.2: a check that could not judge is not a check that passed, and
+/// until this rung both released the same `String`.
+fn release_unjudged(
+    text: impl Into<String>,
+    citations: Vec<kernel_types::Citation>,
+    inference: &Arc<dyn InferenceProvider>,
+    speed: crate::oicp::Speed,
+    why: String,
+) -> kernel_types::Answer {
+    kernel_types::Draft::composed(text, citations).release(
+        sealed::engine_attribution(&**inference, speed),
+        &[kernel_types::Judgement::could_not_judge(
+            kernel_types::TURN_SUBJECT,
+            reason_or(why, "the gate could not reach a verdict on this turn"),
+        )],
+    )
+}
+
+/// `Reason::new` refuses placeholder text ("n/a", "unknown", ...). A refused
+/// reason falls back to a named literal rather than to an empty one — the
+/// substitution is visible in the source, never silent (ARCH §18.3).
+fn reason_or(why: String, fallback: &'static str) -> kernel_types::Reason {
+    kernel_types::Reason::new(why).unwrap_or_else(|| kernel_types::Reason::literal(fallback))
 }
 
 pub(crate) async fn gate_answer(
@@ -1284,18 +1502,26 @@ async fn gate_answer_inner(
     // the wrong passage (or worse, read a stamped chunk as unstamped).
     let leaf_custodies: Vec<Option<crate::types::Custody>>;
     let leaf_urls: Vec<Option<String>>;
+    // Grain travels through the SAME filter, for the reason above and one
+    // more: it is what the released citation's [`kernel_types::Origin`]
+    // carries, so a grain read off the unfiltered list would stamp a quote
+    // with another chunk's provenance. Binding it here rather than assuming
+    // `Leaf` keeps the seal honest if this filter ever changes (rung
+    // nc-20-turn-adoption).
+    let leaf_grains: Vec<Grain>;
     // `_urls`: the leaf view's URLs exist for the ledger's locator
     // fallback, which the funnel derives from the FULL evidence; nothing
     // in the ladder reads the filtered view, so it is not bound.
-    let (chunks, locators, targets, custodies, _urls): (
+    let (chunks, locators, targets, custodies, _urls, grains): (
         &[String],
         &[Option<String>],
         &[Option<CitationTarget>],
         &[Option<crate::types::Custody>],
         &[Option<String>],
+        &[Grain],
     ) = if evidence.has_summary_evidence() {
         let keep: Vec<usize> = (0..evidence.chunks.len())
-            .filter(|i| evidence.source_of(*i) == EvidenceSource::Leaf)
+            .filter(|i| evidence.source_of(*i).may_be_quoted())
             .collect();
         leaf_owned = keep.iter().map(|i| evidence.chunks[*i].clone()).collect();
         leaf_locators = keep
@@ -1314,20 +1540,26 @@ async fn gate_answer_inner(
             .iter()
             .map(|i| evidence.chunk_urls.get(*i).cloned().flatten())
             .collect();
+        leaf_grains = keep.iter().map(|i| evidence.source_of(*i)).collect();
         (
             &leaf_owned,
             &leaf_locators,
             &leaf_targets,
             &leaf_custodies,
             &leaf_urls,
+            &leaf_grains,
         )
     } else {
+        leaf_grains = (0..evidence.chunks.len())
+            .map(|i| evidence.source_of(i))
+            .collect();
         (
             &evidence.chunks,
             &evidence.chunk_locators,
             &evidence.chunk_targets,
             &evidence.chunk_custodies,
             &evidence.chunk_urls,
+            &leaf_grains,
         )
     };
     let entity_anchored = evidence.entity_anchored;
@@ -1358,7 +1590,12 @@ async fn gate_answer_inner(
             "gate refused: evidence holds unknown-provenance chunks (custody.md §4)"
         );
         return GateOutcome {
-            text: grounded_abstention(question, chunks.len().min(12)),
+            answer: abstain(
+                grounded_abstention(question, chunks.len().min(12)),
+                inference,
+                base_request.preferred_speed,
+                "evidence holds unknown-provenance chunks (custody.md §4)".to_string(),
+            ),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
@@ -1478,17 +1715,60 @@ async fn gate_answer_inner(
             // than no row (§18.3 — absence is reported, never defaulted). The
             // prose rendering below is unchanged and still shows every quote,
             // so nothing disappears from what the reader can READ.
-            let released_citations: Vec<crate::types::ReleasedCitation> = quotes
-                .iter()
-                .filter_map(|q| {
-                    Some(crate::types::ReleasedCitation {
-                        text: q.text.clone(),
-                        locator: q.locator.clone(),
-                        target: q.target.clone()?,
-                    })
-                })
-                .collect();
-            let openable = released_citations.len();
+            // The turn, in kernel vocabulary (rung nc-20-turn-adoption).
+            //
+            // The seal is the leaf view — what this ladder is allowed to quote.
+            // Each released quote is minted through
+            // `kernel_types::Citation::pointing_into`, the ONE door: it refuses
+            // a quote the seal does not hold verbatim, and refuses one landing
+            // in material that may not be quoted. Both rules held here before,
+            // as an upstream guarantee stated in three doc comments; they are
+            // now a constructor, so no future quote path can skip either.
+            //
+            // BEHAVIOUR IS UNCHANGED, and that was checked rather than assumed:
+            // a `GroundedQuote` carrying `Some(target)` is already one
+            // contiguous run of ONE chunk (`QuoteMatch::Exact`), and seal
+            // membership is exactly "has a `(corpus, chunk)` handle" — the same
+            // predicate the old `target.clone()?` fold applied. What is new is
+            // that a drop is a NAMED value carrying the quote and the seal size
+            // instead of a `None` vanishing inside a `filter_map`.
+            let seal = sealed::SealedEvidence::over(chunks, targets, custodies, grains);
+            let mut turn_citations: Vec<kernel_types::Citation> = Vec::new();
+            // Human section headings, index-parallel to `turn_citations` — the
+            // display half of a citation, which the kernel `Origin` deliberately
+            // does not carry (its `Locator` is the machine handle).
+            let mut headings: Vec<Option<String>> = Vec::new();
+            let mut refusals: Vec<kernel_types::Refused> = Vec::new();
+            for q in &quotes {
+                // No handle => no seal member => no row, exactly as the
+                // `target.clone()?` fold decided before. Counted as a refusal
+                // so the trace below distinguishes it from a quote the member
+                // did not hold.
+                let Some(target) = q.target.as_ref() else {
+                    refusals.push(kernel_types::Refused::NotInSeal {
+                        quote: q.text.clone(),
+                        sealed_len: 0,
+                    });
+                    continue;
+                };
+                match seal.cite(target, q.text.as_str()) {
+                    Ok(c) => {
+                        turn_citations.push(c);
+                        headings.push(q.locator.clone());
+                    }
+                    Err(r) => refusals.push(r),
+                }
+            }
+            tracing::debug!(
+                target: "grounding.seal",
+                sealed = seal.len(),
+                unhandled = seal.unhandled(),
+                quotes = quotes.len(),
+                cited = turn_citations.len(),
+                refused = refusals.len(),
+                why = ?refusals.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                "citation release: quotes checked against the sealed leaf view"
+            );
             dbg(&format!(
                 "citation: GROUNDED → release (answer={:?} quotes={} located={located}/{} \
                  quote_chars={quote_chars})",
@@ -1570,8 +1850,59 @@ async fn gate_answer_inner(
             {
                 return guarded;
             }
+            // ── Release (rung nc-20-turn-adoption) ───────────────────────────
+            //
+            // The composed text becomes a `Draft`, whose text CANNOT BE READ,
+            // and the only exit from a `Draft` is a release that says what is
+            // known about it. This turn's verdict is a pass and it is one the
+            // gate genuinely established: every released quote was re-checked
+            // verbatim against the seal three lines up. The fold is
+            // `Judgement::roll_up` inside `Draft::release` — one reducer, not a
+            // second one written here (ARCH §10.6).
+            //
+            // Nothing about the released STRING changes: `Answer::text` is the
+            // `cited` value that used to be assigned to `GateOutcome::text`
+            // directly. What changes is that it can no longer be assigned
+            // WITHOUT a judgement, because there is no other door.
+            let verdict_reason = kernel_types::Reason::new(format!(
+                "{} of {} released quote(s) verified verbatim against {} sealed chunk(s)",
+                turn_citations.len(),
+                quotes.len(),
+                seal.len()
+            ))
+            .unwrap_or_else(|| kernel_types::Reason::literal("quotes verified against the seal"));
+            // Through the same door every other exit uses. This site was
+            // already correct before rung 9.2 and was the only one that was;
+            // routing it through `release_held` too is what makes "one
+            // decider" true rather than "one decider plus the original"
+            // (ARCH §10.6).
+            let released: kernel_types::Answer = release_held(
+                cited,
+                turn_citations,
+                inference,
+                base_request.preferred_speed,
+                verdict_reason.to_string(),
+            );
+            // The wire rows are PROJECTED from the released answer rather than
+            // assembled beside it: one decider for "what did this turn cite"
+            // (ARCH §10.6). Before this, `meta["citations"]` and the answer's
+            // own citations were two hand-built lists that happened to agree.
+            let released_citations =
+                crate::types::EpistemicState::citations_of(&released, &headings);
+            let openable = released_citations.len();
+            tracing::debug!(
+                target: "grounding.seal",
+                verdict = %released.judgement().verdict(),
+                citations = released.citations().len(),
+                openable,
+                custody = ?released.evidence_custody().map(|c| c.as_str()),
+                "citation release: answer sealed with its judgement"
+            );
             return GateOutcome {
-                text: cited,
+                // Was `released.text().to_string()` — the `Answer` was built
+                // correctly here and then thrown away on the next line, which
+                // is what made this the only judged exit of sixteen.
+                answer: released,
                 meta: with_native_verdict(
                     serde_json::json!({
                     "surface": profile.surface.id(),
@@ -1637,7 +1968,7 @@ async fn gate_answer_inner(
         dbg("citation: not tightly grounded → fall through to legacy ladder");
     }
     let mut text = draft;
-    let mut action = "released";
+    let mut action = ACT_RELEASED;
     let mut retried = false;
     let mut final_vp: Option<f64> = None;
     // Why `final_vp` is what it is. A vp of 0.0 from a path the gate
@@ -1745,7 +2076,7 @@ async fn gate_answer_inner(
                         // the failed text (typically: keep the prior
                         // verified answer).
                         text = grounded_abstention(&claim, chunks.len().min(12));
-                        action = "abstained_no_retry";
+                        action = ACT_ABSTAINED_NO_RETRY;
                         emit_gate_progress(
                             progress,
                             NarrationPhase::ClaimCheckComplete {
@@ -1754,11 +2085,17 @@ async fn gate_answer_inner(
                             },
                         );
                         return GateOutcome {
-                            text,
+                            answer: release_as(
+                                action,
+                                text,
+                                Vec::new(),
+                                inference,
+                                base_request.preferred_speed,
+                            ),
                             meta: with_native_verdict(
                                 serde_json::json!({
                                                 "surface": profile.surface.id(),
-                                                "action": action,
+                                                "action": action.id,
                                                 "retried": false,
                                                 "violation_prob": final_vp,
                                 "claim_check_outcome": final_outcome,
@@ -1792,7 +2129,7 @@ async fn gate_answer_inner(
                                 "grounding gate: retry skipped — evidence below retry floor, abstaining without a second synthesis"
                             );
                             text = grounded_abstention(&claim, chunks.len().min(12));
-                            action = "abstained_weak_evidence";
+                            action = ACT_ABSTAINED_WEAK_EVIDENCE;
                             emit_gate_progress(
                                 progress,
                                 NarrationPhase::ClaimCheckComplete {
@@ -1801,11 +2138,17 @@ async fn gate_answer_inner(
                                 },
                             );
                             return GateOutcome {
-                                text,
+                                answer: release_as(
+                                    action,
+                                    text,
+                                    Vec::new(),
+                                    inference,
+                                    base_request.preferred_speed,
+                                ),
                                 meta: with_native_verdict(
                                     serde_json::json!({
                                                         "surface": profile.surface.id(),
-                                                        "action": action,
+                                                        "action": action.id,
                                                         "retried": false,
                                                         "violation_prob": final_vp,
                                     "claim_check_outcome": final_outcome,
@@ -1909,7 +2252,7 @@ async fn gate_answer_inner(
                                         // is an abstention — same contract as
                                         // the NO_CLAIM decline guard below.
                                         text = second;
-                                        action = "abstained_decline";
+                                        action = ACT_ABSTAINED_DECLINE;
                                         emit_gate_progress(
                                             progress,
                                             NarrationPhase::ClaimVerdict {
@@ -1919,7 +2262,7 @@ async fn gate_answer_inner(
                                         );
                                     } else {
                                         text = second;
-                                        action = "retry_released";
+                                        action = ACT_RETRY_RELEASED;
                                         if let Some(rec) = gate_claims.first_mut() {
                                             rec.supported = true;
                                             rec.violation_prob = Some(v2.violation_prob);
@@ -1937,7 +2280,7 @@ async fn gate_answer_inner(
                                     final_vp = Some(v2.violation_prob);
                                     final_outcome = Some(v2.outcome);
                                     text = grounded_abstention(&claim, chunks.len().min(12));
-                                    action = "abstained";
+                                    action = ACT_ABSTAINED;
                                     if let Some(rec) = gate_claims.first_mut() {
                                         rec.violation_prob = Some(v2.violation_prob);
                                     }
@@ -1959,9 +2302,9 @@ async fn gate_answer_inner(
                                     // abstention (same contract as above).
                                     text = second;
                                     if released_pure_decline(&text) {
-                                        action = "abstained_decline";
+                                        action = ACT_ABSTAINED_DECLINE;
                                     } else {
-                                        action = "retry_released_unverified";
+                                        action = ACT_RETRY_RELEASED_UNVERIFIED;
                                     }
                                     if let Some(rec) = gate_claims.first_mut() {
                                         rec.violation_prob = None;
@@ -1976,14 +2319,14 @@ async fn gate_answer_inner(
                                 "gated retry synthesis failed — releasing abstention"
                             );
                             text = grounded_abstention(&claim, chunks.len().min(12));
-                            action = "abstained_retry_error";
+                            action = ACT_ABSTAINED_RETRY_ERROR;
                         }
                     }
                 }
             }
         }
         None => {
-            action = "judge_failed_open";
+            action = ACT_JUDGE_FAILED_OPEN;
         }
     }
     // Terminal progress frame for the short path. Only when a claim
@@ -1991,11 +2334,15 @@ async fn gate_answer_inner(
     // only on the verdicts this fall-through exit owns — the abstain
     // early-returns above emit their own completion frames.
     if claim_audited {
-        let (confirmed, flagged) = match action {
-            "released" => (1, 0),
-            "retry_released" | "retry_released_unverified" => (1, 1),
-            a if a.starts_with("abstained") => (0, 1),
-            _ => (0, 0),
+        // Reads the action's REACH rather than its spelling. The old form
+        // matched four string arms and a `starts_with` prefix — §2.1's smell,
+        // and a fifth action id would have fallen into `_ => (0, 0)` silently.
+        let (confirmed, flagged) = match action.reach {
+            GateReach::Held if action.id.starts_with("retry_") => (1, 1),
+            GateReach::Held => (1, 0),
+            GateReach::Unjudged if action.id.starts_with("retry_") => (1, 1),
+            GateReach::Declined => (0, 1),
+            GateReach::Flawed | GateReach::Unjudged => (0, 0),
         };
         if confirmed + flagged > 0 {
             emit_gate_progress(
@@ -2005,11 +2352,12 @@ async fn gate_answer_inner(
         }
     }
     dbg(&format!(
-        "verdict action={action} retried={retried} vp={final_vp:?} tau={tau}"
+        "verdict action={} retried={retried} vp={final_vp:?} tau={tau}",
+        action.id
     ));
     tracing::info!(
         target: "grounding_gate",
-        action,
+        action = action.id,
         retried,
         vp = ?final_vp,
         tau,
@@ -2023,7 +2371,7 @@ async fn gate_answer_inner(
     // convert it to the honest abstention instead of shipping noise. Terse
     // GROUNDED answers are unaffected — the citation path formats them with
     // their supporting quote, well past this floor.
-    if action == "released"
+    if action == ACT_RELEASED
         && text.trim().chars().count() < 15
         && !text.contains("Grounded in the source")
         && question.trim().chars().count() > 40
@@ -2033,7 +2381,12 @@ async fn gate_answer_inner(
             text.trim()
         ));
         return GateOutcome {
-            text: grounded_abstention(question, chunks.len().min(12)),
+            answer: abstain(
+                grounded_abstention(question, chunks.len().min(12)),
+                inference,
+                base_request.preferred_speed,
+                "released text answers nothing — fragment guard".to_string(),
+            ),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
@@ -2065,7 +2418,7 @@ async fn gate_answer_inner(
     // BOTH arms. H1's verdict rides the turn as telemetry and is reported
     // beside the decision, never in place of it — see `abstention_action`
     // for why the typed shortcut was retired and when it comes back.
-    let reclassify = (action == "released" && !claim_audited)
+    let reclassify = (action == ACT_RELEASED && !claim_audited)
         .then(|| abstention_action(&text))
         .flatten();
     if let Some(reclassified) = reclassify {
@@ -2080,7 +2433,12 @@ async fn gate_answer_inner(
             "grounding gate: released text is a 0-holding decline — action reclassified to abstained_decline"
         );
         return GateOutcome {
-            text,
+            answer: abstain(
+                text,
+                inference,
+                base_request.preferred_speed,
+                "released text is a 0-holding decline".to_string(),
+            ),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
@@ -2106,7 +2464,9 @@ async fn gate_answer_inner(
     // SUPPORTING specifics (a cited flag/number/entity absent from the
     // evidence). Skip when the path already abstained (nothing asserted). On a
     // flag: correct-or-abstain via one grounded rewrite.
-    if !action.starts_with("abstained") && !action.starts_with("judge_failed") {
+    // Skip when the gate did not release an asserted answer — the verdict is
+    // read off the action rather than re-derived from its spelling.
+    if matches!(action.reach, GateReach::Held | GateReach::Flawed) {
         if let Some(guarded) = short_specifics_guard(
             inference,
             question,
@@ -2123,11 +2483,17 @@ async fn gate_answer_inner(
         }
     }
     GateOutcome {
-        text,
+        answer: release_as(
+            action,
+            text,
+            Vec::new(),
+            inference,
+            base_request.preferred_speed,
+        ),
         meta: with_native_verdict(
             serde_json::json!({
                 "surface": profile.surface.id(),
-                "action": action,
+                "action": action.id,
                 "retried": retried,
                 "violation_prob": final_vp,
                     "claim_check_outcome": final_outcome,
@@ -2639,7 +3005,7 @@ async fn short_specifics_guard(
         Some(v) if !v.is_empty() => {
             tracing::info!(
                 target: "grounding_gate",
-                action = "abstained_specifics",
+                action = ACT_ABSTAINED_SPECIFICS.id,
                 flagged = specifics.len(),
                 "short specifics guard: rewrite still fabricates — abstaining"
             );
@@ -2655,7 +3021,12 @@ async fn short_specifics_guard(
                 })
                 .collect();
             Some(GateOutcome {
-                text: grounded_abstention("", chunks.len().min(12)),
+                answer: abstain(
+                    grounded_abstention("", chunks.len().min(12)),
+                    inference,
+                    base_request.preferred_speed,
+                    "second-opinion guard flagged fabricated specifics".to_string(),
+                ),
                 meta: with_native_verdict(
                     serde_json::json!({
                         "surface": profile.surface.id(),
@@ -2672,7 +3043,7 @@ async fn short_specifics_guard(
         _ => {
             tracing::info!(
                 target: "grounding_gate",
-                action = "retry_released_specifics",
+                action = ACT_RETRY_RELEASED_SPECIFICS.id,
                 flagged = specifics.len(),
                 "short specifics guard: corrective rewrite released"
             );
@@ -2688,7 +3059,13 @@ async fn short_specifics_guard(
                 })
                 .collect();
             Some(GateOutcome {
-                text: second,
+                answer: release_as(
+                    ACT_RETRY_RELEASED_SPECIFICS,
+                    second,
+                    Vec::new(),
+                    inference,
+                    base_request.preferred_speed,
+                ),
                 meta: with_native_verdict(
                     serde_json::json!({
                         "surface": profile.surface.id(),
@@ -2803,13 +3180,13 @@ async fn gate_longform(
     let leaf_chunks: Vec<String> = chunks
         .iter()
         .enumerate()
-        .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Leaf)
+        .filter(|(i, _)| evidence.source_of(*i).may_be_quoted())
         .map(|(_, c)| c.clone())
         .collect();
     let summary_chunks: Vec<String> = chunks
         .iter()
         .enumerate()
-        .filter(|(i, _)| evidence.source_of(*i) == EvidenceSource::Summary)
+        .filter(|(i, _)| !evidence.source_of(*i).may_be_quoted())
         .map(|(_, c)| c.clone())
         .collect();
     // THE AUDITOR IS SHOWN WHAT THE DRAFTER WAS SHOWN. This was a constant
@@ -3581,7 +3958,16 @@ async fn gate_longform(
     let Some((text, audited, failed)) = audit(draft, false, None).await else {
         // Claim-list extraction failed — fail open with the draft.
         return GateOutcome {
-            text: draft_backup,
+            // Claim-list extraction failed, so the gate reached no verdict.
+            // ARCH §18.2: that is not a pass, and until this rung it released
+            // the same bare `String` a verified answer did.
+            answer: release_unjudged(
+                draft_backup,
+                Vec::new(),
+                inference,
+                base_request.preferred_speed,
+                "claim-list extraction failed — gate fell open".to_string(),
+            ),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
@@ -3604,7 +3990,13 @@ async fn gate_longform(
             },
         );
         return GateOutcome {
-            text,
+            answer: release_held(
+                text,
+                Vec::new(),
+                inference,
+                base_request.preferred_speed,
+                format!("{n_claims} claim(s) audited, none flagged"),
+            ),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
@@ -3655,9 +4047,9 @@ async fn gate_longform(
                 "longform repair ladder is tombstoned — releasing the audited draft \
                  with its failed claims marked (SOVEREIGN_GATE_LONGFORM_REPAIR=1 re-arms)"
             );
-            "annotated_marked"
+            ACT_ANNOTATED_MARKED
         } else {
-            "annotated_no_retry"
+            ACT_ANNOTATED_NO_RETRY
         };
         emit_gate_progress(
             progress,
@@ -3680,11 +4072,21 @@ async fn gate_longform(
             // in its own UI (desktop sets SOVEREIGN_NOTE_AS_METADATA=1); on
             // API/CLI it appends the visible note. Either way a known-failed
             // claim is never released without its caveat (ARCH §18.3).
-            text: append_note(text, &note),
+            answer: release_as_because(
+                action,
+                append_note(text, &note),
+                Vec::new(),
+                inference,
+                base_request.preferred_speed,
+                format!(
+                    "{} claim(s) flagged and released with a caveat",
+                    failed_claims.len()
+                ),
+            ),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
-                    "action": action, "retried": false,
+                    "action": action.id, "retried": false,
                     "claims_checked": n_claims, "failed_claims": failed_claims,
                     "threshold": tau, "mode": "per_claim",
                 }),
@@ -3852,11 +4254,21 @@ async fn gate_longform(
                 let failed_claims: Vec<String> = failed.into_iter().map(|f| f.claim).collect();
                 let note = verification_note(&failed_claims);
                 return GateOutcome {
-                    text: append_note(text, &note),
+                    answer: release_as_because(
+                        ACT_ANNOTATED_REWRITE_ERROR,
+                        append_note(text, &note),
+                        Vec::new(),
+                        inference,
+                        base_request.preferred_speed,
+                        format!(
+                            "surgical rewrite failed; {} claim(s) flagged and released with a caveat",
+                            failed_claims.len()
+                        ),
+                    ),
                     meta: with_native_verdict(
                         serde_json::json!({
                             "surface": profile.surface.id(),
-                            "action": "annotated_rewrite_error", "retried": false,
+                            "action": ACT_ANNOTATED_REWRITE_ERROR.id, "retried": false,
                             "claims_checked": n_claims, "failed_claims": failed_claims,
                             "threshold": tau, "mode": "per_claim",
                         }),
@@ -3908,11 +4320,18 @@ async fn gate_longform(
                 },
             );
             GateOutcome {
-                text: text2,
+                answer: release_as_because(
+                    ACT_REWRITE_RELEASED,
+                    text2,
+                    Vec::new(),
+                    inference,
+                    base_request.preferred_speed,
+                    format!("{n2} claim(s) re-audited after rewrite, none flagged"),
+                ),
                 meta: with_native_verdict(
                     serde_json::json!({
                         "surface": profile.surface.id(),
-                        "action": "rewrite_released", "retried": true,
+                        "action": ACT_REWRITE_RELEASED.id, "retried": true,
                         "claims_checked": n2, "failed_claims": [],
                         "threshold": tau, "mode": "per_claim",
                     }),
@@ -3935,10 +4354,20 @@ async fn gate_longform(
             let failed_claims: Vec<String> = failed2.into_iter().map(|f| f.claim).collect();
             let note = verification_note(&failed_claims);
             GateOutcome {
-                text: append_note(text2, &note),
+                answer: release_as_because(
+                    ACT_REWRITE_ANNOTATED,
+                    append_note(text2, &note),
+                    Vec::new(),
+                    inference,
+                    base_request.preferred_speed,
+                    format!(
+                        "{} claim(s) still flagged after rewrite, released with a caveat",
+                        failed_claims.len()
+                    ),
+                ),
                 meta: with_native_verdict(
                     serde_json::json!({
-                        "action": "rewrite_annotated", "retried": true,
+                        "action": ACT_REWRITE_ANNOTATED.id, "retried": true,
                         "claims_checked": n2, "failed_claims": failed_claims,
                         "threshold": tau, "mode": "per_claim",
                     }),
@@ -3948,11 +4377,19 @@ async fn gate_longform(
             }
         }
         None => GateOutcome {
-            text: second_backup,
+            // The rewrite produced text the gate never re-audited.
+            answer: release_as_because(
+                ACT_REWRITE_RELEASED_UNVERIFIED,
+                second_backup,
+                Vec::new(),
+                inference,
+                base_request.preferred_speed,
+                "rewrite released without re-audit".to_string(),
+            ),
             meta: with_native_verdict(
                 serde_json::json!({
                     "surface": profile.surface.id(),
-                    "action": "rewrite_released_unverified", "retried": true,
+                    "action": ACT_REWRITE_RELEASED_UNVERIFIED.id, "retried": true,
                     "threshold": tau, "mode": "per_claim",
                 }),
                 native,
@@ -4046,6 +4483,8 @@ mod tests {
             chunk_id,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -4363,7 +4802,7 @@ mod tests {
             Some("refused_unknown_custody")
         );
         assert!(
-            outcome.text.starts_with("I couldn't confirm"),
+            outcome.answer.text().starts_with("I couldn't confirm"),
             "the refusal must be an abstention-shaped release"
         );
         // The funnel's ledger records BOTH rows: the stamped chunk as
@@ -4598,7 +5037,11 @@ mod tests {
             outcome.meta.get("action").and_then(|a| a.as_str()),
             Some("abstained_decline")
         );
-        assert_eq!(outcome.text, draft, "the model's own decline prose ships");
+        assert_eq!(
+            outcome.answer.text(),
+            draft,
+            "the model's own decline prose ships"
+        );
         assert!(outcome.claims.is_empty(), "a decline asserts nothing");
     }
 
@@ -4677,7 +5120,10 @@ mod tests {
             outcome.meta.get("action").and_then(|a| a.as_str()),
             Some("abstained_decline")
         );
-        assert_eq!(outcome.text, "I don't have reliable information on this.");
+        assert_eq!(
+            outcome.answer.text(),
+            "I don't have reliable information on this."
+        );
         assert!(
             !outcome.claims.iter().any(|c| c.supported),
             "no claim may be marked supported by a NO_CLAIM decline retry: {:?}",
@@ -4709,7 +5155,7 @@ mod tests {
             outcome.meta.get("action").and_then(|a| a.as_str()),
             Some("released")
         );
-        assert_eq!(outcome.text, draft);
+        assert_eq!(outcome.answer.text(), draft);
     }
 
     /// The Phase-6 invariant's gate half: verify-only (retry: false)
@@ -4742,11 +5188,11 @@ mod tests {
         // ("none of them cover it") to a self-scoped hedge ("I couldn't confirm")
         // so a mis-abstain isn't a FALSE claim about the sources. The action is
         // the invariant; the wording is graceful and source-honest.
-        assert!(outcome.text.starts_with("I couldn't confirm"));
-        assert!(!outcome.text.contains("not going to state"));
+        assert!(outcome.answer.text().starts_with("I couldn't confirm"));
+        assert!(!outcome.answer.text().contains("not going to state"));
         // Must NOT assert a universal negative about the sources' content.
-        assert!(!outcome.text.contains("none of them"));
-        assert!(!outcome.text.contains("not recorded there"));
+        assert!(!outcome.answer.text().contains("none of them"));
+        assert!(!outcome.answer.text().contains("not recorded there"));
     }
 
     /// Supported claims release unchanged under verify-only.
@@ -4769,7 +5215,7 @@ mod tests {
             outcome.meta.get("action").and_then(|a| a.as_str()),
             Some("released")
         );
-        assert_eq!(outcome.text, draft);
+        assert_eq!(outcome.answer.text(), draft);
     }
 
     fn native_verdict(
@@ -4973,12 +5419,12 @@ mod tests {
         // that string appearing in the released text is a synthesis call
         // that should not have happened.
         assert!(
-            !outcome.text.contains("unexpected synthesis call"),
+            !outcome.answer.text().contains("unexpected synthesis call"),
             "the tombstoned path must make NO synthesis call — the released \
              text carries the mock's sentinel, so a rewrite ran"
         );
         assert!(
-            outcome.text.contains("Harbour Row"),
+            outcome.answer.text().contains("Harbour Row"),
             "the released text must still be the audited draft"
         );
     }
@@ -5128,15 +5574,15 @@ mod tests {
              structural, not remembered"
         );
         assert!(
-            !outcome.text.contains("Crescent Lane"),
+            !outcome.answer.text().contains("Crescent Lane"),
             "the fabricated sentence is gone"
         );
         assert!(
-            outcome.text.contains("Harbour Row"),
+            outcome.answer.text().contains("Harbour Row"),
             "the verified prose survives"
         );
         assert!(
-            !outcome.text.contains("unexpected synthesis call"),
+            !outcome.answer.text().contains("unexpected synthesis call"),
             "no full re-synthesis ran — surgery handled it"
         );
         assert!(

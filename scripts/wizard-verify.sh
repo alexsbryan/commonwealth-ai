@@ -227,7 +227,14 @@ if [[ -n "$CHILD" && "$PIDFILE" == "$CHILD" ]]; then
 else
   bad "pidfile '$PIDFILE' != child pid '$CHILD'"
 fi
-[[ -f "$FRESH/.sovereign/daemon.lock" ]] && ok "run lock present" || bad "no run lock file"
+# The run lock lives in the DATA ROOT (re-keyed off $HOME 2026-08-24), which on
+# a fresh wizard run is the branded dir — or the legacy one on a machine the
+# rebrand fallback picked. Accept either, same as the config check below.
+if [[ -f "$FRESH/.svrnmesh/daemon.lock" || -f "$FRESH/.sovereign/daemon.lock" ]]; then
+  ok "run lock present"
+else
+  bad "no run lock file"
+fi
 # The rebrand's canonical config path is ~/.svrnmesh/config.toml; the
 # legacy ~/.sovereign/ path also satisfies load(). Accept either.
 if [[ -f "$FRESH/.svrnmesh/config.toml" || -f "$FRESH/.sovereign/config.toml" ]]; then

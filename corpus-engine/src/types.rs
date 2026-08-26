@@ -629,6 +629,26 @@ pub struct ScoredChunk {
     /// embedding) and for legacy callers that didn't request it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub vector_distance: Option<f32>,
+    /// Where this chunk came from — see [`Provenance`](crate::index::ChunkProvenance).
+    ///
+    /// A FIELD rather than two keys in [`Self::metadata`], because whether a
+    /// chunk may ground a claim was a string compare on an untyped map:
+    /// `metadata["custody"]` set the egress floor and
+    /// `metadata["source"] == "raptor"` decided quotability, written at one
+    /// site and read at roughly fifteen (TOPOLOGY §10 phase 9 rung 9.1,
+    /// hazard 1). The `Acquired` arm has no public constructor, so a chunk
+    /// this process built can only say so.
+    ///
+    /// Required — there is no `Default`. A chunk that could omit its
+    /// provenance would be a manufactured chunk passing as an acquired one by
+    /// omission, which is the state the rung removes.
+    ///
+    /// `skip_deserializing` because `Provenance` deliberately has no
+    /// `Deserialize` (a derive is a public constructor). `ScoredChunk`'s own
+    /// `Deserialize` is vestigial — no production path deserializes one — and
+    /// what it yields is honestly "this process did not acquire it".
+    #[serde(skip_deserializing, default = "crate::index::ChunkProvenance::off_the_wire")]
+    pub provenance: crate::index::ChunkProvenance,
 }
 
 // ─── Ingest Result ──────────────────────────────────────

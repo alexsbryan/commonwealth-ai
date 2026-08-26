@@ -19,14 +19,12 @@ use std::sync::Mutex;
 use async_trait::async_trait;
 
 use sovereign_contracts::error::Result;
-use sovereign_contracts::recipe::notes::{
-    NoteRow, NoteScope, NoteSource, RecipeNotes, ScopeFilter,
-};
+use sovereign_contracts::recipe::notes::{Note, NoteScope, NoteSource, RecipeNotes, ScopeFilter};
 
 /// In-memory [`RecipeNotes`]: append-only rows behind a mutex.
 #[derive(Default)]
 pub(crate) struct InMemoryRecipeNotes {
-    rows: Mutex<Vec<NoteRow>>,
+    rows: Mutex<Vec<Note>>,
 }
 
 impl InMemoryRecipeNotes {
@@ -55,7 +53,7 @@ impl RecipeNotes for InMemoryRecipeNotes {
         let mut rows = self.rows.lock().unwrap();
         let seq = rows.len();
         let id = format!("note-{}", seq + 1);
-        rows.push(NoteRow {
+        rows.push(Note {
             id: id.clone(),
             kind: kind.to_string(),
             content: content.to_string(),
@@ -89,10 +87,10 @@ impl RecipeNotes for InMemoryRecipeNotes {
         limit: usize,
         include_retired: bool,
         scope_filter: &ScopeFilter,
-    ) -> Result<Vec<NoteRow>> {
+    ) -> Result<Vec<Note>> {
         let rows = self.rows.lock().unwrap();
         let scope_strs: Vec<&str> = scope_filter.scopes.iter().map(|s| s.as_str()).collect();
-        let out: Vec<NoteRow> = rows
+        let out: Vec<Note> = rows
             .iter()
             .rev() // newest first (rows are pushed oldest → newest)
             .filter(|r| include_retired || r.retired_at.is_none())

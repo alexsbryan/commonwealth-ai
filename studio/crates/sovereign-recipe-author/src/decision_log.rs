@@ -311,18 +311,6 @@ mod tests {
         (notes, features, dir)
     }
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn writes_a_decision_with_payload() {
         let (notes, features, _dir) = fresh_stores().await;
@@ -340,7 +328,7 @@ mod tests {
                     "attribution": "partner",
                     "alternatives_considered": ["judge co-authorship overlap"]
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -384,7 +372,7 @@ mod tests {
                     "kind": "tuesday_choice",
                     "summary": "x"
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();
@@ -412,7 +400,7 @@ mod tests {
                     "kind": kind,
                     "summary": format!("a {kind}")
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_or_else(|e| panic!("{kind}: {e}"));

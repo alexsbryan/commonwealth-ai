@@ -7,14 +7,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteSource, NoteStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Kinds the tool admits in `validate()`. Single source of truth for
 /// the schema-`enum` field, the validator, and any future test that
@@ -42,156 +41,30 @@ impl WriteNoteTool {
     }
 }
 
-#[async_trait]
-impl Tool for WriteNoteTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "note".to_string(),
-            name: "Write Note".to_string(),
-            description: "Persist a working note that survives across sessions. \
-                          Use to record decisions, failed attempts, known invariants, \
-                          and open tasks. Notes tagged with symbols or files are \
-                          retrieved by read_notes when you revisit that code. \
-                          Use kind='todo' for cross-session tasks — they appear \
-                          in the server startup summary."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": [
-                            "decision", "attempt", "invariant", "todo",
-                            "commitment", "follow_up", "goal"
-                        ],
-                        "description": "decision=architectural choice, attempt=failed approach, \
-                                        invariant=must-not-break constraint, todo=open task, \
-                                        commitment=promise made to a named person/org \
-                                        (relational), follow_up=temporal marker tied to a \
-                                        named entity (relational), goal=declared desired \
-                                        outcome with success criterion (strategic)"
-                    },
-                    "related_entity": {
-                        "type": "string",
-                        "description": "Optional free-text name of the Person, Organization, \
-                                        or Initiative this note is anchored to. Surfaces in \
-                                        the relational/strategic digest when the entity is \
-                                        active. Required-shape (but not enforced) for \
-                                        kind=commitment | follow_up | goal."
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "The note content. Be specific enough to be useful in a future session."
-                    },
-                    "symbols": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Symbol names this note relates to (for filtered retrieval)"
-                    },
-                    "files": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "File paths this note relates to (for filtered retrieval)"
-                    },
-                    "session_id": {
-                        "type": "string",
-                        "description": "Optional session identifier (defaults to 'mcp')"
-                    },
-                    "scope": {
-                        "type": "string",
-                        "enum": ["global", "feature", "session"],
-                        "description": "ATOS scope. Defaults to 'global'. Pass 'feature' with a \
-                                        feature_id to tag this note to an ATOS feature."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Required when scope='feature'. The id returned by \
-                                        provision_feature (same value as $SOVEREIGN_FEATURE_ID \
-                                        in the ATOS driver env)."
-                    },
-                    "supersedes": {
-                        "type": "string",
-                        "description": "Optional id of a prior note this one REPLACES. The \
-                                        superseded note is auto-retired (hidden from read_notes, \
-                                        with a 'superseded by <id>' reason) while its row is kept \
-                                        for the gossip-propagated supersedes chain. Use when a new \
-                                        decision/invariant reverses or updates an older one, so the \
-                                        two don't coexist and contradict."
-                    }
-                },
-                "required": ["kind", "content"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You've just discovered a non-obvious constraint — something that would take another session hours to re-derive. Record it now as an invariant so it surfaces the next time anyone touches this code.".into(),
-                    call: serde_json::json!({
-                        "kind": "invariant",
-                        "content": "EmbedSlot must use n_gpu_layers=0, offload_kqv=false, and op_offload=false. The GGML Metal scheduler crashes on embedding tensor graphs (GGML_ASSERT buf_src) without all three.",
-                        "symbols": ["EmbedSlot", "EmbeddedLlamaCpp"],
-                        "files": ["crates/sovereign-inference/src/embedded.rs"]
-                    }),
-                },
-                ToolExample {
-                    situation: "You chose one implementation approach over others. Record the decision and reasoning so the next session doesn't relitigate it.".into(),
-                    call: serde_json::json!({
-                        "kind": "decision",
-                        "content": "Used Mutex<HashMap> for tool call counters in ToolRegistry rather than DashMap — avoids adding a dependency to sovereign-core for a non-hot path.",
-                        "symbols": ["ToolRegistry"]
-                    }),
-                },
-                ToolExample {
-                    situation: "You tried an approach that failed in a non-obvious way. Record it so the next session skips straight to what works.".into(),
-                    call: serde_json::json!({
-                        "kind": "attempt",
-                        "content": "Tried with_split_mode(LlamaSplitMode::None) to force CPU-only for embedding — has no effect on compute graph routing. op_offload=false is required.",
-                        "symbols": ["EmbedSlot"]
-                    }),
-                },
-            ],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "id":         { "type": "string" },
-                    "kind":       { "type": "string" },
-                    "scope":      { "type": "string" },
-                    "feature_id": { "type": ["string", "null"] },
-                    "supersedes": { "type": ["string", "null"] },
-                    "retired":    { "type": ["string", "null"] }
-                }
-            })),
-        }
+impl WriteNoteTool {
+    /// Bind this tool's state to its `note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("note", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        let kind = params
-            .get("kind")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("write_note requires 'kind'".to_string()))?;
-        if !WRITE_NOTE_KINDS.contains(&kind) {
-            return Err(Error::InvalidInput(format!(
-                "invalid kind '{kind}': must be one of {}",
-                WRITE_NOTE_KINDS.join(", ")
-            )));
-        }
-        params
-            .get("content")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                Error::InvalidInput("write_note requires non-empty 'content'".to_string())
-            })?;
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `note`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let kind = params
             .get("kind")
             .and_then(|v| v.as_str())
@@ -299,6 +172,28 @@ impl Tool for WriteNoteTool {
             "retired": retired,
         })))
     }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        let kind = params
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("write_note requires 'kind'".to_string()))?;
+        if !WRITE_NOTE_KINDS.contains(&kind) {
+            return Err(Error::InvalidInput(format!(
+                "invalid kind '{kind}': must be one of {}",
+                WRITE_NOTE_KINDS.join(", ")
+            )));
+        }
+        params
+            .get("content")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| {
+                Error::InvalidInput("write_note requires non-empty 'content'".to_string())
+            })?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -337,7 +232,7 @@ mod tests {
 
         let a_id = id_of(
             &tool
-                .execute(
+                .run(
                     &json!({"kind": "decision", "content": "A: original decision"}),
                     &ctx(),
                 )
@@ -354,7 +249,7 @@ mod tests {
             .is_none());
 
         let out_b = tool
-            .execute(
+            .run(
                 &json!({"kind": "decision", "content": "B: replaces A", "supersedes": a_id}),
                 &ctx(),
             )
@@ -386,7 +281,7 @@ mod tests {
         let tool = WriteNoteTool::new(Arc::clone(&store));
 
         let out = tool
-            .execute(
+            .run(
                 &json!({"kind": "invariant", "content": "X", "supersedes": "does-not-exist"}),
                 &ctx(),
             )

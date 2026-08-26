@@ -33,7 +33,7 @@
 
 use async_trait::async_trait;
 
-use sovereign_core::types::ToolDescriptor;
+use oicp_types::ToolDescriptor;
 
 use super::{Middleware, MiddlewareError, MiddlewareSession, PipelineContext};
 use crate::openai_types::{ChatCompletionRequest, ToolDefinition, ToolFunction};
@@ -154,10 +154,10 @@ mod tests {
             description: format!("test descriptor for {id}"),
             parameters: json!({"type": "object", "properties": {}}),
             examples: Vec::new(),
-            effect: sovereign_core::types::Effect::Write,
-            idempotency: sovereign_core::types::Idempotency::Idempotent,
-            latency: sovereign_core::types::Latency::Fast,
-            scope: sovereign_core::types::Scope::Persistent,
+            effect: oicp_types::Effect::Write,
+            idempotency: oicp_types::Idempotency::Idempotent,
+            latency: oicp_types::Latency::Fast,
+            scope: oicp_types::Scope::Persistent,
             output_schema: None,
         }
     }

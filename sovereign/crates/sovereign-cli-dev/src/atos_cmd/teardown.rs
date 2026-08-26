@@ -11,17 +11,24 @@
 
 use sovereign_atos::AtosOrchestrator;
 
-use super::args::split_args;
+use super::args::parse_args;
 use super::stores::open_orchestrator;
 
 pub(crate) async fn cmd_teardown(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("teardown: missing <feature-id>");
         return 2;
     };
-    let auto = flags.iter().any(|(k, _)| k == "auto");
-    let dry_run = flags.iter().any(|(k, _)| k == "dry-run");
+    let auto = flags.has("auto");
+    let dry_run = flags.has("dry-run");
 
     let orc = match open_orchestrator() {
         Ok(o) => o,

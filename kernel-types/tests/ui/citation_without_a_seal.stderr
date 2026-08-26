@@ -1,0 +1,11 @@
+error[E0451]: fields `quote`, `source` and `custody` of struct `Citation` are private
+  --> tests/ui/citation_without_a_seal.rs:31:9
+   |
+30 |     let _ = Citation {
+   |             -------- in this type
+31 |         quote: "the whale is a fish".to_string(),
+   |         ^^^^^ private field
+32 |         source: origin(),
+   |         ^^^^^^ private field
+33 |         custody: Custody::PublicWeb,
+   |         ^^^^^^^ private field

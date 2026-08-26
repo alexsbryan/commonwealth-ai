@@ -580,18 +580,31 @@ shadows = "models.primary_pool.copies"
 purpose = "Distributed-inference primary's sibling set override."
 
 [[flag]]
-name = "SOVEREIGN_USE_SUPERVISOR"
-cluster = "mesh"
-default = "unset"
-status = "shipped"
-purpose = "Route distributed-inference workers through the supervisor."
-
-[[flag]]
 name = "SOVEREIGN_WORKER_RUNNER"
 cluster = "mesh"
 default = "unset"
 status = "shipped"
 purpose = "Distributed-inference worker runner selector."
+
+# ── daemon-lifecycle ────────────────────────────────────────────────
+#
+# Which PROCESS becomes the daemon. These select a launch topology, not a
+# tunable, so they are the first candidates for `quality/TOPOLOGY.md` Phase 10
+# (an env read that selects behaviour becomes a profile variant, §6.2).
+
+[[flag]]
+name = "SOVEREIGN_USE_SUPERVISOR"
+cluster = "daemon-lifecycle"
+default = "on"
+status = "guard"
+purpose = "Desktop kill-switch for supervised-child mode: `0`/`false` drops the daemon CHILD process and runs an in-process EmbeddedDaemon instead. Unset (and the redundant legacy `1`) means supervised child — the default since DAEMON_RESILIENCE P0.1, the W1 flip. It has nothing to do with distributed-inference workers, which is what this entry claimed until 2026-08-24. CONSTRUCTION-TIME since 2026-08-25 (TOPOLOGY Phase 10): read once by `sovereign_contracts::launch::DaemonHost::from_env`, published by the desktop's `main`, and never consulted at a point of use again."
+
+[[flag]]
+name = "SOVEREIGN_FORCE_LOCAL"
+cluster = "daemon-lifecycle"
+default = "off"
+status = "guard"
+purpose = "`1` means THIS process runs the weights — the real-mode desktop harnesses and the run-local-while-a-daemon-is-up case. Implies the in-process EmbeddedDaemon, since a child daemon would contradict it, and it TAKES PRECEDENCE over SOVEREIGN_USE_SUPERVISOR. CONSTRUCTION-TIME since 2026-08-25 (TOPOLOGY Phase 10): `DaemonHost::from_env` is the one reader; `bootstrap::detect` and `supervisor_setup::is_enabled` were two independent parses of it and now read the resolved value."
 
 # ── inference ───────────────────────────────────────────────────────
 
@@ -1242,3 +1255,19 @@ cluster = "deep-research"
 default = "off"
 status = "shipped"
 purpose = "drb1-t5: the deep-research deliverable is COMPOSED (one section per planned sub-question over the whole merged evidence window, plus a closing synthesis — AIQ teardown §1.6/§6.3) instead of being rebuilt from atomised claim rows. On-form: SOVEREIGN_DR_COMPOSED_REPORT=1 (also true, case-insensitive); every other value, including unset, leaves the claim-ledger render in place. Why it exists: measured on the logged t7a flight, the ledger shape scored 2.16/10 against the DRB-I reference's 9.32 on the benchmark's own criteria, with `## Findings` empty or near-empty on all nine deliverables because 127 of 137 claims landed could-not-judge — the page was the bookkeeping rather than the answer. What does NOT change when it is on: the gate. The audit runs over the COMPOSED text (so the audited artefact and the delivered artefact are one document), the corroboration floor, custody veto and containment witness are untouched, refuted claims are marked in place, and everything unverified is named in a closing Verification section. Read in exactly one place (deep_research::composed_report_enabled). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."
+
+# ── daemon-lifecycle: host headroom, the resource that actually runs out ──
+
+[[flag]]
+name = "SOVEREIGN_HEADROOM_SOFT_MB"
+cluster = "daemon-lifecycle"
+default = "max(4096, 15% of RAM)"
+status = "guard"
+purpose = "Warn threshold for HOST memory headroom (MemAvailable on Linux; free+inactive+purgeable on macOS), sampled by memory_watch beside the process-RSS limits. Added 2026-08-25 because the RSS hard limit could not fire on the host it guarded: the kernel killed the daemon at anon-rss 36.4 GiB against a 36.0 GiB steady state, with `=auto` resolving to ~108 GB — six OOM kills in 24h and the guard silent through every one (note 05cbffed). RSS is the wrong noun; the exhausted resource was GTT (GPU-mapped host memory), which RSS does not count. Warn-only and always on: saying 'the box is running out' costs nothing and is the signal that was missing. The 15% default is derived, not chosen — the pre-restart daemon sat at 19.1 GB MemAvailable on a 125 GB box (15.3%), which is the regime the kills happened in."
+
+[[flag]]
+name = "SOVEREIGN_HEADROOM_HARD_MB"
+cluster = "daemon-lifecycle"
+default = "off"
+status = "guard"
+purpose = "Graceful self-restart floor for host memory headroom; `auto` derives half the soft threshold. Default OFF for the same reason SOVEREIGN_RSS_HARD_LIMIT_MB is: a self-SIGTERM only helps under a supervisor that relaunches (launchd KeepAlive.SuccessfulExit=false / systemd Restart=on-failure). Distinct from the inert-guard problem it was added beside — the RSS limit measured a quantity that could not reach its threshold, whereas this one is opt-in but fires on the quantity that does. The log line states explicitly that low headroom is not an accusation: headroom is shared (an unrelated gnome-shell held 12.55 GB on the measured host), and the daemon exits because it is the process that can come back cleanly, not because it is the culprit."

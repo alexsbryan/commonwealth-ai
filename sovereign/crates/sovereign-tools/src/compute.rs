@@ -1,55 +1,37 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Sandboxed Python code execution tool.
 pub struct ComputeTool;
 
-#[async_trait]
-impl Tool for ComputeTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "compute".to_string(),
-            name: "Compute".to_string(),
-            description: "Execute Python code in a sandboxed environment and return output"
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "Python code to execute"
-                    }
-                },
-                "required": ["code"]
-            }),
-            examples: vec![],
-            effect: Effect::ReadWrite,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Slow,
-            scope: Scope::Session,
-            // Python script output is script-dependent; no fixed shape.
-            output_schema: None,
-        }
+impl ComputeTool {
+    /// Bind this tool's state to its `compute` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("compute", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::Shell]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        if params.get("code").and_then(|v| v.as_str()).is_none() {
-            return Err(Error::InvalidInput(
-                "Compute requires a 'code' string parameter".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `compute`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let code = params
             .get("code")
             .and_then(|v| v.as_str())
@@ -96,5 +78,15 @@ impl Tool for ComputeTool {
                 output.status.code().unwrap_or(-1)
             )))
         }
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        if params.get("code").and_then(|v| v.as_str()).is_none() {
+            return Err(Error::InvalidInput(
+                "Compute requires a 'code' string parameter".to_string(),
+            ));
+        }
+        Ok(())
     }
 }

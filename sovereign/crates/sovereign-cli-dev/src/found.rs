@@ -99,6 +99,10 @@ pub struct Stage1Answer {
 /// Changing `id`: don't. Notes written under the old id stay
 /// under the old id. Pick a new id and add a new entry if the
 /// question reshapes.
+///
+/// NOT `sovereign_core::runtime::acquisition::CatalogEntry` (which is
+/// `pub(crate)` and names an acquisition ROUTE candidate); this is a static
+/// onboarding-question row. Same name, no shared concept.
 struct CatalogEntry {
     id: &'static str,
     prompt: &'static str,
@@ -432,6 +436,10 @@ pub fn canonical_design_path(repo_root: &Path) -> PathBuf {
 /// A named technical disagreement with 2+ defensible sides. The
 /// system presents all sides neutrally; the user picks one, leaves
 /// it open, or skips.
+///
+/// NOT `corpus_engine::enrichment::fault_lines::FaultLine`, which is a
+/// DETECTED crux between two position clusters keyed on chunk ids; this is
+/// a human-authored charter disagreement with named sides.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FaultLine {
     pub id: String,

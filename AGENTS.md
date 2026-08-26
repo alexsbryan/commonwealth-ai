@@ -233,6 +233,7 @@ These are hard to undo when skipped. Do not proceed without them.
 - **Before any non-trivial change to an existing function:** `blast("function_name", max_depth: 2)`. Know the transitive impact before touching it. The `concurrent` field in the response lists peer claims on this symbol from the work atlas — treat a non-empty `concurrent` as a collision warning, not an FYI.
 - **Before renaming a public symbol or HTTP route:** `drift_findings(query: "old_name", kind: "any")`. If any normative claim references it, the rename must update the narrative atomically. Skip this and the next drift run will surface an "anchor not in atlas" finding pointing at the rename.
 - **Before using a type from another crate:** `symbols("TypeName")` to confirm it exists and check its fields.
+- **Before minting a NEW type, trait, or enum:** `sovereign code converge noun <Name>` (~8s, read-only). It answers "does this concept already exist, and which crate owns it" across all three workspaces — the question local context cannot answer and the reason `deep_research/icd.rs` privately re-derived five register nouns that already had homes. A name already defined elsewhere is a convergence decision, not a free choice: reuse the owner's type, or rename yours apart and say which. `cargo xtask concept-gate` is the backstop, and it only sees your type after the next index.
 - **Before non-trivial edits to a hot file:** `work_in_flight(scope="<path>", match_mode="file")` to catch peer agents and humans editing the same file. Active-grade observations within the last 5 minutes mean someone is right there — coordinate, don't race. Skip this only when the change is local, mechanical, and unlikely to merge-conflict (typo, comment, isolated module).
 
 ### Compilation and test feedback — run the scripts
@@ -346,10 +347,23 @@ trigger column is when to open it — the doc section holds the full text.
 
 ## Architecture
 
-**Three Cargo workspaces — `corpus-engine`, `sovereign`, `commonwealth` — and
-no single root `Cargo.toml`.** Each subdirectory is its own workspace, which is
-why the build/test scripts in `scripts/` are the gate and bare `cargo` from the
-repo root is not.
+**ONE Cargo workspace, declared at the repo root.** `./Cargo.toml` carries a
+`[workspace]` with 54 members — `corpus-engine`, 25 `sovereign/crates/*`, the
+`commonwealth/crates/*`, `oicp-types`, `oicp-client`, `kernel-types`,
+`quality/arch-layers`. No subdirectory declares its own `[workspace]`, and
+there is no `sovereign/Cargo.toml` at all: a `cargo` invoked from `sovereign/`
+walks UP to the root and resolves the same workspace.
+
+(This paragraph said the opposite until 2026-08-20 — "three workspaces, no
+single root `Cargo.toml`" — and used it to explain why the `scripts/` wrappers
+are the gate. The practice is right and the reason was not. **The scripts are
+the gate because they resolve the repo's real feature contract**
+(`corpus-engine/treesitter` + `sovereign-cli/dev-tools`, plus
+`sovereign-mesh/mesh-sim` on the lint side) **and carry guards bare cargo has
+no equivalent of** — the zero-test exit 4, the unattributable-run exit 5, the
+build-failure-is-a-failure rule. See "Compilation and test feedback" above.
+Believing the old claim sends you looking for manifests that do not exist and
+misprices where a crate can live, which is load-bearing during boundary work.)
 
 ```
 commonwealth-ai/

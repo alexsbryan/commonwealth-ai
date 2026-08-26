@@ -54,40 +54,124 @@ pub struct StandaloneReranker {
     slot: Arc<RerankSlot>,
 }
 
-/// Load the reranker named by `SOVEREIGN_RERANK_MODEL_PATH`, if any.
+/// What [`load_from_env`] decided about the rerank slot.
 ///
-/// **One loader for every shipping surface.** The CLI, the desktop and
-/// the hub server all reach the reranker through here, so "is a
-/// reranker installed?" has one answer per process instead of three
-/// (ARCH_PRINCIPLES §10.6). Pair the result with
-/// `sovereign_tools::corpus::rerank_config_from_env()`, which resolves
-/// the matching `SOVEREIGN_RERANK_*` knobs.
+/// Four arms rather than an `Option`, because the three ways to end up without
+/// a reranker are not the same fact and a caller has different things to say
+/// about each (ARCH §18.3 — absence is reported, never defaulted). "Nobody
+/// asked for one" and "one was asked for and refused because it does not fit"
+/// read identically through an `Option`, and the second is the one an operator
+/// has to see.
+pub enum RerankLoad {
+    /// `SOVEREIGN_RERANK_MODEL_PATH` is unset. A reranker is opt-in.
+    NotConfigured,
+    /// Loaded and ready.
+    Loaded(Arc<dyn InferenceProvider>),
+    /// **Refused before allocating.** The pre-flight said the slot does not
+    /// fit, so the allocation never happened — the point of a pre-flight gate.
+    Refused {
+        /// The full capacity report, for an operator to act on.
+        message: String,
+    },
+    /// Configured, attempted, and the load itself failed.
+    Failed {
+        /// Why.
+        message: String,
+    },
+}
+
+impl RerankLoad {
+    /// The provider, if there is one. For a caller that genuinely has nothing
+    /// different to do about the three absences.
+    pub fn provider(self) -> Option<Arc<dyn InferenceProvider>> {
+        match self {
+            Self::Loaded(p) => Some(p),
+            _ => None,
+        }
+    }
+}
+
+/// Load the reranker named by `SOVEREIGN_RERANK_MODEL_PATH`, if any — and
+/// refuse it up front when it does not fit.
 ///
-/// Soft-fail by contract: an unset variable returns `None` quietly (a
-/// reranker is opt-in), and a set-but-unloadable path returns `None`
-/// after a `warn`. Neither may block startup — retrieval simply runs
-/// the baseline fusion path. The failure IS logged, though: a
-/// misconfigured path that silently reads as "no reranker configured"
-/// is the ambiguity this function exists to remove.
-pub fn load_from_env() -> Option<Arc<dyn InferenceProvider>> {
-    let raw = std::env::var("SOVEREIGN_RERANK_MODEL_PATH").ok()?;
+/// **One loader for every shipping surface.** The CLI, the desktop and the hub
+/// server all reach the reranker through here (ARCH §10.6).
+///
+/// That sentence was in this doc comment before 2026-08-25 and was FALSE: the
+/// CLI never called this function. It carried its own load path in
+/// `chat_cmd/bootstrap.rs` — and that path had the capacity pre-flight this
+/// one did not, so of the three shipping surfaces exactly one honoured note
+/// `b57b0cd5`, the 64 GB SIGTERM incident whose whole lesson is that a slot
+/// which does not fit must be refused UP FRONT rather than discovered by the
+/// OOM killer mid-turn. A comment asserting a mirror that is not one is
+/// ARCH §7.2's smell, and this is what it cost: the desktop and the hub could
+/// each load a rerank slot alongside a resident primary with nothing checking
+/// whether the two fit together.
+///
+/// The pre-flight is now HERE, so all three inherit it from one place.
+/// `SOVEREIGN_SKIP_VRAM_CHECK` still overrides it — loudly, as before.
+///
+/// Soft-fail by contract: none of the three absences may block startup —
+/// retrieval simply runs the baseline fusion path. Each is logged and each is
+/// a distinct arm of [`RerankLoad`], so a caller with a banner can say which
+/// one happened.
+pub fn load_from_env() -> RerankLoad {
+    let Ok(raw) = std::env::var("SOVEREIGN_RERANK_MODEL_PATH") else {
+        return RerankLoad::NotConfigured;
+    };
     let path = std::path::PathBuf::from(&raw);
+
+    // NATIVE_GROUNDING.md §8 residency plan — the fit check BEFORE the slot
+    // loads. The rerank slot is process-local additional weight alongside
+    // whatever primary is already resident.
+    let hw = crate::hardware::HardwareProfile::detect();
+    let plan = [crate::capacity::SlotPlan {
+        role: "rerank".into(),
+        path: path.clone(),
+        // Matches the pool H1 scores in one batch (k <= 8) and the reranker's
+        // own batch shape during retrieval.
+        n_seq_max: 8,
+        n_ctx: 8192,
+    }];
+    let report = crate::capacity::check_fit(&plan, &hw);
+    if !report.fits {
+        if crate::capacity::check_skipped_by_env() {
+            tracing::warn!(
+                path = %path.display(),
+                "rerank capacity check FAILED but is disabled by \
+                 SOVEREIGN_SKIP_VRAM_CHECK — loading as instructed"
+            );
+        } else {
+            let message = format!(
+                "the rerank slot does not fit ({} MiB required, {} MiB \
+                 available after {} MiB reserved). Running baseline retrieval; \
+                 native grounding will report no instrument.\n{}",
+                report.total_required_mb,
+                report.available_mb,
+                report.safety_reserved_mb,
+                report.refuse_message()
+            );
+            tracing::warn!(path = %path.display(), "{message}");
+            // The allocation never happens — that is the point of the gate.
+            return RerankLoad::Refused { message };
+        }
+    }
+
     match StandaloneReranker::load(&path, ModelFamily::Reranker, None) {
         Ok(reranker) => {
             tracing::info!(
                 path = %path.display(),
                 "reranker loaded from SOVEREIGN_RERANK_MODEL_PATH"
             );
-            Some(Arc::new(reranker) as Arc<dyn InferenceProvider>)
+            RerankLoad::Loaded(Arc::new(reranker) as Arc<dyn InferenceProvider>)
         }
         Err(e) => {
-            tracing::warn!(
-                path = %path.display(),
-                error = %e,
-                "SOVEREIGN_RERANK_MODEL_PATH is set but the reranker failed to load — \
-                 running baseline retrieval without rerank"
+            let message = format!(
+                "SOVEREIGN_RERANK_MODEL_PATH is set but the reranker failed to \
+                 load ({e}) — running baseline retrieval without rerank"
             );
-            None
+            tracing::warn!(path = %path.display(), "{message}");
+            RerankLoad::Failed { message }
         }
     }
 }
@@ -110,9 +194,7 @@ impl StandaloneReranker {
                 // Honour the same llama.cpp-log-suppression policy the
                 // host daemon uses — SOVEREIGN_LLAMA_LOGS=1 to see ggml
                 // output.
-                if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
-                    b.void_logs();
-                }
+                crate::llama_logs::LlamaLogs::from_env().install(&mut b);
                 Arc::new(b)
             }
             Err(crate::llama::cpp::LLamaCppError::BackendAlreadyInitialized) => {

@@ -87,46 +87,29 @@ pub async fn run_live_pinned(
         .set_conversation_enabled_corpora(&conv_id, Some(vec![corpus.to_string()]))
         .await;
 
-    let stream_start = match pin_intent {
-        Some(intent) => {
-            session
-                .runtime
-                .handle_message_stream_as(question, &conv_id, intent)
-                .await
-        }
-        None => {
-            session
-                .runtime
-                .handle_message_stream(question, &conv_id)
-                .await
-        }
-    };
-    let raw = match stream_start {
-        Ok(handle) => {
-            let mut stream = handle.stream;
-            let mut buf = String::new();
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(chunk) => buf.push_str(&chunk),
-                    Err(e) => {
-                        eprintln!("    [live] stream error: {e}");
-                        break;
-                    }
-                }
-            }
-            buf
-        }
-        Err(sovereign_core::error::Error::NotImplemented(_)) => {
-            match session.runtime.handle_message(question, &conv_id).await {
-                Ok(resp) => resp.message.content,
-                Err(e) => {
-                    eprintln!("    [live] fallback failed: {e}");
-                    String::new()
-                }
-            }
-        }
+    // ONE turn driver (TOPOLOGY §10 phase 6). Instrument-NEUTRAL: this
+    // already drove `handle_message_stream`, so `collect_turn` — which is
+    // `serve_turn` with a collecting sink — runs the identical pipeline. What
+    // it removes is the hand-rolled drain and a fallback arm that used to
+    // re-run `handle_message` and write the question to the conversation
+    // twice.
+    //
+    // A pinned intent is a turn PARAMETER now rather than a different
+    // function to call, which is what let the three `ask` report tools stop
+    // owning turn loops as well.
+    let raw = match sovereign_core::runtime::collect_turn(
+        &session.runtime,
+        session.store.as_ref(),
+        &conv_id,
+        question,
+        sovereign_contracts::types::TurnMode::Grounded,
+        pin_intent,
+    )
+    .await
+    {
+        Ok(turn) => turn.text,
         Err(e) => {
-            eprintln!("    [live] stream start: {e}");
+            eprintln!("    [live] turn failed: {e}");
             String::new()
         }
     };

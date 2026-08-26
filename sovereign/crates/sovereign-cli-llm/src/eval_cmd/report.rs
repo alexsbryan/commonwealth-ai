@@ -617,6 +617,7 @@ mod tests {
 
     fn result(id: &str, cat: &str, src: ScoreSnapshot, facts: ScoreSnapshot) -> EvalResult {
         EvalResult {
+            error: None,
             question_id: id.into(),
             category: cat.into(),
             question: format!("Q for {id}"),

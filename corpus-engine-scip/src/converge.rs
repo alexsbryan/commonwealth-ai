@@ -17,6 +17,29 @@
 //!      and which crate could own it?                    [`dossier`]
 //!   3. Did the number go up?                            caller's ratchet
 //!
+//! ## The census counts only what adoption could retire (2026-08-21)
+//!
+//! A name defined as a type in two crates is not automatically a convergence
+//! candidate: if neither definition is reachable from outside its own crate,
+//! there is nothing to import and nothing to switch to. Measured at
+//! `b325f22c`, 239 of 275 rows (87%) were exactly that. Since 2026-08-21 a row
+//! counts toward the ratchet only when at least two crates each hold a
+//! definition another crate's PRODUCTION code ALREADY references —
+//! [`cross_crate_reached`], which carries the evidence and the two-instrument
+//! cross-check. Measured at `4f64bdb2`: 255 colliding names, 33 countable, and
+//! `quality/baselines/concepts.txt` re-minted 279 -> 33 in the same commit. The wider number
+//! did not disappear: [`Census::colliding_names`] still reports it, every row
+//! is still in [`Census::rows`], and `converge census --local` lists the ones
+//! set aside. A narrowing that hid what it removed could not be checked
+//! (§18.6).
+//!
+//! What the narrowing can now MISS, stated where it does not flatter the
+//! number: a genuine fork whose two definitions are both still local — the
+//! duplicate that was minted this week and not yet imported anywhere. It is
+//! invisible to the ratchet until someone uses it. [`crate::shape`] is the
+//! feed that sees those, because it matches on field shape and asks nothing
+//! about reach.
+//!
 //! Pure functions over `&[ScipSymbolRecord]` / `&[ScipRefRecord]` — the same
 //! inputs as [`crate::arch_metrics`] and [`crate::capability_map`]. No I/O,
 //! no embeddings, no source reads, no new dependencies.
@@ -74,35 +97,75 @@ use crate::scip_graph::{ScipRefRecord, ScipSymbolRecord};
 /// [`Census::scope`] and [`Dossier::scope`] carry them into the output: a
 /// count that travels without its method is the brittleness the convergence
 /// program exists to end (`ARCH_PRINCIPLES` §18.4).
+///
+/// Exclusions match whole path SEGMENTS. They were substrings until
+/// 2026-08-20, when the campaign's own instrument-validation rung found that
+/// `"research/"` — written for the top-level spike tree — also swallowed
+/// `sovereign-core/src/deep_research/`, the module the noun-convergence
+/// program cites as the reason it exists. Six of the ten patterns had that
+/// same shape (a bare token a longer segment can end with), so the repair is
+/// the matching rule, not the one string.
+///
+/// `external` joined the list on 2026-08-20 for the same reason `vendor` is on
+/// it — `sovereign/bench/external/` is third-party repo checkouts, and it was
+/// 68% of everything `dry_report` reported once that report started using this
+/// scope at all.
 #[derive(Debug, Clone, Serialize)]
 pub struct SourceScope {
     /// Path prefixes that count. Empty = everything not excluded.
     pub include_prefixes: Vec<String>,
-    /// Substrings that disqualify a path.
-    pub exclude_contains: Vec<String>,
+    /// Whole `/`-separated path segments that disqualify a path. A pattern
+    /// never matches a substring of a longer segment.
+    pub exclude_segments: Vec<String>,
 }
 
 impl Default for SourceScope {
     fn default() -> Self {
         Self {
             include_prefixes: Vec::new(),
-            exclude_contains: [
+            // Segment names, so no leading or trailing slash: the slashes in
+            // the old spelling were doing the anchoring by hand, and doing
+            // only half of it (`research/` anchored the right side, never the
+            // left; `/tests/` anchored both, which is why that entry never
+            // misfired).
+            exclude_segments: [
                 // Not ours.
-                "vendor/",
-                "node_modules/",
-                ".cargo-container/",
-                "research/",
+                "vendor",
+                "node_modules",
+                ".cargo-container",
+                "research",
+                // `sovereign/bench/external/` holds full third-party repo
+                // checkouts — SWE-bench task repos, RewardBench fixtures. Same
+                // rubric as `vendor`, and measured as the single largest term
+                // in the duplication report: with the segment list as it stood
+                // on 2026-08-20, `dry-report` read 1,982 groups / ~39,053
+                // redundant lines, of which 1,416 groups / ~26,687 lines were
+                // fixture repos. Excluding it lands the report at 566 groups /
+                // ~12,366 lines, which is the first-party production figure
+                // this scope claims to produce.
+                //
+                // It moves the CENSUS too, and in the direction that flatters
+                // the campaign — so it is stated here rather than only where it
+                // helps (§18.6). Measured at `285878ff`: type definitions
+                // 5,465 -> 5,139 (-326), and the ratchet number (names defined
+                // as a type in >1 crate) 278 -> 275. `Relationship` leaves the
+                // table entirely, `Verdict` drops one definition, and
+                // `ListEntry` enters the visible top rows. Three of the 278
+                // were only ever multi-crate because a fixture repo defined
+                // them. Any bar stamped before this commit is not comparable to
+                // one stamped after it.
+                "external",
                 // Build output and agent worktree shadows. The worktree clause
                 // is load-bearing: `.claude/worktrees/agent-*/` carries full
                 // copies of first-party crates and will otherwise be counted
                 // as additional definitions of every name in them.
-                "target/",
-                ".claude/",
+                "target",
+                ".claude",
                 // Not production.
-                "/tests/",
-                "/benches/",
-                "/examples/",
-                "/build.rs",
+                "tests",
+                "benches",
+                "examples",
+                "build.rs",
             ]
             .iter()
             .map(|s| s.to_string())
@@ -113,10 +176,9 @@ impl Default for SourceScope {
 
 impl SourceScope {
     pub fn admits(&self, path: &str) -> bool {
-        if self
-            .exclude_contains
-            .iter()
-            .any(|e| path.contains(e.as_str()))
+        if path
+            .split('/')
+            .any(|seg| self.exclude_segments.iter().any(|e| e == seg))
         {
             return false;
         }
@@ -149,11 +211,28 @@ pub struct TypeDef {
 #[derive(Debug, Clone, Serialize)]
 pub struct CensusRow {
     pub name: String,
-    /// Distinct crates defining this name. Length > 1 is the census criterion.
+    /// Distinct crates defining this name. Length > 1 is the collision
+    /// criterion.
     pub crates: Vec<String>,
+    /// The subset of [`Self::crates`] whose definition of this name is ALREADY
+    /// referenced from a different crate's production code. Length > 1 is the
+    /// RATCHET criterion — see [`cross_crate_reached`].
+    pub reached_crates: Vec<String>,
     pub defs: Vec<TypeDef>,
     /// Names that end or start with this one. Over-collects; see module docs.
     pub kin: Vec<String>,
+}
+
+impl CensusRow {
+    /// Can adoption ever retire this row?
+    ///
+    /// Only when at least two crates each hold a definition some other crate
+    /// already reaches: converging a name means callers switch to one of the
+    /// definitions, and a definition nothing outside its crate can name is not
+    /// a thing anyone can switch to.
+    pub fn is_reachable(&self) -> bool {
+        self.reached_crates.len() > 1
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -161,7 +240,17 @@ pub struct Census {
     pub scope: SourceScope,
     /// Every first-party production top-level type definition considered.
     pub total_type_defs: usize,
-    /// Names defined as a type in more than one crate, ranked.
+    /// Names defined as a type in more than one crate. This was the ratchet
+    /// number until 2026-08-21; it is now the population the ratchet is drawn
+    /// from, kept because a narrowing that hides what it removed cannot be
+    /// checked (§18.6).
+    pub colliding_names: usize,
+    /// …of which at least two crates' definitions are already reached across a
+    /// crate boundary. **THE RATCHET NUMBER.**
+    pub reachable_names: usize,
+    /// Every colliding name, reachable rows first. Nothing is dropped: a row
+    /// the narrowing sets aside is still here, carrying an empty or
+    /// single-entry `reached_crates` that says why (§18.3).
     pub rows: Vec<CensusRow>,
 }
 
@@ -255,6 +344,95 @@ pub fn crate_dag(
     dag
 }
 
+/// Definitions that some OTHER crate already references — the narrowing
+/// predicate, and the reason the census stopped over-reporting on 2026-08-21.
+///
+/// ## What was wrong
+///
+/// The census counted a name defined as a type in more than one crate and
+/// asked nothing about whether either definition was reachable. Measured at
+/// `b325f22c`: **239 of 275 rows (87%) named a collision no other crate could
+/// reach.** `sovereign-core::Phase` — the census's own "owner" for
+/// `sovereign-cli-dev`'s FSM `Phase` — is an enum declared INSIDE A FUNCTION
+/// BODY at `title.rs:482`; `CatalogEntry` is `pub(crate)`. There is nothing to
+/// import, so no amount of adoption can retire either row; only a rename or a
+/// deletion moves them. The cost was paid once already: an order target was
+/// derived from the wide number (nc-21, 40 -> 20) and was unreachable when it
+/// was written, because 25 of the 40 had no exported owner at all.
+///
+/// ## The predicate, and why it is graph-only
+///
+/// A definition is REACHED when an in-scope reference names it from a file
+/// whose caller package differs from the definition's package. That is a
+/// strictly stronger claim than "could be imported": not *`pub` at top level*
+/// but *another crate is already using it*. It needs no source read, no second
+/// index pass, and no visibility column the graph does not carry.
+///
+/// ## Both instruments, because one is not a measurement (§18.4)
+///
+/// Cross-checked at index head `4f64bdb2` against a text instrument that reads
+/// the declaration line out of `git show <indexed-head>:<file>` (the working
+/// tree cannot be used — its line numbers have slid away from the index) and
+/// asks whether the name is declared `pub` at module top level:
+///
+/// | instrument | definitions of 662 | surviving rows of 255 |
+/// |---|---:|---:|
+/// | graph — reached by another crate's production code | 174 | **33** |
+/// | text — `pub` at module top level | 457 | 168 |
+///
+/// The graph's survivors are a strict SUBSET of the text's at BOTH levels
+/// (`B \ A = 0` for rows and for definitions; 9 of 662 definitions the text
+/// arm could not read). That is the expected direction and the check that says
+/// the number can be used: `pub` at top level is necessary for cross-crate
+/// reach and not sufficient, so a graph survivor the text arm calls private
+/// would mean one of them is broken.
+///
+/// The two disagreed on exactly one definition before the test-caller clause
+/// below existed, and the disagreement was the TEXT arm's: `corpus-engine`'s
+/// `QuestionType` is declared `pub` inside a macro invocation body, so it is
+/// indented and the heuristic's "column 0 means top level" rule scored it
+/// local. It is a good illustration of why the shipped predicate is the graph
+/// one.
+pub fn cross_crate_reached(
+    defs: &[TypeDef],
+    refs: &[ScipRefRecord],
+    scope: &SourceScope,
+) -> BTreeSet<String> {
+    let home: BTreeMap<&str, &str> = defs
+        .iter()
+        .map(|d| (d.qualified.as_str(), d.krate.as_str()))
+        .collect();
+    let mut out = BTreeSet::new();
+    for r in refs {
+        if !scope.admits(&r.file_path) {
+            continue;
+        }
+        let Some(owner) = home.get(r.callee_qualified.as_str()) else {
+            continue;
+        };
+        let Some((caller, desc)) = pkg_and_desc(&r.caller_qualified) else {
+            continue;
+        };
+        // A colocated `mod tests` sits under a `/tests/` descriptor segment
+        // even when the FILE is production, and `type_defs` already refuses to
+        // COUNT such a definition. Reach must use the same rule or a
+        // `#[cfg(test)]` import in another crate could move the production
+        // ratchet — the exact asymmetry
+        // `a_production_twin_raises_the_ratchet_and_a_test_only_twin_does_not`
+        // pins on the definition side. One decider for "what is production"
+        // (§10.6). Measured at `b0697afb`: 6 of 183 reached definitions were
+        // reached only from a test caller, moving exactly one row
+        // (`QuestionType`, 34 -> 33).
+        if desc.contains("/tests/") {
+            continue;
+        }
+        if caller != *owner {
+            out.insert(r.callee_qualified.clone());
+        }
+    }
+    out
+}
+
 fn kin_of(name: &str, all: &BTreeSet<&str>) -> Vec<String> {
     all.iter()
         .filter(|m| m.len() > name.len() && (m.ends_with(name) || m.starts_with(name)))
@@ -264,9 +442,21 @@ fn kin_of(name: &str, all: &BTreeSet<&str>) -> Vec<String> {
 
 // ── Verb 1: census ────────────────────────────────────────────────────────────
 
-/// Names defined as a type in more than one crate, ranked by crates spanned,
-/// then kin, then definition count.
-pub fn census(defs: &[TypeDef], scope: &SourceScope, with_kin: bool) -> Census {
+/// Names defined as a type in more than one crate, each annotated with the
+/// crates another crate already reaches, ranked reachable-first.
+///
+/// `reached` is [`cross_crate_reached`]'s output. Passing an EMPTY set is
+/// legitimate — it means "no ref table was read" — and yields a census whose
+/// [`Census::reachable_names`] is zero. Callers that have refs must pass them;
+/// this signature is why the CLI now reads the ref table for `census` and
+/// `status` (measured cost on this workspace: 0.8s -> 5.3s, no second index
+/// pass).
+pub fn census(
+    defs: &[TypeDef],
+    reached: &BTreeSet<String>,
+    scope: &SourceScope,
+    with_kin: bool,
+) -> Census {
     let all_names: BTreeSet<&str> = defs.iter().map(|d| d.name.as_str()).collect();
     let mut by_name: BTreeMap<&str, Vec<&TypeDef>> = BTreeMap::new();
     for d in defs {
@@ -280,9 +470,15 @@ pub fn census(defs: &[TypeDef], scope: &SourceScope, with_kin: bool) -> Census {
             if crates.len() < 2 {
                 return None;
             }
+            let reached_crates: BTreeSet<&str> = ds
+                .iter()
+                .filter(|d| reached.contains(d.qualified.as_str()))
+                .map(|d| d.krate.as_str())
+                .collect();
             Some(CensusRow {
                 name: name.to_string(),
                 crates: crates.into_iter().map(String::from).collect(),
+                reached_crates: reached_crates.into_iter().map(String::from).collect(),
                 defs: ds.into_iter().cloned().collect(),
                 kin: if with_kin {
                     kin_of(name, &all_names)
@@ -294,9 +490,9 @@ pub fn census(defs: &[TypeDef], scope: &SourceScope, with_kin: bool) -> Census {
         .collect();
 
     rows.sort_by(|a, b| {
-        b.crates
-            .len()
-            .cmp(&a.crates.len())
+        b.is_reachable()
+            .cmp(&a.is_reachable())
+            .then(b.crates.len().cmp(&a.crates.len()))
             .then(b.kin.len().cmp(&a.kin.len()))
             .then(b.defs.len().cmp(&a.defs.len()))
             .then(a.name.cmp(&b.name))
@@ -305,20 +501,21 @@ pub fn census(defs: &[TypeDef], scope: &SourceScope, with_kin: bool) -> Census {
     Census {
         scope: scope.clone(),
         total_type_defs: defs.len(),
+        colliding_names: rows.len(),
+        reachable_names: rows.iter().filter(|r| r.is_reachable()).count(),
         rows,
     }
 }
 
-/// The ratchet number: how many names are defined as a type in >1 crate.
-pub fn duplicate_count(defs: &[TypeDef]) -> usize {
-    let mut by_name: BTreeMap<&str, BTreeSet<&str>> = BTreeMap::new();
-    for d in defs {
-        by_name
-            .entry(d.name.as_str())
-            .or_default()
-            .insert(d.krate.as_str());
-    }
-    by_name.values().filter(|c| c.len() > 1).count()
+/// The ratchet number: how many colliding names adoption could actually
+/// retire.
+///
+/// A relay onto [`census`], not a second count. The two used to be independent
+/// loops over the same defs; once the narrowing landed that would have been
+/// two implementations of one threshold (§10.6), and the gate and the feed
+/// could have disagreed silently.
+pub fn duplicate_count(defs: &[TypeDef], reached: &BTreeSet<String>, scope: &SourceScope) -> usize {
+    census(defs, reached, scope, false).reachable_names
 }
 
 // ── Verb 2: dossier ───────────────────────────────────────────────────────────
@@ -430,60 +627,110 @@ fn render_scope(scope: &SourceScope, out: &mut String) {
     } else {
         out.push_str(&scope.include_prefixes.join(", "));
     }
-    out.push_str(" minus ");
-    out.push_str(&scope.exclude_contains.join(" "));
+    out.push_str(" minus segments ");
+    out.push_str(&scope.exclude_segments.join(" "));
     out.push('\n');
 }
 
-pub fn render_census(c: &Census, limit: usize, with_kin: bool) -> String {
+/// The census feed. `local_only` swaps the table for the rows the narrowing
+/// set aside — the same rows, never a different report.
+pub fn render_census(c: &Census, limit: usize, with_kin: bool, local_only: bool) -> String {
     let mut s = String::new();
     render_scope(&c.scope, &mut s);
+    let set_aside = c.colliding_names - c.reachable_names;
+    let one_owner = c
+        .rows
+        .iter()
+        .filter(|r| r.reached_crates.len() == 1)
+        .count();
     s.push_str(&format!(
         "\nfirst-party production type definitions : {}\n",
         c.total_type_defs
     ));
     s.push_str(&format!(
-        "names defined as a type in >1 crate     : {}   <- the ratchet number\n",
-        c.rows.len()
+        "names defined as a type in >1 crate     : {}\n",
+        c.colliding_names
     ));
+    s.push_str(&format!(
+        "  reachable — >=2 crates' defs are already used by another crate's\n\
+         \x20              production code\n\
+         \x20                                       : {:<5} <- the ratchet number\n",
+        c.reachable_names
+    ));
+    s.push_str(&format!(
+        "  set aside — fewer than two crates' defs are reached\n\
+         \x20                                       : {set_aside:<5} ({})\n",
+        if local_only {
+            "listed below"
+        } else {
+            "--local to list"
+        }
+    ));
+    // What the narrowing MISSES, printed next to what it removes. A row with
+    // exactly one reached definition is still convergible — the local copies
+    // fold into the one type other crates already import — and the >=2 rule
+    // does not count it. Saying so here rather than only in the direction the
+    // narrowing was meant to fix is §18.6.
+    s.push_str(&format!(
+        "    of those, one crate's def IS reached: {one_owner:<5} still convergible \
+         (fold the local copies\n\
+         \x20                                         into it) — not counted by the ratchet\n"
+    ));
+    let shown: Vec<&CensusRow> = c
+        .rows
+        .iter()
+        .filter(|r| r.is_reachable() != local_only)
+        .collect();
     if with_kin {
-        let kin: usize = c.rows.iter().map(|r| r.kin.len()).sum();
+        let kin: usize = shown.iter().map(|r| r.kin.len()).sum();
         s.push_str(&format!(
-            "morphological kin of those names        : {kin}   (over-collects by design — see `converge noun`)\n"
+            "morphological kin of the rows below      : {kin}   (over-collects by design — see `converge noun`)\n"
         ));
     }
     s.push('\n');
     if with_kin {
-        s.push_str("crates  defs   kin  name\n------  ----  ----  ----\n");
+        s.push_str("crates  reach  defs   kin  name\n------  -----  ----  ----  ----\n");
     } else {
-        s.push_str("crates  defs  name\n------  ----  ----\n");
+        s.push_str("crates  reach  defs  name\n------  -----  ----  ----\n");
     }
-    for r in c.rows.iter().take(limit) {
+    for r in shown.iter().take(limit) {
         if with_kin {
             s.push_str(&format!(
-                "{:>6}  {:>4}  {:>4}  {}\n",
+                "{:>6}  {:>5}  {:>4}  {:>4}  {}\n",
                 r.crates.len(),
+                r.reached_crates.len(),
                 r.defs.len(),
                 r.kin.len(),
                 r.name
             ));
         } else {
             s.push_str(&format!(
-                "{:>6}  {:>4}  {}\n",
+                "{:>6}  {:>5}  {:>4}  {}\n",
                 r.crates.len(),
+                r.reached_crates.len(),
                 r.defs.len(),
                 r.name
             ));
         }
     }
-    if c.rows.len() > limit {
+    if shown.len() > limit {
         s.push_str(&format!(
             "\n... {} more (--limit 0 for all)\n",
-            c.rows.len() - limit
+            shown.len() - limit
         ));
     }
-    s.push_str("\nSame name is not same concept — this DISCOVERS, a human DISPOSITIONS.\n");
-    s.push_str("Next: `svrn code converge noun <Name>` for one row's dossier.\n");
+    if local_only {
+        s.push_str(
+            "\nThese rows are NOT counted by the ratchet and adoption cannot retire them:\n\
+             every definition is module-private, `pub(crate)`, declared inside a function\n\
+             body, or simply not imported anywhere yet. There is nothing to switch to.\n\
+             Only a rename or a deletion moves one — and `converge shape` is the verb\n\
+             that finds the renamed forks a name census cannot see.\n",
+        );
+    } else {
+        s.push_str("\nSame name is not same concept — this DISCOVERS, a human DISPOSITIONS.\n");
+        s.push_str("Next: `svrn code converge noun <Name>` for one row's dossier.\n");
+    }
     s
 }
 
@@ -585,6 +832,9 @@ mod tests {
             callee_qualified: format!("rust-analyzer cargo {to_pkg} 0.1.0 {to_desc}"),
             file_path: file.into(),
             line: 1,
+            start_col: -1,
+            end_line: -1,
+            end_col: -1,
             ref_kind: "direct".into(),
         }
     }
@@ -627,6 +877,66 @@ mod tests {
         assert!(!s.admits("research/spike/src/lib.rs"));
     }
 
+    /// The campaign's motivating file must be visible to the campaign's own
+    /// instrument. `sovereign-core/src/deep_research/icd.rs` is the specimen
+    /// the noun-convergence program cites — five register nouns re-derived
+    /// privately there — and until 2026-08-20 the census could not see it,
+    /// because the exclusion list matched `"research/"` as a SUBSTRING and
+    /// `deep_research/` ends in it. `converge noun <X>` inherits this scope, so
+    /// the blind spot made the pre-flight oracle answer "no such concept" in
+    /// the one direction that is unsafe (§18.3 — absence is never defaulted).
+    #[test]
+    fn deep_research_is_not_the_research_spike_tree() {
+        let s = SourceScope::default();
+        assert!(s.admits("sovereign/crates/sovereign-core/src/deep_research/icd.rs"));
+        // …while the top-level spike tree the pattern was actually written for
+        // stays excluded. It is repo-relative with no leading slash, which is
+        // why the fix cannot simply be to anchor the pattern as `/research/`.
+        assert!(!s.admits("research/spike/src/lib.rs"));
+        assert!(!s.admits("research/enrichment-spikes/x/y.rs"));
+    }
+
+    /// The whole list, both arms. `deep_research` was the entry that bit, but
+    /// six of the ten patterns had the identical shape — a bare token that a
+    /// LONGER segment can end with. Fixed as semantics (segment equality), not
+    /// as a patch to one string.
+    #[test]
+    fn every_exclusion_matches_a_whole_segment_not_a_substring() {
+        let s = SourceScope::default();
+        // Longer segments that merely END with an excluded token are source.
+        for admitted in [
+            "sovereign/crates/sovereign-core/src/deep_research/icd.rs",
+            "sovereign/crates/a/src/xvendor/x.rs",
+            "sovereign/crates/a/src/my_target/x.rs",
+            "sovereign/crates/a/src/prebuild.rs",
+            // `external` is a segment, so a module or file merely NAMED for it
+            // is still source.
+            "sovereign/crates/a/src/external_api.rs",
+            "sovereign/crates/a/src/api_external/mod.rs",
+        ] {
+            assert!(s.admits(admitted), "must be counted: {admitted}");
+        }
+        // …and the trees the patterns were written for still go.
+        for excluded in [
+            "research/spike/src/lib.rs",
+            "vendor/foo/src/lib.rs",
+            "node_modules/x/y.rs",
+            ".cargo-container/x.rs",
+            "target/debug/build/x.rs",
+            ".claude/worktrees/agent-a/sovereign/crates/x/src/lib.rs",
+            "sovereign/crates/a/tests/e2e.rs",
+            "sovereign/crates/a/benches/b.rs",
+            "sovereign/crates/a/examples/e.rs",
+            "sovereign/crates/a/build.rs",
+            // Third-party fixture repos vendored under the bench tree — 68% of
+            // everything `dry_report` reported before this entry existed.
+            "sovereign/bench/external/swebench/repos/django/django/db/models/sql/query.py",
+            "sovereign/bench/external/rewardbench2/run.py",
+        ] {
+            assert!(!s.admits(excluded), "must be excluded: {excluded}");
+        }
+    }
+
     #[test]
     fn colocated_mod_tests_types_are_out_of_scope() {
         // The FILE is production; the descriptor says `mod tests`. A test
@@ -651,6 +961,17 @@ mod tests {
         assert_eq!(type_defs(&syms, &SourceScope::default()).len(), 1);
     }
 
+    /// One in-scope reference from `user` to `pkg`'s definition of `desc`.
+    fn used_by(user: &str, pkg: &str, desc: &str) -> ScipRefRecord {
+        rf(
+            user,
+            "f().",
+            pkg,
+            desc,
+            &format!("sovereign/crates/{user}/src/u.rs"),
+        )
+    }
+
     #[test]
     fn census_reports_only_names_spanning_more_than_one_crate() {
         let syms = vec![
@@ -662,12 +983,213 @@ mod tests {
             sym("crate_a", "p/Twice#", "a/src/p.rs", 40),
             sym("crate_a", "q/Twice#", "a/src/q.rs", 50),
         ];
-        let defs = type_defs(&syms, &SourceScope::default());
-        let c = census(&defs, &SourceScope::default(), false);
+        let scope = SourceScope::default();
+        let defs = type_defs(&syms, &scope);
+        let refs = vec![
+            used_by("cli", "crate_a", "m/Verdict#"),
+            used_by("cli", "crate_b", "n/Verdict#"),
+        ];
+        let reached = cross_crate_reached(&defs, &refs, &scope);
+        let c = census(&defs, &reached, &scope, false);
         assert_eq!(c.total_type_defs, 5);
         assert_eq!(c.rows.len(), 1);
         assert_eq!(c.rows[0].name, "Verdict");
-        assert_eq!(duplicate_count(&defs), 1);
+        assert_eq!(c.colliding_names, 1);
+        assert_eq!(c.reachable_names, 1);
+        assert_eq!(duplicate_count(&defs, &reached, &scope), 1);
+    }
+
+    /// The narrowing, with the failing input named (§18.1).
+    ///
+    /// Both halves of the specimen the census got wrong: `Phase` is declared
+    /// inside a function body in one crate and `pub(crate)` in the other, so
+    /// nothing outside either crate can name either definition — it is a
+    /// collision between two local helpers, and no amount of adoption retires
+    /// it. `Verdict` is the same COLLISION shape and a genuine candidate,
+    /// because both definitions are already imported elsewhere.
+    #[test]
+    fn a_collision_no_other_crate_reaches_is_not_counted() {
+        let scope = SourceScope::default();
+        let syms = vec![
+            sym(
+                "core",
+                "title/Phase#",
+                "sovereign/crates/core/src/t.rs",
+                482,
+            ),
+            sym("dev", "fsm/Phase#", "sovereign/crates/dev/src/f.rs", 40),
+            sym("core", "m/Verdict#", "sovereign/crates/core/src/m.rs", 10),
+            sym("mesh", "n/Verdict#", "sovereign/crates/mesh/src/n.rs", 20),
+        ];
+        let defs = type_defs(&syms, &scope);
+        let refs = vec![
+            // `Phase` is used only inside its own crate, on both sides.
+            rf(
+                "core",
+                "g().",
+                "core",
+                "title/Phase#",
+                "sovereign/crates/core/src/t.rs",
+            ),
+            rf(
+                "dev",
+                "g().",
+                "dev",
+                "fsm/Phase#",
+                "sovereign/crates/dev/src/f.rs",
+            ),
+            // `Verdict`'s two definitions are each imported by a third crate.
+            used_by("cli", "core", "m/Verdict#"),
+            used_by("eval", "mesh", "n/Verdict#"),
+        ];
+        let reached = cross_crate_reached(&defs, &refs, &scope);
+        let c = census(&defs, &reached, &scope, false);
+
+        assert_eq!(c.colliding_names, 2, "both names still collide");
+        assert_eq!(c.reachable_names, 1, "only one can be retired by adoption");
+        assert_eq!(duplicate_count(&defs, &reached, &scope), 1);
+
+        // Reachable first, and the set-aside row is REPORTED, not dropped.
+        assert_eq!(c.rows[0].name, "Verdict");
+        assert!(c.rows[0].is_reachable());
+        assert_eq!(c.rows[1].name, "Phase");
+        assert!(!c.rows[1].is_reachable());
+        assert!(c.rows[1].reached_crates.is_empty());
+        assert!(render_census(&c, 40, false, true).contains("Phase"));
+        assert!(!render_census(&c, 40, false, false).contains("Phase"));
+    }
+
+    /// One reached definition is not enough: converging needs two crates that
+    /// can each be switched TO or AWAY FROM. The arm that fails if the
+    /// predicate is ever relaxed to `any`.
+    #[test]
+    fn one_reached_definition_and_one_local_one_is_still_not_countable() {
+        let scope = SourceScope::default();
+        let syms = vec![
+            sym("core", "m/Config#", "sovereign/crates/core/src/m.rs", 10),
+            sym("mesh", "n/Config#", "sovereign/crates/mesh/src/n.rs", 20),
+        ];
+        let defs = type_defs(&syms, &scope);
+        let refs = vec![used_by("cli", "core", "m/Config#")];
+        let reached = cross_crate_reached(&defs, &refs, &scope);
+        let c = census(&defs, &reached, &scope, false);
+        assert_eq!(c.colliding_names, 1);
+        assert_eq!(c.reachable_names, 0);
+        assert_eq!(c.rows[0].reached_crates, vec!["core"]);
+    }
+
+    /// The ratchet's two arms, side by side — the pair that decides whether
+    /// `converge status` goes red. The gate is armed against ADDITIONS, so
+    /// what must be shown is the DELTA, not the absolute count: a production
+    /// twin in a second crate moves it by exactly one, and a `#[cfg(test)]`
+    /// twin of the same name moves it by zero. Watched red 2026-08-19 live
+    /// (272 -> 273); pinned here so it stays that way (§18.1: a check with no
+    /// failing input you can name is not a check).
+    ///
+    /// Since the 2026-08-21 narrowing the twin must also be REACHED to move
+    /// the number, so every arm carries the reference that makes it so.
+    #[test]
+    fn a_production_twin_raises_the_ratchet_and_a_test_only_twin_does_not() {
+        let scope = SourceScope::default();
+        let syms = vec![
+            sym("crate_a", "m/Register#", "sovereign/crates/a/src/m.rs", 10),
+            sym("crate_a", "m/Solo#", "sovereign/crates/a/src/m.rs", 20),
+        ];
+        let base_refs = vec![used_by("cli", "crate_a", "m/Register#")];
+        let count = |syms: &[ScipSymbolRecord], refs: &[ScipRefRecord]| {
+            let defs = type_defs(syms, &scope);
+            let reached = cross_crate_reached(&defs, refs, &scope);
+            duplicate_count(&defs, &reached, &scope)
+        };
+        let before = count(&syms, &base_refs);
+        assert_eq!(before, 0, "one crate, no twins");
+
+        // RED: the same noun minted a second time, in another crate, and used.
+        let mut added = syms.clone();
+        added.push(sym(
+            "crate_b",
+            "n/Register#",
+            "sovereign/crates/b/src/n.rs",
+            30,
+        ));
+        let mut added_refs = base_refs.clone();
+        added_refs.push(used_by("cli", "crate_b", "n/Register#"));
+        assert_eq!(
+            count(&added, &added_refs),
+            before + 1,
+            "a cross-crate twin that another crate already reaches is exactly \
+             the +1 the ratchet fires on"
+        );
+
+        // GREEN: same name, same second crate, but under `#[cfg(test)] mod
+        // tests` — a test helper is not a concept the register owns, and a
+        // ratchet that fired on one would be disabled inside a week.
+        let mut test_only = syms.clone();
+        test_only.push(sym(
+            "crate_b",
+            "n/tests/Register#",
+            "sovereign/crates/b/src/n.rs",
+            30,
+        ));
+        assert_eq!(
+            count(&test_only, &added_refs),
+            before,
+            "a #[cfg(test)] twin must not move the ratchet"
+        );
+
+        // …and neither does a twin under `tests/`, `benches/` or `examples/`,
+        // which the scope drops by path rather than by descriptor.
+        let mut out_of_tree = syms;
+        out_of_tree.push(sym("crate_b", "n/Register#", "b/tests/e2e.rs", 30));
+        assert_eq!(count(&out_of_tree, &added_refs), before);
+    }
+
+    /// The reference has to CROSS a crate boundary, and it has to come from an
+    /// in-scope file. A type used only by its own crate's tests is not reached.
+    #[test]
+    fn only_an_in_scope_cross_crate_reference_counts_as_reach() {
+        let scope = SourceScope::default();
+        let syms = vec![sym(
+            "core",
+            "m/Verdict#",
+            "sovereign/crates/core/src/m.rs",
+            10,
+        )];
+        let defs = type_defs(&syms, &scope);
+
+        let same_crate = vec![rf(
+            "core",
+            "g().",
+            "core",
+            "m/Verdict#",
+            "sovereign/crates/core/src/other.rs",
+        )];
+        assert!(cross_crate_reached(&defs, &same_crate, &scope).is_empty());
+
+        let from_a_test = vec![rf(
+            "cli",
+            "t().",
+            "core",
+            "m/Verdict#",
+            "sovereign/crates/cli/tests/e2e.rs",
+        )];
+        assert!(cross_crate_reached(&defs, &from_a_test, &scope).is_empty());
+
+        // …and a COLOCATED `mod tests` in another crate, whose file is
+        // production and whose descriptor is not. Six live definitions were
+        // reached only this way at `b0697afb`; counting them would let a
+        // `#[cfg(test)]` import move the production ratchet.
+        let from_a_colocated_test = vec![rf(
+            "cli",
+            "m/tests/t().",
+            "core",
+            "m/Verdict#",
+            "sovereign/crates/cli/src/m.rs",
+        )];
+        assert!(cross_crate_reached(&defs, &from_a_colocated_test, &scope).is_empty());
+
+        let real = vec![used_by("cli", "core", "m/Verdict#")];
+        assert_eq!(cross_crate_reached(&defs, &real, &scope).len(), 1);
     }
 
     #[test]
@@ -679,8 +1201,9 @@ mod tests {
             sym("crate_d", "p/VerdictRow#", "d/src/p.rs", 40),
             sym("crate_e", "q/Unrelated#", "e/src/q.rs", 50),
         ];
-        let defs = type_defs(&syms, &SourceScope::default());
-        let c = census(&defs, &SourceScope::default(), true);
+        let scope = SourceScope::default();
+        let defs = type_defs(&syms, &scope);
+        let c = census(&defs, &BTreeSet::new(), &scope, true);
         assert_eq!(c.rows[0].kin, vec!["GateVerdict", "VerdictRow"]);
     }
 

@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use corpus_engine::{CorpusEngine, ReconstructionMethod};
+use corpus_engine::{Corpus, CorpusEngine, ReconstructionMethod};
 
 use super::fmt::human_bytes;
 
@@ -233,12 +233,21 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
         .map(|cfg| cfg.data.dir)
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
-    let canonical_path = index_dir.join(&corpus_id);
+    // `Corpus` is corpus-engine's published noun for the on-disk layout —
+    // canonical root, partition prefix, meta sidecar. This command used to
+    // spell all three by hand.
+    let Some(corpus) = Corpus::named(&index_dir, &corpus_id) else {
+        // Refused, not defaulted: `index_dir.join("")` is the index ROOT, so an
+        // empty id used to mean "every corpus on this node" (ARCH §18.3).
+        eprintln!("corpus id must not be empty");
+        return 1;
+    };
+    let canonical_path = corpus.root();
 
     // Refuse to clobber an existing canonical. If the user genuinely
     // wants to rebuild from partitions, they can `corpus remove` the
     // canonical first.
-    if canonical_path.join("_corpus_meta.json").exists() {
+    if corpus.is_installed() {
         eprintln!(
             "Canonical index already exists at {}.\n\
              merge-partitions never clobbers existing canonical data. If you \
@@ -253,7 +262,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
     // peer-partition, doesn't matter — we own the chunks once they're
     // on local disk, and merge_shards dedupes by content_hash so
     // overlap between partitions is collapsed automatically.
-    let prefix = format!("{corpus_id}-partition-");
+    let prefix = corpus.partition_prefix();
     let mut partitions: Vec<(PathBuf, String)> = Vec::new();
     match std::fs::read_dir(&index_dir) {
         Ok(entries) => {
@@ -269,7 +278,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
                 let Some(suffix) = name_str.strip_prefix(&prefix) else {
                     continue;
                 };
-                if !path.join("_corpus_meta.json").exists() {
+                if !Corpus::meta_in(&path).exists() {
                     continue;
                 }
                 partitions.push((path, suffix.to_string()));
@@ -339,7 +348,7 @@ pub(super) async fn cmd_corpus_merge_partitions(args: &[String]) -> i32 {
         // Read total_shards + scope directly from the meta JSON since
         // they're not exposed via IndexInfo. Falls back to None on any
         // parse error — fine, we'll just not stamp them on canonical.
-        let raw = std::fs::read_to_string(path.join("_corpus_meta.json")).unwrap_or_default();
+        let raw = std::fs::read_to_string(Corpus::meta_in(&path)).unwrap_or_default();
         let meta_v: serde_json::Value =
             serde_json::from_str(&raw).unwrap_or(serde_json::Value::Null);
         let total_shards = meta_v["total_shards"].as_u64().map(|n| n as usize);
@@ -650,14 +659,18 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
         return 1;
     };
 
-    // Resolve the sovereign index dir: same logic as the daemon uses.
-    let index_dir = sovereign_contracts::rebrand::mesh_data_dir().join("indexes");
+    // Resolve the sovereign index dir: same root the daemon's corpus engine
+    // writes to (`~/.svrnmesh/indexes`). This said `mesh_data_dir()` until
+    // 2026-08-24 and the comment claimed it matched the daemon — it did not.
+    // `alignment_cmd::mesh_indexes_dir` made the same correction on 2026-07-24
+    // after a fully-materialized 1930-chunk ingest reported "no local corpus".
+    let index_dir = sovereign_cli_shared::dirs::sovereign_indexes();
 
     // Build a no-op embed function — reconstruction reads metadata only.
     let noop_embed: corpus_engine::EmbedFn =
         Arc::new(|_text: &str| Box::pin(async { Ok(vec![0.0_f32; 0]) }));
 
-    let recipes_dir = sovereign_contracts::rebrand::mesh_data_dir().join("recipes");
+    let recipes_dir = sovereign_cli_shared::dirs::sovereign_root().join("recipes");
 
     let engine = CorpusEngine::new(recipes_dir, index_dir, noop_embed);
 
@@ -742,8 +755,7 @@ pub(super) async fn cmd_corpus_reconstruct_manifest(args: &[String]) -> i32 {
 
     // The manifest has already been written by reconstruct_source_manifest().
     // Confirm path for the user.
-    let index_path = sovereign_contracts::rebrand::mesh_data_dir()
-        .join("indexes")
+    let index_path = sovereign_cli_shared::dirs::sovereign_indexes()
         .join(&corpus_id)
         .join("_source_manifest.json");
     println!("Manifest written to: {}", index_path.display());
@@ -861,8 +873,14 @@ pub(super) async fn cmd_corpus_migrate_to_partition(args: &[String]) -> i32 {
     let self_node_id_str = self_node_id.to_string();
 
     let index_dir = data_dir.join("indexes");
-    let canonical = index_dir.join(&corpus_id);
-    let partition = index_dir.join(format!("{corpus_id}-partition-{self_node_id_str}"));
+    let Some(corpus) = Corpus::named(&index_dir, &corpus_id) else {
+        // Refused, not defaulted: `index_dir.join("")` is the index ROOT, so an
+        // empty id used to mean "every corpus on this node" (ARCH §18.3).
+        eprintln!("corpus id must not be empty");
+        return 1;
+    };
+    let canonical = corpus.root();
+    let partition = corpus.partition(&self_node_id_str);
 
     println!();
     println!("Migration plan for '{corpus_id}':");
@@ -931,7 +949,7 @@ pub(super) fn find_self_partition(
     index_dir: &std::path::Path,
     corpus_id: &str,
 ) -> Option<(PathBuf, String)> {
-    let prefix = format!("{corpus_id}-partition-");
+    let prefix = Corpus::named(index_dir, corpus_id)?.partition_prefix();
     let mut best: Option<(PathBuf, String, bool)> = None;
     let entries = std::fs::read_dir(index_dir).ok()?;
     for entry in entries.flatten() {
@@ -946,7 +964,7 @@ pub(super) fn find_self_partition(
         let Some(suffix) = name_str.strip_prefix(&prefix) else {
             continue;
         };
-        let meta_path = path.join("_corpus_meta.json");
+        let meta_path = Corpus::meta_in(&path);
         let Ok(content) = std::fs::read_to_string(&meta_path) else {
             continue;
         };
@@ -982,7 +1000,7 @@ pub(super) fn processed_shards_summary(
     index_path: &std::path::Path,
     total_override: Option<usize>,
 ) -> Option<String> {
-    let meta = std::fs::read_to_string(index_path.join("_corpus_meta.json")).ok()?;
+    let meta = std::fs::read_to_string(Corpus::meta_in(&index_path)).ok()?;
     let v: serde_json::Value = serde_json::from_str(&meta).ok()?;
     let processed: Vec<u64> = v["processed_shards"]
         .as_array()?

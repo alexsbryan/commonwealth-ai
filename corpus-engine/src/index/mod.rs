@@ -4,13 +4,18 @@
 
 mod create;
 mod enrichment;
+mod evidence;
 mod maintain;
+mod provenance;
 pub use maintain::MaintenanceStats;
 pub mod raptor;
 mod read;
 mod search;
 mod write;
 
+pub use evidence::{Evidence, EvidenceSet};
+pub use provenance::{Acquisition, ChunkProvenance};
+pub(crate) use provenance::{custody_of, grain_of};
 pub use read::NeighborWindow;
 
 use std::path::{Path, PathBuf};
@@ -659,7 +664,7 @@ pub struct FilterOverride {
 }
 
 fn meta_path(index_dir: &Path) -> std::path::PathBuf {
-    index_dir.join("_corpus_meta.json")
+    crate::corpus::Corpus::meta_in(&index_dir)
 }
 
 /// Migrate an on-disk index from `from_version` to the current schema
@@ -1970,7 +1975,7 @@ mod tests {
             "last_updated": 0,
         });
         std::fs::write(
-            index_dir.join("_corpus_meta.json"),
+            crate::corpus::Corpus::meta_in(&index_dir),
             serde_json::to_string(&legacy_meta).unwrap(),
         )
         .unwrap();

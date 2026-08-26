@@ -17,7 +17,7 @@ use futures::StreamExt;
 use sovereign_core::setup_config::EditSection;
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::{CompletionRequest, PromptShape, SamplingMode, StreamFrame};
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
+use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 use sovereign_inference::fim::build_fim_prompt;
 
 fn gated_gguf() -> Option<PathBuf> {
@@ -64,7 +64,7 @@ async fn raw_fim_round_trip_and_lcp_second_request() {
         eprintln!("SKIP: set SOVEREIGN_FIM_TEST_GGUF to a local coder gguf");
         return;
     };
-    let engine = EmbeddedLlamaCpp::load_full(&gguf, None, None, 4096, None)
+    let engine = EmbeddedLlamaCpp::load_full(&gguf, None, None, SlotWindows::uniform(4096), None)
         .expect("engine loads the coder gguf as the fast slot");
 
     // Alias-mode install: fim.path == fast path → probe on the fast

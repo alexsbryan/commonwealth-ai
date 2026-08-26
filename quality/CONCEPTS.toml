@@ -12,13 +12,13 @@
 #                                   tests/, examples/, benches/ are out of
 #                                   scope by construction, or a test helper
 #                                   named `Evidence` breaks the build)
-#   svrn converge status          — the metric, re-run live per row
+#   svrn code converge status     — the metric, re-run live per row
 #
 # THE METRIC — two levels, and numbers are MINTED, not typed (2026-08-17):
 #   headline   the register burn-down: rows converged / rows in_program.
 #              Every order's landing verdict re-runs its row's `measure`
 #              method at land time and reports before/after.
-#   feed       the D1 census (`svrn converge census`): names defined as a
+#   feed       the D1 census (`svrn code converge census`): names defined as a
 #              type in more than one FIRST-PARTY PRODUCTION crate, idiom
 #              patterns excluded. It DISCOVERS candidates and ranks them;
 #              every hit gets a `disposition`. Its raw count is not the
@@ -31,6 +31,16 @@
 #   day later the same query read 292 raw / 272 first-party-production. That
 #   drift is a design input, not an embarrassment: prose carries methods and
 #   dates, tools carry numbers.
+#   2026-08-20 (nc-0-reach, the instrument-validation rung): 272 -> 279. Not
+#   drift and not new duplication — a defect in the census's OWN scope filter.
+#   `SourceScope`'s exclusions were SUBSTRING matches, so `"research/"`,
+#   written for the top-level spike tree, also hid
+#   `sovereign-core/src/deep_research/` — the module this program cites as the
+#   reason it exists. Repaired as whole-SEGMENT matching (six of the ten
+#   patterns had the same shape; `research` was the only one whose behaviour
+#   changed on today's tree). 86 type definitions in 12 files entered scope and
+#   seven names became visibly duplicated: BudgetEntry, ClaimVerdict, Draft,
+#   Event, MockBackendImpl, TriageConfig, TriageOutcome.
 #
 # Fields
 #   name        REQUIRED. the concept, as it appears in the census.
@@ -64,13 +74,40 @@
 #   totality    REQUIRED. what must ALWAYS be true of it — the thing that
 #               makes an illegal state unrepresentable. This is the design
 #               decision; everything else is bookkeeping.
+#   gloss       REQUIRED. one line: what the noun IS, for a reader who has
+#               never seen it. Moved here 2026-08-20 (nc-15-generate) from
+#               TARGET_ARCHITECTURE.md §2, where 27 of them were hand-typed
+#               beside a status marker this file already owned — and where one
+#               noun (`Question`) was described for a register row that does
+#               not exist. The document renders this field; it no longer
+#               restates it.
+#   shape       OPTIONAL. the type sketch, as Rust, for rows whose totality is
+#               easier read as a declaration than as a sentence. Nine rows
+#               carry one. Same move, same reason: the sketch was in the
+#               document and the document was hand-maintained.
+#   home        REQUIRED. minted | planned — does the canonical path EXIST?
+#               This is not `status` and conflating the two is what broke the
+#               register. `status` is how far the MIGRATION has got; `home` is
+#               whether there is anywhere to migrate TO. Seven rows were
+#               `status = target` with a home that had existed for four days
+#               (nc-1-kernel / nc-10-judgement / nc-4-evidence landed the types
+#               in kernel-types and only nc-11-answer's own three rows were
+#               updated), so nothing distinguished them from rows whose home
+#               was genuinely unbuilt — and `canonical` is what the refactor
+#               ledger copies into every label's `dest`.
+#                 minted   a worker can `use` this path today.
+#                 planned  nothing is there yet.
+#               Enforced both directions by `svrn code refactor status` against
+#               the WORKING TREE: a `minted` row that stops resolving fails, and
+#               a `planned` row that starts resolving fails too — the second is
+#               the drift that actually happened, and it is silent without this.
 #   status      holds | partial | target
 #   in_program  true if the program does work on it. false = architectural
 #               completeness only.
 #   phase       which phase lands it. omit when in_program = false.
 #   verified_at freeze | differential | journey  (see NOUN_CONVERGENCE §5)
 #   measure     the row's live metric as a one-line method (a query or
-#               command). `svrn converge status` re-runs it; the landing
+#               command). `svrn code converge status` re-runs it; the landing
 #               verdict re-runs it; nobody recalls it.
 #   today       DATED snapshot of the current shape, with citations. Evidence
 #               lives here — and it decays: the 2026-08-17 verification pass
@@ -85,7 +122,9 @@
 schema_version = 2
 graph = "~/.svrnmesh/indexes/commonwealth-ai/scip_graph.db"
 # baseline: minted by nc-t0b — see THE METRIC above. Discovery snapshots:
-# 278 (2026-08-16, unfiltered), 272 (2026-08-17, first-party production).
+# 278 (2026-08-16, unfiltered), 272 (2026-08-17, first-party production),
+# 279 (2026-08-20, first-party production with the scope filter corrected to
+# whole-segment matching — see THE METRIC above for the attribution).
 
 # ─────────────────────────────────────────────────────────────────────
 # PHASE 1 — the instrument. Nothing downstream is trustworthy until this
@@ -107,7 +146,25 @@ every gate at once; the re-arm is an explicit baseline re-mint (RUNBOOK §6),
 not a green tick nobody earned. (v1 said 'first run, pass' — that shape lets
 any refactor of the bench green-light itself, which contradicts the
 four-verdict rule this row exists to serve.)"""
+gloss      = '''one comparable observation.'''
+shape      = '''
+pub struct Measurement {
+    pub fingerprint: Fingerprint,   // THE KEY, not metadata
+    pub metrics:     BTreeMap<MetricName, f64>,
+    pub artifact:    ArtifactRef,
+}
+
+pub struct Fingerprint {            // every field required
+    pub lane:           LaneId,
+    pub corpus:         CorpusId,
+    pub model:          ModelAttribution,
+    pub prompt_version: PromptVersion,
+    pub sample_cap:     SampleCap,     // absent entirely from today's baseline
+    pub scorer_version: ScorerVersion,
+}
+'''
 status      = "target"
+home        = "planned"
 in_program  = true
 phase       = 1
 verified_at = "differential"
@@ -119,7 +176,9 @@ name        = "Baseline"
 canonical   = "sovereign_eval::measurement::Baseline"
 disposition = "converge"
 totality    = "Stored under its fingerprint. A changed condition changes the key, so a stale baseline cannot silently false-fire; a missing key yields NoBaseline, surfaced in posture with the fingerprint that has no prior."
+gloss      = '''the committed prior for one fingerprint.'''
 status      = "partial"
+home        = "planned"
 in_program  = true
 phase       = 1
 verified_at = "differential"
@@ -128,7 +187,7 @@ today       = "2026-08-16: keyed by lane id; comparability is operator memory. `
 
 [[concept]]
 name        = "Attribution"
-canonical   = "sovereign_contracts::attribution::Attribution"
+canonical   = "kernel_types::attribution::Attribution"
 disposition = "converge"
 totality    = """
 ONE answer to 'which engine computed this text': model identity, build,
@@ -137,7 +196,9 @@ register names it; Answer.provenance carries it; the OICP manifest
 advertises it. Four shapes today describe the same fact — which is the
 disease inside the cure, and why this row is phase 1: the Measurement
 fingerprint cannot be total over a concept that has no name."""
+gloss      = '''which engine computed this text.'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 1
 verified_at = "differential"
@@ -154,14 +215,24 @@ today       = "2026-08-17: ModelInfo is byte-duplicated (commonwealth-core/model
 
 [[concept]]
 name        = "Verdict"
-canonical   = "sovereign_contracts::verdict::Verdict"
+canonical   = "kernel_types::judgement::Verdict"
 disposition = "converge the gate family; distinct (rename) the rest"
 totality    = """
 Four states, one definition, workspace-wide: Passed | Failed(Reason) |
 CouldNotJudge(Reason) | NeverRan(Reason). ARCH_PRINCIPLES §18.2 becomes a
 type instead of a rule people remember. NeverRan is distinct from
 CouldNotJudge — a gate that did not execute is not a gate that abstained."""
+gloss      = '''the outcome of any check.'''
+shape      = '''
+pub enum Verdict {
+    Passed,
+    Failed(Reason),
+    CouldNotJudge(Reason),
+    NeverRan(Reason),
+}
+'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 2
 verified_at = "differential"
@@ -180,7 +251,7 @@ type's serde form should speak that vocabulary or the alias be recorded."""
 
 [[concept]]
 name        = "Judgement"
-canonical   = "sovereign_contracts::judgement::Judgement"
+canonical   = "kernel_types::judgement::Judgement"
 disposition = "converge per question: three cores, two renames"
 totality    = """
 A Judgement is MINTABLE ONLY BY A CALIBRATED JUDGE — private constructor,
@@ -192,7 +263,19 @@ no quote by construction. Carries the register fingerprint (which judge,
 which build, which prompt — an Attribution). Lanes bind as tenants; none
 owns a private copy (ARCH §10.6). Canonical is Tier-1 contracts because
 Answer embeds it; sovereign-eval owns the machinery that PRODUCES it."""
+gloss      = '''a verdict with its evidence and calibration.'''
+shape      = '''
+pub enum Judgement {
+    Judged {
+        verdict:  JudgedVerdict,      // Passed | Failed(Reason) | CouldNotJudge(Reason)
+        quote:    EvidenceQuote,      // inside the variant — not Option-with-a-comment
+        register: Attribution,        // which judge, which build, which prompt
+    },
+    NeverRan(Reason),                 // carries no quote BY CONSTRUCTION
+}
+'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 2
 verified_at = "differential"
@@ -227,7 +310,9 @@ name        = "WireMessage"
 canonical   = "sovereign_wire"
 disposition = "external-mirror (OpenAI family) + converge (true protocol DTOs) + distinct (same-name different protocols)"
 totality    = "One definition per daemon-boundary message. The typed client is generated; `json!` and `Value::get` are clippy-banned at surface call sites, the way path accessors already are. A foreign schema (OpenAI) is mirrored ONCE and re-exported — a mirror is a quote, and you do not paraphrase a quote seven times."
+gloss      = '''one definition per daemon-boundary message.'''
 status      = "target"
+home        = "planned"
 in_program  = true
 phase       = 3
 verified_at = "differential"
@@ -259,7 +344,9 @@ name        = "SurfaceError"
 canonical   = "sovereign_desktop::error::DesktopError"
 disposition = "converge"
 totality    = "A command returns a structured error, never a String. The frontend mirror is typed through invokeChecked."
+gloss      = '''a structured error returned by a command, never a String.'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 3
 verified_at = "journey"
@@ -271,7 +358,9 @@ name        = "BootstrapMode"
 canonical   = "sovereign_desktop::bootstrap::BootstrapMode"
 disposition = "converge"
 totality    = "The sum type survives into AppState. Attach and Local are distinguishable by the compiler, and Local's ConfigSource payload is not discarded."
+gloss      = '''how this install was brought up — Attach or Local, distinguishable by the compiler.'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 3
 verified_at = "journey"
@@ -288,7 +377,7 @@ today       = "2026-08-17 re-verification REVERSED v1's diagnosis: the enum (src
 
 [[concept]]
 name        = "Origin"
-canonical   = "sovereign_contracts::evidence::Origin"
+canonical   = "kernel_types::origin::Origin"
 disposition = "converge"
 totality    = """
 Every field non-optional, and the SOURCE IS A CLOSED SUM — Corpus{corpus,
@@ -299,7 +388,23 @@ false on day one: web search, attached documents and tool output already
 reach the model. Without the grain, what a chunk may GROUND stays a string
 compare. NodeId's home must be Tier 0/1 — contracts cannot import the mesh
 crate."""
+gloss      = '''where a piece of knowledge came from.'''
+shape      = '''
+pub struct Origin {
+    pub source:    Source,    // the CLOSED sum — see below
+    pub served_by: Server,    // Local | Peer(NodeId, PeerName)
+    pub grain:     Grain,     // Leaf | Summary — what this may ground
+}
+
+pub enum Source {
+    Corpus     { corpus: CorpusId, document: DocumentId, locator: Locator },
+    Web        { url: Url, fetched_at: Timestamp },
+    Attachment { asset: AssetId, locator: Locator },
+    ToolOutput { tool: ToolId, call_hash: ContentHash },
+}
+'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 4
 verified_at = "differential"
@@ -308,7 +413,7 @@ today       = "2026-08-17: provenance rides ScoredChunk.metadata: HashMap<String
 
 [[concept]]
 name        = "Custody"
-canonical   = "sovereign_contracts::types::custody::Custody"
+canonical   = "kernel_types::custody::Custody"
 disposition = "converge"
 totality    = """
 The chunk-level custody class — where this content stands (PublicWeb |
@@ -318,12 +423,14 @@ already carried; the work is promotion: from a string under CUSTODY_META_KEY
 to a field the compiler sees. Stamped-at-retrieval means a policy change
 applies to future seals, not in-flight values — revocation is a property of
 the next retrieve, by design."""
+gloss      = '''where a piece of content stands, carried by the chunk.'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 4
 verified_at = "journey"
 measure     = "paths from raw text to model-visible content that carry no typed custody (today: every path — the type rides a metadata string)"
-today       = "2026-08-17: v1's 'never carried by the data' was FALSE — sovereign-contracts/src/types/custody.rs:34 exists, is stamped at acquisition (retrieval_pipeline.rs:2335), rides chunks under CUSTODY_META_KEY, and lands in EvidenceContext.chunk_custodies (grounding/mod.rs:319). But the newest code did not find it: deep_research/icd.rs CorpusEntry carries `custody: String` — the canonical exists and is still being re-derived as a string, which is the ratchet's whole case."
+today       = "2026-08-26 (supersedes the 2026-08-17 line): the promotion this row asks for LANDED on the retrieval path. corpus_engine::index::ChunkProvenance is a required field on ScoredChunk with no Default and no Deserialize; its Acquired arm has no public constructor, so sovereign reads custody and writes only Manufactured. All five production reads take the typed stamp — grounding/mod.rs (custody + grain), formatters.rs, merge_select.rs, question_analysis.rs — and CUSTODY_META_KEY has NO production writer left; the estate stamp is now ChunkProvenance::acquired_from_estate, a door named for its store. The mesh reply path closed the same day: custody + grain now travel on oicp-types KnowledgeResult (wire spellings, since the protocol crate is pinned to zero internal deps), commonwealth-api's two routes forward what their index stamped instead of dropping it, and ChunkProvenance::acquired_from_peer JOINS the peer's claim with Custody::Peer rather than taking it. Ratchet: sovereign-core/tests/chunk_provenance_census.rs, FIVE manufacturers remaining and every one of them content this process genuinely builds. STILL OPEN, and the 2026-08-17 finding stands verbatim for it: deep_research/icd.rs CorpusEntry carries `custody: String`, off the retrieval path and still re-deriving the canonical as a string."
 
 [[concept]]
 name        = "SharingPolicy"
@@ -338,7 +445,15 @@ Evidence exists, so this noun stays a corpus property — the v1 register's
 147→1 framing aimed the carried-custody cure at the wrong axis. Illegal
 states unrepresentable: Local | Mesh{queryable, replicable}, not two bools
 whose Local+queryable combination the type admits."""
+gloss      = '''what a *corpus* permits the mesh.'''
+shape      = '''
+pub enum SharingPolicy {
+    Local,                                        // never leaves
+    Mesh { queryable: bool, replicable: bool },   // snippets / index bytes
+}
+'''
 status      = "target"
+home        = "planned"
 in_program  = true
 phase       = 4
 verified_at = "journey"
@@ -347,13 +462,42 @@ today       = "2026-08-17: query_sharing/mesh_sharing are two bools — and not 
 
 [[concept]]
 name        = "Evidence"
-canonical   = "sovereign_contracts::evidence::Evidence"
+# CORRECTED 2026-08-20 by rung nc-4-evidence. Was
+# `sovereign_contracts::evidence::Evidence`, which (a) names a type that does
+# not exist on this tree and (b) contradicts the campaign's own layer map,
+# where corpus-engine is the domain that owns Corpus/Evidence/Atom/Note/Record
+# and sovereign is the INTERFACE layer above it. Recorded because rung 15
+# generates the architecture description FROM this register, so a wrong
+# `canonical` propagates into the description of the system.
+canonical   = "corpus_engine::Evidence"
 disposition = "converge (and `layered` for the contracts ScoredChunk wrapper — see today)"
 totality    = """
-Constructible ONLY by retrieve. No public constructor, no Default, no path
-from raw text to Evidence that skips origin and custody. This is the noun
-the whole product rests on."""
+No public constructor, no Default, no public fields, and NO `Deserialize` —
+a derive that would put the back door straight back on. Every door that mints
+one lives inside corpus-engine and takes an Origin and a Custody BY VALUE, so
+there is no path from raw text to Evidence that skips provenance.
+
+NARROWED 2026-08-20 by rung nc-4-evidence, and the narrowing is the honest
+part. The rung was drafted as "constructible ONLY by retrieve". Taken
+literally that bans six of the seven acquisition paths rung 1's kernel pins
+as SHIPPING TODAY — `kernel_types::origin::Source` is a closed sum of Corpus,
+Web, Attachment, ToolOutput, Memory, Conversation, Note, and its own test
+`every_shipping_acquisition_path_has_a_variant` is what pins them. Only one of
+the seven is a corpus. What survives, and is implementable, is the invariant
+above: one door per acquisition family, all of them inside the owning crate.
+`retrieve` is the corpus door and the only one built at this rung; the other
+six are rungs 9-12."""
+gloss      = '''the retrieval unit, and the only thing a model may read.'''
+shape      = '''
+pub struct Evidence {
+    pub content: Text,
+    pub origin:  Origin,
+    pub custody: Custody,
+    pub score:   Relevance,
+}
+'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 4
 verified_at = "differential"
@@ -375,7 +519,7 @@ a golden equivalence test."""
 
 [[concept]]
 name        = "EvidenceSet"
-canonical   = "sovereign_contracts::evidence::EvidenceSet"
+canonical   = "corpus_engine::index::EvidenceSet"
 disposition = "converge"
 totality    = """
 TWO seals, both carried: the CHUNK SET composition read, and the CORPUS
@@ -387,7 +531,9 @@ value; it may not widen the scope. (v1 claimed the runtime already honours
 a same-value seal as convention; 2026-08-17 verification refuted that —
 see today — so this row is target, and the totality encodes the asymmetry
 the gate actually needs rather than banning the re-search it depends on.)"""
+gloss      = '''a sealed body of evidence for one turn.'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 4
 verified_at = "differential"
@@ -404,19 +550,56 @@ weakly; the chunk seal does not exist at all."""
 
 [[concept]]
 name        = "Draft"
-canonical   = "sovereign_contracts::answer::Draft"
+canonical   = "kernel_types::answer::Draft"
+# HOME CORRECTED 2026-08-20 (rung nc-11-answer), and it was FORCED, not
+# preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
+# EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
+# cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
+# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
+# declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
+# hold the trait and cannot hold the noun that needs it. `kernel-types` is the
+# only layer-0 crate both `corpus-engine` and `sovereign` already depend on.
+# This is a move WITHIN layer 0 — the same one rung 10 made for `Judgement`
+# and documented at length — not a change of which product domain owns the
+# noun. `Answer` never names `Evidence`: every field of it is already kernel
+# vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge (the turn concept); distinct (two squatters rename)"
 totality    = "A Draft cannot be returned to a surface. It becomes an Answer only through verify and release, which makes 'forgot to run the gate' unrepresentable."
+gloss      = '''generated text, not yet released.'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 4
 verified_at = "differential"
 measure     = "surface-reachable text values that never passed through the gate (today: unmeasured — the type that would make it measurable does not exist)"
+landed_at   = """2026-08-20, rung nc-11-answer. "A Draft cannot be returned to
+a surface" landed in the sharper form the type can actually enforce: a Draft's
+TEXT cannot be read at all — no accessor, no Display, no Serialize, private
+field — so the only exit is release. Compile-fail proof:
+kernel-types/tests/ui/draft_text_is_not_readable.rs. The two squatters
+(sovereign-cli-llm/backlog_cmd/item.rs:49, deep_research/icd.rs:612) are
+DISTINCT concepts and are deliberately left alone: a backlog draft item and an
+inter-component document are not this noun, and renaming them apart is not
+this rung's work."""
 today       = "2026-08-17: no turn-level Draft type exists — TARGET_ARCHITECTURE's v1 `partial` marker was generous. Two other concepts squat the name: sovereign-cli-llm/item.rs:49 (a draft backlog item) and deep_research/icd.rs:604 (the DR inter-component document, minted this week). Both rename or namespace; the turn Draft is greenfield."
 
 [[concept]]
 name        = "Answer"
-canonical   = "sovereign_contracts::answer::Answer"
+canonical   = "kernel_types::answer::Answer"
+# HOME CORRECTED 2026-08-20 (rung nc-11-answer), and it was FORCED, not
+# preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
+# EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
+# cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
+# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
+# declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
+# hold the trait and cannot hold the noun that needs it. `kernel-types` is the
+# only layer-0 crate both `corpus-engine` and `sovereign` already depend on.
+# This is a move WITHIN layer 0 — the same one rung 10 made for `Judgement`
+# and documented at length — not a change of which product domain owns the
+# noun. `Answer` never names `Evidence`: every field of it is already kernel
+# vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge"
 totality    = """
 Cannot exist without a Judgement. An honest abstention is an Answer too —
@@ -425,23 +608,72 @@ Provenance is a field. release() folds Vec<Judgement> into the Answer's
 judgement by ONE NAMED POLICY (worst-verdict-wins unless the policy says
 otherwise) — that fold is a decider, and a decider gets one name and one
 implementation (§10.6), not an ad-hoc reduce at each call site."""
+gloss      = '''what the user sees.'''
+shape      = '''
+pub struct Answer {
+    pub text:       Text,
+    pub citations:  Vec<Citation>,   // each points into the sealed EvidenceSet
+    pub provenance: Provenance,      // a field, not metadata["provenance"]
+    pub judgement:  Judgement,
+}
+'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 4
 verified_at = "journey"
 measure     = "paths where provenance presence is asserted by convention rather than type (today: functional.rs:235 asserts present, routing_moves.rs:277 asserts absent — same key, opposite assertions, distinguished only by which handler ran)"
+landed_at   = """2026-08-20, rung nc-11-answer. The totality is enforced by
+construction: private fields, no Default, no Deserialize, and every door
+(Draft::release, Draft::release_ungated, Answer::abstained) takes a Judgement
+by value. `release()` folds by ONE named policy and that policy is
+`Judgement::roll_up`, reused from rung 10 rather than re-reduced here — so an
+empty judgement set is could-not-judge and never a pass. `release_ungated`
+carries Verdict::NeverRan, which fixes a real defect: an un-gated turn was
+previously indistinguishable at the type level from a gated-and-passed one.
+Compile-fail proof: kernel-types/tests/ui/answer_without_a_judgement.rs.
+NOT DONE: the live turn path (grounding/mod.rs, streaming.rs) has not migrated
+onto the type, and the 8 metadata["provenance"] writer sites are untouched."""
 today       = "2026-08-17 (confirmed exact): ResponseProvenance is a real typed struct that travels serialized into message.metadata[\"provenance\"] from 8 writer sites; production readers are defensive (let-else / ?), the unwrap shape lives in the test surface. Presence is a per-path convention pinned by two tests asserting opposite things."
 
 [[concept]]
 name        = "Citation"
-canonical   = "sovereign_contracts::answer::Citation"
+canonical   = "kernel_types::answer::Citation"
+# HOME CORRECTED 2026-08-20 (rung nc-11-answer), and it was FORCED, not
+# preferred. `Citation`'s one constructor takes a `Seal` — the trait a sealed
+# EvidenceSet implements — so the trait must sit BELOW `corpus-engine`, which
+# cannot depend on `sovereign-contracts` (that edge runs the wrong way, and
+# `corpus-engine/src/index/evidence.rs` already says so where it restates
+# CUSTODY_META_KEY by hand rather than import it). `sovereign-contracts` is
+# declared in the layer-0 `contract` layer of ARCH_LAYERS.toml, so it cannot
+# hold the trait and cannot hold the noun that needs it. `kernel-types` is the
+# only layer-0 crate both `corpus-engine` and `sovereign` already depend on.
+# This is a move WITHIN layer 0 — the same one rung 10 made for `Judgement`
+# and documented at length — not a change of which product domain owns the
+# noun. `Answer` never names `Evidence`: every field of it is already kernel
+# vocabulary, which is what makes the home legal rather than merely convenient.
 disposition = "converge"
 totality    = "A Citation points INTO the sealed EvidenceSet — it cannot cite what the seal does not contain. The audited invariant sovereign-meshapp already states (the quoted text appears in the cited chunk) becomes construction, not audit."
+gloss      = '''a pointer into the sealed `EvidenceSet`.'''
 status      = "target"
+home        = "minted"
 in_program  = true
 phase       = 4
 verified_at = "differential"
 measure     = "D1 count for name Citation + citation shapes that carry no seal reference"
+landed_at   = """2026-08-20, rung nc-11-answer. `Citation::pointing_into(seal,
+quote)` is the only door: it refuses a quote the seal does not hold verbatim
+(Refused::NotInSeal, carrying the seal's size so an empty seal is
+distinguishable from a miss) and refuses one landing in Grain::Summary
+(Refused::NotQuotable) — the audited invariant sovereign-meshapp states in a
+doc comment at wrapped.rs:182, promoted to a constructor. Compile-fail proof:
+kernel-types/tests/ui/citation_without_a_seal.rs plus
+citation_has_no_public_constructor.rs (split, because rustc suppresses the
+private-field diagnostic when method resolution in the same body already
+failed — one fixture recorded one error and hid the other).
+NOT DONE: the three squatting definitions (sovereign-eval/judge.rs:79,
+sovereign-meshapp/wrapped.rs:182, sovereign-server/projection.rs:95) and the
+fourth under a different name (ReleasedCitation) are all still in place."""
 today       = "2026-08-17: three definitions, none canonical — sovereign-eval/judge.rs:79 (code location for an axis score — distinct concept, renames), sovereign-meshapp/wrapped.rs:182 (verbatim span + offsets, the closest to target), sovereign-server/projection.rs:95 (mobile-wire retrieval hit). The runtime's ReleasedCitation (grounding/mod.rs:1435) is a fourth shape the census misses because the name differs — a synonym-duplicate, exactly the class D1 is blind to."
 
 # ─────────────────────────────────────────────────────────────────────
@@ -457,7 +689,17 @@ A declared, validated profile. Consumers receive a NARROWED view carrying
 only what they need. Capability<T> is Available(T) | Unavailable(reason) —
 absence is a value the caller must handle, never an empty collection.
 (ARCH_PRINCIPLES §18.3)"""
+gloss      = '''what this install can actually do.'''
+shape      = '''
+pub struct Capabilities { /* validated at construction */ }
+
+pub enum Capability<T> {
+    Available(T),
+    Unavailable(UnavailableReason),
+}
+'''
 status      = "target"
+home        = "planned"
 in_program  = true
 phase       = 5
 verified_at = "journey"
@@ -481,7 +723,9 @@ name        = "Step"
 canonical   = "sovereign_workflow::steps::Step"
 disposition = "converge (the dataflow substrate); distinct (plan-step and build-stage squatters)"
 totality    = "One dataflow substrate. compose(), the corpus pipeline, enrichment, and the bench lanes are tenants; none carries a private engine."
+gloss      = '''one typed unit of the single dataflow substrate.'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 5
 verified_at = "differential"
@@ -505,7 +749,9 @@ name        = "Artifact"
 canonical   = "sovereign_workflow::model::Artifact"
 disposition = "converge (substrate + DR tenancy); distinct (bench output record renames)"
 totality    = "The substrate's typed step output — content-addressed, cacheable. A subsystem that produces typed run artifacts (deep-research's ICD family first) is a TENANT of this type, not an author of a private enum."
+gloss      = '''the substrate's typed step output — content-addressed, cacheable.'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 5
 verified_at = "differential"
@@ -523,7 +769,9 @@ name        = "Intent"
 canonical   = "sovereign_contracts::types::routing::Intent"
 disposition = "converge"
 totality    = "The enum plus a data table — one row per intent declaring handler, slot, retrieval policy, gate surface, budget, labels. The table is a STATIC RUST CONST over the closed enum (closed sets are enums, §2) so a missing attribute is a compile error — a TOML table would make it a load error, which is the wrong failure time for a closed set. Adding an intent is one row."
+gloss      = '''what kind of ask it is.'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 6
 verified_at = "differential"
@@ -535,7 +783,9 @@ name        = "Command"
 canonical   = "sovereign/docs/cli-contract.toml"
 disposition = "converge"
 totality    = "The contract is GENERATIVE. Parser, dispatch, help text and reference docs are produced from it. A command not in the contract does not exist; a contract row nothing implements does not compile. (Non-type canonical: the concept-gate treats the contract file as the owner; type-level gating does not apply.)"
+gloss      = '''one CLI promise.'''
 status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 6
 verified_at = "journey"
@@ -547,7 +797,17 @@ name        = "Record"
 canonical   = "sovereign_record::Record"
 disposition = "converge"
 totality    = "Append-only; identity is a content hash, never a counter, sequence number, or address (ARCH_PRINCIPLES §7.5). Mutable views are projections, derived and rebuildable."
+gloss      = '''an immutable fact with provenance.'''
+shape      = '''
+pub struct Record<T> {
+    pub id:         ContentHash,  // identity from essence, never a counter
+    pub written_at: Timestamp,
+    pub author:     Author,
+    pub body:       T,
+}
+'''
 status      = "target"
+home        = "planned"
 in_program  = true
 phase       = 6
 verified_at = "differential"
@@ -559,7 +819,9 @@ name        = "Endpoint"
 canonical   = "sovereign_mesh::endpoint::Endpoint"
 disposition = "converge"
 totality    = "Declaring an endpoint declares its exposure class (loopback | mesh-internal | private-lan | token-authenticated). The guard is attached by the registry, not mounted by hand."
+gloss      = '''a network surface with a declared exposure.'''
 status      = "target"
+home        = "planned"
 in_program  = true
 phase       = 6
 verified_at = "journey"
@@ -568,15 +830,17 @@ today       = "2026-08-17 (confirmed): 256 route definitions (222 production acr
 
 [[concept]]
 name        = "Gap"
-canonical   = "sovereign_contracts::evidence::Gap"
+canonical   = "sovereign_contracts::types::epistemic::Gap"
 disposition = "converge (the knowledge-gap family); distinct (design/ignorance gaps rename)"
 totality    = "A Gap is a demand for evidence the current corpus cannot meet — statement, what would answer it, and the trail from claim to demand. The deep-research loop consumes Gaps and produces acquisition; the atlas detects them; the epistemic ledger records them. One noun, three producers, zero private copies."
-status      = "target"
+gloss      = '''a demand for evidence the current corpus cannot meet.'''
+status      = "partial"
+home        = "minted"
 in_program  = true
 phase       = 6
 verified_at = "differential"
 measure     = "D1 count for name Gap, partitioned converge-family vs renames"
-today       = "2026-08-17: six definitions; the FAMILY is real — corpus-engine atlas gaps.rs:55 (typed, significance-scored), corpus-engine pipeline/types.rs:1617 (its own file calls it the looser ancestor), contracts epistemic.rs:222 (evidence demand + acquisition conjectures), deep_research/icd.rs:397 (the round-driving gap) — four shapes of one concept across three subsystems, and it is the central noun of the deep-research product loop. Distinct squatters rename: atos_cmd run.rs:1780 (design gap), honesty.rs:80 (known-unknown)."
+today       = "2026-08-24: the declared home `sovereign_contracts::evidence::Gap` names a module that cannot exist — evidence went to corpus-engine and kernel-types, and a Tier-1 contracts crate may not name it. A real home already existed: `types::epistemic::Gap` (epistemic.rs:294) carries the fuller shape — demand_idx, statement, coverage, and catalog-only AcquisitionRoutes. The converging twin is deep_research/icd.rs:397 (id, text, actionable_query, corroboration), the same noun one tier up, which may depend downward. Two stay DISTINCT and are already adjudicated in code: honesty.rs:86, whose own doc comment cites the nc-12 split (a missing SOURCE with a best-guess location), and the atlas detector gaps.rs:56 (a gap in a corpus's atom graph, significance-scored)."
 
 # ─────────────────────────────────────────────────────────────────────
 # ARCHITECTURAL COMPLETENESS — already coherent. Listed so the noun set
@@ -588,7 +852,9 @@ name       = "Recipe"
 canonical  = "corpus_engine::recipe::Recipe"
 disposition = "distinct"
 totality   = "Pure TOML declaring acquire → extract → filter → chunk → embed → index, plus custody. Schema generated to SCHEMA.md and gated."
+gloss      = '''how a corpus is made.'''
 status     = "holds"
+home       = "minted"
 in_program = false
 measure    = "D1 count for name Recipe"
 today      = "THE REFERENCE IMPLEMENTATION of this whole architecture — the one place a policy decision is already data rather than code, proven across 26 catalogued recipes. Every `target` row above is an application of the move Recipe already made. 2026-08-17 correction to v1's duplicates=1: a name twin exists at sovereign-pipeline/recipe.rs:61 (the fleet-run recipe: meta/source/enrich/dispatch/schedule) — an adjacent, distinct concept; rename it (RunRecipe or similar) rather than converge."
@@ -598,53 +864,68 @@ name       = "Corpus"
 canonical  = "corpus_engine::Corpus"
 disposition = "converge"
 totality   = "An index plus its sharing policy, produced by a Recipe."
+gloss      = '''an index plus its custody, produced by a `Recipe`.'''
 status     = "holds"
+home       = "minted"
 in_program = false
 measure    = "D1 count for name Corpus"
 
 [[concept]]
 name       = "Claim"
-canonical  = "sovereign_core::runtime::grounding::Claim"
-disposition = "converge (the spec-intel mirror pair); the atlas Claim atom is a distinct, correctly-named concept"
-totality   = "One assertion extracted from a Draft — the unit the gate judges."
-status     = "holds"
-in_program = false
-measure    = "D1 count for name Claim"
-today      = "2026-08-17 correction to v1's duplicates=1: three census twins — the atlas Claim ATOM (atoms.rs:557, a knowledge act in a corpus; distinct concept, correctly named, stays) and a true mirror pair in enrich_cmd (spec_intel.rs:87 writes, spec_reconcile.rs:122 re-declares to read; the read side's doc comment says so) — the pair converges."
+canonical  = "kernel_types::claim::Claim"
+disposition = "converge (the gate's claim vocabulary); the atlas Claim ATOM is a distinct, correctly-named concept and stays"
+totality   = "One assertion extracted from a Draft — the unit the gate judges. It names no evidence: an assertion plus, at most, where in the draft it came from. That is what lets it sit at layer 0 beside Draft and Judgement."
+gloss      = '''one assertion extracted from a `Draft`; the unit the gate judges.'''
+status     = "target"
+home       = "planned"
+in_program = true
+phase      = 4
+verified_at = "differential"
+measure    = "D1 count for name Claim + private claim records outside the kernel (today: GateClaim)"
+today      = "2026-08-24: the noun DOES NOT EXIST and this row said it held. `sovereign_core::runtime::grounding::Claim` has never been defined; the gate carries `pub(crate) struct GateClaim` (grounding/mod.rs:828), which is not this noun — it is a claim ALREADY JOINED to its judgement (text + supported + violation_prob + address). The 2026-08-17 snapshot cited a converging mirror pair in enrich_cmd (spec_intel.rs / spec_reconcile.rs); both files are gone, so that adjudication no longer describes anything. One `pub struct Claim` remains workspace-wide — the atlas atom (atoms.rs:557), a knowledge act in a corpus, distinct and correctly named. Home is the kernel because the decomposition is already kernel vocabulary: the assertion is text, `supported` is a Verdict, the address is a Locator. GateClaim then becomes Claim + Judgement + Option<Locator> rather than a fourth private record."
 
 [[concept]]
 name       = "Atom"
 canonical  = "corpus_engine::enrichment::atlas::atoms::AtomEnvelope"
 disposition = "converge"
 totality   = "The closed set of atlas atom kinds (Entity, Event, State, Relation, Claim, Question, Configuration, ArgumentReconstruction, Position), tagged, with deliberately no #[serde(other)] — an unknown atom refuses, never skips."
+gloss      = '''the enrichment ontology's unit (`AtomEnvelope`).'''
 status     = "holds"
+home       = "minted"
 in_program = false
 measure    = "definitions of atom-kind vocabularies outside atoms.rs"
 today      = "Added in v2 for completeness: the enrichment ontology is a major noun family the v1 register omitted even while §2 cited AtomEnvelope's fan-out as evidence. Corrective note on that evidence: AtomEnvelope's 739 variant refs are matching on a CLOSED SET, which is what enums are for (§2) — D3 fan-out of a closed enum measures exposure, not disease; the detector needs a policy-vs-pattern-match discriminator before its numbers are read as findings."
 
 [[concept]]
 name       = "Tool"
-canonical  = "sovereign_tools::ToolRegistry"
+canonical  = "sovereign_contracts::registry::ToolRegistry"
 disposition = "converge"
 totality   = "One manifest of tool identity, effect and scope; a tool exists iff the registry lists it. Tool OUTPUT that reaches a model enters the evidence system as Origin::ToolOutput — see the Origin row."
+gloss      = '''one manifest of tool identity, effect and scope (`ToolRegistry`).'''
 status     = "holds"
+home       = "minted"
 in_program = false
 measure    = "tool-definition surfaces outside the registry"
 
 [[concept]]
 name       = "Peer"
-canonical  = "commonwealth_core::mesh::Peer"
+canonical  = "commonwealth_core::mesh::MemberRecord"
 disposition = "converge"
 totality   = "Identity, transport, advertised capabilities. Founded by a join key plus an Ed25519 proof-of-possession."
+gloss      = '''another node in the trust ring.'''
 status     = "holds"
+home       = "minted"
 in_program = false
-measure    = "D1 count for name Peer"
+measure    = "D1 count for name Peer + private peer records outside commonwealth-core::mesh"
+today      = "2026-08-24: the concept holds; the row named a type that does not exist. There is no `pub struct Peer` anywhere in the workspace — the mesh member type is `MemberRecord` (commonwealth-core/mesh.rs:35) and it carries the whole totality: node_id, name, invited_by, joined_at, last_seen, status, capabilities, addresses, node_pubkey (the Ed25519 identity), iroh relay. No split was needed: the IDENTITY half is already the kernel's NodeId, which MemberRecord holds by value rather than re-deriving. Renaming the type to Peer is a separate decision with its own blast radius; this row records where the noun lives, not what it should be called."
 
 [[concept]]
 name       = "NodeCapability"
 canonical  = "oicp_types::Capability"
 disposition = "converge"
 totality   = "The OICP manifest — what a node advertises. Has a standalone conformance tester."
+gloss      = '''what a peer advertises (OICP).'''
 status     = "holds"
+home       = "minted"
 in_program = false
 measure    = "D1 count for name Capability across the OICP surface"

@@ -36,19 +36,72 @@ pub struct CodeIntelReport {
     pub index: IndexReport,
 }
 
-fn load_cache(cache_dir: &Path) -> HashMap<String, SymbolEnrichment> {
-    match std::fs::read_to_string(cache_dir.join(CACHE_FILE)) {
-        Ok(s) => serde_json::from_str::<Vec<SymbolEnrichment>>(&s)
-            .map(|v| v.into_iter().map(|e| (e.body_hash.clone(), e)).collect())
-            .unwrap_or_default(),
-        Err(_) => HashMap::new(),
+/// The map key for a cached entry.
+///
+/// Falls back to the bare body hash for entries written before the prompt
+/// version existed. Such an entry cannot be matched by the new key, so it
+/// re-generates once — correct, because we do not know which prompt produced
+/// it and guessing would keep a possibly-poisoned summary alive.
+fn cache_identity(e: &SymbolEnrichment) -> String {
+    if e.cache_key.is_empty() {
+        e.body_hash.clone()
+    } else {
+        e.cache_key.clone()
     }
 }
 
+/// Load the checkpoint cache.
+///
+/// A MISSING file is a legitimate empty cache — the first run. An UNPARSEABLE
+/// one is not: it means a prior write was interrupted, and the summaries it
+/// held are the only record of hours of model calls. Silently returning an
+/// empty map for that case (which `unwrap_or_default` did) reports a total
+/// loss of progress as a clean start, and the next checkpoint then overwrites
+/// the evidence. So the two cases are now distinguished: the corrupt file is
+/// moved aside under a `.corrupt-*` name and the loss is logged at ERROR
+/// (ARCH §18.3 — absence is reported, never defaulted).
+fn load_cache(cache_dir: &Path) -> HashMap<String, SymbolEnrichment> {
+    let path = cache_dir.join(CACHE_FILE);
+    let Ok(s) = std::fs::read_to_string(&path) else {
+        return HashMap::new(); // absent: the ordinary first-run case
+    };
+    match serde_json::from_str::<Vec<SymbolEnrichment>>(&s) {
+        Ok(v) => v.into_iter().map(|e| (cache_identity(&e), e)).collect(),
+        Err(err) => {
+            let aside = path.with_extension(format!("corrupt-{}", std::process::id()));
+            let preserved = std::fs::rename(&path, &aside).is_ok();
+            tracing::error!(
+                target: "enrichment.code_intel",
+                path = %path.display(),
+                bytes = s.len(),
+                error = %err,
+                preserved_at = %aside.display(),
+                preserved,
+                "code_intel: checkpoint cache is unreadable — treating as EMPTY, so every \
+                 summary it held will be regenerated. A truncated file here means a prior \
+                 run was killed mid-write.",
+            );
+            HashMap::new()
+        }
+    }
+}
+
+/// Write the checkpoint cache atomically: full write to a sibling tmp file,
+/// then `rename` over the real one.
+///
+/// `fs::write` truncates before writing, so a kill mid-write left a truncated
+/// JSON file — and on the whole-corpus pass this file is several MB rewritten
+/// every 200 symbols, i.e. the one moment where losing it costs the entire
+/// run. `rename` within a directory is atomic on POSIX, so a reader sees
+/// either the old complete cache or the new one, never a half-written one.
+/// Same tmp+rename shape as `EnrichmentConfig::save`.
 fn save_cache(cache_dir: &Path, enrichments: &[SymbolEnrichment]) -> Result<()> {
     let json =
         serde_json::to_string(enrichments).map_err(|e| Error::Serialization(e.to_string()))?;
-    std::fs::write(cache_dir.join(CACHE_FILE), json)?;
+    let path = cache_dir.join(CACHE_FILE);
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(&tmp, &path)?;
     Ok(())
 }
 
@@ -275,6 +328,102 @@ mod tests {
 
     fn fake_embed() -> EmbedFn {
         Arc::new(|_s: &str| Box::pin(async { Ok(vec![0.1_f32; 4]) }))
+    }
+
+    fn enrichment(name: &str, body: &str) -> SymbolEnrichment {
+        use crate::enrichment::code_intel::{body_hash, cache_key, PromptKind, SymbolMeta};
+        SymbolEnrichment {
+            meta: SymbolMeta {
+                name: name.to_string(),
+                qualified_name: format!("crate::{name}"),
+                file_path: "z.rs".to_string(),
+                line_start: 1,
+                line_end: 2,
+                language: "rust".to_string(),
+            },
+            body_hash: body_hash(body),
+            cache_key: cache_key(PromptKind::Callable, body),
+            summary: "it does a thing.".to_string(),
+            asks: vec!["what does it do?".to_string()],
+        }
+    }
+
+    /// Round-trip plus tmp hygiene: a successful save leaves no `.tmp`
+    /// sibling behind for `load_cache` to trip over.
+    ///
+    /// This does NOT prove atomicity. A polling reader could not be made to
+    /// observe a torn write on APFS even against the old direct-`fs::write`
+    /// implementation, so that test was dropped rather than kept as a check
+    /// with no failing input (ARCH §18.1). Atomicity rests on POSIX `rename`
+    /// semantics, documented on `save_cache`; the regression guard that does
+    /// bite is `load_cache_preserves_a_corrupt_file_instead_of_silently_zeroing`.
+    #[test]
+    fn save_cache_leaves_no_tmp_sibling_and_round_trips() {
+        let dir = tempfile::tempdir().unwrap();
+        let one = enrichment("a", "fn a() { b(); }");
+        save_cache(dir.path(), std::slice::from_ref(&one)).unwrap();
+
+        let cache = dir.path().join(CACHE_FILE);
+        assert!(cache.exists(), "cache file must exist after save");
+        assert!(
+            !dir.path().join("code_intel_cache.json.tmp").exists(),
+            "the tmp file must be renamed away, not left behind"
+        );
+        assert_eq!(
+            load_cache(dir.path()).len(),
+            1,
+            "what landed must parse back"
+        );
+    }
+
+    /// A truncated cache (a kill mid-write) must NOT read as a clean empty
+    /// start: the file is preserved under a `.corrupt-*` name so the next
+    /// checkpoint cannot overwrite the evidence of what was lost.
+    #[test]
+    fn load_cache_preserves_a_corrupt_file_instead_of_silently_zeroing() {
+        let dir = tempfile::tempdir().unwrap();
+        let full = serde_json::to_string(&[enrichment("a", "fn a() { b(); }")]).unwrap();
+        // Simulate the truncation `fs::write` could leave behind.
+        std::fs::write(dir.path().join(CACHE_FILE), &full[..full.len() / 2]).unwrap();
+
+        assert!(
+            load_cache(dir.path()).is_empty(),
+            "an unreadable cache yields no reusable entries"
+        );
+        let aside: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .filter(|n| n.contains("corrupt-"))
+            .collect();
+        assert_eq!(
+            aside.len(),
+            1,
+            "corrupt cache must be preserved, got {aside:?}"
+        );
+        assert!(
+            !dir.path().join(CACHE_FILE).exists(),
+            "the corrupt file is moved aside, not left in place to be overwritten"
+        );
+    }
+
+    /// NEGATIVE CONTROL for the test above: a genuinely absent cache is the
+    /// ordinary first-run case and must stay silent — no `.corrupt-*` sidecar.
+    /// Without this, the corruption branch could fire on every clean start and
+    /// the test above would still pass.
+    #[test]
+    fn load_cache_treats_a_missing_file_as_an_ordinary_empty_start() {
+        let dir = tempfile::tempdir().unwrap();
+        assert!(load_cache(dir.path()).is_empty());
+        let entries: Vec<_> = std::fs::read_dir(dir.path())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .map(|e| e.file_name().to_string_lossy().to_string())
+            .collect();
+        assert!(
+            entries.is_empty(),
+            "a missing cache must not produce any sidecar, got {entries:?}"
+        );
     }
 
     #[tokio::test]

@@ -541,18 +541,6 @@ impl Tool for WorkflowTestTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn write_scopes_under_workflows_dir_then_validate_passes() {
         let home = tempfile::tempdir().unwrap();
@@ -562,7 +550,10 @@ mod tests {
         let toml = "[workflow]\nname = \"t\"\n[source]\ntype = \"inline\"\nitems = [\"x\"]\n[[step]]\nid = \"a\"\nuses = \"transform:json\"\n";
         let write = WorkflowWriteTool::with_workflows_dir(root.clone());
         let out = write
-            .execute(&serde_json::json!({"path": "t", "content": toml}), &ctx())
+            .execute(
+                &serde_json::json!({"path": "t", "content": toml}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         match out {
@@ -577,7 +568,10 @@ mod tests {
         // A malformed workflow fails validation loudly.
         let validate = WorkflowValidateTool::new();
         let bad = validate
-            .execute(&serde_json::json!({"content": "not a workflow"}), &ctx())
+            .execute(
+                &serde_json::json!({"content": "not a workflow"}),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         if let StepOutput::Json(v) = bad {
@@ -596,7 +590,7 @@ mod tests {
         let err = write
             .execute(
                 &serde_json::json!({"path": "/tmp/evil.toml", "content": ""}),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();
@@ -626,7 +620,7 @@ mod tests {
                         ]
                     }
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -677,7 +671,7 @@ mod tests {
                         { "id": "a", "uses": "transform:json" }
                     ]
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -727,7 +721,7 @@ mod tests {
                         ]
                     }
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -767,10 +761,39 @@ mod tests {
                     "path": "/tmp/evil.toml",
                     "workflow": { "workflow": { "name": "x" }, "step": [{ "id": "a", "uses": "transform:json" }] }
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();
         assert!(format!("{err}").contains("outside"), "got: {err}");
+    }
+}
+
+/// The workflow-authoring family, as a [`ToolBundle`].
+///
+/// Lives here rather than in `sovereign-tools`' bundle module on purpose: a
+/// tool family belongs with the crate that owns its tools, and the seam
+/// exists precisely so a shared file never has to name it
+/// (`quality/TOPOLOGY.md` §10 phase 7b).
+///
+/// Surfaced only when `active_mode == workflow-author` by the narrowed
+/// catalog, so generic chat is unaffected by composing it.
+pub struct WorkflowAuthoringTools;
+
+#[async_trait::async_trait]
+impl sovereign_contracts::tool_bundle::ToolBundle for WorkflowAuthoringTools {
+    fn name(&self) -> &'static str {
+        "workflow-authoring"
+    }
+
+    async fn register_into(
+        &self,
+        reg: &mut sovereign_contracts::registry::ToolRegistry,
+    ) -> sovereign_contracts::tool_bundle::BundleReport {
+        let mut r = sovereign_contracts::tool_bundle::BundleReport::new(self.name());
+        for tool in author_tools() {
+            r = r.registered(reg.register_reporting(tool));
+        }
+        r
     }
 }

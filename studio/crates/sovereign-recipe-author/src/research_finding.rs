@@ -274,18 +274,6 @@ mod tests {
         (notes, features, dir)
     }
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: ConversationId::new(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn writes_a_finding_with_payload() {
         let (notes, features, _dir) = fresh_stores().await;
@@ -303,7 +291,7 @@ mod tests {
                     "confidence": "high",
                     "scope": "api_contract"
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -348,7 +336,7 @@ mod tests {
                     "confidence": "very-sure",
                     "scope": "api_contract"
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();
@@ -372,7 +360,7 @@ mod tests {
                     "confidence": "high",
                     "scope": "thursday"
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap_err();

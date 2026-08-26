@@ -211,7 +211,7 @@ impl Runtime {
             .await;
             grounding_gate_meta = Some(outcome.meta);
             gate_claims = Some(outcome.claims);
-            outcome.text
+            outcome.answer.text().to_string()
         } else {
             response_text
         };

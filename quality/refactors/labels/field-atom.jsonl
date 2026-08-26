@@ -1,0 +1,2 @@
+{"key":"field-atom/commonwealth/crates/commonwealth-api/src/routes_internal/corpus_collaborate.rs/corpus_id","dest":"kernel_types::CorpusId","disp":"converge","why":"corpus-id.toml declares this the first subject; representation and wire form both already match","by":"seat","at":"2026-08-24"}
+{"key":"field-atom/commonwealth/crates/commonwealth-api/src/routes_internal/corpus_grant.rs/corpus_id","dest":"kernel_types::CorpusId","disp":"converge","why":"corpus-id.toml declares this the first subject; representation and wire form both already match","by":"seat","at":"2026-08-24"}

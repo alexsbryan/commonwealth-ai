@@ -975,12 +975,8 @@ commonwealth/
 │   ├── commonwealth-discovery/     # mDNS, gossip, latency probing
 │   ├── commonwealth-scheduler/     # Model selection, layer + knowledge assignment
 │   ├── commonwealth-orchestrator/  # Process management, index management
-│   ├── commonwealth-api/           # Axum HTTP server, OICP endpoint
-│   └── commonwealth-daemon/        # CLI + daemon entry point
-├── Cargo.toml
-└── contrib/
-    ├── systemd/
-    ├── launchd/
+│   └── commonwealth-api/           # Axum HTTP server, OICP endpoint
+└── Cargo.toml
     └── install.sh
 ```
 

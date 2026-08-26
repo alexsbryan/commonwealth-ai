@@ -183,6 +183,55 @@ need the conclusion:
   process, not just the code you write — a silent fan-out is as opaque to the
   operator as a silent refusal to fan out.
 
+**Gating a fan-out: workers run TARGETED tests, the seat runs ONE
+definition-of-done sweep when they all return.** Operator direction 2026-08-20.
+
+This is a CORRECTNESS rule, not an efficiency one, which is why it sits here
+rather than under "Gate details". `scripts/sovereign-test.sh` exits **5 on
+unattributable results** by design: concurrent nextest runs overwrite the shared
+JUnit report, so the counts are not yours. N workers each running the unscoped
+suite either collide into exit 5, or hit the worse case — one reads a green
+summary that belongs to a peer and reports it as its own verdict. **A fan-out
+where every worker runs the full suite cannot produce an honest verdict.** The
+saving (N × ~14 min on a memory-capped box) is real but secondary.
+
+- **Workers** get `./scripts/sovereign-lint.sh --human` (scoped) and
+  `./scripts/sovereign-test.sh --human` with `--package <crate>` / `--changed` /
+  `--filter <test-name>`. Cheap structural gates (`cargo xtask layer-gate`,
+  a boundary script) stay with the worker — they prove that worker's own move.
+- **Worker verdicts report the full suite as "not-run-by-design, deferred to the
+  seat's sweep"** — never passed, never failed. That is a fifth honest state
+  beside §18.1's four, and it exists because the run was deliberately not theirs.
+- **The seat** runs ONE `--full` lint and ONE unscoped suite after every worker
+  is back. That is the definition of done for the whole wave.
+- Already dispatched with full gates? Amend mid-flight — `SendMessage` reaches a
+  running agent at its next tool round.
+- **If the sweep goes red, attribution is the SEAT's job**, not a worker's. Diff
+  by worker before assigning blame, and check first whether the failure predates
+  the fan-out at all.
+
+Unchanged inside the targeted forms: gate on exit codes, never a summary line; a
+zero-test run exits 4 and is NOT green (`--filter` matches the TEST NAME, not the
+file, so a typo verifies nothing).
+
+**`target/sovereign-test/latest/` IS NOT YOURS during a fan-out.** Field-reported
+2026-08-20 by a worker whose raw cargo log was overwritten mid-triage. The script
+writes to a private, uncollidable `${LOG_DIR}/.runs/$$-<epoch>` while it runs —
+but on the way out it does `rm -rf latest && mv "$RUN_DIR" latest`
+(`sovereign-test.sh:979-987`). So your run's artifacts BECOME `latest`, and stay
+yours only until the next peer finishes; `.runs` is then pruned to the most
+recent five. Reading `latest/counts.env` in a concurrent wave can hand you a
+peer's numbers with nothing to mark them as such.
+
+- **Gate on the script's EXIT CODE.** It is per-process and cannot be clobbered.
+- **For counts, read the `{"t":"summary",...}` line the script prints to YOUR
+  stdout** — capture it from the run (`| tee`, or the background task's output
+  file). That is uncollidable too.
+- Treat `latest/` as advisory in a fan-out, and never quote it as evidence for
+  whose result it is. Outside a fan-out it is fine.
+- Same applies to the shared `target/` dir generally: if you need an isolated
+  build for triage, `CARGO_TARGET_DIR=/tmp/<yours> cargo check -p <crate>`.
+
 ## Work atlas — privacy
 
 **Privacy.** Sessions inherit `node.default_privacy` from `~/.sovereign/work-atlas.toml` (default `public`). Private claims/observations are written to `work-atlas-private` and structurally never gossip — peers never see them. The daemon enforces this at three layers (store, gossip, read). Toggling to private mid-session does NOT retroactively unpublish prior records.

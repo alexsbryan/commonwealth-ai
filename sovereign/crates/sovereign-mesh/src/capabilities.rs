@@ -161,13 +161,18 @@ pub async fn build_local_capabilities(
     // lock-step with what the RPC serve path actually does, without threading
     // `[shared_model]` config across the mesh boundary. Consumers (no serve
     // bind) advertise `None`. VRAM is the sum of detected device VRAM.
-    let anchor = std::env::var_os("SOVEREIGN_RPC_SERVE").map(|_| AnchorProfile {
-        can_anchor: true,
-        vram_gb: hardware.gpus.iter().map(|g| g.vram_gb).sum(),
-        model_resident: std::env::var("SOVEREIGN_SHARED_MODEL_ID")
-            .ok()
-            .filter(|s| !s.is_empty()),
-    });
+    let anchor = sovereign_contracts::launch::RpcServe::from_env()
+        .is_serving()
+        .then(|| AnchorProfile {
+            can_anchor: true,
+            vram_gb: hardware.gpus.iter().map(|g| g.vram_gb).sum(),
+            // One reading of the fleet, shared with the status surface and the
+            // inference provider — the three used to parse it independently and
+            // disagreed about whitespace (see `SharedModelFleet`).
+            model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
+                .model_id()
+                .map(str::to_string),
+        });
 
     NodeCapabilities {
         hardware,

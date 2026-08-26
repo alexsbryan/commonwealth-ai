@@ -125,17 +125,20 @@ async fn build_runtime_with_store(
     let tools = Arc::new(ToolRegistry::new());
     let approval: Arc<dyn ApprovalChannel> = Arc::new(AutoApprovalChannel);
 
-    let runtime = Runtime::new(
-        inference,
-        router,
-        Box::new(planner),
-        tools,
-        store_trait,
-        skills,
-        approval,
-        InferenceConfig::default(),
-    )
-    .with_routing_events(sink);
+    let runtime = Runtime::new(sovereign_core::RuntimeParts {
+        routing_events: sink,
+        ..sovereign_core::RuntimeParts::new(
+            inference,
+            router,
+            Box::new(planner),
+            tools,
+            store_trait,
+            skills,
+            approval,
+            InferenceConfig::default(),
+            sovereign_core::runtime::lane::LaneSources::none(),
+        )
+    });
     (runtime, shared_store)
 }
 
@@ -779,18 +782,21 @@ async fn deep_query_stream_emits_retrieval_and_synthesis_narration() {
     // production threshold.
     let sessions = Arc::new(SessionStore::new().with_narration_min_elapsed(Duration::ZERO));
 
-    let runtime = Runtime::new(
-        inference,
-        router,
-        Box::new(planner),
-        tools,
-        store_trait,
-        skills,
-        approval,
-        InferenceConfig::default(),
-    )
-    .with_session_store(sessions)
-    .with_routing_events(sink as Arc<dyn RoutingEventSink>);
+    let runtime = Runtime::new(sovereign_core::RuntimeParts {
+        sessions: Some(sessions),
+        routing_events: sink as Arc<dyn RoutingEventSink>,
+        ..sovereign_core::RuntimeParts::new(
+            inference,
+            router,
+            Box::new(planner),
+            tools,
+            store_trait,
+            skills,
+            approval,
+            InferenceConfig::default(),
+            sovereign_core::runtime::lane::LaneSources::none(),
+        )
+    });
 
     let conv = uuid::Uuid::new_v4().to_string();
     let handle = runtime

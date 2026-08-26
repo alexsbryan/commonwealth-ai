@@ -73,11 +73,23 @@ pub struct AxisScore {
     pub score: u32,
     pub justification: String,
     #[serde(default)]
-    pub citations: Vec<Citation>,
+    pub citations: Vec<CodeExcerpt>,
 }
 
+/// One place in the REPO'S OWN SOURCE that the judge model pointed at while
+/// scoring an axis — a path plus a line range plus the lines themselves.
+///
+/// RENAMED APART from `Citation` on 2026-08-21 (rung `nc-20-turn-adoption`).
+/// It shared the name with `kernel_types::Citation` and is not the same
+/// concept: that one is a passage from a turn's sealed evidence that an answer
+/// stands on, minted through a seal; this is a code reviewer's `file:L12-L34`
+/// pointer, born only by `serde` out of the judge model's JSON
+/// (`assets/judge_system_prompt.md`), with no corpus, no seal and no custody.
+/// Nothing in Rust reads its fields — it round-trips into `judge_report.json`
+/// for a human. The JSON is UNCHANGED: the field names and the enclosing
+/// `citations` key are what the wire carries, never the Rust type name.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct Citation {
+pub struct CodeExcerpt {
     pub file: String,
     pub lines: String,
     #[serde(default)]

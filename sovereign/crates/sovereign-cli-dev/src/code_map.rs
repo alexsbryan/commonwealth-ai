@@ -37,6 +37,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+use sovereign_cli_shared::dirs::sovereign_root;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
 const MAP_HELP: Help = Help {
@@ -618,11 +619,4 @@ fn tally_from_findings(md_path: &Path) -> Option<String> {
         .map(|(a, _)| a)
         .unwrap_or(after);
     Some(core.trim().trim_end_matches('.').trim().to_string())
-}
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
 }

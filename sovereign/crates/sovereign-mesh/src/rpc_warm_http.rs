@@ -144,28 +144,23 @@ fn truncate_for_log(s: &str) -> String {
     format!("{}… [{} bytes total]", &s[..end], s.len())
 }
 
-/// The cache dir the in-process RPC worker actually reads — must mirror
-/// `model_slot::rpc_cache_dir` exactly, so the bytes we warm land where the
-/// worker's RPC server looks for `SET_TENSOR_HASH` hits. `Err` when caching is
-/// disabled (`off` / `0` / empty): warming into a stray dir would let the load
-/// stream anyway and wedge, so we refuse — the host then loads local-only (never
-/// wedge). `sovereign-inference`'s `default_cache_dir` doesn't model the disabled
-/// case, which is why this lives here.
+/// The cache dir the in-process RPC worker actually reads, so the bytes we
+/// warm land where its RPC server looks for `SET_TENSOR_HASH` hits. `Err` when
+/// caching is disabled: warming into a stray dir would let the load stream
+/// anyway and wedge, so we refuse — the host then loads local-only (never
+/// wedge).
+///
+/// This used to re-derive the rule, with a note explaining that
+/// `sovereign-inference`'s `default_cache_dir` "doesn't model the disabled
+/// case". It does now, so the mirror is a delegation and the two cannot drift
+/// apart again (ARCH §10.6). What stays here is the REFUSAL — the message an
+/// operator reads — because only this caller has a host to fall back for.
 fn worker_cache_dir() -> Result<PathBuf, String> {
-    match std::env::var("SOVEREIGN_RPC_CACHE_DIR") {
-        Ok(v) => {
-            let v = v.trim();
-            if v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0" {
-                return Err(
-                    "RPC tensor cache is disabled (SOVEREIGN_RPC_CACHE_DIR=off) — \
-                            cannot auto-warm; the host will load local-only"
-                        .to_string(),
-                );
-            }
-            Ok(PathBuf::from(v))
-        }
-        Err(_) => Ok(sovereign_contracts::rebrand::svrnmesh_root().join("rpc-cache")),
-    }
+    sovereign_inference::embedded::default_cache_dir().ok_or_else(|| {
+        "RPC tensor cache is disabled (SOVEREIGN_RPC_CACHE_DIR=off) — \
+         cannot auto-warm; the host will load local-only"
+            .to_string()
+    })
 }
 
 // ─── Wire types (the `/internal/rpc-warm` body) ──────────────────────────────

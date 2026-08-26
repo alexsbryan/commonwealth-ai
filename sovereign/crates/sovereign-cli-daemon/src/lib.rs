@@ -32,6 +32,7 @@ mod watcher_supervisor;
 pub use daemon_cmd::bootstrap::spawn_self_manifest_refresh;
 
 use sovereign_cli_shared::tracing_init::init_tracing;
+use sovereign_contracts::launch::Launch;
 
 /// Default tracing allowlist for `sovereign-cli-daemon daemon run`.
 ///
@@ -125,8 +126,7 @@ fn daemon_tracing_filter(iroh_debug: bool, llama_debug: bool) -> String {
 /// but those lines are `GGML_LOG_DEBUG` and would still die at our callback
 /// and again at this filter. One env var, all three gates.
 fn llama_debug_requested() -> bool {
-    std::env::var_os("GGML_RPC_DEBUG").is_some()
-        || std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() == Some("1")
+    sovereign_inference::llama_logs::LlamaLogs::from_env().is_verbose()
 }
 
 /// Process-level entry shared by the `sovereign-cli-daemon` binary and
@@ -142,14 +142,28 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
         std::env::set_var("RUST_MIN_STACK", "8388608");
     }
 
+    // ONE decision about what this process becomes (ARCH §2.1, §10.6). Before
+    // this, `run_with_args` re-derived it three times — `first() ==
+    // Some("--compute-child")` here, `first() == Some("daemon")` for the panic
+    // hook, and `match cmd` in `dispatch` — and the desktop's `main.rs` kept a
+    // FOURTH list that disagreed with this one on ordering.
+    let launch = Launch::parse(&raw_args, Launch::Bare);
+
     // Compute-child re-exec (DISTRIBUTED_PILOT_READINESS.md P1): the daemon's
     // ComputeChildManager spawns `current_exe() --compute-child …`. This is a
     // distinct inference process with its OWN runtime; it must skip the
     // daemon's rebrand migration / panic hook / 8 MiB runtime below (it
     // inherits the stack env vars set above). The success path never returns
     // — the child `fast_exit`s on SIGTERM.
-    if raw_args.first().map(String::as_str) == Some("--compute-child") {
-        return sovereign_compute::child_main::run(&raw_args[1..]);
+    //
+    // DELIBERATE BEHAVIOURAL DELTA (2026-08-24): this used to match only
+    // `args[0]`, while the desktop matched the flag at ANY position. A child
+    // re-exec carries `current_exe`'s argv, so the flag can legitimately sit
+    // behind other arguments — the first-only form silently fell through to
+    // verb dispatch and printed "unknown subcommand". `Launch::parse` finds it
+    // at any position, so the two entry points now agree by construction.
+    if let Launch::ComputeChild { args } = &launch {
+        return sovereign_compute::child_main::run(args);
     }
 
     // Rebrand back-compat (see sovereign_core::rebrand): idempotent, non-destructive.
@@ -164,7 +178,16 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
     // runtime-build panic leaves a record. (DAEMON_RESILIENCE.md P0.4 —
     // without this, a tokio worker-task panic was swallowed with no log
     // line and no artifact.)
-    if raw_args.first().map(String::as_str) == Some("daemon") {
+    // `is_resident()` is the one implementation of "binds a long-lived
+    // listener": it covers `daemon run` and `daemon run --worker-mode`, which
+    // is exactly what the `first() == Some("daemon")` test covered.
+    //
+    // It is NOT what the run lock keys on, and an earlier version of this
+    // comment said it was. Residency and data-root ownership are different
+    // questions: `Launch::Worker` is resident and owns no persistent state at
+    // all, so it has nothing to lock. The lock is keyed on the data root by
+    // whoever is about to write it (`sovereign_contracts::run_lock`).
+    if launch.is_resident() {
         let data_dir = sovereign_contracts::rebrand::svrnmesh_root();
         panic_hook::install(data_dir);
     }
@@ -175,7 +198,7 @@ pub fn run_with_args(raw_args: Vec<String>) -> i32 {
         .thread_name("sovereign-cli-daemon-rt")
         .build()
         .expect("failed to build tokio runtime");
-    runtime.block_on(dispatch(raw_args))
+    runtime.block_on(dispatch(launch, &raw_args))
 }
 
 /// The desktop `--daemon-child` entry: exactly `daemon run`, nothing
@@ -186,39 +209,72 @@ pub fn daemon_child_main() -> i32 {
     run_with_args(vec!["daemon".into(), "run".into()])
 }
 
-async fn dispatch(raw_args: Vec<String>) -> i32 {
-    let cmd = raw_args.first().map(|s| s.as_str()).unwrap_or("");
-    let rest: &[String] = if raw_args.is_empty() {
-        &[]
-    } else {
-        &raw_args[1..]
-    };
-
+/// Dispatch on what this process became. Exhaustive over [`Launch`] on
+/// purpose: adding a launch mode must not compile until this binary has
+/// decided what it means here, including deciding it is unreachable.
+///
+/// `raw_args` is carried only for the `Bare` diagnostic — `Launch` answers
+/// "what is this process", and "no launch matched" is one answer whether the
+/// argv was empty or held a word this binary does not know. The two still
+/// deserve different messages.
+async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
     // The daemon needs structured tracing for launchd / systemd
     // operators tailing logs. Match the filter sovereign-cli used
     // pre-split.
-    if cmd == "daemon" {
-        // Track W: `SOVEREIGN_IROH_LOG` cranks iroh/relay/transport internals to
-        // debug for diagnosing a reachability wedge; off, they stay at warn
-        // (errors still visible) so the log isn't flooded.
-        let iroh_debug = std::env::var_os("SOVEREIGN_IROH_LOG").is_some();
-        init_tracing(&daemon_tracing_filter(iroh_debug, llama_debug_requested()));
-    } else if cmd == "setup" {
-        init_tracing("sovereign_cli_daemon=info");
+    match &launch {
+        Launch::Daemon { .. } | Launch::Worker { .. } => {
+            // Track W: `SOVEREIGN_IROH_LOG` cranks iroh/relay/transport internals to
+            // debug for diagnosing a reachability wedge; off, they stay at warn
+            // (errors still visible) so the log isn't flooded.
+            let iroh_debug = std::env::var_os("SOVEREIGN_IROH_LOG").is_some();
+            init_tracing(&daemon_tracing_filter(iroh_debug, llama_debug_requested()));
+        }
+        Launch::Verb { name, .. } if name == "setup" => {
+            init_tracing("sovereign_cli_daemon=info");
+        }
+        _ => {}
     }
 
-    match cmd {
-        "daemon" => daemon_cmd::run(rest).await,
-        "model" => model_cmd::run(rest).await,
-        "setup" => setup_cmd::run_setup(rest).await,
-        "install-service" => install_service_cmd::run(rest).await,
-        "doctor" => doctor_cmd::run_doctor(rest).await,
-        "" => {
-            eprintln!("sovereign-cli-daemon: usage: sovereign-cli-daemon <subcommand> [args...]");
-            2
+    match launch {
+        Launch::Daemon { ref args } | Launch::Worker { ref args } => {
+            daemon_cmd::run(&launch, &args.clone()).await
         }
-        other => {
-            eprintln!("sovereign-cli-daemon: unknown subcommand '{other}'");
+        Launch::Verb { name, args } => {
+            match name.as_str() {
+                "model" => model_cmd::run(&args).await,
+                "setup" => setup_cmd::run_setup(&args).await,
+                "install-service" => install_service_cmd::run(&args).await,
+                "doctor" => doctor_cmd::run_doctor(&args).await,
+                // `ONE_SHOT_VERBS` is the closed set `Launch::parse` matches on;
+                // a name reaching here means that list and this one disagree.
+                other => {
+                    eprintln!("sovereign-cli-daemon: verb '{other}' is declared in Launch but not wired here");
+                    2
+                }
+            }
+        }
+        Launch::Bare => match raw_args.first() {
+            None => {
+                eprintln!(
+                    "sovereign-cli-daemon: usage: sovereign-cli-daemon <subcommand> [args...]"
+                );
+                2
+            }
+            Some(other) => {
+                eprintln!("sovereign-cli-daemon: unknown subcommand '{other}'");
+                2
+            }
+        },
+        // Handled before the runtime is built; listed so the match stays
+        // exhaustive rather than falling through a wildcard.
+        Launch::ComputeChild { .. } => unreachable!("compute-child returns in run_with_args"),
+        // Other binaries' launches. Named explicitly so that adding a variant
+        // forces a decision here instead of silently landing in a `_` arm.
+        Launch::Desktop | Launch::Server | Launch::Smoketest { .. } => {
+            eprintln!(
+                "sovereign-cli-daemon: {} is not a launch this binary serves",
+                launch.as_str()
+            );
             2
         }
     }
@@ -227,6 +283,42 @@ async fn dispatch(raw_args: Vec<String>) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::DAEMON_TRACING_FILTER;
+    use sovereign_contracts::launch::Launch;
+
+    /// The smoketest token has ONE owner — `sovereign_inference::smoketest::
+    /// SMOKETEST_FLAG`, next to the implementation. `sovereign-contracts` sits
+    /// below `sovereign-inference` and cannot name it, so `Launch::parse`
+    /// matches the literal. This test is the seam: it feeds the OWNER's
+    /// constant into the parser and fails if either side drifts. Lives here
+    /// because this is a crate that can see both.
+    #[test]
+    fn launch_smoketest_flag_matches_owner() {
+        let argv = vec![sovereign_inference::smoketest::SMOKETEST_FLAG.to_string()];
+        assert_eq!(
+            Launch::parse(&argv, Launch::Bare).as_str(),
+            "smoketest",
+            "sovereign-inference renamed SMOKETEST_FLAG without updating Launch::parse"
+        );
+    }
+
+    /// The three tokens `launch.rs` owns must be what spawn sites send. Pins
+    /// the round trip a bare literal at a spawn site would silently break.
+    #[test]
+    fn every_owned_launch_flag_round_trips_through_parse() {
+        use sovereign_contracts::launch::{
+            COMPUTE_CHILD_FLAG, DAEMON_CHILD_FLAG, WORKER_MODE_FLAG,
+        };
+        let one = |a: &str| Launch::parse(&[a.to_string()], Launch::Bare);
+        assert_eq!(one(DAEMON_CHILD_FLAG).as_str(), "daemon");
+        assert_eq!(one(COMPUTE_CHILD_FLAG).as_str(), "compute-child");
+        // Worker is reached only via the `daemon` verb, never bare.
+        let worker = Launch::parse(
+            &["daemon".into(), "run".into(), WORKER_MODE_FLAG.to_string()],
+            Launch::Bare,
+        );
+        assert_eq!(worker.as_str(), "worker");
+        assert!(worker.is_resident());
+    }
 
     /// The daemon tracing filter is an allowlist with NO default level, so every
     /// custom-target observability event must be listed by name or it goes dark

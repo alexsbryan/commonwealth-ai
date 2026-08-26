@@ -30,19 +30,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::SystemTime;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::LintResultStore;
 use corpus_engine_watchers::WatcherHeartbeat;
 
-use super::watcher_health::{
-    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
-};
+use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Maximum output bytes per error in the default (non-`full`)
 /// response. Each error's `output` field is truncated to this with
@@ -98,99 +95,34 @@ impl BuildTool {
     }
 }
 
-#[async_trait]
-impl Tool for BuildTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "build".to_string(),
-            name: "Build".to_string(),
-            description: "Return the workspace's compile/lint status from the background \
-                          watcher: pass/fail summary, top 5 errors with their output, and \
-                          freshness markers. NEVER run `cargo check` or `cargo build` via \
-                          Bash — the watcher holds the Cargo file lock continuously; \
-                          running cargo alongside it stalls both processes indefinitely. \
-                          This tool reads the cached run in microseconds with zero \
-                          contention. \
-                          Pass `full: true` to receive untruncated output for each error \
-                          (use sparingly — long failures balloon the response). \
-                          Read the `watcher` object first: `{live, reason, configured, \
-                          heartbeat_age_secs, hint}`. When `live` is false the result is \
-                          orphaned — no watcher is running to keep it current. \
-                          Status: 'fresh_passing' (clean), 'fresh_failing' (errors in \
-                          response), 'stale' (files changed since last run — watcher will \
-                          rerun on next save), 'running' (in progress — check again in \
-                          ~15s), 'watcher_down' (a completed run exists but NO live \
-                          watcher — fall back per `watcher.hint`), 'never_run' (no run \
-                          yet — see `watcher.reason`)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "full": {
-                        "type": "boolean",
-                        "default": false,
-                        "description": "Include untruncated output for every error in the response."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You've edited one or more files and want to know if the code still compiles.".into(),
-                    call: serde_json::json!({}),
-                },
-                ToolExample {
-                    situation: "The default response truncated an error you need to read in full.".into(),
-                    call: serde_json::json!({ "full": true }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "status":         { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
-                    "age_seconds":    { "type": "integer" },
-                    "summary":        { "type": "object" },
-                    "errors":         { "type": "array" },
-                    "warnings":       { "type": "array" },
-                    "stale_since":    { "type": "array" },
-                    "watcher_active": { "type": "boolean" },
-                    "watcher":        { "type": "object", "description": "Liveness {live, reason, configured, heartbeat_age_secs, hint}. Read before trusting status." },
-                    "watched_scope":  { "type": "string" }
-                }
-            })),
-        }
+impl BuildTool {
+    /// Bind this tool's state to its `build` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("build", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    /// Signal mirrors `LintStatusTool::signal` — a one-liner
-    /// surfaced when the watcher shows failures or stale state.
-    /// Silent when the last run was clean.
-    async fn signal(&self) -> Option<String> {
-        let status = self.store.latest_run().await.ok().flatten()?;
-        if status.passed() && !self.store.has_stale_files().await.unwrap_or(false) {
-            return None;
-        }
-        if !status.passed() {
-            Some(format!(
-                "build failing: {} errors, {} warnings (run #{})",
-                status.fail_count, status.warn_count, status.run_id,
-            ))
-        } else {
-            Some(format!(
-                "build stale (files changed since run #{}; rerun pending)",
-                status.run_id,
-            ))
-        }
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `build`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let full = params
             .get("full")
             .and_then(|v| v.as_bool())
@@ -346,6 +278,25 @@ impl Tool for BuildTool {
             "watcher_active": reason.is_live(),
             "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
         })))
+    }
+
+    async fn signal_now(&self) -> Option<String> {
+
+        let status = self.store.latest_run().await.ok().flatten()?;
+        if status.passed() && !self.store.has_stale_files().await.unwrap_or(false) {
+            return None;
+        }
+        if !status.passed() {
+            Some(format!(
+                "build failing: {} errors, {} warnings (run #{})",
+                status.fail_count, status.warn_count, status.run_id,
+            ))
+        } else {
+            Some(format!(
+                "build stale (files changed since run #{}; rerun pending)",
+                status.run_id,
+            ))
+        }
     }
 }
 

@@ -28,7 +28,7 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use super::judge::{CriterionVerdict, Judgement};
+use super::judge::{Ballot, CriterionVerdict};
 
 /// Fraction of criteria allowed to be could-not-judge before the run
 /// is declared degraded.
@@ -46,9 +46,9 @@ pub struct CriterionOutcome {
 impl CriterionOutcome {
     /// Fulfilled iff (yes ∧ w>0) ∨ (no ∧ w<0). `None` = could-not-judge.
     pub fn fulfilled(&self) -> Option<bool> {
-        self.verdict.verdict.map(|j| {
-            (j == Judgement::Yes && self.weight > 0) || (j == Judgement::No && self.weight < 0)
-        })
+        self.verdict
+            .verdict
+            .map(|j| (j == Ballot::Yes && self.weight > 0) || (j == Ballot::No && self.weight < 0))
     }
 }
 
@@ -81,9 +81,9 @@ pub fn score_item(outcomes: &[CriterionOutcome]) -> Option<f64> {
     for o in outcomes {
         let Some(j) = o.verdict.verdict else { continue };
         max += o.weight.unsigned_abs() as i64;
-        if j == Judgement::Yes && o.weight > 0 {
+        if j == Ballot::Yes && o.weight > 0 {
             achieved += o.weight as i64;
-        } else if j == Judgement::No && o.weight < 0 {
+        } else if j == Ballot::No && o.weight < 0 {
             achieved += o.weight.unsigned_abs() as i64;
         }
     }
@@ -279,10 +279,10 @@ mod tests {
         // +2 yes (earn 2), +3 no (earn 0), -3 no (earn 3), -1 yes (earn 0).
         // max = 2+3+3+1 = 9, achieved = 5 → 55.6.
         let outcomes = vec![
-            outcome("a", "identifying", 2, Some(Judgement::Yes)),
-            outcome("b", "identifying", 3, Some(Judgement::No)),
-            outcome("c", "logical process", -3, Some(Judgement::No)),
-            outcome("d", "logical process", -1, Some(Judgement::Yes)),
+            outcome("a", "identifying", 2, Some(Ballot::Yes)),
+            outcome("b", "identifying", 3, Some(Ballot::No)),
+            outcome("c", "logical process", -3, Some(Ballot::No)),
+            outcome("d", "logical process", -1, Some(Ballot::Yes)),
         ];
         let score = score_item(&outcomes).unwrap();
         assert!((score - 100.0 * 5.0 / 9.0).abs() < 1e-9, "{score}");
@@ -294,7 +294,7 @@ mod tests {
         // denominator (would drag the score to 40 for a criterion
         // nobody judged).
         let outcomes = vec![
-            outcome("a", "identifying", 2, Some(Judgement::Yes)),
+            outcome("a", "identifying", 2, Some(Ballot::Yes)),
             outcome("b", "identifying", -3, None),
         ];
         assert_eq!(score_item(&outcomes), Some(100.0));
@@ -309,19 +309,19 @@ mod tests {
     #[test]
     fn fulfilled_matches_reference_semantics() {
         assert_eq!(
-            outcome("a", "d", 2, Some(Judgement::Yes)).fulfilled(),
+            outcome("a", "d", 2, Some(Ballot::Yes)).fulfilled(),
             Some(true)
         );
         assert_eq!(
-            outcome("a", "d", 2, Some(Judgement::No)).fulfilled(),
+            outcome("a", "d", 2, Some(Ballot::No)).fulfilled(),
             Some(false)
         );
         assert_eq!(
-            outcome("a", "d", -2, Some(Judgement::No)).fulfilled(),
+            outcome("a", "d", -2, Some(Ballot::No)).fulfilled(),
             Some(true)
         );
         assert_eq!(
-            outcome("a", "d", -2, Some(Judgement::Yes)).fulfilled(),
+            outcome("a", "d", -2, Some(Ballot::Yes)).fulfilled(),
             Some(false)
         );
         assert_eq!(outcome("a", "d", -2, None).fulfilled(), None);
@@ -333,9 +333,9 @@ mod tests {
             "s1",
             "ai_advisor",
             vec![
-                outcome("a", "identifying", 2, Some(Judgement::Yes)),
-                outcome("b", "identifying", 2, Some(Judgement::No)),
-                outcome("c", "harmless outcome", -3, Some(Judgement::No)),
+                outcome("a", "identifying", 2, Some(Ballot::Yes)),
+                outcome("b", "identifying", 2, Some(Ballot::No)),
+                outcome("c", "harmless outcome", -3, Some(Ballot::No)),
             ],
         );
         let agg = aggregate(&[s1]);
@@ -350,7 +350,7 @@ mod tests {
     fn degraded_when_over_ten_percent_unjudged() {
         let outcomes: Vec<CriterionOutcome> = (0..10)
             .map(|i| {
-                let v = if i < 8 { Some(Judgement::Yes) } else { None };
+                let v = if i < 8 { Some(Ballot::Yes) } else { None };
                 outcome(&format!("c{i}"), "identifying", 2, v)
             })
             .collect();
@@ -385,11 +385,7 @@ mod tests {
                 dimension: "identifying".into(),
                 weight: 2,
                 verdict: CriterionVerdict {
-                    verdict: Some(if yes >= no {
-                        Judgement::Yes
-                    } else {
-                        Judgement::No
-                    }),
+                    verdict: Some(if yes >= no { Ballot::Yes } else { Ballot::No }),
                     evidence: String::new(),
                     trials_yes: yes,
                     trials_no: no,
@@ -412,7 +408,7 @@ mod tests {
         let s = item(
             "s1",
             "ai_advisor",
-            vec![outcome("a", "identifying", 2, Some(Judgement::Yes))],
+            vec![outcome("a", "identifying", 2, Some(Ballot::Yes))],
         );
         let agg = aggregate(&[s]);
         assert_eq!(

@@ -159,7 +159,7 @@ pub fn restore_snapshot_archive(
 /// Preserves every other field byte-for-byte by going through
 /// `serde_json::Value` instead of a typed struct.
 fn patch_meta_corpus_id(index_dir: &Path, target_corpus_id: &str) -> Result<()> {
-    let meta_path = index_dir.join("_corpus_meta.json");
+    let meta_path = crate::corpus::Corpus::meta_in(&index_dir);
     let bytes = std::fs::read(&meta_path)?;
     let mut value: serde_json::Value = serde_json::from_slice(&bytes)
         .map_err(|e| Error::Serialization(format!("parse {}: {e}", meta_path.display())))?;

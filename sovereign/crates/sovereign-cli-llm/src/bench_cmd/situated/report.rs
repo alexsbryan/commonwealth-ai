@@ -256,10 +256,10 @@ pub fn print_text_report(run: &SituatedRun) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bench_cmd::rubric::judge::{CriterionVerdict, Judgement};
+    use crate::bench_cmd::rubric::judge::{Ballot, CriterionVerdict};
     use crate::bench_cmd::rubric::score::score_item;
 
-    fn outcome(id: &str, dim: &str, weight: i32, v: Option<Judgement>) -> CriterionOutcome {
+    fn outcome(id: &str, dim: &str, weight: i32, v: Option<Ballot>) -> CriterionOutcome {
         CriterionOutcome {
             criterion_id: id.into(),
             dimension: dim.into(),
@@ -267,15 +267,15 @@ mod tests {
             verdict: CriterionVerdict {
                 verdict: v,
                 evidence: String::new(),
-                trials_yes: matches!(v, Some(Judgement::Yes)) as u32,
-                trials_no: matches!(v, Some(Judgement::No)) as u32,
+                trials_yes: matches!(v, Some(Ballot::Yes)) as u32,
+                trials_no: matches!(v, Some(Ballot::No)) as u32,
                 trials_failed: v.is_none() as u32,
             },
         }
     }
 
     fn run(version: u32) -> SituatedRun {
-        let criteria = vec![outcome("sc-1", "grounding", 2, Some(Judgement::Yes))];
+        let criteria = vec![outcome("sc-1", "grounding", 2, Some(Ballot::Yes))];
         let probes = vec![ProbeReport {
             probe_id: "present-wife".into(),
             qtype: "present".into(),

@@ -1,0 +1,984 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# ORDERS ARE GITIGNORED (`.sovereign/features/` is per-host). This file is the
+# committed artifact and the LADDER carries the rung list, so the plan survives
+# without them.
+id        = "noun-convergence"
+objective = "Four domains, four boundaries, one small contract at each — so extending one does not require reading the others"
+spec      = "quality/TARGET_ARCHITECTURE.md"
+register  = "quality/CONCEPTS.toml"
+declared  = "2026-08-19"
+status    = "closed"
+# PARKED 2026-08-22 by operator direction. Not abandoned and not a failure —
+# it landed real convergence (nc-17 through nc-27, four fork families, a §18.6
+# catch that stopped a HARD gate being silently loosened). It is parked because
+# an accountability audit against the END GOAL found the campaign was steering
+# by instruments that could not see the goal:
+#
+#   - nc-redundant was 79% BLIND TO DELETION for its entire life. Its near tier
+#     reads an embedding index that never evicts, so 8117 of 10301 lines could
+#     not move by the deletion the bar existed to reward (note 45213e2b).
+#   - nc-adoption's TREATMENT WAS NEVER BUILT. Six rows at its minted floor of
+#     2.94, verdict `failed` every time, while the envelope it was testing was
+#     never minted in kernel-types and its three named conversions never
+#     happened. That is a NEVER-RAN scored as a FAILURE, inside the scoreboard.
+#   - THE KERNEL IS AT THE WRONG ALTITUDE FOR WHERE THE WORK IS. Of the 30
+#     hottest .rs files by 30-day agent reads+edits, 21 import neither
+#     kernel-types nor sovereign-contracts, and they re-derive Opts, Plan, Mode,
+#     Artifact, Report, CheckStatus — command- and workflow-shaped nouns. Zero
+#     of their 232 local nouns collide with a kernel-types name. kernel-types is
+#     a good crate; it was built where the architecture argument was, not where
+#     the keystrokes are.
+#
+# THE SUCCESSOR IS `hot-path-reuse` (quality/campaigns/hot-path-reuse.toml),
+# scoped to that altitude, with each of the failures above answered by a
+# structure rather than an intention. Its "what killed noun-convergence" table
+# cites this campaign's own record row by row.
+#
+# WHAT REMAINS TRUE HERE and should not be re-litigated: kernel-types is layer 0
+# and correct; ARCH §10.6's "one decider, one name" stands; the four fork
+# families nc-22 found were real bugs. Reopen only with an instrument that has
+# passed a positive AND a negative control first.
+
+# ── THE SYSTEM, AS THE OPERATOR DESCRIBES IT ────────────────────────────────
+#
+#   BACK OF HOUSE — the quality controls
+#   eval · benches · judges · code-intel · gates · atos · gym
+#   May observe every layer. NOTHING may depend on it.
+#   Its own nouns: Measurement, Baseline, Attribution, Verdict(the eval kind)
+#   ───────────────────── observes ─────────────────────
+#
+#   2  sovereign        the INTERFACE layer — presents and packages the two
+#                       below (operator, 2026-08-19). Owns THE TURN:
+#                       Question, Answer, Judgement, Citation, Gap
+#         |
+#   1  corpus-engine    KNOWLEDGE. Owns Corpus, Evidence, Atom, Note, Record
+#      commonwealth     FEDERATION. Owns Peer, Capability, NodeCapability
+#         |
+#   0  oicp + kernel    THE CONTRACT. ContentHash, CorpusId, NodeId, Origin,
+#                       Custody, Attribution
+#
+# AGENTS.md's "commonwealth != sovereign, they are peer projects, not
+# parent/child" is a GOVERNANCE claim — separate repos, separate cadence — not
+# a layering one. The traffic settles it: sovereign -> commonwealth is 751 refs
+# (deliberate composition), commonwealth -> sovereign is 122 (leakage).
+#
+# `studio` is a FIFTH system this framing does not name (44 types each way with
+# sovereign). Out of scope, named so it is not mistaken for noise.
+
+# ── MEASURED 2026-08-19 by scripts/nc-boundary.py ───────────────────────────
+#
+#   sovereign     -> corpus-engine  5103 refs /  337 types
+#   sovereign     -> back-of-house  2374 refs /  210 types   BACKSTAGE
+#   sovereign     -> commonwealth    751 refs /   92 types
+#   corpus-engine -> back-of-house   376 refs /   44 types   BACKSTAGE
+#   commonwealth  -> sovereign       122 refs /   22 types   BACKFLOW
+#   oicp          -> sovereign       103 refs /   12 types   BACKFLOW
+#   corpus-engine -> sovereign        24 refs /    4 types   BACKFLOW
+#
+#   SHARED KERNEL: 23 types, 22 of them owned by corpus-engine — including
+#   CorpusEngine (102 methods), CorpusIndex (112 methods), and its Error and
+#   Result. The domains do not talk through a contract. They talk through one
+#   domain's implementation.
+#
+# THE FAT BOUNDARY IS FOUR UNNAMED SURFACES. The 337 types crossing into
+# corpus-engine cluster by traffic:
+#   atlas      AtomEnvelope 542, AtomId 217, EdgeType 141, AtomType 118,
+#              EntityType 109, Entity 89, Edge 69          -> ONE noun: Atom
+#   notes      NoteStore 231, NoteScope 89, NoteRow 73, NoteSource -> Note
+#   retrieval  ScoredChunk 231, ChunkRef 66, EmbedFn 65    -> Evidence
+#   engine     CorpusEngine 193, CorpusIndex, IndexInfo, CorpusSpec,
+#              IngestProgress 94, PipelinePhase 121        -> Corpus
+# Four nouns replace about thirty of the fattest crossing types.
+
+# ── WHY THE FIRST TWO DRAFTS WERE WRONG (both 2026-08-19) ───────────────────
+#
+# v1 ranked by re-derivation pressure off CONCEPTS.toml. That register came
+# from the D1 census — names typed in more than one crate — which is a census
+# of copy-paste accidents, not a decomposition. Measured: following ONE turn
+# from `handle_message_stream` crosses 205 first-party production types; the
+# 27-noun register names FOUR, and at depth<=2 names ONE of fourteen. All v1
+# rungs could have landed green with ~200 main-path types still unnamed — the
+# "orders land, headline never moves" failure that minted initiative-bars.toml.
+#
+# v2 modelled sovereign and commonwealth as peers and got the layer direction
+# wrong, and omitted back-of-house entirely.
+#
+# v3 ranks by DOMAIN BOUNDARY. A noun earns a rung when it is what one domain
+# PUBLISHES to another.
+
+# ── NOT FUNDED (stated so the omissions are choices, not oversights) ────────
+#   - the seven-domain golden freeze. 10,130 passing tests ARE the golden.
+#   - the replay tape, the >=0.8 level-2 agreement experiment, the non-Rust
+#     portability demo.
+#   - shadow mode + N-run promotion as a universal step.
+#   - driving the raw census to 0 — the 221-row two-crate tail is a discovery
+#     feed, not a work queue.
+#   - Step/Artifact substrate: studio's domain, the fifth system.
+#   - god-object splitting: deferred bar, lands as a consequence of rungs 4-7.
+
+# ── THE MISCELLANEA HAS CATEGORIES; IT IS UNMAPPED, NOT UNCATEGORIZED ───────
+#
+# Measured 2026-08-19: of 5,003 first-party production types, 1,515 (30%) end
+# in one of 26 recurring suffixes. They are not 1,515 concepts. They are
+# instances of categories this ladder already names. A worker adjudicating a
+# name uses this table: `FooOutcome` is not a new noun, it is a Judgement.
+#
+#   SHAPE                                        COUNT  BELONGS TO
+#   *Result *Outcome *Verdict *Status              290  Judgement          (r10)
+#   *Request *Response                             218  a domain boundary  (r4-8)
+#   *Row *Record *Entry                            188  Record             (r5)
+#   *Config *Args *Options                         161  per-crate IDIOM — mostly
+#                                                       correct as-is; the register
+#                                                       already dispositions Args
+#   *Report *Summary                               160  back-of-house      (r3)
+#   *Kind *Type                                     86  closed sets — correct as-is
+#   *Store *Registry *Provider                      85  Capability         (r8)
+#   *Phase *Stage *Step *Pass *Pipeline *Runner      74  THE SUBSTRATE     (r3b)
+#   *Id *Ref *Hash                                  48  the kernel         (r1)
+#
+# The dataflow family is the one with no home until rung 3b: seven distinct
+# *Phase enums (BootstrapPhase, IngestPhase, EnrichmentPhase, NarrationPhase,
+# ClearKvPhase, CorpusInstallPhase, HandoffPhase), six *Runner, six *Step,
+# five *Pipeline — all hand-rolling Step / Artifact / Runner, which already
+# exists in studio/crates/sovereign-workflow and is wired as a product feature
+# rather than as substrate. TARGET_ARCHITECTURE §3.2: "five tenants, one engine."
+
+# ── STREAMING — DECIDED 2026-08-19, was a blocking open question ────────────
+#
+# The question was whether "no Answer without a Judgement" survives an
+# assistant that streams tokens before any judgement exists. Reading
+# runtime/streaming.rs settles it: the system ALREADY holds. Gate mode buffers
+# (`held_tokens`, `gate_held_answer` :564, "buffered until the verdicts. An
+# ARMED turn must hold" :1444) and the user sees a heartbeat carrying a COUNT,
+# not the text. The invariant makes structural what the gate already does.
+#
+# The real question was un-gated turns. DECISION: `Answer` always carries a
+# `Judgement`; an un-gated turn carries `Judgement::NeverRan(Reason)` — a
+# variant the target type already declares, which "carries no quote BY
+# CONSTRUCTION". Satisfies §18.2 (a gate that did not execute is not a gate
+# that abstained), costs no architectural change, and fixes a real defect:
+# today an un-gated turn is INDISTINGUISHABLE at the type level from a
+# gated-and-passed one.
+#
+# Rejected: (B) invariant on persisted answers only — creates two classes and
+# the user-facing one is the unchecked class; (C) separate StreamedText and
+# Answer types — duplicates the noun, which is the disease.
+#
+# Tokens on the wire are NOT an Answer. They are frames; the Answer is the
+# released whole. That distinction is what makes this cheap.
+
+# ── THE THREE WIDTH BARS ARE DEFERRED — 2026-08-20, operator ────────────────
+#
+# `nc-boundary`, `nc-no-violation` and `nc-kernel` move from `open` to
+# `deferred`. THEY ARE STILL MEASURED AND STILL CHECKABLE — `deferred` is a
+# label, not a mute: only `descoped` short-circuits the verdict
+# (co-lineage.py:386), so every one of them still runs its instrument, still
+# writes a machine-stamped row, and still renders. `co-lineage coverage
+# noun-convergence` shows them with a `[deferred]` tag beside a live number.
+# Nothing below is deleted and no target is moved.
+#
+# WHAT CHANGED IS THEIR STANDING, and only that: they are EVIDENCE, not
+# TARGETS. A rung is no longer expected to move them, and a landing verdict no
+# longer has to explain why it didn't.
+#
+# WHY, MEASURED, NOT ASSERTED. These three count distinct TYPES CROSSING CRATE
+# EDGES. Two independent measurements say those edges were already correct
+# before this campaign began:
+#   - `cargo xtask layer-gate` exits 0 — 54 members, 244 internal edges,
+#     "every crate assigned, every edge points down or sideways, fan-in within
+#     caps". Verified twice on 2026-08-20, on a clean worktree at HEAD.
+#   - NOUN_CONVERGENCE §10.2: 0 of 441 load-bearing types carry an upward edge;
+#     18 of 28,847 co-changing file pairs cross a crate boundary with no
+#     structural reference behind them; adapter tax is 26 `impl From`.
+# The defect is INSIDE crates, not between them: 42.9% of 4,998 first-party
+# production types are referenced by no other file (`nc-reach`, minted
+# 2026-08-20).
+#
+# THE EVIDENCE THAT FORCED IT. Three waves, ~30 commits: nc-boundary 478 -> 477,
+# nc-no-violation 158 -> 143, nc-kernel 22 -> 23 (BACKWARDS). The same waves
+# shipped a live HTML-truncation bug fix (every crawled page cut at the first
+# `</script>` on three ingest paths), three user-visible desktop panics, 1,405
+# deleted duplicate lines, a trust envelope that exposed ten bench banks being
+# scored as fine, tool descriptors 0 -> 68% data-sourced retiring 4,137 lines of
+# data spelled as code, `code index --help` exiting 1, and a config path that
+# lied to shipped-binary users. NONE of it is visible in these three numbers.
+#
+# THE COST OF LEAVING THEM OPEN was not cosmetic and is the operator's stated
+# reason: with the scoreboard pointed at a disproved hypothesis, every order and
+# every landing verdict had to negotiate between what the bars said and what the
+# work did. That is a standing invitation to doublespeak, paid at every turn.
+#
+# WHAT REPLACES THEM as the campaign's declared destination:
+#   "An agent extending this codebase reaches for what exists instead of
+#    re-deriving it, and what it reaches for tells the truth about its own
+#    confidence."
+#   -> `nc-reach`   can you reach it            42.9% -> 28%
+#   -> `nc-extends` is adding a thing DATA      1/3 -> 3/3
+#   -> `nc-thesis`  does a result carry its own trustworthiness  0.4 -> 1.0
+#
+# HOW TO REOPEN ONE, because a deferral with no reopen condition is just
+# abandonment: if a rung has a specific, named reason to expect a width move —
+# the clearest live candidate is DELETING commonwealth-api's four middlewares
+# that open `<repo>/.sovereign/notes.db` BY PATH, which is still the only
+# identified change that shrinks `nc-boundary` AND reverses `nc-kernel` — then
+# flip that one bar's `status` back to `open` in the same commit as the rung,
+# and say in the landing verdict what you expect it to move and by how much.
+# One line, and git history is the ledger.
+#
+# READ BEFORE TRUSTING A DELTA ON THESE: all three read the daemon's SCIP index
+# and NOT the working tree, so their rows stamp `ref_source: artifact` at
+# `indexed_head`, they move when the daemon re-indexes a PEER's commits, and a
+# `git worktree` does not isolate them (`nc-boundary.py:index_provenance`).
+
+# ── Bars ────────────────────────────────────────────────────────────────────
+
+[[bar]]
+id           = "nc-boundary"
+one_line     = "Each domain publishes a small named surface instead of leaking its internals"
+derives_from = "the measurement above; TARGET_ARCHITECTURE.md §6"
+# DEFERRED 2026-08-20 — evidence, not a target. Still measured, still checkable.
+# Full lineage in the "THE THREE WIDTH BARS ARE DEFERRED" section above,
+# including the reopen condition. Instrument and target below are UNCHANGED.
+# descoped 2026-08-21: 477 across 22 measurements, never moved. The campaign's payoff proved to be drifted deciders, not boundary width.
+status       = "descoped"
+# Distinct types crossing between the three product domains. Target derived,
+# not guessed: corpus-engine publishes Corpus/Evidence/Atom/Note/Record,
+# commonwealth publishes Peer/Capability, sovereign publishes
+# Question/Answer/Judgement/Citation/Gap — 12 nouns plus supporting value types.
+#
+# RE-BASELINED 2026-08-20 by the seat, when nc-boundary.py v2 (handed over by
+# rung nc-3-backstage) replaced v1 as the canonical instrument. v2 fixes a real
+# defect: the reference loop called `domain(fp)` with no crate, so
+# BACKSTAGE_CRATES matched a type's OWNER and never its REFERENCE SITE — a
+# back-of-house crate naming its own type scored as a violation the
+# instrument's own rule (`src == BACKSTAGE: return None`) calls legal.
+# Both halves below are MEASURED on this tree, not asserted (ARCH §18.6 — a
+# judge change reported only in the direction it was meant to fix):
+#   by CODE (rungs 1/2/3, v1 instrument):        485 -> 483   (-2)
+#   by RE-CLASSIFICATION (v1 -> v2, same tree):  483 -> 478   (-5)
+# Original campaign baseline was 485.0; the -5 is not progress toward 50.
+today        = 478.0
+target       = 50.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"core_boundary_width\"]), \"commit\": d[\"indexed_head\"]}))'"
+kill         = "if narrowing a boundary forces a re-export shim that renames the leak rather than removing it, the boundary was drawn in the wrong place — stop and redraw, do not ship the shim"
+
+[[bar]]
+id           = "nc-no-violation"
+one_line     = "No edge runs the wrong way, and nothing depends on the quality controls"
+derives_from = "the layer map above; the back-of-house one-way rule"
+# DEFERRED 2026-08-20 — evidence, not a target. Still measured, still checkable.
+# Full lineage in the "THE THREE WIDTH BARS ARE DEFERRED" section above,
+# including the reopen condition. Instrument and target below are UNCHANGED.
+# Note this bar's own HONESTY CLAUSE was already answered: of the original 337,
+# the campaign moved FOUR by code and 175 by re-classification.
+# descoped 2026-08-21: 143 -> 144 across 22 measurements — moved backwards by one. Layer-gate already exits 0; this bar measures a dimension that was healthy.
+status       = "descoped"
+# 337 types on edges that should not exist: BACKSTAGE 255 (product naming its
+# own instrument), BACKFLOW 82 (a lower layer naming a higher one).
+#
+# HONESTY CLAUSE, and it is load-bearing: most of the BACKSTAGE 255 is a
+# CLASSIFICATION problem, not a code problem — sovereign-cli-llm holds
+# bench_cmd and gym_judge next to chat and corpus in ONE crate, so the boundary
+# cannot be drawn. Only 14 types are named by unambiguous product crates
+# (sovereign-server 11, sovereign-desktop 2, commonwealth-api 1). Rung 3 will
+# move this number largely by RE-CLASSIFYING, which is a metric moving for a
+# bookkeeping reason. Its landing verdict MUST report the split: how much moved
+# by drawing the boundary vs by deleting a dependency.
+#
+# RE-BASELINED 2026-08-20 by the seat, when nc-boundary.py v2 (handed over by
+# rung nc-3-backstage) replaced v1 as the canonical instrument. v2 fixes a real
+# defect: the reference loop called `domain(fp)` with no crate, so
+# BACKSTAGE_CRATES matched a type's OWNER and never its REFERENCE SITE — a
+# back-of-house crate naming its own type scored as a violation the
+# instrument's own rule (`src == BACKSTAGE: return None`) calls legal.
+# Both halves below are MEASURED on this tree, not asserted (ARCH §18.6 — a
+# judge change reported only in the direction it was meant to fix):
+#   by CODE (rungs 1/2/3, v1 instrument):        337 -> 333   (-4, all BACKFLOW)
+#   by RE-CLASSIFICATION (v1 -> v2, same tree):  333 -> 158   (-175: BACKSTAGE
+#                                                -170, BACKFLOW -5)
+# THE CLAUSE ABOVE IS HEREBY ANSWERED: the campaign has moved this bar by FOUR.
+# The other 175 is bookkeeping the instrument was getting wrong. Original
+# campaign baseline was 337.0. 184 of the 255 BACKSTAGE were self-reference:
+# sovereign-agent-bench 92, commonwealth-tdd 40, corpus-engine-archaeology 25,
+# corpus-engine-atos 19, sovereign-authoring-harness 8.
+today        = 158.0
+target       = 0.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"violating_types\"]), \"commit\": d[\"indexed_head\"]}))'"
+
+[[bar]]
+id           = "nc-kernel"
+one_line     = "What every domain speaks is a CONTRACT, owned by none of them"
+derives_from = "the measurement above"
+# DEFERRED 2026-08-20 — evidence, not a target. Still measured, still checkable.
+# Full lineage in the "THE THREE WIDTH BARS ARE DEFERRED" section above.
+# THIS IS THE ONE THAT MOVED BACKWARDS (22 -> 23) and the reason is structural:
+# a noun joins the kernel by acquiring cross-domain consumers, so every
+# PUBLISHING rung raises it and no funded rung reverses it. Its reopen condition
+# is therefore the sharpest of the three — see the notes.db middleware deletion
+# named in the section above. Instrument and target below are UNCHANGED.
+# descoped 2026-08-21: 23 vs target 10, flat. The bar cannot tell a published noun from a leaked god object (nc-2b recorded this).
+status       = "descoped"
+# Today 23 types, 22 owned by corpus-engine, two of them god objects. Target
+# <= 10 in a crate no domain owns. A kernel is judged by OWNERSHIP as much as
+# size: ten types still owned by one domain is the same disease.
+#
+# RE-BASELINED 2026-08-20 by the seat, when nc-boundary.py v2 (handed over by
+# rung nc-3-backstage) replaced v1 as the canonical instrument. v2 fixes a real
+# defect: the reference loop called `domain(fp)` with no crate, so
+# BACKSTAGE_CRATES matched a type's OWNER and never its REFERENCE SITE — a
+# back-of-house crate naming its own type scored as a violation the
+# instrument's own rule (`src == BACKSTAGE: return None`) calls legal.
+# Both halves below are MEASURED on this tree, not asserted (ARCH §18.6 — a
+# judge change reported only in the direction it was meant to fix):
+#   by CODE (rungs 1/2/3, v1 instrument):        23 -> 23    (0 — the kernel
+#                                                CRATE now exists and is
+#                                                measurable, but no shared type
+#                                                has moved into it yet)
+#   by RE-CLASSIFICATION (v1 -> v2, same tree):  23 -> 22    (-1: FeatureStore,
+#                                                the one back-of-house-owned
+#                                                kernel type, drops below three
+#                                                core users once the asymmetry
+#                                                is fixed)
+# Original campaign baseline was 23.0. All 22 remaining are corpus-engine-owned
+# — `kernel_homes` still names a single product domain, so `also_required`
+# below is UNMET regardless of size.
+today        = 22.0
+target       = 10.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-boundary.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"kernel_size\"]), \"commit\": d[\"indexed_head\"]}))'"
+also_required = "`kernel_homes` must name a neutral crate, not a single product domain — nc-boundary.py prints it"
+
+[[bar]]
+id           = "nc-thesis"
+timeout_s    = 30
+one_line     = "The product claim is a TYPE, not a runtime gate"
+derives_from = "TARGET_ARCHITECTURE.md §1, §7 rows 1-4"
+status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+proof        = """compile-fail tests, one per illegal construction: an Answer
+with no Judgement; an Evidence with no Origin; an Evidence with no Custody; a
+Citation not pointing into a sealed EvidenceSet; a non-shareable Evidence
+composed into a peer-bound reply. Each ships red-first (ARCH §18.1)."""
+kill         = "if a totality rule cannot be implemented without banning a path the product legitimately needs, this bar FAILS and is re-registered with the narrower invariant — never quietly relaxed"
+closes_at    = "rung 11"
+# INSTRUMENTED 2026-08-20 by the seat. Until today this bar carried NO `today`
+# and NO `instrument`, so `co-lineage measure` skipped it and it rendered
+# UNMEASURED — while the three type-counting bars were fully instrumented. That
+# is the same asymmetry `nc-extends` was minted to correct, and it had a live
+# cost: rungs 10 and 11 both declare `moves = ["nc-thesis"]`, so either could
+# have landed with no way to say whether the thesis moved.
+#   2/5 declared constructions un-constructible by type -> 0.4
+#   an Answer with no Judgement                   open   (rung 11)
+#   an Evidence with no Origin                    TYPE   evidence_without_an_origin
+#   an Evidence with no Custody                   TYPE   evidence_without_a_custody
+#   a Citation not into a sealed EvidenceSet      open   (rung 11)
+#   a non-shareable Evidence in a peer-bound reply open  (rung 11)
+# nc-4-evidence landed three FURTHER Evidence reds beyond the declared list
+# (struct literal, no public constructor, not mutable). They are real proof and
+# they are deliberately NOT counted: this scores the DECLARED list, and letting
+# extra fixtures inflate it would let the bar be moved by adding tests next to
+# the claims already proven rather than by proving the open ones.
+# SCOPE: the instrument scores COVERAGE only — it does not re-run rustc, because
+# co-lineage caps an instrument at 10s and trybuild needs a full crate build.
+# That the wired reds still FAIL is proven by the definition-of-done sweep,
+# which builds and runs `evidence_reds.rs` as an ordinary test target. A green
+# here over a red sweep is not a thesis.
+# The `harness_positive_control` fixture gates the whole reading: absent or
+# unwired, the instrument exits 4 (could-not-judge) and emits no value rather
+# than reporting a zero it cannot stand behind (§18.2, §18.4). Watched failing
+# 2026-08-20 before this line was written.
+today        = 0.4
+instrument   = "scripts/nc-thesis.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
+
+[[bar]]
+id           = "nc-extends"
+timeout_s    = 30
+one_line     = "Adding a thing is a DATA change, not a code change"
+derives_from = "TARGET_ARCHITECTURE.md §2.1 — Recipe is the reference implementation of the whole architecture"
+status       = "open"
+# The end-goal bar, and the only one testing extensibility directly. Scored
+# today:  add a corpus -> DATA (46 TOML recipes)         PASS
+#         add a tool   -> CODE (60 `impl Tool for`)      FAIL
+#         add an intent-> CODE (per-intent runtime fan-out) FAIL
+# The move is already proven in-house on Recipe; this generalizes it upward
+# rather than importing a foreign idea (ARCH §19).
+today        = 1.0
+target       = 3.0
+direction    = "higher_is_better"
+proof        = "one commit per feature adding ONLY data files; full suite green; no new `impl` block"
+# INSTRUMENTED 2026-08-20 by the seat (operator-approved). Until today this bar
+# — the one that carries the campaign's actual goal — was UNMEASURED, while the
+# three type-counting bars were fully instrumented. That asymmetry is the
+# failure mode it exists to prevent: `nc-boundary` can be driven 485 -> 50 by
+# publishing fifty CONCRETE types and would score as success without making
+# anything extensible. Reads 1/3 on an unchanged tree, agreeing axis-for-axis
+# with the hand-scored `today` above — that agreement is the instrument's
+# validation (§18.4), not a coincidence to be explained away.
+#   corpus 0 rust sites   DATA   217 recipe TOMLs; no Rust names a corpus
+#   tool   112 sites      CODE   every tool is a hand-written `impl Tool for`
+#   intent 43 files       CODE   525 `Intent::` sites fan out across them
+# Grep-shaped and deliberately NOT graph-backed: the three graph bars all read
+# ZERO off an emptied database on 2026-08-20 and would have been recorded as
+# total success. An instrument that cannot be silently emptied is worth more
+# here than a more precise one.
+#
+# SCOPE-CORRECTED 2026-08-20 by the seat, when the operator reweighted the
+# ladder onto this bar and intake asked whether its two rungs could actually
+# move it. THE TOOL AXIS WAS UNREACHABLE BY CONSTRUCTION: `axis_tool` counted
+# `impl Tool for` across the whole tree, but 30 of the 112 sites are in
+# `studio/` — the FIFTH system this campaign declares out of scope by name, and
+# which nc-13's Scope section does not touch. A perfect nc-13 converting every
+# in-scope impl would still have left the axis failing against a bar that
+# passes only at zero. `studio/` joins SKIP. Both halves, per §18.6:
+#   by RE-CLASSIFICATION (same tree, studio excluded):  tool 112 -> 82
+#   by CODE this session:                               0 — no Rust changed
+#   score:                                              1/3 -> 1/3, unchanged
+# Nothing passes for free; the threshold rule (DATA at zero, CODE above, no
+# partial credit) is untouched. This is the same class of fix as nc-boundary
+# v1 -> v2, where the instrument matched a type's OWNER and never its
+# REFERENCE SITE.
+#
+# THE INTENT AXIS WAS RE-SPECIFIED 2026-08-20 by nc-14, seat-authorised. It
+# counted FILES naming `Intent::` and passed only at zero — i.e. no Rust
+# anywhere may name an intent variant. nc-14's order says the opposite and is
+# right: "matching on a CLOSED enum is what enums are FOR ... pattern matches
+# stay." Driving the old number to zero means erasing variant naming from the
+# codebase: worse architecture bought to flip a number.
+#
+# It now counts per-intent POLICY blocks — a `match` over an `Intent` naming
+# >=3 distinct variants whose arms derive a per-variant ATTRIBUTE. Handler
+# DISPATCH (an arm that awaits), guards, and construction sites are refused.
+#
+# BOTH HALVES, per §18.6, on the unchanged tree at d8156d06:
+#   by RE-CLASSIFICATION:  intent 33 files -> 13 policy blocks
+#   by CODE this commit:   0 — no Rust changed
+#   score:                 1/3 -> 1/3, unchanged
+# The re-spec does not flip the axis and does not make it easier to pass.
+#
+# THE GAMING VECTOR IT DELIBERATELY DOES NOT OPEN. The obvious alternative —
+# spec the axis on EXHAUSTIVENESS, counting matches with no `_` arm — can be
+# zeroed by ADDING fallback arms, trading a compile error for a silent default.
+# That is ARCH principle 6 backwards and is the precise disease nc-14's order
+# names. Three live sites already have that shape and are still counted:
+# `speed_for_retrieval_intent`'s `_ => Speed::Slow`, `resolve_output_budget`'s
+# `_ => 700`, `operation_of`'s `_ => None`. `--self-test` carries the planted
+# failing input for each direction and was watched failing three ways before
+# this line was written (§18.1).
+#
+# The axis passes at ZERO POLICY BLOCKS OUTSIDE ONE TABLE. The table itself —
+# the single `match` whose arms build `IntentRow` — does not count against it;
+# a SECOND one does, because two tables is two deciders (principle 8).
+#
+# FALSE PASS FOUND AND FIXED THE SAME DAY, by nc-14, in its own instrument.
+# The first cut keyed on the `Intent::` prefix, so a file doing
+# `use crate::types::Intent::*;` and matching on BARE variant names was
+# invisible to it. One such file exists: `runtime/authority_guard.rs`, whose
+# `guard_story` is a thirteen-variant policy table. With that blind spot the
+# axis read 0/DATA on a tree where a policy site was live — the one direction
+# a bar passing only at zero must never fail in. The scanner now reads the
+# variant names off the `pub enum Intent` declaration itself (so a new variant
+# is covered the day it lands) and accepts bare arm heads in glob-importing
+# files. `--self-test` carries the fixture and it was watched failing.
+#
+# MEASURED with the fixed instrument, both ends:
+#   before nc-14 (at bcabbb69):  14 policy blocks   CODE
+#   after  nc-14:                 1 policy block    CODE
+# The one remaining is `guard_story`, and nc-14 declined to tabulate it on the
+# merits: its column VALUES name sovereign-core's internal file layout
+# ("handlers/knowledge_query.rs exit"), so moving it into the published routing
+# contract is the leak this campaign's kill clause fires on — and it already
+# has the property this rung exists to create (exhaustive, no `_` arm, pinned
+# by test, so a new intent cannot ship without a decided story). Tabulating it
+# would buy the axis and close no defect class. GOAL OUTRANKS METRIC.
+instrument   = "scripts/nc-extends.py --json | python3 -c 'import json,sys; print(json.dumps({\"value\": float(json.load(sys.stdin)[\"value\"])}))'"
+
+[[bar]]
+id           = "nc-reach"
+one_line     = "A type travels beyond the file that declares it, or it is not an abstraction"
+derives_from = "NOUN_CONVERGENCE.md §10.2, minted 2026-08-20 by scripts/nc-reach.py"
+# DEFERRED 2026-08-20 by the REBASELINE (operator-approved, directive 22d0841b).
+# Evidence, not a target. Still measured, still checkable — only `descoped`
+# mutes a verdict. The commentary below is UNCHANGED and still true; what
+# changed is that this bar can no longer be the thing rungs are steered by.
+#
+# THE EVIDENCE THAT DEFERRED IT, both halves measured, neither argued:
+#   (a) PRICE. nc-16 extracted a real shared capability — `sovereign-enrichment-
+#       catalog`, three consuming crates — and moved this bar by -0.031 points
+#       (42.937 -> 42.906 attributable; the raw -0.134 was mostly denominator
+#       dilution from peers' work). At that rate 42.8 -> 28 is ~373 rungs, not
+#       the ~25 the rung's own order predicted.
+#   (b) BLINDNESS, which matters more than the price. That same rung deleted a
+#       real duplicate, gave three hosts ONE config schema where one copy was a
+#       self-declared mirror four fields wrong, and fixed a LIVE defect where
+#       watched-folder enrichment broke under the documented SOVEREIGN_DATA_DIR
+#       override. This bar scored all of that at -0.03. Wave 5 then landed three
+#       more convergence rungs — 703 lines deleted, a defect class closed, `Gap`
+#       6 -> 5 — and moved every declared bar by ZERO.
+#   The arithmetic of why is nc-16's and it is not a matter of opinion: private
+#   share is P/N, and a second consumer reduces P only for types with ZERO other
+#   referencing files — but the types a second host needs are already multi-file
+#   at home, which is exactly what makes them a capability instead of a local
+#   helper. Extraction therefore converts local -> exported, which this headline
+#   does not count. The predicted 20-40 private types crossing could only exist
+#   if they all sat in ONE FILE, i.e. only if the thing extracted were a god
+#   object. The prediction required the anti-pattern the campaign exists to remove.
+#
+# REOPEN CONDITION: a rung family whose MECHANISM moves private -> exported at
+# scale rather than one type at a time. Until such a mechanism is named and
+# priced, this bar reports and does not steer.
+# descoped 2026-08-21: 42.9 -> 42.5 across 8 measurements. Superseded by the real finding: a closed type with NO EXTENSION POINT forces a consumer to fork it. Privacy share is a symptom, not the disease.
+status       = "descoped"
+# WHY THIS BAR EXISTS, stated bluntly because the alternative is arguing it in
+# prose every turn. After three waves and ~30 commits the three type-counting
+# bars read 477 / 143 / 23 against targets of 50 / 0 / 10 — flat, one backwards.
+# In the same period the campaign shipped: a live HTML-truncation bug (every
+# crawled page cut at the first `</script>` on three ingest paths), three
+# user-visible desktop panics, 1,405 deleted duplicate lines, a trust envelope
+# that exposed ten bench banks being scored as fine, tool descriptors 0 -> 68%
+# data-sourced retiring 4,137 lines of data spelled as code, `code index --help`
+# exiting 1, and a config path that lied to shipped-binary users.
+#
+# NOT ONE OF THOSE IS VISIBLE IN THE THREE BARS ABOVE, because they measure a
+# dimension that was already healthy: `cargo xtask layer-gate` exits 0 — every
+# crate edge points down or sideways — and §10.2 measures 0 of 441 load-bearing
+# types carrying an upward edge. The defect is INSIDE crates, and this bar is
+# where the work already being done becomes scoreable instead of narrated.
+#
+# MEASURED at `0f6bb56d`: 42.9% of 4,998 first-party production types are
+# referenced by NO other file. The per-crate spread is the real signal — same
+# authorship, same five months:
+#   sovereign-cli        93 types   85% private   0% exported
+#   sovereign-server     84         80%           0%
+#   sovereign-desktop   213         78%           0%
+#   sovereign-cli-llm   613         75%           0%   (122k production lines)
+#   corpus-engine       900         28%          34%
+#   sovereign-contracts 284         11%          86%
+#   oicp-types           70          0%          96%
+# A fivefold spread is not idiom, it is the absence of anything to reach for.
+# The instrument independently reproduces §10.2's HAND figures (cli-llm 75/0,
+# contracts 15/84 vs 11/86, desktop 79/0 vs 78/0) — that agreement is its
+# validation (§18.4), not a coincidence.
+#
+# TARGET IS DERIVED, NOT GUESSED: 28% is what `corpus-engine` — the LARGEST
+# first-party crate at 900 types — already achieves today. The target is
+# therefore "the rest of the system reaches what our biggest domain crate has
+# already demonstrated is possible", which is falsifiable and was not chosen to
+# flatter any rung.
+#
+# NOT ALL PRIVACY IS WRONG. A one-endpoint DTO should be private, which is why
+# the target is 28 and not 0. A bar driven to zero here would be actively bad
+# architecture, and any rung that claims movement by making one-use types public
+# is gaming it — check the SPREAD, not the mean.
+today        = 42.9
+target       = 28.0
+direction    = "lower_is_better"
+instrument   = "scripts/nc-reach.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"value\"]), \"commit\": d[\"indexed_head\"]}))'"
+kill         = "if the share falls while the per-crate spread does not narrow, the bar is being moved by publishing one-use types rather than by extracting anything — stop and re-read §10.3"
+
+# ── THE REBASELINE, 2026-08-20 (operator-approved, directive 22d0841b) ─────
+#
+# WHY. Wave 5 landed three rungs of genuine convergence and moved ZERO bars,
+# while deleting 703 lines, closing a real defect class, taking `Gap` 6 -> 5 and
+# intent policy blocks 14 -> 1. And twice in two waves the thing actually found
+# was ONE DECIDER COPIED THREE WAYS — nc-16's `config.json` schema implemented
+# three times with a self-declared mirror four fields wrong, and nc-14's intent
+# wire slug hand-written three times at 13 arms each (five counting the inverse
+# decoders). Neither is a leaky boundary, which is what the width bars count.
+# The bars were not measuring what the campaign accomplishes.
+#
+# ONE BAR WAS DESCOPED AND ITS ROW REMOVED, because the 9-bar cap is the
+# anti-accretion structure and the loader is right to refuse a tenth. The record
+# is here and in git history, never silence (rule 8b):
+#   `nc-god-objects` — DESCOPED 2026-08-20, closed by decision. Three reasons,
+#   all measured: (1) NO INSTRUMENT was ever declared, so it could only move by
+#   a hand edit, the growth vector 8b removed; (2) NEVER ATTEMPTED — none of 22
+#   orders named it; (3) ITS PREMISE WAS MEASURED AWAY — §10.2 finds 0 of 441
+#   load-bearing types carrying an upward edge, `layer-gate` exits 0, and 18 of
+#   28,847 co-changing file pairs cross a crate boundary with no structural
+#   reference behind them. The crate graph is HEALTHY; the sprawl is INSIDE
+#   crates, which is now `nc-redundant`'s job, with an instrument, at the
+#   behaviour tier. Its last recorded value was 4160.0 (Runtime 130 methods x
+#   32 files). Reopening means re-registering it WITH an instrument.
+#
+# EVERY FLOOR BELOW IS MINTED at graph d8af5cbf, never hand-typed. §10.7's own
+# metric table is marked "un-minted" and this replaces it — that section said
+# each row should name its owning tool, and now each row HAS one that runs.
+#
+# THE THREE INSTRUMENTS THAT MADE THIS POSSIBLE all landed 2026-08-20:
+# `converge roles` (§10.1/§10.3), `arch_metrics::type_spreads` (§10.2), and
+# `dry-report` + `SourceScope` (§10.6). Before them these numbers were
+# hand-measured and, by §1's own rule, week-old fish on arrival.
+
+[[bar]]
+id           = "nc-redundant"
+one_line     = "One decider, copied three ways, gets deleted down to one"
+derives_from = "NOUN_CONVERGENCE.md §10.6, minted 2026-08-20 by scripts/nc-redundant.py"
+status       = "open"
+# THE PRIMARY BAR OF THE REBASELINE. This is where the campaign's actual
+# repeated finding shows up. The name census keys on NAMES and nc-reach keys on
+# VISIBILITY; §10.6 is explicit that "the two instruments see different halves
+# and the halves need different fixes" — §10.1 needs an abstraction minted,
+# §10.6 needs losers deleted. Deleting a loser is the cheaper, provener half.
+#
+# MEASURED at d8af5cbf: 199 exact-clone groups, 467 near-clone clusters,
+# 14,162 redundant lines (lower bound), first-party production only.
+#
+# TARGET IS PRICED, NOT GUESSED — the two numbers that set it:
+#   - the 78 near-clone clusters at >= 30 lines carry ~4,202 redundant lines;
+#   - `nc-kill-chain-proof` MEASURED the delete rate at net -1,164 lines in one
+#     rung, on this codebase, with `code redirect`, including a live bug fix.
+#   14,162 - ~4,200 = ~9,960. The target is 10,000 and it is ~4 rungs of an
+#   already-proven shape. Named targets are sitting in §10.6 today:
+#   `complete_stream` (12 copies plus three further pairs at 120/110/101 lines),
+#   `ctx` construction (24 copies across two clusters), parse/args ~1,430,
+#   stream/inference ~1,163, text extraction ~1,043.
+#
+# NOT ALL REPETITION IS WRONG. Two nine-line accessors that happen to rhyme are
+# not a shared concept, which is why the target is 10,000 and not zero. A rung
+# claiming movement by collapsing unrelated code that merely looks alike is
+# gaming it — the kill clause below is the check.
+today        = 14162.0
+target       = 10000.0
+direction    = "lower_is_better"
+# NOISE BAND, added 2026-08-21 the same day the bar was registered, because
+# nc-17's worker measured what the seat should have measured before trusting a
+# single run (principle 7 — one run is not a measurement; the seat ran it ONCE
+# and wrote the floor). FOUR consecutive runs at a FIXED `indexed_head`
+# 61a16a7e / `indexed_at` 07:15:32Z returned 14,088 · 14,088 · 14,165 · 14,157.
+# TWO defects, both real, note c5534030:
+#   1. THE STAMP IS NOT SUFFICIENT. `exact` moved 196 -> 202 with provenance
+#      UNCHANGED, so two runs carrying the same stamp are not comparable. This
+#      also explains the bar's own 14,162 against a same-stamp 14,156.
+#   2. THE NEAR PASS IS NONDETERMINISTIC. Runs with identical group counts
+#      differ by 8 lines, so `unit_lines` depends on thread completion order.
+# Bands measured: +/-8 at identical index content, +/-77 across silent rewrites.
+# A delta inside this band is `could-not-judge`, re-run n=3 (§18.5) — it is NOT
+# a result and must never be reported as one.
+#
+# THE DURABLE WORKAROUND, and it is better than the headline: derive a rung's
+# CONTRIBUTION from the cluster list, `(members-1) x unit_lines` summed over the
+# clusters that disappear. That is exact and index-independent. nc-17 used it to
+# pre-register -383 (predicted AFTER 13,774 +/-8) when the headline could not be
+# trusted. Prefer it for attributing a rung; the headline is for the trend.
+noise_band   = 80.0
+# RUN-TIER. `dry-report` walks every symbol embedding in the corpus index and
+# takes minutes, not seconds; the read-tier default of 10s cannot hold it and
+# the first sweep timed out against it. 420s measured with headroom.
+timeout_s    = 420
+#
+# MEASUREMENT PROTOCOL — THE SEAT RE-INDEXES BEFORE MEASURING THIS BAR.
+# Amended 2026-08-21, hours after registering it, because nc-17's worker caught
+# the defect before doing the work rather than after: `dry-report` reads the
+# SCIP index at `last_indexed_head`, NOT the working tree. `nc-boundary` and
+# `nc-reach` share that property and have always been fine with it because they
+# move slowly. THIS BAR IS EXPECTED TO MOVE PER RUNG, so an un-refreshed index
+# returns the rung's own BEFORE number as its AFTER and the rung reads as
+# unmoved when it is merely unseen.
+#   - `code index` is a COMMONS WRITE and stays seat-owned; two concurrent runs
+#     collided on 2026-08-20. Workers must NOT run it and must not work around it.
+#   - The seat re-indexes at WAVE CLOSE, then measures. Until that happens an
+#     unchanged AFTER is `could-not-judge` ON THE INSTRUMENT, never `unmoved` on
+#     the work (ARCH §18.3 — absence is reported, never defaulted).
+#   - A worker's working-tree-truthful evidence in the meantime is the scoped
+#     `dry-report --scope <crate>/` delta (~2s per crate, still index-bound) plus
+#     raw deleted-line counts from `git show --stat` (not index-bound). Both go
+#     in the verdict, each labelled for which it is.
+instrument   = "scripts/nc-redundant.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"value\"]), \"commit\": d[\"commit\"]}))'"
+kill         = "if the count falls while the number of DISTINCT CONCERNS in the report does not, the bar is being moved by merging code that merely looks alike rather than by converging a decider — a clone pair that has DRIFTED is the signal to look for, because drift proves the copies were one decision (§10.6's `strip_html` pair, where one copy silently truncated every crawled page)"
+
+[[bar]]
+id           = "nc-congestion"
+one_line     = "A change stops needing to touch five crates at once"
+derives_from = "NOUN_CONVERGENCE.md §10.7, minted 2026-08-20 by scripts/nc-congestion.py"
+status       = "open"
+# §10.7: "that is the number that says whether any of this works." The only
+# OUTCOME metric here — every other bar measures structure, this one measures
+# whether the structure bought anything. A ceiling to HOLD, not a climb.
+#
+# MEASURED, distinct crates per `.rs` commit by AUTHOR month:
+#   2026-04  1.85   (n=482)
+#   2026-05  2.79   (n=279)
+#   2026-06  3.14   (n=237)
+#   2026-07  3.21   (n=252)   <- peak, +74% across the accretion period
+#   2026-08  2.16   (n=332)   <- the month this campaign has been running
+#
+# BUCKET BY AUTHOR DATE. This history was rewritten around 2026-08-11 and
+# committer dates all cluster there, collapsing five months into two quarters.
+#
+# INSTRUMENT VALIDATED BEFORE THE RESULT (§18.4). The seat's first run
+# collapsed all of `sovereign/crates/*` into one bucket and returned 1.34 for
+# August — a ~40% understatement. It was caught by cross-checking against
+# §10.7's independently published series (1.84 / 2.82 / 3.08 / 3.21 / 2.30),
+# which the corrected instrument reproduces to within a rounding step. That
+# agreement is the validation; the correction is recorded rather than applied
+# quietly.
+#
+# HOLD IT LOOSELY: composition may explain part of the August fall, and a month
+# with more small commits reads lower for reasons that are not convergence.
+today        = 2.16
+target       = 2.30
+direction    = "lower_is_better"
+instrument   = "scripts/nc-congestion.py --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"value\"]), \"commit\": d[\"commit\"]}))'"
+kill         = "if this rises above 2.30 while the other bars improve, the campaign is buying structure at the cost of the thing structure was for — stop and re-read §10.4, because it means reaching is still more expensive than minting"
+
+[[bar]]
+id           = "nc-adoption"
+one_line     = "Authors reach for the shared thing unprompted, or it gets deleted"
+derives_from = "NOUN_CONVERGENCE.md §10.7's pre-registered adoption test, taken verbatim"
+status       = "open"
+# THE ONE BAR THAT IS ALLOWED TO FAIL AND STILL BE A SUCCESS. §10.7, operator
+# direction 2026-08-20: "win by being useful and better, not through force —
+# applied as a software architecture." That direction retired two proposed
+# ratchets. This replaces them.
+#
+# THE TEST, pre-registered before the work, exactly as §10.7 states it:
+#   Build the envelope in `kernel-types` and `Report` as its renderer in
+#   `cli-shared`. Convert three commands — `atlas_drift_report.rs` (48
+#   single-use types), `atos_cmd/run.rs` (43), `cache_audit_cmd.rs` (25).
+#   THEN DO NOT MANDATE IT. No gate, no ratchet, no preflight check. Measure
+#   adoption across the next N new or edited commands. If authors pick it up
+#   unprompted it earned its place. If they do not, it was NOT better than what
+#   they would have written, and it is DELETED rather than enforced.
+#
+# MEASURED FLOOR at d8af5cbf: the `Report` role is 102 types across 23 crates,
+# 3 of them adopted (reaching 3+ crates) = 2.94%. The seat first typed 3.0 here
+# from the rounded human table and corrected it to the minted 2.94 — a floor
+# read off a rendering is not a measured floor. That is the
+# control experiment ALREADY RUN — the most obvious "shared vocabulary"
+# candidate in the codebase, and it never spread, because a report is data and
+# data-shaped abstractions do not pay (§10.3).
+#
+# TARGET IS DERIVED FROM THE SAME TABLE, not chosen: 15% is what `Config` (130
+# types) achieves today, and `Config` is §10.3's own example of a role carrying
+# NOTHING. So 15% is the floor of "spread at all" rather than a stretch. If an
+# envelope that renders, computes age, bands staleness and prints the footer
+# cannot beat the do-nothing role, §10.8's first failure row has fired and the
+# delete branch is the honest outcome.
+#
+# EXTRACT WORK, NOT SHAPE (§10.3): `Tool` carries dispatch + execution and sits
+# at 52%; `Response` carries nothing and sits at 2%. Adoption is monotone in
+# work carried and in nothing else.
+today        = 2.94
+target       = 15.0
+direction    = "higher_is_better"
+# RUN-TIER. `converge roles` walks the graph in ~8s — inside the 10s read-tier
+# cap, but not with enough room to be trusted on a loaded box.
+timeout_s    = 90
+instrument   = "scripts/nc-adoption.py --role Report --json | python3 -c 'import json,sys; d=json.load(sys.stdin); print(json.dumps({\"value\": float(d[\"value\"]), \"commit\": d[\"commit\"]}))'"
+kill         = "if adoption only rises where it was MANDATED, the abstraction did not win on cost and the honest outcome is DELETION, not enforcement — §10.8 row 3. Never add a gate to rescue this bar; a gate here converts the experiment into its own confirmation"
+
+# ── PRE-REGISTRATION 2026-08-20: the fan-in ratchet vs. this campaign ───────
+#
+# Written BEFORE the re-baseline data exists, so the verdict cannot be
+# rationalised afterwards. Seat decision, steer c82d5b92.
+#
+# THE STATE. `quality/baselines/fan_in.tsv` was last touched at 1c9e7af4 dated
+# 2026-08-10 — NINE DAYS before this campaign was declared. At HEAD 4c42e191,
+# clean manifest set, `cargo xtask layer-gate` is ALREADY RED on 2 of its 3
+# relevant rows: rungs landed since (kernel-types, the `code index` move,
+# corpus-engine-sections) grew fan-in and nobody re-baselined. The ratchet has
+# been failing in the open for ~10 days with nobody watching it, which is
+# §18.1 exactly: a gate nobody has watched fail is not a gate.
+#
+# THE TENSION. nc-16 mints `sovereign-enrichment-catalog` because the
+# enrichment store's schema was implemented THREE TIMES — sovereign-cli-llm,
+# sovereign-tools, sovereign-desktop — for want of a library. That is this
+# campaign working as designed. It also adds +1 fan-in to each of
+# corpus-engine, sovereign-core and sovereign-contracts, because inserting a
+# legitimate intermediary IS a fan-in event. Measured on nc-16's manifest
+# diffs: THREE ADDS, ZERO REMOVES. So on this instrument a successful
+# convergence rung is INDISTINGUISHABLE from coupling growth.
+#
+# THE PREDICTION, falsifiable, and the reason this block exists:
+#   The +1/+1/+1 is a TRANSIENT of a deliberately narrow first rung. The -1s
+#   arrive when the same family's rungs 2-5 delete the desktop's other four
+#   re-derived surfaces (atlas, mesh, recipe, governance — 3,135 lines) and
+#   its direct manifest edges can finally go.
+#   PREDICT: across nc-16 plus its four successor rungs, fan-in on
+#   corpus-engine / sovereign-core / sovereign-contracts NETS DOWN, or at
+#   worst returns to the 2026-08-10 baseline of 16 / 15 / 19.
+#   KILL BAR: if the family completes and fan-in has only RISEN, the
+#   extraction is adding intermediaries without removing edges — coupling
+#   growth wearing a convergence costume — and the rung family STOPS. It is
+#   not continued and the baseline is not re-minted to accommodate it.
+#
+# INSTRUMENT CAVEAT (§18.4). Manifest edges are the COARSE instrument; the
+# real one is code-level import sites, because the desktop keeps its
+# corpus-engine manifest edge for the four surfaces it has not yet shed. nc-16
+# is required to report imports SHED, and to name the rung at which the direct
+# edge could actually go — or to say plainly that it never can. "Never"
+# falsifies the prediction immediately and reprices the family.
+#
+# PROCEDURE. `--update-baseline` is a SEAT action, run ONCE at wave close, not
+# per-worker, so the accepted diff is attributable to the wave; its commit
+# cites this block and records the pre-wave HEAD value. Workers do not run it
+# and do not hand-edit rows. (Enforced the hard way on 2026-08-20: a worker
+# re-baselined to 18/20/17 at 00:00:24Z; the seat reverted it to HEAD and
+# froze the file. The overwritten copy is kept for the wave-close diff.)
+
+# ── The ladder ──────────────────────────────────────────────────────────────
+
+[[rung]]
+id = "nc-0-reach"
+moves = ["nc-boundary"]
+one_line = "Reaching becomes cheaper than building — the anti-rot half, armed before anything is added"
+
+[[rung]]
+id = "nc-1-kernel"
+moves = ["nc-kernel", "nc-thesis"]
+one_line = "Mint the neutral kernel — ContentHash, CorpusId, NodeId, Origin, Custody, Attribution — owned by no domain"
+
+[[rung]]
+id = "nc-2-backflow"
+moves = ["nc-no-violation"]
+one_line = "Delete the 82 wrong-way types; the layer map becomes one-way for the first time"
+
+[[rung]]
+id = "nc-2b-inference-vocabulary"
+moves = ["nc-no-violation", "nc-boundary"]
+one_line = "The wire contract stops naming the runtime — 10 inference types move down to oicp-types, and the forbid rule loses its escape"
+# PARTIAL, 2026-08-20. The vocabulary moved; the CONTRACT did not, and the
+# `except = ["sovereign-contracts"]` on the oicp-client forbid rule STAYS. The
+# rung's Done-When is not met and this records why, with prices, so the
+# successor does not re-derive it.
+#
+# MEASURED after the move, `scripts/nc-boundary.py --edge oicp:sovereign`:
+#   oicp -> sovereign   12 types / 103 refs  ->  1 type / 3 refs
+#   and the 1 is `InferenceProvider` itself — the blocker named below.
+# Bars on the same reindex (nc-5 handed over 477 / 158 / 22):
+#   nc-boundary      477 -> 476
+#   nc-no-violation  158 -> 146
+#   nc-kernel         22 ->  23   THE WRONG WAY, and correctly so — the same
+#     effect nc-5 recorded: a type all three domains legitimately speak counts
+#     as kernel growth, because the bar cannot tell a published noun from a
+#     leaked god object. `kernel_homes` is still {corpus-engine}, so
+#     `also_required` remains UNMET regardless.
+#
+# LANDED: the 10 value types + the §8 Speed<->LatencyClass map now live in
+# `oicp-types` (definitions, not copies — nc-boundary.py resolves ownership
+# from the definition's file). Sovereign's SLOT_POLICY deliberately did not
+# follow; that split forced `for_workload*` / `yes_no` off `CompletionRequest`
+# and onto `Workload`, which is the noun that owns the decision. Also minted
+# `oicp_types::InferenceError` and converged `sovereign-compute`'s two
+# hand-written wire maps onto it.
+#
+# THE ORDER'S HARD-HALF QUESTION IS ANSWERED, and the answer is yes. Measured
+# across all 72 `impl InferenceProvider for` blocks: the variants those bodies
+# actually construct are NotImplemented 57, Inference 55, Routing 7, QueueShed
+# 1, InvalidInput 1 — and Storage 1, the lone runtime leak. The protocol/
+# runtime split of `Error` is real, not a hoped-for one.
+#
+# THE BLOCKER IS SOMEWHERE ELSE, and the order did not anticipate it.
+# `InferenceProvider` cannot move to `oicp-types` because ONE of its ~40
+# methods, `edit_slot_info()`, returns `EditSlotInfo` -> FimLane / FimStyle /
+# NextEditLane / NextEditFormat — and `NextEditFormat` names sovereign's OWN
+# prompt strategies (`region_instruct`, `zeta2`, `sweep`). That is product
+# vocabulary; moving it down would put sovereign's prompt taxonomy inside the
+# protocol crate, which is the "publish concrete types to move the metric"
+# failure `nc-boundary` warns about. Two exits, both priced on this tree:
+#   - supertrait split (`SovereignProvider: InferenceProvider`): 488
+#     `dyn InferenceProvider` sites, since every `Arc<dyn InferenceProvider>`
+#     in sovereign would have to change.
+#   - move `EditSlotInfo` down: 201 lines, and drags the prompt taxonomy.
+# Neither is this rung's business. Pick one before re-opening 2b.
+#
+# AND ONE THING WAS TRIED AND REVERTED, deliberately. Switching the trait's
+# error type to `InferenceError` WITHOUT moving the trait was carried far
+# enough for the compiler to price it: sovereign-core and oicp-client both went
+# green, but the tail propagates into the engine's internal streaming plumbing
+# (`StreamSink`, `generate_stream_dispatch`) — the daemon's hot generation
+# path — and it buys 2 types on an edge that still cannot reach zero while
+# `edit_slot_info` stands. Reverted rather than half-landed. The successor
+# should do trait-move and error-switch as ONE change, after EditSlotInfo has
+# a home.
+
+[[rung]]
+id = "nc-3-backstage"
+moves = ["nc-no-violation"]
+one_line = "Back-of-house becomes a CRATE boundary, so the one-way rule can be enforced instead of hoped for"
+
+[[rung]]
+id = "nc-3b-substrate"
+moves = ["nc-boundary"]
+one_line = "Promote Step / Artifact / Runner to substrate — 74 hand-rolled dataflow types become tenants of one engine"
+
+[[rung]]
+id = "nc-4-evidence"
+moves = ["nc-boundary", "nc-thesis"]
+one_line = "corpus-engine publishes Evidence — the retrieval surface, and the only door"
+
+[[rung]]
+id = "nc-5-corpus"
+moves = ["nc-boundary", "nc-kernel"]
+one_line = "corpus-engine publishes Corpus (+ Record) — the engine stops being the interface"
+
+[[rung]]
+id = "nc-6-atom"
+moves = ["nc-boundary"]
+one_line = "corpus-engine publishes Atom — AtomEnvelope alone crosses the boundary 542 times"
+
+[[rung]]
+id = "nc-7-note"
+moves = ["nc-boundary", "nc-kernel"]
+one_line = "corpus-engine publishes Note — NoteStore is a god object serving as a contract"
+
+[[rung]]
+id = "nc-2c-backflow-tail"
+moves = ["nc-no-violation"]
+one_line = "The last commonwealth -> sovereign edge — 16 types / 98 refs, six files, three families — so rung 8 can narrow without narrowing around a leak"
+
+[[rung]]
+# BLOCKED 2026-08-20 by the seat, dependency UNMET — do not dispatch as written.
+# The order's own premise is "rung 2's commonwealth -> sovereign backflow must be
+# gone before the published surface can be narrowed, or you narrow around a
+# leak." Measured today, `nc-boundary.py --edge commonwealth:sovereign`:
+#   16 distinct types / 98 refs still crossing (rung 2 took it 22 -> 16, not to 0)
+#   Effect 20 · Scope 20 · ToolDescriptor 14 · Tier2LaunchOutcome 6 ·
+#   NextEditEpisode 5 · JournalLine 5 · + 10 more
+# The head of that list is one coherent sub-problem, not 16 scattered leaks:
+# Effect / Scope / ToolDescriptor are sovereign's TOOL-REGISTRY vocabulary
+# (the `Effect x Scope` manifest grouping), named by commonwealth crates. That
+# wants a home decision of its own before rung 8 narrows anything.
+id = "nc-8-peer-capability"
+moves = ["nc-boundary", "nc-no-violation"]
+one_line = "commonwealth publishes Peer + Capability; sovereign composes them instead of naming Mesh and AppState"
+
+[[rung]]
+id = "nc-9-question"
+moves = ["nc-boundary"]
+one_line = "sovereign publishes Question — message, context and intent as one noun"
+
+[[rung]]
+id = "nc-10-judgement"
+moves = ["nc-thesis"]
+one_line = "Judgement, with Verdict as a field rather than a rung of its own"
+
+[[rung]]
+id = "nc-11-answer"
+moves = ["nc-thesis", "nc-boundary"]
+one_line = "Answer + Citation — THE THESIS CLOSES: no Answer without a Judgement"
+
+[[rung]]
+id = "nc-12-gap"
+moves = ["nc-boundary"]
+one_line = "Gap — Evidence's dual, and the research loop's driving input"
+
+[[rung]]
+id = "nc-13-tools-as-data"
+moves = ["nc-extends"]
+one_line = "Adding a tool becomes a data change — the Recipe move, generalized"
+
+[[rung]]
+id = "nc-14-intent-as-data"
+moves = ["nc-extends"]
+one_line = "Adding an intent becomes a row — every per-intent attribute is a column"
+
+[[rung]]
+id = "nc-15-generate"
+moves = ["nc-boundary"]
+one_line = "Generate the noun list and boundary map from the register; retire the reconciliation machinery it replaces"

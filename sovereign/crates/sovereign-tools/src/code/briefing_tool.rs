@@ -18,21 +18,17 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use corpus_engine_notes::NoteStore;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-    ToolExample,
-};
+use sovereign_core::types::{StepOutput, ToolContext};
 use sovereign_work_atlas::store::ScopeMatch;
 use sovereign_work_atlas::WorkAtlasStore;
 
 use super::brief::{assemble_brief, BriefInputs, WorkInFlightEntry};
 use super::working_set::{detect_working_set, Strategy};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Daemon-side MCP wrapper around the brief assembler.
 pub struct BriefingTool {
@@ -231,79 +227,25 @@ fn current_branch(repo_root: &std::path::Path) -> Option<String> {
     (!name.is_empty()).then_some(name)
 }
 
-#[async_trait]
-impl Tool for BriefingTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "briefing".to_string(),
-            name: "Session Briefing".to_string(),
-            description: "Assemble the session-orientation brief for this repo: \
-                          working set (from git), live peer work-in-flight, drift \
-                          posture, area principles, active decision/invariant \
-                          notes, structural atoms, and recent activity — one \
-                          token-budgeted markdown document. Call at session start \
-                          (or after a long gap) instead of reading files to \
-                          orient. Same renderer as `svrn code brief`, so hook-\
-                          injected briefs and this tool never disagree."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "strategy": {
-                        "type": "string",
-                        "enum": ["recent", "branch", "explicit"],
-                        "default": "recent",
-                        "description": "Working-set detection: `recent` = files touched by commits in the last `hours` (best for orientation on a clean tree); `branch` = diff vs the default branch; `explicit` = use `files`."
-                    },
-                    "hours": {
-                        "type": "integer",
-                        "default": 48,
-                        "description": "Window for the `recent` strategy."
-                    },
-                    "files": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Repo-relative working-set files (for `explicit`)."
-                    },
-                    "budget_tokens": {
-                        "type": "integer",
-                        "default": 1500,
-                        "description": "Token budget for the rendered brief."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Optional ATOS feature id to scope notes."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![ToolExample {
-                situation:
-                    "Session start — orient on what changed recently and who else is active.".into(),
-                call: json!({ "strategy": "recent", "hours": 48 }),
-            }],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "markdown": { "type": "string", "description": "The rendered brief." },
-                    "working_set_size": { "type": "integer" },
-                    "work_in_flight_count": { "type": "integer" },
-                    "strategy": { "type": "string" },
-                    "budget_tokens": { "type": "integer" }
-                }
-            })),
-        }
+impl BriefingTool {
+    /// Bind this tool's state to its `briefing` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("briefing", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `briefing`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let Some(repo_root) = self.workspace_root.clone() else {
             return Err(Error::InvalidInput(
                 "briefing: daemon has no workspace configured — set \

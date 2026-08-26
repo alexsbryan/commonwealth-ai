@@ -7,6 +7,11 @@
 //! and `[[exception]]` grandfathers today's known violations as a reviewable
 //! burn-down list (adding one requires editing the policy file in the PR).
 //!
+//! `backstage` names the quality controls, which sit OUTSIDE the ordered stack
+//! rather than on top of it: they may observe every layer, and nothing may
+//! depend on them. See [`LayerMap::backstage`] for the rule and the one thing
+//! it cannot enforce.
+//!
 //! Two consumers, one parser:
 //! - `xtask layer-gate` feeds Cargo-DECLARED dependency edges (deterministic,
 //!   runs in CI without a daemon).
@@ -21,7 +26,13 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// Highest `schema_version` this evaluator understands. A map declaring a
 /// newer version fails loudly instead of being half-interpreted.
-pub const MAX_SCHEMA_VERSION: u32 = 1;
+///
+/// v2 added `backstage`. The bump is the load-bearing half of that feature: a
+/// build that predates it would parse a v2 map, silently ignore the unknown
+/// key, and report a clean bill of health on a map whose central rule it never
+/// evaluated. Refusing the map is the only honest answer (ARCH §18.3 — absence
+/// is reported, never defaulted).
+pub const MAX_SCHEMA_VERSION: u32 = 2;
 
 // ── Schema ────────────────────────────────────────────────────────────────────
 
@@ -35,6 +46,31 @@ pub struct LayerMap {
     pub forbids: Vec<Forbid>,
     #[serde(default, rename = "exception")]
     pub exceptions: Vec<Exception>,
+    /// The quality controls — eval, benches, judges, gates, harnesses. Crate
+    /// name patterns (`*` allowed), declared ONCE here and nowhere else.
+    ///
+    /// These sit outside the ordered stack, not on top of it. The rule is
+    /// one-way: back-of-house may observe every layer, and nothing may depend
+    /// on it. A bench you cannot ship without is not a bench.
+    ///
+    /// "Nothing may depend on it" is mechanical, not a matter of taste. The
+    /// test is *does the product ship without it?*, and Cargo already answers
+    /// it: a product crate may reach a back-of-house crate only through an
+    /// `optional = true` dependency the default feature set does not turn on
+    /// ([`DepEdge::optional`]). An unconditional edge means the shipped
+    /// artifact carries its own instrument, which is the single thing this
+    /// rule exists to prevent.
+    ///
+    /// WHAT THIS CANNOT ENFORCE. The unit is the CRATE. Where quality-control
+    /// code shares a crate with product code, this rule can only speak about
+    /// the crate's dependencies as a whole — it cannot stop one module from
+    /// naming a back-of-house type while its neighbours stay clean, and Cargo
+    /// still links the back-of-house crate into the product binary either way.
+    /// Any such crate needs an `[[exception]]` saying so; the exception is the
+    /// honest record that the boundary is drawn in the wrong place, not a
+    /// waiver.
+    #[serde(default)]
+    pub backstage: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -85,6 +121,19 @@ pub struct DepEdge {
     pub from: String,
     pub to: String,
     pub kind: DepKind,
+    /// True when this dependency is absent from the crate's DEFAULT build —
+    /// declared `optional = true` and not switched on by the transitive
+    /// closure of the `default` feature.
+    ///
+    /// Layer DIRECTION ignores this (the layer map governs the all-features
+    /// union: an edge behind a feature is still a declared edge). It matters
+    /// only to the `backstage` rule, where it is the mechanical form of "does
+    /// the product ship without it?" — see [`LayerMap::backstage`].
+    ///
+    /// Feeds that cannot see Cargo features (SCIP symbol references) set this
+    /// `false`: an observed reference is by definition in some build, and
+    /// claiming otherwise would be a guess.
+    pub optional: bool,
 }
 
 // ── Output ────────────────────────────────────────────────────────────────────
@@ -111,6 +160,14 @@ pub enum Violation {
     },
     /// An `[[exception]]` no live edge needed — delete it, it's already won.
     StaleException { from: String, to: String },
+    /// A product crate depending on a back-of-house crate in its default
+    /// build. The one-way rule runs the other way: back-of-house observes the
+    /// product, never the reverse.
+    BackstageEdge {
+        from: String,
+        to: String,
+        kind: DepKind,
+    },
 }
 
 impl Violation {
@@ -152,6 +209,22 @@ impl Violation {
                  the violation is fixed; delete the entry from \
                  quality/ARCH_LAYERS.toml"
             ),
+            Violation::BackstageEdge { from, to, kind } => format!(
+                "{from} → {to}: {} dependency on a `backstage` crate that the \
+                 DEFAULT build carries — the quality controls observe the \
+                 product, never the reverse (a bench you cannot ship without \
+                 is not a bench). Fix it by making the dep `optional = true` \
+                 and leaving it out of `default`, so the shipped artifact \
+                 builds without its own instrument. NOTE: this gate's unit is \
+                 the CRATE — it cannot see which module names the type, and \
+                 Cargo still links `{to}` into the product binary wherever an \
+                 [[exception]] tolerates the edge.",
+                match kind {
+                    DepKind::Normal => "a normal",
+                    DepKind::Build => "a build",
+                    DepKind::Dev => "a dev",
+                }
+            ),
         }
     }
 }
@@ -171,6 +244,29 @@ pub fn parse(toml_text: &str) -> Result<LayerMap, String> {
     }
     if map.layers.is_empty() {
         return Err("ARCH_LAYERS.toml declares no [[layer]] entries".to_string());
+    }
+    // The mirror image of the version check above, and the one that actually
+    // bites: NEW code meeting an OLD (or truncated) map. `backstage` is
+    // `#[serde(default)]`, so an absent key deserializes to an empty vec — and
+    // an empty back-of-house set makes the one-way rule VACUOUSLY TRUE. Every
+    // edge passes, layer-gate prints a clean bill of health, and the green
+    // means "the rule was never configured" while reading exactly like "the
+    // rule found nothing". Those two must never be spelled the same way
+    // (ARCH §18.3 — absence is reported, never defaulted).
+    //
+    // v1 maps legitimately have no `backstage` key: the concept did not exist.
+    // That is the ONE case where an empty set is a real answer, and the
+    // version is what distinguishes it.
+    if map.schema_version >= 2 && map.backstage.is_empty() {
+        return Err(
+            "ARCH_LAYERS.toml declares schema_version >= 2 but no `backstage` \
+             crates. v2 exists to carry the one-way back-of-house rule, and an \
+             empty list would make that rule vacuous — every edge would pass \
+             and the gate would report success on a rule it never evaluated. \
+             Declare the list, or drop back to schema_version = 1 if the rule \
+             is genuinely not wanted here."
+                .to_string(),
+        );
     }
     Ok(map)
 }
@@ -229,8 +325,26 @@ pub fn evaluate(map: &LayerMap, crates: &BTreeSet<String>, edges: &[DepEdge]) ->
         false
     };
 
+    let is_backstage =
+        |name: &str| -> bool { map.backstage.iter().any(|p| wildcard_match(p, name)) };
+
     for edge in edges {
         if edge.kind == DepKind::Dev {
+            continue;
+        }
+        // The one-way back-of-house rule, checked first: it is the sharpest
+        // statement in the map and the only one that survives a crate sitting
+        // in the "right" layer. An edge INTO backstage is legal only from
+        // backstage itself (observing anything is the whole point) or when the
+        // default build does not carry it.
+        if is_backstage(&edge.to) && !is_backstage(&edge.from) && !edge.optional {
+            if !excepted(&edge.from, &edge.to) {
+                violations.push(Violation::BackstageEdge {
+                    from: edge.from.clone(),
+                    to: edge.to.clone(),
+                    kind: edge.kind,
+                });
+            }
             continue;
         }
         // [[forbid]] rules first — they're the sharper statement.
@@ -288,6 +402,16 @@ mod tests {
             from: from.into(),
             to: to.into(),
             kind,
+            optional: false,
+        }
+    }
+
+    /// An edge the DEFAULT build does not carry — `optional = true`, not
+    /// reachable from `default`.
+    fn opt_edge(from: &str, to: &str) -> DepEdge {
+        DepEdge {
+            optional: true,
+            ..edge(from, to, DepKind::Normal)
         }
     }
 
@@ -450,5 +574,188 @@ crates = ["*-core"]
         assert!(v
             .iter()
             .any(|x| matches!(x, Violation::AmbiguousCrate { .. })));
+    }
+
+    // ── the one-way back-of-house rule ────────────────────────────────────
+
+    /// Same layer for every crate, so NOTHING here can fail on direction —
+    /// any violation these tests see is the `backstage` rule and nothing else.
+    const BACKSTAGE_MAP: &str = r#"
+schema_version = 2
+backstage = ["sovereign-eval", "xtask", "*-bench"]
+
+[[layer]]
+name = "everything"
+crates = ["*"]
+"#;
+
+    fn backstage_crates() -> BTreeSet<String> {
+        [
+            "sovereign-eval",
+            "xtask",
+            "agent-bench",
+            "sovereign-cli",
+            "sovereign-core",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
+    }
+
+    #[test]
+    fn product_depending_on_backstage_in_the_default_build_is_a_violation() {
+        let map = parse(BACKSTAGE_MAP).unwrap();
+        let v = evaluate(
+            &map,
+            &backstage_crates(),
+            &[edge("sovereign-cli", "sovereign-eval", DepKind::Normal)],
+        );
+        assert_eq!(
+            v.len(),
+            1,
+            "expected exactly the backstage violation: {v:?}"
+        );
+        assert!(matches!(
+            &v[0],
+            Violation::BackstageEdge { from, to, .. }
+                if from == "sovereign-cli" && to == "sovereign-eval"
+        ));
+        // The gate must NAME its own limit where it speaks — a reader who sees
+        // only this line must not walk away thinking the crate boundary is
+        // tighter than it is.
+        let msg = v[0].describe();
+        assert!(
+            msg.contains("still links"),
+            "gate must disclose that Cargo still links the backstage crate: {msg}"
+        );
+        assert!(
+            msg.contains("CRATE"),
+            "gate must disclose its unit is the crate: {msg}"
+        );
+    }
+
+    #[test]
+    fn backstage_may_depend_on_backstage() {
+        let map = parse(BACKSTAGE_MAP).unwrap();
+        let v = evaluate(
+            &map,
+            &backstage_crates(),
+            &[
+                edge("xtask", "sovereign-eval", DepKind::Normal),
+                edge("agent-bench", "xtask", DepKind::Normal),
+            ],
+        );
+        assert!(v.is_empty(), "observing anything is legal: {v:?}");
+    }
+
+    #[test]
+    fn a_dep_the_default_build_does_not_carry_is_not_a_violation() {
+        let map = parse(BACKSTAGE_MAP).unwrap();
+        let v = evaluate(
+            &map,
+            &backstage_crates(),
+            &[opt_edge("sovereign-cli", "sovereign-eval")],
+        );
+        assert!(
+            v.is_empty(),
+            "the product ships without it — that IS the test: {v:?}"
+        );
+    }
+
+    #[test]
+    fn a_backstage_edge_can_be_grandfathered_and_the_entry_goes_stale_when_fixed() {
+        let with_exception = r#"
+schema_version = 2
+backstage = ["sovereign-eval"]
+[[layer]]
+name = "everything"
+crates = ["*"]
+[[exception]]
+from = "sovereign-cli"
+to = "sovereign-eval"
+reason = "one module in a mixed crate; the boundary is drawn in the wrong place"
+"#;
+        let map = parse(with_exception).unwrap();
+        let live = edge("sovereign-cli", "sovereign-eval", DepKind::Normal);
+        assert!(
+            evaluate(&map, &backstage_crates(), std::slice::from_ref(&live)).is_empty(),
+            "an excepted backstage edge is tolerated"
+        );
+        // …and once the edge is gone the entry must fail as stale, so the win
+        // is forced to be recorded rather than quietly accruing dead policy.
+        let v = evaluate(&map, &backstage_crates(), &[]);
+        assert!(
+            v.iter()
+                .any(|x| matches!(x, Violation::StaleException { .. })),
+            "a fixed backstage violation must retire its own exception: {v:?}"
+        );
+    }
+
+    #[test]
+    fn dev_dependencies_on_backstage_are_never_enforced() {
+        let map = parse(BACKSTAGE_MAP).unwrap();
+        let v = evaluate(
+            &map,
+            &backstage_crates(),
+            &[edge("sovereign-cli", "sovereign-eval", DepKind::Dev)],
+        );
+        assert!(
+            v.is_empty(),
+            "a dev-dep cannot reach a shipped artifact: {v:?}"
+        );
+    }
+
+    #[test]
+    fn a_v2_map_with_no_backstage_list_is_refused_not_silently_vacuous() {
+        // The mirror-image hole: new code, old/truncated map. An empty set
+        // would make the rule vacuously true and the gate green on a rule it
+        // never ran.
+        let vacuous = r#"
+schema_version = 2
+[[layer]]
+name = "everything"
+crates = ["*"]
+"#;
+        let err = parse(vacuous).expect_err("a v2 map with no backstage must not parse");
+        assert!(err.contains("backstage"), "{err}");
+        assert!(err.contains("vacuous"), "the error must name WHY: {err}");
+    }
+
+    #[test]
+    fn a_v1_map_legitimately_has_no_backstage_rule() {
+        // The one case where an empty set is a real answer — the concept did
+        // not exist in v1. It must parse, and it must not evaluate the rule.
+        let m = parse(MAP).expect("v1 maps keep parsing");
+        assert_eq!(m.schema_version, 1);
+        assert!(m.backstage.is_empty());
+    }
+
+    #[test]
+    fn a_map_declaring_a_newer_schema_is_refused_not_half_interpreted() {
+        let future = r#"
+schema_version = 99
+backstage = ["sovereign-eval"]
+[[layer]]
+name = "everything"
+crates = ["*"]
+"#;
+        let err = parse(future).expect_err("a v99 map must not parse");
+        assert!(err.contains("schema_version"), "{err}");
+    }
+
+    #[test]
+    fn an_empty_backstage_list_declares_no_rule() {
+        // v1 maps have no `backstage` key at all. They must keep evaluating
+        // exactly as before — the feature is opt-in by declaration.
+        let map = parse(MAP).unwrap();
+        assert!(map.backstage.is_empty());
+        let v = evaluate(
+            &map,
+            &crates(),
+            &[edge("sovereign-cli", "sovereign-store", DepKind::Normal)],
+        );
+        assert!(!v
+            .iter()
+            .any(|x| matches!(x, Violation::BackstageEdge { .. })));
     }
 }

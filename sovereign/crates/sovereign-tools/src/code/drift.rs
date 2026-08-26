@@ -36,14 +36,14 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use sovereign_atos::approval::{current_spec_hash, detect_drift, find_approval};
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct DriftTool;
 
@@ -59,65 +59,25 @@ impl Default for DriftTool {
     }
 }
 
-#[async_trait]
-impl Tool for DriftTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "drift".to_string(),
-            name: "Drift".to_string(),
-            description: "Report which `.sovereign/features/*/spec.md` files have drifted \
-                          from their committed (approved) version. A feature is \
-                          'drifted' when the working-tree spec hash differs from the \
-                          most recent commit's hash, 'clean' when they match, and \
-                          'unapproved' when the spec has never been committed. Use \
-                          before declaring a feature done — drift means the \
-                          implementation is operating against a spec the team hasn't \
-                          formally accepted. The verdict matches the daemon's \
-                          approval_gate middleware so what `drift` reports is what \
-                          the gate enforces. Pass `feature_id` to scope to one \
-                          feature; omit to report on every feature directory."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Restrict drift detection to a single feature."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "Before declaring a feature complete, verify its spec hasn't drifted from the approved commit.".into(),
-                    call: serde_json::json!({ "feature_id": "p0-payments" }),
-                },
-                ToolExample {
-                    situation: "Survey the workspace — are any feature specs out of sync with their approval?".into(),
-                    call: serde_json::json!({}),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "repo_root":  { "type": "string" },
-                    "drifted":    { "type": "array" },
-                    "clean":      { "type": "array" },
-                    "unapproved": { "type": "array" }
-                }
-            })),
-        }
+impl DriftTool {
+    /// Bind this tool's state to its `drift` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("drift", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::FileRead]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `drift`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let cwd = ctx
             .working_directory
             .as_deref()

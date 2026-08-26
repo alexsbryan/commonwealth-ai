@@ -1,0 +1,23 @@
+[package]
+name = "sovereign-turn-client"
+description = "The client half of the turn protocol — how a surface asks a serving host for a turn"
+version = "0.1.0"
+edition = "2021"
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# The protocol vocabulary, and the entire non-leaf dependency budget. This
+# crate is deliberately the mirror of `oicp-client`: protocol types plus the
+# client that speaks them, nothing above the contract layer.
+sovereign-contracts = { workspace = true }
+
+futures = { workspace = true }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+tokio-tungstenite = "0.29"
+tracing = { workspace = true }
+reqwest = { workspace = true }
+
+[lints]
+workspace = true

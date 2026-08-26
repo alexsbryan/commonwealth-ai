@@ -38,7 +38,7 @@ src-tauri/src/
     store.rs          cache-first reads + reconcile (synced_version / server_version)
   remote/
     client.rs         reqwest HTTP; Authorization: Bearer; parses 503 + Retry-After
-    stream.rs         tokio-tungstenite WS → decode ServerEvent → re-emit message-* events
+    stream.rs         tokio-tungstenite WS → decode TurnFrame → re-emit message-* events
     dto.rs            serde mirror of the Phase-1 server JSON
     map.rs            server Complete{provenance,citations} → the metadata blob RoutingMeta expects
   connectivity/

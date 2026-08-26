@@ -17,19 +17,16 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_watchers::WatcherHeartbeat;
 use corpus_engine_watchers::{LintResult, LintResultStore, LintRunSummary};
 
-use super::watcher_health::{
-    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
-};
+use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct LintStatusTool {
     store: Arc<LintResultStore>,
@@ -84,169 +81,34 @@ impl LintStatusTool {
     }
 }
 
-#[async_trait]
-impl Tool for LintStatusTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "lint_status".to_string(),
-            name: "Lint Status".to_string(),
-            description: "Return lint/type-check status from the background watcher. \
-                          NEVER run `cargo check` or `cargo build` via Bash — the watcher \
-                          holds the Cargo file lock continuously; running cargo check \
-                          alongside it causes BOTH processes to stall indefinitely waiting \
-                          for the lock. This call reads cached results in microseconds with \
-                          zero contention. \
-                          Response fields to trust the result: \
-                          `age_seconds` — how old the result is (typically < 30s after an \
-                          edit; if large, the watcher may have been idle); \
-                          `watched_scope` — the exact command the watcher runs (e.g. \
-                          'cargo check --workspace'), confirming which crates are covered; \
-                          `watcher` — the liveness object `{live, reason, configured, \
-                          heartbeat_age_secs, hint}`. Read it FIRST: when `live` is false \
-                          the result below is orphaned (no watcher is running to keep it \
-                          current), `reason` says why, `hint` says what to do. \
-                          `watcher_active` mirrors `watcher.live` for back-compat. \
-                          Status: 'fresh_passing' (clean, age_seconds shows recency), \
-                          'fresh_failing' (errors in response), 'stale' (files changed \
-                          since last run — watcher will rerun automatically on next save), \
-                          'running' (in progress — check again in ~15s), \
-                          'watcher_down' (a completed run exists but NO live watcher — do \
-                          not trust it; fall back to scripts/sovereign-lint.sh per \
-                          `watcher.hint`), 'never_run' (no run yet — see `watcher.reason`)."
-                .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "files": {
-                        "type": "array",
-                        "items": { "type": "string" },
-                        "description": "Filter freshness to a specific set of paths. The response gains a per-file `files[]` array with status (`fresh_passing | fresh_failing | stale | never_checked`), `checked_at_unix`, `mtime_unix`, and per-file error/warning counts. Top-level `errors[]` / `warnings[]` are filtered to these files too. Paths may be absolute or workspace-relative."
-                    },
-                    "changed": {
-                        "type": "boolean",
-                        "description": "Shortcut for `files`: auto-derive the list from `git diff --name-only HEAD` + untracked `.rs` files. The killer query for active editing: 'are MY files clean?' Mutually-exclusive with `files`; if both provided, `files` wins."
-                    }
-                },
-                "required": []
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "You've edited one or more files and want to know if the code compiles. Do NOT run `cargo check` or `cargo build` — that fights the background watcher for the Cargo file lock and blocks both processes. This reads the watcher's cached result instantly with no contention.".into(),
-                    call: serde_json::json!({}),
-                },
-                ToolExample {
-                    situation: "Active edit loop — you just touched a few files and want to know if THOSE files are clean. The workspace-wide check may still be running, but per-file freshness lands as soon as cargo finishes each crate.".into(),
-                    call: serde_json::json!({ "changed": true }),
-                },
-                ToolExample {
-                    situation: "Scripting / explicit query against a known file set (e.g. a pre-commit hook with a precomputed list).".into(),
-                    call: serde_json::json!({ "files": ["corpus-engine/src/recipe.rs", "sovereign/crates/sovereign-cli/src/drift_cmd_orchestrator.rs"] }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","running","watcher_down","never_run"] },
-                    "age_seconds":     { "type": "integer" },
-                    "pass_count":      { "type": "integer" },
-                    "fail_count":      { "type": "integer" },
-                    "warn_count":      { "type": "integer" },
-                    "watcher_active":  { "type": "boolean" },
-                    "watcher": {
-                        "type": "object",
-                        "description": "Watcher liveness. Read before trusting `status`. When `live` is false the run below is orphaned.",
-                        "properties": {
-                            "live":               { "type": "boolean" },
-                            "reason":             { "type": "string", "enum": ["live","not_configured","watcher_dead","legacy_active","inferred_from_age","unknown"] },
-                            "configured":         { "type": "boolean" },
-                            "heartbeat_age_secs": { "type": ["integer","null"] },
-                            "hint":               { "type": ["string","null"] }
-                        }
-                    },
-                    "watched_scope":   { "type": "string" },
-                    "errors":          { "type": "array" },
-                    "warnings":        { "type": "array" },
-                    "run_id":          { "type": "integer" },
-                    "output_truncated":{ "type": "boolean" },
-                    // `previous_run` is populated whenever `status` is
-                    // `running` and a prior completed run exists. Lets
-                    // callers see "in flight, but the last completed
-                    // run failed with these errors" rather than polling
-                    // `null` indefinitely on a watcher wedged against a
-                    // stable compile error.
-                    "previous_run":    {
-                        "type": "object",
-                        "properties": {
-                            "status":           { "type": "string", "enum": ["fresh_passing","fresh_failing"] },
-                            "run_id":           { "type": "integer" },
-                            "pass_count":       { "type": "integer" },
-                            "fail_count":       { "type": "integer" },
-                            "warn_count":       { "type": "integer" },
-                            "exit_code":        { "type": "integer" },
-                            "age_seconds":      { "type": "integer" },
-                            "looks_like_compile_failure": { "type": "boolean" },
-                            "errors":           { "type": "array" }
-                        }
-                    },
-                    "files": {
-                        "type": "array",
-                        "description": "Per-file freshness, populated when the call passes `files` or `changed`. Each entry: { path, status, checked_at_unix, mtime_unix, errors, warnings }. `status` uses the same vocabulary as the top-level workspace status: `fresh_passing | fresh_failing | stale | never_checked`.",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "path":            { "type": "string" },
-                                "status":          { "type": "string", "enum": ["fresh_passing","fresh_failing","stale","never_checked"] },
-                                "checked_at_unix": { "type": ["integer","null"] },
-                                "mtime_unix":      { "type": ["integer","null"] },
-                                "errors":          { "type": "integer" },
-                                "warnings":        { "type": "integer" }
-                            }
-                        }
-                    }
-                }
-            })),
-        }
+impl LintStatusTool {
+    /// Bind this tool's state to its `lint_status` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("lint_status", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_signal({
+            let state = Arc::clone(&state);
+            Arc::new(move || {
+                let state = Arc::clone(&state);
+                Box::pin(async move { state.signal_now().await })
+                    as std::pin::Pin<Box<dyn std::future::Future<Output = Option<String>> + Send>>
+            })
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    /// Signal: a one-liner when the lint watcher shows failures or
-    /// stale state. Silent when the last run was clean. Read-only
-    /// SQLite point lookup — no extra I/O beyond what `execute()`
-    /// would do on the same call.
-    async fn signal(&self) -> Option<String> {
-        let summary = self.store.latest_run().await.ok().flatten()?;
-        if summary.passed() {
-            return None;
-        }
-        let age = summary
-            .finished_at
-            .elapsed()
-            .ok()
-            .map(|d| format!(" age {}s", d.as_secs()))
-            .unwrap_or_default();
-        // Find the file with the most recent failure to make the line
-        // actionable (operators can go straight there).
-        let top_file = self
-            .store
-            .latest_failures(1)
-            .await
-            .ok()
-            .and_then(|rs| rs.into_iter().next())
-            .map(|r| r.file);
-        let where_ = top_file
-            .map(|f| format!(" (first in {f})"))
-            .unwrap_or_default();
-        Some(format!("{} lint error(s){where_}{age}", summary.fail_count))
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `lint_status`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let legacy_active = read_legacy(&self.watcher_active);
         let configured = self.watched_scope.is_some();
 
@@ -442,6 +304,33 @@ impl Tool for LintStatusTool {
             "watcher": watcher_json(reason, self.heartbeat.as_ref(), configured),
             "files": files_block,
         })))
+    }
+
+    async fn signal_now(&self) -> Option<String> {
+
+        let summary = self.store.latest_run().await.ok().flatten()?;
+        if summary.passed() {
+            return None;
+        }
+        let age = summary
+            .finished_at
+            .elapsed()
+            .ok()
+            .map(|d| format!(" age {}s", d.as_secs()))
+            .unwrap_or_default();
+        // Find the file with the most recent failure to make the line
+        // actionable (operators can go straight there).
+        let top_file = self
+            .store
+            .latest_failures(1)
+            .await
+            .ok()
+            .and_then(|rs| rs.into_iter().next())
+            .map(|r| r.file);
+        let where_ = top_file
+            .map(|f| format!(" (first in {f})"))
+            .unwrap_or_default();
+        Some(format!("{} lint error(s){where_}{age}", summary.fail_count))
     }
 }
 
@@ -863,7 +752,7 @@ mod tests {
         let _r2 = store.begin_run().await.unwrap();
 
         let tool = LintStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),
@@ -894,7 +783,7 @@ mod tests {
         let _r = store.begin_run().await.unwrap();
 
         let tool = LintStatusTool::new(Arc::clone(&store));
-        let out = tool.execute(&json!({}), &ctx()).await.unwrap();
+        let out = tool.run(&json!({}), &ctx()).await.unwrap();
         let v = match out {
             StepOutput::Json(v) => v,
             other => panic!("expected Json, got {other:?}"),

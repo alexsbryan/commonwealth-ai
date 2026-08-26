@@ -41,9 +41,7 @@ impl EmbedOnlyProvider {
     pub fn load(embed_model_path: &Path, embed_family: ModelFamily) -> Result<Self> {
         let mut backend = LlamaBackend::init()
             .map_err(|e| Error::Inference(format!("init llama backend: {e}")))?;
-        if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
-            backend.void_logs();
-        }
+        crate::llama_logs::LlamaLogs::from_env().install(&mut backend);
         let backend = Arc::new(backend);
         let n_gpu_layers = HardwareProfile::detect().recommended_gpu_layers;
         let embed_quirks = embed_family.default_quirks().embed;

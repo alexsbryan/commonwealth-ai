@@ -39,6 +39,7 @@
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
+use sovereign_cli_shared::dirs::sovereign_root;
 use tracing::{debug, info, warn};
 
 /// Path to the `sovereign` binary used for subprocess fan-out.
@@ -1006,13 +1007,6 @@ fn chapters_path(corpus_id: &str) -> PathBuf {
         .join("indexes")
         .join(corpus_id)
         .join("chapters.json")
-}
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn basename_id(p: &Path) -> Option<String> {

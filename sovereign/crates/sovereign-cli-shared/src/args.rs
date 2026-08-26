@@ -20,12 +20,30 @@
 //! - an unknown `--flag` / `-f`, or a value flag with no value, is a
 //!   hard error (matches the loops' `return Err("unknown flag …")`)
 //!
-//! Migration is opportunistic: land this with tests and no callers, then
-//! swap each command's loop for `parse(SPECS, args)` as the god-file
-//! splits already rewrite those files. Pair each `SPECS` with a §7.2
-//! consistency test so help can't advertise a flag the spec omits.
+//! **Adoption (nc-25, 2026-08-21): 33 call sites across four command
+//! families** — `atos_cmd` (18), `awareness_cmd` (13), `inner_chaos`,
+//! `voice_eval` — replacing five byte-identical hand-rolled splitters.
+//! Before that this parser had ZERO adopters for its whole life, and the
+//! bug it was written to prevent shipped anyway: four of the five
+//! splitters dropped `--key=value` (`ae0ec58c`), and every one of them
+//! treated an UNDECLARED `--x` as value-taking, so a typo ate the
+//! following token and the command ran on defaults. `atos run --accept
+//! --workdir /tmp/x` lost `--workdir` outright.
+//!
+//! Pair each `SPECS` with a §7.2 consistency test — see
+//! [`advertised_flags`] — so help can't advertise a flag the spec omits.
+//!
+//! **Where it does NOT fit, and why.** `tools_cmd` (`svrn tools call
+//! <id> --key=value …`) forwards arbitrary flags as a tool's JSON
+//! params. Its flag set is the union of every registered tool's
+//! parameter schema, discovered at runtime from the `ToolRegistry`
+//! manifest. `ArgSpec` is a CLOSED set by construction and expressing
+//! that would mean "accept anything", which destroys the guarantee that
+//! makes adopting it worth doing. Closed sets are enums, open sets are
+//! registries (§2, §4): `tools call` is the registry side and keeps its
+//! own splitter, deliberately.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// One argument a command accepts. Construct as a `&'static [ArgSpec]`
 /// next to the command's `Help` so the flag list has a single source of
@@ -206,6 +224,26 @@ pub fn parse(specs: &[ArgSpec], args: &[String]) -> Result<Parsed, ArgError> {
     Ok(parsed)
 }
 
+/// The long flags a command's help text advertises, for the §7.2 pin
+/// that keeps [`parse`]'s spec and the help from drifting apart:
+/// `assert_eq!(advertised_flags(HELP), SPECS.iter().map(|s| s.long)…)`.
+///
+/// One decider for "what does this help promise". Every adopter needs
+/// the same answer, and the same three prose traps: a usage line writes
+/// alternatives as `--minutes/--threads`, a body paragraph writes a
+/// family as `--*-model`, and every entry is followed by punctuation.
+/// So: split on whitespace AND `/`, strip surrounding punctuation, keep
+/// only `--name` where `name` is alphanumeric-plus-dash.
+pub fn advertised_flags(help: &str) -> BTreeSet<String> {
+    help.split_whitespace()
+        .flat_map(|t| t.split('/'))
+        .map(|t| t.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-'))
+        .filter_map(|t| t.strip_prefix("--"))
+        .filter(|t| !t.is_empty() && t.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
+        .map(str::to_string)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -300,6 +338,42 @@ mod tests {
         assert_eq!(
             ArgError::MissingValue("--data-dir".to_string()).to_string(),
             "--data-dir needs a value"
+        );
+    }
+
+    #[test]
+    fn advertised_flags_reads_a_help_block() {
+        let help = "USAGE\n  cmd [--minutes N | --threads N]\n\nFLAGS\n                      --minutes <N>   Budget.\n  --no-judge      No number.\n";
+        let got = advertised_flags(help);
+        assert_eq!(
+            got,
+            ["minutes", "threads", "no-judge"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect::<BTreeSet<_>>()
+        );
+    }
+
+    /// The three prose traps, each of which produced a false flag name
+    /// when this extractor was written inline in a command module.
+    #[test]
+    fn advertised_flags_ignores_prose_artifacts() {
+        let help = "Reuses --minutes/--threads and --temperature/--daemon/--*-model.\n\
+                    Trailing punctuation: --report, --diff.";
+        let got = advertised_flags(help);
+        assert_eq!(
+            got,
+            [
+                "minutes",
+                "threads",
+                "temperature",
+                "daemon",
+                "report",
+                "diff"
+            ]
+            .iter()
+            .map(|s| s.to_string())
+            .collect::<BTreeSet<_>>()
         );
     }
 }

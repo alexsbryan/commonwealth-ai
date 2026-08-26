@@ -821,10 +821,14 @@ pub(crate) fn project_retrieved_chunks(
                 "score": c.score,
                 "source": c.metadata.get("source"),
                 "provenance_tier": if c.url.is_some() { "web" } else { "corpus" },
-                // The custody class the acquisition path stamped under
-                // the ONE shared key (custody.md §5, reds R-2/R-4) —
-                // null when no stamp exists, never a defaulted class.
-                "custody": c.metadata.get(crate::types::CUSTODY_META_KEY),
+                // The custody class the acquisition door recorded
+                // (custody.md §5, reds R-2/R-4) — null when no door
+                // recorded one, never a defaulted class. Read off the typed
+                // stamp, so the glassbox shows what the gate actually
+                // decided on rather than a parallel string the gate stopped
+                // reading (TOPOLOGY §10 rung 9.1).
+                "custody": c.provenance.stamped_custody().map(|c| c.as_str()),
+                "producer": c.provenance.producer(),
                 "chunk_id": c.chunk_id,
                 "source_doc_id": c.source_doc_id,
                 "metadata": c.metadata,

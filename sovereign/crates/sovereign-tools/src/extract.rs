@@ -15,45 +15,28 @@
 //! per-item error (panic-safe — a bad PDF fails its own item, not the run). No
 //! size cap: the output feeds the chunker, not a prompt.
 
-use async_trait::async_trait;
-
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
+use std::sync::Arc;
 
 pub struct ExtractTool;
 
-#[async_trait]
-impl Tool for ExtractTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "extract".to_string(),
-            name: "extract".to_string(),
-            description: "Extract a document's text by file type (PDF, Office, HTML, epub, \
-                          Markdown, txt) and return it — e.g. params = { path = \"{item.path}\" }. \
-                          Feed the output to tool:chunk."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "path": { "type": "string", "description": "File to extract text from" }
-                },
-                "required": ["path"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Session,
-            output_schema: None,
-        }
+impl ExtractTool {
+    /// Bind this tool's state to its `extract` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("extract", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `extract`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let path = params
             .get("path")
             .and_then(|v| v.as_str())
@@ -68,18 +51,6 @@ impl Tool for ExtractTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// txt + md extract to text; a missing path and an unsupported extension are
     /// loud errors (not panics).
     #[tokio::test]
@@ -91,9 +62,9 @@ mod tests {
         std::fs::write(&md, "# Title\n\nbody text").unwrap();
 
         let out = ExtractTool
-            .execute(
+            .run(
                 &serde_json::json!({ "path": txt.to_string_lossy() }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -104,23 +75,26 @@ mod tests {
 
         // Markdown extracts (the body text comes back).
         let md_out = ExtractTool
-            .execute(&serde_json::json!({ "path": md.to_string_lossy() }), &ctx())
+            .run(
+                &serde_json::json!({ "path": md.to_string_lossy() }),
+                &ToolContext::default(),
+            )
             .await
             .unwrap();
         assert!(matches!(md_out, StepOutput::Text(t) if t.contains("body text")));
 
         // Missing path → loud error.
         assert!(ExtractTool
-            .execute(&serde_json::json!({}), &ctx())
+            .run(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
         // Unsupported extension → loud error (not a panic).
         let bin = dir.path().join("c.bin");
         std::fs::write(&bin, "x").unwrap();
         assert!(ExtractTool
-            .execute(
+            .run(
                 &serde_json::json!({ "path": bin.to_string_lossy() }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());

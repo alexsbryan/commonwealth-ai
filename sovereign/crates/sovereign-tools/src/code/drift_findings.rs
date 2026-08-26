@@ -55,13 +55,13 @@
 
 use std::path::{Path, PathBuf};
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// On-disk shape of one finding inside the drift report's JSON
 /// sidecar. Mirrors `Finding` in `atlas_drift_report.rs`. We
@@ -159,109 +159,25 @@ impl Default for DriftFindingsTool {
     }
 }
 
-#[async_trait]
-impl Tool for DriftFindingsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "drift_findings".to_string(),
-            name: "Drift Findings".to_string(),
-            description:
-                "Return drift-report findings that reference a code symbol, file path, \
-                 or substring — without re-running `sovereign drift detect`. Sibling \
-                 to `drift_posture` (freshness gate) and `symbols`/`callers`/`blast` \
-                 (code-side intelligence). \
-                 \
-                 Use this BEFORE editing a function, struct, or HTTP route to learn \
-                 whether the architecture docs make any normative claim about it — \
-                 the same way you'd run `callers(name)` to learn the code-side blast \
-                 radius. \
-                 \
-                 Match modes (set via `kind`): \
-                 `anchor` (default) — substring against `narrative.canonical_name`, \
-                 which is the model-extracted code anchor for Claim atoms. \
-                 `path` — substring against the source chunk id (narrative section). \
-                 `any` — union of anchor, path, and quotable-excerpt substring. \
-                 \
-                 Reads `~/.svrnmesh/drift/latest.md.json` (canonical mirror written \
-                 by every drift detect run). Returns `never_run` if no report exists \
-                 yet; check `drift_posture` to confirm freshness before acting on \
-                 results."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "Code symbol, file path, or substring to search for. Required."
-                    },
-                    "kind": {
-                        "type": "string",
-                        "enum": ["anchor", "path", "any"],
-                        "description": "Match strategy. Default `anchor` — substring match against the claim's extracted code anchor. Use `path` for chunk-id matches, `any` for the union."
-                    },
-                    "limit": {
-                        "type": "integer",
-                        "description": "Maximum number of findings to return (default 20). Sorted by severity (Critical first)."
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![
-                ToolExample {
-                    situation: "About to refactor `open_index_for_corpus`. Check whether the architecture docs make any normative claim about it before changing the signature.".into(),
-                    call: serde_json::json!({ "query": "open_index_for_corpus" }),
-                },
-                ToolExample {
-                    situation: "Editing the file `corpus-engine/src/recipe.rs`. Find every drift finding tied to that file's narrative sections.".into(),
-                    call: serde_json::json!({ "query": "recipe.rs", "kind": "any" }),
-                },
-                ToolExample {
-                    situation: "Want to see whether the narrative mentions `LocalOnly` anywhere — even in quotes, even if the anchor is something else.".into(),
-                    call: serde_json::json!({ "query": "LocalOnly", "kind": "any", "limit": 5 }),
-                },
-            ],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Session,
-            output_schema: Some(json!({
-                "type": "object",
-                "properties": {
-                    "status": {
-                        "type": "string",
-                        "enum": ["ok", "never_run", "no_matches"],
-                        "description": "`ok` when matches found. `never_run` when no drift report on disk. `no_matches` when report exists but query found nothing."
-                    },
-                    "report_path": { "type": ["string", "null"] },
-                    "match_count": { "type": "integer" },
-                    "match_mode": { "type": "string" },
-                    "findings": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "severity": { "type": "string" },
-                                "kind": { "type": "string" },
-                                "anchor": { "type": "string" },
-                                "headline": { "type": "string" },
-                                "atlas_id": { "type": "string" },
-                                "atom_id": { "type": "string" },
-                                "chunk_id": { "type": ["string", "null"] },
-                                "quotable": { "type": ["string", "null"] },
-                                "action": { "type": "string" }
-                            }
-                        }
-                    }
-                }
-            })),
-        }
+impl DriftFindingsTool {
+    /// Bind this tool's state to its `drift_findings` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("drift_findings", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `drift_findings`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -466,7 +382,7 @@ mod tests {
         write_report(tmp.path(), &sample_report());
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "open_index"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -496,7 +412,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "anything"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -533,7 +449,7 @@ mod tests {
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         // "resolve_parameters" is only in the quotable text, not the anchor.
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "resolve_parameters", "kind": "any"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -569,7 +485,7 @@ mod tests {
         write_report(tmp.path(), &sample_report());
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let out = tool
-            .execute(
+            .run(
                 &json!({"query": "resolve_parameters"}),
                 &ToolContext {
                     conversation_id: "t".into(),
@@ -604,7 +520,7 @@ mod tests {
         let tmp = TempDir::new().unwrap();
         let tool = DriftFindingsTool::new().with_drift_dir(tmp.path().to_path_buf());
         let err = tool
-            .execute(
+            .run(
                 &json!({"query": "   "}),
                 &ToolContext {
                     conversation_id: "t".into(),

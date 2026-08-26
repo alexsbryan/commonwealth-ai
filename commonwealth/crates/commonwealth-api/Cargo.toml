@@ -6,6 +6,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+kernel-types = { workspace = true }
 commonwealth-core = { workspace = true }
 commonwealth-transport = { workspace = true }
 commonwealth-discovery = { workspace = true }
@@ -48,6 +49,10 @@ sovereign-atos = { path = "../../../sovereign/crates/sovereign-atos", optional =
 # atlas_status, notes::response_mine) are not treesitter-gated.
 sovereign-tools = { path = "../../../sovereign/crates/sovereign-tools" }
 sovereign-core  = { path = "../../../sovereign/crates/sovereign-core" }
+# Tool-descriptor vocabulary for the two injector middlewares. Layer 0, so the
+# injectors name what a tool IS without the layer-1 -> layer-2 reach they used
+# to make through `sovereign_core::types` (noun-convergence rung 2c, family A).
+oicp-types = { workspace = true }
 axum = { workspace = true }
 # `http_body::Body` trait for the admission middleware's TallyBody
 # wrapper (peer-request tally on /status, order seat-resource-commons).

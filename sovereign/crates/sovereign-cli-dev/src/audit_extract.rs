@@ -194,7 +194,7 @@ async fn existing_extracted_bodies(notes: &NoteStore) -> std::collections::HashS
 async fn read_existing_decision_notes(
     notes: &NoteStore,
     limit: usize,
-) -> Vec<corpus_engine_notes::NoteRow> {
+) -> Vec<corpus_engine_notes::Note> {
     notes
         .read_notes(
             None,

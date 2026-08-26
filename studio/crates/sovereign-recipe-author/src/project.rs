@@ -39,7 +39,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::recipe_project_store::{RecipeProjectError, RecipeProjectRow, RecipeProjectStore};
 use sovereign_contracts::error::{Error, Result};
-use sovereign_contracts::recipe::notes::{NoteRow, NoteScope, RecipeNotes, ScopeFilter};
+use sovereign_contracts::recipe::notes::{Note, NoteScope, RecipeNotes, ScopeFilter};
 
 /// Wrap an `std::io::Error` into a `sovereign_contracts::Error` carrying
 /// the path that produced it. Matches the convention in
@@ -455,7 +455,7 @@ impl RecipeProject {
     /// Recent feature-scoped notes for this project, newest first.
     /// Used by the situated-context renderer and the dashboard's
     /// decision feed.
-    pub async fn recent_feature_notes(&self, limit: usize) -> Result<Vec<NoteRow>> {
+    pub async fn recent_feature_notes(&self, limit: usize) -> Result<Vec<Note>> {
         let scope = ScopeFilter {
             scopes: vec![NoteScope::Feature],
             feature_id: Some(self.feature_id.clone()),

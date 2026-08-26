@@ -12,14 +12,13 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct PromoteNoteTool {
     store: Arc<NoteStore>,
@@ -31,107 +30,30 @@ impl PromoteNoteTool {
     }
 }
 
-#[async_trait]
-impl Tool for PromoteNoteTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "promote_note".to_string(),
-            name: "Promote Note".to_string(),
-            description:
-                "Copy a note to a higher scope (session/feature → feature/global). The source \
-                 row stays in place for audit; the new row has promoted_from=<source id>. Pass \
-                 new_content to rewrite the note with a more general framing suitable for the \
-                 destination scope (global notes should read as codebase-wide invariants, not \
-                 feature-local decisions)."
-                    .to_string(),
-            parameters: json!({
-                "type": "object",
-                "properties": {
-                    "id": {
-                        "type": "string",
-                        "description": "Source note id (any scope)."
-                    },
-                    "to_scope": {
-                        "type": "string",
-                        "enum": ["feature", "global"],
-                        "description": "Destination scope. 'global' is the common case at feature \
-                                        teardown; 'feature' is used to move a session-scoped \
-                                        scratch note into a feature's permanent record."
-                    },
-                    "feature_id": {
-                        "type": "string",
-                        "description": "Required when to_scope='feature'. Ignored otherwise."
-                    },
-                    "new_content": {
-                        "type": "string",
-                        "description": "Optional rewrite. When omitted, the source content is \
-                                        copied verbatim."
-                    }
-                },
-                "required": ["id", "to_scope"]
-            }),
-            examples: vec![ToolExample {
-                situation: "At feature teardown, a decision about extending SourceKind turned out \
-                            to be the general pattern for all new source types. Promote it to \
-                            global with a codebase-wide framing."
-                    .into(),
-                call: serde_json::json!({
-                    "id": "note-abc-123",
-                    "to_scope": "global",
-                    "new_content": "New source types extend SourceKind in corpus-engine/src/recipe.rs \
-                                    and add a match arm in engine/ingest.rs — do not create plugin \
-                                    registries for source type dispatch."
-                }),
-            }],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Instant,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "promoted_id": { "type": "string" },
-                    "from_scope":  { "type": "string" },
-                    "to_scope":    { "type": "string" }
-                }
-            })),
-        }
+impl PromoteNoteTool {
+    /// Bind this tool's state to its `promote_note` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("promote_note", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        params
-            .get("id")
-            .and_then(|v| v.as_str())
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| Error::InvalidInput("promote_note requires 'id'".to_string()))?;
-        let scope = params
-            .get("to_scope")
-            .and_then(|v| v.as_str())
-            .ok_or_else(|| Error::InvalidInput("promote_note requires 'to_scope'".to_string()))?;
-        if !matches!(scope, "feature" | "global") {
-            return Err(Error::InvalidInput(format!(
-                "promote_note 'to_scope' must be 'feature' or 'global', got '{scope}'"
-            )));
-        }
-        if scope == "feature"
-            && params
-                .get("feature_id")
-                .and_then(|v| v.as_str())
-                .filter(|s| !s.is_empty())
-                .is_none()
-        {
-            return Err(Error::InvalidInput(
-                "promote_note to_scope='feature' requires 'feature_id'".to_string(),
-            ));
-        }
-        Ok(())
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `promote_note`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let id = params.get("id").and_then(|v| v.as_str()).unwrap_or("");
         let to_scope_s = params
             .get("to_scope")
@@ -162,5 +84,35 @@ impl Tool for PromoteNoteTool {
             "to_scope": to_scope.as_str(),
             "feature_id": feature_id,
         })))
+    }
+
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        params
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| Error::InvalidInput("promote_note requires 'id'".to_string()))?;
+        let scope = params
+            .get("to_scope")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| Error::InvalidInput("promote_note requires 'to_scope'".to_string()))?;
+        if !matches!(scope, "feature" | "global") {
+            return Err(Error::InvalidInput(format!(
+                "promote_note 'to_scope' must be 'feature' or 'global', got '{scope}'"
+            )));
+        }
+        if scope == "feature"
+            && params
+                .get("feature_id")
+                .and_then(|v| v.as_str())
+                .filter(|s| !s.is_empty())
+                .is_none()
+        {
+            return Err(Error::InvalidInput(
+                "promote_note to_scope='feature' requires 'feature_id'".to_string(),
+            ));
+        }
+        Ok(())
     }
 }

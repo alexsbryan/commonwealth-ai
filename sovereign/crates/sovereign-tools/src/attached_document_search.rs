@@ -36,14 +36,11 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{InferenceProvider, StateStore, Tool};
-use sovereign_core::types::{
-    AssetState, Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext,
-    ToolDescriptor,
-};
+use sovereign_core::traits::{InferenceProvider, StateStore};
+use sovereign_core::types::{AssetState, StepOutput, ToolContext};
+use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct AttachedDocumentSearchTool {
     store: Arc<dyn StateStore>,
@@ -56,60 +53,30 @@ impl AttachedDocumentSearchTool {
     }
 }
 
-#[async_trait]
-impl Tool for AttachedDocumentSearchTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "attached_doc_search".to_string(),
-            name: "Search attached document".to_string(),
-            description:
-                "Retrieve passages from the document the user has attached to this conversation. \
-                 Use this when the question is about the specific text the user shared (a book, \
-                 paper, report, etc.). Returns relevant excerpts with their location in the \
-                 document. Call repeatedly with different queries to triangulate across the \
-                 document; the corpus knowledge tool covers everything outside the attachment."
-                    .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "A precise natural-language query against the attached \
-                                        document. Examples: 'where Stevie's address label is \
-                                        described', 'Vladimir's speech about the Greenwich \
-                                        Observatory', 'every passage where Winnie is called \
-                                        incurious'."
-                    }
-                },
-                "required": ["query"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "string",
-                "description": "Concatenated passages with inline source labels. Empty / no-doc \
-                                response on conversations without an attached document."
-            })),
-        }
+impl AttachedDocumentSearchTool {
+    /// Bind this tool's state to its `attached_doc_search` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        let run_state = Arc::clone(&state);
+        sovereign_core::tool_manifest::declared("attached_doc_search", move |params, ctx| {
+            let state = Arc::clone(&run_state);
+            async move { state.run(&params, &ctx).await }
+        })
+        .with_validate({
+            let state = Arc::clone(&state);
+            Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // Reading the user's own attached document needs no gate.
-    }
-
-    fn validate(&self, params: &serde_json::Value) -> Result<()> {
-        match params.get("query").and_then(|v| v.as_str()) {
-            Some(s) if !s.trim().is_empty() => Ok(()),
-            _ => Err(Error::InvalidInput(
-                "attached_doc_search requires a non-empty `query` string".to_string(),
-            )),
-        }
-    }
-
-    async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `attached_doc_search`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -636,10 +603,14 @@ impl Tool for AttachedDocumentSearchTool {
         Ok(StepOutput::Text(formatted))
     }
 
-    fn retry_config(&self) -> Option<sovereign_core::types::RetryConfig> {
-        // Retrieval is deterministic; no retry. Idempotency handles
-        // duplicate calls via the registry's cache.
-        None
+    fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
+
+        match params.get("query").and_then(|v| v.as_str()) {
+            Some(s) if !s.trim().is_empty() => Ok(()),
+            _ => Err(Error::InvalidInput(
+                "attached_doc_search requires a non-empty `query` string".to_string(),
+            )),
+        }
     }
 }
 

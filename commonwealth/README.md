@@ -2,7 +2,7 @@
 
 Commonwealth is the mesh layer underneath Sovereign. It handles the parts that let several machines work together as one mesh: discovery, gossip, scheduling inference across nodes, sharing knowledge indexes, and replicating a small amount of shared state.
 
-Most people never run it on its own. Sovereign embeds it in-process through the `sovereign-mesh` crate, so you create and join meshes with `sovereign mesh create` and `sovereign mesh join`, and the daemon you already run becomes a node. There is also a standalone `commonwealth` binary, built from `commonwealth-daemon`, for a headless peer — a cloud GPU box that joins a mesh to lend compute with no desktop attached. That case is in [CLOUD_PEER_DEPLOY.md](../sovereign/docs/CLOUD_PEER_DEPLOY.md).
+Commonwealth is never run on its own — there is no standalone `commonwealth` binary. Sovereign embeds it in-process through the `sovereign-mesh` crate, so you create and join meshes with `sovereign mesh create` and `sovereign mesh join`, and the daemon you already run becomes a node. A headless peer — a cloud GPU box that joins a mesh to lend compute with no desktop attached — is the same daemon in worker mode (`sovereign-cli daemon run --worker-mode`, containerised); that case is in [CLOUD_PEER_DEPLOY.md](../sovereign/docs/CLOUD_PEER_DEPLOY.md).
 
 If what you want is to pool machines with people you trust, the Sovereign side is where to start: [Run a model bigger than your machine](../docs/RUN_A_BIGGER_MODEL.md).
 
@@ -22,7 +22,6 @@ The trust model is social rather than cryptographic: you join a mesh because som
 - `commonwealth-knowledge` — corpus-engine integration: install, shard, and search corpora across the mesh.
 - `commonwealth-app` — the mesh-app platform: manifests, lifecycle, registry, proxy.
 - `commonwealth-state` — MeshStore, a gossip-replicated SQLite key-value store with TTL-based GC.
-- `commonwealth-daemon` — the CLI entry point and the standalone `commonwealth` binary.
 - `commonwealth-test-harness` — a simulated multi-node mesh and a mock llama-server for integration tests.
 
 The full design is in [ARCHITECTURE.md](ARCHITECTURE.md); the system-wide map is [SYSTEM_OVERVIEW.md](../sovereign/SYSTEM_OVERVIEW.md).

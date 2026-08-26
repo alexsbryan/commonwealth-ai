@@ -9,3 +9,5 @@ swebench/gold/
 swebench/instances.jsonl
 swebench/.mini-swe-out/
 rewardbench2/runs/
+aa-omniscience/AA-Omniscience_dataset_public.csv
+aa-omniscience/__pycache__/

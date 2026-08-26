@@ -1002,10 +1002,10 @@ fn sanitize_phase1_object_arrays(value: &mut serde_json::Value) {
 fn render_phase6_classifier_user_body(
     content: &crate::enrichment::atlas::analysis::CandidateContent,
 ) -> String {
-    use crate::enrichment::atlas::analysis::AtomKind;
-    let kind_label = |k: AtomKind| match k {
-        AtomKind::Claim => "Claim",
-        AtomKind::State => "State",
+    use crate::enrichment::atlas::analysis::TensionSide;
+    let kind_label = |k: TensionSide| match k {
+        TensionSide::Claim => "Claim",
+        TensionSide::State => "State",
     };
     let mut user = String::new();
     user.push_str("# Candidate to classify\n\n");

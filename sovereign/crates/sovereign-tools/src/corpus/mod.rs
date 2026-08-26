@@ -17,6 +17,13 @@ use sovereign_core::types::{DocumentChunk, SourceType};
 
 use crate::rag::chunk::chunk_text;
 
+// The one `strip_html` (§10.6). This module carried a hand-copy until
+// 2026-08-20; the two drifted and the copy here silently truncated every
+// document at its first `</script>` — see the regression test at the bottom of
+// this file. Re-exported at the historical path so `html_crawl`,
+// `stackexchange` and `sec_edgar` call sites are unchanged.
+pub(crate) use corpus_engine::extractors::strip_html;
+
 pub use manager::{CorpusInstallPhase, CorpusManager, CorpusProgress, ProgressCallback};
 pub use registry::{CorpusDefinition, CorpusRegistry, TierDefinition};
 
@@ -73,16 +80,54 @@ pub fn rerank_dedup_picker_from_env() -> corpus_engine::DedupPicker {
 /// consumers like the PPR admission gate (`SOVEREIGN_PPR_EXPAND`)
 /// while leaving `enabled = false`, so the leaf search stays
 /// byte-identical to baseline.
+/// THE reader of `SOVEREIGN_DISABLE_WIKI_GRAPH` (TOPOLOGY §10 phase 10,
+/// ARCH §10.6).
+///
+/// The memory-pressure escape hatch. The graph is a 7M-edge sqlite mmap; on a
+/// host already running the daemon, loading it twice has tipped past available
+/// RAM in practice.
+///
+/// The shared recipe and the desktop each carried this three-line parse, and
+/// the desktop's own comment said so — "probe logic mirrors bootstrap.rs
+/// `load_wikipedia_graph`; dedup to a shared crate is a follow-up". This is
+/// the follow-up. Both hosts reach `sovereign-tools`, which is why the
+/// predicate lives here rather than in either of them.
+pub fn wiki_graph_disabled() -> bool {
+    std::env::var("SOVEREIGN_DISABLE_WIKI_GRAPH")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// THE reader of `SOVEREIGN_RERANK_CANDIDATES_K` (TOPOLOGY §10 phase 10,
+/// ARCH §10.6).
+///
+/// `None` means unset or unparseable, which are the same instruction to the
+/// caller — keep the default — and are distinguished in the trace rather than
+/// in the type. The shared recipe had its own identical parse in its
+/// dedup-only ablation branch, so an operator tuning one number could get two
+/// answers depending on which host built the config.
+pub fn rerank_candidates_k_from_env() -> Option<usize> {
+    let raw = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K").ok()?;
+    match raw.parse::<usize>() {
+        Ok(n) => Some(n),
+        Err(_) => {
+            tracing::warn!(
+                value = %raw,
+                "SOVEREIGN_RERANK_CANDIDATES_K is not a number — keeping the default"
+            );
+            None
+        }
+    }
+}
+
 pub fn rerank_config_from_env() -> corpus_engine::RerankConfig {
     let mut cfg = corpus_engine::RerankConfig::default();
     let gate_only = std::env::var("SOVEREIGN_RERANK_GATE_ONLY")
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
     cfg.enabled = !gate_only;
-    if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
-        if let Ok(n) = s.parse::<usize>() {
-            cfg.candidates_k = n;
-        }
+    if let Some(n) = rerank_candidates_k_from_env() {
+        cfg.candidates_k = n;
     }
     if let Ok(s) = std::env::var("SOVEREIGN_RERANK_MIN_SCORE") {
         if let Ok(f) = s.parse::<f32>() {
@@ -190,7 +235,8 @@ pub fn inference_to_inference_fn(
         // extraction where fast-class throughput is existential (the primary
         // model at ~1 min/chunk makes enrichment impractical on large
         // corpora) and quality is bench-validated per recipe.
-        let mut request = CompletionRequest::for_workload(Workload::EnrichBulk, prompt)
+        let mut request = Workload::EnrichBulk
+            .request(prompt)
             // POLICY-DEBT(SLOT_POLICY §4.5 EnrichBulk): 4096 > 512 forfeits
             // the batched FastShort claim; kept — dropped 2026-05-29
             // (evening): once grammar-constrained decoding lands via
@@ -266,111 +312,49 @@ fn chunk_and_wrap(
         .collect()
 }
 
-/// Strip HTML tags and decode common entities.
-pub(crate) fn strip_html(html: &str) -> String {
-    let mut result = String::with_capacity(html.len());
-    let mut in_tag = false;
-    let mut in_script = false;
-    let mut in_style = false;
-    let mut tag_name = String::new();
-    let mut collecting_tag_name = false;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let mut chars = html.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '<' {
-            in_tag = true;
-            collecting_tag_name = true;
-            tag_name.clear();
-            continue;
-        }
-        if in_tag {
-            if collecting_tag_name {
-                if ch.is_ascii_whitespace() || ch == '>' || ch == '/' {
-                    collecting_tag_name = false;
-                    let lower = tag_name.to_lowercase();
-                    if lower == "script" {
-                        in_script = true;
-                    } else if lower == "/script" {
-                        in_script = false;
-                    } else if lower == "style" {
-                        in_style = true;
-                    } else if lower == "/style" {
-                        in_style = false;
-                    } else if lower == "br"
-                        || lower == "br/"
-                        || ((lower == "p" || lower == "/p" || lower == "div" || lower == "/div")
-                            && !result.ends_with('\n'))
-                    {
-                        result.push('\n');
-                    }
-                } else {
-                    tag_name.push(ch);
-                }
-            }
-            if ch == '>' {
-                in_tag = false;
-            }
-            continue;
-        }
-        if in_script || in_style {
-            continue;
-        }
-        if ch == '&' {
-            let mut entity = String::new();
-            for ec in chars.by_ref() {
-                if ec == ';' {
-                    break;
-                }
-                entity.push(ec);
-                if entity.len() > 10 {
-                    break;
-                }
-            }
-            match entity.as_str() {
-                "amp" => result.push('&'),
-                "lt" => result.push('<'),
-                "gt" => result.push('>'),
-                "quot" => result.push('"'),
-                "apos" => result.push('\''),
-                "nbsp" => result.push(' '),
-                s if s.starts_with('#') => {
-                    let num_str = &s[1..];
-                    let code = if let Some(hex) = num_str.strip_prefix('x') {
-                        u32::from_str_radix(hex, 16).ok()
-                    } else {
-                        num_str.parse::<u32>().ok()
-                    };
-                    if let Some(c) = code.and_then(char::from_u32) {
-                        result.push(c);
-                    }
-                }
-                _ => {
-                    result.push('&');
-                    result.push_str(&entity);
-                    result.push(';');
-                }
-            }
-            continue;
-        }
-        result.push(ch);
+    /// The bug this file carried until 2026-08-20, asserted so a re-fork
+    /// cannot bring it back silently.
+    ///
+    /// `strip_html` lived here as a hand-copy of
+    /// `corpus_engine::extractors::strip_html`, and the two DRIFTED: the
+    /// corpus-engine copy grew a clause that keeps the leading `/` of a
+    /// closing tag as part of the tag name, and this copy never got it.
+    /// Without it, `</script>` parses with an EMPTY tag name — the `/` is
+    /// consumed by the same branch that ends tag-name collection — so
+    /// `in_script` is never cleared and every character after the first
+    /// `</script>` in the document is discarded. That is silent truncation on
+    /// three live paths: `html_crawl` (crawled pages), `stackexchange`, and
+    /// `sec_edgar` (filing bodies), all of which put a script in `<head>`.
+    ///
+    /// Watched failing against the local copy before the redirect landed:
+    /// `assert!(text.contains("came for"))` returned an empty string.
+    #[test]
+    fn script_close_tag_does_not_truncate_the_document() {
+        let html = "<html><head><script>var a = 1;</script></head>\
+                    <body><p>The paragraph a reader came for.</p></body></html>";
+        let text = strip_html(html);
+        assert!(
+            text.contains("The paragraph a reader came for."),
+            "everything after </script> was dropped; got {text:?}"
+        );
+        assert!(!text.contains("var a"), "script body leaked; got {text:?}");
     }
 
-    // Collapse excessive whitespace.
-    let mut collapsed = String::with_capacity(result.len());
-    let mut prev_newline = false;
-    for line in result.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() {
-            if !prev_newline {
-                collapsed.push('\n');
-                prev_newline = true;
-            }
-        } else {
-            collapsed.push_str(trimmed);
-            collapsed.push('\n');
-            prev_newline = false;
-        }
+    /// Same shape, `</style>`. The `/`-in-tag-name clause fixes both, and a
+    /// stylesheet in `<head>` is at least as common as a script.
+    #[test]
+    fn style_close_tag_does_not_truncate_the_document() {
+        let html = "<html><head><style>body { color: red; }</style></head>\
+                    <body><p>Body text.</p></body></html>";
+        let text = strip_html(html);
+        assert!(text.contains("Body text."), "got {text:?}");
+        assert!(
+            !text.contains("color: red"),
+            "style body leaked; got {text:?}"
+        );
     }
-
-    collapsed.trim().to_string()
 }

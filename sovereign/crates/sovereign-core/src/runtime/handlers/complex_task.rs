@@ -366,7 +366,7 @@ impl Runtime {
             .await;
             grounding_gate_meta = Some(outcome.meta);
             gate_claims = Some(outcome.claims);
-            outcome.text
+            outcome.answer.text().to_string()
         } else {
             synthesis.text.clone()
         };
@@ -554,6 +554,18 @@ impl Runtime {
                 if let Some(g) = grounding_gate_meta {
                     m["grounding_gate"] = g;
                 }
+                // The task, stamped where `provenance`, `citations` and
+                // `epistemic_state` are stamped. Returning it only in
+                // `Response.task` meant just ONE caller could see it — the
+                // server's non-streaming REST route — while the streaming
+                // path, which both apps use, ran this same handler and kept
+                // only the message id and content. Same turn, two doors, two
+                // different answers about whether a task exists.
+                m["task"] = serde_json::json!({
+                    "id": task.id,
+                    "status": format!("{:?}", task.status),
+                    "steps_completed": task.completed_steps.len(),
+                });
                 m
             }),
             version: now(),

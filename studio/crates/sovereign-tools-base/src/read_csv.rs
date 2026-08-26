@@ -90,18 +90,6 @@ mod tests {
     use super::*;
     use std::io::Write;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn reads_rows_as_objects_keyed_by_header() {
         let dir = tempfile::tempdir().unwrap();
@@ -115,7 +103,7 @@ mod tests {
         let out = ReadCsvTool
             .execute(
                 &serde_json::json!({ "path": path.to_string_lossy() }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();

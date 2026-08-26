@@ -56,7 +56,7 @@ async fn workflow_store_marks_indexes_built_so_retrieval_serves_the_corpus() {
         "build_indexes": false
     });
 
-    let out = CorpusStoreTool.execute(&params, &ctx()).await.unwrap();
+    let out = CorpusStoreTool.declared().execute(&params, &ctx()).await.unwrap();
     match out {
         StepOutput::Text(t) => assert!(t.contains("stored 2"), "{t}"),
         o => panic!("unexpected output: {o:?}"),

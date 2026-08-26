@@ -43,18 +43,6 @@ use tracing::debug;
 
 use crate::types::{Custody, SearchPrivacy};
 
-/// How restrictive a custody class is, for release-floor comparison.
-/// `PublicWeb` (0) is the least restrictive (web material egresses
-/// unconditionally), `Personal` (2) the most.
-fn restrictiveness(c: Custody) -> u8 {
-    match c {
-        Custody::PublicWeb => 0,
-        Custody::Peer => 1,
-        Custody::Personal => 2,
-        Custody::Unknown => 3,
-    }
-}
-
 /// A run-scoped typed consent grant: the operator's release of a
 /// custody floor for ONE run. Default-deny — the absence of a grant
 /// releases nothing but public-web material. Recorded in the run
@@ -84,8 +72,14 @@ impl ConsentGrant {
     /// `grant_floor_covers_and_refuses_by_class` pins the correct
     /// direction.
     pub fn covers(&self, payload: Custody) -> bool {
-        payload != Custody::Unknown
-            && restrictiveness(payload) <= restrictiveness(self.release_floor)
+        // ONE implementation of the custody ordering (ARCH §10.6). The
+        // comparison used to be a private `restrictiveness` fn in this file;
+        // it moved to `kernel_types::Custody` at rung nc-11-answer, when the
+        // MESH boundary (`PeerAnswer::bound_for_peer`) needed the same
+        // question answered and a second copy would have been the second
+        // decider. This method keeps its name — it is the third-party-egress
+        // spelling of the question — and delegates the rule.
+        payload.released_by(self.release_floor)
     }
 }
 

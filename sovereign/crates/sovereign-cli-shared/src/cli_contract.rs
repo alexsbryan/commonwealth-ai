@@ -310,12 +310,12 @@ impl Journey {
 }
 
 impl JourneyStep {
-    /// What a lane could catch if this step went wrong. See [`Evidence`].
-    pub fn evidence(&self) -> Evidence {
+    /// What a lane could catch if this step went wrong. See [`AssertionStrength`].
+    pub fn evidence(&self) -> AssertionStrength {
         match &self.expect {
-            Some(e) if e.inspects_output() => Evidence::Output,
-            Some(e) if e.exit.is_some() => Evidence::ExitOnly,
-            _ => Evidence::None,
+            Some(e) if e.inspects_output() => AssertionStrength::Output,
+            Some(e) if e.exit.is_some() => AssertionStrength::ExitOnly,
+            _ => AssertionStrength::None,
         }
     }
 
@@ -331,14 +331,14 @@ impl JourneyStep {
     /// breakage. An unfalsifiable step does not merely fail to prove its own
     /// command; it MISATTRIBUTES the failure of the sequence.
     ///
-    /// Equivalent to `self.evidence() == Evidence::None`, and kept as a named
+    /// Equivalent to `self.evidence() == AssertionStrength::None`, and kept as a named
     /// predicate because that is the concept the ratchets are about — but note
     /// that "unfalsifiable" is necessary, not sufficient: a step in a
     /// `skip_live` journey cannot fail either, whatever it declares. Ask
     /// [`Journey::live_steps`] which steps a lane actually runs before drawing
     /// a conclusion from this.
     pub fn is_unfalsifiable(&self) -> bool {
-        self.evidence() == Evidence::None
+        self.evidence() == AssertionStrength::None
     }
 }
 
@@ -449,7 +449,12 @@ impl Expect {
 /// So `ExitOnly` is the class to watch, not to celebrate: it is the cheapest
 /// way to satisfy a "declare something" ratchet without adding evidence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Evidence {
+/// Renamed apart from `Evidence` 2026-08-20 (noun-convergence rung
+/// nc-4-evidence). Not the retrieval noun: this grades how much a CONTRACT
+/// STEP could catch if its command broke. It is back-of-house measurement
+/// vocabulary, and the campaign's layer map puts that in a different
+/// register from the knowledge a turn is grounded on.
+pub enum AssertionStrength {
     /// No `expect` block, or one that asserts nothing. Cannot fail.
     None,
     /// An exit code and nothing else.
@@ -461,7 +466,7 @@ pub enum Evidence {
 /// One row of [`Contract::assertion_census`] — the numbers behind "how much of
 /// this manifest can actually fail?", split by whether a lane runs it.
 #[derive(Debug, Clone, Default)]
-pub struct EvidenceCount {
+pub struct AssertionCount {
     /// Steps that cannot fail: no assertion at all.
     pub none: usize,
     /// Steps asserting only an exit code.
@@ -470,17 +475,17 @@ pub struct EvidenceCount {
     pub output: usize,
 }
 
-impl EvidenceCount {
+impl AssertionCount {
     /// Total steps in this class.
     pub fn total(&self) -> usize {
         self.none + self.exit_only + self.output
     }
 
-    fn add(&mut self, e: Evidence) {
+    fn add(&mut self, e: AssertionStrength) {
         match e {
-            Evidence::None => self.none += 1,
-            Evidence::ExitOnly => self.exit_only += 1,
-            Evidence::Output => self.output += 1,
+            AssertionStrength::None => self.none += 1,
+            AssertionStrength::ExitOnly => self.exit_only += 1,
+            AssertionStrength::Output => self.output += 1,
         }
     }
 }
@@ -494,9 +499,9 @@ impl EvidenceCount {
 #[derive(Debug, Clone, Default)]
 pub struct AssertionCensus {
     /// Steps some lane runs.
-    pub live: EvidenceCount,
+    pub live: AssertionCount,
     /// Steps NO lane runs — journey-level `skip_live`, or a step-level one.
-    pub never_run: EvidenceCount,
+    pub never_run: AssertionCount,
     /// `journey[idx] run` for every LIVE step that asserts nothing. The
     /// to-do list, in the order a reader would fix it.
     pub live_unfalsifiable: Vec<String>,
@@ -914,10 +919,10 @@ impl Contract {
                 if j.runs_live() && s.skip_live.is_none() {
                     c.live.add(ev);
                     live_any += 1;
-                    if ev == Evidence::Output {
+                    if ev == AssertionStrength::Output {
                         live_output += 1;
                     }
-                    if ev == Evidence::None {
+                    if ev == AssertionStrength::None {
                         c.live_unfalsifiable
                             .push(format!("{}[{}] {}", j.id, i, s.run));
                     }

@@ -7,9 +7,62 @@
 
 use std::path::PathBuf;
 
-use sovereign_cli_shared::dirs::mesh_data_dir;
+use sovereign_cli_shared::dirs::sovereign_root;
 use sovereign_mesh::deep_link::{build_https_join_link, parse_join_argument};
 use sovereign_mesh::EmbeddedDaemon;
+
+/// The `SetupConfig` a `svrn mesh` one-shot binds with.
+///
+/// A missing `config.toml` is the ordinary first-run state and
+/// [`SetupConfig::unconfigured`] is its honest value: default ports, loopback
+/// client bind. A config that EXISTS but will not parse is not that state, and
+/// the substitution is named on stderr rather than applied silently — before
+/// this the daemon reached the same defaults through internal `None` fallbacks
+/// and said nothing, so a typo in `[daemon] client_port` looked like the port
+/// simply not taking effect (ARCH §18.3).
+/// The `DaemonServices` a `svrn mesh create` / `svrn mesh join` one-shot
+/// assembles — obtained from THE assembler, not named here.
+///
+/// `sovereign_mesh::assemble` is the one exhaustive match over `Launch` that
+/// constructs anything (`quality/TOPOLOGY.md` §10, Falsifier 3). These two
+/// sites used to name `DaemonServices::MeshAdmin` directly, which is a fourth
+/// place answering "what does this invocation assemble". They now supply
+/// parts and let the match answer — so a mesh verb that somehow ran under a
+/// different launch mode is refused rather than quietly given a daemon.
+///
+/// `Launch::parse` is called here rather than threaded because this binary is
+/// `exec`d by the dispatcher and its argv IS the verb invocation; parse is the
+/// one sanctioned reader of that (Falsifier 1 forbids OTHER code deciding what
+/// the process is, not calling the decider).
+fn mesh_admin_services() -> sovereign_mesh::DaemonServices {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let launch = sovereign_contracts::launch::Launch::parse(
+        &args,
+        // A mesh verb reaching this code path IS a verb invocation; `Bare` is
+        // the honest default for "argv named nothing this parser knows".
+        sovereign_contracts::launch::Launch::Verb {
+            name: "mesh".to_string(),
+            args: args.clone(),
+        },
+    );
+    match sovereign_mesh::assemble(&launch, sovereign_mesh::LaunchParts::Admin) {
+        Ok(services) => services,
+        Err(refusal) => {
+            eprintln!("error: {refusal}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn one_shot_setup_config() -> sovereign_core::setup_config::SetupConfig {
+    match sovereign_core::setup_config::SetupConfig::load() {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("(no usable ~/.svrnmesh/config.toml: {e} — binding the default :9741/:9742)");
+            sovereign_core::setup_config::SetupConfig::unconfigured()
+        }
+    }
+}
 
 /// Run a mesh subcommand. Returns the exit code.
 pub async fn run_mesh(args: &[String]) -> i32 {
@@ -88,7 +141,10 @@ async fn cmd_warm_cache(args: &[String]) -> i32 {
     let cache_dir = match cache_dir.or_else(sovereign_inference::embedded::default_cache_dir) {
         Some(d) => d,
         None => {
-            eprintln!("could not resolve a cache dir (pass --cache-dir or set HOME)");
+            eprintln!(
+                "no cache dir: SOVEREIGN_RPC_CACHE_DIR is off/0/empty (caching \
+                 disabled), or HOME is unset. Pass --cache-dir to warm one anyway."
+            );
             return 1;
         }
     };
@@ -688,16 +744,27 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // `SOVEREIGN_RPC_HEADROOM` env wins (the daemon reads it directly), else the
     // `[shared_model] headroom` config (bootstrap bridges config→env), else 1.2.
     // `--headroom` overrides this for what-if planning.
-    let mut headroom: f64 = std::env::var("SOVEREIGN_RPC_HEADROOM")
-        .ok()
-        .and_then(|v| v.trim().parse::<f64>().ok())
+    // ONE parser, ONE default (§10.6). The env read, the `>= 1.0` filter and
+    // the literal `1.2` used to exist here AND in
+    // `sovereign_inference::embedded::rpc_headroom_factor` — the function that
+    // actually gates the load. They agreed, which is the weakest way for a
+    // promise to hold: this command's whole contract is that "a previewed plan
+    // uses the headroom the load executes with", and it was kept by two copies
+    // of a number matching.
+    //
+    // The config fallback stays here, and is why the shared helper returns an
+    // `Option`: this CLI can run BEFORE bootstrap has bridged
+    // `[shared_model] headroom` into the environment, so it has a second
+    // source the daemon does not. The filter applies to that source too — a
+    // headroom below 1.0 gates on less memory than the model needs.
+    let mut headroom: f64 = sovereign_inference::embedded::rpc_headroom_from_env()
         .or_else(|| {
             sovereign_core::setup_config::SetupConfig::load()
                 .ok()
                 .and_then(|c| c.shared_model.headroom)
+                .filter(|&h| h >= 1.0)
         })
-        .filter(|&h| h >= 1.0)
-        .unwrap_or(1.2);
+        .unwrap_or(sovereign_inference::embedded::RPC_HEADROOM_DEFAULT);
     let mut headroom_from_flag = false;
     let mut json = false;
     let mut from_mesh = false;
@@ -2549,7 +2616,7 @@ async fn cmd_create(args: &[String]) -> i32 {
     // is gone — we can't re-show it. Direct the user to `mesh rotate`
     // instead of blindly attempting another create_mesh (which errors
     // with AlreadyRunning or leaves them confused).
-    if sovereign_mesh::persist::load(&mesh_data_dir())
+    if sovereign_mesh::persist::load(&sovereign_root())
         .map(|opt| opt.is_some())
         .unwrap_or(false)
     {
@@ -2567,7 +2634,11 @@ async fn cmd_create(args: &[String]) -> i32 {
     });
     let node_name = hostname().unwrap_or_else(|| "sovereign-node".to_string());
 
-    let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    let daemon = EmbeddedDaemon::new(
+        sovereign_root(),
+        one_shot_setup_config(),
+        mesh_admin_services(),
+    );
     // Explicit create = serve remote peers → expose the client API
     // (bind non-loopback + require a bearer token).
     daemon.expose_client_api();
@@ -2688,7 +2759,11 @@ async fn cmd_join(args: &[String]) -> i32 {
     }
 
     eprintln!("(no daemon detected on :9741 — running the join in-process)");
-    let daemon = EmbeddedDaemon::new(mesh_data_dir());
+    let daemon = EmbeddedDaemon::new(
+        sovereign_root(),
+        one_shot_setup_config(),
+        mesh_admin_services(),
+    );
     daemon.expose_client_api();
     let Some(link) = parse_join_argument(arg) else {
         // Pre-validated above, so this is unreachable. Bail
@@ -2801,7 +2876,7 @@ async fn cmd_rotate(args: &[String]) -> i32 {
         sovereign_cli_shared::help::print(&HELP_MESH_ROTATE);
         return 0;
     }
-    match sovereign_mesh::persist::rotate_join_key(&mesh_data_dir()) {
+    match sovereign_mesh::persist::rotate_join_key(&sovereign_root()) {
         Ok(Some(rotated)) => {
             eprintln!();
             eprintln!("Note: existing members stay connected. Only future joins need the new key.");
@@ -3324,7 +3399,7 @@ async fn cmd_fetch_model(args: &[String]) -> i32 {
 /// the gossip-port endpoints (`:9742`), which is exactly what we
 /// want — the model-files routes live on the internal port.
 async fn collect_peer_internal_urls() -> std::io::Result<Vec<String>> {
-    let mesh_path = sovereign_cli_shared::dirs::mesh_data_dir().join("mesh.json");
+    let mesh_path = sovereign_root().join("mesh.json");
     let bytes = std::fs::read(&mesh_path)?;
     // Parse loosely — we only need the addresses array of each
     // non-self member. Using serde_json::Value avoids dragging in

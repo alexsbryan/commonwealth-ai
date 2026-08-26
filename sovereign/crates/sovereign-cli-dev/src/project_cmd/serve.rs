@@ -405,27 +405,32 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     let mut tools = sovereign_core::ToolRegistry::new();
     tools.register(Box::new(
         sovereign_tools::SymbolLookupTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .declared(),
     ));
-    tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
-        &engine,
-    ))));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-        Arc::clone(&engine),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::CodeSearchTool::new(Arc::clone(&engine)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::RecentChangesTool::new(Arc::clone(&engine)).declared(),
+    ));
     tools.register(Box::new(
         sovereign_tools::FindCalleesTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .declared(),
     ));
     tools.register(Box::new(
         sovereign_tools::FindCallersTool::new(Arc::clone(&engine), Arc::clone(&merged_graph))
-            .with_health_checker(Arc::clone(&health_checker)),
+            .with_health_checker(Arc::clone(&health_checker))
+            .declared(),
     ));
     // Capability map — derived "what the codebase does" overview.
-    tools.register(Box::new(sovereign_tools::CapabilityMapTool::new()));
+    tools.register(Box::new(
+        sovereign_tools::CapabilityMapTool::new().declared(),
+    ));
     // Architecture observability (quality program) — report + posture.
-    tools.register(Box::new(sovereign_tools::ArchReportTool::new()));
-    tools.register(Box::new(sovereign_tools::ArchPostureTool::new()));
+    tools.register(Box::new(sovereign_tools::ArchReportTool::new().declared()));
+    tools.register(Box::new(sovereign_tools::ArchPostureTool::new().declared()));
 
     // ── Test / lint watcher tools ───────────────────────────────
 
@@ -435,16 +440,16 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         if let Some(scope) = test_watched_scope {
             tool = tool.with_watched_scope(scope);
         }
-        tools.register(Box::new(tool));
+        tools.register(Box::new(tool.declared()));
     }
     if let Some(ref watcher) = test_watcher {
-        tools.register(Box::new(sovereign_tools::RunTestsTool::new(Arc::clone(
-            watcher,
-        ))));
+        tools.register(Box::new(
+            sovereign_tools::RunTestsTool::new(Arc::clone(watcher)).declared(),
+        ));
     }
-    tools.register(Box::new(sovereign_tools::GetRunOutputTool::new(
-        Arc::clone(&test_store),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::GetRunOutputTool::new(Arc::clone(&test_store)).declared(),
+    ));
 
     {
         let mut tool = sovereign_tools::LintStatusTool::new(Arc::clone(&lint_store))
@@ -453,26 +458,28 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         if let Some(scope) = lint_watched_scope {
             tool = tool.with_watched_scope(scope);
         }
-        tools.register(Box::new(tool));
+        tools.register(Box::new(tool.declared()));
     }
     tools.register(Box::new(
-        sovereign_tools::DriftPostureTool::new().with_workspace_root(repo_root.clone()),
+        sovereign_tools::DriftPostureTool::new()
+            .with_workspace_root(repo_root.clone())
+            .declared(),
     ));
-    tools.register(Box::new(sovereign_tools::GetLintOutputTool::new(
-        Arc::clone(&lint_store),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::GetLintOutputTool::new(Arc::clone(&lint_store)).declared(),
+    ));
 
     // ── Agent partnership tools (notes, blast radius, project context) ──
 
-    tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
-        &notes_store,
-    ))));
-    tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
-        &notes_store,
-    ))));
-    tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
-        &notes_store,
-    ))));
+    tools.register(Box::new(
+        sovereign_tools::WriteNoteTool::new(Arc::clone(&notes_store)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::ReadNotesTool::new(Arc::clone(&notes_store)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::DeleteNoteTool::new(Arc::clone(&notes_store)).declared(),
+    ));
     // Work atlas — coordination layer for agents sharing this repo.
     // The serve path runs the GC loop and exposes the three claim
     // tools alongside the code-intel surface. Per spec §10 the
@@ -489,7 +496,7 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             .or_else(|_| commonwealth_state::MeshStore::in_memory())
             .expect("work atlas mesh store"),
     );
-    let atlas_node_id = sovereign_mesh::persist::load_or_generate_self_node_id(&data_dir);
+    let atlas_node_id = crate::atlas_identity::atlas_node_id();
     let atlas_store = Arc::new(sovereign_work_atlas::WorkAtlasStore::new(
         Arc::clone(&atlas_mesh_store),
         atlas_node_id,
@@ -525,19 +532,21 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
             atlas_repo_root.clone(),
             atlas_repo_id.clone(),
             atlas_branch.clone(),
-        ),
+        )
+        .declared(),
     ));
     tools.register(Box::new(
         sovereign_work_atlas::tools::ReleaseScopeTool::new(
             Arc::clone(&atlas_store),
             Arc::clone(&atlas_broadcaster),
-        ),
+        )
+        .declared(),
     ));
     tools.register(Box::new(
-        sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&atlas_store)),
+        sovereign_work_atlas::tools::WorkInFlightTool::new(Arc::clone(&atlas_store)).declared(),
     ));
     tools.register(Box::new(
-        sovereign_work_atlas::tools::ResourceMayITool::new(Arc::clone(&atlas_store)),
+        sovereign_work_atlas::tools::ResourceMayITool::new(Arc::clone(&atlas_store)).declared(),
     ));
     // GC loop. Holds onto the handle so dropping it aborts cleanly
     // when serve terminates.
@@ -549,54 +558,51 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
         sovereign_tools::BlastRadiusTool::new(Arc::clone(&merged_graph))
             .with_project_root(repo_root.clone())
             .with_health_checker(Arc::clone(&health_checker))
-            .with_atlas(Arc::clone(&atlas_store)),
+            .with_atlas(Arc::clone(&atlas_store))
+            .declared(),
     ));
     if let Some(ref ds) = docs_store {
         tools.register(Box::new(
             sovereign_tools::ProjectContextTool::new(Arc::clone(ds))
-                .with_features(Arc::clone(&features_store)),
+                .with_features(Arc::clone(&features_store))
+                .declared(),
         ));
     }
 
     // ── ATOS feature management ─────────────────────────────────
-    tools.register(Box::new(sovereign_tools::ProvisionFeatureTool::new(
-        Arc::clone(&features_store),
-    )));
-    tools.register(Box::new(sovereign_tools::ArchiveFeatureTool::new(
-        Arc::clone(&features_store),
-    )));
-    tools.register(Box::new(sovereign_tools::ReadNoteByIdTool::new(
-        Arc::clone(&notes_store),
-    )));
-    tools.register(Box::new(sovereign_tools::PromoteNoteTool::new(Arc::clone(
-        &notes_store,
-    ))));
+    tools.register(Box::new(
+        sovereign_tools::ProvisionFeatureTool::new(Arc::clone(&features_store)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::ArchiveFeatureTool::new(Arc::clone(&features_store)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::ReadNoteByIdTool::new(Arc::clone(&notes_store)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::PromoteNoteTool::new(Arc::clone(&notes_store)).declared(),
+    ));
     // ReadNoteDigestTool runs in fallback (header-only) mode here —
     // `svrn project serve` doesn't load a model, so the Fast-slot
     // summarization path is unavailable. The banner in the fallback
     // digest makes the degraded state visible to agents. The daemon
     // binary wires inference in via `.with_inference(...)`.
-    tools.register(Box::new(sovereign_tools::ReadNoteDigestTool::new(
-        Arc::clone(&notes_store),
-    )));
-    tools.register(Box::new(sovereign_tools::RecordAtosEventTool::new(
-        Arc::clone(&features_store),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::ReadNoteDigestTool::new(Arc::clone(&notes_store)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::RecordAtosEventTool::new(Arc::clone(&features_store)).declared(),
+    ));
     // atos_plan_emit intentionally NOT registered — see runtime
     // tools_cmd/registry.rs for rationale (markdown plan path
     // replaced structured-JSON path).
-    tools.register(Box::new(sovereign_tools::WriteRedteamFindingTool::new(
-        Arc::clone(&notes_store),
-    )));
+    tools.register(Box::new(
+        sovereign_tools::WriteRedteamFindingTool::new(Arc::clone(&notes_store)).declared(),
+    ));
 
     // ── Session reflection (feedback loop) ─────────────────────────────
-    tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
-        Arc::clone(&notes_store),
-    )));
-
-    // ── Doc path checker ────────────────────────────────────────────────
     tools.register(Box::new(
-        sovereign_tools::CheckDocPathsTool::new().with_project_root(repo_root.clone()),
+        sovereign_tools::SessionReflectionTool::new(Arc::clone(&notes_store)).declared(),
     ));
 
     // ── DESIGN.md structural signals ────────────────────────────────────
@@ -606,7 +612,9 @@ pub(crate) async fn cmd_serve(args: &[String]) -> i32 {
     // right file. Absolute paths still work — the tool resolves them
     // verbatim, bypassing project_root.
     tools.register(Box::new(
-        sovereign_tools::DesignSignalsExtractTool::new().with_project_root(repo_root.clone()),
+        sovereign_tools::DesignSignalsExtractTool::new()
+            .with_project_root(repo_root.clone())
+            .declared(),
     ));
 
     // ── Start watcher coordinator ───────────────────────────────

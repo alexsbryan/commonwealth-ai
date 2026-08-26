@@ -136,7 +136,12 @@ impl DiscoveryOutcome {
 
 /// What one tick says about one tracked worker. See [`DiscoveryOutcome`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Evidence {
+/// Renamed apart from `Evidence` 2026-08-20 (noun-convergence rung
+/// nc-4-evidence). It was one of five `Evidence` types in five crates, and
+/// it is not the retrieval noun: this grades whether a WORKER is reachable
+/// on this tick, and carries no content, no origin and no score. Same word,
+/// different concept — so it renames apart rather than converging.
+enum PresenceGrade {
     /// Confirmed dialable.
     Present,
     /// Our own compute child is warming against or serving across this
@@ -287,7 +292,7 @@ struct WorkerState {
     /// When this peer last carried a successful multi-gigabyte model transfer.
     /// Out-of-band liveness that is strictly stronger than an 800ms probe.
     warm_alive_at: Option<Instant>,
-    /// The most recent tick graded this worker [`Evidence::Engaged`] — held
+    /// The most recent tick graded this worker [`PresenceGrade::Engaged`] — held
     /// present by our own child's warm/serving traffic rather than by a probe.
     /// Surfaced on [`WorkerStatusView`] so an operator reading mesh status
     /// mid-load can see WHY a probe-starved worker is still eligible.
@@ -370,9 +375,9 @@ pub struct WorkerStatusView {
 /// Classify what this tick says about one tracked worker.
 ///
 /// Pure, and the hinge of the whole fix. Absence-from-the-slice degrades to a
-/// real [`Evidence::Absent`] only when we have positive grounds AND the benefit
+/// real [`PresenceGrade::Absent`] only when we have positive grounds AND the benefit
 /// of the doubt has run out — a genuinely dead worker must still leave.
-fn evidence_for(
+fn presence_grade_for(
     id: &NodeId,
     st: &WorkerState,
     present: &HashSet<NodeId>,
@@ -381,9 +386,9 @@ fn evidence_for(
     scanned: bool,
     now: Instant,
     cfg: &EligibilityConfig,
-) -> Evidence {
+) -> PresenceGrade {
     if present.contains(id) {
-        return Evidence::Present;
+        return PresenceGrade::Present;
     }
     // Positive first-party evidence, NOT benefit of the doubt — so it ranks
     // above the grace machinery (including the grace-disabled escape below):
@@ -393,13 +398,13 @@ fn evidence_for(
     // or serving, so the vouching ends with the child — a worker that dies
     // takes the child (and this evidence) down with it.
     if !st.endpoint.is_empty() && engaged.contains(st.endpoint.as_str()) {
-        return Evidence::Engaged;
+        return PresenceGrade::Engaged;
     }
     // Grace disabled — every non-present tick is absence, i.e. exactly the
     // pre-2026-07-28 behaviour. Kept as a one-line escape for an operator who
     // wants the old semantics back.
     if cfg.absence_grace.is_zero() {
-        return Evidence::Absent;
+        return PresenceGrade::Absent;
     }
 
     // Do we have a REASON to withhold judgement this tick?
@@ -411,15 +416,15 @@ fn evidence_for(
     if !no_statement {
         // Positive grounds: the scan ran, the peer was not merely unprobeable
         // (gossip dropped it), and nothing vouches for it.
-        return Evidence::Absent;
+        return PresenceGrade::Absent;
     }
 
     // Withholding — but only for so long.
     let held_for = st.unconfirmed_since.map(|s| now.duration_since(s));
     if held_for.is_some_and(|d| d >= cfg.absence_grace) {
-        Evidence::Absent
+        PresenceGrade::Absent
     } else {
-        Evidence::Unconfirmed
+        PresenceGrade::Unconfirmed
     }
 }
 
@@ -477,7 +482,7 @@ impl WorkerEligibility {
         for (id, st) in map.iter_mut() {
             let before = st.status(now, &self.config);
             let was_present = st.present;
-            let evidence = evidence_for(
+            let grade = presence_grade_for(
                 id,
                 st,
                 &present_ids,
@@ -487,14 +492,14 @@ impl WorkerEligibility {
                 now,
                 &self.config,
             );
-            st.engaged = evidence == Evidence::Engaged;
+            st.engaged = grade == PresenceGrade::Engaged;
 
-            match evidence {
+            match grade {
                 // No statement. Freeze the whole state machine: no flap, no
                 // re-settle, endpoint untouched. Because `present` is left as it
                 // was, the disappear arm below fires EXACTLY ONCE when the grace
                 // finally expires — one flap, not one per tick.
-                Evidence::Unconfirmed => {
+                PresenceGrade::Unconfirmed => {
                     st.unconfirmed_since.get_or_insert(now);
                 }
                 // Engaged is presence by another witness: our own child's
@@ -504,7 +509,7 @@ impl WorkerEligibility {
                 // `addresses` map only lists discovery-confirmed workers, so an
                 // engaged-only tick never rewrites the endpoint; and `status()`
                 // checks the quarantine first, so engagement never lifts one.
-                Evidence::Present | Evidence::Engaged => {
+                PresenceGrade::Present | PresenceGrade::Engaged => {
                     st.unconfirmed_since = None;
                     // An address change for a present node is NOT a flap —
                     // update the endpoint in place and leave presence/settle
@@ -539,7 +544,7 @@ impl WorkerEligibility {
                     }
                     st.present = true;
                 }
-                Evidence::Absent => {
+                PresenceGrade::Absent => {
                     st.unconfirmed_since = None;
                     if was_present {
                         // Disappeared — a flap. Reset the settle run; maybe
@@ -559,7 +564,7 @@ impl WorkerEligibility {
                     endpoint = %st.endpoint,
                     from = ?before,
                     to = ?after,
-                    evidence = ?evidence,
+                    grade = ?grade,
                     flaps = st.flaps.len(),
                     quarantine_count = st.quarantine_count,
                     cooldown_secs = st.quarantine_remaining(now),
@@ -584,7 +589,7 @@ impl WorkerEligibility {
     ///   other hold. A peer that warms once and then goes quiet still degrades
     ///   on schedule.
     ///
-    /// Routing it through [`Evidence`] rather than mutating presence directly is
+    /// Routing it through [`PresenceGrade`] rather than mutating presence directly is
     /// what makes that safe: a `note_alive` that set `present = true` would be
     /// re-flapped by the very next `observe`, oscillating between the two
     /// mutators.

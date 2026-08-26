@@ -22,6 +22,10 @@ pub mod atlas_canonical;
 pub mod atlas_traversal;
 pub mod canonical_sync;
 pub mod chunkers;
+/// `Corpus` — one installed corpus, named and located. The published noun, and
+/// the one decider of corpus-engine's on-disk layout (see the module docs for
+/// the 156 hand-joins it replaces).
+pub mod corpus;
 pub mod engine;
 pub mod enrichment;
 pub mod error;
@@ -37,6 +41,10 @@ pub mod freshness;
 pub mod harness;
 pub mod index;
 pub mod meta_atlas;
+/// The one append-only journal — `Op` + `Oplog`, three tenants (governance,
+/// enrichment reconciliation, meta-atlas bridge) that each used to carry their
+/// own copy of the same envelope and the same file IO.
+pub mod oplog;
 pub mod pii;
 pub mod progress;
 pub mod recipe;
@@ -108,6 +116,7 @@ pub mod notes_sync;
 // consumers already depend on, so a consumer cannot pick up the predicate
 // without the bound in reach (and need not take a second direct dep on the
 // leaf — ARCH §8.3).
+pub use corpus::{Corpus, CORPUS_META_FILENAME};
 pub use corpus_engine_yield::{DeferralBudget, DeferralStep, YieldHook, MAX_FOREGROUND_DEFERRAL};
 pub use engine::{
     CancellationFlag, CancellationRegistry, CorpusDiskStatus, CorpusEngine, CustomAcquirerFn,
@@ -131,9 +140,15 @@ pub use index::raptor::{
 };
 pub use index::{
     read_provenance, set_provenance, CorpusIndex, CorpusProvenance, DedupeReport,
-    EnrichmentChunkRow, FilterOverride, InsertChunk, MaintenanceStats, NeighborWindow, ScopeMeta,
-    StoredChunk, StoredChunkWithMetadata,
+    EnrichmentChunkRow, Evidence, FilterOverride, InsertChunk, MaintenanceStats, NeighborWindow,
+    ScopeMeta, StoredChunk, StoredChunkWithMetadata,
 };
+// `Evidence`'s value types, from the crate consumers already depend on. A
+// caller cannot hold an `Evidence` without being able to read its `Origin` and
+// `Custody`, so re-exporting them here is what stops every consumer taking a
+// second direct dep on the kernel leaf (ARCH §8.3) — the same reasoning as the
+// `YieldHook` + `DeferralBudget` block above.
+pub use kernel_types::{ContentHash, CorpusId, Custody, Grain, Locator, Origin, Server, Source};
 pub use progress::{
     IngestProgress, ManifestReconstructionReport, ProgressCallback, ReconstructionMethod,
     SourceFileManifest, SourceFileRecord, SourceFileStatus,

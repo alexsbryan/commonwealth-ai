@@ -936,7 +936,11 @@ fn parse_row_attrs(e: &quick_xml::events::BytesStart<'_>) -> Result<HashMap<Stri
 // ─── MediaWiki Markup Stripping ───────────────────────────────
 
 /// Strip MediaWiki markup, producing plain text.
-pub(crate) fn strip_mediawiki(text: &str) -> String {
+/// Strip MediaWiki markup down to plain text.
+///
+/// `pub` since 2026-08-20 — `sovereign_tools::corpus::wikipedia` carried a
+/// byte-for-byte hand-copy (comments aside). One implementation (§10.6).
+pub fn strip_mediawiki(text: &str) -> String {
     let mut result = String::with_capacity(text.len());
     let mut chars = text.chars().peekable();
 

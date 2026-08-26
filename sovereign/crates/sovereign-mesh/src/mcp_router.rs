@@ -23,7 +23,6 @@ use axum::response::IntoResponse;
 use axum::routing::post;
 use axum::{Json, Router};
 use futures::stream::{self, Stream, StreamExt};
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tower_http::cors::CorsLayer;
 
@@ -31,57 +30,16 @@ use corpus_engine_notes::NoteStore;
 use sovereign_core::registry::ToolRegistry;
 use sovereign_core::types::{Effect, StepOutput, ToolContext};
 
-#[derive(Deserialize)]
-pub struct JsonRpcRequest {
-    #[allow(dead_code)]
-    #[serde(default)]
-    pub jsonrpc: String,
-    /// Optional — JSON-RPC notifications (e.g. `notifications/initialized`)
-    /// omit the id and must not receive a response.
-    #[serde(default)]
-    pub id: Option<Value>,
-    pub method: String,
-    #[serde(default)]
-    pub params: Option<Value>,
-}
-
-#[derive(Serialize)]
-pub struct JsonRpcResponse {
-    pub jsonrpc: &'static str,
-    pub id: Value,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub result: Option<Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<JsonRpcError>,
-}
-
-#[derive(Serialize)]
-pub struct JsonRpcError {
-    pub code: i32,
-    pub message: String,
-}
-
-impl JsonRpcResponse {
-    fn ok(id: Value, value: Value) -> Self {
-        Self {
-            jsonrpc: "2.0",
-            id,
-            result: Some(value),
-            error: None,
-        }
-    }
-    fn err(id: Value, code: i32, message: impl Into<String>) -> Self {
-        Self {
-            jsonrpc: "2.0",
-            id,
-            result: None,
-            error: Some(JsonRpcError {
-                code,
-                message: message.into(),
-            }),
-        }
-    }
-}
+// ─── JSON-RPC 2.0 envelope ────────────────────────────────────
+//
+// Imported, not re-declared. The envelope is a wire contract, so it lives at
+// layer 0 in `oicp-types` (reached here through `sovereign_core`'s re-export,
+// per ARCH §8.3) and `sovereign_server::routes_mcp` imports the same one.
+//
+// This router's `Option<Value>` id is the shape that won the adjudication; the
+// visible change here is that the error object now carries the spec's optional
+// `data` member, which serializes to nothing while it is `None`.
+use sovereign_core::oicp::jsonrpc::{JsonRpcRequest, JsonRpcResponse};
 
 fn call_tool_text(text: impl Into<String>, is_error: bool) -> Value {
     serde_json::json!({
@@ -350,7 +308,7 @@ async fn mcp_handle(
     if !is_localhost(&peer) {
         return (
             StatusCode::FORBIDDEN,
-            Json(JsonRpcResponse::err(
+            Json(JsonRpcResponse::error(
                 Value::Null,
                 -32001,
                 "MCP is local-only",
@@ -377,7 +335,7 @@ async fn mcp_handle(
             if items.is_empty() {
                 return (
                     StatusCode::OK,
-                    Json(JsonRpcResponse::err(Value::Null, -32600, "empty batch")),
+                    Json(JsonRpcResponse::error(Value::Null, -32600, "empty batch")),
                 )
                     .into_response();
             }
@@ -400,9 +358,11 @@ async fn mcp_handle(
                             responses.push(response);
                         }
                     }
-                    Err(_) => {
-                        responses.push(JsonRpcResponse::err(Value::Null, -32600, "invalid request"))
-                    }
+                    Err(_) => responses.push(JsonRpcResponse::error(
+                        Value::Null,
+                        -32600,
+                        "invalid request",
+                    )),
                 }
             }
             if responses.is_empty() {
@@ -430,7 +390,11 @@ async fn mcp_handle(
             },
             Err(_) => (
                 StatusCode::OK,
-                Json(JsonRpcResponse::err(Value::Null, -32600, "invalid request")),
+                Json(JsonRpcResponse::error(
+                    Value::Null,
+                    -32600,
+                    "invalid request",
+                )),
             )
                 .into_response(),
         },
@@ -476,7 +440,7 @@ async fn dispatch(
                     "version": env!("CARGO_PKG_VERSION")
                 }
             });
-            JsonRpcResponse::ok(id, result)
+            JsonRpcResponse::result(id, result)
         }
         "tools/list" => {
             let descriptors = tools.descriptors();
@@ -487,7 +451,7 @@ async fn dispatch(
                 &descriptors,
                 feature_root.0.as_deref().map(|p| p.as_path()),
             );
-            JsonRpcResponse::ok(id, serde_json::json!({ "tools": tool_list }))
+            JsonRpcResponse::result(id, serde_json::json!({ "tools": tool_list }))
         }
         "tools/call" => {
             handle_tool_call(
@@ -502,8 +466,8 @@ async fn dispatch(
             )
             .await
         }
-        "ping" => JsonRpcResponse::ok(id, serde_json::json!({})),
-        other => JsonRpcResponse::err(id, -32601, format!("method not found: {other}")),
+        "ping" => JsonRpcResponse::result(id, serde_json::json!({})),
+        other => JsonRpcResponse::error(id, -32601, format!("method not found: {other}")),
     };
 
     Some(response)
@@ -528,10 +492,10 @@ async fn handle_tool_call(
     agent_session_token: String,
 ) -> JsonRpcResponse {
     let Some(params) = params else {
-        return JsonRpcResponse::err(id, -32602, "missing params");
+        return JsonRpcResponse::error(id, -32602, "missing params");
     };
     let Some(raw_name) = params.get("name").and_then(|v| v.as_str()) else {
-        return JsonRpcResponse::err(id, -32602, "missing 'name'");
+        return JsonRpcResponse::error(id, -32602, "missing 'name'");
     };
     // Alias rewrite: a client that cached the old MCP name (e.g.
     // `find_callers`) hits the same canonical handler as the new
@@ -545,13 +509,13 @@ async fn handle_tool_call(
         .unwrap_or(Value::Object(Default::default()));
 
     if !is_mcp_exposed(&name) {
-        return JsonRpcResponse::err(id, -32601, format!("tool not found: {raw_name}"));
+        return JsonRpcResponse::error(id, -32601, format!("tool not found: {raw_name}"));
     }
 
     let tool = match tools.get(&name) {
         Ok(t) => t,
         Err(_) => {
-            return JsonRpcResponse::ok(
+            return JsonRpcResponse::result(
                 id,
                 call_tool_text(
                     format!("`{name}` not registered. Run `sovereign project init` first."),
@@ -562,7 +526,7 @@ async fn handle_tool_call(
     };
 
     if let Err(e) = tool.validate(&arguments) {
-        return JsonRpcResponse::ok(id, call_tool_text(e.to_string(), true));
+        return JsonRpcResponse::result(id, call_tool_text(e.to_string(), true));
     }
 
     // Phase 1.5 audit gate: MCP is stdio/HTTP non-interactive, so the
@@ -661,13 +625,13 @@ async fn handle_tool_call(
     let _ = call_counter.fetch_add(1, Ordering::Relaxed);
 
     match result {
-        Ok(StepOutput::Text(text)) => JsonRpcResponse::ok(id, call_tool_text(text, false)),
+        Ok(StepOutput::Text(text)) => JsonRpcResponse::result(id, call_tool_text(text, false)),
         Ok(StepOutput::Json(value)) => {
             let text = serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string());
-            JsonRpcResponse::ok(id, call_tool_text(text, false))
+            JsonRpcResponse::result(id, call_tool_text(text, false))
         }
-        Ok(other) => JsonRpcResponse::ok(id, call_tool_text(format!("{other:?}"), false)),
-        Err(e) => JsonRpcResponse::ok(
+        Ok(other) => JsonRpcResponse::result(id, call_tool_text(format!("{other:?}"), false)),
+        Err(e) => JsonRpcResponse::result(
             id,
             call_tool_text(format!("Tool `{name}` failed: {e}"), true),
         ),

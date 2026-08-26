@@ -14,6 +14,7 @@ use axum::routing::{get, post};
 use axum::Router;
 
 use sovereign_core::runtime::Runtime;
+use sovereign_core::traits::StateStore;
 use sovereign_core::types::*;
 use sovereign_tools::document_asset::DocumentAssetManager;
 // Only the upload handler reports ingest progress, and that route is
@@ -96,10 +97,9 @@ pub fn document_router() -> Router {
 /// retrieval), reuse it for the ingest skeleton's T2 entity pass — the
 /// same −70%-token NER-for-LLM swap the desktop uses. Absent/not-warm
 /// falls back to the LLM per window, so this is safe unconditionally.
-fn manager_from_runtime(runtime: &Runtime) -> DocumentAssetManager {
-    let manager =
-        DocumentAssetManager::new(Arc::clone(&runtime.inference), Arc::clone(&runtime.store));
-    match &runtime.gliner {
+fn manager_from_runtime(runtime: &Runtime, store: &Arc<dyn StateStore>) -> DocumentAssetManager {
+    let manager = DocumentAssetManager::new(Arc::clone(&runtime.inference), Arc::clone(store));
+    match &runtime.lane_sources.gliner {
         Some(extractor) => manager.with_entity_extractor(Arc::clone(extractor)),
         None => manager,
     }
@@ -119,11 +119,10 @@ fn asset_visible_to(asset: &DocumentAsset, tenant: &str) -> bool {
 
 /// GET /v1/documents
 async fn list_assets(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
 ) -> ApiResult<Vec<DocumentAsset>> {
-    let mut assets = runtime
-        .store
+    let mut assets = store
         .list_document_assets()
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -140,6 +139,7 @@ async fn list_assets(
 #[cfg(feature = "dev-routes")]
 async fn upload_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Json(body): Json<UploadRequest>,
 ) -> ApiResult<AssetResponse> {
@@ -151,7 +151,7 @@ async fn upload_asset(
         ));
     }
 
-    let manager = manager_from_runtime(&runtime);
+    let manager = manager_from_runtime(&runtime, &store);
 
     let mut asset = manager
         .ingest(path, |progress| {
@@ -177,8 +177,7 @@ async fn upload_asset(
     // Stamp ownership so this document is private to the uploading tenant on
     // a multi-user hub (re-saves the asset row with `owner` set).
     asset.owner = Some(tenant.0.clone());
-    runtime
-        .store
+    store
         .save_document_asset(&asset)
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?;
@@ -188,12 +187,11 @@ async fn upload_asset(
 
 /// GET /v1/documents/:id
 async fn get_asset(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
 ) -> ApiResult<AssetResponse> {
-    let asset = runtime
-        .store
+    let asset = store
         .get_document_asset(&id)
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -209,13 +207,13 @@ async fn get_asset(
 /// DELETE /v1/documents/:id
 async fn delete_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
 ) -> ApiResult<serde_json::Value> {
     // Only the owner may delete. Treat another principal's document as
     // not-found rather than revealing that it exists.
-    let asset = runtime
-        .store
+    let asset = store
         .get_document_asset(&id)
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -224,7 +222,7 @@ async fn delete_asset(
         return Err(api_error(StatusCode::NOT_FOUND, "Document not found"));
     }
 
-    let manager = manager_from_runtime(&runtime);
+    let manager = manager_from_runtime(&runtime, &store);
     manager
         .delete(&id)
         .await
@@ -236,12 +234,12 @@ async fn delete_asset(
 /// POST /v1/documents/:id/ask
 async fn ask_asset(
     Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
     Json(body): Json<AskRequest>,
 ) -> ApiResult<AskResponse> {
-    let asset = runtime
-        .store
+    let asset = store
         .get_document_asset(&id)
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?
@@ -261,7 +259,7 @@ async fn ask_asset(
         ));
     }
 
-    let manager = manager_from_runtime(&runtime);
+    let manager = manager_from_runtime(&runtime, &store);
     let start = std::time::Instant::now();
 
     let (response, operation, sources) = manager
@@ -275,8 +273,7 @@ async fn ask_asset(
 
     // Record the operation for analytics.
     let message_id = uuid::Uuid::new_v4().to_string();
-    let _ = runtime
-        .store
+    let _ = store
         .save_document_operation(&message_id, &asset.id, &operation, duration_ms)
         .await;
 
@@ -289,12 +286,11 @@ async fn ask_asset(
 
 /// GET /v1/documents/:id/state
 async fn get_asset_state(
-    Extension(runtime): Extension<Arc<Runtime>>,
+    Extension(store): Extension<Arc<dyn StateStore>>,
     Extension(tenant): Extension<TenantId>,
     Path(id): Path<String>,
 ) -> ApiResult<AssetStateResponse> {
-    let asset = runtime
-        .store
+    let asset = store
         .get_document_asset(&id)
         .await
         .map_err(|e| api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()))?

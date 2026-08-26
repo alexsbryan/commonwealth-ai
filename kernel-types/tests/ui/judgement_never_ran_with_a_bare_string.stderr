@@ -1,0 +1,13 @@
+error[E0308]: mismatched types
+ --> tests/ui/judgement_never_ran_with_a_bare_string.rs:7:53
+  |
+7 |     let _ = Judgement::never_ran("bench-baselines", "unknown");
+  |             --------------------                    ^^^^^^^^^ expected `Reason`, found `&str`
+  |             |
+  |             arguments to this function are incorrect
+  |
+note: associated function defined here
+ --> src/judgement.rs
+  |
+  |     pub fn never_ran(subject: impl Into<String>, reason: Reason) -> Judgement {
+  |            ^^^^^^^^^

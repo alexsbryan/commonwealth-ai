@@ -340,3 +340,81 @@ pub fn answer_segments_footer(metadata: Option<&serde_json::Value>) -> String {
     }
     out
 }
+
+// ─── Typed renderers — the same output, from the wire instead of the store ───
+//
+// `provenance_header` and `retrieved_chunks_footer` above read the PERSISTED
+// metadata blob, which only a process holding the store can produce. Phase 6
+// makes `svrn chat` a client of the daemon's turn surface, and a client is
+// handed `TurnFrame::Complete` — typed `Provenance` + `Citation` values that
+// crossed a socket. These render the identical text from those.
+//
+// The blob readers are kept, not deleted: `bench`, `eval` and the inner-chaos
+// harness still run turns in-process and still have a store to read. The two
+// are one decider in the sense that matters (§10.6) because the typed values
+// are PROJECTED from the same blob by
+// `sovereign_contracts::types::projection` — there is one parse of the
+// metadata shape, and these two functions are two renderings of its output,
+// not two interpretations of the blob.
+
+/// The provenance header, from the typed frame.
+///
+/// `routing_tier` is the wire's name for what the blob reader prints as
+/// `intent` — the projection prefers `coarse_intent` and falls back to
+/// `intent`, so the rendered string matches.
+pub fn provenance_header_typed(
+    provenance: Option<&sovereign_contracts::types::projection::Provenance>,
+) -> String {
+    let Some(prov) = provenance else {
+        return String::new();
+    };
+    let mut out = String::new();
+    let sources: Vec<&str> = prov.sources.iter().map(|s| s.origin.as_str()).collect();
+    if sources.is_empty() {
+        let _ = write!(out, "Searched (nothing)");
+    } else {
+        let _ = write!(out, "Searched {}", sources.join(", "));
+    }
+    if let Some(ms) = prov.total_ms.filter(|m| *m > 0) {
+        let _ = write!(out, " · {:.1}s", ms as f64 / 1000.0);
+    }
+    if let Some(tier) = prov.routing_tier.as_deref() {
+        let _ = write!(out, " · {tier}");
+    }
+    if !prov.inference_backend.is_empty() {
+        let _ = write!(out, " · {}", prov.inference_backend);
+    }
+    out
+}
+
+/// The sources footer, from the typed frame.
+///
+/// `url` and `provenance_tier` are `Option` on [`Citation`] because they were
+/// added in phase 6 for exactly this call site — the CLI's footer exists for
+/// diagnostic visibility, and converting the host to a client while silently
+/// dropping two of its five columns would have been a downgrade wearing a
+/// convergence badge.
+pub fn citations_footer(
+    citations: &[sovereign_contracts::types::projection::Citation],
+) -> String {
+    if citations.is_empty() {
+        return String::new();
+    }
+    let mut out = String::new();
+    let _ = writeln!(out, "--- sources ({}) ---", citations.len());
+    for (i, c) in citations.iter().enumerate() {
+        let tier = c.provenance_tier.as_deref().unwrap_or("");
+        let head = match c.title.as_deref() {
+            Some(t) if !t.is_empty() => format!("{t} — {}", c.corpus_id),
+            _ => c.corpus_id.clone(),
+        };
+        let _ = writeln!(out, "[{n:>2}] {head}  [{tier}]", n = i + 1);
+        if let Some(u) = c.url.as_deref() {
+            let _ = writeln!(out, "     {u}");
+        }
+        if !c.snippet.is_empty() {
+            let _ = writeln!(out, "     {}", c.snippet);
+        }
+    }
+    out
+}

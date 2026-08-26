@@ -48,11 +48,11 @@ const ATOS_INSTRUCTIONS: &str = include_str!("../../assets/atos_instructions.md"
 /// Production daemons pass `tool_registry.descriptors()`; tests can
 /// pass `vec![]` when they don't care about the catalog.
 pub struct ContextInjector {
-    tool_descriptors: Vec<sovereign_core::types::ToolDescriptor>,
+    tool_descriptors: Vec<oicp_types::ToolDescriptor>,
 }
 
 impl ContextInjector {
-    pub fn new(tool_descriptors: Vec<sovereign_core::types::ToolDescriptor>) -> Self {
+    pub fn new(tool_descriptors: Vec<oicp_types::ToolDescriptor>) -> Self {
         Self { tool_descriptors }
     }
 
@@ -173,8 +173,8 @@ impl Middleware for ContextInjector {
 ///
 /// Rendered as a compact markdown block — one line per tool, effect
 /// tag up front, one-sentence description.
-fn compose_cli_tools_catalog(descriptors: &[sovereign_core::types::ToolDescriptor]) -> String {
-    use sovereign_core::types::{Effect, Scope, ToolDescriptor};
+fn compose_cli_tools_catalog(descriptors: &[oicp_types::ToolDescriptor]) -> String {
+    use oicp_types::{Effect, Scope, ToolDescriptor};
     use std::collections::BTreeMap;
 
     if descriptors.is_empty() {
@@ -589,7 +589,7 @@ mod tests {
         // descriptor for the canonical code-intel tool (`symbols`,
         // Read · Persistent) so the grouping + id assertions exercise
         // the rendering path without standing up a real ToolRegistry.
-        use sovereign_core::types::{Effect, Idempotency, Latency, Scope, ToolDescriptor};
+        use oicp_types::{Effect, Idempotency, Latency, Scope, ToolDescriptor};
         let descriptors = vec![ToolDescriptor {
             id: "symbols".to_string(),
             name: "symbols".to_string(),

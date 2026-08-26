@@ -77,7 +77,7 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
             source.display()
         )));
     }
-    let source_meta = source.join("_corpus_meta.json");
+    let source_meta = crate::corpus::Corpus::meta_in(&source);
     if !source_meta.exists() {
         return Err(Error::NoShardsFound(format!(
             "promote_single_shard: {} has no _corpus_meta.json",
@@ -90,7 +90,7 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
     // parent dir long before Lance ingest runs. Refusing on bare
     // directory existence used to strand every Lance promote behind
     // a healthy SCIP sidecar.
-    if output.join("_corpus_meta.json").exists() {
+    if crate::corpus::Corpus::meta_in(&output).exists() {
         return Err(Error::Database(format!(
             "promote_single_shard: refusing to overwrite existing canonical at {}",
             output.display()
@@ -143,7 +143,7 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
     }
 
     // Rewrite meta to drop partition-specific fields and mark complete.
-    let raw = std::fs::read_to_string(output.join("_corpus_meta.json"))?;
+    let raw = std::fs::read_to_string(crate::corpus::Corpus::meta_in(&output))?;
     let mut meta: serde_json::Value =
         serde_json::from_str(&raw).map_err(|e| Error::Serialization(format!("read meta: {e}")))?;
     if let Some(obj) = meta.as_object_mut() {
@@ -160,7 +160,7 @@ pub fn promote_single_shard(source: &Path, output: &Path) -> Result<()> {
         );
     }
     std::fs::write(
-        output.join("_corpus_meta.json"),
+        crate::corpus::Corpus::meta_in(&output),
         serde_json::to_string_pretty(&meta)
             .map_err(|e| Error::Serialization(format!("write meta: {e}")))?,
     )?;
@@ -612,7 +612,7 @@ pub async fn merge_shards(shard_paths: &[PathBuf], output_path: &Path) -> Result
     // via `content_hash`).
     if shard_paths.len() == 1 {
         let source = &shard_paths[0];
-        let output_has_data = output_path.join("_corpus_meta.json").exists();
+        let output_has_data = crate::corpus::Corpus::meta_in(&output_path).exists();
         if !output_has_data && source != output_path {
             promote_single_shard(source, output_path)?;
             return CorpusIndex::open(output_path).await?.info().await;
@@ -1261,7 +1261,7 @@ pub async fn merge_partitions_into_canonical(
     progress: Option<Arc<dyn Fn(MergePhaseProgress) + Send + Sync>>,
 ) -> Result<PartitionMergeReport> {
     let canonical_path = index_dir.join(corpus_id);
-    if canonical_path.join("_corpus_meta.json").exists() {
+    if crate::corpus::Corpus::meta_in(&canonical_path).exists() {
         return Err(Error::Database(format!(
             "merge_partitions_into_canonical: canonical at {} already exists — \
              refusing to clobber. Remove it first if you really want to rebuild \
@@ -1291,7 +1291,7 @@ pub async fn merge_partitions_into_canonical(
         if !name_str.starts_with(&prefix) {
             continue;
         }
-        if !path.join("_corpus_meta.json").exists() {
+        if !crate::corpus::Corpus::meta_in(&path).exists() {
             continue;
         }
         partition_paths.push(path);
@@ -1341,7 +1341,8 @@ pub async fn merge_partitions_into_canonical(
 
         // Read total_shards directly from the meta JSON since it's
         // not exposed via IndexInfo.
-        let raw = std::fs::read_to_string(path.join("_corpus_meta.json")).unwrap_or_default();
+        let raw =
+            std::fs::read_to_string(crate::corpus::Corpus::meta_in(&path)).unwrap_or_default();
         if let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) {
             if let Some(n) = v["total_shards"].as_u64() {
                 let n = n as usize;
@@ -1492,7 +1493,7 @@ pub async fn append_partition_to_canonical(
     embedding_dim: usize,
     mesh_sharing: bool,
 ) -> Result<AppendReport> {
-    if !source_path.join("_corpus_meta.json").exists() {
+    if !crate::corpus::Corpus::meta_in(&source_path).exists() {
         return Err(Error::NoShardsFound(format!(
             "append_partition_to_canonical: source {} has no _corpus_meta.json",
             source_path.display()
@@ -1836,10 +1837,10 @@ mod tests {
             "source partition dir should have been renamed away, got {}",
             shard_path.display()
         );
-        assert!(merged_path.join("_corpus_meta.json").exists());
+        assert!(crate::corpus::Corpus::meta_in(&merged_path).exists());
 
         // _corpus_meta.json must have shed partition-specific fields.
-        let raw = std::fs::read_to_string(merged_path.join("_corpus_meta.json")).unwrap();
+        let raw = std::fs::read_to_string(crate::corpus::Corpus::meta_in(&merged_path)).unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["is_shard"], serde_json::Value::Bool(false));
         assert!(v["processed_shards"].as_array().unwrap().is_empty());
@@ -1862,7 +1863,7 @@ mod tests {
         let result = promote_single_shard(&src, &dst);
         assert!(result.is_err(), "must refuse to overwrite populated output");
         // Source stays untouched.
-        assert!(src.join("_corpus_meta.json").exists());
+        assert!(crate::corpus::Corpus::meta_in(&src).exists());
     }
 
     #[tokio::test]
@@ -1881,7 +1882,7 @@ mod tests {
 
         // Blank out p2's embedding_model — simulate the peer-pull
         // copy bug.
-        let p2_meta_path = p2.join("_corpus_meta.json");
+        let p2_meta_path = crate::corpus::Corpus::meta_in(&p2);
         let raw = std::fs::read_to_string(&p2_meta_path).unwrap();
         let mut v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         v["embedding_model"] = serde_json::Value::String(String::new());
@@ -1910,7 +1911,7 @@ mod tests {
         create_test_index(&p2, 2).await;
 
         // Rename p2's embedding_model to something different.
-        let p2_meta_path = p2.join("_corpus_meta.json");
+        let p2_meta_path = crate::corpus::Corpus::meta_in(&p2);
         let raw = std::fs::read_to_string(&p2_meta_path).unwrap();
         let mut v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         v["embedding_model"] = serde_json::Value::String("other-model".into());
@@ -1932,7 +1933,7 @@ mod tests {
         create_test_index(&p2, 2).await;
 
         for path in [&p1, &p2] {
-            let meta_path = path.join("_corpus_meta.json");
+            let meta_path = crate::corpus::Corpus::meta_in(&path);
             let raw = std::fs::read_to_string(&meta_path).unwrap();
             let mut v: serde_json::Value = serde_json::from_str(&raw).unwrap();
             v["embedding_model"] = serde_json::Value::String(String::new());
@@ -1988,8 +1989,8 @@ mod tests {
         drop(i2);
 
         // Sanity-check the partitions are discoverable.
-        assert!(p1.join("_corpus_meta.json").exists());
-        assert!(p2.join("_corpus_meta.json").exists());
+        assert!(crate::corpus::Corpus::meta_in(&p1).exists());
+        assert!(crate::corpus::Corpus::meta_in(&p2).exists());
 
         // ── Run the recovery ─────────────────────────────────────
         let report = merge_partitions_into_canonical(index_dir, "foo", None)
@@ -2017,7 +2018,8 @@ mod tests {
         assert_eq!(report.embedding_model, "test-model");
 
         // Canonical meta should be ingestion-complete + indexes-built.
-        let raw = std::fs::read_to_string(report.canonical_path.join("_corpus_meta.json")).unwrap();
+        let raw = std::fs::read_to_string(crate::corpus::Corpus::meta_in(&report.canonical_path))
+            .unwrap();
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["ingestion_in_progress"], serde_json::Value::Bool(false));
         assert_eq!(v["indexes_built"], serde_json::Value::Bool(true));
@@ -2051,7 +2053,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let canonical = dir.path().join("foo");
         create_test_index(&canonical, 1).await;
-        assert!(canonical.join("_corpus_meta.json").exists());
+        assert!(crate::corpus::Corpus::meta_in(&canonical).exists());
 
         // Also need at least one partition dir or discovery errors
         // first; we want to specifically exercise the canonical-
@@ -2063,7 +2065,7 @@ mod tests {
         assert!(result.is_err(), "must refuse when canonical already exists");
 
         // Canonical untouched.
-        assert!(canonical.join("_corpus_meta.json").exists());
+        assert!(crate::corpus::Corpus::meta_in(&canonical).exists());
     }
 
     #[tokio::test]
@@ -2107,7 +2109,7 @@ mod tests {
 
         // Lance landed.
         assert!(
-            canonical.join("_corpus_meta.json").exists(),
+            crate::corpus::Corpus::meta_in(&canonical).exists(),
             "_corpus_meta.json should be moved into canonical",
         );
         // Source dir emptied + dropped.
@@ -2422,9 +2424,9 @@ mod tests {
             std::fs::read_to_string(canonical.join("chunks.lance/data.bin")).unwrap(),
             "prior-ingest",
         );
-        assert!(source_path.join("_corpus_meta.json").exists());
+        assert!(crate::corpus::Corpus::meta_in(&source_path).exists());
         assert!(
-            !canonical.join("_corpus_meta.json").exists(),
+            !crate::corpus::Corpus::meta_in(&canonical).exists(),
             "a refused promote must not leave entries behind in the destination",
         );
     }

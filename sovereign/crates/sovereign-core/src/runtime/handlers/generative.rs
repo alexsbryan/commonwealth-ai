@@ -106,6 +106,9 @@ impl Runtime {
         let started = std::time::Instant::now();
         let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<Result<String>>();
 
+        // Copied out before the spawn — `self` does not outlive the task, and a
+        // `RouterStamp` is `Copy`, so the turn carries the router that routed it.
+        let router_stamp = self.router.stamp();
         tokio::spawn(async move {
             use futures::StreamExt;
             let mut s = cleaned_stream;
@@ -158,6 +161,9 @@ impl Runtime {
             // click depends on. Retrieval/grounding fields stay empty.
             let completion_tokens = (full_text.chars().count() / 4) as u32;
             let provenance = ResponseProvenance {
+                // Which classifiers were live behind this route; `None` from a router
+                // that does not report. `routed_by_none()` marks a DEGRADED host.
+                router: router_stamp,
                 intent: "GenerativeQuery".to_string(),
                 search_method: None,
                 sources: Vec::new(),

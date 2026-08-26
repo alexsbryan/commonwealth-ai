@@ -6,12 +6,12 @@
 //! and three private copies of that would drift apart exactly when one of them
 //! grows a field (ARCH_PRINCIPLES §10.6).
 
-use super::judge::{CriterionVerdict, Judgement};
+use super::judge::{Ballot, CriterionVerdict};
 use super::score::{score_item, CriterionOutcome, RubricItem};
 
 /// One judged criterion. `trials_*` are filled consistently with `verdict`
 /// so unanimity accounting sees a coherent record.
-pub fn outcome(id: &str, dim: &str, weight: i32, verdict: Option<Judgement>) -> CriterionOutcome {
+pub fn outcome(id: &str, dim: &str, weight: i32, verdict: Option<Ballot>) -> CriterionOutcome {
     CriterionOutcome {
         criterion_id: id.into(),
         dimension: dim.into(),
@@ -19,8 +19,8 @@ pub fn outcome(id: &str, dim: &str, weight: i32, verdict: Option<Judgement>) -> 
         verdict: CriterionVerdict {
             verdict,
             evidence: String::new(),
-            trials_yes: matches!(verdict, Some(Judgement::Yes)) as u32,
-            trials_no: matches!(verdict, Some(Judgement::No)) as u32,
+            trials_yes: matches!(verdict, Some(Ballot::Yes)) as u32,
+            trials_no: matches!(verdict, Some(Ballot::No)) as u32,
             trials_failed: verdict.is_none() as u32,
         },
     }

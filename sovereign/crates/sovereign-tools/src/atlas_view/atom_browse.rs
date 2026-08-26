@@ -13,12 +13,12 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock, RwLock};
 
 use corpus_engine::enrichment::atlas::atoms::{AtomEnvelope, AtomId, AtomType, AtomsFile};
-use corpus_engine::enrichment::atlas::read_atlas_atoms;
+use corpus_engine::enrichment::atlas::{read_atlas_atoms, StableAtomKey};
 use corpus_engine::enrichment::pipeline::atlas::EnrichmentDepth;
 use serde::{Deserialize, Serialize};
 
 use super::reader::{CurationStatus, FileAtlasReader};
-use super::stable_key::{compute_stable_key, StableAtomKey};
+use super::DISPLAY_NAME_TRUNCATION;
 
 /// Server-side filter the desktop's `AtlasCorpusView` posts on every
 /// keystroke / tab switch. All fields are independent — an unset
@@ -112,8 +112,6 @@ pub struct AtomSummary {
     pub updated_at: Option<i64>,
 }
 
-const DISPLAY_NAME_TRUNCATION: usize = 120;
-
 impl FileAtlasReader {
     /// Browse atoms within one corpus.
     ///
@@ -127,18 +125,18 @@ impl FileAtlasReader {
         corpus_id: &str,
         filter: AtomFilter,
         page: PageCursor,
-    ) -> Result<AtomListPage, AtomBrowseError> {
+    ) -> Result<AtomListPage, AtomQueryError> {
         let atlas_dir = self
             .atlas_dir(corpus_id)
-            .ok_or_else(|| AtomBrowseError::UnknownCorpus(corpus_id.to_string()))?;
+            .ok_or_else(|| AtomQueryError::UnknownCorpus(corpus_id.to_string()))?;
 
         let corpus_id_owned = corpus_id.to_string();
         let filter_for_task = filter.clone();
         // Cache hit returns instantly; cache miss pays the
         // serde-deserialise cost on the blocking pool so we don't
         // freeze the runtime for wiki-scale reads.
-        let page = tokio::task::spawn_blocking(move || -> Result<AtomListPage, AtomBrowseError> {
-            let atoms = cached_atoms(&atlas_dir).map_err(AtomBrowseError::ReadAtoms)?;
+        let page = tokio::task::spawn_blocking(move || -> Result<AtomListPage, AtomQueryError> {
+            let atoms = cached_atoms(&atlas_dir).map_err(AtomQueryError::ReadAtoms)?;
             // Per-doc recency lives one level up from the atlas dir —
             // `<indexes>/<corpus>/_doc_freshness.json`, beside the
             // `atlas/` subdir. Missing sidecar → empty map → insertion
@@ -156,7 +154,7 @@ impl FileAtlasReader {
             ))
         })
         .await
-        .map_err(|join_err| AtomBrowseError::Task(join_err.to_string()))??;
+        .map_err(|join_err| AtomQueryError::Task(join_err.to_string()))??;
 
         tracing::debug!(
             corpus_id,
@@ -171,8 +169,12 @@ impl FileAtlasReader {
     }
 }
 
+/// What can go wrong answering an atom query — browse, detail or subgraph.
+/// One type for all three: `atom_detail` declared a byte-identical
+/// `AtomDetailError` (same three variants, same three messages) until
+/// 2026-08-20. Two names, one concept.
 #[derive(Debug, thiserror::Error)]
-pub enum AtomBrowseError {
+pub enum AtomQueryError {
     #[error("corpus `{0}` has no atlas")]
     UnknownCorpus(String),
     #[error("read atoms.json: {0}")]
@@ -259,18 +261,19 @@ fn filter_and_page(
     let mut matches: Vec<&AtomEnvelope> = Vec::new();
     for atom in atoms {
         if let Some(target) = filter.atom_type {
-            if atom_type_of(atom) != target {
+            if atom.atom_type() != target {
                 continue;
             }
         }
         if let Some(min) = filter.min_salience {
-            match scalar_score(atom) {
+            match atom.salience() {
                 Some(s) if s >= min => {}
                 _ => continue,
             }
         }
         if let Some(needle) = &name_needle {
-            if !display_name_of(atom)
+            if !atom
+                .display_name(Some(DISPLAY_NAME_TRUNCATION))
                 .to_lowercase()
                 .contains(needle.as_str())
             {
@@ -320,135 +323,31 @@ fn build_summary(
 ) -> AtomSummary {
     AtomSummary {
         atom_id: atom.id().clone(),
-        stable_key: compute_stable_key(corpus_id, atom),
-        atom_type: atom_type_of(atom),
-        display_name: display_name_of(atom).to_string(),
-        salience: scalar_score(atom),
+        stable_key: atom.stable_key(corpus_id),
+        atom_type: atom.atom_type(),
+        display_name: atom.display_name(Some(DISPLAY_NAME_TRUNCATION)),
+        salience: atom.salience(),
         enrichment_depth: atom.enrichment_depth(),
-        evidence_chunk_count: evidence_count(atom),
+        evidence_chunk_count: atom.evidence().len() as u32,
         curation_status: CurationStatus::Generated,
         overlay_supports: false,
         updated_at: atom_freshness(atom, freshness),
     }
 }
 
-fn atom_type_of(atom: &AtomEnvelope) -> AtomType {
-    match atom {
-        AtomEnvelope::Entity(_) => AtomType::Entity,
-        AtomEnvelope::Event(_) => AtomType::Event,
-        AtomEnvelope::State(_) => AtomType::State,
-        AtomEnvelope::Relation(_) => AtomType::Relation,
-        AtomEnvelope::Claim(_) => AtomType::Claim,
-        AtomEnvelope::Question(_) => AtomType::Question,
-        AtomEnvelope::Configuration(_) => AtomType::Configuration,
-        AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
-        AtomEnvelope::Position(_) => AtomType::Position,
-        AtomEnvelope::Opposition(_) => AtomType::Opposition,
-        AtomEnvelope::Asset(_) => AtomType::Asset,
-    }
-}
-
-/// Best short label for the row. Claim and Question carry only
-/// `content` (potentially a full sentence), so we truncate; named
-/// atom types (Entity, ArgumentReconstruction, etc.) return their
-/// natural label untruncated.
-fn display_name_of(atom: &AtomEnvelope) -> String {
-    match atom {
-        AtomEnvelope::Entity(a) => a.canonical_name.clone(),
-        AtomEnvelope::Event(a) => truncate_for_display(&a.description),
-        AtomEnvelope::State(a) => a.label.clone(),
-        AtomEnvelope::Relation(a) => a.label.clone(),
-        AtomEnvelope::Claim(a) => truncate_for_display(&a.content),
-        AtomEnvelope::Question(a) => truncate_for_display(&a.content),
-        AtomEnvelope::Configuration(a) => a.label.clone(),
-        AtomEnvelope::ArgumentReconstruction(a) => a.name.clone(),
-        AtomEnvelope::Position(a) => a.canonical_name.clone(),
-        AtomEnvelope::Opposition(a) => a.canonical_label.clone(),
-        AtomEnvelope::Asset(a) => {
-            if a.original_filename.is_empty() {
-                format!(
-                    "{} asset {}",
-                    a.asset_kind,
-                    &a.sha256[..12.min(a.sha256.len())]
-                )
-            } else {
-                a.original_filename.clone()
-            }
-        }
-    }
-}
-
-fn truncate_for_display(s: &str) -> String {
-    if s.chars().count() <= DISPLAY_NAME_TRUNCATION {
-        return s.to_string();
-    }
-    let mut out: String = s.chars().take(DISPLAY_NAME_TRUNCATION).collect();
-    out.push('…');
-    out
-}
-
-fn scalar_score(atom: &AtomEnvelope) -> Option<f32> {
-    match atom {
-        AtomEnvelope::Entity(a) => Some(a.salience),
-        AtomEnvelope::Configuration(a) => Some(a.confidence),
-        _ => None,
-    }
-}
-
-fn evidence_count(atom: &AtomEnvelope) -> u32 {
-    match atom {
-        // `Entity.first_appearance` is a single ChunkRef, not a Vec.
-        AtomEnvelope::Entity(_) => 1,
-        AtomEnvelope::Event(a) => a.evidence.len() as u32,
-        AtomEnvelope::State(a) => a.evidence.len() as u32,
-        AtomEnvelope::Relation(a) => a.evidence.len() as u32,
-        AtomEnvelope::Claim(a) => a.evidence.len() as u32,
-        AtomEnvelope::Question(a) => a.raised_at.len() as u32,
-        AtomEnvelope::Configuration(a) => a.evidence.len() as u32,
-        AtomEnvelope::ArgumentReconstruction(a) => a.evidence.len() as u32,
-        AtomEnvelope::Position(_) => 1,
-        AtomEnvelope::Opposition(_) => 1,
-        // Asset atoms' evidence is the asset's existence itself —
-        // reachable by the Attaches edge, not chunk-anchored.
-        AtomEnvelope::Asset(_) => 0,
-    }
-}
-
-/// The `source_doc_id` of the atom's anchoring chunk, when enrichment
-/// populated it. This is the join key into `_doc_freshness.json`.
-/// Named atom types anchor on their single `first_appearance` chunk;
-/// evidence-bearing types use their first piece of evidence (which is
-/// the chunk that introduced the atom).
-fn atom_source_doc_id(atom: &AtomEnvelope) -> Option<&str> {
-    // Assets stamp their source doc id directly on the atom; no chunk
-    // hop needed.
-    if let AtomEnvelope::Asset(a) = atom {
-        return if a.first_seen_source_doc_id.is_empty() {
-            None
-        } else {
-            Some(a.first_seen_source_doc_id.as_str())
-        };
-    }
-    let chunk = match atom {
-        AtomEnvelope::Entity(a) => Some(&a.first_appearance),
-        AtomEnvelope::Position(a) => Some(&a.first_appearance),
-        AtomEnvelope::Opposition(a) => Some(&a.first_appearance),
-        AtomEnvelope::Event(a) => a.evidence.first(),
-        AtomEnvelope::State(a) => a.evidence.first(),
-        AtomEnvelope::Relation(a) => a.evidence.first(),
-        AtomEnvelope::Claim(a) => a.evidence.first(),
-        AtomEnvelope::Configuration(a) => a.evidence.first(),
-        AtomEnvelope::ArgumentReconstruction(a) => a.evidence.first(),
-        AtomEnvelope::Question(a) => a.raised_at.first(),
-        AtomEnvelope::Asset(_) => unreachable!("handled above"),
-    };
-    chunk.and_then(|c| c.source_doc_id.as_deref())
-}
+// Five 11-arm fan-outs over `AtomEnvelope` lived here — `atom_type_of`,
+// `display_name_of` (+ its truncation constant), `scalar_score`,
+// `evidence_count` and `atom_source_doc_id` — with byte-identical twins in
+// `atom_detail`, under a comment calling the duplication intentional. Every
+// one of them is now an accessor on `AtomEnvelope` itself, where the closed
+// set of kinds lives, so a new atom kind cannot answer differently in two
+// crates. Deleted 2026-08-20 (ARCH §10.6 — one decider, one name).
 
 /// Recency of the atom's source document, or `None` when the doc has
 /// no recorded (re)index — i.e. baseline install-time content.
 fn atom_freshness(atom: &AtomEnvelope, freshness: &HashMap<String, i64>) -> Option<i64> {
-    atom_source_doc_id(atom).and_then(|id| freshness.get(id).copied())
+    atom.source_doc_id()
+        .and_then(|id| freshness.get(id).copied())
 }
 
 #[cfg(test)]
@@ -697,7 +596,7 @@ mod tests {
             .await
             .unwrap_err();
         match err {
-            AtomBrowseError::UnknownCorpus(id) => assert_eq!(id, "nonexistent"),
+            AtomQueryError::UnknownCorpus(id) => assert_eq!(id, "nonexistent"),
             other => panic!("expected UnknownCorpus, got {other:?}"),
         }
     }
@@ -796,7 +695,7 @@ mod tests {
             confidence: None,
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(evidence_count(&s), 3);
+        assert_eq!(s.evidence().len() as u32, 3);
         // Event also has evidence + section_position; pin the shape.
         let e = AtomEnvelope::Event(corpus_engine::enrichment::atlas::atoms::Event {
             id: AtomId::event(1),
@@ -808,7 +707,7 @@ mod tests {
             causal_antecedents: vec![],
             enrichment_depth: EnrichmentDepth::Extracted,
         });
-        assert_eq!(evidence_count(&e), 1);
+        assert_eq!(e.evidence().len() as u32, 1);
     }
 
     /// An entity whose `first_appearance` carries a `source_doc_id` —

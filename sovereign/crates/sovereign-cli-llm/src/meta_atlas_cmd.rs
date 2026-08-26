@@ -258,13 +258,6 @@ async fn cmd_align(args: &[String]) -> i32 {
     }
 }
 
-fn source_str(s: bridge::EdgeSource) -> &'static str {
-    match s {
-        bridge::EdgeSource::Deterministic => "det",
-        bridge::EdgeSource::Adjudicated => "llm",
-    }
-}
-
 fn render_edge(e: &bridge::BridgeEdge) {
     let sigs = e
         .signals_fired
@@ -275,7 +268,7 @@ fn render_edge(e: &bridge::BridgeEdge) {
     println!(
         "  {:8} {:>3} {:.2}  {}  →  {}",
         e.relation.as_str(),
-        source_str(e.source),
+        e.source.as_str(),
         e.confidence,
         e.left.title,
         e.right.title

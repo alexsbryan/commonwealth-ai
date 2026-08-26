@@ -6,6 +6,14 @@
 //! of exactly this class shipped: a `~/.claude/plans/…` machine-local
 //! citation survived in §2 until an external review caught it (fixed
 //! 2026-07-01).
+//!
+//! **One implementation, since 2026-08-20.** The `check_doc_paths` MCP tool
+//! (634 lines) did the same check on demand, over the same documents, and was
+//! deleted rather than kept in parallel — ARCH §10.6, and §7's
+//! structural-over-remembered rule: this gate runs inside `cargo xtask
+//! quality` whether anyone thinks of it or not, resolves markdown LINK targets
+//! as well as inline spans, and carries an allowlist for the citations that
+//! legitimately do not resolve.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -18,6 +26,12 @@ const DOCS_GATE_DOCS: &[&str] = &[
     "sovereign/SYSTEM_OVERVIEW.md",
     "sovereign/ARCH_PRINCIPLES.md",
     "docs/ARCHITECTURE_TOUR.md",
+    // Added 2026-08-20 with the deletion of the `check_doc_paths` MCP tool,
+    // which did this same job on demand and had to be REMEMBERED. Four of this
+    // document's regions are generated, so a path it cites is now written by a
+    // renderer — which is exactly the case a structural gate should hold and an
+    // advisory tool cannot.
+    "quality/TARGET_ARCHITECTURE.md",
 ];
 
 /// Extensions worth resolving. Deliberately EXCLUDES runtime artifacts

@@ -37,7 +37,7 @@ use sovereign_contracts::frame::{approx_tokens, Frame, FrameSchema};
 use crate::error::Result;
 use crate::slot_policy::Workload;
 use crate::traits::InferenceProvider;
-use crate::types::{CompletionRequest, Message, Role};
+use crate::types::{Message, Role};
 
 /// Frame sections, in render order.
 ///
@@ -254,8 +254,7 @@ pub async fn fold(
     });
 
     // SLOT_POLICY §3 Housekeep: conversation-frame fold.
-    let mut request =
-        CompletionRequest::for_workload(Workload::Housekeep, prompt).with_output_budget(400);
+    let mut request = Workload::Housekeep.request(prompt).with_output_budget(400);
     request.temperature = Some(0.0);
     request.structured_output = Some(schema);
 

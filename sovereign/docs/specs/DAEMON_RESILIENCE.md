@@ -181,9 +181,15 @@ staged escalation with cooldown + rebuild cap; the watcher heartbeat
   tier2_enrichment_resume) + log_rotation + memory_watch.
 - [x] **P0.5 — Close the process-identity holes.** *(Landed 2026-07-18;
   the bind-policy item shipped as a listener watchdog — see below.)*
-  flock(2) single-instance run lock (`~/.svrnmesh/daemon.lock`,
-  kernel-released on any exit incl. SIGKILL; escape hatch
-  `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1`), taken before model load;
+  flock(2) single-instance run lock (`<data dir>/daemon.lock`,
+  kernel-released on any exit incl. SIGKILL), taken before model load.
+  Re-keyed 2026-08-24 from `$HOME` onto the DATA ROOT
+  (`sovereign_contracts::run_lock::RunLock`) — the `$HOME` key refused
+  multi-node harnesses that give each node its own data dir and admitted
+  two processes onto one data dir from two `$HOME`s; the
+  `SOVEREIGN_ALLOW_MULTIPLE_DAEMONS=1` escape hatch that papered over the
+  first case is deleted, because under the corrected key it can only
+  defeat a correct refusal;
   `daemon stop` escalates to SIGKILL after the 10s SIGTERM grace
   (`await_exit_or_sigkill`); phantom-Running is closed by
   `listener_watch.rs` — probe the client port each minute, 3 consecutive

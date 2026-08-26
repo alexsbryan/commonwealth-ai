@@ -19,6 +19,7 @@ pub mod capabilities;
 pub mod commit_harvest;
 pub mod corpus_watch_http;
 pub mod daemon;
+pub mod daemon_services;
 /// Routing decision records — Phase 0 (P1/P2) of
 /// `docs/specs/SCHEDULER_QUALITY.md`. One structured record per
 /// routing decision (full candidate set, every scorer input stamped
@@ -93,6 +94,7 @@ pub mod throughput_tracking;
 /// survives.
 pub mod tier;
 pub mod tool_profile;
+pub mod turn_http;
 pub mod types;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
@@ -119,7 +121,13 @@ pub mod pinned_transport;
 pub mod pinned_worker_source;
 
 pub use daemon::EmbeddedDaemon;
+pub use daemon_services::{
+    assemble, AssemblyRefusal, DaemonServices, EmbedAdvertisement, HeadlessExtras, HeadlessRails,
+    HeadlessServices, LaunchParts, McpMount, McpSurface, MeshAdminWitness, ServingCapability,
+    ServingCore, ServingProfile,
+};
 pub use deep_link::{parse_deep_link, DeepLink};
+pub use peer_inference::DeferredDaemon;
 pub use state::MeshState;
 pub use types::*;
 pub use work_atlas_broadcaster::MeshBroadcaster;

@@ -48,50 +48,59 @@ pub mod scenarios;
 
 use std::path::{Path, PathBuf};
 
-/// Boolean flags that do not consume the next token. Mirrors the
-/// awareness-cmd args helper, but inlined so `voice_eval` doesn't
-/// depend on the dev-tools-gated awareness module.
-const BOOLEAN_FLAGS: &[&str] = &["all", "json", "help", "h"];
+use sovereign_cli_shared::args::{parse, ArgSpec, Parsed};
 
-fn split_args(args: &[String]) -> (Vec<String>, Vec<(String, String)>) {
-    let mut positional = Vec::new();
-    let mut flags = Vec::new();
-    let mut i = 0;
-    while i < args.len() {
-        let arg = &args[i];
-        if let Some(name) = arg.strip_prefix("--") {
-            if BOOLEAN_FLAGS.contains(&name) {
-                flags.push((name.to_string(), String::new()));
-                i += 1;
-            } else {
-                let value = args.get(i + 1).cloned().unwrap_or_default();
-                flags.push((name.to_string(), value));
-                i += 2;
-            }
-        } else {
-            positional.push(arg.clone());
-            i += 1;
-        }
-    }
-    (positional, flags)
-}
-
-fn get_flag(flags: &[(String, String)], name: &str) -> Option<String> {
-    let key = name.strip_prefix("--").unwrap_or(name);
-    flags.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone())
-}
-
-fn has_flag(flags: &[(String, String)], name: &str) -> bool {
-    let key = name.strip_prefix("--").unwrap_or(name);
-    flags.iter().any(|(k, _)| k == key)
-}
+/// Every flag `svrn voice eval` accepts, declared once as data. The
+/// parsing itself is `sovereign_cli_shared::args::parse` — this module
+/// carried a byte-identical copy of the same `while i < args.len()` loop
+/// until 2026-08-21, one of five, and the copies disagreed about
+/// `--key=value` for months.
+///
+/// `spec_and_help_agree` below is the §7.2 pin. It is not decorative:
+/// the code read `skills-dir-skills` (a name the help never mentioned)
+/// while the help advertised nothing at all, so the skills-dir override
+/// was unreachable from the documented surface. A spec the help must
+/// match is how that stops being possible.
+const SPECS: &[ArgSpec] = &[
+    ArgSpec::flag("all"),
+    ArgSpec::flag("json"),
+    ArgSpec::flag("no-judge"),
+    ArgSpec::value("scenario"),
+    ArgSpec::value("skill"),
+    ArgSpec::value("scenarios-dir"),
+    ArgSpec::value("skills-dir"),
+    ArgSpec::value("canned-response"),
+    ArgSpec::value("report"),
+    ArgSpec::value("diff"),
+    ArgSpec::value("chat-model"),
+    ArgSpec::value("judge-model"),
+    ArgSpec::value("daemon"),
+];
 
 /// Default location for scenario TOMLs, resolved relative to the
 /// repo root. Override via `--scenarios-dir`.
 const DEFAULT_SCENARIOS_DIR: &str = "bench/voice";
 
 pub async fn run_voice_eval(args: &[String]) -> i32 {
-    let (positional, flags) = split_args(args);
+    // An unknown flag is now a hard error instead of a token-eating
+    // no-op: the old splitter treated any undeclared `--x` as
+    // value-taking, so `--typo next-arg` swallowed `next-arg` and the
+    // run continued on defaults.
+    let flags = match parse(SPECS, args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("voice eval: {e}");
+            print_help();
+            return 2;
+        }
+    };
+
+    if flags.wants_help() {
+        print_help();
+        return 0;
+    }
+
+    let positional = flags.positionals();
 
     // First positional is the action — only `eval` today; reserved
     // surface for future `voice list` / `voice describe`.
@@ -99,11 +108,6 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
     if action != "eval" {
         eprintln!("voice: unknown action `{action}`. Try `voice eval --help`.");
         return 2;
-    }
-
-    if has_flag(&flags, "help") || has_flag(&flags, "h") {
-        print_help();
-        return 0;
     }
 
     // Resolve scenarios directory. Honour `--scenarios-dir`, else
@@ -135,14 +139,19 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
 
     // Mode: dry-run (`--canned-response "<text>"`) skips the live
     // Runtime. Useful for harness validation / CI without a daemon.
-    let canned_response = get_flag(&flags, "canned-response");
-    let report_path: Option<PathBuf> = get_flag(&flags, "report")
+    let canned_response = flags.value("canned-response");
+    let report_path: Option<PathBuf> = flags
+        .value("report")
         .filter(|s| !s.is_empty())
         .map(PathBuf::from);
-    let json_only = has_flag(&flags, "json");
-    let no_judge = has_flag(&flags, "no-judge");
-    let daemon_base = get_flag(&flags, "daemon").filter(|s| !s.is_empty());
-    let skills_dir_override = get_flag(&flags, "skills-dir-skills")
+    let json_only = flags.has("json");
+    let no_judge = flags.has("no-judge");
+    let daemon_base = flags
+        .value("daemon")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let skills_dir_override = flags
+        .value("skills-dir")
         .filter(|s| !s.is_empty())
         .map(PathBuf::from);
     // Model A/B flags. `--chat-model` swaps the runtime turn's model;
@@ -150,8 +159,14 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
     // variance doesn't get conflated with judge variance. Either may
     // be omitted (then the daemon's configured chat model is used,
     // and the judge runs on whatever the chat call uses).
-    let chat_model = get_flag(&flags, "chat-model").filter(|s| !s.is_empty());
-    let judge_model = get_flag(&flags, "judge-model").filter(|s| !s.is_empty());
+    let chat_model = flags
+        .value("chat-model")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
+    let judge_model = flags
+        .value("judge-model")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
 
     let mut run = report::VoiceEvalRun::new().with_models(chat_model.clone(), judge_model.clone());
 
@@ -237,7 +252,7 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
     // flips have run-to-run variance the README documents at ±2-4
     // scenarios; axis means pool across all scenarios so they're
     // more stable.
-    if let Some(diff_path) = get_flag(&flags, "diff").filter(|s| !s.is_empty()) {
+    if let Some(diff_path) = flags.value("diff").filter(|s| !s.is_empty()) {
         let baseline_path = std::path::PathBuf::from(&diff_path);
         match report::load_axis_means_from_report(&baseline_path) {
             Ok(baseline) => match report::AxisMeans::from_run(&run) {
@@ -265,48 +280,52 @@ pub async fn run_voice_eval(args: &[String]) -> i32 {
     }
 }
 
+/// The advertised flag surface, as data. `print_help` renders it and
+/// `spec_and_help_agree` diffs it against [`SPECS`] — the pin that stops
+/// the parser and the help from drifting apart again.
+const HELP: &str = "svrn voice eval — score the relational voice contract
+
+USAGE
+  sovereign voice eval [--scenario <id> | --skill <id> | --all]
+                       [--scenarios-dir <path>] [--canned-response \"...\"]
+                       [--report <path>] [--chat-model <id>] [--judge-model <id>]
+
+FLAGS
+  --scenario <id>            Run only the named scenario.
+  --skill <id>               Run every scenario whose [scenario].skill matches.
+                             E.g. `--skill inner-work` filters out the personal-
+                             assistant scenarios so a baseline reflects one skill.
+  --all                      Run every scenario in the scenarios dir.
+  --canned-response \"...\"    Dry-run: skip the live Runtime and score the
+                             passed text against the scenario's checks. Useful
+                             for CI and harness validation.
+  --scenarios-dir <path>     Override the default `bench/voice/` location.
+  --skills-dir <path>        Override where the runner loads relational skills from.
+  --report <path>            Write the per-scenario JSON report to this path.
+  --diff <baseline.json>     After the run, print per-axis deltas against the
+                             baseline JSON. Axis means are the tuning loop's
+                             primary signal — pass/fail flips have run-to-run
+                             variance, axis means pool across scenarios.
+  --json                     Suppress the text report; print only the JSON path.
+  --no-judge                 Skip the LLM-as-judge call; deterministic checks only.
+  --chat-model <id>          Pin the runtime turn to this model id (gguf stem).
+  --judge-model <id>         Pin the LLM-as-judge to this model id, regardless of
+                             --chat-model. Use this for model A/B baselines so the
+                             judge stays stable while the chat model varies.
+  --daemon <url>             Daemon base URL (default from SetupConfig).
+
+SCORING
+  Deterministic checks (length cap, question density, banned phrases,
+  required substrings) run on every response. The voice-judge LLM rubric
+  (eight principles + avoid-list) is exposed via `judge::voice_judge_request`
+  and used by the live runner — see `executor::VOICE_JUDGE_PROMPT`.";
+
 fn print_help() {
-    eprintln!("svrn voice eval — score the relational voice contract");
-    eprintln!();
-    eprintln!("USAGE");
-    eprintln!("  sovereign voice eval [--scenario <id> | --skill <id> | --all]");
-    eprintln!("                       [--scenarios-dir <path>] [--canned-response \"...\"]");
-    eprintln!("                       [--report <path>] [--chat-model <id>] [--judge-model <id>]");
-    eprintln!();
-    eprintln!("FLAGS");
-    eprintln!("  --scenario <id>            Run only the named scenario.");
-    eprintln!("  --skill <id>               Run every scenario whose [scenario].skill matches.");
-    eprintln!("                             E.g. `--skill inner-work` filters out the personal-");
-    eprintln!("                             assistant scenarios so a baseline reflects one skill.");
-    eprintln!("  --all                      Run every scenario in the scenarios dir.");
-    eprintln!("  --canned-response \"...\"    Dry-run: skip the live Runtime and score the");
-    eprintln!("                             passed text against the scenario's checks. Useful");
-    eprintln!("                             for CI and harness validation.");
-    eprintln!("  --scenarios-dir <path>     Override the default `bench/voice/` location.");
-    eprintln!("  --report <path>            Write the per-scenario JSON report to this path.");
-    eprintln!("  --diff <baseline.json>     After the run, print per-axis deltas against the");
-    eprintln!("                             baseline JSON. Axis means are the tuning loop's");
-    eprintln!("                             primary signal — pass/fail flips have run-to-run");
-    eprintln!("                             variance, axis means pool across scenarios.");
-    eprintln!("  --json                     Suppress the text report; print only the JSON path.");
-    eprintln!(
-        "  --no-judge                 Skip the LLM-as-judge call; deterministic checks only."
-    );
-    eprintln!("  --chat-model <id>          Pin the runtime turn to this model id (gguf stem).");
-    eprintln!("  --judge-model <id>         Pin the LLM-as-judge to this model id, regardless of");
-    eprintln!("                             --chat-model. Use this for model A/B baselines so the");
-    eprintln!("                             judge stays stable while the chat model varies.");
-    eprintln!("  --daemon <url>             Daemon base URL (default from SetupConfig).");
-    eprintln!();
-    eprintln!("SCORING");
-    eprintln!("  Deterministic checks (length cap, question density, banned phrases,");
-    eprintln!("  required substrings) run on every response. The voice-judge LLM rubric");
-    eprintln!("  (eight principles + avoid-list) is exposed via `judge::voice_judge_request`");
-    eprintln!("  and used by the live runner — see `executor::VOICE_JUDGE_PROMPT`.");
+    eprintln!("{HELP}");
 }
 
-fn resolve_scenarios_dir(flags: &[(String, String)]) -> Result<PathBuf, String> {
-    if let Some(explicit) = get_flag(flags, "scenarios-dir").filter(|s| !s.is_empty()) {
+fn resolve_scenarios_dir(flags: &Parsed) -> Result<PathBuf, String> {
+    if let Some(explicit) = flags.value("scenarios-dir").filter(|s| !s.is_empty()) {
         let p = PathBuf::from(explicit);
         return if p.is_dir() {
             Ok(p)
@@ -337,18 +356,24 @@ fn resolve_scenarios_dir(flags: &[(String, String)]) -> Result<PathBuf, String> 
 
 fn select_scenarios(
     dir: &Path,
-    flags: &[(String, String)],
+    flags: &Parsed,
     positional: &[String],
 ) -> Result<Vec<scenarios::Scenario>, String> {
-    let all = has_flag(flags, "all");
-    let by_flag = get_flag(flags, "scenario").filter(|s| !s.is_empty());
+    let all = flags.has("all");
+    let by_flag = flags
+        .value("scenario")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
     let by_positional = positional.iter().find(|s| !s.starts_with("--")).cloned();
     let target_id = by_flag.or(by_positional);
     // `--skill <id>` filters the loaded set to scenarios whose
     // `[scenario].skill` matches. Composes with `--all` (run every
     // scenario for that skill) and is mutually exclusive with
     // `--scenario` (since a single id already pins the skill).
-    let skill_filter = get_flag(flags, "skill").filter(|s| !s.is_empty());
+    let skill_filter = flags
+        .value("skill")
+        .filter(|s| !s.is_empty())
+        .map(str::to_string);
 
     if all && target_id.is_some() {
         return Err("pass either --all or --scenario <id>, not both".into());
@@ -396,6 +421,10 @@ mod tests {
     use super::*;
     use std::fs;
 
+    fn svec(items: &[&str]) -> Vec<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
     fn write_scenario(dir: &std::path::Path, id: &str, skill: &str) {
         let body = format!(
             r#"[scenario]
@@ -419,7 +448,7 @@ user = "hello"
         write_scenario(dir.path(), "i02", "inner-work");
         write_scenario(dir.path(), "p01", "personal-assistant");
 
-        let flags = vec![("skill".to_string(), "inner-work".to_string())];
+        let flags = parse(SPECS, &svec(&["--skill", "inner-work"])).unwrap();
         let picked = select_scenarios(dir.path(), &flags, &[]).unwrap();
         let ids: Vec<&str> = picked.iter().map(|s| s.scenario.id.as_str()).collect();
         assert_eq!(ids, vec!["i01", "i02"]);
@@ -429,7 +458,7 @@ user = "hello"
     fn select_by_skill_with_no_matches_errors() {
         let dir = tempfile::tempdir().unwrap();
         write_scenario(dir.path(), "i01", "inner-work");
-        let flags = vec![("skill".to_string(), "research".to_string())];
+        let flags = parse(SPECS, &svec(&["--skill", "research"])).unwrap();
         let err = select_scenarios(dir.path(), &flags, &[]).unwrap_err();
         assert!(err.contains("no scenarios"));
         assert!(err.contains("research"));
@@ -439,10 +468,11 @@ user = "hello"
     fn select_by_skill_and_scenario_is_an_error() {
         let dir = tempfile::tempdir().unwrap();
         write_scenario(dir.path(), "i01", "inner-work");
-        let flags = vec![
-            ("skill".to_string(), "inner-work".to_string()),
-            ("scenario".to_string(), "i01".to_string()),
-        ];
+        let flags = parse(
+            SPECS,
+            &svec(&["--skill", "inner-work", "--scenario", "i01"]),
+        )
+        .unwrap();
         let err = select_scenarios(dir.path(), &flags, &[]).unwrap_err();
         assert!(err.contains("--skill"));
         assert!(err.contains("--scenario"));
@@ -453,8 +483,69 @@ user = "hello"
         let dir = tempfile::tempdir().unwrap();
         write_scenario(dir.path(), "i01", "inner-work");
         write_scenario(dir.path(), "p01", "personal-assistant");
-        let flags = vec![("all".to_string(), String::new())];
+        let flags = parse(SPECS, &svec(&["--all"])).unwrap();
         let picked = select_scenarios(dir.path(), &flags, &[]).unwrap();
         assert_eq!(picked.len(), 2);
+    }
+
+    /// `--key=value` must mean what `--key value` means.
+    ///
+    /// nc-22b converged this behaviour into five hand-rolled copies of the
+    /// splitter; nc-25 removed the copies. The behaviour is now asserted
+    /// against `sovereign_cli_shared::args::parse` through THIS module's
+    /// own `SPECS`, so the assertion still fails if the spec regresses —
+    /// which is the half a test in the shared crate cannot cover.
+    #[test]
+    fn equals_form_is_the_same_as_the_space_form() {
+        let eq = parse(SPECS, &svec(&["--scenarios-dir=/tmp/sc"])).unwrap();
+        let sp = parse(SPECS, &svec(&["--scenarios-dir", "/tmp/sc"])).unwrap();
+        assert_eq!(eq, sp);
+        assert_eq!(eq.value("scenarios-dir"), Some("/tmp/sc"));
+    }
+
+    /// A value containing `=` survives: only the FIRST `=` splits.
+    #[test]
+    fn equals_form_keeps_the_rest_of_the_value() {
+        let p = parse(SPECS, &svec(&["--scenarios-dir=a=b=c"])).unwrap();
+        assert_eq!(p.value("scenarios-dir"), Some("a=b=c"));
+    }
+
+    /// BEHAVIOUR CHANGE (nc-25). The hand-rolled splitter accepted
+    /// `--json=whatever` and recorded bare presence. The canonical parser
+    /// refuses it — a boolean does not take a value — and says so instead
+    /// of guessing. The half that mattered is preserved either way: the
+    /// following token is never swallowed.
+    #[test]
+    fn inline_value_on_a_boolean_is_refused_not_guessed() {
+        let err = parse(
+            SPECS,
+            &svec(&["--json=whatever", "--scenarios-dir", "/tmp/sc"]),
+        )
+        .unwrap_err();
+        assert_eq!(err.to_string(), "--json does not take a value");
+    }
+
+    /// BEHAVIOUR CHANGE (nc-25). An undeclared flag used to be treated as
+    /// value-taking, so it silently ate the NEXT token and the run
+    /// continued on defaults. It is now a hard error naming the flag.
+    #[test]
+    fn an_undeclared_flag_is_refused_instead_of_eating_the_next_token() {
+        let err = parse(SPECS, &svec(&["--scenrios-dir", "/tmp/sc"])).unwrap_err();
+        assert_eq!(err.to_string(), "unknown flag '--scenrios-dir'");
+    }
+
+    /// §7.2 — the pin. Every `--flag` the help advertises must be in
+    /// [`SPECS`], and every spec entry must be advertised. The failure
+    /// this catches shipped: the code read `--skills-dir-skills` while the
+    /// help named no skills flag at all, so the override was unreachable.
+    #[test]
+    fn spec_and_help_agree() {
+        let declared: std::collections::BTreeSet<String> =
+            SPECS.iter().map(|s| s.long.to_string()).collect();
+        assert_eq!(
+            sovereign_cli_shared::args::advertised_flags(HELP),
+            declared,
+            "help and SPECS disagree; left = advertised, right = declared"
+        );
     }
 }

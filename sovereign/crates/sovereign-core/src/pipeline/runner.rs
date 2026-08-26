@@ -27,7 +27,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
-use futures::{stream, Stream, StreamExt};
+use futures::Stream;
 
 use crate::error::Result;
 use crate::pipeline::curator::curate;
@@ -37,10 +37,9 @@ use crate::pipeline::stages::{CuratedPackage, Sufficiency};
 use crate::skills::SkillRegister;
 use crate::slot_policy::Workload;
 use crate::title::strip_think_blocks;
-use crate::traits::InferenceProvider;
+use crate::traits::{frames_to_text_stream, InferenceProvider};
 use crate::types::{
-    CompletionRequest, NarrationEvent, NarrationPhase, RouterClassification, StreamFrame,
-    TurnNarration,
+    CompletionRequest, NarrationEvent, NarrationPhase, RouterClassification, TurnNarration,
 };
 
 /// Default per-turn token budget for the team-pipeline. Used when
@@ -459,20 +458,16 @@ async fn run_presenter_streaming(
     );
     let raw = provider.complete_stream_with_finish(&request).await?;
 
-    // Adapt typed StreamFrame → Result<String> for the legacy
-    // consumer surface. Token frames pass through verbatim; Finish
-    // closes the stream; Error becomes a single Err.
-    let adapted = raw.flat_map(|frame| {
-        let items: Vec<Result<String>> = match frame {
-            StreamFrame::Token(text) => vec![Ok(text)],
-            StreamFrame::Finish { .. } => Vec::new(),
-            StreamFrame::Error(msg) => vec![Err(crate::error::Error::Inference(msg))],
-        };
-        stream::iter(items)
-    });
-
+    // Adapt typed StreamFrame → Result<String> for the legacy consumer
+    // surface. This was an inline copy until noun-convergence rung nc-17,
+    // and the copy was WRONG in a way the shared one is not: it matched
+    // `Finish { .. }` and dropped it, but `EmbeddedLlamaCpp` reports a
+    // mid-stream failure as `Finish { reason: FinishReason::Error(_) }`
+    // and never as `StreamFrame::Error`. Every engine-side stream failure
+    // on the presenter path therefore arrived as a clean end-of-stream and
+    // the user saw a short answer instead of an error.
     Ok(PresenterStreamBundle {
-        stream: Box::pin(adapted),
+        stream: frames_to_text_stream(raw),
     })
 }
 
@@ -545,7 +540,7 @@ fn build_drafter_request(
     // SLOT_POLICY §3 Synthesize: the Drafter composes the user-facing
     // draft. Bundle latency=Normal → shadow Speed::Slow (Primary slot),
     // unchanged from the prior explicit Slow.
-    let mut req = CompletionRequest::for_workload(Workload::Synthesize, prompt);
+    let mut req = Workload::Synthesize.request(prompt);
     // iter8: the Drafter carries the witness contract again
     // (RELATIONAL_BASE_SYSTEM_PROMPT for Relational) so it
     // produces witness-voice prose, not retrieval-analytical

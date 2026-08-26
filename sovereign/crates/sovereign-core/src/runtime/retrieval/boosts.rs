@@ -34,12 +34,13 @@ impl Runtime {
         entities: &[String],
         enabled_corpora: Option<&[String]>,
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> Vec<MetaAtlasHitRecord> {
         // Clone the `Arc` out and drop the guard before the awaits below
         // (`index` is consulted across them; a std `RwLock` guard is not
         // `Send`). `None` until the desktop's deferred warm attaches the
         // index — boost simply short-circuits until then.
-        let index = self.meta_atlas.read().ok().and_then(|g| g.clone());
+        let index = lane.meta_atlas.clone();
         let Some(index) = index else {
             return Vec::new();
         };
@@ -96,6 +97,7 @@ impl Runtime {
                         "MetaAtlasBoost",
                         enabled_corpora,
                         corpus_ceiling,
+                        lane,
                     )
                     .await;
                 let stability_tag = anchor.stability.map(|s| s.as_str().to_string());
@@ -146,6 +148,7 @@ impl Runtime {
         // it must never cross into a corpus the principal doesn't own. So the
         // ceiling is forwarded to Filter 5 in `search_corpora_filtered`.
         corpus_ceiling: Option<&[String]>,
+        lane: &crate::runtime::Lane,
     ) -> usize {
         // Topic-vs-query mix for the cross-corpus fetch embedding. 0.5 =
         // equal weight: the topic anchor keeps the pull inside the linked
@@ -164,7 +167,7 @@ impl Runtime {
         if !on {
             return 0;
         }
-        let Some(index) = self.bridge.as_ref() else {
+        let Some(index) = lane.bridge.as_ref() else {
             return 0;
         };
         if index.is_empty() || entities.is_empty() {
@@ -231,6 +234,7 @@ impl Runtime {
                         "BridgeBoost",
                         None,
                         corpus_ceiling,
+                        lane,
                     )
                     .await;
                 let relation = edge.relation.as_str();

@@ -144,18 +144,6 @@ fn get_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_js
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     #[tokio::test]
     async fn weighted_centroid_with_dotted_weight_key() {
         // weights 3 and 1 → centroid pulled toward the first vector.
@@ -166,7 +154,7 @@ mod tests {
         let out = VectorMeanTool
             .execute(
                 &serde_json::json!({ "items": items, "vector_key": "vec", "weight_key": "row.Rating" }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -184,7 +172,10 @@ mod tests {
     async fn zero_weight_sum_errors() {
         let items = serde_json::json!([{ "vector": [1.0], "weight": "0" }]);
         let err = VectorMeanTool
-            .execute(&serde_json::json!({ "items": items }), &ctx())
+            .execute(
+                &serde_json::json!({ "items": items }),
+                &ToolContext::default(),
+            )
             .await
             .unwrap_err();
         assert!(err.to_string().contains("average"), "{err}");

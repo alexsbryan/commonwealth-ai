@@ -9,52 +9,34 @@
 //! function the bespoke `enrich atlas-gaps` runs. Effect is `Write` (it writes
 //! `gaps.json`); idempotent (same atoms → same gaps → same ids).
 
-use async_trait::async_trait;
-
 use corpus_engine::enrichment::atlas::{
     analysis::gaps::{detect_deterministic_gaps, GapDetectionInput, GapsOutput},
     read_atlas_atoms, read_atlas_edges, write_atlas_gaps, AtomEnvelope,
 };
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
 
 use crate::atlas_phase::atlas_dir_for;
+use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 pub struct AtlasGapsTool;
 
-#[async_trait]
-impl Tool for AtlasGapsTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_gaps".to_string(),
-            name: "atlas_gaps".to_string(),
-            description: "Literary-atlas Phase 7: detect structural gaps (transitions without a \
-                          trigger, ungrounded claims, open questions) in the resolved atlas. \
-                          Reads atoms.json + edges.json, writes gaps.json. Deterministic."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
-                },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+impl AtlasGapsTool {
+    /// Bind this tool's state to its `atlas_gaps` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_gaps", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `atlas_gaps`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = params
             .get("corpus")
             .and_then(|v| v.as_str())
@@ -109,18 +91,6 @@ impl Tool for AtlasGapsTool {
 mod tests {
     use super::*;
 
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
-
     /// The leaf wraps the real corpus-engine gap detector: read atoms+edges →
     /// detect → write gaps.json, on the canonical `<index>/<corpus>/atlas/` paths.
     /// Hermetic: a fresh atlas with no atoms yields zero gaps and a well-formed
@@ -146,7 +116,10 @@ mod tests {
             "corpus": "c1",
             "index_dir": dir.path().to_string_lossy()
         });
-        let out = AtlasGapsTool.execute(&params, &ctx()).await.unwrap();
+        let out = AtlasGapsTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap();
         match out {
             StepOutput::Text(t) => assert!(t.contains("0 gap"), "{t}"),
             o => panic!("unexpected output: {o:?}"),
@@ -162,6 +135,9 @@ mod tests {
         // A missing atlas is a loud error (points the operator at resolve).
         let bad =
             serde_json::json!({ "corpus": "nope", "index_dir": dir.path().to_string_lossy() });
-        assert!(AtlasGapsTool.execute(&bad, &ctx()).await.is_err());
+        assert!(AtlasGapsTool
+            .run(&bad, &ToolContext::default())
+            .await
+            .is_err());
     }
 }

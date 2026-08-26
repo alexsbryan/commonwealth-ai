@@ -599,7 +599,10 @@ fn append_watcher_log(ctx: &RebuildCtx, line: &str) {
         return;
     };
     // `<root>/logs/watch-{corpus}-scip.log` — the same path the CLI's
-    // `project watch logs <id> scip` reads (registry_watch.rs). The
+    // `project watch logs <id> scip` reads
+    // (`sovereign-cli/src/project_registry.rs::cmd_watch_logs`; it lived in
+    // `cli-dev`'s `registry_watch.rs` until that unreachable fork was
+    // deleted, nc-27 2026-08-21). The
     // `logs` segment is the contract; without it the daemon wrote
     // `<root>/watch-...` and the CLI's promise went unkept (watched
     // failing in the full suite 2026-08-14).

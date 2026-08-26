@@ -9,24 +9,25 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::*;
 
-use crate::projection::{Citation, Provenance};
-
-/// Event emitted by the server for WebSocket/SSE consumers.
+/// Executor progress + approval events, fanned out to every connected
+/// consumer by [`ServerApprovalChannel`].
+///
+/// Deliberately NOT the turn protocol. `sovereign_contracts::types::
+/// TurnFrame` carries one tenant's in-flight turn down the one socket
+/// that asked for it; these three are genuinely broadcast. Until
+/// 2026-08-25 both sets were one `ServerEvent` enum kept apart by a doc
+/// comment, which meant `event_tx.send(ServerEvent::Token { .. })`
+/// compiled — a tenant's answer delivered to every other connected
+/// client. Two types is what makes that a type error instead of a thing
+/// to remember (TOPOLOGY.md §10 phase 5b, ARCH §7).
 ///
 /// Variants are added when a corresponding emit site exists. Don't add
-/// speculative variants — they break exhaustiveness for downstream consumers
-/// without ever firing.
-///
-/// Note on transport: `StepDone` / `ApprovalReq` / `UserInput` are
-/// genuinely fan-out (broadcast across connections by
-/// [`ServerApprovalChannel`]). The streaming variants `Token` /
-/// `Complete` / `StreamError` are NOT broadcast — `ws.rs` sends them
-/// down the single requesting socket, because tokens are per-turn and
-/// per-tenant and must never fan to another client's connection.
+/// speculative variants — they break exhaustiveness for downstream
+/// consumers without ever firing.
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(tag = "type", content = "data")]
 #[serde(rename_all = "snake_case")]
-pub enum ServerEvent {
+pub enum ExecutorEvent {
     StepDone {
         task_id: String,
         step: StepSummary,
@@ -41,65 +42,6 @@ pub enum ServerEvent {
         task_id: String,
         step_id: usize,
         question: String,
-    },
-    /// One streamed token delta for an assistant message. Emitted once
-    /// per chunk as the host synthesizes the response.
-    Token { message_id: String, chunk: String },
-    /// Terminal frame, sent after the stream is exhausted and the
-    /// runtime has persisted the assistant message. Carries the
-    /// projected provenance + corpus-grounded citations for the
-    /// completed message (see `crate::projection`).
-    Complete {
-        message_id: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        provenance: Option<Provenance>,
-        #[serde(skip_serializing_if = "Vec::is_empty")]
-        citations: Vec<Citation>,
-        /// The typed epistemic ledger (EPISTEMIC_STATE.md), when the turn
-        /// stamped one. `None` on old messages / kill switch off. I2-C
-        /// closes the wire gap; mobile rendering stays deferred.
-        #[serde(skip_serializing_if = "Option::is_none")]
-        epistemic_state: Option<sovereign_core::types::EpistemicState>,
-    },
-    /// A streaming turn failed, or the host was busy. `retry_after_secs`
-    /// is set on the busy case so the client mirrors REST `503` behaviour
-    /// (the "host busy" connectivity state) rather than a generic error.
-    StreamError {
-        message: String,
-        #[serde(skip_serializing_if = "Option::is_none")]
-        retry_after_secs: Option<u64>,
-    },
-    /// A glassbox progress signal for the in-flight turn: a phase the
-    /// runtime entered or completed (retrieval, synthesis, gap check,
-    /// tool call), forwarded from the runtime's narration channel. Lets
-    /// the client show what the host is actually doing before and while
-    /// the answer streams — the desktop-parity "process handles".
-    Narration {
-        /// The assistant message this turn is producing. Empty for
-        /// narration emitted before the stream handle is acquired.
-        #[serde(skip_serializing_if = "String::is_empty")]
-        message_id: String,
-        /// `NarrationPhase`, snake_case: unit variants serialize as a
-        /// string (`"retrieval_start"`), struct variants as a single-key
-        /// object (`{ "retrieval_complete": { … } }`). The client reads
-        /// the key for an icon and falls back gracefully on unknowns.
-        phase: serde_json::Value,
-        /// Human-readable narration text from the runtime (e.g. "Read 12
-        /// chunks across sep, wikipedia").
-        text: String,
-        /// Wall-clock milliseconds since the turn began.
-        elapsed_ms: u64,
-    },
-    /// The host is at capacity and this turn is queued behind others.
-    /// Emitted on the WS path before the turn starts streaming, and again
-    /// each time it moves up the line, so the client can render "#k · ~Ns".
-    /// The turn still runs to completion once a slot frees — this is *not* a
-    /// terminal frame (unlike `StreamError`, which is the shed outcome).
-    QueuePosition {
-        /// 1-based place in line (1 = next to be served).
-        position: u32,
-        /// Rough wait estimate (ms), accounting for the parallel decode slots.
-        estimated_wait_ms: u64,
     },
 }
 
@@ -130,7 +72,7 @@ struct PendingInput {
 /// event calls `submit_approval()` to unblock the waiting task.
 pub struct ServerApprovalChannel {
     /// Broadcast channel for progress/approval events.
-    event_tx: broadcast::Sender<ServerEvent>,
+    event_tx: broadcast::Sender<ExecutorEvent>,
     /// Pending approval requests: key = "task_id:step_id".
     pending_approvals: Arc<RwLock<HashMap<String, PendingApproval>>>,
     /// Pending user input requests: key = "task_id:step_id".
@@ -140,7 +82,7 @@ pub struct ServerApprovalChannel {
 }
 
 impl ServerApprovalChannel {
-    pub fn new() -> (Self, broadcast::Receiver<ServerEvent>) {
+    pub fn new() -> (Self, broadcast::Receiver<ExecutorEvent>) {
         let (event_tx, event_rx) = broadcast::channel(64);
         let channel = Self {
             event_tx,
@@ -178,7 +120,7 @@ impl ServerApprovalChannel {
     }
 
     /// Subscribe to server events.
-    pub fn subscribe(&self) -> broadcast::Receiver<ServerEvent> {
+    pub fn subscribe(&self) -> broadcast::Receiver<ExecutorEvent> {
         self.event_tx.subscribe()
     }
 }
@@ -190,7 +132,7 @@ impl ApprovalChannel for ServerApprovalChannel {
         let key = format!("{task_id}:{}", step.id);
 
         // Broadcast the approval request event.
-        let _ = self.event_tx.send(ServerEvent::ApprovalReq {
+        let _ = self.event_tx.send(ExecutorEvent::ApprovalReq {
             task_id: task_id.clone(),
             step_id: step.id,
             preview: preview.clone(),
@@ -212,7 +154,7 @@ impl ApprovalChannel for ServerApprovalChannel {
         // Use a synthetic step_id for user input requests.
         let key = format!("{task_id}:input");
 
-        let _ = self.event_tx.send(ServerEvent::UserInput {
+        let _ = self.event_tx.send(ExecutorEvent::UserInput {
             task_id: task_id.clone(),
             step_id: 0,
             question: question.to_string(),
@@ -240,7 +182,7 @@ impl ApprovalChannel for ServerApprovalChannel {
             | StepOutput::Json(_)
             | StepOutput::ReasonWithToolsResult { .. } => "done",
             StepOutput::Jump(t) => {
-                let _ = self.event_tx.send(ServerEvent::StepDone {
+                let _ = self.event_tx.send(ExecutorEvent::StepDone {
                     task_id,
                     step: StepSummary {
                         id: step.id,
@@ -253,7 +195,7 @@ impl ApprovalChannel for ServerApprovalChannel {
             StepOutput::Skipped => "skipped",
         };
 
-        let _ = self.event_tx.send(ServerEvent::StepDone {
+        let _ = self.event_tx.send(ExecutorEvent::StepDone {
             task_id,
             step: StepSummary {
                 id: step.id,

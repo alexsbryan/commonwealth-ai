@@ -1,49 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 //! Pure formatters used by the glass-box reading surface.
 //!
-//! Why this lives outside `reading_http`: every function here is a
-//! per-variant match over `AtomEnvelope` (eight arms) or `EdgeType`
-//! (ten arms) with no I/O, no async, and no daemon state. Pulling
-//! the formatters out drops `reading_http.rs` under ARCH §3.1's
-//! "justify yourself" threshold and gives the type-label / surface
-//! / evidence helpers a stable seam to grow against.
+//! Why this lives outside `reading_http`: the projection here is a
+//! per-variant match over `AtomEnvelope` with no I/O, no async, and no
+//! daemon state, which keeps `reading_http.rs` under ARCH §3.1's
+//! "justify yourself" threshold.
+//!
+//! What used to live here and deliberately no longer does: the atom and
+//! edge type LABELS, and the evidence-anchor extraction. Each was
+//! duplicated into sovereign-desktop, and in both cases the two copies had
+//! DIVERGED — the desktop's answered `unreachable!` for kinds the resolver
+//! actually emits. They are accessors on the atom now (`AtomType::label`,
+//! `EdgeType::label`, `AtomEnvelope::evidence_anchors`), so there is one
+//! spelling per closed set. What is left is the one projection that is
+//! genuinely presentation rather than atom knowledge.
 
-use corpus_engine::enrichment::atlas::{AtomEnvelope, EdgeType};
-
-pub(crate) fn atom_type_label(atom: &AtomEnvelope) -> &'static str {
-    match atom {
-        AtomEnvelope::Entity(_) => "entity",
-        AtomEnvelope::Event(_) => "event",
-        AtomEnvelope::State(_) => "state",
-        AtomEnvelope::Relation(_) => "relation",
-        AtomEnvelope::Claim(_) => "claim",
-        AtomEnvelope::Question(_) => "question",
-        AtomEnvelope::Configuration(_) => "configuration",
-        AtomEnvelope::ArgumentReconstruction(_) => "argument",
-        AtomEnvelope::Position(_) => "position",
-        AtomEnvelope::Opposition(_) => "opposition",
-        AtomEnvelope::Asset(_) => "asset",
-    }
-}
-
-pub(crate) fn edge_type_label(t: EdgeType) -> &'static str {
-    match t {
-        EdgeType::Transition => "transition",
-        EdgeType::Causes => "causes",
-        EdgeType::Grounds => "grounds",
-        EdgeType::Tension => "tension",
-        EdgeType::Involves => "involves",
-        EdgeType::Composes => "composes",
-        EdgeType::Configures => "configures",
-        EdgeType::Grounding => "grounding",
-        EdgeType::Framing => "framing",
-        EdgeType::Provenance => "provenance",
-        EdgeType::EvidenceFor => "evidence_for",
-        EdgeType::Concedes => "concedes",
-        EdgeType::OpposesIn => "opposes_in",
-        EdgeType::Attaches => "attaches",
-    }
-}
+use corpus_engine::enrichment::atlas::AtomEnvelope;
 
 /// Pull the human-readable fields for any atom type. Not every
 /// type has every field — for atoms without a clean canonical name
@@ -149,68 +121,5 @@ pub(crate) fn truncate(s: &str, max_chars: usize) -> String {
         format!("{trimmed}…")
     } else {
         trimmed
-    }
-}
-
-/// Extract every `(section_id, optional_preview)` pair from an
-/// atom's evidence (or `first_appearance` for entities, or
-/// `section_position` for events). Order preserves the order
-/// evidence was written.
-pub(crate) fn atom_evidence_section_refs(atom: &AtomEnvelope) -> Vec<(String, Option<String>)> {
-    match atom {
-        AtomEnvelope::Entity(e) => vec![(
-            e.first_appearance.chunk_id.clone(),
-            e.first_appearance.passage_preview.clone(),
-        )],
-        AtomEnvelope::Event(e) => {
-            let mut out = vec![(e.section_position.section_id.clone(), None)];
-            for c in &e.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-        AtomEnvelope::State(s) => s
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Relation(r) => r
-            .evidence
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Claim(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Question(q) => q
-            .raised_at
-            .iter()
-            .map(|c| (c.chunk_id.clone(), c.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::Configuration(c) => c
-            .evidence
-            .iter()
-            .map(|cr| (cr.chunk_id.clone(), cr.passage_preview.clone()))
-            .collect(),
-        AtomEnvelope::ArgumentReconstruction(a) => {
-            let mut out = vec![(a.section_position.section_id.clone(), None)];
-            for c in &a.evidence {
-                out.push((c.chunk_id.clone(), c.passage_preview.clone()));
-            }
-            out
-        }
-        AtomEnvelope::Position(p) => vec![(
-            p.first_appearance.chunk_id.clone(),
-            p.first_appearance.passage_preview.clone(),
-        )],
-        AtomEnvelope::Opposition(o) => vec![(
-            o.first_appearance.chunk_id.clone(),
-            o.first_appearance.passage_preview.clone(),
-        )],
-        // Asset atoms don't have section-level evidence; reachable
-        // via the carrier doc's Attaches edge.
-        AtomEnvelope::Asset(_) => Vec::new(),
     }
 }

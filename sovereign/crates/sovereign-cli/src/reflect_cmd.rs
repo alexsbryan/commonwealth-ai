@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::io::{self, BufRead, Write};
 use std::path::{Path, PathBuf};
 
-use corpus_engine_notes::{NoteRow, NoteStore, ToolCallLogRow};
+use corpus_engine_notes::{Note, NoteStore, ToolCallLogRow};
 
 /// Old top-level `svrn reflect` entry point. Prints the
 /// deprecation banner and forwards to the canonical view handler.
@@ -211,7 +211,7 @@ async fn run_summary(
     println!("{}", "─".repeat(46));
 
     // Group active reflections by tool_name.
-    let mut signals: HashMap<String, Vec<&NoteRow>> = HashMap::new();
+    let mut signals: HashMap<String, Vec<&Note>> = HashMap::new();
     for r in reflections.iter().filter(|n| n.retired_at.is_none()) {
         let tool = r
             .tool_name
@@ -336,7 +336,7 @@ async fn run_summary(
     0
 }
 
-fn print_raw(reflections: &[NoteRow]) -> i32 {
+fn print_raw(reflections: &[Note]) -> i32 {
     println!();
     println!("RAW REFLECTIONS");
     println!("{}", "─".repeat(17));
@@ -642,7 +642,7 @@ fn truncate(s: &str, max: usize) -> String {
     }
 }
 
-fn count_sessions<'a>(rows: impl Iterator<Item = &'a NoteRow>) -> usize {
+fn count_sessions<'a>(rows: impl Iterator<Item = &'a Note>) -> usize {
     rows.map(|n| n.session_id.as_str())
         .collect::<std::collections::HashSet<_>>()
         .len()

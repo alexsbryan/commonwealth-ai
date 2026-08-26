@@ -9,88 +9,33 @@
 
 use crate::types::*;
 
-/// Intent-implied OICP defaults (v0.3). The classified intent
-/// carries a latency signal — "DeepQuery" wants extended thinking
-/// budget, "ComplexTask" and "KnowledgeQuery" want solid normal
-/// latency — which the scheduler consumes as `latency_class`.
-/// `capability_hint` defaults to `general`; code/prose/etc. are left
-/// to skill-level overrides since the intent vocabulary doesn't
-/// carry a specialization distinction.
+/// Intent-implied OICP defaults (v0.3), read off the intent table.
 ///
-/// Returns `None` for small-model intents (SimpleQuery, Continuation,
-/// SimpleAction) where cross-network latency wouldn't be worth
-/// trading for a marginal quality bump — no OICP envelope means
-/// the local Fast slot serves without invoking the scheduler.
+/// The classified intent carries a latency signal — `DeepQuery` wants extended
+/// thinking budget, `ComplexTask` and `KnowledgeQuery` want solid normal
+/// latency — which the scheduler consumes as `latency_class`. Both that and
+/// the capability hint are the `oicp` column of [`Intent::row`]; the per-intent
+/// reasoning lives on the rows.
+///
+/// `None` means the intent declares no envelope at all (`SimpleQuery`,
+/// `Continuation`, `SimpleAction`): cross-network latency is not worth trading
+/// for a marginal quality bump, so the local Fast slot serves without invoking
+/// the scheduler.
 pub(crate) fn default_oicp_for_intent(
     intent: &Intent,
 ) -> Option<crate::oicp::InferenceRequirements> {
-    use crate::oicp::{CapabilityHint, InferenceRequirements, LatencyClass};
-    let (hint, latency_class) = match intent {
-        Intent::DeepQuery => {
-            // Reasoning-heavy: extended class tolerates higher TTFT
-            // in exchange for deeper thinking budgets.
-            (CapabilityHint::general(), LatencyClass::Extended)
-        }
-        Intent::ComplexTask => {
-            // Tool-using plans want solid normal-latency responses;
-            // extended would add round-trip overhead per tool step.
-            (CapabilityHint::general(), LatencyClass::Normal)
-        }
-        Intent::KnowledgeQuery => {
-            // Retrieval-driven synthesis over a bounded chunk set.
-            (CapabilityHint::general(), LatencyClass::Normal)
-        }
-        Intent::CodeQuery => {
-            // First-class code route: retrieval over code-intel summaries plus
-            // the SCIP call-graph trace, then synthesis. Code-capable hint,
-            // normal latency (same shape as KnowledgeQuery, code-scoped).
-            (CapabilityHint::code(), LatencyClass::Normal)
-        }
-        Intent::ComparisonQuery => {
-            // Bounded two-entity contrast — Fast slot, no reasoning
-            // budget. Retrieval over a small chunk set, constrained
-            // synthesis prompt, sub-second TTFT target.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::MetalingualQuery => {
-            // Codebase lookup + brief synthesis — same shape as
-            // KnowledgeQuery's FastFocused path but against code
-            // corpora. Fast slot is enough; no reasoning budget.
-            (CapabilityHint::code(), LatencyClass::Fast)
-        }
-        Intent::ConationQuery => {
-            // Operates on the prior turn — no new retrieval, no
-            // reclassification. The OICP envelope of the rebound
-            // classification is what actually matters; this default
-            // just covers the rare case where conation is dispatched
-            // without rebind context.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::CommissiveQuery => {
-            // Persistence-only path — no LLM synthesis required for
-            // the storage step; a brief Fast-slot acknowledgment
-            // citing the situated anchor is all we need.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::ExpressiveQuery => {
-            // Acknowledge + situated help-offer. Fast slot synthesis
-            // grounded in working_memory + last assistant turn; no
-            // retrieval against the world corpus.
-            (CapabilityHint::general(), LatencyClass::Fast)
-        }
-        Intent::GenerativeQuery => {
-            // Creative generation — primary (Slow) slot for quality; no
-            // retrieval, no thinking budget. Extended class signals the
-            // scheduler to favour the capable slot for a long piece.
-            (CapabilityHint::general(), LatencyClass::Extended)
-        }
-        Intent::SimpleQuery | Intent::SimpleAction { .. } | Intent::Continuation { .. } => {
-            return None;
-        }
-    };
+    use crate::oicp::{CapabilityHint, InferenceRequirements};
+    let (hint, latency_class) = intent.row().oicp?;
     Some(
         InferenceRequirements::new()
-            .with_hint(hint)
+            // Every hint in the table is one of `CapabilityHint::STANDARDIZED`,
+            // which `parse` accepts unconditionally — held by
+            // `intent_table_hints_are_standardized`, which is what makes this
+            // `expect` a statement about the test rather than a hope.
+            .with_hint(CapabilityHint::parse(hint).expect(
+                "intent table hint is standardized \
+                 (intent_table_hints_are_standardized)",
+            ))
             .with_latency_class(latency_class),
     )
 }
@@ -104,21 +49,7 @@ pub(crate) fn format_interpretation(
     primary: &Intent,
     rationale: Option<&str>,
 ) -> String {
-    let intent_phrase = match primary {
-        Intent::SimpleQuery => "a quick factual answer",
-        Intent::DeepQuery => "a deeper explanation",
-        Intent::KnowledgeQuery => "a look in your installed knowledge",
-        Intent::CodeQuery => "a look in the indexed code",
-        Intent::ComparisonQuery => "a comparison between two things",
-        Intent::MetalingualQuery => "a lookup in your codebase",
-        Intent::ConationQuery => "a tweak to my last reply",
-        Intent::CommissiveQuery => "a commitment to save",
-        Intent::ExpressiveQuery => "an acknowledgment + help offer",
-        Intent::GenerativeQuery => "something creative written for you",
-        Intent::SimpleAction { .. } => "a tool call",
-        Intent::ComplexTask => "a multi-step task",
-        Intent::Continuation { .. } => "a follow-up to earlier work",
-    };
+    let intent_phrase = primary.row().interpretation;
     if let Some(r) = rationale {
         format!("I'm reading this as {intent_phrase} ({r}). If that's off, redirect below.")
     } else {
@@ -126,22 +57,16 @@ pub(crate) fn format_interpretation(
     }
 }
 
-/// Human label for a redirect chip on the banner.
+/// Human label for a redirect chip on the banner — the `redirect_label`
+/// column of [`Intent::row`].
 pub(crate) fn label_for_intent(intent: &Intent) -> String {
+    let label = intent.row().redirect_label;
     match intent {
-        Intent::SimpleQuery => "Give me a quick answer".into(),
-        Intent::DeepQuery => "Walk me through it in depth".into(),
-        Intent::KnowledgeQuery => "Check my knowledge base".into(),
-        Intent::CodeQuery => "Search the codebase".into(),
-        Intent::ComparisonQuery => "Compare them side by side".into(),
-        Intent::MetalingualQuery => "Look it up in this codebase".into(),
-        Intent::ConationQuery => "Adjust the last reply".into(),
-        Intent::CommissiveQuery => "Save this as a commitment".into(),
-        Intent::ExpressiveQuery => "Hear me out and help".into(),
-        Intent::GenerativeQuery => "Write something creative".into(),
-        Intent::SimpleAction { tool } => format!("Use the {tool} tool"),
-        Intent::ComplexTask => "Plan a multi-step task".into(),
-        Intent::Continuation { .. } => "Continue prior task".into(),
+        // The only payload-carrying label: two `SimpleAction`s naming
+        // different tools want different chips, so the row holds the template
+        // and the payload fills the hole.
+        Intent::SimpleAction { tool } => label.replace("{tool}", &tool.to_string()),
+        _ => label.to_string(),
     }
 }
 
@@ -151,20 +76,13 @@ pub(crate) fn label_for_intent(intent: &Intent) -> String {
 /// serializable — the full `Intent` enum carries a `ToolId` for
 /// `SimpleAction`, which is ergonomic in Rust but awkward in JSON.
 pub(crate) fn intent_hint(intent: &Intent) -> String {
+    let slug = intent.row().slug;
     match intent {
-        Intent::SimpleQuery => "simple_query".into(),
-        Intent::DeepQuery => "deep_query".into(),
-        Intent::KnowledgeQuery => "knowledge_query".into(),
-        Intent::CodeQuery => "code_query".into(),
-        Intent::ComparisonQuery => "comparison_query".into(),
-        Intent::MetalingualQuery => "metalingual_query".into(),
-        Intent::ConationQuery => "conation_query".into(),
-        Intent::CommissiveQuery => "commissive_query".into(),
-        Intent::ExpressiveQuery => "expressive_query".into(),
-        Intent::GenerativeQuery => "generative_query".into(),
-        Intent::SimpleAction { tool } => format!("simple_action:{tool}"),
-        Intent::ComplexTask => "complex_task".into(),
-        Intent::Continuation { task_id } => format!("continuation:{task_id}"),
+        // The two payload-carrying variants suffix the base slug with their
+        // payload; `parse_intent_hint` splits on the same `:`.
+        Intent::SimpleAction { tool } => format!("{slug}:{tool}"),
+        Intent::Continuation { task_id } => format!("{slug}:{task_id}"),
+        _ => slug.to_string(),
     }
 }
 
@@ -210,23 +128,106 @@ pub(crate) fn parse_intent_hint(hint: &str) -> Intent {
 /// Kept short and neutral — the alternatives themselves do most of
 /// the disambiguation work; the question just frames the choice.
 pub(crate) fn build_clarification_question(_message: &str, primary: &Intent) -> String {
-    let read_as = match primary {
-        Intent::SimpleQuery => "a quick factual answer",
-        Intent::DeepQuery => "a deeper explanation",
-        Intent::KnowledgeQuery => "a corpus lookup",
-        Intent::CodeQuery => "a question about the code",
-        Intent::ComparisonQuery => "a side-by-side comparison",
-        Intent::MetalingualQuery => "a vocabulary lookup in our system",
-        Intent::ConationQuery => "an adjustment to my last reply",
-        Intent::CommissiveQuery => "a commitment to save",
-        Intent::ExpressiveQuery => "an acknowledgment + targeted help",
-        Intent::GenerativeQuery => "something creative written for you",
-        Intent::SimpleAction { .. } => "an action",
-        Intent::ComplexTask => "a multi-step task",
-        Intent::Continuation { .. } => "a continuation",
-    };
+    let read_as = primary.row().read_as;
     format!(
         "I could approach this a few ways — my best read is {read_as}, \
          but could you pick what you'd like most?"
     )
+}
+
+#[cfg(test)]
+mod intent_wire_tests {
+    use super::*;
+
+    /// Every variant, including both payload shapes. The `slug` column is the
+    /// only place the wire vocabulary is decided, but `parse_intent_hint` is
+    /// its INVERSE and is still hand-written — so adding an intent and
+    /// forgetting the parser is a test failure here rather than a silent
+    /// `SimpleQuery` in production.
+    fn every_variant() -> Vec<Intent> {
+        vec![
+            Intent::SimpleQuery,
+            Intent::DeepQuery,
+            Intent::KnowledgeQuery,
+            Intent::ComparisonQuery,
+            Intent::MetalingualQuery,
+            Intent::ConationQuery,
+            Intent::CommissiveQuery,
+            Intent::ExpressiveQuery,
+            Intent::GenerativeQuery,
+            Intent::CodeQuery,
+            Intent::SimpleAction {
+                tool: ToolId::from("search".to_string()),
+            },
+            Intent::ComplexTask,
+            Intent::Continuation {
+                task_id: TaskId::from("task-1".to_string()),
+            },
+        ]
+    }
+
+    #[test]
+    fn every_wire_hint_round_trips() {
+        for intent in every_variant() {
+            let hint = intent_hint(&intent);
+            assert_eq!(
+                parse_intent_hint(&hint),
+                intent,
+                "{} did not survive the wire round trip via {hint:?}",
+                intent.name()
+            );
+        }
+    }
+
+    #[test]
+    fn the_hint_is_the_table_slug_plus_any_payload() {
+        // The base of every hint is the row's `slug` — one decider for the
+        // wire key. The two payload variants suffix it after a `:`.
+        for intent in every_variant() {
+            let hint = intent_hint(&intent);
+            let base = hint.split(':').next().unwrap();
+            assert_eq!(base, intent.row().slug, "{}", intent.name());
+        }
+        assert_eq!(
+            intent_hint(&Intent::SimpleAction {
+                tool: ToolId::from("web_search".to_string())
+            }),
+            "simple_action:web_search"
+        );
+        assert_eq!(
+            intent_hint(&Intent::Continuation {
+                task_id: TaskId::from("t-9".to_string())
+            }),
+            "continuation:t-9"
+        );
+    }
+
+    #[test]
+    fn the_redirect_chip_names_the_tool_it_would_use() {
+        // `redirect_label` is the one column holding a `{tool}` placeholder;
+        // if the substitution ever stops firing the chip reads literally.
+        let label = label_for_intent(&Intent::SimpleAction {
+            tool: ToolId::from("code_search".to_string()),
+        });
+        assert_eq!(label, "Use the code_search tool");
+        assert!(!label.contains('{'), "the placeholder leaked: {label}");
+        assert_eq!(
+            label_for_intent(&Intent::DeepQuery),
+            "Walk me through it in depth"
+        );
+    }
+
+    #[test]
+    fn an_unknown_hint_is_reported_not_guessed() {
+        // The fallback is deliberate and logged (`SimpleQuery` keeps the
+        // continuation path from hard-failing), but it must not swallow a
+        // hint that merely LOOKS like a payload form.
+        assert_eq!(parse_intent_hint("not_an_intent"), Intent::SimpleQuery);
+        assert_eq!(
+            parse_intent_hint("continuation:"),
+            Intent::Continuation {
+                task_id: TaskId::from(String::new())
+            }
+        );
+    }
 }

@@ -13,6 +13,8 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::Json;
 
+use corpus_engine::Corpus;
+
 use crate::state::AppState;
 
 /// POST /internal/model/transfer — peer-to-peer model file transfer.
@@ -247,7 +249,7 @@ pub async fn index_transfer(
     }
 
     // Verify the unpacked directory has _corpus_meta.json.
-    if !unpack_path.join("_corpus_meta.json").exists() {
+    if !Corpus::meta_in(&unpack_path).exists() {
         tracing::error!(
             corpus = %corpus_id,
             path = %unpack_path.display(),

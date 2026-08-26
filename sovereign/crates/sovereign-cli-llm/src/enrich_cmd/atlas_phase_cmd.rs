@@ -19,12 +19,9 @@ use corpus_engine::enrichment::pipeline::{
 use super::config::EnrichConfig;
 use super::inference_client::DaemonInferenceClient;
 use super::paths;
-use async_trait::async_trait;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
-use sovereign_core::traits::Tool;
-use sovereign_core::types::{
-    Effect, Idempotency, Latency, Permission, Scope, StepOutput, ToolContext, ToolDescriptor,
-};
+use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_core::types::{StepOutput, ToolContext};
 
 // ── cluster-atlas ───────────────────────────────────────────
 
@@ -549,38 +546,21 @@ fn _compile_time_reexport_guard() {
 /// Effect `Write`; needs the daemon up (per-sketch embeddings).
 pub(crate) struct AtlasClusterTool;
 
-#[async_trait]
-impl Tool for AtlasClusterTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "atlas_cluster".to_string(),
-            name: "atlas_cluster".to_string(),
-            description:
-                "Literary-atlas Phase 2: cluster Phase-1 section sketches into typed \
-                          facet clusters (HDBSCAN per facet over sketch embeddings). Reads \
-                          cache/questions.json, writes cache/atlas-clusters.json. Needs the daemon."
-                    .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (must be enrich-init'd with an *_atlas pipeline)" }
-                },
-                "required": ["corpus"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Slow,
-            scope: Scope::Persistent,
-            output_schema: None,
-        }
+impl AtlasClusterTool {
+    /// Bind this tool's state to its `atlas_cluster` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("atlas_cluster", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![]
-    }
-
-    async fn execute(
+    /// The executable half of `atlas_cluster`.
+    async fn run(
         &self,
         params: &serde_json::Value,
         _ctx: &ToolContext,
@@ -623,18 +603,7 @@ impl Tool for AtlasClusterTool {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
+    use sovereign_core::traits::Tool;
 
     /// The `atlas_cluster` leaf validates its `corpus` before any IO: missing or
     /// unknown corpus fails loudly. (The happy path needs the daemon + a resolved
@@ -642,13 +611,15 @@ mod tests {
     #[tokio::test]
     async fn atlas_cluster_leaf_validates_corpus() {
         assert!(AtlasClusterTool
-            .execute(&serde_json::json!({}), &ctx())
+            .declared()
+            .execute(&serde_json::json!({}), &ToolContext::default())
             .await
             .is_err());
         assert!(AtlasClusterTool
+            .declared()
             .execute(
                 &serde_json::json!({ "corpus": "definitely-not-a-real-corpus-zzz" }),
-                &ctx()
+                &ToolContext::default()
             )
             .await
             .is_err());

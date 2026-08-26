@@ -31,7 +31,7 @@ use sovereign_tools::code::atos_utils::{
     split_state_marker, step_goal_is_scaffold, strip_failure_cruft, truncate,
 };
 
-use super::args::{get_flag, split_args};
+use super::args::parse_args;
 
 const DEFAULT_MAX_ITERS: u32 = 20;
 const DEFAULT_DAEMON_URL: &str = "http://localhost:9741";
@@ -46,6 +46,17 @@ const DIFF_BYTE_BUDGET: usize = 64 * 1024;
 // ─── Public entry ────────────────────────────────────────────────────────────
 
 pub(crate) async fn cmd_run(args: &[String]) -> i32 {
+    // `--help` must not require the flags it is being asked to describe.
+    // `show_help` is read off the parsed cfg, but `from_args` refuses
+    // before that without `--workdir` — so `atos run --help` printed
+    // "missing --workdir <path>" and exited 2, and the help this command
+    // ships was structurally unreachable. Asked through the same parser
+    // that owns the answer, not by re-deciding what a help token is.
+    if parse_args(args).map(|p| p.wants_help()).unwrap_or(false) {
+        print_help();
+        return 0;
+    }
+
     let cfg = match RunCfg::from_args(args) {
         Ok(c) => c,
         Err(msg) => {
@@ -124,17 +135,19 @@ impl DriverKind {
 
 impl RunCfg {
     fn from_args(args: &[String]) -> Result<Self, String> {
-        let (positional, flags) = split_args(args);
-        let show_help = positional
-            .iter()
-            .any(|p| p == "help" || p == "--help" || p == "-h");
+        let flags = parse_args(args).map_err(|e| e.to_string())?;
+        // `--help` used to be sorted into the FLAG list while this check
+        // looked among the POSITIONALS, so `atos run --help` printed
+        // nothing and only the bare `help` token worked. The canonical
+        // parser recognises all three forms in any position.
+        let show_help = flags.wants_help();
 
-        let workdir = match get_flag(&flags, "--workdir") {
+        let workdir = match flags.value("workdir").map(|s| s.to_string()) {
             Some(s) => PathBuf::from(s),
             None => return Err("missing --workdir <path>".into()),
         };
 
-        let driver = match get_flag(&flags, "--driver").as_deref() {
+        let driver = match flags.value("driver").map(|s| s.to_string()).as_deref() {
             None | Some("") | Some("opencode") => DriverKind::Opencode,
             Some("claude") => DriverKind::Claude,
             Some("codex") => DriverKind::Codex,
@@ -145,7 +158,7 @@ impl RunCfg {
             }
         };
 
-        let max_iters = match get_flag(&flags, "--max-iters") {
+        let max_iters = match flags.value("max-iters").map(|s| s.to_string()) {
             Some(s) => s
                 .parse::<u32>()
                 .map_err(|_| format!("--max-iters not a positive integer: {s}"))?,
@@ -155,21 +168,29 @@ impl RunCfg {
             return Err("--max-iters must be > 0".into());
         }
 
-        let daemon_url =
-            get_flag(&flags, "--daemon-url").unwrap_or_else(|| DEFAULT_DAEMON_URL.to_string());
+        let daemon_url = flags
+            .value("daemon-url")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| DEFAULT_DAEMON_URL.to_string());
 
-        let reviewer_model = get_flag(&flags, "--reviewer-model")
+        let reviewer_model = flags
+            .value("reviewer-model")
+            .map(|s| s.to_string())
             .unwrap_or_else(|| DEFAULT_REVIEWER_MODEL.to_string());
 
-        let driver_model =
-            get_flag(&flags, "--driver-model").unwrap_or_else(|| DEFAULT_DRIVER_MODEL.to_string());
+        let driver_model = flags
+            .value("driver-model")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| DEFAULT_DRIVER_MODEL.to_string());
 
-        let done_marker =
-            get_flag(&flags, "--done-marker").unwrap_or_else(|| DEFAULT_DONE_MARKER.to_string());
+        let done_marker = flags
+            .value("done-marker")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| DEFAULT_DONE_MARKER.to_string());
 
-        let dry_run = flags.iter().any(|(k, _)| k == "dry-run");
-        let fresh_plan = flags.iter().any(|(k, _)| k == "fresh-plan");
-        let accept = flags.iter().any(|(k, _)| k == "accept");
+        let dry_run = flags.has("dry-run");
+        let fresh_plan = flags.has("fresh-plan");
+        let accept = flags.has("accept");
 
         let resolve_against_workdir = |raw: String| -> PathBuf {
             let p = PathBuf::from(&raw);
@@ -181,11 +202,20 @@ impl RunCfg {
         };
 
         Ok(Self {
-            design_path: get_flag(&flags, "--design").map(resolve_against_workdir),
-            charter_path: get_flag(&flags, "--charter").map(resolve_against_workdir),
-            plan_path: get_flag(&flags, "--plan").map(resolve_against_workdir),
+            design_path: flags
+                .value("design")
+                .map(|s| s.to_string())
+                .map(resolve_against_workdir),
+            charter_path: flags
+                .value("charter")
+                .map(|s| s.to_string())
+                .map(resolve_against_workdir),
+            plan_path: flags
+                .value("plan")
+                .map(|s| s.to_string())
+                .map(resolve_against_workdir),
             workdir,
-            feature_id: get_flag(&flags, "--feature-id"),
+            feature_id: flags.value("feature-id").map(|s| s.to_string()),
             driver,
             driver_model,
             max_iters,
@@ -301,6 +331,10 @@ fn resolve_artifacts(cfg: &RunCfg) -> Result<ResolvedArtifacts, String> {
 /// One step in the agent-authored plan. Each step is a discrete unit
 /// of work bounded by an executable `verify_cmd`. The runner refuses
 /// to mark a step `Done` until the verify command exits zero.
+///
+/// NOT `sovereign_contracts::types::Step`, which is a DAG node with a
+/// `StepKind` executor; this is one `plan.json` step bounded by a shell
+/// `verify_cmd`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Step {
     id: String,
@@ -350,6 +384,10 @@ enum StepState {
 /// for what work remains. The runner mutates `state` / `attempts`
 /// in place after each EXECUTE phase; the agent rewrites the plan
 /// (with `revision` bumped) during REASSESS.
+///
+/// NOT `sovereign_contracts::types::Plan`, which is a planner DAG (`TaskId`
+/// + `edges`); this is the on-disk `plan.json` an external agent rewrites,
+/// versioned by `schema_version`/`revision`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Plan {
     #[serde(default = "default_schema_version")]
@@ -488,6 +526,9 @@ impl Plan {
 
 /// Phase the FSM picks for the next iteration. Decided from the
 /// (plan, last_rejection, steps_since_reassess) tuple.
+///
+/// NOT `sovereign_core::title`'s `Phase`, which is a fn-local
+/// streaming-buffer state; this is the ATOS runner's FSM phase.
 #[derive(Debug, Clone)]
 enum Phase {
     Plan,
@@ -1768,6 +1809,8 @@ fn compose_agent_prompt(
 
 // ─── Reviewer call ───────────────────────────────────────────────────────────
 
+/// NOT `sovereign_eval::diff::ReviewerVerdict`, which is a scored-axes
+/// report file; this is the reviewer model's raw JSON reply.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct ReviewerVerdict {
     verdict: String, // "accept" | "reject"
@@ -1777,6 +1820,9 @@ struct ReviewerVerdict {
     gaps: Vec<Gap>,
 }
 
+/// The reviewer model's JSON shape, not `honesty::Gap` and not
+/// `sovereign_contracts::types::epistemic::Gap` — three fields the model
+/// fills, with no id and no demand index.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct Gap {
     #[serde(default)]

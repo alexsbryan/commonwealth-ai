@@ -106,7 +106,7 @@ impl NoteSource {
 /// A single note row, as read back from the store. Mirrors the store row so the
 /// adapter copies field-for-field; `scope`/`source` are the string forms.
 #[derive(Debug, Clone)]
-pub struct NoteRow {
+pub struct Note {
     /// Note id (store primary key).
     pub id: String,
     /// Note kind string (`decision`, `todo`, `attempt`, ...).
@@ -188,5 +188,5 @@ pub trait RecipeNotes: Send + Sync {
         limit: usize,
         include_retired: bool,
         scope_filter: &ScopeFilter,
-    ) -> Result<Vec<NoteRow>>;
+    ) -> Result<Vec<Note>>;
 }

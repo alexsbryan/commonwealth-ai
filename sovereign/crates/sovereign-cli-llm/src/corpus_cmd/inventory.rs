@@ -5,6 +5,8 @@
 
 use std::path::PathBuf;
 
+use corpus_engine::Corpus;
+
 use super::fmt::{dir_size_bytes, format_count, human_bytes};
 
 // ── Mesh subcommand implementations ──────────────────────
@@ -453,11 +455,19 @@ pub(super) async fn cmd_corpus_remove(args: &[String]) -> i32 {
         .unwrap_or_else(|_| sovereign_contracts::rebrand::svrnmesh_root());
     let index_dir = data_dir.join("indexes");
 
-    // Discover what's actually on disk for this corpus.
-    let canonical_path = index_dir.join(&corpus_id);
-    let canonical_exists = canonical_path.join("_corpus_meta.json").exists();
+    // Discover what's actually on disk for this corpus. `Corpus` owns the
+    // layout (canonical root, partition prefix, meta sidecar); this command
+    // used to spell all three itself.
+    let Some(corpus) = Corpus::named(&index_dir, &corpus_id) else {
+        // Refused, not defaulted: `index_dir.join("")` is the index ROOT, so an
+        // empty id used to mean "every corpus on this node" (ARCH §18.3).
+        eprintln!("corpus id must not be empty");
+        return 1;
+    };
+    let canonical_path = corpus.root();
+    let canonical_exists = corpus.is_installed();
 
-    let prefix = format!("{corpus_id}-partition-");
+    let prefix = corpus.partition_prefix();
     let mut partition_paths: Vec<PathBuf> = Vec::new();
     if let Ok(entries) = std::fs::read_dir(&index_dir) {
         for entry in entries.flatten() {
@@ -764,7 +774,7 @@ fn scan_corpus_rows(indexes_dir: &std::path::Path) -> std::io::Result<Vec<Corpus
 
 /// The `corpus_id` a directory's `_corpus_meta.json` declares, if any.
 fn read_meta_corpus_id(dir: &std::path::Path) -> Option<String> {
-    let raw = std::fs::read_to_string(dir.join("_corpus_meta.json")).ok()?;
+    let raw = std::fs::read_to_string(Corpus::meta_in(dir)).ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     v.get("corpus_id")
         .and_then(|x| x.as_str())
@@ -831,7 +841,11 @@ pub(crate) fn corpus_readiness(indexes_dir: &std::path::Path, corpus_id: &str) -
     // materialised ONLY by the finalise/merge step (see
     // `CorpusEngine::partition_path`), so a partition is exactly the
     // "still building" signal.
-    let partition_prefix = format!("{corpus_id}-partition-");
+    let Some(partition_prefix) =
+        Corpus::named(indexes_dir, corpus_id).map(|c| c.partition_prefix())
+    else {
+        return CorpusReadiness::Absent;
+    };
     if let Ok(read) = std::fs::read_dir(indexes_dir) {
         for entry in read.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -867,7 +881,7 @@ fn read_corpus_status_row(corpus_id: &str, dir: &std::path::Path) -> CorpusStatu
     // computed count. We don't open lance here — too heavy for a
     // status command. Instead we report whether the meta file
     // claims indexed status.
-    let chunk_count = std::fs::read_to_string(dir.join("_corpus_meta.json"))
+    let chunk_count = std::fs::read_to_string(Corpus::meta_in(dir))
         .ok()
         .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
         .and_then(|v| {
@@ -957,7 +971,7 @@ mod tests {
             "indexes_built": !ingestion_in_progress,
         });
         std::fs::write(
-            dir.join("_corpus_meta.json"),
+            Corpus::meta_in(dir),
             serde_json::to_string_pretty(&meta).unwrap(),
         )
         .unwrap();

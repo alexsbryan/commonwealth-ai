@@ -232,6 +232,160 @@ impl WarnGate {
         }
         warn
     }
+
+    /// Same hysteresis, inverted: fires when `value` falls BELOW `floor`.
+    ///
+    /// Headroom is a floor, not a ceiling — a separate method rather than a
+    /// clever argument inversion at the call site, because
+    /// `observe(floor.saturating_sub(avail), 0)` is correct and unreadable,
+    /// and a guard nobody can read is a guard nobody maintains.
+    fn observe_below(&mut self, value: u64, floor: u64, now: Instant) -> bool {
+        self.observe(floor.saturating_sub(value), 0, now)
+    }
+}
+
+// ── Host headroom: the resource that actually runs out ──────────────────
+//
+// The RSS limits above guard THIS PROCESS's footprint. On 2026-08-25 that was
+// measured to be the wrong noun on the host it was written for (note
+// `05cbffed`): six kernel OOM kills in 24 hours, and the guard was silent
+// through every one. The numbers leave no room for interpretation — the kernel
+// killed at anon-rss 36.4 GiB while steady state under judging was 36.0 GiB, so
+// there was no separation to fire in, and `=auto` resolves to 85% of RAM
+// (~108 GB) which the process never approaches.
+//
+// The exhausted resource was GTT — GPU-mapped host memory, 46.4 GB in the
+// daemon plus 12.55 GB in an unrelated `gnome-shell` — and RSS does not count
+// it. So a process can sit at a modest RSS while the BOX has nothing left,
+// which is the exact state the kernel resolves by killing this daemon: it
+// carries `oom_score_adj:200`, making it the most killable process present.
+//
+// A guard that cannot fail is worse than none, because it is read as coverage
+// (ARCH §18.1). What follows samples what actually runs out.
+
+/// Latest sampled host headroom in MiB. 0 = not yet sampled.
+static LATEST_HEADROOM_MB: AtomicU64 = AtomicU64::new(0);
+
+pub fn latest_headroom_mb() -> Option<u64> {
+    match LATEST_HEADROOM_MB.load(Ordering::Relaxed) {
+        0 => None,
+        v => Some(v),
+    }
+}
+
+/// Absolute floor under the RAM-derived headroom warning, so a small host does
+/// not warn continuously about a headroom level that is normal for it.
+const HEADROOM_FLOOR_MB: u64 = 4096;
+
+/// Fraction of RAM below which headroom is worth saying out loud.
+///
+/// 15% is derived from the measurement, not chosen: the pre-restart daemon sat
+/// at 19.1 GB MemAvailable on a 125 GB box (15.3%) and that is the regime the
+/// kills happened in — so a warning at 18.75 GB fires while there is still
+/// room to act, and a lower threshold would only announce the OOM.
+const HEADROOM_SOFT_PCT: u64 = 15;
+
+/// Warn threshold for host headroom. Always on: unlike a self-SIGTERM, saying
+/// "the box is running out" costs nothing and is the signal that was missing
+/// through all six kills.
+pub fn headroom_soft_mb() -> u64 {
+    let derived = derived_headroom_soft_mb(total_system_ram_mb());
+    parse_limit_mb(
+        std::env::var("SOVEREIGN_HEADROOM_SOFT_MB").ok().as_deref(),
+        Some(derived),
+    )
+    .unwrap_or(derived)
+}
+
+/// Pure derivation, so the threshold is testable without a host.
+fn derived_headroom_soft_mb(total_ram_mb: Option<u64>) -> u64 {
+    total_ram_mb
+        .map(|ram| (ram * HEADROOM_SOFT_PCT / 100).max(HEADROOM_FLOOR_MB))
+        .unwrap_or(HEADROOM_FLOOR_MB)
+}
+
+/// Hard floor: graceful self-restart when host headroom falls below it.
+///
+/// **Default OFF**, for the same reason the RSS hard limit is: a self-SIGTERM
+/// only helps under a supervisor that relaunches. This is NOT the inert-guard
+/// problem above — that guard measured a quantity that could not reach its
+/// threshold; this one is opt-in but fires on the quantity that does.
+pub fn headroom_hard_mb() -> Option<u64> {
+    headroom_hard_policy(
+        std::env::var("SOVEREIGN_HEADROOM_HARD_MB").ok().as_deref(),
+        total_system_ram_mb(),
+    )
+}
+
+/// Pure policy, mirroring [`hard_limit_policy`]'s precedence so the two hard
+/// limits cannot drift into disagreeing about what `off` or garbage means.
+fn headroom_hard_policy(raw: Option<&str>, total_ram_mb: Option<u64>) -> Option<u64> {
+    match raw.map(str::trim) {
+        None | Some("0") | Some("off") | Some("OFF") => None,
+        Some(v) if v.eq_ignore_ascii_case("auto") => {
+            total_ram_mb.map(|ram| (ram * HEADROOM_SOFT_PCT / 200).max(HEADROOM_FLOOR_MB / 2))
+        }
+        Some(v) => v.parse::<u64>().ok().filter(|&n| n > 0),
+    }
+}
+
+/// Host memory headroom in MiB — what is left for EVERYONE, not what this
+/// process holds.
+///
+/// Reports absence rather than a guess when the platform has no answer
+/// (ARCH §18.3): a headroom of `None` must never be read as a headroom of 0,
+/// which would trip the floor on every tick.
+fn host_available_mb() -> Option<u64> {
+    #[cfg(target_os = "linux")]
+    {
+        // `MemAvailable` is the kernel's own estimate of what a new allocation
+        // can get without swapping — reclaimable page cache included. That is
+        // the right number precisely because it is NOT `MemFree`: most of a
+        // healthy box's RAM is cache, and a free-only reading would fire
+        // continuously on a machine that is perfectly fine.
+        let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
+        for line in meminfo.lines() {
+            if let Some(rest) = line.strip_prefix("MemAvailable:") {
+                let kb: u64 = rest.split_whitespace().next()?.parse().ok()?;
+                return Some(kb / 1024);
+            }
+        }
+        None
+    }
+    #[cfg(target_os = "macos")]
+    {
+        // No MemAvailable equivalent. free + inactive + purgeable is the
+        // closest honest analogue: those are the pages the pager hands to a
+        // new allocation before it starts compressing.
+        let mut count: libc::mach_msg_type_number_t = (std::mem::size_of::<libc::vm_statistics64>()
+            / std::mem::size_of::<libc::integer_t>())
+            as libc::mach_msg_type_number_t;
+        let mut stats: libc::vm_statistics64 = unsafe { std::mem::zeroed() };
+        // SAFETY: out-struct is zeroed and `count` is its size in integer_t
+        // units, which is what host_statistics64 expects.
+        let rc = unsafe {
+            libc::host_statistics64(
+                libc::mach_host_self(),
+                libc::HOST_VM_INFO64,
+                &mut stats as *mut _ as *mut libc::integer_t,
+                &mut count,
+            )
+        };
+        if rc != libc::KERN_SUCCESS {
+            return None;
+        }
+        let page = unsafe { libc::sysconf(libc::_SC_PAGESIZE) };
+        if page <= 0 {
+            return None;
+        }
+        let pages =
+            stats.free_count as u64 + stats.inactive_count as u64 + stats.purgeable_count as u64;
+        Some(pages * page as u64 / (1024 * 1024))
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    {
+        None
+    }
 }
 
 /// The watch-loop body, exposed so the daemon can run it under
@@ -250,6 +404,8 @@ pub async fn watch_loop(interval: Duration) {
         soft_from_env = std::env::var_os("SOVEREIGN_RSS_SOFT_LIMIT_MB").is_some(),
         hard_from_env = std::env::var_os("SOVEREIGN_RSS_HARD_LIMIT_MB").is_some(),
         interval_secs = interval.as_secs(),
+        headroom_soft_mb = headroom_soft_mb(),
+        headroom_hard_mb = headroom_hard_mb(),
         "memory-watch: armed"
     );
     if hard.is_none() {
@@ -282,8 +438,55 @@ pub async fn watch_loop(interval: Duration) {
         // is one interval in.
         ticker.tick().await;
         let mut gate = WarnGate::new();
+        let mut headroom_gate = WarnGate::new();
+        let headroom_soft = headroom_soft_mb();
+        let headroom_hard = headroom_hard_mb();
         loop {
             ticker.tick().await;
+
+            // Host headroom FIRST: it is the quantity that actually runs out,
+            // and it is sampled even when the RSS read fails so a box in
+            // trouble still says so.
+            if let Some(avail_mb) = tokio::task::spawn_blocking(host_available_mb)
+                .await
+                .ok()
+                .flatten()
+            {
+                LATEST_HEADROOM_MB.store(avail_mb, Ordering::Relaxed);
+                if let Some(floor) = headroom_hard {
+                    if avail_mb < floor {
+                        tracing::error!(
+                            headroom_mb = avail_mb,
+                            headroom_hard_mb = floor,
+                            rss_mb = latest_rss_mb(),
+                            "memory-watch: HOST HEADROOM below floor — initiating graceful \
+                             restart. NOTE: this is not an accusation. Headroom is shared, \
+                             the daemon may not be what consumed it, and it exits because \
+                             it is the process that can come back cleanly"
+                        );
+                        HARD_EXIT_REQUESTED.store(true, Ordering::SeqCst);
+                        #[cfg(unix)]
+                        // SAFETY: raise(SIGTERM) on our own pid is
+                        // async-signal-safe and handled by the daemon's
+                        // signal listener.
+                        unsafe {
+                            libc::raise(libc::SIGTERM);
+                        }
+                        return;
+                    }
+                }
+                if headroom_gate.observe_below(avail_mb, headroom_soft, Instant::now()) {
+                    tracing::warn!(
+                        headroom_mb = avail_mb,
+                        headroom_soft_mb = headroom_soft,
+                        rss_mb = latest_rss_mb(),
+                        "memory-watch: host memory headroom low — the BOX is running out, \
+                         which is what the kernel OOM killer resolves by killing this \
+                         daemon (oom_score_adj:200). Not necessarily this process's doing"
+                    );
+                }
+            }
+
             let rss = tokio::task::spawn_blocking(current_rss_mb)
                 .await
                 .ok()
@@ -450,6 +653,103 @@ mod tests {
         // Soft must sit below hard by construction so the warn ladder
         // fires before the restart.
         assert!(SOFT_PCT < HARD_PCT);
+    }
+
+    // ── host headroom ──────────────────────────────────────────────────
+
+    /// THE NAMED FAILING INPUT (ARCH §18.1) — the state the old guard slept
+    /// through, replayed as an assertion.
+    ///
+    /// Measured on the Halo 2026-08-25 (note `05cbffed`): 125 GB box, daemon
+    /// at 36.4 GiB anon-rss when the kernel killed it, MemAvailable down to
+    /// 19.1 GB. The RSS hard limit at `auto` was ~108 GB, so it could not
+    /// fire — and its steady state was 36.0 GiB, so no explicit value could
+    /// have separated normal from fatal either. A headroom warning at 15% of
+    /// RAM is 18.75 GB, which is inside that regime.
+    #[test]
+    fn the_headroom_warning_fires_where_the_rss_limit_could_not() {
+        const HALO_RAM_MB: u64 = 125 * 1024;
+        let soft = derived_headroom_soft_mb(Some(HALO_RAM_MB));
+
+        // The RSS guard, for contrast. Asserted against the process size the
+        // kernel actually killed at (36.4 GiB) rather than against a literal
+        // limit: HARD_PCT is platform-conditional (85% Linux / 65% macOS), so
+        // a hardcoded expectation passes on one host and fails on the other
+        // while testing nothing. The defect is the RATIO — the limit sits
+        // multiples above where death occurs, on either platform.
+        const OBSERVED_KILL_RSS_MB: u64 = 37_274; // 36.4 GiB
+        let rss_auto = hard_limit_policy(Some("auto"), Some(HALO_RAM_MB)).unwrap();
+        assert!(
+            rss_auto > OBSERVED_KILL_RSS_MB * 2,
+            "the RSS auto limit ({rss_auto} MiB) sits more than 2x above the \
+             {OBSERVED_KILL_RSS_MB} MiB the process was at when the kernel killed \
+             it — which is why it never fired"
+        );
+
+        // The headroom guard fires in the observed pre-kill regime.
+        let observed_pre_kill_mb = 19_100;
+        assert!(
+            observed_pre_kill_mb < soft,
+            "headroom soft ({soft} MiB) must be above the 19.1 GB the box was \
+             actually at before the kills, or this guard is inert too"
+        );
+        // …and stays quiet in the healthy regime measured after the restart.
+        let observed_post_restart_mb = 48_700;
+        assert!(
+            observed_post_restart_mb > soft,
+            "a healthy box (48.7 GB free after restart) must not warn"
+        );
+    }
+
+    /// A small host must not warn continuously about a headroom level that is
+    /// normal for it — 15% of 16 GB is 2.4 GB, which a laptop lives at.
+    #[test]
+    fn a_small_host_uses_the_absolute_floor() {
+        assert_eq!(derived_headroom_soft_mb(Some(16 * 1024)), HEADROOM_FLOOR_MB);
+        assert_eq!(derived_headroom_soft_mb(None), HEADROOM_FLOOR_MB);
+        // A large host uses the percentage, not the floor.
+        assert!(derived_headroom_soft_mb(Some(125 * 1024)) > HEADROOM_FLOOR_MB);
+    }
+
+    /// The hard floor is OFF unless asked for, and agrees with the RSS hard
+    /// limit about what `off`/garbage mean — two guards that disagree about
+    /// their own kill-switch is the §10.6 smell.
+    #[test]
+    fn the_headroom_hard_floor_is_off_by_default() {
+        let ram = Some(125 * 1024);
+        for raw in [None, Some("0"), Some("off"), Some("OFF"), Some("banana")] {
+            assert_eq!(
+                headroom_hard_policy(raw, ram),
+                None,
+                "{raw:?} must leave the floor disabled"
+            );
+            assert_eq!(
+                hard_limit_policy(raw, ram),
+                None,
+                "{raw:?} — RSS side agrees"
+            );
+        }
+        assert!(headroom_hard_policy(Some("auto"), ram).is_some());
+        assert_eq!(headroom_hard_policy(Some("2048"), ram), Some(2048));
+    }
+
+    /// `observe_below` is the hysteresis the warning rides: one line on the
+    /// downward crossing, silence while it stays low, and re-arm on recovery.
+    #[test]
+    fn observe_below_fires_on_the_downward_crossing_only() {
+        let mut g = WarnGate::new();
+        let t0 = Instant::now();
+        assert!(!g.observe_below(20_000, 18_000, t0), "healthy — silent");
+        assert!(
+            g.observe_below(17_000, 18_000, t0),
+            "crossed down — warn once"
+        );
+        assert!(!g.observe_below(16_000, 18_000, t0), "still low — no spam");
+        assert!(!g.observe_below(19_000, 18_000, t0), "recovered — silent");
+        assert!(
+            g.observe_below(17_500, 18_000, t0),
+            "crossed down again after recovery — warn again"
+        );
     }
 
     #[test]

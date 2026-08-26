@@ -140,9 +140,7 @@ fn run(args: SmokeArgs) -> ExitCode {
     // Suppress C-level stderr so the parent's status decisions are
     // based on exit code / signal, not stderr noise. Set
     // `SOVEREIGN_LLAMA_LOGS=1` to see them when debugging this path.
-    if std::env::var("SOVEREIGN_LLAMA_LOGS").ok().as_deref() != Some("1") {
-        backend.void_logs();
-    }
+    crate::llama_logs::LlamaLogs::from_env().install(&mut backend);
     let backend = Arc::new(backend);
 
     let model_params = LlamaModelParams::default().with_n_gpu_layers(args.n_gpu_layers);

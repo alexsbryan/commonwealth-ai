@@ -102,17 +102,22 @@ async fn runtime_with_digest_provider() -> (Runtime, Arc<StubDigestProvider>) {
     let tools = Arc::new(ToolRegistry::new());
     let approval: Arc<dyn ApprovalChannel> = Arc::new(AutoApprovalChannel);
 
-    let runtime = Runtime::new(
-        inference,
-        Box::new(UnusedRouter),
-        Box::new(planner),
-        tools,
-        store_trait,
-        skills,
-        approval,
-        InferenceConfig::default(),
-    )
-    .with_landscape_digests(Arc::clone(&provider) as Arc<dyn LandscapeDigestProvider>);
+    let runtime = Runtime::new(sovereign_core::RuntimeParts {
+        landscape_digests: Some(Arc::clone(&provider) as Arc<dyn LandscapeDigestProvider>),
+        ..sovereign_core::RuntimeParts::new(
+            inference,
+            Box::new(UnusedRouter),
+            Box::new(planner),
+            tools,
+            store_trait,
+            skills,
+            approval,
+            InferenceConfig::default(),
+            // Phase 4b: enrichment is a required argument, not eight
+            // forgettable builders.
+            sovereign_core::runtime::lane::LaneSources::none(),
+        )
+    });
 
     (runtime, provider)
 }

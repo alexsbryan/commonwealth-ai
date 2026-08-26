@@ -78,18 +78,18 @@ pub struct ToolCallEvent {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct NotesByKind {
-    pub decisions: Vec<NoteRow>,
-    pub invariants: Vec<NoteRow>,
-    pub uncertainties: Vec<NoteRow>,
-    pub attempts: Vec<NoteRow>,
-    pub deviations: Vec<NoteRow>,
-    pub reflections: Vec<NoteRow>,
-    pub redteam_findings: Vec<NoteRow>,
-    pub other: Vec<NoteRow>,
+    pub decisions: Vec<ManifestNote>,
+    pub invariants: Vec<ManifestNote>,
+    pub uncertainties: Vec<ManifestNote>,
+    pub attempts: Vec<ManifestNote>,
+    pub deviations: Vec<ManifestNote>,
+    pub reflections: Vec<ManifestNote>,
+    pub redteam_findings: Vec<ManifestNote>,
+    pub other: Vec<ManifestNote>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct NoteRow {
+pub struct ManifestNote {
     pub id: String,
     pub kind: String,
     pub content: String,
@@ -244,7 +244,7 @@ fn load_notes(notes_db: &Path, session_id: &str) -> Result<NotesByKind> {
         .context("preparing notes query")?;
     let mapped = stmt
         .query_map(params![session_id], |r| {
-            Ok(NoteRow {
+            Ok(ManifestNote {
                 id: r.get(0)?,
                 kind: r.get(1)?,
                 content: r.get(2)?,

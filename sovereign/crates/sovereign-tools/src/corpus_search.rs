@@ -22,63 +22,29 @@
 
 use std::collections::HashSet;
 
-use async_trait::async_trait;
-
 use corpus_engine::CorpusIndex;
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
+use std::sync::Arc;
 
 pub struct CorpusSearchTool;
 
-#[async_trait]
-impl Tool for CorpusSearchTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "corpus_search".to_string(),
-            name: "corpus_search".to_string(),
-            description: "Rank a corpus by similarity to a query vector. Returns the top-k \
-                          hits as a collection of {source_doc_id, title, score, text} — the \
-                          read side of `corpus_store`. Pre-embed the query with `embed:default`."
-                .to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "corpus": { "type": "string", "description": "Corpus id (directory under the index dir)" },
-                    "embedding": { "type": "string", "description": "Query vector — e.g. {seed_vec.output} from an embed: step" },
-                    "query": { "type": "string", "description": "Optional query text for hybrid lexical (FTS) recall on top of vector similarity" },
-                    "top_k": { "type": "string", "description": "How many hits to return (default 10)" },
-                    "single": { "type": "boolean", "description": "Return the single top hit as an object (or null) instead of an array — for resolution under for_each" },
-                    "exclude": { "type": "string", "description": "Array of source_doc_ids (or objects with source_doc_id) to drop from results — e.g. {resolved.output}" },
-                    "index_dir": { "type": "string", "description": "Index root. Default: ~/.svrnmesh/indexes" }
-                },
-                "required": ["corpus", "embedding"]
-            }),
-            examples: vec![],
-            effect: Effect::Read,
-            idempotency: Idempotency::Idempotent,
-            latency: Latency::Fast,
-            scope: Scope::Persistent,
-            output_schema: Some(serde_json::json!({
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "source_doc_id": { "type": "string" },
-                        "title": { "type": "string" },
-                        "score": { "type": "number" },
-                        "text": { "type": "string" }
-                    }
-                }
-            })),
-        }
+impl CorpusSearchTool {
+    /// Bind this tool's state to its `corpus_search` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("corpus_search", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![] // Reading your own corpus needs no special permission.
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `corpus_search`.
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus = str_param(params, "corpus")?;
         let query_text = params.get("query").and_then(|v| v.as_str()).unwrap_or("");
         let top_k = parse_top_k(params).unwrap_or(10);
@@ -248,18 +214,7 @@ fn default_index_dir() -> std::path::PathBuf {
 mod tests {
     use super::*;
     use crate::corpus_store::CorpusStoreTool;
-
-    fn ctx() -> ToolContext {
-        ToolContext {
-            conversation_id: Default::default(),
-            task_id: None,
-            working_directory: None,
-            in_reasoning_loop: false,
-            agent_session_token: None,
-            turn_index: 0,
-            ..Default::default()
-        }
-    }
+    use sovereign_core::traits::Tool;
 
     /// Definition of done: store a corpus, then `corpus_search` it by one of the
     /// stored vectors and get that chunk back, ranked first, with a REAL score
@@ -293,7 +248,8 @@ mod tests {
             "build_indexes": false
         });
         CorpusStoreTool
-            .execute(&store_params, &ctx())
+            .declared()
+            .execute(&store_params, &ToolContext::default())
             .await
             .unwrap();
 
@@ -305,7 +261,7 @@ mod tests {
             "index_dir": index_dir.to_string_lossy()
         });
         let out = CorpusSearchTool
-            .execute(&search_params, &ctx())
+            .run(&search_params, &ToolContext::default())
             .await
             .unwrap();
         let arr = match out {
@@ -347,7 +303,10 @@ mod tests {
             "embedding": [0.1, 0.2, 0.3],
             "index_dir": dir.path().join("indexes").to_string_lossy()
         });
-        let err = CorpusSearchTool.execute(&params, &ctx()).await.unwrap_err();
+        let err = CorpusSearchTool
+            .run(&params, &ToolContext::default())
+            .await
+            .unwrap_err();
         let msg = err.to_string();
         assert!(msg.contains("not found"), "{msg}");
         assert!(
@@ -388,19 +347,23 @@ mod tests {
                 "index_dir": index_dir.to_string_lossy(),
                 "build_indexes": false
             });
-            CorpusStoreTool.execute(&p, &ctx()).await.unwrap();
+            CorpusStoreTool
+                .declared()
+                .execute(&p, &ToolContext::default())
+                .await
+                .unwrap();
         }
 
         // single=true → ONE object (not an array), and it's alpha (its own vector).
         let single = CorpusSearchTool
-            .execute(
+            .run(
                 &serde_json::json!({
                     "corpus": "films",
                     "embedding": [1.0, 0.0, 0.0, 0.0],
                     "single": true,
                     "index_dir": index_dir.to_string_lossy()
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();
@@ -416,7 +379,7 @@ mod tests {
         // exclude=[{source_doc_id: alpha}] → alpha never appears, bravo (runner-up)
         // does. Proves over-fetch-and-drop keeps real results, not just removes one.
         let recs = CorpusSearchTool
-            .execute(
+            .run(
                 &serde_json::json!({
                     "corpus": "films",
                     "embedding": [1.0, 0.0, 0.0, 0.0],
@@ -424,7 +387,7 @@ mod tests {
                     "top_k": "5",
                     "index_dir": index_dir.to_string_lossy()
                 }),
-                &ctx(),
+                &ToolContext::default(),
             )
             .await
             .unwrap();

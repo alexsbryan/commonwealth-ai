@@ -1,0 +1,15 @@
+error[E0423]: cannot initialize a tuple struct which contains private fields
+ --> tests/ui/reason_by_tuple_struct.rs:6:13
+  |
+6 |     let _ = Reason("unknown".to_string());
+  |             ^^^^^^
+  |
+note: constructor is not visible here due to private fields
+ --> src/judgement.rs
+  |
+  | pub struct Reason(String);
+  |                   ^^^^^^ private field
+help: you might have meant to use the `literal` associated function
+  |
+6 |     let _ = Reason::literal("unknown".to_string());
+  |                   +++++++++

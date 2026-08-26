@@ -45,7 +45,7 @@ pub struct TypedAxis {
     /// Which atom shape the resolver projects this axis onto.
     /// Drives `collect_axis_atoms` (the bench-side accessor) and
     /// is the contract the resolver's projection arm must honour.
-    pub atom_kind: AtomKind,
+    pub atom_shape: AxisAtomShape,
 
     /// Fields whose mismatch makes a candidate atom NOT a match.
     /// `[GatingField::Name]` is the minimum; some axes layer
@@ -67,6 +67,14 @@ pub struct TypedAxis {
 
 /// Which atom shape the axis projects onto.
 ///
+/// NOT an atom kind: [`super::atoms::AtomType`] is the closed set of atom
+/// kinds. This is an axis's SELECTOR over atoms — the same envelope variant
+/// appears under several shapes, qualified by a payload tag. Named `AtomKind`
+/// until 2026-08-20, which collided with a second, unrelated `AtomKind` in
+/// `analysis::tension_classifier` (now `TensionSide`) and read as a third
+/// spelling of `AtomType`. Renamed apart rather than merged — three genuinely
+/// different concepts, three names.
+///
 /// Most variants are `AtomEnvelope` variants directly. The two
 /// "WithKind" variants pin a qualifier tag so multiple axes can
 /// share the Entity or Claim envelope without colliding (e.g.
@@ -74,7 +82,7 @@ pub struct TypedAxis {
 /// `evidence` and `concession` both live on `Claim` distinguished
 /// by `claim_kind`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AtomKind {
+pub enum AxisAtomShape {
     Entity,
     /// `Entity` filtered by `concept_kind == <tag>` (snake_case).
     EntityWithConceptKind(&'static str),
@@ -127,7 +135,7 @@ pub const AXIS_CATALOG: &[TypedAxis] = &[
     TypedAxis {
         key: "mechanism",
         discourse_mode: DiscourseMode::Argumentative,
-        atom_kind: AtomKind::EntityWithConceptKind("mechanism"),
+        atom_shape: AxisAtomShape::EntityWithConceptKind("mechanism"),
         gating_fields: &[GatingField::Name],
         informational_fields: &["description_keywords_any", "domain_contains_any"],
         description: "Named causal/explanatory mechanism the section's argument turns on.",
@@ -135,7 +143,7 @@ pub const AXIS_CATALOG: &[TypedAxis] = &[
     TypedAxis {
         key: "named_position",
         discourse_mode: DiscourseMode::Argumentative,
-        atom_kind: AtomKind::Position,
+        atom_shape: AxisAtomShape::Position,
         gating_fields: &[GatingField::Name, GatingField::Stance],
         informational_fields: &["content_contains_any", "proponent_contains_any"],
         description: "Named position with author stance (endorse / rebut / survey / mixed).",
@@ -143,7 +151,7 @@ pub const AXIS_CATALOG: &[TypedAxis] = &[
     TypedAxis {
         key: "evidence",
         discourse_mode: DiscourseMode::Argumentative,
-        atom_kind: AtomKind::ClaimWithKind("evidence"),
+        atom_shape: AxisAtomShape::ClaimWithKind("evidence"),
         gating_fields: &[GatingField::Name, GatingField::Kind],
         informational_fields: &["content_contains_any", "supports_contains_any"],
         description:
@@ -152,7 +160,7 @@ pub const AXIS_CATALOG: &[TypedAxis] = &[
     TypedAxis {
         key: "opposition",
         discourse_mode: DiscourseMode::Argumentative,
-        atom_kind: AtomKind::Opposition,
+        atom_shape: AxisAtomShape::Opposition,
         gating_fields: &[GatingField::Opposition],
         informational_fields: &["axis_contains_any"],
         description: "Symmetric opposition between two readings; left/right are order-independent.",
@@ -160,7 +168,7 @@ pub const AXIS_CATALOG: &[TypedAxis] = &[
     TypedAxis {
         key: "concession",
         discourse_mode: DiscourseMode::Argumentative,
-        atom_kind: AtomKind::ClaimWithKind("concession"),
+        atom_shape: AxisAtomShape::ClaimWithKind("concession"),
         gating_fields: &[GatingField::Name],
         informational_fields: &["addresses_contains_any", "outcome"],
         description: "Concessive move; `outcome` and `addresses` edge-walk are informational.",

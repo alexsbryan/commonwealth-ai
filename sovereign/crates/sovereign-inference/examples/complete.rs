@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::CompletionRequest;
-use sovereign_inference::embedded::EmbeddedLlamaCpp;
+use sovereign_inference::embedded::{EmbeddedLlamaCpp, SlotWindows};
 
 fn print_usage() {
     eprintln!("Usage: complete --model <path.gguf> --prompt <text> [--stream] [--max-tokens N]");
@@ -111,14 +111,19 @@ async fn main() {
         args.ctx,
         args.gpu_layers
     );
-    let provider =
-        match EmbeddedLlamaCpp::load_full(&args.model, None, None, args.ctx, args.gpu_layers) {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("Failed to load model: {e}");
-                std::process::exit(1);
-            }
-        };
+    let provider = match EmbeddedLlamaCpp::load_full(
+        &args.model,
+        None,
+        None,
+        SlotWindows::uniform(args.ctx),
+        args.gpu_layers,
+    ) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Failed to load model: {e}");
+            std::process::exit(1);
+        }
+    };
 
     let caps = provider.capabilities();
     eprintln!(

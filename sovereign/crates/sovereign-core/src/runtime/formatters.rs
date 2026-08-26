@@ -270,7 +270,7 @@ pub(crate) fn format_scored_chunks_counted(
                 format!("[Catalog: {title}{contested_suffix}]"),
                 &mut catalog_parts,
             )
-        } else if c.metadata.get("source").map(String::as_str) == Some("raptor") {
+        } else if c.provenance.grain() == kernel_types::Grain::Summary {
             // Derived-overview tier — checked BEFORE the web branch
             // because a RAPTOR virtual chunk carries a URL and no
             // chunk_id, the exact signature the web guard keys on.
@@ -623,6 +623,8 @@ mod folder_attribution_tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -766,6 +768,8 @@ mod folder_attribution_tests {
             chunk_id: Some(42),
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let web = ScoredChunk {
             content: "Breaking news…".into(),
@@ -777,6 +781,8 @@ mod folder_attribution_tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let out = format_scored_chunks_with_kinds(&[corpus, web], 100_000, None, None, None, None);
         assert!(
@@ -946,6 +952,8 @@ mod formatter_stream_section_tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1025,7 +1033,8 @@ mod formatter_stream_section_tests {
         );
         c.url = Some("https://plato.stanford.edu/entries/compatibilism/".into());
         c.chunk_id = None;
-        c.metadata.insert("source".into(), "raptor".into());
+        c.provenance =
+            corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary");
         c.metadata.insert("raptor_level".into(), "1".into());
         let web = {
             let mut w = chunk("web", "live-result", "Genuine web fetch.", None, None);
@@ -1059,7 +1068,8 @@ mod formatter_stream_section_tests {
     fn overview_section_renders_after_passages() {
         let mut summary = chunk("sep", "free-will", "Summary body.", None, None);
         summary.url = Some("https://plato.stanford.edu/entries/free-will/".into());
-        summary.metadata.insert("source".into(), "raptor".into());
+        summary.provenance =
+            corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary");
         let leaf = chunk("sep", "free-will", "Leaf passage body.", None, None);
         // Summary FIRST in the vector (reserve_raptor_chunks order) —
         // the section order must still put passages first.

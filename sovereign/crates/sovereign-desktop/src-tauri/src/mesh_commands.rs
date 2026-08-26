@@ -99,7 +99,7 @@ pub async fn mesh_create(
             .map_err(|e| format!("parse mesh/create response: {e}"));
     }
 
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
     // Explicit create = opt into serving remote peers → expose the
@@ -164,7 +164,7 @@ pub async fn mesh_join(
 
     // Local mode keeps the deep-link-only parser for backward compat;
     // the HTTP path above accepts bare keys too.
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
     let parsed = parse_deep_link(&link).ok_or_else(|| "Invalid join link".to_string())?;
@@ -286,7 +286,7 @@ pub async fn mesh_get_state(
         return Ok(Some(MeshStateResponse::from_remote_status(remote)));
     }
 
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         tracing::warn!(
             target: "mesh_state",
             "mesh_get_state(local): no in-process mesh daemon — Members empty"
@@ -335,7 +335,7 @@ pub async fn mesh_get_state(
 /// we wouldn't have detected Attach in the first place.
 #[tauri::command]
 pub async fn mesh_is_running(state: State<'_, Arc<AppState>>) -> Result<bool, String> {
-    match state.mesh.as_ref() {
+    match state.mesh().await {
         Some(m) => Ok(m.is_running().await),
         None => Ok(true), // Attach mode: the external daemon is always running.
     }
@@ -377,7 +377,7 @@ pub async fn mesh_rotate_invite(
     // EmbeddedDaemon method just for this. Mirror what the HTTP
     // handler does: rotate on disk, then push the plaintext back
     // into the daemon so subsequent status polls see the new key.
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
     let data_dir = mesh.data_dir().to_path_buf();
@@ -408,7 +408,7 @@ pub async fn mesh_leave(state: State<'_, Arc<AppState>>) -> Result<(), String> {
         }
         return Ok(());
     }
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
     // User clicked "Leave" — leave the current mesh AND re-create a fresh
@@ -502,7 +502,7 @@ pub fn suggest_node_name() -> String {
 /// the MeshDiagnosticsPanel every few seconds.
 #[tauri::command]
 pub async fn mesh_diagnostics(state: State<'_, Arc<AppState>>) -> Result<MeshDiagnostics, String> {
-    let (peers, daemon_running) = match state.mesh.as_ref() {
+    let (peers, daemon_running) = match state.mesh().await {
         Some(m) => {
             let peers = m
                 .discovered_peers()
@@ -691,7 +691,7 @@ pub async fn mesh_get_contributions(
             .await
             .map_err(|e| format!("parse /internal/contribution/view response: {e}"));
     }
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Ok(Vec::new());
     };
     let Some(app_state) = mesh.app_state().await else {
@@ -753,7 +753,7 @@ pub async fn mesh_set_peer_preference(
              set` instead"
             .into());
     }
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
     let Some(app_state) = mesh.app_state().await else {
@@ -781,7 +781,7 @@ pub async fn mesh_clear_peer_preference(
              clear` instead"
             .into());
     }
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
     let Some(app_state) = mesh.app_state().await else {
@@ -802,7 +802,7 @@ pub async fn mesh_list_peer_preferences(
     if attached_port(&state).is_some() {
         return Ok(Vec::new());
     }
-    let Some(mesh) = state.mesh.as_ref() else {
+    let Some(mesh) = state.mesh().await else {
         return Ok(Vec::new());
     };
     let Some(app_state) = mesh.app_state().await else {

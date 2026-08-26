@@ -24,25 +24,28 @@ use std::time::Duration;
 use tauri::{AppHandle, Emitter};
 use tracing::{info, warn};
 
+use sovereign_contracts::launch::DaemonHost;
+
 use crate::supervisor::{HealthTarget, Supervisor, SupervisorConfig, SupervisorState};
 
 /// Supervised child-process mode is the DEFAULT (DAEMON_RESILIENCE.md
-/// P0.1 — the W1 flip, 2026-07-18). Two opt-outs:
+/// P0.1 — the W1 flip, 2026-07-18); the two opt-outs and their precedence
+/// live on [`DaemonHost`].
 ///
-/// - `SOVEREIGN_USE_SUPERVISOR=0` (or `false`) — the kill-switch back
-///   to the in-process `EmbeddedDaemon`. (`=1`/`true`, the old opt-IN
-///   spelling, is accepted and redundant.)
-/// - `SOVEREIGN_FORCE_LOCAL=1` — its documented meaning is "THIS
-///   process runs the weights" (the real-mode desktop harnesses and
-///   the run-local-while-a-daemon-is-up power case), which a child
-///   daemon would contradict.
+/// **This function no longer reads the environment** (`quality/TOPOLOGY.md`
+/// Phase 10, §6.2). It used to, and it was called from three points of use, so
+/// the answer to "does this desktop supervise a child?" was a predicate over
+/// `std::env` evaluated three times at three moments — invisible to
+/// go-to-definition, and re-derivable differently by a fourth caller. The
+/// process now resolves it ONCE in `main` and this reads that decision.
 pub fn is_enabled() -> bool {
-    if std::env::var("SOVEREIGN_FORCE_LOCAL").is_ok_and(|v| v == "1") {
-        return false;
-    }
-    !std::env::var("SOVEREIGN_USE_SUPERVISOR")
-        .map(|v| v == "0" || v.eq_ignore_ascii_case("false"))
-        .unwrap_or(false)
+    crate::launch_mode::daemon_host().is_supervised()
+}
+
+/// The same decision, with its reason, for the log lines that used to say only
+/// "supervisor disabled".
+pub fn host() -> DaemonHost {
+    crate::launch_mode::daemon_host()
 }
 
 /// A live supervised daemon child: the supervisor plus the handle to its
@@ -141,7 +144,7 @@ fn resolve_daemon_child() -> Option<SpawnSpec> {
     let exe = std::env::current_exe().ok()?;
     Some(SpawnSpec {
         binary: exe,
-        args: vec!["--daemon-child".into()],
+        args: vec![sovereign_contracts::launch::DAEMON_CHILD_FLAG.into()],
     })
 }
 
@@ -174,7 +177,16 @@ pub async fn maybe_start(
         } => cfg.clone(),
         _ => return (mode, None),
     };
-    if !is_enabled() {
+    let host = host();
+    if !host.is_supervised() {
+        // NAMES WHICH opt-out, not just that one fired. Until Phase 10 gave
+        // the decision a type this could only report a bare false, so an
+        // operator could not tell a harness's `SOVEREIGN_FORCE_LOCAL` from a
+        // user's kill-switch (§18.3).
+        info!(
+            host = host.as_str(),
+            "supervisor: not engaging — the desktop hosts its own daemon"
+        );
         return (mode, None);
     }
 
@@ -444,7 +456,7 @@ mod tests {
         daemon_supervisor_config(
             SpawnSpec {
                 binary: PathBuf::from("/nonexistent/sovereign-desktop"),
-                args: vec!["--daemon-child".into()],
+                args: vec![sovereign_contracts::launch::DAEMON_CHILD_FLAG.into()],
             },
             9741,
             PathBuf::from("/nonexistent/crash-logs"),

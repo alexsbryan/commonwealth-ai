@@ -67,6 +67,7 @@ impl Runtime {
             completion,
             self.inference_config.max_tokens,
             self.inference.effective_context_size(),
+            self.router.stamp(),
         )
     }
 }
@@ -78,8 +79,13 @@ pub(crate) fn completion_provenance(
     completion: &CompletionResponse,
     max_tokens_budget: usize,
     context_window: Option<u32>,
+    // `router` is passed IN rather than read from a `Runtime`: this function
+    // is deliberately the pure core (see the note above), and the caller is
+    // the only one that knows which router actually routed.
+    router: Option<sovereign_contracts::types::RouterStamp>,
 ) -> ResponseProvenance {
     ResponseProvenance {
+        router,
         intent,
         search_method: None,
         sources: Vec::new(),
@@ -162,7 +168,13 @@ mod tests {
     /// field lands, every surface-varying field comes back neutral.
     #[test]
     fn completion_provenance_maps_telemetry_and_leaves_surface_fields_neutral() {
-        let p = completion_provenance("ComplexTask".to_string(), &completion(), 4096, Some(16384));
+        let p = completion_provenance(
+            "ComplexTask".to_string(),
+            &completion(),
+            4096,
+            Some(16384),
+            None,
+        );
 
         // Completion/config-derived tail (the fields git shows being
         // mirror-edited across the three handlers).
@@ -191,7 +203,7 @@ mod tests {
         c.oicp_meta = None;
         c.finish_reason = None;
         c.completion_tokens = None;
-        let p = completion_provenance("AttachedDoc".to_string(), &c, 2048, None);
+        let p = completion_provenance("AttachedDoc".to_string(), &c, 2048, None, None);
         assert!(p.oicp_match.is_none());
         assert!(p.finish_reason.is_none());
         assert!(p.completion_tokens.is_none());

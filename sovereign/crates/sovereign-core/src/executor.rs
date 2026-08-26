@@ -726,7 +726,7 @@ impl Executor {
                     .collect::<Vec<_>>()
                     .join("\n");
 
-                let request = CompletionRequest::yes_no(&resolved, &context_str);
+                let request = crate::slot_policy::yes_no(&resolved, &context_str);
                 let response = self.inference.complete(&request).await?;
                 let target = if response.as_bool() {
                     *if_true

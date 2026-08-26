@@ -9,7 +9,7 @@
 //! off-repo (cross-machine, mesh-replicated), or whenever else the
 //! git path doesn't fit your flow.
 
-use super::args::split_args;
+use super::args::parse_args;
 
 pub(crate) async fn cmd_feature(args: &[String]) -> i32 {
     let Some(sub) = args.first().cloned() else {
@@ -27,7 +27,14 @@ pub(crate) async fn cmd_feature(args: &[String]) -> i32 {
 }
 
 async fn cmd_feature_approve(args: &[String]) -> i32 {
-    let (positional, _flags) = split_args(args);
+    let flags = match parse_args(args) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("atos: {e}");
+            return 2;
+        }
+    };
+    let positional = flags.positionals();
     let Some(feature_id) = positional.first().cloned() else {
         eprintln!("feature approve: missing <id>");
         return 2;

@@ -25,7 +25,7 @@ use serde::{Deserialize, Serialize};
 use tauri::State;
 
 use corpus_engine::Recipe;
-use sovereign_contracts::recipe::notes::{NoteRow, NoteScope, RecipeNotes, ScopeFilter};
+use sovereign_contracts::recipe::notes::{Note, NoteScope, RecipeNotes, ScopeFilter};
 use sovereign_store::recipe_project_store::{RecipeProjectRow, RecipeProjectStore};
 use sovereign_tools::recipe_author::{
     self, checkpoint::restore_checkpoint as do_restore_checkpoint, ArtifactKind, CheckpointMeta,
@@ -229,8 +229,8 @@ pub struct DashboardNoteEntry {
     pub payload: Option<serde_json::Value>,
 }
 
-impl From<NoteRow> for DashboardNoteEntry {
-    fn from(row: NoteRow) -> Self {
+impl From<Note> for DashboardNoteEntry {
+    fn from(row: Note) -> Self {
         let payload = row
             .payload_json
             .as_deref()

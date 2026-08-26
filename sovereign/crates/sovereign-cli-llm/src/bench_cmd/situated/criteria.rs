@@ -384,8 +384,8 @@ applies_to = ["*"]
             bank.items.len()
         );
         let (y, n) = hard.iter().fold((0, 0), |(y, n), i| match i.expected {
-            crate::bench_cmd::rubric::judge::Judgement::Yes => (y + 1, n),
-            crate::bench_cmd::rubric::judge::Judgement::No => (y, n + 1),
+            crate::bench_cmd::rubric::judge::Ballot::Yes => (y + 1, n),
+            crate::bench_cmd::rubric::judge::Ballot::No => (y, n + 1),
         });
         assert!(
             y >= 3 && n >= 3,

@@ -42,7 +42,9 @@ use corpus_engine::enrichment::atlas::atoms::{
     AtomEnvelope, AtomId, AtomsFile, ChunkRef, Configuration, Entity, Event, Opposition, Position,
     Question, Relation, State,
 };
-use corpus_engine::enrichment::atlas::axis_catalog::{all_axes, AtomKind, GatingField, TypedAxis};
+use corpus_engine::enrichment::atlas::axis_catalog::{
+    all_axes, AxisAtomShape, GatingField, TypedAxis,
+};
 use corpus_engine::enrichment::atlas::edges::{Edge, EdgeType, EdgesFile};
 use corpus_engine::enrichment::atlas::ATLAS_DIRNAME;
 use corpus_engine::enrichment::pipeline::atlas::EntityType;
@@ -1127,7 +1129,7 @@ fn tally_unmatched<T>(
 //   3. add a golden TOML block for the corresponding axis.
 //
 // No new Rust file. No new scorer. The catalog's `gating_fields` /
-// `atom_kind` declaration drives `collect_axis_atoms` (candidate
+// `atom_shape` declaration drives `collect_axis_atoms` (candidate
 // pool) and `matches_axis` (gating predicate).
 
 /// Per-expectation row in the uniform view the driver consumes.
@@ -1275,7 +1277,7 @@ impl<'a> AxisCandidate<'a> {
 }
 
 /// Collect candidate atoms for an axis. Filters by qualifier when
-/// the catalog's `AtomKind` is `EntityWithConceptKind` /
+/// the catalog's `AxisAtomShape` is `EntityWithConceptKind` /
 /// `ClaimWithKind`. Returns an empty Vec when atoms.json is absent.
 fn collect_axis_atoms<'a>(axis: &TypedAxis, snap: &'a AtlasSnapshot) -> Vec<AxisCandidate<'a>> {
     let Some(file) = snap.atoms.as_ref() else {
@@ -1283,21 +1285,23 @@ fn collect_axis_atoms<'a>(axis: &TypedAxis, snap: &'a AtlasSnapshot) -> Vec<Axis
     };
     let mut out = Vec::new();
     for atom in &file.atoms {
-        let candidate = match (axis.atom_kind, atom) {
-            (AtomKind::EntityWithConceptKind(tag), AtomEnvelope::Entity(e))
+        let candidate = match (axis.atom_shape, atom) {
+            (AxisAtomShape::EntityWithConceptKind(tag), AtomEnvelope::Entity(e))
                 if e.concept_kind.as_deref() == Some(tag) =>
             {
                 Some(AxisCandidate::Entity(e))
             }
-            (AtomKind::ClaimWithKind(tag), AtomEnvelope::Claim(c))
+            (AxisAtomShape::ClaimWithKind(tag), AtomEnvelope::Claim(c))
                 if c.claim_kind.as_deref() == Some(tag) =>
             {
                 Some(AxisCandidate::Claim(c))
             }
-            (AtomKind::Entity, AtomEnvelope::Entity(e)) => Some(AxisCandidate::Entity(e)),
-            (AtomKind::Claim, AtomEnvelope::Claim(c)) => Some(AxisCandidate::Claim(c)),
-            (AtomKind::Position, AtomEnvelope::Position(p)) => Some(AxisCandidate::Position(p)),
-            (AtomKind::Opposition, AtomEnvelope::Opposition(o)) => {
+            (AxisAtomShape::Entity, AtomEnvelope::Entity(e)) => Some(AxisCandidate::Entity(e)),
+            (AxisAtomShape::Claim, AtomEnvelope::Claim(c)) => Some(AxisCandidate::Claim(c)),
+            (AxisAtomShape::Position, AtomEnvelope::Position(p)) => {
+                Some(AxisCandidate::Position(p))
+            }
+            (AxisAtomShape::Opposition, AtomEnvelope::Opposition(o)) => {
                 Some(AxisCandidate::Opposition(o))
             }
             _ => None,

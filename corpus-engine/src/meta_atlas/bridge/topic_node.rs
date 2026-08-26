@@ -102,7 +102,7 @@ impl BridgeTopic {
         let mut best_any: Option<(f32, String)> = None;
 
         for env in atoms {
-            *atom_profile.entry(atom_type_of(env)).or_insert(0) += 1;
+            *atom_profile.entry(env.atom_type()).or_insert(0) += 1;
 
             let v = classify_articulation(env, preview_of(env));
             inv += v.inventory;
@@ -268,25 +268,6 @@ fn preview_of(env: &AtomEnvelope) -> &str {
     }
 }
 
-/// Map an atom envelope to its [`AtomType`]. Mirrors the match in
-/// `enrichment::atlas::summary` — there is no `AtomEnvelope::atom_type`
-/// accessor to reuse.
-fn atom_type_of(env: &AtomEnvelope) -> AtomType {
-    match env {
-        AtomEnvelope::Entity(_) => AtomType::Entity,
-        AtomEnvelope::Event(_) => AtomType::Event,
-        AtomEnvelope::State(_) => AtomType::State,
-        AtomEnvelope::Relation(_) => AtomType::Relation,
-        AtomEnvelope::Claim(_) => AtomType::Claim,
-        AtomEnvelope::Question(_) => AtomType::Question,
-        AtomEnvelope::Configuration(_) => AtomType::Configuration,
-        AtomEnvelope::ArgumentReconstruction(_) => AtomType::ArgumentReconstruction,
-        AtomEnvelope::Position(_) => AtomType::Position,
-        AtomEnvelope::Opposition(_) => AtomType::Opposition,
-        AtomEnvelope::Asset(_) => AtomType::Asset,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,6 +412,8 @@ mod tests {
             chunk_id: Some(42),
             source_doc_id: Some("12345".into()),
             vector_distance: Some(0.2),
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: crate::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let t = topic_from_chunk("wikipedia", &hit).unwrap();
         assert_eq!(t.corpus_id, "wikipedia");

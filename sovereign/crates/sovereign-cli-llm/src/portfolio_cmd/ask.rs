@@ -94,41 +94,26 @@ pub async fn cmd_ask(args: &[String]) -> i32 {
             .set_conversation_enabled_corpora(&conv_id, Some(vec![corpus_id.clone()]))
             .await;
 
-        match session
-            .runtime
-            .handle_message_stream_as(question, &conv_id, Intent::KnowledgeQuery)
-            .await
-        {
-            Ok(handle) => {
-                let mut stream = handle.stream;
-                while let Some(item) = stream.next().await {
-                    match item {
-                        Ok(chunk) => {
-                            print!("{chunk}");
-                            let _ = std::io::stdout().flush();
-                        }
-                        Err(e) => {
-                            eprintln!("\n[stream error] {e}");
-                            failures += 1;
-                            break;
-                        }
-                    }
-                }
-                println!();
-            }
-            Err(sovereign_core::error::Error::NotImplemented(_)) => {
-                match session.runtime.handle_message(question, &conv_id).await {
-                    Ok(resp) => println!("{}", resp.message.content),
-                    Err(e) => {
-                        eprintln!("turn failed: {e}");
-                        failures += 1;
-                    }
-                }
-            }
-            Err(e) => {
-                eprintln!("stream start failed: {e}");
-                failures += 1;
-            }
+        // ONE turn driver (TOPOLOGY §10 phase 6) — replaces a hand-rolled
+        // drain plus a `NotImplemented` fallback to `handle_message` that
+        // double-wrote the user's message (the streaming path persists it
+        // before refusing a document-attached turn).
+        let sink = crate::turn_sink::StdoutTurnSink::default();
+        sovereign_core::runtime::serve_turn(
+            &session.runtime,
+            session.store.as_ref(),
+            &conv_id,
+            question,
+            sovereign_contracts::types::TurnMode::Grounded,
+            Some(Intent::KnowledgeQuery),
+            None,
+            &sink,
+        )
+        .await;
+        println!();
+        if let Some(e) = sink.failure() {
+            eprintln!("turn failed: {e}");
+            failures += 1;
         }
         render_sources(&session, &conv_id, corpus_id).await;
     }

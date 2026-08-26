@@ -82,9 +82,9 @@ pub async fn run(
                 let verdict = match t.cites_a_source() {
                     Some(cited) => CriterionVerdict {
                         verdict: Some(if cited {
-                            judge::Judgement::Yes
+                            judge::Ballot::Yes
                         } else {
-                            judge::Judgement::No
+                            judge::Ballot::No
                         }),
                         evidence: format!(
                             "structural: gate released {} located quote(s)",

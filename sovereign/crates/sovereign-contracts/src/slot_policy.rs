@@ -169,6 +169,52 @@ impl Workload {
             .with_sharding(posture)
             .with_request_id(format!("wl-{}-{}", self.as_str(), &tag[..8]))
     }
+
+    /// Build the request this workload class declares (SLOT_POLICY §9.4).
+    /// The call site says WHAT the call is; the scheduler resolves WHERE it
+    /// runs. Attaches the OICP requirement bundle, the derived
+    /// `preferred_speed` shadow (§8 — via `latency_to_speed`, never a
+    /// literal), the class think budget, and emits the glassbox `workload=`
+    /// tracing event.
+    ///
+    /// Privacy: LocalOnly. Internal machinery uses this; it is provably
+    /// routing-neutral at the mesh privacy gate. Session-posture-aware callers
+    /// (grounding judges, EnrichBulk fan-out) use [`Self::request_shared`].
+    ///
+    /// Was `CompletionRequest::for_workload` until 2026-08-20. It could not
+    /// stay an inherent constructor once `CompletionRequest` moved down to
+    /// `oicp-types`: the protocol crate would have had to name sovereign's
+    /// workload table to keep it. Living on `Workload` puts the decision on
+    /// the noun that owns it (noun-convergence rung 2b).
+    pub fn request(self, prompt: impl Into<String>) -> CompletionRequest {
+        self.request_shared(prompt, ShardingPrivacy::LocalOnly)
+    }
+
+    /// [`Self::request`] with an explicit privacy posture — the only path by
+    /// which internal work becomes mesh-offloadable. Threading the
+    /// session/operator posture (never hardcoding it) is SLOT_POLICY §2.4.
+    pub fn request_shared(
+        self,
+        prompt: impl Into<String>,
+        posture: ShardingPrivacy,
+    ) -> CompletionRequest {
+        let bundle = self.bundle();
+        let oicp = self.requirements(posture);
+        tracing::debug!(
+            target: "slot_policy",
+            workload = self.as_str(),
+            latency_class = ?bundle.latency,
+            privacy = ?posture,
+            request_id = oicp.request_id.as_deref().unwrap_or(""),
+            "workload request constructed"
+        );
+        let mut req = CompletionRequest::new(&prompt.into());
+        // The ONE canonical shadow derivation (SLOT_POLICY §8).
+        req.preferred_speed = latency_to_speed(bundle.latency);
+        req.think_budget = bundle.think_budget;
+        req.oicp = Some(oicp);
+        req
+    }
 }
 
 /// Effective sharding posture of a request (§3.1: envelope-absent =
@@ -180,23 +226,38 @@ pub fn posture_of(req: &CompletionRequest) -> ShardingPrivacy {
         .unwrap_or(ShardingPrivacy::LocalOnly)
 }
 
-/// §8 request-side derive. `Medium` is a deprecated alias of `Slow`
-/// (both mean "primary work"). NEVER produces `Extended` (rule 4.4 —
-/// only intent/skill declarations emit it).
-pub const fn speed_to_latency(speed: Speed) -> LatencyClass {
-    match speed {
-        Speed::Fast => LatencyClass::Fast,
-        Speed::Medium | Speed::Slow => LatencyClass::Normal,
-    }
-}
+// §8's Speed <-> LatencyClass derivation. The DEFINITIONS moved to
+// `oicp-types` with `Speed` itself — both types are protocol vocabulary, and
+// leaving the map up here would have kept `oicp-client` depending on sovereign
+// for it. This module remains the canonical PATH every call site spells, so
+// the "one home" claim in the header still holds (noun-convergence rung 2b).
+pub use crate::oicp::{latency_to_speed, speed_to_latency};
 
-/// §8 resolve — serve side and shadow side. `Extended` collapses to
-/// the primary slot (there is no third chat slot). NEVER produces
-/// `Medium`.
-pub const fn latency_to_speed(class: LatencyClass) -> Speed {
-    match class {
-        LatencyClass::Fast => Speed::Fast,
-        LatencyClass::Normal | LatencyClass::Extended => Speed::Slow,
+/// Forced yes/no check on the fast slot: 5-token budget, temperature 0, no
+/// thinking. Read the verdict with `CompletionResponse::as_bool`. Used by
+/// `Branch` steps and other binary gates.
+///
+/// SLOT_POLICY §3 Route: a branch-condition check. The envelope makes every
+/// call site scheduler-visible and the honest 5-token budget rides along as
+/// the FastShort hard gate; speed stays Fast (the shadow Route would derive
+/// anyway). Was `CompletionRequest::yes_no` — it reads the workload table, so
+/// it is policy and stayed behind when the request type moved down.
+pub fn yes_no(condition: &str, context: &str) -> CompletionRequest {
+    CompletionRequest {
+        prompt: format!(
+            "Given the following context:\n{context}\n\n\
+             Answer this yes/no question with only \"yes\" or \"no\":\n{condition}"
+        ),
+        preferred_speed: Speed::Fast,
+        max_tokens: Some(5),
+        temperature: Some(0.0),
+        think_budget: Some(0), // No thinking needed for yes/no
+        oicp: Some(
+            Workload::Route
+                .requirements(ShardingPrivacy::LocalOnly)
+                .with_max_output_tokens(5),
+        ),
+        ..Default::default()
     }
 }
 
@@ -317,7 +378,7 @@ mod tests {
     #[test]
     fn shadow_speed_agrees_with_bundle_latency() {
         for w in Workload::ALL {
-            let req = CompletionRequest::for_workload(w, "probe");
+            let req = w.request("probe");
             assert_eq!(
                 speed_to_latency(req.preferred_speed),
                 w.bundle().latency,
@@ -325,5 +386,59 @@ mod tests {
                 w.as_str()
             );
         }
+    }
+
+    // ── The workload constructors, moved here with the methods ─────────
+    //
+    // These tests came from `types/completion.rs` when `for_workload*` and
+    // `yes_no` stayed behind on the policy side of the 2b move. They assert
+    // policy, not vocabulary: which envelope a class attaches, and that the
+    // §8 shadow is derived rather than typed.
+
+    #[test]
+    fn every_workload_request_sets_oicp_version() {
+        // Pins the structural-422 invariant: an envelope missing
+        // `oicp_version` is rejected at the daemon's Json extractor.
+        for w in Workload::ALL {
+            let req = w.request("p");
+            let oicp = req.oicp.expect("workload envelope");
+            assert_eq!(oicp.oicp_version, OICP_VERSION, "{}", w.as_str());
+        }
+    }
+
+    #[test]
+    fn request_defaults_to_local_only() {
+        let req = Workload::Route.request("p");
+        assert_eq!(req.oicp.unwrap().sharding(), ShardingPrivacy::LocalOnly);
+    }
+
+    #[test]
+    fn request_shared_threads_posture() {
+        let req = Workload::Judge.request_shared("p", ShardingPrivacy::MeshAllowed);
+        assert_eq!(req.oicp.unwrap().sharding(), ShardingPrivacy::MeshAllowed);
+    }
+
+    #[test]
+    fn request_tags_request_id() {
+        let req = Workload::Housekeep.request("p");
+        let id = req.oicp.unwrap().request_id.expect("tag");
+        assert!(id.starts_with("wl-housekeep-"), "{id}");
+    }
+
+    #[test]
+    fn with_output_budget_sets_both_max_tokens_and_envelope() {
+        let req = Workload::Route.request("p").with_output_budget(5);
+        assert_eq!(req.max_tokens, Some(5));
+        assert_eq!(req.oicp.unwrap().max_output_tokens, Some(5));
+    }
+
+    #[test]
+    fn yes_no_carries_route_envelope_and_stays_fast() {
+        let yn = yes_no("is it?", "ctx");
+        assert_eq!(yn.preferred_speed, Speed::Fast);
+        let oicp = yn.oicp.expect("route envelope");
+        assert_eq!(oicp.effective_latency_class(), LatencyClass::Fast);
+        assert_eq!(oicp.max_output_tokens, Some(5));
+        assert_eq!(oicp.sharding(), ShardingPrivacy::LocalOnly);
     }
 }

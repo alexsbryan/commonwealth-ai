@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-use async_trait::async_trait;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::Tool;
 use sovereign_core::types::*;
+use std::sync::Arc;
+use sovereign_core::tool_manifest::DeclaredTool;
 
 /// CalDAV calendar tool for reading and creating events.
 pub struct CalendarTool {
@@ -24,39 +24,25 @@ impl CalendarTool {
     }
 }
 
-#[async_trait]
-impl Tool for CalendarTool {
-    fn descriptor(&self) -> ToolDescriptor {
-        ToolDescriptor {
-            id: "calendar".to_string(),
-            name: "Calendar".to_string(),
-            description: "Read and create calendar events via CalDAV".to_string(),
-            parameters: serde_json::json!({
-                "type": "object",
-                "properties": {
-                    "action": { "type": "string", "enum": ["list", "create"] },
-                    "summary": { "type": "string", "description": "Event title (for create)" },
-                    "start": { "type": "string", "description": "Start time ISO 8601 (for create)" },
-                    "end": { "type": "string", "description": "End time ISO 8601 (for create)" }
-                },
-                "required": ["action"]
-            }),
-            examples: vec![],
-            effect: Effect::Write,
-            idempotency: Idempotency::NonIdempotent,
-            latency: Latency::Slow,
-            scope: Scope::External,
-            // Shape varies with `action` — list returns events,
-            // create returns a confirmation blob.
-            output_schema: None,
-        }
+impl CalendarTool {
+    /// Bind this tool's state to its `calendar` manifest row.
+    ///
+    /// The declared half — id, schema, permissions, retry — is the row in
+    /// `tool-manifests/`. What is left here is the part that runs.
+    pub fn declared(self) -> DeclaredTool {
+        let state = Arc::new(self);
+        sovereign_core::tool_manifest::declared("calendar", move |params, ctx| {
+            let state = Arc::clone(&state);
+            async move { state.run(&params, &ctx).await }
+        })
     }
 
-    fn required_permissions(&self) -> Vec<Permission> {
-        vec![Permission::CalendarRead]
-    }
-
-    async fn execute(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
+    /// The executable half of `calendar`.
+    async fn run(
+        &self,
+        params: &serde_json::Value,
+        _ctx: &ToolContext,
+    ) -> Result<StepOutput> {
         let action = params
             .get("action")
             .and_then(|v| v.as_str())

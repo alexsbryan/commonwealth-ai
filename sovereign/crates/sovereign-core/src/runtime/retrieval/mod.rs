@@ -57,9 +57,10 @@ impl Runtime {
     pub(crate) async fn contested_titles_for_chunks(
         &self,
         chunks: &[corpus_engine::ScoredChunk],
+        lane: &crate::runtime::Lane,
     ) -> std::collections::HashSet<String> {
         let mut out = std::collections::HashSet::new();
-        let Some(graph) = self.wikipedia_graph.as_ref() else {
+        let Some(graph) = lane.wikipedia_graph.as_ref() else {
             return out;
         };
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -113,6 +114,11 @@ impl Runtime {
         intent: &Intent,
         scope: Option<&str>,
     ) -> KnowledgeContext {
+        // Resolved ONCE for the turn and passed to every stage below
+        // (daemon-convergence Phase 4a) — no stage reaches back into the
+        // Runtime for a provider.
+        let lane = self.lane();
+
         // Document-attached messages are detected by the
         // `[Document attached: filename]` prefix. We only need to
         // know whether one is attached — the actual document
@@ -123,7 +129,7 @@ impl Runtime {
         // this, a stray document-attached message would burn an
         // embed call producing useless context.
         let attached_source: Option<String> = message
-            .strip_prefix("[Document attached: ")
+            .strip_prefix(crate::runtime::DOCUMENT_ATTACHED_PREFIX)
             .and_then(|rest| rest.find(']').map(|end| rest[..end].to_string()));
 
         // Run the DeepQuery retrieval pipeline — the ordered, traced
@@ -148,6 +154,7 @@ impl Runtime {
             Vec::new(),
             "DeepQuery",
             format!("{intent:?}"),
+            lane.clone(),
         );
         if attached_source.is_some() {
             tracing::debug!("prepare_knowledge_context called with attached document — skipping (should be ComplexTask)");
@@ -272,7 +279,7 @@ impl Runtime {
         // climbed but answer-fact-score didn't, because the model
         // never saw the depth chunks).
         let contested_titles: std::collections::HashSet<String> =
-            self.contested_titles_for_chunks(&all_chunks).await;
+            self.contested_titles_for_chunks(&all_chunks, &lane).await;
         let folder_meta = self.folder_metadata_snapshot().await;
 
         let history = format_history_as_prompt(context, 10);
@@ -294,7 +301,7 @@ impl Runtime {
             // conversation corpus. No-op when no reader wired or no
             // conv-category chunks present. Spec
             // `sovereign/docs/specs/CONV_TIERED_PORT.md`.
-            self.rerank_conv_chunks_via_ppr(message, &mut all_chunks, &display_categories)
+            self.rerank_conv_chunks_via_ppr(message, &mut all_chunks, &display_categories, &lane)
                 .await;
             // Late RAPTOR injection (SOVEREIGN_RAPTOR_LATE) — see the KQ path.
             // Appended post-rerank so leaf ranking is untouched. corpus_embedding
@@ -312,6 +319,7 @@ impl Runtime {
                     &mut all_chunks,
                     "DeepQuery",
                     context.conversation.enabled_corpora.as_deref(),
+                    &lane,
                 )
                 .await;
                 // Then RESERVE them to the head of the pool — the same
@@ -329,7 +337,7 @@ impl Runtime {
                 all_chunks = reserve_raptor_chunks(std::mem::take(&mut all_chunks));
             }
             let conv_briefing = self
-                .build_conv_briefing_block(&all_chunks, &display_categories)
+                .build_conv_briefing_block(&all_chunks, &display_categories, &lane)
                 .await;
             // Phase 3 (budget-sensor redesign): mirror the KQ path's
             // ctx-aware retrieval ceiling — this path previously
@@ -444,6 +452,25 @@ impl Runtime {
             } else {
                 let short_history = format_history_as_prompt(context, 4);
                 format!("{short_history}\n\nRelevant knowledge:\n{knowledge_block}\n\nAssistant:")
+            }
+        } else if let Some(guidance) =
+            crate::runtime::unavailability::unavailability_guidance(&unavailable_corpora)
+        {
+            // Empty pool over a LOST corpus. Until 2026-08-25 this arm was
+            // unreachable in that case: `readiness_disclosure` injected the
+            // same guidance as a `score: 1.0` chunk, so `all_chunks` was
+            // non-empty and the turn took the grounded arm above with one
+            // fabricated passage in it. The disclosure now rides the prompt
+            // and the pool stays empty, which is what it actually was.
+            tracing::info!(
+                target: "retrieval.pipeline",
+                lost = unavailable_corpora.len(),
+                "DeepQuery: empty pool over a lost corpus — disclosing in the prompt"
+            );
+            if history.is_empty() {
+                format!("User: {message}\n\n{guidance}\n\nAssistant:")
+            } else {
+                format!("{history}\n\n{guidance}\n\nAssistant:")
             }
         } else if history.is_empty() {
             message.to_string()

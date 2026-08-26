@@ -9,6 +9,7 @@
 //! with a future tier-1 rustdoc-vs-signature drift detector (#39)
 //! that will share the same finding shape and renderer.
 
+use sovereign_cli_shared::dirs::sovereign_root;
 use std::path::{Path, PathBuf};
 
 use corpus_engine_archaeology::rough_edges::{
@@ -178,13 +179,6 @@ fn resolve_source_path(args: &Args) -> Result<PathBuf, String> {
         ));
     }
     Ok(p)
-}
-
-/// Branded per-user data root (rebrand-aware path SSOT — prefers a
-/// populated `~/.svrnmesh`, honors `SOVEREIGN_DATA_DIR` via callers of
-/// `rebrand::data_dir`; derivation lives in sovereign-cli-shared).
-fn sovereign_root() -> PathBuf {
-    sovereign_cli_shared::dirs::sovereign_root()
 }
 
 fn sidecar_json_path(md: &Path) -> PathBuf {

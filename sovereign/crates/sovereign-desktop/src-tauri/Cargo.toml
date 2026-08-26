@@ -7,6 +7,10 @@ license.workspace = true
 [dependencies]
 sovereign-core = { workspace = true }
 sovereign-contracts = { workspace = true }
+# The enrichment store the CLI and the daemon also read — `enrich_commands`
+# lists it rather than re-deriving the layout and the schema (rung
+# nc-16-shared-capability).
+sovereign-enrichment-catalog = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }

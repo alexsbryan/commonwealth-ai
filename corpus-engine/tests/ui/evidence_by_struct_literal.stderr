@@ -1,0 +1,14 @@
+error[E0451]: fields `content`, `origin`, `custody` and `score` of struct `corpus_engine::Evidence` are private
+  --> tests/ui/evidence_by_struct_literal.rs:9:9
+   |
+ 8 |     let _ = Evidence {
+   |             -------- in this type
+ 9 |         content: "the text".to_string(),
+   |         ^^^^^^^ private field
+10 |         origin: Origin {
+   |         ^^^^^^ private field
+...
+19 |         custody: Custody::Personal,
+   |         ^^^^^^^ private field
+20 |         score: 0.9,
+   |         ^^^^^ private field

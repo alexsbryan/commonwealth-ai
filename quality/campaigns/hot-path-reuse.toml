@@ -1,0 +1,304 @@
+# Flight rules — read raw. Verdicts come from measurement rows, never prose here.
+id        = "hot-path-reuse"
+objective = "An agent extending a hot file finds what it needs already there, and reaching for it is cheaper than writing one"
+spec      = "quality/HOT_PATH_REUSE.md"
+declared  = "2026-08-22"
+status    = "active"
+
+# ════════════════════════════════════════════════════════════════════════════
+#  THE DIRECTION — this is what we steer by. Bars are further down and they
+#  are SUBORDINATE. Operator direction 2026-08-22: "define our compass that
+#  says what is the right direction, then we push the right direction above
+#  obsessing about bars."
+# ════════════════════════════════════════════════════════════════════════════
+#
+# WHY DIRECTION OUTRANKS BARS HERE, in this workspace's own evidence. We move
+# along whatever gradient is presented. A bar presents a SCALAR gradient and
+# the gradient points at the number: nc-redundant said "reach 10,000" and got
+# nine waves of work aimed at a figure that was 79% blind to the work being
+# done. A direction presents a BEHAVIOURAL gradient and the gradient points at
+# the behaviour, which cannot be satisfied by a proxy — satisfying it IS the
+# goal.
+#
+# FOUR STATEMENTS. Each must be able to stop you mid-keystroke; that is the
+# test the eleven in AGENTS.md pass and it is the only test that matters here.
+#
+#   D1. THE SCAN WINDOW IS THE DESIGN SURFACE.
+#       A surface an agent does not scan does not exist, however well
+#       published. Ask of anything you publish: will it be IN the window of
+#       the agent who needs it? Importing one module of a crate does not put
+#       its siblings in view — measured here: 3 of 5 hand-rollers already
+#       imported `sovereign_cli_shared` for a sibling module and hand-rolled
+#       anyway. Docs are never in the window at the moment of decision.
+#
+#   D2. CHEAPER TO REUSE THAN TO WRITE, COUNTED IN WHAT THE AUTHOR TYPES.
+#       Not in lines saved repo-wide, not in concepts unified — in tokens at
+#       the call site. An agent that judges hand-rolling cheaper is usually
+#       RIGHT, and the answer is to make reuse cheaper, never to argue.
+#
+#   D3. CONVERGE THE WHOLE JOB OR DO NOT CONVERGE IT.
+#       A surface that takes the easy third and leaves the struct, the
+#       coercion and the validation with the author has not paid for its
+#       import. That is exactly why `args` sat unused for 73 days.
+#
+#   D4. ONE WAY TO EXPRESS ONE THING.
+#       A second public way is worse than one awkward way. If the new form
+#       ships beside the old, we added a knob and removed nothing — the
+#       failure kernel-types made when it minted `Verdict` and left ten
+#       definitions standing.
+#
+# WHEN DIRECTION AND A BAR DISAGREE, DIRECTION WINS AND THE BAR IS WRONG.
+# Write down which bar and why, then fix or drop it. A bar has never once been
+# the thing that was right in this workspace's recorded history.
+
+# ════════════════════════════════════════════════════════════════════════════
+#  WHAT BARS ARE STILL FOR — the one job they do that a compass cannot
+# ════════════════════════════════════════════════════════════════════════════
+#
+# Do not read the above as "numbers were a mistake". The distinction that
+# matters is between two uses of the same object:
+#
+#   A BAR AS A TARGET is Goodhart bait. "nc-redundant -> 10,000" is a standing
+#   invitation to move a number. Every failure catalogued below is this.
+#
+#   A BAR AS A FALSIFIER is the only thing that has ever stopped this seat
+#   lying to itself. nc-27 pre-registered 9787 +/- 80, measured 10301, and THE
+#   MISS WAS THE FINDING — it bought the near-tier blindness diagnosis. Without
+#   a number stated in advance, nc-27 ships "we deleted 1,340 lines!" and the
+#   instrument is still broken today. The campaign substrate itself exists for
+#   this reason: co-lineage replaced hand-written prose transitions because a
+#   prose row asserted a bar `met` crediting a guard that existed only on an
+#   unmerged branch.
+#
+# SO THE RULES CHANGE, NOT THE TOOL:
+#   - No falsifier without a CLAIM. A number with nothing to prove is telemetry.
+#   - No claim without a falsifier. An assertion nobody can check is prose.
+#   - A falsifier EXPIRES when its claim resolves. It is not a standing target
+#     to be chased across waves; that is what turned 17 rungs into 9 bars.
+#   - Something can be WATCHED WITHOUT BEING STEERED BY. See the section below.
+#
+# TWO CLAIMS ARE LIVE, SO THERE ARE TWO FALSIFIERS. Not four. `hpr-in-view`
+# and `hpr-noun-rate` were cut on 2026-08-22 before either was ever measured:
+# in-view proposed building a new telemetry surface for a question we have not
+# reached yet, and noun-rate was a target rather than a claim — "make the noun
+# count fall" is precisely the shape that produced this mess. Noun count moves
+# to WATCHED below.
+
+# ════════════════════════════════════════════════════════════════════════════
+#  THE TREATMENT — clap derive, ALREADY IN THE TREE (revised 2026-08-22)
+# ════════════════════════════════════════════════════════════════════════════
+#
+# The first draft of this campaign proposed BUILDING a derive macro in
+# sovereign-cli-shared. Inventory first (principle 11) says do not: `clap = {
+# version = "4", features = ["derive"] }` is already a workspace dependency
+# (root Cargo.toml:284), already used by four crates, and its derive does
+# exactly the three things the cheaper form needs — the field list IS the flag
+# list, coercion comes from the field type, cross-flag rules are attributes.
+#
+# AND IT IS FREE WHERE THE HOT FILES ARE. `cargo tree -p sovereign-cli-llm -i
+# clap` returns clap v4.6.1: it is ALREADY in that crate's build graph via
+# sovereign-eval. Zero marginal dependency. sovereign-cli-llm holds SIX of the
+# top-30 hot files and THREE of the five hand-rolling specimens.
+#
+#   in build graph today: cli-llm YES · cli, cli-shared, cli-dev, cli-daemon NO
+#
+# So the campaign starts where the treatment costs nothing, and the weight
+# question for the other four crates is answered LATER with measured numbers
+# rather than argued now.
+#
+# D4 IS NOW LIVE AND UNRESOLVED, AND IT IS NAMED RATHER THAN DEFERRED QUIETLY.
+# Adopting clap gives two public ways to declare a flag surface: clap derive,
+# and `cli-shared::args` (ArgSpec/Parsed/parse, 15 users). D4 says one must go.
+# That decision needs the build-weight measurement for cli/cli-dev/cli-daemon
+# and is NOT settled by the first conversion. Recorded here so it cannot be
+# forgotten, which is what happened to `Verdict`.
+#
+# NOT THE FIRST MOVE, and the reason is worth keeping: `doctor_cmd.rs`
+# (heat 33) defines `CheckStatus { Passed, Failed, Warning, Skipped }` over 122
+# sites and looks like an obvious adopter of `kernel_types::Verdict`. It is
+# not. `Warning` is its MOST-used variant (38 sites) and means "the check ran
+# and the answer is degraded but not broken" — a state none of Verdict's four
+# carry. Converging them would be a lossy substitution (§18.3) and exactly the
+# "merging code that merely looks alike" that noun-convergence's own kill
+# clause warned against. The real gap there is narrower than it first looked:
+# doctor cannot express could-not-judge. That is a separate, smaller fix.
+
+# ════════════════════════════════════════════════════════════════════════════
+#  THE EVIDENCE — measured 2026-08-22 at HEAD 63c72af8
+# ════════════════════════════════════════════════════════════════════════════
+#
+# `sovereign_cli_shared::args` (ArgSpec / Parsed / parse) shipped 2026-06-09 in
+# 6b2f4e04 and acquired ZERO voluntary adopters in the 73 days to 2026-08-21.
+# Then three campaign rungs converted 14 files in one day — nc-22b (ae0ec58c),
+# nc-25 (74313f10), nc-26 (580a652e). All 15 users today are the minting commit
+# or a mandated conversion. Method: `git log -S'cli_shared::args' --reverse` per
+# file. (A first attempt using `comm` against nc-25's commit file list produced
+# a false "9 voluntary adopters" — provenance needs the -S walk.)
+#
+# WHY, over the five hottest commands that still hand-roll:
+#
+#   file                     struct  parse-fn  total  flags
+#   router_fit_cmd.rs            11         0     11     12
+#   main.rs                      17        67     84     11
+#   vault_report.rs              10        43     53     10
+#   all.rs                       58        88    146     16
+#   notes_retrieval_cmd.rs        7         0      7      5
+#   TOTAL                       103       198    301     54
+#
+# The shared parser replaces the PARSE LOOP ONLY — 198 of 301 lines — and
+# leaves the struct, the value coercion and every cross-flag rule with the
+# author. That is D3 stated as a measurement.
+#
+# ── WHAT KILLED noun-convergence, each answered by a structure ──────────────
+#
+# 1. INSTRUMENT NEVER VALIDATED. nc-redundant 79% blind to deletion for its
+#    whole life (note 45213e2b).           -> GATE ZERO below.
+# 2. TREATMENT NEVER SHIPPED, BAR SCORED `failed` SIX TIMES. nc-adoption at its
+#    minted floor while its envelope was never built.
+#                                          -> EXIT 3 precondition, below.
+# 3. BAR MEASURED WHAT NOBODY FEELS. A line count.
+#                                          -> D1-D4 are behavioural, and every
+#                                             falsifier names the sentence its
+#                                             subject says when it moves.
+# 4. ADOPTION COUNTED WITHOUT PROVENANCE. 14 of 15 adopters were mandated.
+#                                          -> voluntary-only numerator.
+# 5. MINTING DID NOT RETIRE. `Verdict`: ten definitions survive the kernel's.
+#                                          -> D4, and hpr-cheaper's kill.
+# 6. NINE BARS, SEVENTEEN RUNGS MOST NAMING NO BAR.
+#                                          -> TWO falsifiers, and a direction
+#                                             that does not need rungs at all.
+#
+# ── GATE ZERO — no falsifier is trusted before its instrument is validated ──
+#
+#   POSITIVE  a change that MUST move it moves it by the predicted amount.
+#   NEGATIVE  a change that must NOT move it (rename, reformat) leaves it
+#             inside its band.
+# nc-redundant would have failed its positive control in one afternoon: delete
+# a known near-clone, watch the number not move. Nine waves were spent instead.
+#
+# ── PRECONDITIONS ARE STRUCTURAL, NOT REMEMBERED (§7, principle 10) ─────────
+#
+# co-lineage reads instrument EXIT CODES, and `exit 3` records
+# `could-not-judge / artifact-absent` (its docstring line 36; self-tested at
+# line 1109). So EVERY INSTRUMENT HERE CHECKS ITS PRECONDITION FIRST AND
+# `exit 3` WHEN UNMET, naming the unmet condition on stderr and printing NO
+# value. A bar may only say `failed` about a treatment that demonstrably
+# shipped. That is the one line of nc-adoption's failure worth encoding forever.
+#
+# ── WATCHED, NOT STEERED BY ─────────────────────────────────────────────────
+#
+# Deliberately NOT bars. Look at them when a claim resolves; never aim at them,
+# never fund a rung to move one.
+#   - local nouns standing in the current top-30 hot set (232 on 2026-08-22)
+#   - hot files importing any shared contract (9 of 30 on 2026-08-22)
+#   - kernel-types per-type consumer counts (2 orphans, 6 single-consumer of 19)
+# If one of these moves a long way and no claim predicted it, that is a signal
+# worth chasing — which is the opposite of a target, and the only honest use
+# for a number nobody is steering by.
+
+# ════════════════════════════════════════════════════════════════════════════
+
+[[bar]]
+id           = "hpr-cheaper"
+one_line     = "CLAIM: in a reshaped hot path, adding a flag touches ONE place instead of two"
+derives_from = "re-derived 2026-08-22 from the pilot conversion of vault_report.rs, which falsified the original line-count formulation"
+status       = "open"
+# RE-DERIVED AFTER THE PILOT, AND THE PILOT IS WHY. The first formulation was
+# TOTAL LINES for the flag surface, floor 301 target 120. The pilot converted
+# vault_report.rs and moved it 53 -> 48. Five lines. The 43-line parse loop did
+# vanish; ~18 lines of `#[arg(long)]` attributes replaced it.
+#
+# THE LINE COUNT WAS THE WRONG QUANTITY, and the campaign's own rule applies —
+# when direction and a bar disagree, DIRECTION WINS AND THE BAR IS WRONG. What
+# the pilot actually changed is what D2 cares about and what an extending agent
+# actually pays:
+#
+#   ADDING A FLAG, BEFORE : a struct field AND a match arm, in two places that
+#                           must be kept in sync. Miss the arm and the flag is
+#                           silently ignored.
+#   ADDING A FLAG, AFTER  : a struct field. One place. There is no arm.
+#
+# Not recorded as a moved goalpost: the original bar's miss is the finding, and
+# it is stated above rather than deleted. This is the second time in eight days
+# that a campaign's headline instrument measured something adjacent to its
+# thesis (nc-redundant was the first). That recurrence is the reason gate zero
+# exists and it is now the strongest argument for it.
+#
+# THE SENTENCE ITS SUBJECT SAYS WHEN IT MOVES: "I added a field and the flag
+# worked — there was no second place to update."
+#
+# WHAT IT MEASURES: summed over the five frozen specimens, the number of
+# distinct places that must change to add one flag. Hand-rolled is 2 (field +
+# arm); a derived surface is 1 (field). Floor 10 = 5 files x 2. Target 5.
+# UNGAMEABLE BY VERBOSITY — attribute style cannot move it, and the only way to
+# reach 1 is to make the declaration the single source, which is the thesis.
+#
+# ── THE FLOOR OF 10 WAS WRONG, AND hpr-1 MEASURED IT WRONG WITHIN THE HOUR ──
+#
+# I derived floor 10 as "five specimens x 2 places each (struct field + match
+# arm)", generalising from the ONE file I had converted. hpr-1 counted instead
+# of accepting the estimate:
+#
+#   vault_report.rs   2 places  (struct field, match arm)            <- the pilot
+#   router_fit_cmd.rs 4 places  (+ a `let mut` local in parse_opts,
+#                                + an entry in the final `Ok(Opts { … })`)
+#   bench_cmd/all.rs  3 places  (+ an `impl Default for Opts` entry)
+#
+# So hand-rolled cost is NOT a constant — it is 2 to 4 and it grows with how
+# many times the file restates its own field list. The pilot was the CHEAPEST
+# of the three and I generalised from it, which understates the treatment's
+# value by roughly half on the worst file.
+#
+# TWO THINGS FOLLOW, and the second is the one that matters:
+#   1. RESOLVED — the counter reported 16 (4+4+2+3+3) and the floor is now 16.
+#      Current tree reads 10: three specimens converted to 1 place each. The
+#      remaining 6 are main.rs (4) and notes_retrieval_cmd.rs (3), both in
+#      `sovereign-cli`. TARGET 5 IS THEREFORE GATED ON D4 — reaching it needs
+#      clap in a crate where it is not in the build graph. Named, not deferred
+#      quietly.
+#   2. THE INSTRUMENT MUST COUNT, NEVER ASSUME. hpr-2 was mid-flight writing
+#      `hand-rolled = 2` from its order and was corrected before it shipped.
+#      Had it landed, router_fit_cmd.rs would have scored a 2->1 win against a
+#      true 4->1 — an instrument reporting a plausible, well-formed, wrong
+#      number, which is §18's characteristic failure and the third instance in
+#      this workspace in eight days (nc-redundant, hpr-cheaper v1, this).
+#
+# Recorded rather than quietly patched: a floor corrected in silence teaches
+# nobody, and the estimate-vs-count distinction is the whole lesson.
+#
+# PRECONDITION (else exit 3): at least one specimen is converted and compiles.
+# Satisfied by the pilot at HEAD.
+floor        = 16.0
+floor_basis  = "measured 2026-08-22 by scripts/hpr-cost.py counting sites in source at HEAD 63c72af8: router_fit_cmd 4 + main 4 + vault_report 2 + bench_cmd/all 3 + notes_retrieval_cmd 3. Replaces a hand-typed 10 that assumed a constant 2 per file."
+target       = 5.0
+direction    = "lower_is_better"
+timeout_s    = 30
+instrument   = "scripts/hpr-cost.py --json"
+kill         = "D4. If the derived form ships BESIDE `cli-shared::args` without retiring one of them, we added a knob and removed nothing — kernel-types minting `Verdict` while ten definitions stood. Two public ways to declare one flag surface is worse than one awkward way."
+
+[[bar]]
+id           = "hpr-unprompted"
+one_line     = "CLAIM: make it cheaper and agents reach for it without being told"
+derives_from = "D1 and D2; floor is the 73-day natural experiment — cli-shared::args shipped 2026-06-09, zero voluntary adopters"
+status       = "open"
+# THE WHOLE EXPERIMENT. EXPIRES after one 30-day window following the derive.
+#
+# THE SENTENCE ITS SUBJECT SAYS WHEN IT MOVES: "I needed to parse three flags,
+# the shared thing was right there and shorter, so I used it."
+#
+# Rung commits of this campaign are excluded from the numerator BY
+# CONSTRUCTION — the campaign cannot manufacture its own uptake. Target 3 is
+# small on purpose: this is not about popularity, it is about telling "agents
+# reach for it" from "agents only ever get marched to it". Two could be one
+# agent twice.
+#
+# PRECONDITION (else exit 3): hpr-cheaper has MET. A zero here while the
+# cheaper form is unbuilt is uninterpretable — that is the reading nc-adoption
+# got wrong six times running.
+floor        = 0.0
+floor_basis  = "measured 2026-08-22: 0 voluntary adopters in 73 days. CORRECTED by hpr-2's gate zero — the 14 rung conversions are TWO commits (nc-22b ae0ec58c 5, nc-25 74313f10 9), not three. 580a652e (nc-26) is a pure R100 crate move of awareness_cmd and converted nothing: A MOVE IS NOT AN ADOPTION. The zero is unaffected."
+target       = 3.0
+direction    = "higher_is_better"
+timeout_s    = 60
+instrument   = "scripts/hpr-unprompted.py --json"
+kill         = "if uptake rises ONLY inside rungs of this campaign, the form did not win on cost and the honest outcome is to DELETE it, not to mandate it. Never add a gate to rescue this bar — a gate converts the experiment into its own confirmation. Operator direction 2026-08-20, inherited: win by being useful and better, not through force."
