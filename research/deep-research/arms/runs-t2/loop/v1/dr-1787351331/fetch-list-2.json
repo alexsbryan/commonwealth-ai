@@ -1,0 +1,182 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787351331",
+  "charter_hash": "9f73b2d381087123",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "**Gentrification Trends ( )** * **Acceleration:** Gentrification levels were at their lowest in the s and increased every decade until . (4, 1980, 2024)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "New York tracts gentrified highest raw total among cities reviewed",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Federal Reserve data tracking inequality series confirmed reached record levels",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Several metros exhibit extreme patterns income ratios reach top bottom earners",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h10",
+      "query_id": "q1",
+      "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+      "title": "Gentrification by the numbers",
+      "snippet": "UGA real estate professor Richard Martin: 'I found a very large, across-the-board increase in the amount of gentrification in the 2000s relative to earlier decades' — gentrification levels were at their lowest in the 1970s and increased every decade until 2010.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h11",
+      "query_id": "q1",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "snippet": "Governing analyzed Census tract data for the nation's 50 largest cities. Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) led; nearly 20 percent of lower-income neighborhoods gentrified since 2000, compared to 9 percent in the 1990s; poverty rate percentage-point change -0.7 gentrifying vs +6.7 not gentrifying.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h5",
+      "query_id": "q1",
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "snippet": "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h9",
+      "query_id": "q1",
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "snippet": "Stanford sociologist Jackelyn Hwang found the negative effects of gentrification are felt disproportionately by minority communities: poor residents moving from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying neighborhoods within the city, while residents moving from other gentrifying neighborhoods tend to move to wealthier neighborhoods.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h4",
+      "query_id": "q1",
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "snippet": "SmartAsset ranked 98 of the largest U.S. cities by income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. New Orleans tops the list with a ratio of 7.87; Boston follows with 7.81 ($172,476 at the 80th percentile versus $22,095 at the 20th).",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h10",
+      "h11",
+      "h1",
+      "h5",
+      "h9"
+    ],
+    "eps_admits": [
+      "h4"
+    ],
+    "below_cut": [
+      "h4",
+      "h1",
+      "h11",
+      "h11",
+      "h8",
+      "h5",
+      "h6",
+      "h2",
+      "h3",
+      "h11",
+      "h5",
+      "h3",
+      "h4",
+      "h6",
+      "h1",
+      "h4",
+      "h6",
+      "h9",
+      "h2",
+      "h5",
+      "h7",
+      "h8",
+      "h2",
+      "h10",
+      "h2",
+      "h9",
+      "h10",
+      "h1",
+      "h4",
+      "h6",
+      "h8",
+      "h3",
+      "h8",
+      "h10",
+      "h9"
+    ],
+    "threshold": 10.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

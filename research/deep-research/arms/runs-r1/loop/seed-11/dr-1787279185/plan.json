@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787279185",
+  "charter_hash": "8299b59f9c7d2bf6",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's total market capitalization in July 2025",
+      "Global AI infrastructure spending forecast for fiscal year 2026 by major cloud providers (Microsoft, Amazon, Google, Meta) as a percentage of their capex budgets",
+      "Year-over-year growth rate of Nvidia's data center revenue segment from Q1 2024 to Q1 2025",
+      "Share of global GPU shipments attributed to Nvidia's Hopper and Blackwell architectures in the first half of 2025",
+      "Price per unit of Nvidia's B200 GPU compared to its predecessor A100 in mid-2025",
+      "Total addressable market size estimate for generative AI inference hardware in 2025",
+      "Percentage change in Nvidia's stock price from January 1, 2023, to July 1, 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

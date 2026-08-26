@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787350502",
+  "charter_hash": "2f5521d0abc66532",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of US federal laws passed in 2024 and early 2025 mandating TikTok divestiture or ban",
+      "Percentage share of US adult users accessing TikTok daily as reported by Pew Research Center in late 2023 to mid-2024",
+      "Count of US House and Senate votes on the Protecting Americans from Foreign Adversary Controlled Applications Act (PAAFCA) in April 2024",
+      "Date of the Supreme Court ruling in *TikTok v. Garland* regarding the constitutionality of PAAFCA in January 2025",
+      "Name of the joint venture structure proposed for TikTok's US operations involving Oracle and other investors announced in September 2024",
+      "Number of days remaining until the mandatory ban date under PAAFCA at the time of the December 2024 executive action or legislative extension",
+      "Percentage change in TikTok app downloads in the United States following the initial threat of a ban in late 2024 as tracked by Sensor Tower"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2025"
+    ]
+  }
+}

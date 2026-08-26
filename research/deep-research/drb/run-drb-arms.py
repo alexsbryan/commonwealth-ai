@@ -58,6 +58,15 @@ ARM_FLAGS = {
     "corpus-scale": ["--backend", "auto", "--search-source", "corpus",
                      "--corpora", "wikipedia", "--search", "40",
                      "--fetch", "60", "--max-rounds", "6"],
+    "std": ["--backend", "auto", "--search-source", "web",
+            "--consent", "personal", "--search", "12", "--fetch", "12",
+            "--max-rounds", "3"],
+    # "std" — the loop's STANDARD battery arm on the web leg (the config
+    # the frozen banks validate; order deep-research-t7a amendment,
+    # directive 7f0e276b, pre-registered pre-registration.md "T7a
+    # amendment — the DRB-I flight": --search 12 --fetch 12 --max-rounds 3,
+    # web consent personal, <=96 cumulative web searches enforced by the
+    # pre-registered stop rule at the task boundary).
 }
 
 
@@ -66,17 +75,25 @@ def main():
     ap.add_argument("--bin", default="sovereign")
     ap.add_argument("--arm",
                     choices=["local", "hybrid", "deep", "ceiling",
-                             "corpus-scale"],
+                             "corpus-scale", "std"],
                     default=None,
                     help="fly only one arm (default: both, local first)")
     ap.add_argument("--run-root", default=str(HERE / "runs"),
                     help="run root (t4a: demo/demo12/runs — the frozen drb/runs is never touched)")
+    ap.add_argument("--max-cumulative-searches", type=int, default=0,
+                    help="hard stop at the task boundary once the cumulative "
+                         "web-search count across ALL landed manifests in this "
+                         "run root reaches the cap (t7a amendment: <=96, the "
+                         "100-query discipline). Skipped-as-complete tasks "
+                         "count toward the cap, so a resume cannot blow past "
+                         "it. The per-task allowance is never reduced.")
     args = ap.parse_args()
 
     run_root = Path(args.run_root)
     rows = [json.loads(l) for l in open(HERE / "query.subset.jsonl", encoding="utf-8")]
     arms = [args.arm] if args.arm else ["local", "hybrid"]
     failures = []
+    stopped_at_cap = False
 
     def manifest_of(run_dir: Path):
         """The manifest lives in the nested run-id dir (drb-<id>/dr-<ts>/)."""
@@ -84,10 +101,32 @@ def main():
                        key=lambda p: p.stat().st_mtime)
         return cands[-1] if cands else None
 
+    def cumulative_searches() -> int:
+        """Sum search_calls across every landed manifest of THIS arm under
+        run_root (the cap is on real web searches — mock-deck battery runs
+        sharing the root simulate search calls and must not count)."""
+        total = 0
+        for mp in (run_root / arm).glob("drb-*/dr-*/manifest.json"):
+            try:
+                m = json.load(open(mp, encoding="utf-8"))
+                total += sum(r.get("search_calls", 0) for r in m.get("rounds", []))
+            except Exception:
+                pass
+        return total
+
     for arm in arms:
         flags = ARM_FLAGS[arm]
         for r in rows:
             tid = r["id"]
+            if args.max_cumulative_searches:
+                used = cumulative_searches()
+                if used >= args.max_cumulative_searches:
+                    stopped_at_cap = True
+                    print(f"[{arm}] task {tid} NEVER-RAN — cumulative "
+                          f"{used} >= cap {args.max_cumulative_searches} "
+                          f"(pre-registered hard stop at the task boundary; "
+                          f"per-task allowance untouched)", flush=True)
+                    continue
             run_dir = run_root / arm / f"drb-{tid}"
             log_path = run_root / arm / f"drb-{tid}.console.log"
             run_dir.mkdir(parents=True, exist_ok=True)
@@ -127,6 +166,10 @@ def main():
     if failures:
         print("FAILURES:", failures, flush=True)
         return 1
+    if stopped_at_cap:
+        print("FLIGHT STOPPED AT CUMULATIVE-SEARCH CAP — remaining tasks "
+              "never-ran with reason (pre-registered rule)", flush=True)
+        return 0
     print("ALL FLIGHTS OK", flush=True)
     return 0
 

@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787292941",
+  "charter_hash": "a63f1f02228931c1",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed so that obligations would land as institutional capacity and technology mature [Source: ev-1]. This schedule also serves to double as a compliance roadmap for providers worldwide [Source: ev-1].\n\nRegarding what the different deadlines require, the evidence supports only one specific detail from your list. The \"unacceptable risk\" practices are banned outright starting on February 2, 2025 [Source: ev-1]. While the text mentions other dates (such as August 2, 2026) associated with high-risk system obligations in its general description of phases [Source: ev-1], it does not provide further specifics about those requirements within the scope of the provided still-open items or supporting details beyond that single prohibition date.",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web"
+    }
+  ]
+}

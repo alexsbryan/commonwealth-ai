@@ -1,0 +1,25 @@
+Fatal Python error: PyGILState_Release: thread state 0x7f929b23e560 must be current when releasing
+Python runtime state: initialized
+
+Current thread 0x00007f929b368bc0 [python3] (most recent call first):
+  File "/usr/lib64/python3.14/socket.py", line 729 in readinto
+  File "/usr/lib64/python3.14/http/client.py", line 297 in _read_status
+  File "/usr/lib64/python3.14/http/client.py", line 336 in begin
+  File "/usr/lib64/python3.14/http/client.py", line 1459 in getresponse
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/urllib3/connection.py", line 571 in getresponse
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/urllib3/connectionpool.py", line 534 in _make_request
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787 in urlopen
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/requests/adapters.py", line 645 in send
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/requests/sessions.py", line 706 in send
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/requests/sessions.py", line 592 in request
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/requests/sessions.py", line 640 in post
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 164 in _call
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 194 in call
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 261 in query_batch
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 327 in score_report
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 611 in score_set
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 695 in main
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 996 in <module>
+
+Extension modules: charset_normalizer.md, charset_normalizer.cd, requests.packages.charset_normalizer.md, requests.packages.chardet.md, requests.packages.charset_normalizer.cd, requests.packages.chardet.cd (total: 6)
+CALIBRATION_EXIT 134

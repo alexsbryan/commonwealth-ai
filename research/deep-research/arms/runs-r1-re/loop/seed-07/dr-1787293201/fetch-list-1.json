@@ -1,0 +1,148 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787293201",
+  "charter_hash": "09ca74e5f857b456",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "The number of US federal laws enacted in 2024 and 2025 mandating the divestiture or prohibition of TikTok, involving the United States Congress",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "The count of executive orders signed by President Donald Trump regarding TikTok between January 2025 and June 2025, involving the White House",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "The percentage change in TikTok's monthly active users in China from Q1 2023 to Q4 2024, involving ByteDance and China",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "The share of US national security agencies that issued formal warnings about data exfiltration risks associated with TikTok prior to December 2023, involving ODNI and FBI",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "The number of days until compliance specified in the \"Protecting Americans from Foreign Adversary Controlled Applications Act\" enacted April 2024, involved United States Congress",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "The total value in USD of any proposed acquisition offers for TikTok's US operations by potential buyers between January 2024 and June 2025 involving Oracle or other consortiums",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q8",
+      "text": "The count of state-level laws passed regarding social media restrictions on minors under age 16 in states like Texas and Florida during 2023-2024 involving State Legislatures",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "The median time lag between data collection events in China and access requests by Chinese government entities as cited in congressional hearings 2024-2025 involving ByteDance",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q7",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q6",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 13.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,179 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787328402",
+  "charter_hash": "8322a2844f287ac0",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "-mini on April . (3, 4, 2025)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "launch signaled direction frontier reasoning models shifting toward tool-using commodity prices",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "This strategic move was intended to defend OpenAI’s position against DeepSeek's R cost shock and Anthropic's agentic-coding push while GPT- ",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Native Tool Use They featured including web search code interpreter trained model",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "Budget Forcing models utilized technique called employing fixed maximum thought task-adaptive dynamic compute harder questions required longer thinking times",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "* **Private Chain-of-Thought:** This launch introduced OpenAI's private chain-of-thought policy, where reasoning tokens are not exposed to A (3, 4, 2025)",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "launch demonstrated significant performance improvements",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "set a record on the ARC-AGI benchmark, achieving approximately on ARC-AGI- at high compute . (3, 4, 2025)",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q9",
+      "text": "Pricing for these models was structured as follows: * **o ** $ per million input tokens and $ per million output tokens . (3, 4, 2025)",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q10",
+      "text": "-mini:** $ per million input tokens and $$ per million output tokens [Note: The evidence lists \" / \" in the context of pricing; interpreting (3, 4, 2025)",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q11",
+      "text": "-mini was . (3, 4, 2025)",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 4.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1"
+    ],
+    "threshold": 8.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

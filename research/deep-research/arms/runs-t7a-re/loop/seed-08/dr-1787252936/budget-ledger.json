@@ -1,0 +1,125 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1787252936",
+  "charter_hash": "906016683911f4d9",
+  "allowance": {
+    "web-search:mock": 12,
+    "web-fetch:pages": 12
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787252951,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787253065,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787253065,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787253065,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787253065,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787253065,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-search:mock": 12,
+    "web-fetch:pages": 1
+  },
+  "remaining": {
+    "web-search:mock": 0,
+    "web-fetch:pages": 11
+  },
+  "refused_urls": []
+}

@@ -1,0 +1,67 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787293689",
+  "charter_hash": "ae902c441ad6eebb",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 1
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-11",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787293689"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Nvidia's market value crossed $4 trillion on July 9, 2025, driven by sustained demand for its Blackwell accelerator rack systems (GB200/GB300), the ~$500 billion Stargate AI-infrastructure plan, and repeated upward revisions to capital expenditure guidance from major hyperscalers including Microsoft, Meta, Google, and Amazon throughout 2025 [Source: ev-1].",
+    "This milestone indicates that the market is pricing AI infrastructure as the largest new capital cycle since the internet era, with Nvidia positioned as a central \"toll-booth\" in this spending supercycle [Source: ev-1].",
+    "The evidence outlines a rapid valuation trajectory where Nvidia reached $1 trillion in mid-2023, $2 trillion in February 2024, $3 trillion in June 2024, and finally $4 trillion in July 2025 following a significant price run-up in early July 2025 when its share price crossed approximately $160 [Source: ev-1].",
+    "CEO Jensen Huang characterized this period as a transition from training to inference demand, describing the creation of \"AI factories\" that sell compute as a commodity [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787293689",
+    "acquired_at_unix": 1787293689,
+    "released_at_unix": 1787293776
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787337552",
+  "charter_hash": "e4324e1e3f375dbb",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Microsoft's Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This allowed any process running as the user to access sensitive information captured by default, including passwords and private content visible on screen [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The incident drew scrutiny from regulatory bodies such as the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "In response, Microsoft changed the feature significantly.[Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "This revised version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "In response, Microsoft changed the feature significantly. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

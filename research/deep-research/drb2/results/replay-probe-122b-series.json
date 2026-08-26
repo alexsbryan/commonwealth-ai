@@ -1,0 +1,101 @@
+{
+ "series": "t7a-drb2-judge-probe-122b",
+ "judge_model": "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003",
+ "shape": "idx-4 items 0-3; paper max per probe",
+ "gate": ">=3/4 pass vendored parse+validate -> calibration GO; below -> could-not-judge",
+ "probes": [
+  {
+   "probe": "122b-1",
+   "paper": 45000,
+   "deadline_s": 300,
+   "call_s": 291.4,
+   "exit": 4,
+   "verdict": "FAIL",
+   "stage": "validate",
+   "failure": "echo drift 4/4 (markdown bold, whitespace collapse, case/char drift)",
+   "scores": [
+    1,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "probe": "122b-2",
+   "paper": 45000,
+   "deadline_s": 300,
+   "call_s": 300.0,
+   "exit": 2,
+   "verdict": "TRANSPORT-ABORT",
+   "failure": "daemon inference deadline exceeded (5487 tokens generated at kill; gen-time clock)",
+   "raw": null
+  },
+  {
+   "probe": "122b-3",
+   "paper": 45000,
+   "deadline_s": 300,
+   "call_s": 419.0,
+   "exit": 2,
+   "verdict": "TRANSPORT-ABORT",
+   "failure": "daemon inference deadline exceeded (5451 tokens generated; ~119s prefill + 300s gen)",
+   "raw": null
+  },
+  {
+   "probe": "122b-4",
+   "paper": 20000,
+   "deadline_s": 900,
+   "call_s": 67.8,
+   "exit": 4,
+   "verdict": "FAIL",
+   "stage": "validate",
+   "failure": "echo drift 3/4 (case drift, tail rewrite, dash spacing; item 0 exact)",
+   "scores": [
+    1,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "probe": "122b-2r",
+   "paper": 45000,
+   "deadline_s": 900,
+   "call_s": 702.7,
+   "exit": 5,
+   "verdict": "FAIL",
+   "stage": "parse",
+   "failure": "<think> CoT prefix 41.6k chars + fences inside think block; payload JSON valid but echo drift 4/4 ('->\" subst, case, whitespace)",
+   "scores": [
+    1,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "probe": "122b-3r",
+   "paper": 45000,
+   "deadline_s": 900,
+   "call_s": 91.4,
+   "exit": 4,
+   "verdict": "FAIL",
+   "stage": "validate",
+   "failure": "echo drift 3/4 (name substitution Tashen, transposition BJPS, tail rewrite; item 0 exact)",
+   "scores": [
+    1,
+    0,
+    1,
+    1
+   ]
+  }
+ ],
+ "gate_slots": [
+  "122b-1",
+  "122b-2r",
+  "122b-3r",
+  "122b-4"
+ ],
+ "passed": 0,
+ "failed": 4,
+ "gate_verdict": "COULD-NOT-JUDGE (0/4 < 3/4)"
+}

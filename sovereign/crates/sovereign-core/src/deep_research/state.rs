@@ -95,6 +95,16 @@ impl State {
             (Auditing, NoNewGaps) => Synthesizing,
             (Auditing, BudgetExhausted) => Synthesizing,
             (Auditing, GapCycle) => Querying,
+            // drb1-r2c (F4 continue): the acquisition-free round return —
+            // the stop rule's continue (gaps growing, round budget
+            // remaining, web leg unavailable: F16 refusal or budget out)
+            // consumes the round without acquiring; the machine returns
+            // to Rounding for the next RoundStarted. The bare loop
+            // `continue` of drb1-r1 left the machine at Auditing and the
+            // next round errored ("no transition for (auditing,
+            // RoundStarted)") — watched red in gym_deck::
+            // unsearchable_estate_refuses_the_web_leg.
+            (Auditing, AcquisitionSkipped) => Rounding,
             // GAP-4: the structural-surprise re-frame — Auditing lands
             // on Reframing (the reframe record is written there), and
             // ReframeWritten re-enters Planning — the SAME PlanWritten
@@ -155,6 +165,11 @@ pub enum Event {
     SurveyComplete,
     NoNewGaps,
     BudgetExhausted,
+    /// drb1-r2c (F4 continue): the stop rule consumed a round WITHOUT
+    /// the acquisition leg — gaps growing, round budget remaining, but
+    /// the web leg cannot run (F16 refusal or budget out). Auditing
+    /// returns to Rounding so the next RoundStarted is a legal pair.
+    AcquisitionSkipped,
     /// GAP-4: the typed re-frame event — fired by the loop when the
     /// structural-surprise trigger fires at Auditing (only when a
     /// reframe input was staged at launch).
@@ -382,6 +397,29 @@ mod tests {
             None
         );
         assert_eq!(State::transition(State::Reframing, Event::GapCycle), None);
+    }
+
+    #[test]
+    fn f4_continue_transition_is_enumerated() {
+        // drb1-r2c (F4 continue): the acquisition-free round return is a
+        // typed pair — Auditing → Rounding, so the next RoundStarted is
+        // legal (the red: gym_deck::unsearchable_estate_refuses_the_web_leg
+        // errored on (auditing, RoundStarted)). The skip is Auditing-only
+        // — the audit's stop rule fires it — and it never acquires: the
+        // acquiring path from Auditing is GapCycle → Querying onward.
+        assert_eq!(
+            State::transition(State::Auditing, Event::AcquisitionSkipped),
+            Some(State::Rounding)
+        );
+        assert_eq!(
+            State::transition(State::Rounding, Event::AcquisitionSkipped),
+            None,
+            "the skip is Auditing-only — it cannot fire mid-acquire"
+        );
+        assert_eq!(
+            State::transition(State::Querying, Event::AcquisitionSkipped),
+            None
+        );
     }
 
     #[test]

@@ -480,6 +480,7 @@ fn write_config(plan: &Plan) -> Result<(), String> {
         }
         Err(_) => SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: plan.model_path.clone(),
                 fast: None,

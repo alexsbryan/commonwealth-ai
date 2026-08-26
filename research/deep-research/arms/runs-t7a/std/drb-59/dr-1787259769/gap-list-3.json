@@ -1,0 +1,247 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787259769",
+  "charter_hash": "1911271c489f36f3",
+  "round": 3,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, birds achieve precise location and direction navigation during migration by utilizing a combination of innate biological mechanisms and environmental cues.[Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "They are equipped with internal clocks that allow them to interpret these changing patterns throughout the day and seasons to determine their position relative to hemispheres [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This sense allows them to identify north-south directions by sensing differences in the strength of the magnetic field, which is strongest at the poles and weaker toward the equator [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "A specific region of the brain capable of detecting magnetism has been identified in recent studies [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "They inherit genetically encoded directions from their parents; if parents have different directional instincts, offspring may exhibit intermediate migration paths [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "While some species like swans learn routes from parents during a first migration, many others navigate independently using these innate cues [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "*   **Day Length:** The timing of migration itself is primarily controlled by changes in day length, which acts as a cue for when to initiate movement between breeding and wintering grounds [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Based on the provided evidence, birds achieve precise location and direction navigation during migration by utilizing a combination of innate biological mechanisms and environmental cues. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, birds achieve precise location and direction navigation during migration by utilizing a combination of innate biological mechanisms and environmental cues. [Source: ev-2]",
+      "actionable_query": "Based provided evidence birds achieve precise location direction navigation during migration utilizing combination innate biological mechanisms environmental cues",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "They are equipped with internal clocks that allow them to interpret these changing patterns throughout the day and seasons to determine their position relative to hemispheres [Source: ev-3].",
+      "actionable_query": "They equipped internal clocks allow them interpret changing patterns throughout day seasons determine position relative hemispheres",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "This sense allows them to identify north-south directions by sensing differences in the strength of the magnetic field, which is strongest at the poles and weaker toward the equator [Source: ev-3].",
+      "actionable_query": "sense allows them identify north-south directions sensing differences strength magnetic field strongest poles weaker toward equator",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "A specific region of the brain capable of detecting magnetism has been identified in recent studies [Source: ev-3].",
+      "actionable_query": "specific region brain capable detecting magnetism identified recent studies",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "They inherit genetically encoded directions from their parents; if parents have different directional instincts, offspring may exhibit intermediate migration paths [Source: ev-2].",
+      "actionable_query": "They inherit genetically encoded directions parents have different directional instincts offspring may exhibit intermediate migration paths",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "While some species like swans learn routes from parents during a first migration, many others navigate independently using these innate cues [Source: ev-3].",
+      "actionable_query": "While some species like swans learn routes from parents during a migration, many others navigate independently using these innate cues .",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "*   **Day Length:** The timing of migration itself is primarily controlled by changes in day length, which acts as a cue for when to initiate movement between breeding and wintering grounds [Source: ev-1].",
+      "actionable_query": "Day Length timing migration itself primarily controlled changes acts cue initiate movement breeding wintering grounds",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

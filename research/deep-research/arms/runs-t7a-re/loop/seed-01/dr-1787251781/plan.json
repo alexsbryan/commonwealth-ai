@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787251781",
+  "charter_hash": "d9969be2b543f904",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Google's acquisition price for Wiz in March 2025",
+      "Wiz's annual recurring revenue (ARR) or valuation at the time of acquisition (2025)",
+      "Number of cloud security startups acquired by Google between 2019 and 2024",
+      "Market share of AWS, Azure, and GCP in global public cloud infrastructure as a service (IaaS/PaaS) spending in Q4 2023",
+      "Growth rate of the global cloud security market from 2020 to 2024",
+      "List of top five competitors to Wiz in the cloud workload protection platform (CWPP) segment before the acquisition"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2025"
+    ]
+  }
+}

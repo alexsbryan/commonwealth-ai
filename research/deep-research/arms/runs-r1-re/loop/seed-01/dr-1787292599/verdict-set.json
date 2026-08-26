@@ -1,0 +1,144 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787292599",
+  "charter_hash": "526a8d3c70609cd4",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, here is the answer to your question:\n\n**Why Google acquired Wiz:**\nGoogle Cloud, under Thomas Kurian, pursued the acquisition of Wiz primarily to close a security gap with competitors AWS and Azure [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The company bet that cloud-security consolidation would be the next battleground in the \"cloud wars,\" driven by AI-driven cloud adoption as a demand driver [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "**What the deal signaled about the market:**\nThe transaction was announced on 2025-03-18 for approximately $32 billion in an all-cash structure, marking it as the largest acquisition in Google's history [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "This move followed Wiz’s rejection of an earlier $23 billion offer from Google in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Although announced in March 2025, the deal completed its regulatory and shareholder steps later in 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Google announced on 2025-03-18 that it had agreed to acquire Wiz for approximately $32 billion in an all-cash deal, which marked the largest acquisition in Google's history [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "The primary strategic reason for this acquisition was for Google Cloud, under Thomas Kurian, to close a security gap with competitors AWS and Azure [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "This transaction followed Wiz’s rejection of an earlier $23 billion offer from Google in July 2024 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-01"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

@@ -1,0 +1,107 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787292941",
+  "charter_hash": "a63f1f02228931c1",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed so that obligations would land as institutional capacity and technology mature [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This schedule also serves to double as a compliance roadmap for providers worldwide [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Regarding what the different deadlines require, the evidence supports only one specific detail from your list. [Source: ev-1]",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "The \"unacceptable risk\" practices are banned outright starting on February 2, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "While the text mentions other dates (such as August 2, 2026) associated with high-risk system obligations in its general description of phases [Source: ev-1], it does not provide further specifics about those requirements within the scope of the provided still-open items or supporting details beyond that single prohibition date.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "The different deadlines require the following specific obligations:\n*   **Prohibited practices:** \"Unacceptable risk\" practices are banned outright from 2025-02-02 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "The Act was published in the EU Official Journal on 2024-07-12 and entered into force on 2024/08/01 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

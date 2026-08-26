@@ -1,0 +1,61 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787242254",
+  "charter_hash": "b4b727db2535c958",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 12
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 5,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-04",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787242254"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+    "The launch signaled a shift in frontier reasoning models toward integrating vision directly into the model architecture rather than bolting it on, as well as incorporating native tool use (such as web search and code interpreter) trained into the model itself [Source: ev-1].",
+    "Strategically, with GPT-5 not yet shipping, OpenAI used this release to defend its position at the frontier against DeepSeek’s R1 cost shock and Anthropic’s agentic-coding push [Source: ev-1].",
+    "This move reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini's pricing of $1.10 per million input tokens and $4.40 per million output tokens, compared to o3's higher price point of $10 / $40 per million tokens (input/output) [Source: ev-1].",
+    "The launch also introduced a private chain-of-thought policy where reasoning tokens are not exposed to API callers, alongside an API-first availability strategy that made these models accessible to developers from day one [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787242254",
+    "acquired_at_unix": 1787242254,
+    "released_at_unix": 1787242314
+  }
+}

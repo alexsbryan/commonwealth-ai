@@ -1,0 +1,129 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "round": 3,
+  "entries": [
+    {
+      "url": "https://www.filippremik.com/uploads/1/4/2/3/142331340/premik_jmp.pdf",
+      "title": "[PDF] Procurement with Bid Preference & Buyer's Switching Costs - Filip Premik",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=w67K0PY7n9U",
+      "title": "(AGT10E9) [Game Theory] Calculating Expected Revenue in Vickrey (Second Price) Auction",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "http://www.econport.org/content/handbook/auctions/usefulconcepts/revequiv.html",
+      "title": "EconPort - Revenue Equivalence for One-sided Markets",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://atlaspolicy.com/estimating-the-impacts-of-direct-to-consumer-electric-vehicle-sales",
+      "title": "Estimating the Impacts of Direct-to-Consumer Electric Vehicle ...",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.chegg.com/homework-help/questions-and-answers/suppose-interested-bidding-piece-land-know-one-bidder-interested-seller-announced-highest--q119671261",
+      "title": "Solved Suppose we are interested in bidding on a piece of | Chegg.com",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf",
+      "title": "F:\\C103\\auctionlect.wpd",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/pdf/2202.07517",
+      "title": "[PDF] An Equilibrium Model of the First-Price Auction with Strategic ...",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.anderson.ucla.edu/sites/default/files/document/2025-06/Modeling%20Bidder%20Risk%20Preferences%20to%20Optimize%20Auction%20Design.pdf",
+      "title": "[PDF] Modeling Bidder Risk Preferences to Optimize Auction Design",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.aeaweb.org/conference/2023/program/paper/9HzFTrtZ",
+      "title": "[PDF] Bidding behavior in housing auctions - American Economic Association",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+      "title": "8 Minutes to Master Solving Sealed Bid First Price Auction ...",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://direct.mit.edu/rest/article/107/3/755/114759/Bidding-on-Price-and-Quality-An-Experiment-on-the",
+      "title": "Bidding on Price and Quality: An Experiment on the Complexity of ...",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://milgrom.people.stanford.edu/wp-content/uploads/1985/03/Economics-Of-Competitive-Bidding.pdf",
+      "title": "[PDF] The Economics of Competitive Bidding - Paul Milgrom",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://economia.uniroma2.it/master-science/economics/corso/asset/YTo0OntzOjI6ImlkIjtzOjM6IjQyMSI7czozOiJpZGEiO3M6NDoiMTExMiI7czoyOiJlbSI7TjtzOjE6ImMiO3M6NToiMjRhMDciO30=",
+      "title": "[PDF] Notes on Expected Revenue from Auctions",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.scribd.com/document/648536111/Buyer-s-optimal-information-revelation-strategy-in-procurement-auctions",
+      "title": "Optimal Bidding Strategies in Auctions | PDF | Auction | Procurement",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "http://www.parisschoolofeconomics.com/compte-olivier/Chapter11Auctions.pdf",
+      "title": "[PDF] Auctions - Paris School of Economics",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

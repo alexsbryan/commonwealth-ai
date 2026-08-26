@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787350919",
+  "charter_hash": "72588ccfbaa08272",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Date of official announcement for OpenAI GPT-5 release",
+      "Number of new model variants included in the initial GPT-5 launch package",
+      "Percentage change in API pricing per million tokens between GPT-4o and GPT-5 standard tier",
+      "Count of enterprise customers reporting migration to GPT-5 within 30 days of release",
+      "Share of total OpenAI revenue attributed to API usage versus consumer subscriptions in Q3 2025",
+      "Median latency reduction (in milliseconds) measured across benchmark tasks comparing GPT-5 to GPT-4.1",
+      "List of specific features removed or deprecated from the ChatGPT interface upon GPT-5 rollout"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "5",
+      "2025"
+    ]
+  }
+}

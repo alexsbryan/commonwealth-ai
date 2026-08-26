@@ -1,0 +1,183 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787242079",
+  "charter_hash": "47316214969ad1cb",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787242079",
+    "question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/loop/seed-02/dr-1787242079",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+  "frontier": [
+    "Nvidia's percentage decline in stock price on January 27, 2025",
+    "Total market capitalization lost by Nvidia on January 27, 3025",
+    "Date of DeepSeek R1 model release and initial public availability",
+    "Number of H800 GPUs used to train the DeepSeek V3/R1 base models according to technical reports",
+    "Reported total cost or budget for training DeepSeek V3 compared to industry averages",
+    "Average number of NVIDIA A100/H100 GPUs required to train a frontier LLM with similar parameter counts (e.g., GPT-4o, Claude 3.5)",
+    "Nvidia's reported revenue from data center segment in Q4 FY2024 vs Q4 FY2023 percentage change",
+    "Analyst estimates regarding Nvidia's market share in AI accelerators prior to January 2025",
+    "Comparison of inference costs per token between DeepSeek R1 and comparable closed-source frontier models"
+  ],
+  "frontier_question": "Why did DeepSeek's R1 release trigger the largest single-day loss in Nvidia's history, and what did it reveal about frontier-AI training economics?",
+  "figure_specifiers": [
+    "1"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787242079",
+      "charter_hash": "47316214969ad1cb",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787242079",
+      "charter_hash": "47316214969ad1cb",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-02",
+          "source_url": "https://estate.example/seed-02",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "DeepSeek released DeepSeek-R1, its open-weights reasoning model with accompanying paper, on 2025-01-20. Its predecessor DeepSeek-V3 (released 2024-12-26) reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million, on export-restricted H800 chips. R1's reasoning was produced by reinforcement learning (GRPO), and R1-Zero was trained with no supervised fine-tuning at all. On 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization — at the time the largest single-day loss in stock-market history — with about US$1 trillion erased across the tech complex. Markets repriced the thesis that frontier-AI capex, and therefore Nvidia's demand, is moated by compute scale: an open-weights frontier-class reasoning model had been trained for a fraction of the incumbent cost. US export controls (the H800 restrictions) had forced Chinese labs toward efficiency — scarcity, not preference, drove the economics.\n",
+          "ingested_into": null,
+          "tags": [
+            "2025",
+            "deepseek",
+            "loss",
+            "nvidia"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-02"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787242079",
+      "charter_hash": "47316214969ad1cb",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-02"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained at a fraction of incumbent costs, thereby repricing the market thesis that demand for compute (and thus Nvidia) is protected by scale.",
+    "Specifically:\n\n*   **Cost and Efficiency Revelation:** DeepSeek-V3, released on 2024-12-26 [Source: ev-1], reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+    "*   **Market Reaction:** On 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization, the largest single-day loss in stock-market history, with about US$1 trillion erased across the tech complex [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained at a fraction of incumbent costs, thereby repricing the market thesis that demand for compute (and thus Nvidia) is protected by scale.",
+      "actionable_query": "1 DeepSeek’s release triggered largest single-day loss Nvidia’s history because demonstrated frontier-class open-weights reasoning model could trained fraction incumbent costs thereby repricing market",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "Specifically:\n\n*   **Cost and Efficiency Revelation:** DeepSeek-V3, released on 2024-12-26 [Source: ev-1], reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+      "actionable_query": "Specifically: * **Cost and Efficiency Revelation:** DeepSeek-V released on - - , reported training on roughly million GPU-hours at a claimed",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "*   **Market Reaction:** On 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization, the largest single-day loss in stock-market history, with about US$1 trillion erased across the tech complex [Source: ev-1].",
+      "actionable_query": "* **Market Reaction:** On - - Nvidia lost approximately US$ trillion erased across the tech complex . (1)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 3,
+      "fetched": 0,
+      "search_calls": 2
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-02",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

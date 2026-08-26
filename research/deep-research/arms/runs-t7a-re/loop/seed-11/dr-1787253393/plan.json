@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787253393",
+  "charter_hash": "98ef3dd1c82d411b",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Nvidia's market capitalization on July 1, 2025",
+      "Global AI infrastructure capex forecast for data centers in 2024 and 2025 by major cloud providers (Microsoft, Amazon, Google, Meta)",
+      "Share of Nvidia revenue derived from Data Center segment Q1 FY2026",
+      "Year-over-year percentage change in global semiconductor industry sales driven by GPU demand",
+      "Number of hyperscale data center projects announced or completed with Nvidia Hopper/Blackwell chips between January 2023 and June 2025",
+      "Median enterprise IT budget allocation to AI hardware versus traditional servers in Fortune 500 companies"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2025"
+    ]
+  }
+}

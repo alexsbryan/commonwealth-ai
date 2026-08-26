@@ -1,0 +1,88 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787293777",
+  "charter_hash": "66b68fa60ea96453",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2024 Microsoft’s Recall feature became privacy scandal because initially designed memory tool automatically screenshotted user's screen few seconds stored data locally",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "changed version Recall now opt-in default OFF rather enabled",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Additionally accessing timeline requires Windows Hello authentication presence detection feature explicitly excludes incognito browsing sessions DRM content",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "revised secure version reached general availability Copilot PCs initial controversy permanently shaped privacy conversations surrounding",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 16.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

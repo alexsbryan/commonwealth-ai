@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787242173",
+  "charter_hash": "d12ea3ba1ab92515",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of helium tank leaks detected during the Starliner CFT-1 mission",
+      "Percentage change in spacecraft velocity due to thruster malfunctions during the undocking phase",
+      "Count of crew members on board the Boeing Starliner for its first operational flight (CFT-2)",
+      "Date and time of NASA's decision to return the Starliner uncrewed from orbit (1, mean)",
+      "Cost per day of keeping astronauts aboard the ISS as a result of the delayed return",
+      "Change in launch window schedule for subsequent Crew Flight Test missions following the incident (1, mean)"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1",
+      "mean"
+    ]
+  }
+}

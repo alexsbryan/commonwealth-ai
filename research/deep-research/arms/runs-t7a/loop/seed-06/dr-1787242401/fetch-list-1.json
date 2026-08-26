@@ -1,0 +1,130 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787242401",
+  "charter_hash": "d0e50262d0074795",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Number of Windows devices affected by the CrowdStrike Falcon sensor update globally in July 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Percentage of global commercial airline flights disrupted or cancelled on July 19, 2024 due to IT outages",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Estimated financial loss for Microsoft attributed to the CrowdStrike incident in Q3 FY2025 earnings report",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Total number of countries reporting significant service disruptions following the CrowdStrike outage on July 18-19, 2026",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Median downtime duration for critical business applications reported by major enterprises during the July 2024 CrowdStrike event",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Share of US healthcare facilities experiencing system failures requiring manual operations after the CrowdStrike update failure",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 9.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

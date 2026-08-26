@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787336574",
+  "charter_hash": "6983ecf0c4d70cd2",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "NASA ordered Boeing's Starliner to return uncrewed because the five reaction-control system (RCS) thruster anomalies identified during docking could not be guaranteed safe for the deorbit burn, as these thrusters could not be ground-tested in their flight condition [Source: ev-1]. This decision meant that astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned, returning on a Crew-9 Dragon roughly 9.5 months after launch instead of the planned ~8 days [Source: ev-1]. Additionally, under the fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-03",
+      "custody": "public-web"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787329483",
+  "charter_hash": "4a2305f15567840b",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Microsoft's Recall feature became a privacy scandal in 2024 because it was initially designed to screenshot the user’s screen every few seconds and store this data locally, creating a \"photographic memory\" for the PC [Source: ev-1]. Security researchers, notably Kevin Beaumont, demonstrated that despite Microsoft's claims of encryption, these screenshots were actually stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1]. Consequently, sensitive information visible on the screen—such as passwords, health data, and private messages—was captured by default and remained accessible to any process running under the user account [Source: ev-1]. This collision between an opt-in value proposition and privacy expectations resulted in what was described as the AI-PC era’s first major privacy crisis [Source: ev-1].\n\nIn response to the controversy, regulatory inquiries from bodies such as the Irish Data Protection Commission and the UK Information Commissioner's Office, along with an investigation opened by Washington State Attorney General Bob Ferguson, pressured Microsoft to change its approach [Source: ev-1]. Following a delay announced in June 2024, Microsoft reversed the feature's default setting so that Recall is now opt-in (default OFF) rather than enabled automatically [Source: ev-1]. The relaunched version requires Windows Hello authentication and presence detection to access the timeline and explicitly excludes incognito or DRM content from capture [Source: ev-1]. This revised, opt-in version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-12",
+      "custody": "public-web"
+    }
+  ]
+}

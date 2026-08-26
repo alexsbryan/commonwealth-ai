@@ -1,0 +1,30 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787243315",
+  "charter_hash": "4733962f472c4cb6",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://estate.example/seed-12",
+      "source_url": "https://estate.example/seed-12",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Microsoft announced Recall on 2024-05-20 at the Copilot+ PC launch (Microsoft Build) — an AI \"memory\" feature that screenshots the screen every few seconds, stores them locally, and makes them searchable (\"photographic memory\" for your PC). Security researchers, notably Kevin Beaumont, showed Recall's screenshots were stored unencrypted (plaintext) in a local SQLite database despite Microsoft's \"encrypted\" claims, and that passwords and sensitive content visible on screen were captured by default — accessible to any process running as the user. Microsoft delayed Recall (June 2024), then reversed the default: the relaunched feature is opt-in (default OFF), requires Windows Hello and presence detection to open the timeline, and excludes incognito/DRM content. The Irish Data Protection Commission (DPC) and the UK Information Commissioner's Office raised questions; the Washington State Attorney General (Bob Ferguson) opened an investigation. The feature's value proposition — searchable local memory — collided with privacy expectations for local data: a default-on recorder of everything on screen, including passwords, health data and private messages, with security claims that did not hold; the episode became the AI-PC era's first major privacy crisis and a case study in shipping AI features default-on. The revised opt-in Recall reached general availability on Copilot+ PCs in 2025, but the controversy permanently shaped the \"AI PC\" privacy conversation.\n",
+      "ingested_into": null,
+      "tags": [
+        "2024",
+        "2025",
+        "feature",
+        "microsoft",
+        "recall"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://estate.example/seed-12"
+  ],
+  "derived_custody": "public-web"
+}

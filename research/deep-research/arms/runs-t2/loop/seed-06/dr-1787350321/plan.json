@@ -1,0 +1,22 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787350321",
+  "charter_hash": "d252c81318228768",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of Windows devices affected by the CrowdStrike Falcon sensor update in July 2024",
+      "Percentage of global commercial airline flights cancelled or delayed between July 19 and July 23, 2024 due to IT outages",
+      "Estimated financial cost of the July 2024 outage for major corporations such as Delta Air Lines, FedEx, and United Airlines",
+      "Count of countries where government agencies reported operational disruptions following the CrowdStrike incident on July 18-19, 2024",
+      "Median time (in hours) required for organizations to restore normal operations after applying the faulty CrowdStrike content update"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

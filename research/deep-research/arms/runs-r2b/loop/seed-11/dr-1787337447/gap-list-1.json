@@ -1,0 +1,66 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787337447",
+  "charter_hash": "2d823579659b4aa8",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "never-ran",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": true,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "Therefore, I cannot provide an answer based on the provided materials.",
+      "verdict": "never-ran",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": true,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "No evidence was retrieved this round.",
+      "actionable_query": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+      "from_claim_id": "c1",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "Therefore, I cannot provide an answer based on the provided materials.",
+      "actionable_query": "Why did Nvidia's market value cross $4 trillion in July 2025, and what does the milestone say about AI infrastructure spending?",
+      "from_claim_id": "c2",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [
+    {
+      "claim_id": "c1",
+      "reason": "no evidence retrieved for this round"
+    },
+    {
+      "claim_id": "c2",
+      "reason": "no evidence retrieved for this round"
+    }
+  ],
+  "strict_subset_of_prior": true
+}

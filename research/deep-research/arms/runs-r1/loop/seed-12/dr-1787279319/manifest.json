@@ -1,0 +1,68 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787279319",
+  "charter_hash": "602065f91080bdf7",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 6
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 2
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-12",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787279319"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Microsoft's Recall feature became a privacy scandal in 2024 because security researchers, notably Kevin Beaumont, demonstrated that the AI \"memory\" tool stored screenshots of users' screens unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+    "This contradicted Microsoft’s claims that the data was encrypted and allowed any process running as the user to access sensitive content captured by default, such as passwords, health data, and private messages [Source: ev-1].",
+    "The incident drew scrutiny from regulatory bodies including the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson [Source: ev-1].",
+    "In response, Microsoft delayed the feature in June 2024 and reversed its default setting so that it is now opt-in (default OFF), requires Windows Hello and presence detection to open the timeline, and excludes incognito/DRM content [Source: ev-1].",
+    "This revised version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787279319",
+    "acquired_at_unix": 1787279319,
+    "released_at_unix": 1787279419
+  }
+}

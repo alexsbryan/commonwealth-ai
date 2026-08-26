@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787242849",
+  "charter_hash": "f2373db9ef630876",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the evidence provided, here is why Anthropic released Claude 4 as two models in May 2025 and what it signaled about the agentic-coding market:\n\n**Why Anthropic Released Two Models (Opus 4 and Sonnet 4)**\nAnthropic released Claude Opus 4 and Claude Sonnet 4 simultaneously to create a tiered product lineup that addressed different segments of the developer and enterprise markets. The dual-model strategy was designed to address different market needs within the agentic-coding sector [Source: ev-1]. Specifically, this involved positioning **Claude Opus 4** as the flagship model with higher pricing at $15 per million input tokens and $75 per million output tokens [Source: ev-1], while **Claude Sonnet 4** acted as a \"fast workhorse\" positioned specifically as the developer-default coding model at lower prices of $3 per million input tokens and $15 per million output tokens [Source: ev-1].\n\n**What the Launch Signaled About the Agentic-Coding Market**\nThe launch signaled that reliability and safety were becoming critical differentiators in an enterprise agentic-coding gold rush. By highlighting significant advancements in capability, particularly with \"computer use 2.0,\" which was roughly twice as reliable as the previous generation (referenced here via version comparisons involving 3.x) for browser control tasks [Source: ev-1], Anthropic positioned Claude 4 as the safest and most reliable coding agent against competitors like OpenAI's o-series [Source: ev-1]. This strategic focus on reliability and safety drove record API usage and cemented Anthropic’s position in the market, ultimately contributing to its raising of a large funding round at a reported ~$183 billion valuation later that year [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-09",
+      "custody": "public-web"
+    }
+  ]
+}

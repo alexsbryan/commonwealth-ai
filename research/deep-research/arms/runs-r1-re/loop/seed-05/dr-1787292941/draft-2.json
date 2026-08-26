@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787292941",
+  "charter_hash": "a63f1f02228931c1",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed so that obligations would land as institutional capacity and technology mature [Source: ev-1]. This schedule also serves to double as a compliance roadmap for providers worldwide [Source: ev-1].\n\nThe different deadlines require the following specific obligations:\n*   **Prohibited practices:** \"Unacceptable risk\" practices are banned outright from 2025-02-02 [Source: ev-1].\n*   **General-purpose AI (GPAI) models:** Obligations apply from 2025-8-02, with duties scaled by systemic-risk status using a threshold of $10^{26}$ FLOPs [Source: ev-1].\n*   **High-risk systems:** Obligations generally apply from 2026-8-02, though a subset applies from 2027-8-02 [Source: ev-1].\n\nThe Act was published in the EU Official Journal on 2024-07-12 and entered into force on 2024/08/01 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web"
+    }
+  ]
+}

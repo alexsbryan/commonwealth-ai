@@ -1,0 +1,114 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787350321",
+  "charter_hash": "d252c81318228768",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "On July a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by crashing approximately million Windows devices into b (2024)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "root cause identified out-of-bounds memory read sensor's code specifically untrusted pointer dereference triggered input bypassed flawed validation due missing checks memory-safety defect",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-06"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "This incident occurred because of \"monoculture concentration,\" where security agent deployed at enterprise scale with fast-cadence updates b (2024)",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "consequences severe across multiple sectors Aviation Delta Air Lines cancelled roughly flights incurred million costs airline later sued CrowdStrike hired David Boies",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-06"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 20.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-06",
+      "title": "The CrowdStrike outage (2024-07-19)",
+      "snippet": "A faulty CrowdStrike Falcon content update crashed Windows machines worldwide on 2024-07-19 — about 8.5 million devices.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 10.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787252289",
+  "charter_hash": "3f2f8a3c7ee72366",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2024 2027 Act entered force phases because phased entry deliberate ensure obligations land institutional capacity technology mature serving compliance roadmap global providers",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "Specific deadlines require different actions based risk tiers",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Prohibited practices classified unacceptable risks social scoring manipulative uses apply",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 18.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 18.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

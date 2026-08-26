@@ -1,0 +1,110 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787272636",
+  "charter_hash": "278a4e62cb8e9486",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Nvidia's market value crossed $4 trillion on 2025-07-09, making it the first company in history to close above this threshold [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This milestone was driven by several key factors related to AI infrastructure spending and demand:\n\n*   **Accelerator Demand:** Strong demand for Blackwell accelerator rack systems (GB200/GB300) contributed significantly to the valuation increase [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "*   **Major Infrastructure Projects:** The Stargate project, with an approximately $500 billion plan for AI infrastructure, played a major role in driving growth [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "*   **Hyperscaler Capex:** Repeatedly raised capital expenditure guidance from major hyperscalers—including Microsoft, Meta, Google, and Amazon—throughout 2025 supported Nvidia’s market position as it held a dominant share of the AI-accelerator market [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-11"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "*   **Shift to Inference:** CEO Jensen Huang characterized this period as a transition from training demand to inference demand, describing \"AI factories\" that sell compute as a commodity [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "At the time of crossing $4 trillion, Nvidia’s share price was approximately $160 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "Nvidia’s market value crossed $4 trillion on 2025-07-09, making it the first company in history to close above this threshold [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

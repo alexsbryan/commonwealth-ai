@@ -1,0 +1,139 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787337645",
+  "charter_hash": "8ea26f60cb4bd2ef",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "How did American cities change across four decades (1980-2024): gentrification, inequality, affordability, and displacement — every claim cited?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Median household income growth rate by city 1980 vs 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Percentage change in median home price by city 1980 to 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Gini coefficient for personal income at the metropolitan level 1983 and 2023",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h11",
+      "query_id": "q1",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h11",
+      "query_id": "q3",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "snippet": "Governing analyzed Census tract data for the nation's 50 largest cities. Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) led; nearly 20 percent of lower-income neighborhoods gentrified since 2000, compared to 9 percent in the 1990s; poverty rate percentage-point change -0.7 gentrifying vs +6.7 not gentrifying.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h11",
+      "query_id": "q2",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h11",
+      "h11",
+      "h1"
+    ],
+    "eps_admits": [
+      "h11"
+    ],
+    "below_cut": [
+      "h11",
+      "h1",
+      "h10",
+      "h1",
+      "h11",
+      "h9",
+      "h6",
+      "h2",
+      "h10",
+      "h5",
+      "h6",
+      "h8",
+      "h10",
+      "h5",
+      "h6",
+      "h9",
+      "h8",
+      "h4",
+      "h1",
+      "h4",
+      "h8",
+      "h9",
+      "h4",
+      "h6",
+      "h4",
+      "h5",
+      "h8",
+      "h10",
+      "h2",
+      "h5",
+      "h3",
+      "h9",
+      "h2",
+      "h2",
+      "h3",
+      "h3",
+      "h3"
+    ],
+    "threshold": 10.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

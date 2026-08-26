@@ -1,0 +1,36 @@
+{
+  "icd": "charter",
+  "version": 1,
+  "run_id": "dr-1787350502",
+  "question": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+  "seed_id": null,
+  "created_at_unix": 1787350502,
+  "charter": {
+    "max_rounds": 3,
+    "evidence_window_max_chunks": 20,
+    "containment": {
+      "trigger": "judge-supported",
+      "extraction_max_tokens": 32,
+      "specifics_max": 4
+    },
+    "triage": {
+      "code_set_k": 5,
+      "eps_quota": 0.1,
+      "content_coverage_floor": 0.25,
+      "prose_line_floor": 500
+    },
+    "budget": {
+      "web_search_queries": 12,
+      "web_fetch_pages": 12
+    },
+    "custody": {
+      "stamp_required": true,
+      "unknown_refuses": true
+    },
+    "url_constraint": {
+      "enabled": true,
+      "layer": "sovereign-inference:UrlAllowlistConstraint"
+    }
+  },
+  "frozen": true
+}

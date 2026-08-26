@@ -1,0 +1,76 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787259198",
+  "charter_hash": "7784c16c082bba48",
+  "round": 1,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "source_url": "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Horizontal gene transfer - Wikipedia Jump to content Main menu Main menu\nmove to sidebar hide Navigation Main page\nContents\nCurrent events\nRandom article\nAbout Wikipedia\nContact us Contribute Help\nLearn to edit\nCommunity portal\nRecent changes\nUpload file\nSpecial pages Search Search Appearance Donate Create account Log in Personal tools Donate Create account Log in Contents\nmove to sidebar hide (Top)\n1 History 2 Mechanisms Toggle Mechanisms subsection 2.1 Horizontal transposon transfer 3 Methods of detection 4 Viruses 5 Prokaryotes Toggle Prokaryotes subsection 5.1 Bacterial transformation 5.2 Bacterial conjugation 5.3 Archaeal DNA transfer 6 Eukaryotes Toggle Eukaryotes subsection 6.1 Organelle to nuclear genome 6.2 Organelle to organelle 6.3 Bacteria to fungi 6.4 Bacteria to plants 6.5 Bacteria to animals 6.6 Plant to plant 6.7 Plants to animals 6.8 Plant to fungus 6.9 Plant to bacteria 6.10 Fungi to insects 6.11 Fungi to fungi 6.12 Fungi to oomycetes 6.13 Oomycetes to fungi 6.14 Animals to animals 6.15 Animals to bacteria 6.16 Human to protozoan 6.17 Human genome 7 Compounds found to promote horizontal gene transfer 8 Promiscuous DNA Toggle Promiscuous DNA subsection 8.1 History 8.2 Mechanism 8.3 Types 8.3.1 NUMTs 8.3.2 NUPTs 9 Artificial horizontal gene transfer 10 In evolution Toggle In evolution subsection 10.1 Challenge to the tree of life 10.2 Phylogenetic information in HGT 10.3 The chromosomal organization of horizontal gene transfer 10.4 Genes 11 See also 12 References 13 Further reading 14 External links Toggle the table of contents Horizontal gene transfer\n39 languages العربية\nБългарски\nBosanski\nCatalà\nČeština\nЧӑвашла\nDansk\nDeutsch\nΕλληνικά\nEspañol\nEesti\nEuskara\nفارسی\nSuomi\nFrançais\nGaeilge\nGalego\nעברית\nMagyar\nBahasa Indonesia\nItaliano\n日本語\n한국어\nМакедонски\nМонгол\nNederlands\nNorsk nynorsk\nPolski\nPortuguês\nРусский\nSimple English\nSvenska\nไทย\nTagalog\nTürkçe\nУкраїнська\nTiếng Việt\n粵語\n中文 Edit links\nArticle Talk English Read Edit View history Tools Tools\nmove to sidebar hide Actions Read Edit View history General What links here\nRelated changes\nUpload file\nPermanent link\nPage information\nCite this page\nGet shortened URL\nSwitch to legacy parser Print/export Download as PDF\nPrintable version In other projects Wikimedia Commons\nWikidata item Appearance\nmove to sidebar hide From Wikipedia, the free encyclopedia\nTransfer of genes from unrelated organisms\n\"HGT\" redirects here. For other uses, see HGT (disambiguation).\nThis article is about the natural process. For artificial gene transfer, see Gene delivery.\nTree of life showing vertical and horizontal gene transfers Horizontal gene transfer (HGT) or lateral gene transfer (LGT)[1][2][3] is the movement of genetic material between organisms other than by the (\"vertical\") transmission of DNA from parent to offspring (reproduction).[4] HGT is an important factor in the evolution of many organisms.[5][6] HGT is influencing scientific understanding of higher-order evolution while more significantly shifting perspectives on bacterial evolution.[7]\nHorizontal gene transfer is the primary mechanism for the spread of antibiotic resistance in bacteria,[8][5][9][10] and plays an important role in the evolution of bacteria that can degrade novel compounds such as human-created pesticides[11] and in the evolution, maintenance, and transmission of virulence.[12] It often involves temperate bacteriophages and plasmids.[13][14][15] Genes responsible for antibiotic resistance in one species of bacteria can be transferred to another species of bacteria through various mechanisms of HGT such as transformation, transduction and conjugation, subsequently arming the antibiotic resistant genes' recipient against antibiotics. The rapid spread of antibiotic resistance genes in this manner is becoming a challenge to manage in the field of medicine. Ecological factors may also play a role in the H",
+      "ingested_into": null,
+      "tags": [
+        "gene",
+        "horizontal",
+        "transfer",
+        "wikipedia"
+      ]
+    },
+    {
+      "id": "ev-2",
+      "locator": "https://www.youtube.com/watch?v=BiRc2FGh71o",
+      "source_url": "https://www.youtube.com/watch?v=BiRc2FGh71o",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "What is Horizontal Gene Transfer? - YouTube\nAboutPressCopyrightContact usCreatorsAdvertiseDevelopersTermsPrivacyPolicy & SafetyHow YouTube worksTest new featuresNFL Sunday Ticket\n&copy; 2026 Google LLC",
+      "ingested_into": null,
+      "tags": [
+        "gene",
+        "horizontal",
+        "transfer",
+        "what"
+      ]
+    },
+    {
+      "id": "ev-3",
+      "locator": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+      "source_url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Horizontal gene transfer between bacteria and animals - PMC Skip to main content An official website of the United States government Here's how you know Here's how you know Official websites use .gov A .gov website belongs to an official government organization in the United States. Secure .gov websites use HTTPS A lock ( Lock Locked padlock icon ) or https:// means you've safely connected to the .gov website. Share sensitive information only on official, secure websites. Search Log in Dashboard Publications Account settings Log out Search… Search NCBI Primary site navigation Search Logged in as: Dashboard Publications Account settings Log in Search PMC Full-Text Archive Search in PMC Journal List User Guide PERMALINK\nCopy As a library, NLM provides access to scientific literature. Inclusion in an NLM database does not imply endorsement of, or agreement with, the contents by NLM or the National Institutes of Health.\nLearn more: PMC Disclaimer | PMC Copyright Notice Trends Genet\n. Author manuscript; available in PMC: 2012 Apr 1.\nPublished in final edited form as: Trends Genet. 2011 Feb 18;27(4):157–163. doi: 10.1016/j.tig.2011.01.005 Search in PMC Search in PubMed View in NLM Catalog Add to search Horizontal gene transfer between bacteria and animals\nJulie C Dunning Hotopp\nJulie C Dunning Hotopp\n1Institute for Genome Science, Department of Microbiology & Immunology, University of Maryland School of Medicine, Baltimore, MD 21201\nFind articles by Julie C Dunning Hotopp 1 Author information Article notes Copyright and License information 1Institute for Genome Science, Department of Microbiology & Immunology, University of Maryland School of Medicine, Baltimore, MD 21201\n✉\nCorresponding author: Dunning Hotopp, J. C. (jdhotopp@som.umaryland.edu)\nIssue date 2011 Apr.\nPMC Copyright notice\nPMCID: PMC3068243 NIHMSID: NIHMS269564 PMID: 21334091 The publisher's version of this article is available at Trends Genet Abstract\nHorizontal gene transfer is increasingly described between bacteria and animals. Such transfers that are vertically inherited have the potential to influence the evolution of animals. One classic example is the transfer of DNA from mitochondria and chloroplasts to the nucleus after the acquisition of these organelles by eukaryotes. Even today, many of the described instances of bacteria to animal transfer occur as part of intimate relationships like those of endosymbionts and their invertebrate hosts, particularly insects and nematodes, while numerous transfers are also found in asexual animals. Both of these observations are consistent with modern evolutionary theory, in particular the serial endosymbiotic theory and Muller’s ratchet. While it is tempting to suggest that these particular lifestyles might promote horizontal gene transfer, it is difficult to ascertain given the non-random sampling of animal genome sequencing projects and the lack of a systematic analysis of animal genomes for such transfers.\nOccurrence and significance of horizontal gene transfer\nHorizontal gene transfer (HGT) is the transfer of DNA between diverse organisms which allows for the acquisition of novel traits that are unique from those inherited. The advent of large scale genome sequencing has greatly improved our understanding of the importance of HGT particularly among Eubacteria where most cases of genetic transfers have been described so far. For example, the phylogenetic analysis of 144 prokaryotic genomes has indicated that, although most genetic information flows vertically, genes are also frequently transferred horizontally between closely related taxa and between bacteria inhabiting the same environment [1]. HGT in Eubacteria has been implicated in the acquisition and evolution of many traits including antibiotic resistance, pathogenesis, and bioremediation [2, 3].\nAlthough less common, HGT events among eukaryotes have also been identified. In animals, cases of eukaryote-to-eukaryote HGT include the recent acquisition of P e",
+      "ingested_into": null,
+      "tags": [
+        "animals",
+        "bacteria",
+        "between",
+        "gene",
+        "horizontal",
+        "transfer"
+      ]
+    },
+    {
+      "id": "ev-4",
+      "locator": "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2024.1338026/full",
+      "source_url": "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2024.1338026/full",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Frontiers | Horizontal gene transfer in plant microbiomes: integrons as hotspots for cross-species gene exchange Frontiers in Microbiology\nAbout us\nAbout us\nWho we are\nMission and values\nHistory\nLeadership\nAwards\nImpact and progress\nFrontiers impact\nOur annual reports\nThought leadership\nResearcher perspectives\nPublishing model\nHow we publish\nOpen access\nQuality and research integrity\nPeer review\nResearch Topics\nPublish your data with FAIR²\nFee policy\nServices\nSocieties\nNational consortia\nInstitutional partnerships\nCollaborators\nMore from Frontiers\nFrontiers Forum\nFrontiers Planet Prize\nPress office\nSustainability\nCareer opportunities\nContact us\nAll journalsAll articles\nSubmit manuscriptSubmit data\nSearch\nFrontiers in Microbiology\nSections\nSections\nAncient DNA and Forensic Microbiology\nAntimicrobials, Resistance and Chemotherapy\nAquatic Microbiology\nBiology of Archaea\nExtreme Microbiology\nFood Microbiology\nInfectious Agents and Disease\nMicrobe and Virus Interactions with Plants\nMicrobial Symbioses\nMicrobiological Chemistry and Geomicrobiology\nMicrobiome Data Science\nMicrobiotechnology\nMicroorganisms in Vertebrate Digestive Systems\nPhage Biology\nPhysiology and Metabolism of Microorganisms\nSystems Microbiology\nTerrestrial Microbiology\nVirology\nArticlesResearch TopicsEditorial board\nAbout journal\nAbout journal\nScope\nField chief editors\nMission and scope\nFacts\nJournal sections\nOpen access statement\nCopyright statement\nQuality\nFor authors\nWhy submit?\nArticle types\nAuthor guidelines\nEditor guidelines\nPublishing fees\nSubmission checklist\nContact editorial office\nAbout us\nAbout us\nWho we are\nMission and values\nHistory\nLeadership\nAwards\nImpact and progress\nFrontiers impact\nOur annual reports\nThought leadership\nResearcher perspectives\nPublishing model\nHow we publish\nOpen access\nQuality and research integrity\nPeer review\nResearch Topics\nPublish your data with FAIR²\nFee policy\nServices\nSocieties\nNational consortia\nInstitutional partnerships\nCollaborators\nMore from Frontiers\nFrontiers Forum\nFrontiers Planet Prize\nPress office\nSustainability\nCareer opportunities\nContact us\nAll journalsAll articles\nSubmit manuscriptSubmit data\nFrontiers in Microbiology\nSections\nSections\nAncient DNA and Forensic Microbiology\nAntimicrobials, Resistance and Chemotherapy\nAquatic Microbiology\nBiology of Archaea\nExtreme Microbiology\nFood Microbiology\nInfectious Agents and Disease\nMicrobe and Virus Interactions with Plants\nMicrobial Symbioses\nMicrobiological Chemistry and Geomicrobiology\nMicrobiome Data Science\nMicrobiotechnology\nMicroorganisms in Vertebrate Digestive Systems\nPhage Biology\nPhysiology and Metabolism of Microorganisms\nSystems Microbiology\nTerrestrial Microbiology\nVirology\nArticlesResearch TopicsEditorial board\nAbout journal\nAbout journal\nScope\nField chief editors\nMission and scope\nFacts\nJournal sections\nOpen access statement\nCopyright statement\nQuality\nFor authors\nWhy submit?\nArticle types\nAuthor guidelines\nEditor guidelines\nPublishing fees\nSubmission checklist\nContact editorial office\nFrontiers in Microbiology\nSections\nSections\nAncient DNA and Forensic Microbiology\nAntimicrobials, Resistance and Chemotherapy\nAquatic Microbiology\nBiology of Archaea\nExtreme Microbiology\nFood Microbiology\nInfectious Agents and Disease\nMicrobe and Virus Interactions with Plants\nMicrobial Symbioses\nMicrobiological Chemistry and Geomicrobiology\nMicrobiome Data Science\nMicrobiotechnology\nMicroorganisms in Vertebrate Digestive Systems\nPhage Biology\nPhysiology and Metabolism of Microorganisms\nSystems Microbiology\nTerrestrial Microbiology\nVirology\nArticlesResearch TopicsEditorial board\nAbout journal\nAbout journal\nScope\nField chief editors\nMission and scope\nFacts\nJournal sections\nOpen access statement\nCopyright statement\nQuality\nFor authors\nWhy submit?\nArticle types\nAuthor guidelines\nEditor guidelines\nPublishing fees\nSubmission checklist\nContact editorial office\nSubmit manuscriptSubmit data\nSearch\nORIGINAL RESEARCH article\nFront. Microbiol., 29 April 2024\nSec. Evolutionary an",
+      "ingested_into": null,
+      "tags": [
+        "cross",
+        "exchange",
+        "frontiers",
+        "gene",
+        "horizontal",
+        "hotspots"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [],
+  "derived_custody": "public-web"
+}

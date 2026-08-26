@@ -1,0 +1,45 @@
+=== [1] judging the two NEVER-RAN tasks at 65536 ctx ===
+  judge 440s (attempt 1)
+  task 62: T=7.26 R=9.32 overall=43.79 (440s, 2678w)
+  task 83: NEVER-RAN (Failed to generate content: HTTPConnectionPool(host='127.0.0.1', port=9741): Read timed out. (read timeout=600))
+
+TASK          T        R   OVERALL    WORDS
+62         7.26     9.32     43.79     2678
+
+  comprehensiveness      42.8139
+  insight                42.2901
+  instruction_following  45.1009
+  readability            48.1763
+  COMPOSITE              43.7927   (n=1 of 2)
+
+  Perplexity official 40.46 | 27B judge reads Perplexity at 43.67
+  baseline t7a graded-probe 17.3751
+
+=== [2] instrument test-retest: re-judge t56 (already scored 43.1843) ===
+  judge 469s (attempt 1)
+{
+ "id": 56,
+ "overall_score": 0.4623592784488706,
+ "comprehensiveness": 0.4481707317073171,
+ "insight": 0.45642540620384053,
+ "instruction_following": 0.5,
+ "readability": 0.4545454545454546,
+ "target_total": 7.87525,
+ "reference_total": 9.157499999999999
+}
+OVERALL x100 = 46.2359
+
+=== [3] second retest: t90 (already scored 43.8573) ===
+  judge 378s (attempt 1)
+{
+ "id": 90,
+ "overall_score": 0.453472481053547,
+ "comprehensiveness": 0.43389830508474575,
+ "insight": 0.4518072289156626,
+ "instruction_following": 0.4771341463414634,
+ "readability": 0.4638728323699423,
+ "target_total": 7.299999999999999,
+ "reference_total": 8.798000000000002
+}
+OVERALL x100 = 45.3472
+=== DONE ===

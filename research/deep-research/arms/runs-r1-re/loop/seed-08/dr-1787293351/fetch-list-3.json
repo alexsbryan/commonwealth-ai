@@ -1,0 +1,76 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787293351",
+  "charter_hash": "c03978e200bf7655",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "A US court found Google’s search business to be a monopoly because it violated Section of the Sherman Act by engaging in exclusionary conduc",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Judge Amit Mehta ruled on August that these practices—specifically paying companies like Apple and Samsung billions of dollars to remain the",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Evidence presented trial showed Google paid approximately billion distribution gave Apple roughly Safari search-ad revenue",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "Additionally Google prohibited paying default search placement entering revenue-sharing agreements faces limits acquisitions AI-related investments",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-08",
+      "title": "The Google search-monopoly remedies (2024-2025)",
+      "snippet": "Judge Amit Mehta ruled Google a search monopolist on 2024-08-05; structural remedies followed on 2025-08-05.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 16.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

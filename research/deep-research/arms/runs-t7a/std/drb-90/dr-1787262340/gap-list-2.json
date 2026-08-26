@@ -1,0 +1,1120 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787262340",
+  "charter_hash": "7a9a364495f9f05b",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "**Analysis of Liability Allocation in ADAS-Equipped Vehicles: Shared Human-Machine Context**\n\nThe allocation of liability in accidents involving Advanced Driver Assistance Systems (ADAS) represents a significant shift from traditional auto insurance models, which historically focused primarily on human driver error [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "As ADAS features become standard, the legal landscape is evolving to address whether fault lies with the driver or the technology itself [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This analysis integrates technical principles, regulatory frameworks, and emerging liability theories to examine responsibility boundaries. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "### 1. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "Technical Principles and System Capabilities\nTo understand liability, one must distinguish between passive and active ADAS systems. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "Passive systems, such as anti-lock braking systems (ABS), electronic stability control (ESC), and tire pressure monitoring systems (TPMS), are designed only to alert the driver without actively controlling vehicle movements [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "In contrast, active systems take actionable steps to avoid accidents; common examples include adaptive cruise control (ACC), automatic emergency braking (AEB), blind spot monitoring (BSM), and lane departure warnings (LDW) [Source: ev-4] [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "These systems rely on a fusion of data from cameras, radars, ultrasonic sensors, and other inputs to assess the environment [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "For instance, front crash prevention uses sensors like lidar or radar to detect proximity to vehicles ahead, issuing warnings and precharging brakes before applying full braking if no driver response occurs [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "While these technologies aim to reduce human error, they are not fully autonomous; truly driverless cars are not yet widely available for sale, meaning drivers continue to share driving responsibilities with the technology for the foreseeable future [Source: ev-2] [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c11",
+      "text": "### 2. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "Legal Frameworks and Regulatory Landscape\nThe regulatory environment is fragmented and evolving. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "ev-2",
+          "fragmented and evolving"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "In the United States, slightly over half of the fifty states have enacted some form of legislation regulating autonomous vehicles (AVs), creating a volatile landscape for insurance carriers operating across jurisdictions [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 50"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "State laws vary significantly in how they define operator responsibility:\n*   **New York** requires that a natural person holding a valid license be physically present within the vehicle during operation on public highways [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "*   **Nevada** allows fully autonomous testing but defines the \"driver\" as either the owner or the person who engages the automated driving system, requiring the vehicle to achieve a minimal risk condition upon failure [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "*   **Texas** views the owner as the operator of the vehicle for compliance with traffic laws, even if not physically present, considering the automated driving system part of this framework [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "ev-3"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "At the federal level, National Highway Traffic Safety Administration (NHTSA) finalized a requirement in 2024 mandating front crash prevention on nearly all new vehicles with a gross vehicle weight rating of 10,000 pounds or less by September 2029 [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "10,000",
+          "2029"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "This rule requires systems to be operable in both daylight and dark conditions and capable of warning and braking at speeds up to 90 mph [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "90"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "Prior to this mandate, a voluntary commitment brokered by IIHS and NHTSA led 20 automakers representing 99% of U.S. [Source: ev-2]",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2",
+        "ev-4"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "20",
+          "99%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+          "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 3,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c20",
+      "text": "light vehicle sales to make the technology standard by September 2022 [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2022"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "### 3. [Source: ev-2]",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "Boundaries of Responsibility: Driver vs. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c23",
+      "text": "System\nThe core legal challenge lies in discerning negligence when human oversight interacts with automated assistance. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c24",
+      "text": "Traditional liability models are being disrupted as fault may extend beyond the driver to manufacturers, software developers, and other stakeholders involved in AV/ADAS technology [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c25",
+      "text": "**Driver Liability:**\nDrivers can be held liable if they over-rely on ADAS systems or fail to maintain appropriate attention despite system alerts [Source: ev-4] [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c26",
+      "text": "The \"shared responsibility\" model implies that while the car assists, the ultimate control remains with the human operator unless full automation is achieved [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c27",
+      "text": "Determining negligence often involves assessing the extent of ADAS use and its reliability at the time of the crash [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c28",
+      "text": "**System/Manufacturer Liability:**\nLiability may shift toward manufacturers if an active ADAS system fails due to defect. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c29",
+      "text": "Because these systems are intended to automate certain aspects of driving, their failure can cause serious injuries or death, potentially leading to product liability claims against those involved in production [Source: ev-4].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c30",
+      "text": "As reliance on these technologies increases, there is a growing potential for shared or shifting fault among multiple actors (driver, manufacturer, software developer) resulting from a single accident [Source: ev-4] [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c31",
+      "text": "### 4. [Source: ev-2]",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c32",
+      "text": "Empirical Context and Safety Data\nThe debate over liability is informed by safety data indicating that while some driver assistance technologies reduce crashes, fully automated vehicles show superior performance metrics compared to human drivers. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c33",
+      "text": "Research indicates that Waymo’s driverless vehicles have crash rates 68% lower than human drivers, suggesting that removing the human element significantly reduces risk [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "68%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c34",
+      "text": "However, since most current vehicles operate under partial automation where humans share responsibility, the \"human factor\" remains central to liability determinations [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c35",
+      "text": "It is also noted that while sensors for ADAS are often blamed for high repair costs, other factors contribute significantly to these expenses [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c36",
+      "text": "### 5. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c37",
+      "text": "Recommendations and Proposed Regulatory Guidelines\nBased on the evidence provided, the following recommendations emerge for navigating this complex landscape:\n\n1. [Source: ev-3]",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c38",
+      "text": "**Standardization of Operator Definitions:** Given the volatility in state laws (e.g., New York’s physical presence requirement vs. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c39",
+      "text": "Nevada/Texas owner-operator models), a more uniform federal or interstate standard defining who constitutes the \"operator\" during partial automation phases would reduce jurisdictional conflicts for insurers and courts [Source: ev-3].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c40",
+      "text": "2. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c41",
+      "text": "**Clarification of Negligence Standards for Over-reliance:** Legal frameworks should explicitly define what constitutes \"over-reliance\" by drivers on active ADAS systems like ACC and AEB to clarify when liability shifts from system malfunction to driver negligence [Source: ev-4] [Source: ev-1].",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c42",
+      "text": "3. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c43",
+      "text": "**Enhanced Data Tracking for Liability Determination:** As technology deploys more widely, better systems are needed to track safety performance and incident data to objectively determine whether a crash resulted from human error or technological failure [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c44",
+      "text": "This supports the need for robust black-box data that can distinguish between driver inaction and sensor/algorithmic failure. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c45",
+      "text": "4. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c46",
+      "text": "**Manufacturer Accountability for Active Systems:** Given that active systems take actionable control steps, regulatory guidelines should reinforce manufacturer responsibility for defects in these specific components (e.g., AEB, ACC), distinct from passive alert-only systems [Source: ev-4] [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "-"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c47",
+      "text": "In conclusion, liability allocation in ADAS-equipped vehicles is not binary but exists on a spectrum of shared responsibility. [Source: ev-3]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c48",
+      "text": "As technology advances toward higher levels of automation—where the Society of Automotive Engineers identifies six levels ranging from full human control to no onboard input—the legal burden will likely continue shifting from individual drivers to manufacturers and software developers as human intervention decreases [Source: ev-3].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 6"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c49",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "### 1. [Source: ev-2]",
+      "actionable_query": "###",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "Technical Principles and System Capabilities\nTo understand liability, one must distinguish between passive and active ADAS systems. [Source: ev-2]",
+      "actionable_query": "Technical Principles and System Capabilities To understand liability, must distinguish between passive and active ADAS systems.",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "These systems rely on a fusion of data from cameras, radars, ultrasonic sensors, and other inputs to assess the environment [Source: ev-4].",
+      "actionable_query": "systems rely fusion data cameras radars ultrasonic sensors other inputs assess environment",
+      "from_claim_id": "c35",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "### 2. [Source: ev-2]",
+      "actionable_query": "###",
+      "from_claim_id": "c11",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "Legal Frameworks and Regulatory Landscape\nThe regulatory environment is fragmented and evolving. [Source: ev-2]",
+      "actionable_query": "Legal Frameworks and Regulatory Landscape The regulatory environment is fragmented and evolving.",
+      "from_claim_id": "c12",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "In the United States, slightly over half of the fifty states have enacted some form of legislation regulating autonomous vehicles (AVs), creating a volatile landscape for insurance carriers operating across jurisdictions [Source: ev-3].",
+      "actionable_query": "In the United States, slightly over half of the states have enacted some form of legislation regulating autonomous vehicles (AVs), creating ",
+      "from_claim_id": "c13",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "At the federal level, National Highway Traffic Safety Administration (NHTSA) finalized a requirement in 2024 mandating front crash prevention on nearly all new vehicles with a gross vehicle weight rating of 10,000 pounds or less by September 2029 [Source: ev-2].",
+      "actionable_query": "federal level National Highway Traffic Safety Administration NHTSA finalized requirement mandating front crash prevention nearly all new vehicles gross vehicle weight rating pounds less September",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "This rule requires systems to be operable in both daylight and dark conditions and capable of warning and braking at speeds up to 90 mph [Source: ev-2].",
+      "actionable_query": "rule requires systems operable both daylight dark conditions capable warning braking speeds mph",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "light vehicle sales to make the technology standard by September 2022 [Source: ev-2].",
+      "actionable_query": "light vehicle sales make technology standard September",
+      "from_claim_id": "c20",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "Boundaries of Responsibility: Driver vs. [Source: ev-2]",
+      "actionable_query": "Boundaries Responsibility Driver",
+      "from_claim_id": "c22",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "Determining negligence often involves assessing the extent of ADAS use and its reliability at the time of the crash [Source: ev-1].",
+      "actionable_query": "Determining negligence often involves assessing extent ADAS use reliability time crash",
+      "from_claim_id": "c27",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g12",
+      "text": "Research indicates that Waymo’s driverless vehicles have crash rates 68% lower than human drivers, suggesting that removing the human element significantly reduces risk [Source: ev-2].",
+      "actionable_query": "Research indicates Waymo’s driverless vehicles have crash rates lower human drivers suggesting removing element significantly reduces risk",
+      "from_claim_id": "c33",
+      "corroboration": {
+        "origins": [
+          "https://www.iihs.org/research-areas/advanced-driver-assistance"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "### 5. [Source: ev-2]",
+      "actionable_query": "###",
+      "from_claim_id": "c36",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "2. [Source: ev-3]",
+      "actionable_query": "",
+      "from_claim_id": "c40",
+      "corroboration": null
+    },
+    {
+      "id": "g15",
+      "text": "3. [Source: ev-3]",
+      "actionable_query": "",
+      "from_claim_id": "c42",
+      "corroboration": null
+    },
+    {
+      "id": "g16",
+      "text": "This supports the need for robust black-box data that can distinguish between driver inaction and sensor/algorithmic failure. [Source: ev-3]",
+      "actionable_query": "supports need robust black-box data can distinguish driver inaction sensor/algorithmic failure",
+      "from_claim_id": "c44",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "4. [Source: ev-3]",
+      "actionable_query": "",
+      "from_claim_id": "c45",
+      "corroboration": null
+    },
+    {
+      "id": "g18",
+      "text": "**Manufacturer Accountability for Active Systems:** Given that active systems take actionable control steps, regulatory guidelines should reinforce manufacturer responsibility for defects in these specific components (e.g., AEB, ACC), distinct from passive alert-only systems [Source: ev-4] [Source: ev-3].",
+      "actionable_query": "**Manufacturer Accountability for Active Systems:** Given that active systems take actionable control steps, regulatory guidelines should re",
+      "from_claim_id": "c46",
+      "corroboration": null
+    },
+    {
+      "id": "g19",
+      "text": "As technology advances toward higher levels of automation—where the Society of Automotive Engineers identifies six levels ranging from full human control to no onboard input—the legal burden will likely continue shifting from individual drivers to manufacturers and software developers as human intervention decreases [Source: ev-3].",
+      "actionable_query": "As technology advances toward higher levels of automation—where the Society of Automotive Engineers identifies levels ranging from full huma",
+      "from_claim_id": "c48",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

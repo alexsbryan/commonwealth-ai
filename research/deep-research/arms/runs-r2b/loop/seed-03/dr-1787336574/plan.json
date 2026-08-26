@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787336574",
+  "charter_hash": "6983ecf0c4d70cd2",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of helium tank leaks detected during the Starliner CFT-1 mission, 2024",
+      "Count of thruster malfunctions or failures reported on Boeing CST-100 Starliner during orbital operations, 2023–2024",
+      "Percentage change in NASA Commercial Crew Program schedule delay for subsequent crewed missions due to Starliner return decision, 2025",
+      "Share of total flight time spent in autonomous mode versus manual override by astronauts during Starliner undocking and re-entry phase, June 2024",
+      "Cost per day of extended stay aboard ISS associated with delayed Starliner crew return, USD, 2024",
+      "Number of safety reviews conducted by NASA Office of Inspector General regarding Boeing Starliner propulsion system reliability, 2022–2024"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "1",
+      "mean"
+    ]
+  }
+}

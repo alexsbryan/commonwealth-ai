@@ -1,0 +1,56 @@
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787269990 — Why did Google acquire cloud-security firm Wiz in March 2025, and what did the deal signal about the cloud-security market?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/seed-01/dr-1787269990
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-01 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787269990] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787269990] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1787269990] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787269990] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787269990] Building FTS content index (2/3)...
+[dr-estate-dr-1787269990] FTS content index done
+[dr-estate-dr-1787269990] Building FTS title index (3/3)...
+[dr-estate-dr-1787269990] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787269990 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/seed-01/dr-1787269990/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787269990", charter_hash: "649e09de0b310541", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 8 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 3, fetched: 0, search_calls: 3 }, RoundRow { round: 3, gaps_before: 3, gaps_after: 4, fetched: 0, search_calls: 1 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://estate.example/seed-01", custody: "public-web", ingested_into: Some("dr-estate-dr-1787269990") }], failed: [] }, budget: BudgetTotals { spent: {"web-search:mock": 12, "web-fetch:pages": 1}, remaining: {"web-fetch:pages": 11, "web-search:mock": 0} }, not_covered: ["Based on the evidence provided, Google acquired Wiz for approximately $32 billion in an all-cash deal announced on 2025-03-18 [Source: ev-1].", "The primary strategic reason for this acquisition was to close the security gap with competitors AWS and Azure under the leadership of Thomas Kurian at Google Cloud [Source: ev-1].", "Regarding what the deal signaled about the cloud-security market, it indicated a focus on cloud-security consolidation as the next battleground in the \"cloud wars,\" driven by AI-driven cloud adoption [Source: ev-1].", "Additionally, the transaction marked the largest acquisition in Google's history [Source: ev-1].", "Google announced on 2025-03-18 that it would acquire the cloud-security firm Wiz for approximately $32 billion in an all-cash transaction, which marked the largest acquisition in Google's history [Source: ev-1].", "This deal followed Wiz's rejection of a previous offer from Google worth $23 billion in July 2024 [Source: ev-1].", "The strategic move was driven by Google Cloud under Thomas Kurian to close the security gap with competitors AWS and Azure [Source: ev-1]."], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1787269990", acquired_at_unix: 1787269990, released_at_unix: Some(1787270094) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2-degenerate.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "fetch-list-3.json", "skip-ledger-3.json", "evidence-window-3.json", "verdict-set.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/seed-01/dr-1787269990/report.md
+rounds: 3 | gaps after last round: 4 | searches: 12 | fetched sources: 1
+open questions (could-not-judge):
+  - Based on the evidence provided, Google acquired Wiz for approximately $32 billion in an all-cash deal announced on 2025-03-18 [Source: ev-1].
+  - The primary strategic reason for this acquisition was to close the security gap with competitors AWS and Azure under the leadership of Thomas Kurian at Google Cloud [Source: ev-1].
+  - Regarding what the deal signaled about the cloud-security market, it indicated a focus on cloud-security consolidation as the next battleground in the "cloud wars," driven by AI-driven cloud adoption [Source: ev-1].
+  - Additionally, the transaction marked the largest acquisition in Google's history [Source: ev-1].
+  - Google announced on 2025-03-18 that it would acquire the cloud-security firm Wiz for approximately $32 billion in an all-cash transaction, which marked the largest acquisition in Google's history [Source: ev-1].
+  - This deal followed Wiz's rejection of a previous offer from Google worth $23 billion in July 2024 [Source: ev-1].
+  - The strategic move was driven by Google Cloud under Thomas Kurian to close the security gap with competitors AWS and Azure [Source: ev-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2-degenerate.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  fetch-list-3.json
+  skip-ledger-3.json
+  evidence-window-3.json
+  verdict-set.json
+  report.md
+  manifest.json

@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787270518",
+  "charter_hash": "8253a2eebd49352b",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Date the EU AI Act entered into force and specific dates for each phase of application between 2024 and 2027",
+      "List of prohibited AI practices under Article 5 and their effective date in February 2025",
+      "Regulatory requirements for high-risk AI systems listed in Annex III and their compliance deadline in August 2026",
+      "Obligation to comply with transparency obligations for certain AI systems (e.g., deepfakes, chatbots) and its effective date in August 2025",
+      "Requirements for general-purpose AI models regarding technical documentation, copyright policies, and training data summaries and their applicable timeline from August 2025",
+      "Penalties and fines structure for non-compliance with the EU AI Act including maximum fine amounts as a percentage of global turnover"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2027"
+    ]
+  }
+}

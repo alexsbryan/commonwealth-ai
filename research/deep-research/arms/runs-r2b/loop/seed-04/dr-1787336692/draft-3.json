@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787336692",
+  "charter_hash": "c879eabeb8746942",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1]. The launch signaled a shift in frontier reasoning models toward integrating vision directly into the model architecture rather than bolting it on, alongside native tool use (such as web search and code interpreter) that is trained into the model itself [Source: ev-1]. It also marked OpenAI’s first private chain-of-thought policy, where reasoning tokens are not exposed to API callers [Source: ev-1]. The launch reframed frontier capability as \"tool-using reasoning at commodity prices,\" evidenced by o4-mini’s pricing of $1.10 per million input tokens and $4.40 per million output tokens, compared to o3’s $10/$40 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-04",
+      "custody": "public-web"
+    }
+  ]
+}

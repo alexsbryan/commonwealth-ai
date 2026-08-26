@@ -1,0 +1,69 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787337003",
+  "charter_hash": "077d85b8d7dd773f",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 6,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-07",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787337003"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "The United States moved to force the sale or ban of TikTok between 2024 and 2025 primarily due to national security concerns, specifically the risk that the Chinese government could access US user data and the platform’s algorithm [Source: ev-1].",
+    "Legally, President Biden signed the Protecting Americans from Foreign Adversary Controlled Applications Act on April 24, 2024, requiring ByteDance to divest TikTok's US operations within roughly 270 days (extendable by 90) or face a ban [Source: ev-1].",
+    "The Supreme Court upheld this law with a unanimous 9-0 per curiam decision on January 17, 2025 [Source: ev-1].",
+    "The dispute was resolved through an Oracle-led deal announced on June 10, 2023 (noted as 2025-06-10 per Bloomberg in evidence), which structured the resolution as a joint venture rather than an outright sale [Source: ev-1].",
+    "Under this agreement, Oracle received about a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1].",
+    "Vice President JD Vance led the White House negotiations for this final ownership structure, which remained live throughout the process [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787337003",
+    "acquired_at_unix": 1787337003,
+    "released_at_unix": 1787337115
+  }
+}

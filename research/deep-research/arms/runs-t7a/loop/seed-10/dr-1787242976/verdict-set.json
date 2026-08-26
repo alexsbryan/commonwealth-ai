@@ -1,0 +1,274 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787242976",
+  "charter_hash": "0d92e594303284df",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, here is why OpenAI released GPT-5 in August 2025 and how it changed their sales strategy:\n\n**Why OpenAI Released GPT-5**\nOpenAI released GPT-5 (along with GPT-5 mini) on **August 7, 2025**, as part of a deliberate strategic shift to **\"give-away-the-frontier\" pricing**. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This approach involved making the model available immediately to free users. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The release was designed to consolidate OpenAI’s strategy around one unified model combined with aggressive distribution via the free tier [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "By doing so, the company effectively ended the previous market split between reasoning and non-reasoning models [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Furthermore, this launch shifted the competitive battleground from benchmark demos to \"default agency,\" focusing on providing models that act rather than just answer questions [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "**Changes to How the Company Sells Its Models**\nThe release fundamentally changed OpenAI's sales and product structure in several key ways:\n\n*   **Unified Product:** GPT-5 retired separate o-series products (specifically o3, o4-mini, o3-mini, and o3-pro) by folding them into GPT-5's internal \"reasoning modes.\" This eliminated the need for a model picker. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "The marketing pitch consequently shifted from selling distinct \"reasoning models\" to offering a single model that simply \"thinks\" [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "*   **Pricing Structure:** Prices collapsed significantly compared to previous offerings, described as being a fraction of the former o-series prices. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "While consumer subscription tiers remained at $20/month for Plus and $200/month for Pro, API pricing was set at $1.25 per million input tokens and $10 per million output tokens for GPT-5. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "GPT-5 mini was priced even lower at $0.25 per million input tokens and$2 per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "*   **Integrated Features:** The model introduced integrated capabilities that previously might have required separate tools or models, including native image generation (without a separate image model), deep research integration, file upload, web search out of the box, and a 5-million-token context window [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "OpenAI released GPT-5 on August 7, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "The release marked a deliberate strategic shift to \"give-away-the-frontier\" pricing by making the model available immediately to free users [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "This move consolidated OpenAI’s strategy around one unified model and aggressive distribution via the free tier, effectively ending the previous split between reasoning and non-reasoning models [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c15",
+      "text": "The launch fundamentally changed how the company sells its models in several key ways:\n*   **Unified Product:** It retired separate o-series products (o3, o4-mini, o3-mini, and o3-pro) by folding them into GPT-5's internal \"reasoning modes,\" eliminating the need for a model picker [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "The pitch shifted from selling distinct \"reasoning models\" to offering a single model that simply \"thinks\" [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "*   **Pricing Structure:** Prices collapsed significantly compared to previous offerings. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "While Plus remains at $20/month and Pro at $200/month, API pricing is set at $1.25 per million input tokens and $10 per million output tokens for GPT-5, with GPT-5 mini priced at $0.25 and $2 respectively [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "These prices are described as being a fraction of the o-series prices [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "*   **Competitive Focus:** The competitive battleground moved from benchmark demos to \"default agency,\" focusing on models that act rather than just answer [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "Additionally, GPT-5 introduced integrated features such as native image generation, deep research, file upload, web search, and a 5-million-token context window [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

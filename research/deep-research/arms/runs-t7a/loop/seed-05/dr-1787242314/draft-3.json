@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787242314",
+  "charter_hash": "63e56e6c3d32832c",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The EU AI Act entered into force in phases between 2024 and 2027 to ensure that obligations land as institutional capacity and technology mature, a schedule that also serves as the compliance roadmap exported worldwide through the Brussels effect [Source: ev-1].\n\nThese deadlines are supported by enforcement mechanisms where fines reach €35 million or 7% of global annual turnover for prohibited-practice violations and €15 million or 3% for most other breaches [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web"
+    }
+  ]
+}

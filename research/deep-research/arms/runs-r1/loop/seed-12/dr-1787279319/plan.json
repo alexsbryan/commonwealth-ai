@@ -1,0 +1,22 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787279319",
+  "charter_hash": "602065f91080bdf7",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Percentage of Windows 11 users who disabled the Recall feature within one week of its initial rollout in May 2024",
+      "Count of security researchers and privacy advocates who publicly criticized Microsoft's initial implementation of local data storage for screenshots in April 2023 to June 2024",
+      "Number of changes made to the default settings of the Recall feature regarding biometric authentication requirements announced by Microsoft on July 8, 2024",
+      "Share of user consent prompts required before enabling the Recall feature following the policy update in July 2024 compared to the original launch version",
+      "Median time interval between the initial announcement of the Recall privacy controversy and Microsoft's official statement addressing encryption and access controls"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

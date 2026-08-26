@@ -1,0 +1,209 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787253525",
+  "charter_hash": "16c4fed35fca03ac",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787253525",
+    "question": "Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-re/loop/seed-12/dr-1787253525",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?",
+  "frontier": [
+    "Number of privacy experts and security researchers who publicly criticized Microsoft Recall in 2024, involving entities: Microsoft, Windows 11",
+    "Percentage change in media coverage volume regarding \"Microsoft Recall\" from May to June 2024 compared to the preceding month, involving entities: Microsoft Recall, news outlets",
+    "Count of specific data breaches or vulnerabilities identified by third-party auditors prior to the public launch of Microsoft Recall in May 2024, involving entity: Microsoft Recall",
+    "Share of users who opted out of or disabled the initial beta version of Microsoft Recall before its general availability announcement, involving entities: Windows Copilot+ PCs, early adopters",
+    "List of security features removed or modified in the final release of Microsoft Recall compared to the original preview version announced in May 2023, involving entities: Microsoft Recall feature set",
+    "Date when Microsoft officially delayed the general availability rollout of Microsoft Recall due to privacy concerns, involving entity: Microsoft (2024)",
+    "Number of government agencies or regulatory bodies that issued statements regarding data retention policies for on-device AI features like Recall in mid-2024, involving entities: US Government, EU Regulators"
+  ],
+  "frontier_question": "Why did Microsoft's Recall feature for Windows become a privacy scandal in 2024, and how was it changed?",
+  "figure_specifiers": [
+    "2024"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787253525",
+      "charter_hash": "16c4fed35fca03ac",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787253525",
+      "charter_hash": "16c4fed35fca03ac",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-12",
+          "source_url": "https://estate.example/seed-12",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Microsoft announced Recall on 2024-05-20 at the Copilot+ PC launch (Microsoft Build) — an AI \"memory\" feature that screenshots the screen every few seconds, stores them locally, and makes them searchable (\"photographic memory\" for your PC). Security researchers, notably Kevin Beaumont, showed Recall's screenshots were stored unencrypted (plaintext) in a local SQLite database despite Microsoft's \"encrypted\" claims, and that passwords and sensitive content visible on screen were captured by default — accessible to any process running as the user. Microsoft delayed Recall (June 2024), then reversed the default: the relaunched feature is opt-in (default OFF), requires Windows Hello and presence detection to open the timeline, and excludes incognito/DRM content. The Irish Data Protection Commission (DPC) and the UK Information Commissioner's Office raised questions; the Washington State Attorney General (Bob Ferguson) opened an investigation. The feature's value proposition — searchable local memory — collided with privacy expectations for local data: a default-on recorder of everything on screen, including passwords, health data and private messages, with security claims that did not hold; the episode became the AI-PC era's first major privacy crisis and a case study in shipping AI features default-on. The revised opt-in Recall reached general availability on Copilot+ PCs in 2025, but the controversy permanently shaped the \"AI PC\" privacy conversation.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2025",
+            "feature",
+            "microsoft",
+            "recall"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-12"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787253525",
+      "charter_hash": "16c4fed35fca03ac",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-12"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that the screenshots it captured were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+    "This allowed any process running as the user to access sensitive content visible on screen, including passwords and private messages, which were captured by default [Source: ev-1].",
+    "Although Microsoft initially delayed the release of the feature announced at the Copilot+ PC launch on May 20, 2024 [Source: ev-1], public scrutiny from regulators such as the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson forced a reversal in policy [Source: ev-1].",
+    "This updated, privacy-focused version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that the screenshots it captured were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+      "actionable_query": "2024 Microsoft’s Recall feature became privacy scandal because despite claims data encrypted security researchers demonstrated screenshots captured stored unencrypted plaintext within local SQLite",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This allowed any process running as the user to access sensitive content visible on screen, including passwords and private messages, which were captured by default [Source: ev-1].",
+      "actionable_query": "allowed any process running user access sensitive content visible screen including passwords private messages captured default",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Although Microsoft initially delayed the release of the feature announced at the Copilot+ PC launch on May 20, 2024 [Source: ev-1], public scrutiny from regulators such as the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson forced a reversal in policy [Source: ev-1].",
+      "actionable_query": "2024 Although Microsoft initially delayed release feature announced Copilot launch May public scrutiny regulators Irish Data Protection Commission Information Commissioner's Office investigation",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "This updated, privacy-focused version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "actionable_query": "updated privacy-focused version Recall reached general availability Copilot PCs",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-12",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

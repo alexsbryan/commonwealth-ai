@@ -1,0 +1,14 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787349697",
+  "charter_hash": "3437c9309d272ef3",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "No evidence was retrieved this round. Therefore, I cannot provide an answer or cite any sources regarding the user's query about \"Estate.\"",
+  "citations": []
+}

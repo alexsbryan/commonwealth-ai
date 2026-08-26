@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787328887",
+  "charter_hash": "154053531bc184b3",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of US federal laws enacted in 2024 and 2025 mandating the divestiture or ban of TikTok",
+      "Percentage share of US social media users aged 13-17 who reported using TikTok daily in 2023 and 2024",
+      "Count of US government agencies that banned TikTok from official devices between January 2022 and December 2024",
+      "Name of the primary national security threat assessment document issued by the US Department of Defense regarding ByteDance data practices in 2019, 2021, and 2023",
+      "Date of the Supreme Court oral arguments scheduled for *TikTok v. Garland* in November 2024",
+      "Outcome classification (upheld or struck down) of the Ninth Circuit Court of Appeals ruling on the constitutionality of the Protecting Americans from Foreign Adversary Controlled Applications Act in August 2024",
+      "Number of days given to TikTok to divest its operations in the United States under the final agreement signed between the Trump administration and ByteDance in January 2025",
+      "Percentage ownership stake allocated to US investors in the proposed joint venture structure announced by Oracle and Silver Lake for TikTok's US entity in December 2023"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2025"
+    ]
+  }
+}

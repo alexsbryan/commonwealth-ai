@@ -138,6 +138,9 @@ async fn drill_once(run_dir: PathBuf, deck: Deck) -> Manifest {
             max_rounds: 3,
             code_set_k: 3,
             eps_quota: 0.1,
+            content_coverage_floor:
+                sovereign_core::deep_research::acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR,
+            prose_line_floor: sovereign_core::deep_research::acquisition::DEFAULT_PROSE_LINE_FLOOR,
             evidence_window_max_chunks: 20,
             estate_corpus_ids: Vec::new(),
             web_backend: MockBackendImpl::BACKEND_ID.to_string(),
@@ -146,6 +149,9 @@ async fn drill_once(run_dir: PathBuf, deck: Deck) -> Manifest {
             web_fetch_allowance: 8,
             posture: ShardingPrivacy::LocalOnly,
             consent: None,
+            max_rounds_override: None,
+            max_search_override: None,
+            max_fetch_override: None,
         },
         port,
         Arc::new(GarbageJudge),
@@ -197,6 +203,21 @@ async fn p5_drill_pair_trace_identity() {
             "round {}: gaps_after diverged",
             c.round
         );
+        // search_calls stays an EQUALITY. It survived the acquisition
+        // tune of 2026-08-24 intact, and the detour is worth recording:
+        // the query validity gate (`acquisition::query_refusal`) briefly
+        // broke this, because the plant degrades round 2's gap query to
+        // `" (2025)"` via `template_query` and the gate refused it, so
+        // the poisoned arm searched nothing while the clean arm searched
+        // once. The equality had been holding only because BOTH arms
+        // spent a search — one on a real query, one on garbage.
+        //
+        // The fix was upstream, not here: the gap-query reformulation
+        // (`ResearchPort::gap_queries`) forms a self-contained query from
+        // the gap's own text, which for this plant is the entirely usable
+        // "OpenAI acquired Anthropic in March 2025.". Both arms search
+        // once again, for the same reason, and the drill asserts identity
+        // rather than a relaxed bound.
         assert_eq!(
             c.search_calls, p.search_calls,
             "round {}: search_calls diverged",
@@ -224,19 +245,21 @@ async fn p5_drill_pair_trace_identity() {
         assert_eq!(r.fetched, 0, "round {}: clean run fetched", r.round);
     }
     assert!(clean_manifest.sources.fetched.is_empty());
+    // Keyed on the ROUND, not on `search_calls == 0`.
+    //
+    // That proxy stood for "this is finish()'s audit row", and it is a
+    // guess: it identifies a row by a COUNT that other rows can also
+    // carry. The 2026-08-24 acquisition work made a round legitimately
+    // search zero times for an unrelated reason and the proxy silently
+    // matched it, asserting the merged-evidence count against a round
+    // that had correctly fetched nothing. This drill's shape is fixed
+    // and deterministic by construction (`max_rounds` 3, a garbage
+    // judge, a decked environment), so the round number identifies the
+    // row exactly.
     let mut saw_acquire_round = false;
     for r in &poisoned_manifest.rounds {
-        if r.search_calls == 0 {
-            // finish()'s audit row: the merged cumulative chunks —
-            // the round-1 pair, never a re-fetch.
-            assert_eq!(
-                r.fetched, 2,
-                "finish row must carry the merged evidence (2 chunks)"
-            );
-            continue;
-        }
-        saw_acquire_round = true;
         if r.round == 1 {
+            saw_acquire_round = true;
             assert_eq!(r.fetched, 2, "round 1 must admit the plant pair");
         } else {
             assert_eq!(

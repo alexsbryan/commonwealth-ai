@@ -1,0 +1,32 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "round": 3,
+  "chunks": [],
+  "fetch_failures": [
+    {
+      "url": "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+      "error": "fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: Execution error: fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    },
+    {
+      "url": "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+      "error": "fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: Execution error: fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    },
+    {
+      "url": "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+      "error": "fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: Execution error: fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    },
+    {
+      "url": "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+      "error": "fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: Execution error: fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    }
+  ],
+  "dedup_refused": [],
+  "derived_custody": "public-web"
+}

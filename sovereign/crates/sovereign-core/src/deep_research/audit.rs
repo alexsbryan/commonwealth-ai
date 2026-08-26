@@ -30,12 +30,13 @@
 
 use super::containment::{citation_handles, containment_witness, ContainmentConfig};
 use super::icd::{
-    ClaimVerdict, CorroborationRecord, EmptyWindow, Gap, GapList, GateAction, Verdict,
-    WitnessRecord,
+    ClaimVerdict, CorroborationRecord, EmptyRoundReason, EmptyWindow, EvidenceWindow, FetchFailure,
+    Gap, GapList, GateAction, Verdict, WitnessRecord,
 };
 use crate::oicp::ShardingPrivacy;
 use crate::runtime::grounding::{claim_violation_joint, grounding_gate_threshold};
 use crate::traits::InferenceProvider;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// One window chunk as the audit sees it (content + custody).
@@ -107,6 +108,44 @@ fn flush_paragraph(paragraph: &mut Vec<String>, span: &Option<String>, claims: &
     }
 }
 
+/// Markdown heading lines are STRUCTURE, not assertions — they are
+/// replaced with a blank line (already a paragraph boundary here) before
+/// the sentence splitter runs.
+///
+/// Two defects on the first live composed flight (2026-08-23, run
+/// dr-1787534265) traced to this being absent:
+///   1. The deliverable's own H1 is `# {question}`, and a research question
+///      ends in `?` — sentence-final punctuation. The title was extracted as
+///      a claim, judged, and the rendered report led with
+///      `# <the user's question> **[refuted by the evidence]**`. A question
+///      is not an assertion and cannot be refuted.
+///   2. `compose_report` emits `### Heading\nFirst sentence.` with no blank
+///      line between, so the heading was absorbed into the following
+///      sentence and appeared inside claim text in the Verification list.
+///      `synthesize.rs::count_header_swallows` exists to detect this shape
+///      on the drafting side; nothing enforced it on the audit side.
+///
+/// Only ATX headings at line start count (`#` through `######` followed by
+/// space or end-of-line). A `#` mid-line — "issue #42", a C preprocessor
+/// line inside prose — is untouched.
+fn blank_out_heading_lines(draft: &str) -> String {
+    draft
+        .split('\n')
+        .map(|line| {
+            let t = line.trim_start();
+            let hashes = t.len() - t.trim_start_matches('#').len();
+            let is_atx =
+                (1..=6).contains(&hashes) && t[hashes..].chars().next().is_none_or(|c| c == ' ');
+            if is_atx {
+                ""
+            } else {
+                line
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub fn split_claims(draft: &str) -> Vec<String> {
     let mut claims = Vec::new();
     let mut current = String::new();
@@ -118,6 +157,7 @@ pub fn split_claims(draft: &str) -> Vec<String> {
     let mut paragraph_span: Option<String> = None;
     // Iterate char-wise, splitting on sentence-final punctuation
     // (., !, ?) followed by whitespace or end.
+    let draft = blank_out_heading_lines(draft);
     let chars: Vec<char> = draft.chars().collect();
     let mut i = 0;
     while i < chars.len() {
@@ -202,6 +242,250 @@ pub fn split_claims(draft: &str) -> Vec<String> {
 /// `grounding_gate_threshold()` and frozen into the charter hash — the
 /// loop re-reads nothing mid-run (FR-3).
 #[allow(clippy::too_many_arguments)]
+/// The ONE decider over the round window's own fields (order
+/// deep-research-t7b, pre-registered — §10.6: one implementation per
+/// threshold; §2: closed sets are enums). A window that ADDED evidence
+/// is None; the five empty shapes are the closed enum. The round's own
+/// window is per-round (NEW chunks only), so "refused everything"
+/// reads as empty-chunks + empty-failures + non-empty dedup_refused —
+/// the t6c pinned shape.
+///
+/// drb1-r1 Item 2: Distinguishes `RetriesExhausted` (fetch failures
+/// after retries) from `Failed` (immediate failures).
+pub fn empty_round_reason(window: &EvidenceWindow) -> Option<EmptyRoundReason> {
+    if !window.chunks.is_empty() {
+        return None;
+    }
+    let failed = !window.fetch_failures.is_empty();
+    let refused = !window.dedup_refused.is_empty();
+    // drb1-t2: pages WERE fetched but every one was content-refused —
+    // its own named shape (budget spent, no evidence; the refusals
+    // carry their reasons on the window).
+    let content_refused = !window.content_refused.is_empty();
+
+    // drb1-r1 Item 2: Check if any failure exhausted retries
+    let retries_exhausted = window.fetch_failures.iter().any(|f| f.retries > 0);
+
+    match (failed, refused, content_refused, retries_exhausted) {
+        (true, true, _, _) => Some(EmptyRoundReason::Mixed),
+        (true, false, _, true) => Some(EmptyRoundReason::RetriesExhausted),
+        (true, false, _, false) => Some(EmptyRoundReason::Failed),
+        (false, true, true, _) => Some(EmptyRoundReason::Mixed),
+        (false, true, false, _) => Some(EmptyRoundReason::Refused),
+        (false, false, true, _) => Some(EmptyRoundReason::ContentRefused),
+        (false, false, false, _) => Some(EmptyRoundReason::NoAdmits),
+    }
+}
+
+// ---------------------------------------------------------------------
+// drb1-t5 — the support binder.
+//
+// Its predecessor located a claim's support with
+// `chunk.content.contains(specific)`. That is brittle string matching:
+// measured over the logged t7a flight, 125 of 137 claims (91%) bound to
+// ZERO origins while 136 of 137 carried their own `[Source: ev-N]`
+// marker — research prose paraphrases its sources, and
+// `containment.rs` already conceded the class ("figureless claims merge
+// nothing"). It is the same keyword-matcher failure the router replaced
+// three times before (`current_info_classifier`, `scope_classifier`,
+// `claim_class_classifier`).
+//
+// The replacement composes three stages, each asked ONLY what it can
+// answer:
+//
+//   1. figures  — a claim's digits must appear verbatim in the chunk.
+//                 A number is a feature of the claim's FORM, not its
+//                 vocabulary, so code enforces it (§7.6). Honesty-
+//                 critical and never delegated to a model.
+//   2. locate   — embedding argmax over the chunk's spans. This is the
+//                 house method for open text (§2.4, principle 9) and it
+//                 replaces `contains()`. It answers only "which part of
+//                 this chunk is about this claim".
+//   3. decide   — the located span goes to the calibrated judge.
+//                 Similarity CANNOT see negation: "affects more men
+//                 than women" and "affects more women than men" are
+//                 neighbours in embedding space, so a cosine threshold
+//                 alone would bind a CONTRADICTING chunk as support and
+//                 manufacture grounding — the exact failure the
+//                 corroboration floor exists to prevent.
+//
+// A chunk becomes an origin only when all three agree.
+// ---------------------------------------------------------------------
+
+/// Span length for stage 2. Long enough to carry a claim's context,
+/// short enough that the judge in stage 3 reads one idea.
+const LOCATE_SPAN_CHARS: usize = 900;
+const LOCATE_SPAN_OVERLAP: usize = 250;
+
+/// Stage-2 floor: below this cosine, no part of the chunk is "about"
+/// the claim and stage 3 is never asked.
+const MIN_LOCATE_SIM: f32 = 0.35;
+
+/// Stage-3 floor on the calibrated support probability
+/// (`1.0 - claim_violation_joint`).
+///
+/// PROVISIONAL, and named as such: it is stricter than "does not
+/// violate" on purpose — a chunk that is merely SILENT on a claim sits
+/// near 0.5 and must not count as support. The calibration this owes is
+/// the standing honesty banks (P4-v0, R-12), which measure both
+/// directions: recovered true claims AND admitted fabrications (§18.6 —
+/// a judge change reported only in the direction it was meant to fix is
+/// not a measurement).
+const SUPPORT_FLOOR: f64 = 0.65;
+
+/// Span embeddings for one audit pass, memoized by chunk id.
+///
+/// `locate_spans` and its `embed_batch` are pure functions of the CHUNK —
+/// nothing about them depends on the claim being judged. They were being
+/// recomputed for every (claim, chunk) pair. `claim_figures_present` passes
+/// vacuously for a figureless claim, and on the measured task-69 flight 133
+/// of 139 claims (96%) were figureless, so nearly every claim visited every
+/// chunk: ~4,655 pairs re-splitting and re-embedding 35 chunks whose spans
+/// never changed.
+///
+/// ONLY SUCCESSES ARE CACHED. An `embed_batch` failure is left uncached so
+/// the next claim retries it exactly as it did before — a sticky failure
+/// would turn a transient outage into a run-long degrade, which is a
+/// behaviour change and not the one being made here. Successes are
+/// deterministic, so reusing them is byte-identical.
+#[derive(Default)]
+pub struct SpanCache {
+    by_chunk: std::sync::Mutex<HashMap<String, Arc<(Vec<String>, Vec<Vec<f32>>)>>>,
+}
+
+impl SpanCache {
+    fn get(&self, chunk_id: &str) -> Option<Arc<(Vec<String>, Vec<Vec<f32>>)>> {
+        self.by_chunk.lock().ok()?.get(chunk_id).cloned()
+    }
+    fn put(&self, chunk_id: &str, v: Arc<(Vec<String>, Vec<Vec<f32>>)>) {
+        if let Ok(mut m) = self.by_chunk.lock() {
+            m.insert(chunk_id.to_string(), v);
+        }
+    }
+}
+
+/// Split a chunk into overlapping spans for stage 2.
+fn locate_spans(content: &str) -> Vec<String> {
+    let t: String = super::scrub_control(content)
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    if t.is_empty() {
+        return Vec::new();
+    }
+    let chars: Vec<char> = t.chars().collect();
+    let step = LOCATE_SPAN_CHARS.saturating_sub(LOCATE_SPAN_OVERLAP).max(1);
+    let mut out = Vec::new();
+    let mut i = 0usize;
+    while i < chars.len() {
+        let end = (i + LOCATE_SPAN_CHARS).min(chars.len());
+        let span: String = chars[i..end].iter().collect();
+        if span.chars().count() > 150 || out.is_empty() {
+            out.push(span);
+        }
+        if end == chars.len() {
+            break;
+        }
+        i += step;
+    }
+    out
+}
+
+/// Stage 1 — every figure the claim asserts must be present verbatim.
+/// Citation handles are stripped first so `[Source: ev-2]` never
+/// contributes a bare "2" (the fold's own anti-leak precedent).
+fn claim_figures_present(claim: &str, content: &str) -> bool {
+    let stripped = super::containment::strip_citation_spans(claim);
+    super::figure_tokens(&stripped)
+        .iter()
+        .all(|f| content.contains(f.as_str()))
+}
+
+/// How a chunk's support was located — recorded, never inferred, so a
+/// degraded run is visible rather than silently scored (§18.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LocatedBy {
+    /// Stage 2 ran: an embedded span cleared `MIN_LOCATE_SIM`.
+    Embedding,
+    /// The provider has no embedding surface; stage 2 could not run and
+    /// the binder fell back to verbatim specifics. NAMED in the record.
+    VerbatimFallback,
+}
+
+/// Stages 2+3 for one chunk. `Ok(None)` = located but unsupported;
+/// `Err` = the embedding surface is unavailable (the caller degrades and
+/// names it).
+async fn chunk_supports(
+    provider: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    claim_vec: &[f32],
+    chunk_id: &str,
+    content: &str,
+    posture: ShardingPrivacy,
+    cache: &SpanCache,
+) -> Result<bool, String> {
+    // The spans and their embeddings belong to the CHUNK, not the claim —
+    // compute them once per pass (see `SpanCache`).
+    let entry = match cache.get(chunk_id) {
+        Some(hit) => hit,
+        None => {
+            let spans = locate_spans(content);
+            if spans.is_empty() {
+                return Ok(false);
+            }
+            let vecs = provider
+                .embed_batch(&spans)
+                .await
+                .map_err(|e| format!("span embed: {e}"))?;
+            if vecs.iter().any(|v| v.is_empty()) {
+                // Same rule as the claim vector: absence is reported, never
+                // scored as a miss.
+                return Err("zero-dimension span embedding".to_string());
+            }
+            let entry = Arc::new((spans, vecs));
+            cache.put(chunk_id, Arc::clone(&entry));
+            entry
+        }
+    };
+    let (spans, vecs) = (&entry.0, &entry.1);
+    if spans.is_empty() {
+        return Ok(false);
+    }
+    let mut best: Option<(f32, usize)> = None;
+    for (i, v) in vecs.iter().enumerate() {
+        let sim = super::cosine(claim_vec, v);
+        match best {
+            Some((b, _)) if sim <= b => {}
+            _ => best = Some((sim, i)),
+        }
+    }
+    let Some((sim, idx)) = best else {
+        return Ok(false);
+    };
+    let span = &spans[idx];
+    if sim < MIN_LOCATE_SIM {
+        tracing::debug!(
+            target: "deep_research",
+            sim, floor = MIN_LOCATE_SIM,
+            "t5 binder: no span is about this claim — stage 3 not asked"
+        );
+        return Ok(false);
+    }
+    let violation =
+        claim_violation_joint(provider, claim, std::slice::from_ref(span), 1, 0, posture).await;
+    let Some(violation) = violation else {
+        return Ok(false);
+    };
+    let support = 1.0 - violation;
+    tracing::debug!(
+        target: "deep_research",
+        sim, support, floor = SUPPORT_FLOOR,
+        supported = support >= SUPPORT_FLOOR,
+        "t5 binder: located span judged"
+    );
+    Ok(support >= SUPPORT_FLOOR)
+}
+
 pub async fn assess_claim(
     provider: &Arc<dyn InferenceProvider>,
     claim: &str,
@@ -209,6 +493,7 @@ pub async fn assess_claim(
     containment: &ContainmentConfig,
     posture: ShardingPrivacy,
     tau: f64,
+    spans: &SpanCache,
 ) -> ClaimAudit {
     // 1. Empty window → never-ran (never a pass).
     if chunks.is_empty() {
@@ -224,36 +509,24 @@ pub async fn assess_claim(
         };
     }
 
-    // 2. Judge.
-    let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
-    let prob = claim_violation_joint(provider, claim, &texts, texts.len(), 0, posture).await;
-    let Some(prob) = prob else {
-        return ClaimAudit {
-            claim: claim.to_string(),
-            verdict: Verdict::CouldNotJudge,
-            action: GateAction::AbstainedDecline,
-            witness: WitnessRecord::default(),
-            supporting_chunk_ids: Vec::new(),
-            empty_evidence_window: false,
-            reason: Some("judge failed to run (claim_violation_joint returned None)".to_string()),
-            corroboration: None,
-        };
-    };
-
-    // 3. Failed (violation).
-    if prob >= tau {
-        return ClaimAudit {
-            claim: claim.to_string(),
-            verdict: Verdict::Failed,
-            action: GateAction::AbstainedDecline,
-            witness: WitnessRecord::default(),
-            supporting_chunk_ids: Vec::new(),
-            empty_evidence_window: false,
-            reason: Some(format!("judge violation_prob {prob:.3} >= tau {tau}")),
-            corroboration: None,
-        };
-    }
-
+    // ORDER (2026-08-24, the "trim the fat" pass): the ref-required
+    // handle checks run BEFORE the judge. They are a pure string scan
+    // (`citation_handles` looks for "[Source: ...]") plus a lookup, and
+    // they were sitting behind the single most expensive call shape in
+    // the system — the full-window-prefill claim judge. Measured on the
+    // task-69 flight: 18 of 139 claims (13%) paid that judge and were
+    // then refused here by strings.
+    //
+    // THIS CHANGES A PRECEDENCE, and the change is named rather than
+    // buried (§18.3). Before, a handleless claim the judge REFUTED came
+    // back `Failed`; now it comes back `CouldNotJudge` with the
+    // ref-required reason, because the judge no longer runs for it. Both
+    // are non-passing and the ref-required refusal is the more
+    // actionable record ("cite the chunk you are asserting against"),
+    // but it IS a verdict conversion where the prior comment claimed
+    // refusals only. Zero of the 139 claims on the measured flight are
+    // affected: all 11 `Failed` claims carry resolvable handles.
+    // Pinned by `ref_required_precedes_the_judge`.
     // 4. Ref-required (order deep-research-t4a, pre-registered): the
     // draft must cite the chunks it asserts against — the model's
     // honesty discretion goes to zero (it selects which chunks to
@@ -302,6 +575,59 @@ pub async fn assess_claim(
             corroboration: None,
         };
     }
+
+    // 2. Judge.
+    //
+    // The WHOLE window is the stable prefix (2026-08-24). Every sibling
+    // claim in an audit pass is judged against the same `chunks` — the
+    // pass builds them once (`Self::audit_chunks`) and hands the same
+    // slice to each call — which is exactly `EvidenceFamily`'s contract:
+    // "the evidence every sibling call in the pass sees". Declaring it
+    // lets `SOVEREIGN_PREFIX_STATE` (default-on; the grounding gate is
+    // its only consumer) pin the evidence prefill ONCE for the pass
+    // instead of re-prefilling the entire window per claim.
+    //
+    // This is a pure LATENCY change: the split moves the declared cache
+    // boundary and NEVER the prompt text — `EvidenceFamily::new(w)` then
+    // `claim_prompt(rest)` renders the same bytes for every split of the
+    // same window, pinned by `the_family_split_moves_the_boundary_not_the_prompt`.
+    // Same bytes to the judge means the same verdict; only the prefill
+    // is spared.
+    //
+    // Measured cost of passing 0 here: on task 69 the round-2 audit ran
+    // 46s against a 2-chunk window (baseline dr-1787551476) and >33min
+    // against a 33-chunk one once greedy acquisition landed — the audit
+    // had become the run's dominant wall-clock term.
+    let texts: Vec<String> = chunks.iter().map(|c| c.content.clone()).collect();
+    let n_shared = texts.len();
+    let prob = claim_violation_joint(provider, claim, &texts, texts.len(), n_shared, posture).await;
+    let Some(prob) = prob else {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("judge failed to run (claim_violation_joint returned None)".to_string()),
+            corroboration: None,
+        };
+    };
+
+    // 3. Failed (violation).
+    if prob >= tau {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::Failed,
+            action: GateAction::AbstainedDecline,
+            witness: WitnessRecord::default(),
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some(format!("judge violation_prob {prob:.3} >= tau {tau}")),
+            corroboration: None,
+        };
+    }
+
     let ref_texts: Vec<String> = chunks
         .iter()
         .filter(|c| referenced_ids.contains(&c.id))
@@ -309,48 +635,26 @@ pub async fn assess_claim(
         .collect();
     let witness = containment_witness(provider, claim, &ref_texts, containment, posture).await;
 
-    // 6. Custody veto (R-3): the claim's supporting chunks must not rest
-    // on unknown provenance. Locate supporting chunks by specific
-    // presence (C-class) when the witness ran; if every located chunk is
-    // unknown, refuse.
-    let witnessable_specifics: Vec<String> = witness.specifics.clone();
-    let mut supporting: Vec<String> = Vec::new();
-    let mut supporting_urls: Vec<String> = Vec::new();
-    let mut unknown_supporting: Vec<String> = Vec::new();
-    for chunk in chunks {
-        let carries = witnessable_specifics
-            .iter()
-            .any(|s| chunk.content.contains(s));
-        if carries {
-            if chunk.custody_known {
-                supporting.push(chunk.id.clone());
-                supporting_urls.push(chunk.source_url.clone());
-            } else {
-                unknown_supporting.push(chunk.id.clone());
-            }
-        }
-    }
-    let no_known_support = supporting.is_empty() && !unknown_supporting.is_empty();
-    if no_known_support {
-        return ClaimAudit {
-            claim: claim.to_string(),
-            verdict: Verdict::CouldNotJudge,
-            action: GateAction::RefusedUnknownProvenance,
-            witness: WitnessRecord {
-                ran: witness.ran,
-                specifics: witness.specifics,
-                all_absent: witness.all_absent,
-                reason: Some(format!(
-                    "supporting chunks have unknown provenance: {unknown_supporting:?}"
-                )),
-            },
-            supporting_chunk_ids: Vec::new(),
-            empty_evidence_window: false,
-            reason: Some("refused: claim rests on unknown-provenance evidence (R-3)".to_string()),
-            corroboration: None,
-        };
-    }
-
+    // HOISTED above the location loop (2026-08-24, the "trim the fat"
+    // pass). This check reads only `witness`, decided on the line above —
+    // yet it used to sit AFTER the per-chunk location loop, and its
+    // return discards what that loop produced (`supporting_chunk_ids:
+    // Vec::new()`). So the loop ran, in full, for every claim whose
+    // specifics the witness had already found absent, and the result was
+    // thrown away. Measured on the task-69 flight: 51 of 139 claims
+    // (37%), about 1,785 (claim, chunk) pairs computed for nothing.
+    //
+    // The VERDICT is identical in every case, by inspection: the only
+    // return this now preempts is the R-3 unknown-provenance refusal
+    // below, and that returns `CouldNotJudge` too. What differs, and only
+    // when BOTH would have fired, is the recorded action/reason —
+    // `AbstainedDecline` with the witness reason instead of
+    // `RefusedUnknownProvenance`. That is the better record anyway: R-3
+    // exists to stop a claim PASSING on unknown provenance, and a claim
+    // whose asserted specifics are absent from its own cited evidence was
+    // never going to pass. Zero claims on the measured flight took the
+    // R-3 path at all. Pinned by
+    // `witness_downgrade_precedes_the_location_loop`.
     // Witness downgrade: all witnessable specifics absent (or the
     // negative-claim rule's contradicted negation).
     if witness.ran && witness.all_absent {
@@ -377,6 +681,121 @@ pub async fn assess_claim(
             supporting_chunk_ids: Vec::new(),
             empty_evidence_window: false,
             reason: None,
+            corroboration: None,
+        };
+    }
+
+    // 6. Custody veto (R-3): the claim's supporting chunks must not rest
+    // on unknown provenance. Locate supporting chunks by specific
+    // presence (C-class) when the witness ran; if every located chunk is
+    // unknown, refuse.
+    let witnessable_specifics: Vec<String> = witness.specifics.clone();
+    let mut supporting: Vec<String> = Vec::new();
+    let mut supporting_urls: Vec<String> = Vec::new();
+    let mut unknown_supporting: Vec<String> = Vec::new();
+
+    // drb1-t5: embed the claim ONCE for stage 2. A provider with no
+    // embedding surface degrades to the verbatim path and the
+    // degradation is NAMED, never silently scored (§18.3).
+    // A ZERO-DIMENSION vector is an absence wearing the shape of a
+    // value: a provider saying "I do not embed" by returning `Ok(vec![])`.
+    // Scoring it as a similarity would silently convert "unavailable"
+    // into "unsupported" — the substitution §18.3 forbids. It degrades,
+    // and the degradation is named.
+    let claim_vec = match provider.embed(claim).await {
+        Ok(v) if !v.is_empty() => Some(v),
+        Ok(_) => {
+            tracing::warn!(
+                target: "deep_research",
+                "t5 binder: provider returned a zero-dimension embedding — \
+                 DEGRADED to verbatim specifics (absence, not a low score)"
+            );
+            None
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "deep_research",
+                error = %e,
+                "t5 binder: no embedding surface — DEGRADED to verbatim specifics"
+            );
+            None
+        }
+    };
+    let located_by = if claim_vec.is_some() {
+        LocatedBy::Embedding
+    } else {
+        LocatedBy::VerbatimFallback
+    };
+
+    for chunk in chunks {
+        // Stage 1 runs in BOTH modes and is honesty-critical: every
+        // figure the claim asserts must be verbatim in this chunk. A
+        // figureless claim passes this stage vacuously.
+        if !claim_figures_present(claim, &chunk.content) {
+            continue;
+        }
+        let carries = match claim_vec.as_deref() {
+            Some(cv) => match chunk_supports(
+                provider,
+                claim,
+                cv,
+                &chunk.id,
+                &chunk.content,
+                posture,
+                spans,
+            )
+            .await
+            {
+                Ok(v) => v,
+                Err(e) => {
+                    tracing::warn!(
+                        target: "deep_research",
+                        error = %e,
+                        chunk = %chunk.id,
+                        "t5 binder: stage 2/3 unavailable for this chunk — verbatim fallback, named"
+                    );
+                    witnessable_specifics
+                        .iter()
+                        .any(|s| chunk.content.contains(s))
+                }
+            },
+            None => witnessable_specifics
+                .iter()
+                .any(|s| chunk.content.contains(s)),
+        };
+        if carries {
+            if chunk.custody_known {
+                supporting.push(chunk.id.clone());
+                supporting_urls.push(chunk.source_url.clone());
+            } else {
+                unknown_supporting.push(chunk.id.clone());
+            }
+        }
+    }
+    tracing::debug!(
+        target: "deep_research",
+        located_by = ?located_by,
+        supporting = supporting.len(),
+        origins = supporting_urls.len(),
+        "t5 binder: support located"
+    );
+    let no_known_support = supporting.is_empty() && !unknown_supporting.is_empty();
+    if no_known_support {
+        return ClaimAudit {
+            claim: claim.to_string(),
+            verdict: Verdict::CouldNotJudge,
+            action: GateAction::RefusedUnknownProvenance,
+            witness: WitnessRecord {
+                ran: witness.ran,
+                specifics: witness.specifics,
+                all_absent: witness.all_absent,
+                reason: Some(format!(
+                    "supporting chunks have unknown provenance: {unknown_supporting:?}"
+                )),
+            },
+            supporting_chunk_ids: Vec::new(),
+            empty_evidence_window: false,
+            reason: Some("refused: claim rests on unknown-provenance evidence (R-3)".to_string()),
             corroboration: None,
         };
     }
@@ -648,11 +1067,62 @@ pub fn run_tau() -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::Custody;
     use async_trait::async_trait;
     use futures::Stream;
     use std::pin::Pin;
 
     #[test]
+    /// RED before `blank_out_heading_lines`. The deliverable's H1 is
+    /// `# {question}`; a question ends in `?`, so the splitter emitted the
+    /// user's own question as a claim and `render.rs` stamped a verdict on
+    /// it. First live composed flight shipped a report titled
+    /// `# Is there a general method ...? **[refuted by the evidence]**`.
+    #[test]
+    fn the_report_title_is_never_extracted_as_a_claim() {
+        let draft = "# Is there a general method for solving asymmetric auctions?\n\n\
+                     Bidders draw values independently. [Source: ev-1]\n";
+        let claims = split_claims(draft);
+        assert!(
+            !claims.iter().any(|c| c.contains("general method")),
+            "the question must not be a claim, got: {claims:?}"
+        );
+        assert_eq!(claims.len(), 1, "only the body sentence is a claim");
+        assert!(claims[0].contains("Bidders draw values independently"));
+    }
+
+    /// RED before the fix. `compose_report` writes `### Heading` immediately
+    /// followed by the first sentence with no blank line, so the heading was
+    /// absorbed into that sentence and surfaced inside the Verification
+    /// list as claim text.
+    #[test]
+    fn a_markdown_heading_is_never_swallowed_into_the_following_sentence() {
+        let draft = "### Focus on Agent Interoperability Protocols\n\
+                     Instead of auction mechanics, the evidence details A2A. [Source: ev-2]\n";
+        let claims = split_claims(draft);
+        assert_eq!(
+            claims.len(),
+            1,
+            "one sentence, not a heading+sentence: {claims:?}"
+        );
+        assert!(
+            !claims[0].contains("Focus on Agent Interoperability"),
+            "heading leaked into the claim: {}",
+            claims[0]
+        );
+        assert!(claims[0].contains("Instead of auction mechanics"));
+    }
+
+    /// A `#` that is not an ATX heading is prose and stays. Guards against
+    /// the fix eating issue refs and the like.
+    #[test]
+    fn a_hash_mid_line_is_prose_not_a_heading() {
+        let draft = "The regression is tracked as issue #42 in the tracker. [Source: ev-3]\n";
+        let claims = split_claims(draft);
+        assert_eq!(claims.len(), 1);
+        assert!(claims[0].contains("issue #42"), "got: {}", claims[0]);
+    }
+
     fn sentence_splitter_attaches_spans() {
         let draft = "The Meridian Bridge was completed in 1873 [Source: https://example.com/a]. Its span is 240 meters [Source: https://example.com/b]. A final sentence with no citation.";
         let claims = split_claims(draft);
@@ -1106,6 +1576,86 @@ mod tests {
     /// witness's extraction) answers the scripted text. The joint judge
     /// makes exactly one provider call, so the audit path is fully
     /// deterministic.
+    /// A provider that COUNTS what the audit actually asked it to do.
+    /// `embed_batch` is the location loop's per-chunk stage-2 call, so its
+    /// count is how many (claim, chunk) pairs the loop really visited.
+    #[derive(Default)]
+    struct CountingProvider {
+        completes: std::sync::atomic::AtomicUsize,
+        embeds: std::sync::atomic::AtomicUsize,
+        embed_batches: std::sync::atomic::AtomicUsize,
+        /// Chunk texts handed to embed_batch, so a test can see whether the
+        /// SAME chunk was embedded more than once in a pass.
+        batched: std::sync::Mutex<Vec<String>>,
+        /// Specifics the extractor returns; "NONE" makes the witness
+        /// all-absent.
+        extract: &'static str,
+    }
+
+    impl CountingProvider {
+        fn n_complete(&self) -> usize {
+            self.completes.load(std::sync::atomic::Ordering::Relaxed)
+        }
+        fn n_embed_batch(&self) -> usize {
+            self.embed_batches
+                .load(std::sync::atomic::Ordering::Relaxed)
+        }
+    }
+
+    #[async_trait]
+    impl InferenceProvider for CountingProvider {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            self.completes
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let text = if r.structured_output.is_some() {
+                r#"{"A": 1.0, "B": 0.0}"#.to_string()
+            } else {
+                self.extract.to_string()
+            };
+            Ok(crate::types::CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "test".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<Pin<Box<dyn Stream<Item = crate::error::Result<String>> + Send>>>
+        {
+            unimplemented!()
+        }
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            self.embeds
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            Ok(vec![1.0, 0.0, 0.0])
+        }
+        async fn embed_batch(&self, texts: &[String]) -> crate::error::Result<Vec<Vec<f32>>> {
+            self.embed_batches
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            if let Ok(mut b) = self.batched.lock() {
+                b.push(texts.join("|"));
+            }
+            Ok(texts.iter().map(|_| vec![1.0, 0.0, 0.0]).collect())
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
     struct ShapeScripted {
         extract: &'static str,
     }
@@ -1165,7 +1715,126 @@ mod tests {
         }]
     }
 
+    /// **The ref-required handle check must run BEFORE the judge.**
+    ///
+    /// `citation_handles` is a pure `[Source: ...]` string scan; the judge is
+    /// the full-window-prefill call and the priciest shape in the system. A
+    /// claim with no handle can only ever be refused, so paying the judge
+    /// first is pure waste — 18 of 139 claims (13%) on the measured task-69
+    /// flight did exactly that.
+    ///
+    /// Pins the ORDER by counting: a handleless claim must reach the
+    /// provider ZERO times. Watched red against the pre-trim order, where
+    /// the same claim cost one `complete` before being refused.
     #[tokio::test]
+    async fn ref_required_precedes_the_judge() {
+        let p = Arc::new(CountingProvider {
+            extract: "Apollo 11",
+            ..Default::default()
+        });
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            "Apollo 11 landed in 1969 and nobody cited a thing.",
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        assert_eq!(audit.verdict, Verdict::CouldNotJudge);
+        assert_eq!(audit.action, GateAction::RefusedNoCitationHandle);
+        assert_eq!(
+            p.n_complete(),
+            0,
+            "a handleless claim must not reach the judge — the handle check is \
+             a string scan and the judge is the most expensive call we make"
+        );
+    }
+
+    /// **The witness downgrade must run BEFORE the location loop.**
+    ///
+    /// `witness.all_absent` is decided from the referenced chunks alone, and
+    /// its return discards `supporting_chunk_ids` — so every stage-2/3 call
+    /// the loop makes for such a claim is computed and thrown away. On the
+    /// measured task-69 flight that was 51 of 139 claims, ~1,785
+    /// (claim, chunk) pairs.
+    ///
+    /// Pins it by counting `embed_batch`, which is the loop's per-chunk
+    /// stage-2 call: an all-absent claim must make ZERO of them. Watched red
+    /// against the pre-trim order, where the loop ran over the whole window
+    /// first.
+    #[tokio::test]
+    async fn witness_downgrade_precedes_the_location_loop() {
+        let p = Arc::new(CountingProvider {
+            extract: "NONE",
+            ..Default::default()
+        });
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let audit = assess_claim(
+            &provider,
+            "None of the provided sources list the crew members of the Apollo 11 mission. [Source: c1]",
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        assert_eq!(audit.verdict, Verdict::CouldNotJudge);
+        assert!(audit.witness.ran && audit.witness.all_absent);
+        assert_eq!(
+            p.n_embed_batch(),
+            0,
+            "an all-absent claim must not walk the location loop — its result \
+             is discarded by the very return this check makes"
+        );
+    }
+
+    /// **A chunk's spans are embedded once per pass, not once per claim.**
+    ///
+    /// `locate_spans` + `embed_batch` depend only on the CHUNK. 96% of the
+    /// measured flight's claims were figureless, so `claim_figures_present`
+    /// passed vacuously and nearly every claim visited every chunk —
+    /// re-splitting and re-embedding the same text ~139 times.
+    ///
+    /// Pins it by judging two different claims through ONE `SpanCache` and
+    /// asserting the second one embeds nothing new. Watched red without the
+    /// cache: the batch count doubles.
+    #[tokio::test]
+    async fn span_embeddings_are_computed_once_per_chunk_per_pass() {
+        let p = Arc::new(CountingProvider {
+            extract: "Apollo 11",
+            ..Default::default()
+        });
+        let provider: Arc<dyn InferenceProvider> = p.clone();
+        let spans = SpanCache::default();
+        let window = apollo_window();
+        for claim in [
+            "Apollo 11 landed on the Moon in 1969. [Source: c1]",
+            "The Apollo 11 mission carried a crew to the Moon. [Source: c1]",
+        ] {
+            let _ = assess_claim(
+                &provider,
+                claim,
+                &window,
+                &ContainmentConfig::default(),
+                ShardingPrivacy::LocalOnly,
+                0.9,
+                &spans,
+            )
+            .await;
+        }
+        let batches = p.n_embed_batch();
+        assert!(
+            batches <= window.len(),
+            "each chunk's spans must be embedded at most ONCE for the pass: \
+             {batches} embed_batch calls across {} chunks and 2 claims",
+            window.len()
+        );
+    }
+
     async fn contradicted_negative_records_its_reason_in_the_audit() {
         // Ref-required amendment (order deep-research-t4a,
         // pre-registered): the fixture claim gains its citation handle
@@ -1182,6 +1851,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(audit.verdict, Verdict::CouldNotJudge);
@@ -1211,6 +1881,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(audit.verdict, Verdict::CouldNotJudge);
@@ -1287,6 +1958,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1332,6 +2004,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1361,6 +2034,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1428,6 +2102,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1476,6 +2151,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(audit.verdict, Verdict::Passed, "two distinct origins pass");
@@ -1533,6 +2209,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1570,6 +2247,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1607,6 +2285,7 @@ mod tests {
             &ContainmentConfig::default(),
             ShardingPrivacy::LocalOnly,
             0.9,
+            &SpanCache::default(),
         )
         .await;
         assert_eq!(
@@ -1633,6 +2312,304 @@ mod tests {
             GateAction::AbstainedDecline,
             "the ref-scoped witness downgrade keeps the abstained action, got {:?}",
             audit.action
+        );
+    }
+
+    // ------------------------------------------------------------------
+    // T7b — the one decider over the round window's own fields
+    // (RED-FIRST: `empty_round_reason` does not exist at HEAD — this
+    // test did not compile before the fix landed; order
+    // deep-research-t7b, pre-registered). The four empty shapes are a
+    // closed enum (§2, §10.6): refused / failed / mixed / no-admits.
+    // ------------------------------------------------------------------
+
+    fn empty_window(
+        round: u32,
+        fetch_failures: Vec<FetchFailure>,
+        dedup_refused: Vec<String>,
+        content_refused: Vec<crate::deep_research::icd::ContentRefusal>,
+    ) -> EvidenceWindow {
+        EvidenceWindow {
+            icd: "evidence_window".to_string(),
+            version: 1,
+            run_id: "run-1".to_string(),
+            charter_hash: "hash".to_string(),
+            round,
+            chunks: Vec::new(),
+            fetch_failures,
+            dedup_refused,
+            content_refused,
+            derived_custody: "public-web".to_string(),
+        }
+    }
+
+    #[test]
+    fn empty_round_reason_classifies_round_windows() {
+        // Refused: everything the round admitted was already fetched
+        // (the pinned t6c shape — chunks [], failures [], refused [url]).
+        let refused = empty_window(
+            2,
+            Vec::new(),
+            vec!["https://estate.example/seed-02".to_string()],
+            Vec::new(),
+        );
+        assert_eq!(
+            empty_round_reason(&refused),
+            Some(EmptyRoundReason::Refused)
+        );
+
+        // Failed: admitted fetches errored, nothing refused.
+        let failed = empty_window(
+            2,
+            vec![FetchFailure {
+                url: "https://example.com/a".to_string(),
+                error: "fetch failed".to_string(),
+                absent: false,
+                retries: 0,
+                health: crate::deep_research::icd::UrlHealth::Dead,
+            }],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert_eq!(empty_round_reason(&failed), Some(EmptyRoundReason::Failed));
+
+        // RetriesExhausted: fetch failed after exhausting retries.
+        let retries_exhausted = empty_window(
+            2,
+            vec![FetchFailure {
+                url: "https://example.com/b".to_string(),
+                error: "fetch failed after retries".to_string(),
+                absent: false,
+                retries: 2,
+                health: crate::deep_research::icd::UrlHealth::Dead,
+            }],
+            Vec::new(),
+            Vec::new(),
+        );
+        assert_eq!(
+            empty_round_reason(&retries_exhausted),
+            Some(EmptyRoundReason::RetriesExhausted)
+        );
+
+        // Mixed: some refused, some failed.
+        let mixed = empty_window(
+            3,
+            vec![FetchFailure {
+                url: "https://example.com/b".to_string(),
+                error: "fetch failed".to_string(),
+                absent: false,
+                retries: 0,
+                health: crate::deep_research::icd::UrlHealth::Dead,
+            }],
+            vec!["https://estate.example/seed-02".to_string()],
+            Vec::new(),
+        );
+        assert_eq!(empty_round_reason(&mixed), Some(EmptyRoundReason::Mixed));
+
+        // drb1-t2 ContentRefused: pages WERE fetched but every one was
+        // content-refused at the post-fetch gate — budget spent, no
+        // evidence; its own named shape, not NoAdmits and not Failed.
+        let content_refused = empty_window(
+            3,
+            Vec::new(),
+            Vec::new(),
+            vec![crate::deep_research::icd::ContentRefusal {
+                url: "https://example.com/chrome".to_string(),
+                title: "A Listing Page".to_string(),
+                coverage: 0.083,
+                prose_line: 42,
+                reason: "content-below-threshold".to_string(),
+            }],
+        );
+        assert_eq!(
+            empty_round_reason(&content_refused),
+            Some(EmptyRoundReason::ContentRefused)
+        );
+
+        // NoAdmits: nothing was admitted to fetch at all.
+        let no_admits = empty_window(3, Vec::new(), Vec::new(), Vec::new());
+        assert_eq!(
+            empty_round_reason(&no_admits),
+            Some(EmptyRoundReason::NoAdmits)
+        );
+
+        // A round that ADDED evidence is not an empty round.
+        let mut populated = empty_window(1, Vec::new(), Vec::new(), Vec::new());
+        populated.chunks.push(super::super::icd::WindowChunk {
+            id: "ev-1".to_string(),
+            locator: "l".to_string(),
+            source_url: "https://example.com/a".to_string(),
+            custody: Custody::PublicWeb.to_string(),
+            provenance_class: "direct".to_string(),
+            content: "evidence".to_string(),
+            ingested_into: None,
+            tags: Vec::new(),
+        });
+        assert_eq!(empty_round_reason(&populated), None);
+    }
+
+    // ---- drb1-t5: the three-stage binder ---------------------------
+
+    /// A provider that DOES embed (so stage 2 runs and locates a span)
+    /// and whose forced choice is scripted, so stage 3's decision is the
+    /// only variable. `a`/`b` are the support/against sides of the
+    /// calibrated A/B: support = a/(a+b).
+    struct PolarityScripted {
+        extract: &'static str,
+        a: f64,
+        b: f64,
+    }
+
+    #[async_trait]
+    impl InferenceProvider for PolarityScripted {
+        async fn complete(
+            &self,
+            r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<crate::types::CompletionResponse> {
+            let text = if r.structured_output.is_some() {
+                format!(r#"{{"A": {}, "B": {}}}"#, self.a, self.b)
+            } else {
+                self.extract.to_string()
+            };
+            Ok(crate::types::CompletionResponse {
+                text,
+                tokens_used: 0,
+                prompt_tokens: 0,
+                model_id: "test".into(),
+                latency_ms: 0,
+                oicp_meta: None,
+                finish_reason: None,
+                completion_tokens: None,
+            })
+        }
+        async fn complete_stream(
+            &self,
+            _r: &crate::types::CompletionRequest,
+        ) -> crate::error::Result<Pin<Box<dyn Stream<Item = crate::error::Result<String>> + Send>>>
+        {
+            unimplemented!()
+        }
+        /// A REAL vector — stage 2 can run. Every text embeds
+        /// identically, so cosine is 1.0 and the span always locates:
+        /// the test isolates stage 3.
+        async fn embed(&self, _t: &str) -> crate::error::Result<Vec<f32>> {
+            Ok(vec![1.0, 0.0, 0.0, 0.0])
+        }
+        fn capabilities(&self) -> crate::types::ProviderCapabilities {
+            crate::types::ProviderCapabilities {
+                max_context_tokens: 4096,
+                supports_structured_output: false,
+                relative_speed: crate::types::Speed::Fast,
+                relative_reasoning: crate::types::Depth::Moderate,
+            }
+        }
+    }
+
+    /// THE honesty red for T5. Similarity cannot see negation: a chunk
+    /// that CONTRADICTS the claim sits right next to it in embedding
+    /// space, so stage 2 will happily locate a span. Stage 3 is what
+    /// stops it from becoming an origin — without it the binder would
+    /// manufacture the grounding the corroboration floor exists to
+    /// prevent.
+    #[tokio::test]
+    async fn a_contradicting_chunk_never_binds_as_support() {
+        let claim = "The Apollo 11 crew landed on the Moon. [Source: c1]";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(PolarityScripted {
+            extract: "Apollo 11",
+            a: 0.0,
+            b: 1.0, // the judge says: not supported
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        assert_ne!(
+            audit.verdict,
+            Verdict::Passed,
+            "a located-but-unsupported span must not pass the claim"
+        );
+        let origins = audit
+            .corroboration
+            .as_ref()
+            .map(|c| c.origins.len())
+            .unwrap_or(0);
+        assert_eq!(
+            origins, 0,
+            "stage 3 refused, so the chunk contributes NO origin (got {origins})"
+        );
+    }
+
+    /// The mirror: the same located span, the same claim, but the judge
+    /// says supported — the chunk becomes an origin. Without this the
+    /// test above would pass for the wrong reason (a binder that never
+    /// binds anything).
+    #[tokio::test]
+    async fn a_supported_located_span_does_bind_as_an_origin() {
+        let claim = "The Apollo 11 crew landed on the Moon. [Source: c1]";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(PolarityScripted {
+            extract: "Apollo 11",
+            a: 1.0,
+            b: 0.0, // the judge says: supported
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        let origins = audit
+            .corroboration
+            .as_ref()
+            .map(|c| c.origins.len())
+            .unwrap_or(0);
+        assert_eq!(
+            origins, 1,
+            "the supported span binds its chunk as exactly one origin"
+        );
+        assert_eq!(
+            audit.verdict,
+            Verdict::CouldNotJudge,
+            "and ONE origin still caps at the corroboration floor — the floor is untouched by T5"
+        );
+    }
+
+    /// Stage 1 is honesty-critical and runs before any model call: a
+    /// claim asserting a figure the chunk does not carry cannot bind to
+    /// it, however similar the prose looks and however agreeable the
+    /// judge is.
+    #[tokio::test]
+    async fn a_figure_absent_from_the_chunk_blocks_the_bind() {
+        let claim =
+            "The Apollo 11 mission launched on July 16, 1969 with 7 astronauts. [Source: c1]";
+        let provider: Arc<dyn InferenceProvider> = Arc::new(PolarityScripted {
+            extract: "7 astronauts",
+            a: 1.0,
+            b: 0.0, // even with the judge saying yes
+        });
+        let audit = assess_claim(
+            &provider,
+            claim,
+            &apollo_window(),
+            &ContainmentConfig::default(),
+            ShardingPrivacy::LocalOnly,
+            0.9,
+            &SpanCache::default(),
+        )
+        .await;
+        assert_ne!(
+            audit.verdict,
+            Verdict::Passed,
+            "a claim asserting a figure absent from the evidence must never pass"
         );
     }
 }

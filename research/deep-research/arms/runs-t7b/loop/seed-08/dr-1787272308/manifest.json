@@ -1,0 +1,67 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787272308",
+  "charter_hash": "a4b0e99e8e20d0f6",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-08",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787272308"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "A US court found Google to be a monopolist in general search services and general search text advertising because it violated Section 2 of the Sherman Act through exclusionary conduct [Source: ev-1].",
+    "Specifically, Judge Amit Mehta ruled on August 5, 2024, that Google’s practice of paying billions of dollars for default distribution deals—such as with Apple, Samsung, and Mozilla—created a self-reinforcing loop where defaults generate scale, data, and quality that protect market dominance against rivals [Source: ev-1].",
+    "Evidence cited included CEO Sundar Pichai’s testimony that Google paid approximately $26.3 billion for distribution in 2021, and trial evidence showing Google paid Apple roughly 36% of Safari search-ad revenue [Source: ev-1].",
+    "The court also ordered that Google may no longer pay for default search placement through revenue-sharing agreements and imposed limits on its acquisitions and AI-related investments [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787272308",
+    "acquired_at_unix": 1787272308,
+    "released_at_unix": 1787272389
+  }
+}

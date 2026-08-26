@@ -1,0 +1,141 @@
+  task 56: 18 chunks -> 87 passages, 6 sections
+    §1 What are the theoretical foundations and existence condition -> 397w
+    §2 How do standard solution techniques like integral equations  -> 465w
+    §3 Which specific analytical methods, such as fixed-point itera -> 481w
+    §4 What are the key mathematical challenges posed by non-identi -> 445w
+    §5 Are there established closed-form solutions or bounds for co -> 413w
+    §6 To what extent can these methods be generalized across arbit -> 471w
+    §synthesis -> 343w
+  -> 3053 words, 4 sources
+
+  task 56 composed in 467s
+  task 58: 14 chunks -> 76 passages, 6 sections
+    §1 What is the current prevalence and frequency of horizontal g -> 495w
+    §2 How do the mechanisms of HGT differ between non-microbial sy -> 505w
+    §3 Which specific evolutionary pressures or ecological contexts -> 453w
+    §4 Do acquired genes confer measurable adaptive benefits, such  -> 459w
+    §5 Why has HGT been historically overlooked in macro-eukaryotic -> 440w
+    §6 What are the broader implications for understanding long-ter -> 443w
+    §synthesis -> 393w
+  -> 3297 words, 7 sources
+
+  task 58 composed in 483s
+  task 59: 16 chunks -> 67 passages, 5 sections
+    §1 What are the primary sensory cues birds use to determine loc -> 477w
+    §2 How do migratory birds integrate multiple signals into a coh -> 589w
+    §3 Which environmental disturbances disrupt or alter avian navi -> 531w
+    §4 How does species-specific variation affect reliance on diffe -> 505w
+    §5 What is the current scientific consensus versus ongoing deba -> 477w
+    §synthesis -> 393w
+  -> 3015 words, 10 sources
+
+  task 59 composed in 416s
+  task 62: 16 chunks -> 85 passages, 5 sections
+    §1 What are the primary architectural strategies proposed for s -> 438w
+    §2 How do current technological advancements impact the feasibi -> 416w
+    §3 What are the critical practical implementation challenges an -> 479w
+    §4 Which scaling methods demonstrate the highest potential for  -> 420w
+    §5 How does modular connectivity compare to monolithic designs  -> 504w
+    §synthesis -> 346w
+  -> 2678 words, 9 sources
+
+  task 62 composed in 356s
+  task 65: 29 chunks -> 185 passages, 5 sections
+    §1 What are the fundamental state-space models governing grain  -> 454w
+    §2 How do modern control theory frameworks optimize phenotypic  -> 450w
+    §3 Which theoretical methods integrate sensor fusion with robus -> 474w
+    §4 How does the proposed design ensure scalability and adaptabi -> 412w
+    §5 What performance metrics validate the efficacy of the integr -> 501w
+    §synthesis -> 384w
+  -> 2740 words, 9 sources
+
+  task 65 composed in 388s
+  task 69: 28 chunks -> 133 passages, 4 sections
+    §1 What are the core architectural differences and interoperabi -> 497w
+    §2 Which specific technical limitations in current agent commun -> 446w
+    §3 How do the innovative features of A2A enhance autonomous mul -> 465w
+    §4 In what ways do A2A's design principles align with or diverg -> 506w
+    §synthesis -> 348w
+  -> 2322 words, 9 sources
+
+  task 69 composed in 323s
+  task 78: 13 chunks -> 49 passages, 5 sections
+    §1 What are the distinct clinical warning signs across early, m -> 409w
+    §2 Which specific behavioral or physical changes should prompt  -> 519w
+    §3 How do post-DBS surgical complications manifest as daily hea -> 493w
+    §4 What practical lifestyle modifications optimize comfort for  -> 428w
+    §5 What multidisciplinary support strategies effectively enhanc -> 463w
+    §synthesis -> 348w
+  -> 2752 words, 10 sources
+
+  task 78 composed in 384s
+  task 83: 12 chunks -> 37 passages, 5 sections
+    §1 Which major manufacturers, specific models, and hardware con -> 448w
+    §2 What are the primary use cases and deployment scenarios for  -> 483w
+    §3 How does market penetration vary across North America, Japan -> 453w
+    §4 What is the estimated installed base of these devices by reg -> 446w
+    §5 What are the typical price ranges and cost structures associ -> 427w
+    §synthesis -> 359w
+  -> 2716 words, 9 sources
+
+  task 83 composed in 399s
+  task 90: 19 chunks -> 74 passages, 5 sections
+    §1 What are the technical capabilities and operational limitati -> 476w
+    §2 How do existing legal frameworks define liability for automa -> 570w
+    §3 What insights does relevant case law provide on driver versu -> 496w
+    §4 Where do current laws fail to address the complexities of hu -> 509w
+    §5 Which regulatory guidelines should be adopted to clarify acc -> 456w
+    §synthesis -> 382w
+  -> 2974 words, 12 sources
+
+  task 90 composed in 389s
+  task 95: 17 chunks -> 55 passages, 5 sections
+    §1 What are the core philosophical doctrines and historical con -> 469w
+    §2 How do its teachings on non-attachment apply to daily life,  -> 477w
+    §3 In what ways can the sutra's principles transform workplace  -> 526w
+    §4 How does the text inform approaches to marriage stability an -> 455w
+    §5 What is the critical synthesis of these diverse applications -> 563w
+    §synthesis -> 364w
+  -> 2920 words, 9 sources
+
+  task 95 composed in 422s
+  judge 388s (attempt 1)
+  task 56: T=7.01 R=9.22 overall=43.18 (388s, 3053w)
+  judge 448s (attempt 1)
+  task 58: T=7.71 R=9.29 overall=45.35 (448s, 3297w)
+  judge 377s (attempt 1)
+  task 59: T=7.71 R=9.51 overall=44.78 (377s, 3015w)
+  attempt 1: missing dims ['insight', 'instruction_following', 'readability'], empty dims [] — retrying
+  attempt 2: missing dims ['insight', 'instruction_following', 'readability'], empty dims [] — retrying
+  attempt 3: missing dims ['insight', 'instruction_following', 'readability'], empty dims [] — retrying
+  task 62: NEVER-RAN (exit 2: task 62 judge never returned a scorable verdict (missing dims ['insight', 'instruction_following', 'readability'], empty dims []). NEVER-RAN, not zero.)
+  judge 427s (attempt 1)
+  task 65: T=7.19 R=8.93 overall=44.60 (427s, 2740w)
+  judge 362s (attempt 1)
+  task 69: T=7.63 R=9.22 overall=45.28 (362s, 2322w)
+  judge 371s (attempt 1)
+  task 78: T=7.16 R=9.55 overall=42.85 (371s, 2752w)
+  task 83: NEVER-RAN (Failed to generate content: openai chat/completions 503: {"error":{"message":"local inference failed: Inference error: Prompt too long: 49977 tokens already meets or exceeds the context window of 32764. Shorten the conversation.","type":"backend_error","code":null}})
+  judge 389s (attempt 1)
+  task 90: T=7.27 R=9.31 overall=43.86 (389s, 2974w)
+  judge 389s (attempt 1)
+  task 95: T=7.71 R=9.31 overall=45.31 (389s, 2920w)
+
+TASK          T        R   OVERALL    WORDS
+56         7.01     9.22     43.18     3053
+58         7.71     9.29     45.35     3297
+59         7.71     9.51     44.78     3015
+65         7.19     8.93     44.60     2740
+69         7.63     9.22     45.28     2322
+78         7.16     9.55     42.85     2752
+90         7.27     9.31     43.86     2974
+95         7.71     9.31     45.31     2920
+
+  comprehensiveness      42.9220
+  insight                43.6039
+  instruction_following  46.5834
+  readability            45.8968
+  COMPOSITE              44.3995   (n=8 of 10)
+
+  Perplexity official 40.46 | 27B judge reads Perplexity at 43.67
+  baseline t7a graded-probe 17.3751

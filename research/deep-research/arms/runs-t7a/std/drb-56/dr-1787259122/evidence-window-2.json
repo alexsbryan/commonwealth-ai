@@ -1,0 +1,32 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "round": 2,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://python.quantecon.org/two_auctions.html",
+      "source_url": "https://python.quantecon.org/two_auctions.html",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "140. First-Price and Second-Price Auctions Intermediate Quantitative Economics with Python On this page 140.1. First-price sealed-bid auction (FPSB) 140.1.1. Characterization of FPSB auction 140.2. Second-price sealed-bid auction (SPSB) 140.3. Characterization of SPSB auction 140.4. Uniform distribution of private values 140.5. Setup 140.6. First price sealed bid auction 140.7. Second price sealed bid auction 140.8. Python code 140.9. Revenue equivalence theorem 140.10. Calculation of bid price in FPSB 140.11. \\(\\chi^2\\) Distribution 140.12. Code summary 140.13. References Powered by Jupyter Book\n↑ Top Intermediate Quantitative Economics with Python\nThomas J. Sargent and John Stachurski Last changed: Jul 28, 2026 ▼ Changelog (full history)\n364f150 Chihiro Watanabe 2 weeks ago Update rng usage in two_auctions.md (#960) 6e967af Daisuke Oyama 9 months ago [two_auctions] Fix conditional expectation simulation (#652) be0af2e Humphrey Yang 11 months ago [two_auction] Lecture review with math and warning fixes (#556) 2ea0317 Copilot 1 year ago Upgrade all HTTP links to HTTPS across lecture series (#523) bab7a8e Smit Lunagariya 2 years ago Remove unused imports (#357) 1bf43db Humphrey Yang 3 years ago FIX: Broken Links and Redirects (#264) fb2c000 Natasha 4 years ago Correct some typos in two_auctions.md 86aca79 John Stachurski 4 years ago Fixed minor typos in Auction lecture (#204) 7be425a thomassargent30 4 years ago Tom's Feb 8 edits of two lectures d6642a2 thomassargent30 4 years ago Tom's latest edits of five new lectures 140. First-Price and Second-Price Auctions#\nThis lecture is designed to set the stage for a subsequent lecture about Multiple Good Allocation Mechanisms\nIn that lecture, a planner or auctioneer simultaneously allocates several goods to set of people.\nIn the present lecture, a single good is allocated to one person within a set of people.\nHere we’ll learn about and simulate two classic auctions :\na First-Price Sealed-Bid Auction (FPSB)\na Second-Price Sealed-Bid Auction (SPSB) created by William Vickrey [Vickrey, 1961]\nWe’ll also learn about and apply a\nRevenue Equivalent Theorem\nWe recommend watching this video about second price auctions by Anders Munk-Nielsen:\nand\nAnders Munk-Nielsen put his code on GitHub.\nMuch of our Python code below is based on his.\n140.1. First-price sealed-bid auction (FPSB)#\nProtocols:\nA single good is auctioned.\nProspective buyers simultaneously submit sealed bids.\nEach bidder knows only his/her own bid.\nThe good is allocated to the person who submits the highest bid.\nThe winning bidder pays price she has bid.\nDetailed Setting:\nThere are \\(n>2\\) prospective buyers named \\(i = 1, 2, \\ldots, n\\).\nBuyer \\(i\\) attaches value \\(v_i\\) to the good being sold.\nBuyer \\(i\\) wants to maximize the expected value of her surplus defined as \\(v_i - p\\), where \\(p\\) is the price that she pays, conditional on her winning the auction.\nEvidently,\nIf \\(i\\) bids exactly \\(v_i\\), she pays what she thinks it is worth and gathers no surplus value.\nBuyer \\(i\\) will never want to bid more than \\(v_i\\).\nIf buyer \\(i\\) bids \\(b < v_i\\) and wins the auction, then she gathers surplus value \\(v_i - b > 0\\).\nIf buyer \\(i\\) bids \\(b < v_i\\) and someone else bids more than \\(b\\), buyer \\(i\\) loses the auction and gets no surplus value.\nTo proceed, buyer \\(i\\) wants to know the probability that she wins the auction as a function of her bid \\(v_i\\)\nthis requires that she know a probability distribution of bids \\(v_j\\) made by prospective buyers \\(j \\neq i\\)\nGiven her idea about that probability distribution, buyer \\(i\\) wants to set a bid that maximizes the mathematical expectation of her surplus value.\nBids are sealed, so no bidder knows bids submitted by other prospective buyers.\nThis means that bidders are in effect participating in a game in which players do not know payoffs of other players.\nThis is a Bayesian game, a Nash equilibrium of which is called a Bayesian Nash equilibrium.\nTo complete the specificatio",
+      "ingested_into": null,
+      "tags": [
+        "140",
+        "auctions",
+        "first",
+        "price",
+        "second"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+    "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+    "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf"
+  ],
+  "derived_custody": "public-web"
+}

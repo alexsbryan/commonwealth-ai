@@ -1,0 +1,40 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787262188",
+  "charter_hash": "479ce77955d9a805",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "never-ran",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": true,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "No evidence was retrieved this round.",
+      "actionable_query": "Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS applications. Your report should: 1) List major manufacturers, specific device models, and their configurations. 2) Include images of these devices. 3) Analyze the primary use cases and scenarios where these devices are deployed. 4) Investigate the market penetration, common usage scenarios, typical price ranges, and estimated installed base for such devices across different regions (North America, Japan/Korea, Southeast Asia, South America).",
+      "from_claim_id": "c1",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [
+    {
+      "claim_id": "c1",
+      "reason": "no evidence retrieved for this round"
+    }
+  ],
+  "strict_subset_of_prior": true
+}

@@ -217,6 +217,16 @@ pub struct ContainmentConfig {
 pub struct TriageConfig {
     pub code_set_k: usize,
     pub eps_quota: f64,
+    /// drb1-t2 (fetch-then-judge): the post-fetch content gate's
+    /// coverage floor — a fetched page admits to the window when its
+    /// content covers at least this fraction of the query's distinct
+    /// terms OR carries a prose line at least `prose_line_floor` chars.
+    /// Defaults from `acquisition::DEFAULT_CONTENT_COVERAGE_FLOOR`
+    /// (serde-default keeps pre-t2 charters loadable).
+    #[serde(default = "crate::deep_research::acquisition::default_content_coverage_floor")]
+    pub content_coverage_floor: f64,
+    #[serde(default = "crate::deep_research::acquisition::default_prose_line_floor")]
+    pub prose_line_floor: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -415,6 +425,59 @@ pub struct EmptyWindow {
     pub reason: String,
 }
 
+/// Why a round's evidence window came back empty — the closed set of
+/// round-level empty shapes (order deep-research-t7b, pre-registered).
+/// The one decider over the window's own fields lives in audit.rs
+/// (`empty_round_reason`); this enum is the ONLY wire form.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmptyRoundReason {
+    /// Every fetch the round admitted was refused as already-fetched
+    /// (dedup gate, fetch.rs) — the pinned t6c shape: the round's
+    /// admits were exactly the already-acquired URLs.
+    Refused,
+    /// Every admitted fetch failed (dead URLs, fetch errors).
+    Failed,
+    /// Every admitted fetch was retried the maximum times (2 retries)
+    /// and still failed (drb1-r1 Item 2).
+    RetriesExhausted,
+    /// Some refused, some failed.
+    Mixed,
+    /// Nothing was admitted to fetch this round (no hits).
+    NoAdmits,
+    /// drb1-t2 (fetch-then-judge): pages WERE fetched but every one was
+    /// content-refused at the post-fetch admission gate — the round
+    /// spent real budget and returned no evidence, a distinct shape
+    /// from a round that never fetched (NoAdmits) or whose fetches
+    /// failed (Failed). The refusals carry their reasons on the
+    /// window's `content_refused`.
+    ContentRefused,
+}
+
+impl EmptyRoundReason {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Refused => "all-admitted-fetches-refused",
+            Self::Failed => "all-admitted-fetches-failed",
+            Self::RetriesExhausted => "all-admitted-fetches-retries-exhausted",
+            Self::Mixed => "mixed-refused-and-failed",
+            Self::NoAdmits => "no-admitted-hits",
+            Self::ContentRefused => "all-fetched-pages-content-refused",
+        }
+    }
+}
+
+/// A round whose evidence window is empty — the round-level state the
+/// verdict assembly had no reader for (the t7b forensics: rounds whose
+/// fetches were all dedup-refused rendered identically to rounds that
+/// never added evidence). Recorded at acquire_round, carried on the
+/// checkpoint, surfaced on the verdict set and the report.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct EmptyRound {
+    pub round: u32,
+    pub reason: EmptyRoundReason,
+}
+
 // ---------------------------------------------------------------------------
 // §5 fetch-list-<round>.json — R4 + R5
 // ---------------------------------------------------------------------------
@@ -429,6 +492,27 @@ pub struct FetchList {
     pub queries: Vec<FormedQuery>,
     pub search_hits: Vec<SearchHit>,
     pub triage: TriageOutcome,
+    /// Queries the loop FORMED and then declined to dispatch (the
+    /// acquisition tune of 2026-08-24). A formed query that is not a
+    /// query — the empty string, a bare `###` — must not spend a search,
+    /// and must not simply vanish either: the artifact records what was
+    /// withheld and why (§18.3, absence is reported never defaulted).
+    /// `#[serde(default)]` so every flight recorded before this field
+    /// existed still deserializes.
+    #[serde(default)]
+    pub refused_queries: Vec<RefusedQuery>,
+}
+
+/// A query the loop formed and refused to dispatch, with the reason the
+/// one decider gave (`acquisition::query_refusal`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefusedQuery {
+    pub text: String,
+    pub reason: String,
+    /// The gap it came from, when it came from one.
+    #[serde(default)]
+    pub from_gap_id: Option<String>,
+    pub formed_by: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -522,6 +606,15 @@ pub struct SkipEntry {
     pub rank: usize,
     pub reason: String,
     pub decision: String,
+    /// drb1-t1: the hit's query id and search snippet, so the ledger
+    /// row replays exactly (the admission stage's recorded inputs —
+    /// the logged t7a flight could not replay its own skipped rows
+    /// because neither was persisted). Empty on artifacts predating
+    /// the field (additive, never a schema break).
+    #[serde(default)]
+    pub query_id: String,
+    #[serde(default)]
+    pub snippet: String,
 }
 
 // ---------------------------------------------------------------------------
@@ -581,6 +674,13 @@ pub struct EvidenceWindow {
     /// fetches spend no budget.
     #[serde(default)]
     pub dedup_refused: Vec<String>,
+    /// drb1-t2 (fetch-then-judge): pages fetched this round that the
+    /// post-fetch content admission gate refused, each WITH the
+    /// measured score and the named reason — the fetch leg's half of
+    /// the phantom-row invariant (a fetched row is never silently
+    /// un-ledgered).
+    #[serde(default)]
+    pub content_refused: Vec<ContentRefusal>,
     pub derived_custody: String,
 }
 
@@ -603,6 +703,140 @@ pub struct FetchFailure {
     pub url: String,
     pub error: String,
     pub absent: bool,
+    /// drb1-r1 Item 2: number of retries attempted for this fetch.
+    /// 0 = immediate failure, 1 = failed after 1 retry, 2 = failed after 2 retries.
+    #[serde(default)]
+    pub retries: u32,
+    /// drb1-t2 (URL-health classification, journaled per fetch): the
+    /// closed set of fetch-outcome health classes. `unknown` on
+    /// artifacts predating the field (serde default) — never guessed.
+    #[serde(default)]
+    pub health: UrlHealth,
+}
+
+/// The URL-health classification (drb1-t2, AIQ §1.3's tool-failure
+/// journaling adapted to our fetch leg): every fetch outcome carries
+/// one class from this closed set, so the ledger answers "what kind of
+/// failure ate the budget?" without re-parsing error strings later.
+/// The ONE classifier lives in fetch.rs (`classify_fetch_error`).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UrlHealth {
+    /// Pre-classification artifacts / unclassifiable error text —
+    /// also the serde default (artifacts predating the field).
+    #[default]
+    Unknown,
+    /// The payload was non-text and not extractable (binary refusal).
+    Binary,
+    /// The server answered a failure status (HTTP 4xx/5xx).
+    HttpStatus,
+    /// The fetch errored after all retries — the URL is dead for the
+    /// run (budget.rs `record_fetch_dead`).
+    Dead,
+    /// The budget decider refused the fetch.
+    BudgetRefused,
+    /// drb1-t2: the round's fetch share (the r2b split) was spent
+    /// before this planned fetch ran — held for the later rounds, not
+    /// a decider refusal (the ledger's allowance is untouched).
+    RoundCap,
+    /// Refused as already-fetched (dedup gate) — not a failure.
+    Dedup,
+    /// The hit id had no row in the round's candidate set.
+    Missing,
+    /// The terminal-state poll failed — the whole leg is absent.
+    Terminal,
+    /// The fetch itself succeeded (registry rows only; failures never
+    /// carry this).
+    Ok,
+}
+
+impl UrlHealth {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Binary => "binary",
+            Self::HttpStatus => "http-status",
+            Self::Dead => "dead",
+            Self::BudgetRefused => "budget-refused",
+            Self::RoundCap => "round-cap",
+            Self::Dedup => "dedup",
+            Self::Missing => "missing",
+            Self::Terminal => "terminal",
+            Self::Ok => "ok",
+            Self::Unknown => "unknown",
+        }
+    }
+}
+
+/// drb1-t2 (fetch-then-judge): a fetched page the post-fetch CONTENT
+/// admission gate refused — the reason is recorded, never a silent
+/// un-ledgering (the phantom-row invariant extended to the content
+/// gate). The page WAS fetched (budget spent, source registered); it
+/// did not enter the evidence window.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ContentRefusal {
+    pub url: String,
+    pub title: String,
+    /// The content-admission coverage score ([0,1]) that was measured.
+    pub coverage: f64,
+    /// The longest line in the fetched content (the prose signal).
+    pub prose_line: usize,
+    /// The named reason (e.g. `content-below-threshold`,
+    /// `empty-content`).
+    pub reason: String,
+}
+
+/// The fetch surface that served a source — the registry's `type`
+/// (AIQ §1.4 records URL/citation keys per source; ours names the
+/// surface so the writer knows what a citation points at).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SourceType {
+    /// A public-web HTML page.
+    Web,
+    /// A PDF whose text was extracted at the fetch boundary (drb1-t2).
+    Pdf,
+    /// An estate retrieval (`estate:<corpus>:<chunk>` locator).
+    Estate,
+}
+
+impl SourceType {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Web => "web",
+            Self::Pdf => "pdf",
+            Self::Estate => "estate",
+        }
+    }
+}
+
+/// One row of the per-run SOURCE REGISTRY (drb1-t2, AIQ §1.4): every
+/// FETCHED source — window-admitted or content-refused — lands here.
+/// This is the T3 writer's citation whitelist surface: a citation the
+/// registry does not carry is a citation to something the run never
+/// acquired. Failed fetch attempts stay on the manifest's failed list
+/// (they produced no source); the registry records acquisitions.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRegistryRow {
+    pub url: String,
+    pub title: String,
+    pub source_type: SourceType,
+    pub round: u32,
+    /// Did the source enter an evidence window (passed the content
+    /// gate)? `false` = fetched but content-refused.
+    pub admitted: bool,
+}
+
+/// The run-scoped source registry (§ the source-registry.json ICD) —
+/// AIQ's per-session SourceRegistry shape, persisted as a run artifact
+/// and compounding into the estate write path later (ours-better: the
+/// registry survives the run).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SourceRegistry {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub sources: Vec<SourceRegistryRow>,
 }
 
 // ---------------------------------------------------------------------------
@@ -642,6 +876,12 @@ pub struct VerdictSet {
     pub run_id: String,
     pub charter_hash: String,
     pub claims: Vec<FinalClaim>,
+    /// The rounds that added no evidence (order deep-research-t7b,
+    /// additive — an old reader deserializes it as empty). A no-evidence
+    /// round reads as no-evidence at the verdict surface, not as
+    /// per-claim could-not-judge.
+    #[serde(default)]
+    pub empty_rounds: Vec<EmptyRound>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -888,4 +1128,73 @@ mod tests {
             .as_str()
             .starts_with("refused"));
     }
+}
+
+// ── Research notes (drb1-r4) ────────────────────────────────────────────
+//
+// The writer's input, distilled per sub-question. AIQ's DRB-II InfoRecall
+// lead (49.23 — above o3, Gemini-3-Pro and Grok) is attributed by our own
+// teardown (`research/deep-research/aiq-teardown.md` §1.3) to giving the
+// writer structured `ResearchNotes` — findings with source ids and an
+// evidence judgment — rather than raw retrieved passages. Ours composed
+// each section from the top-8 passages by cosine; a passage is text the
+// writer must still mine, and eight of them is what fits, not what is
+// known.
+//
+// The citation contract is UNCHANGED and is the reason this shape has
+// `evidence_ids` rather than quoted text: every finding names the window
+// chunks it rests on, the writer cites those same `ev-N` handles, and the
+// audit locates spans exactly as it does today. A finding whose ids do not
+// resolve against the window is REFUSED and recorded, never dropped and
+// never re-numbered (§18.3 — absence is reported, not defaulted).
+
+/// One distilled claim from one sub-question's evidence.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Finding {
+    /// The claim, in the worker's words — one factual statement.
+    pub claim: String,
+    /// The window chunk ids it rests on (`ev-N`). Non-empty and every id
+    /// resolves: the parser refuses anything else.
+    pub evidence_ids: Vec<String>,
+    /// The worker's own 0-100 usefulness judgment for answering the
+    /// sub-question. Advisory — it ranks findings, it never gates a
+    /// citation (the corroboration floor and the audit still do that).
+    pub usefulness: u8,
+}
+
+/// A finding the parser would not admit, kept WITH its reason so a note
+/// that distilled badly is visible rather than merely short.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RefusedFinding {
+    pub claim: String,
+    pub reason: String,
+    /// Ids the worker cited that the window does not hold. Populated for
+    /// the unresolved-id refusal; empty for the others.
+    #[serde(default)]
+    pub unknown_ids: Vec<String>,
+}
+
+/// One sub-question's research note — the worker's whole output.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchNote {
+    pub sub_question: String,
+    pub findings: Vec<Finding>,
+    /// Refused findings, with reasons. A note with zero findings and a
+    /// non-empty refusal list is a DISTILLATION FAILURE, not an empty
+    /// evidence window — the two must stay tellable apart.
+    #[serde(default)]
+    pub refused: Vec<RefusedFinding>,
+    /// How many window chunks this worker was shown.
+    pub passages_seen: usize,
+}
+
+/// The per-round research-note artifact (`research-notes-<round>.json`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResearchNotes {
+    pub icd: String,
+    pub version: u32,
+    pub run_id: String,
+    pub charter_hash: String,
+    pub round: u32,
+    pub notes: Vec<ResearchNote>,
 }

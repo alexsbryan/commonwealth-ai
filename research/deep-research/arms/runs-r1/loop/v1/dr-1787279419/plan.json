@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787279419",
+  "charter_hash": "94ee3fc840c1f5db",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Median home price change percentage in major US metropolitan areas from 1980 to 2024",
+      "Gentrification index or share of neighborhoods reclassified as gentrified by the U.S. Census Bureau between 1980 and 2020",
+      "Income Gini coefficient for top 50 US cities across census years 1980, 1990, 2000, 2010, and 2023",
+      "Ratio of median household income to median rent (affordability ratio) in designated Core Based Statistical Areas from 1985 to 2023",
+      "Percentage change in low-income resident population in formerly poor neighborhoods experiencing high price appreciation from 1970 to 2016",
+      "Count of households displaced by rising rents or property taxes in major coastal cities between 2008 and 2024",
+      "Median year built for housing stock in gentrifying versus non-gentrifying census tracts across the US from 1980"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "1980",
+      "2024"
+    ]
+  }
+}

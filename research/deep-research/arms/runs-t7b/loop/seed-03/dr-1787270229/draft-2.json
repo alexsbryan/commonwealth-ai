@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787270229",
+  "charter_hash": "2e1d7cd0aff62642",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "NASA ordered Boeing's Starliner to return uncrewed because the spacecraft experienced five reaction-control system (RCS) thruster anomalies during its docking approach [Source: ev-1]. NASA determined that these thruster anomalies could not be guaranteed safe for the deorbit burn, as the thrusters could not be ground-tested in their flight condition [Source: ev-1].\n\nThis decision had several significant implications for the program and astronauts:\n*   **Extended Astronaut Stay:** The astronauts aboard, Butch Wilmore and Suni Williams, were stranded on the International Space Station. They did not return until March 18, 2025, spending roughly 9.5 months aloft compared to a planned duration of approximately 8 days [Source: ev-1].\n*   **Uncrewed Return:** Following NASA's announcement on August 24, 2024, that Starliner would return without crew, the spacecraft undocked from the station on September 6, 2024 [Source: ev-1]. It subsequently landed at White Sands on September 7, 2024 (with launch occurring June 5 and docking June 6, both in 2024) [Source: ev-1].\n*   **Financial Impact:** The program operates under a fixed-price contract where Boeing has received about $4.2 billion compared to SpaceX’s roughly $2.6 billion since the Commercial Crew program began in 2014 [Source: ev-1]. By 2025, Boeing disclosed cumulative losses of more than $1.5 billion for the Starliner program [Source: ev-1].\n*   **Workforce Reductions:** In June 2025, following these issues, Boeing announced approximately 400 job cuts within its space division [Source: ev-1].\n*   **Certification Status:** As of 2025, NASA's path toward certifying the Starliner remained unresolved [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-03",
+      "custody": "public-web"
+    }
+  ]
+}

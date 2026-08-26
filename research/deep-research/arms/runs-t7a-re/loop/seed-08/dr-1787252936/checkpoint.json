@@ -1,0 +1,192 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787252936",
+  "charter_hash": "906016683911f4d9",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787252936",
+    "question": "Why did a US court find Google's search business a monopoly, and what remedies were ordered?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a-re/loop/seed-08/dr-1787252936",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did a US court find Google's search business a monopoly, and what remedies were ordered?",
+  "frontier": [
+    "The specific legal standard or test used by the US District Court to determine if Google held monopoly power in general web search, including the relevant market definition and share threshold",
+    "The percentage of global and US general web searches attributed to Google as cited in the court's findings for 2019-2023",
+    "The number of exclusive distribution agreements between Google and major device manufacturers (such as Apple) that were found to be anticompetitive, along with their annual payment values",
+    "The specific remedies ordered regarding the divestiture of Chrome browser, including whether it was mandated or rejected",
+    "The specific remedies ordered regarding Android operating system pre-installs on mobile devices, specifically which partners are prohibited from receiving payments for default status",
+    "The deadline date set by the court for compliance with the structural and conduct remedies"
+  ],
+  "frontier_question": "Why did a US court find Google's search business a monopoly, and what remedies were ordered?",
+  "figure_specifiers": [],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787252936",
+      "charter_hash": "906016683911f4d9",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787252936",
+      "charter_hash": "906016683911f4d9",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-08",
+          "source_url": "https://estate.example/seed-08",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Judge Amit Mehta (US District Court for the District of Columbia) ruled on 2024-08-05 that Google is a monopolist in general search services and general search text advertising, violating Section 2 of the Sherman Act. The theory of harm was default-distribution deals: Google paying Apple, Samsung, Mozilla and others billions to be the default search engine — Google's CEO Sundar Pichai testified the company paid about $26.3 billion for distribution in 2021, and trial evidence showed Google paid Apple roughly 36% of Safari search-ad revenue. On 2025-08-05, Judge Mehta ordered structural remedies: Google must sell Chrome (the first forced divestiture of a major tech company since the Microsoft case of 2000), may no longer pay for default search placement (no revenue-sharing agreements), and faces limits on acquisitions and AI-related investments. The ruling established that paying for default placement in search distribution is exclusionary conduct — defaults create scale, scale creates data, data creates quality, quality protects the default, a self-reinforcing loop rivals could not break. Google appealed to the DC Circuit (notice filed 2025), arguing the trial court punished procompetitive innovation; the case's final outcome remained pending through 2025.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2025",
+            "google",
+            "monopoly",
+            "remedies",
+            "search"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-08"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787252936",
+      "charter_hash": "906016683911f4d9",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-08"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "On 2024-08-05, Judge Amit Mehta of the US District Court for the District of Columbia ruled that Google held a monopoly in general search services and general search text advertising, violating Section 2 of the Sherman Act.",
+    "The court determined this status was maintained through default-distribution deals where Google paid billions to companies like Apple, Samsung, and Mozilla to be their default search engine.",
+    "Evidence showed Google spent about $26.3 billion on distribution in 2021 and paid Apple roughly 36% of Safari search-ad revenue.",
+    "This conduct created a self-reinforcing loop where defaults generated scale, which produced data, improved quality, and protected the default position against rivals.",
+    "Google appealed this decision to the DC Circuit in 2025 arguing that the ruling punished procompetitive innovation, leaving the final outcome pending as of 2025."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "On 2024-08-05, Judge Amit Mehta of the US District Court for the District of Columbia ruled that Google held a monopoly in general search services and general search text advertising, violating Section 2 of the Sherman Act.",
+      "actionable_query": "On - - Judge Amit Mehta of the US District Court for the District of Columbia ruled that Google held a monopoly in general search services a",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "The court determined this status was maintained through default-distribution deals where Google paid billions to companies like Apple, Samsung, and Mozilla to be their default search engine.",
+      "actionable_query": "The court determined this status was maintained through default-distribution deals where Google paid billions to companies like Apple, Samsu",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "Evidence showed Google spent about $26.3 billion on distribution in 2021 and paid Apple roughly 36% of Safari search-ad revenue.",
+      "actionable_query": "Evidence showed Google spent about $ billion on distribution in and paid Apple roughly of Safari search-ad revenue.",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "This conduct created a self-reinforcing loop where defaults generated scale, which produced data, improved quality, and protected the default position against rivals.",
+      "actionable_query": "This conduct created a self-reinforcing loop where defaults generated scale, which produced data, improved quality, and protected the defaul",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "Google appealed this decision to the DC Circuit in 2025 arguing that the ruling punished procompetitive innovation, leaving the final outcome pending as of 2025.",
+      "actionable_query": "Google appealed this decision to the DC Circuit in arguing that the ruling punished procompetitive innovation, leaving the final outcome pen",
+      "from_claim_id": "c7",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 5,
+      "fetched": 0,
+      "search_calls": 5
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-08",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2-degenerate.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

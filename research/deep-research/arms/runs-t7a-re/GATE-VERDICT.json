@@ -1,0 +1,46 @@
+{
+  "record": "gate-verdict-re",
+  "order": "deep-research-t7a",
+  "amendment": "directive 7f0e276b — DRB-I flight pre-flight diagnostic gate, RE-MEASURE ONCE (seat resolution de441b82)",
+  "scored_at": "2026-08-20",
+  "scorer": "arms/score-arms.py (frozen — C-class deterministic, no LLM judge)",
+  "root": "research/deep-research/arms/runs-t7a-re",
+  "binary": "target/debug/sovereign-cli built 2026-08-20 03:33 PDT (same binary as first gate)",
+  "draft_pin": "Qwen3.8-27B-UD-Q6_K_XL on 127.0.0.1:9741 (same as first gate and t6d #5)",
+  "unit": "dr-t7a-re-gate.service — WorkingDirectory=repo root (cwd trap fixed in-unit), one-shot comparator ran in the same unit, 1 passed / 488.81s",
+  "verdicts": [
+    {"leg": "P4-v0", "measured": "64/72", "bar": ">=58/72", "verdict": "passed", "gate1": "62/72", "t6d5": "59/72", "delta_vs_t6d5": "+5"},
+    {"leg": "P4-v1 (loop)", "measured": "6/16", "bar": ">=12/16", "verdict": "failed", "gate1": "5/16", "t6d5": "10/16", "class": "known limit at t6d #5 — reported, never blocking"},
+    {"leg": "P3", "measured": "11/13 (+0 could-not-judge)", "bar": ">=10/13", "verdict": "passed", "gate1": "9/13", "t6d5": "6/13", "delta_vs_t6d5": "+5"},
+    {"leg": "R-12-nongrow", "measured": "11/12 v0 seeds", "bar": ">=10/12", "verdict": "passed", "gate1": "10/12", "t6d5": "12/12", "decision_rule": "R-12 >=11/12 -> single-run noise confirmed -> GO (de441b82)"},
+    {"leg": "T1.7 plan presence", "measured": "11/12", "bar": "all scoped flights carry", "verdict": "failed", "gate1": "12/12", "t6d5": "12/12", "class": "diagnostic leg, not a floor; one plan-implying flight lost the digit/measure word this run — single-run swing, reported not blocking"},
+    {"leg": "two-arm lift (pooled)", "measured": "1.0 vs 0.969", "bar": "+0.10", "verdict": "failed", "t6d5": "1.0 vs 0.978", "class": "known limit at t6d #5 — reported, never blocking"},
+    {"leg": "two-arm lift (v1)", "measured": "1.0 vs 0.974", "bar": "+0.15", "verdict": "failed", "class": "known limit at t6d #5 — reported, never blocking"},
+    {"leg": "honesty not worse", "measured": "ungrounded loop 0.0 vs one-shot 0.031", "bar": "loop <= one-shot", "verdict": "passed", "gate1": "0.0 vs 0.0", "t6d5": "0.0 vs 0.022"}
+  ],
+  "gate_resolution": "GO — R-12 measured 11/12 v0 seeds, the seat's decision rule (de441b82) resolves single-run draft noise confirmed; flight launches per the declaration (web 12/12/3, <=96 cumulative searches, 27B draft + judge).",
+  "r12_misses_named": [
+    {
+      "seed": "seed-08", "run": "re-measure", "gate1": "passed",
+      "gap_trace": [[0, 1], [1, 5], [5, 7]],
+      "rounds": [
+        {"round": 1, "gaps": "0 -> 1", "fetched": 1, "search_calls": 7, "empty_reason": null},
+        {"round": 2, "gaps": "1 -> 5", "fetched": 0, "search_calls": 5, "empty_reason": "all-admitted-fetches-refused"},
+        {"round": 3, "gaps": "5 -> 7", "fetched": 1, "search_calls": 0, "empty_reason": null}
+      ],
+      "class": "final-round gap growth (5 -> 7) after a refused-empty round (1 -> 5) — the R-12 engine gap-growth class; failure ROTATED from first-gate seed-03 to seed-08 on an unchanged deck, the single-run noise signature"
+    },
+    {
+      "seed": "v1", "run": "both gates",
+      "gap_trace_gate1": [[0, 1], [1, 14], [14, 14]],
+      "gap_trace_re": [[0, 1], [1, 17], [17, 18]],
+      "rounds_re": [
+        {"round": 1, "gaps": "0 -> 1", "fetched": 2, "search_calls": 9, "empty_reason": null},
+        {"round": 2, "gaps": "1 -> 17", "fetched": 1, "search_calls": 3, "empty_reason": null},
+        {"round": 3, "gaps": "17 -> 18", "fetched": 3, "search_calls": 0, "empty_reason": null}
+      ],
+      "class": "journaled-not-gated row (the v1 trajectory is the t6c order's gate) — fails consistently across both gates; does not count against the v0 R-12 bar"
+    }
+  ],
+  "noise_signature": "first gate: seed-03 failed + seed-04 could-not-judge (r1->r2 empty-window abstention, pre-registered named exclusion) + v1; re-measure: seed-08 failed + v1. v0 count 10/12 -> 11/12; the v0 failures rotated seeds on the unchanged deck while P4-v0 rose 62 -> 64/72 — consistent with the deck's demonstrated +/-3-4 seed swing."
+}

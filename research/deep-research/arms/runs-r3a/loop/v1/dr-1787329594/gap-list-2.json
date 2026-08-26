@@ -1,0 +1,1231 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787329594",
+  "charter_hash": "9d9824d21ed52525",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, American cities have undergone significant transformation from 1980 to 2024, characterized by accelerating gentrification after 2000, widening economic inequality, deteriorating housing affordability relative to income growth, and demographic displacement. [Source: ev-2]",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1980 to 2024",
+          "1980",
+          "2024",
+          "2000"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c2",
+      "text": "**Gentrification Acceleration (1990s–2013)**\nWhile the term “gentrification” was coined in 1963 [Source: ev-1], its prevalence increased dramatically in recent decades.",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Prevalence increased dramatically in recent decades",
+          "1990",
+          "2013",
+          "1963"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The rate of gentrification—the share of eligible lower-income tracts experiencing change—was nearly 20% for the period following the 2000 Census, more than double the 9% rate observed during the 1990s [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 20%, 9%"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "This acceleration occurred in 39 of the 50 largest cities reviewed [Source: ev-1] and is described as a fundamental shift where income-based gentrification became dominant by 2000–2020, replacing rarer forms seen in the 1970s–1980s [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "39",
+          "50",
+          "2000",
+          "2020",
+          "1970",
+          "1980"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Despite this growth, gentrification remains geographically concentrated. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Nationally, only 8% of all neighborhoods experienced gentrification since the 2000 Census [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 8%"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "A select group of cities saw extensive changes:\n*   **Portland, OR:** 58.1% of eligible tracts gentrified (36 out of 62 eligible; total tracts 142) [Source: ev-1] [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "58.1%",
+          "36",
+          "62",
+          "142"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c8",
+      "text": "*   **Washington, D.C.:** 51.9% of eligible tracts gentrifying (54 tracts; total 179), a sharp increase from just 5 neighborhoods in the 1990s when it was known as the “murder capital” [Source: ev-1] [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "*   **Minneapolis, MN:** 50.6% of eligible tracts (39 tracts; total 116) [Source: ev-1] [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "50.6%",
+          "39",
+          "116"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c10",
+      "text": "*   **Seattle, WA:** 50% of eligible tracts (7 tracts; total 132) [Source: ev-1] [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 7"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "Other notable cities include Atlanta and Virginia Beach at 46.2%, Denver at 42.1%, and Austin at 39.7% [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "46.2%",
+          "42.1%",
+          "39.7%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "In terms of raw volume, New York City had the highest number of gentrified tracts with 128, though its rate was lower at 29.8% due to a larger base of ineligible wealthy areas [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "128",
+          "29.8%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "Conversely, cities like Detroit (2.8%), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2.8%, 2%, 0%"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "**Economic Inequality Widening (1980–2024)**\nAmerican cities have become wealthier in nominal terms but more unequal since 1980 [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1980",
+          "2024"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "The U.S. [Source: ev-2]",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "Gini coefficient reached 0.40 by 2013, with metropolitan areas showing steeper increases than the national average [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "0.40",
+          "2013"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c17",
+      "text": "Specific city data highlights extreme disparities:\n*   **New York City:** Led major metros with a Gini coefficient of 0.5469, compared to the national average of 0.40 in 2013 [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "0.5469",
+          "0.40",
+          "2013"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c18",
+      "text": "*   **Atlanta and Miami:** Followed closely at a Gini coefficient of 0.57 [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "0.57"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "*   **New Orleans:** Reached a Gini coefficient of 0.56 and topped the list for income disparity ratios, where the 80th percentile earns nearly 8 times (ratio of 7.87) what the 20th percentile earns [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c20",
+      "text": "The gap between top and bottom earners has widened significantly. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "The 95/20 income ratio reached 18:1 in Atlanta and Washington D.C., meaning the 95th percentile earns 18 times more than the 20th [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "95/20",
+          "18:1",
+          "95",
+          "18",
+          "20"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c22",
+      "text": "In Boston, the 80/20 ratio was 7.81, with the 80th percentile earning $172,476 versus $22,095 for the 20th percentiles [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "80/20",
+          "7.81",
+          "80",
+          "172,476",
+          "22,095",
+          "20"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c23",
+      "text": "Historical trends show that 57 of the 100 largest metropolitan areas had significantly higher inequality in 2014 compared to 2007, a period coinciding with the tech boom and accelerated gentrification [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "57",
+          "100",
+          "2014",
+          "2007"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c24",
+      "text": "Federal Reserve data tracking over 3,140 series confirms inequality reached record levels by 2018–2021, with the U.S. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "3,140",
+          "2018",
+          "2021"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c25",
+      "text": "showing the sharpest increase among advanced economies since the 1980s [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1980"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c26",
+      "text": "**Affordability Crisis (2000–204)**\nHousing affordability has deteriorated relative to income growth. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 204"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c27",
+      "text": "Since 2000, home prices increased by 177%, while median household income grew only 92% [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2000",
+          "ev-2",
+          "177%",
+          "92%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c28",
+      "text": "The Case-Shiller Index reached 325.78 in July 2024, representing a 225% increase since January 2000 [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "325.78",
+          "2024",
+          "225%",
+          "2000"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c29",
+      "text": "This divergence is particularly acute on the West Coast; California cities exhibit price-to-income ratios between 9.6 and 12.2, more than double the national average of 4.7 [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9.6, 4.7"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c30",
+      "text": "**Displacement and Demographic Shifts (1980–Present)**\nGentrification has driven distinct demographic changes. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "1980"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c31",
+      "text": "Gentrifying neighborhoods recorded population increases and became whiter, with the share of non-Hispanic white residents increasing by an average of 4.3 percentage points [Source: ev-1] [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 4.3"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c32",
+      "text": "In contrast, lower-income neighborhoods that did not gentrify experienced slight population losses (-2.4%) and saw minority concentrations increase, with a -5.0 percentage point change in white share [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2.4%, 5.0"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c33",
+      "text": "Economic outcomes for residents diverged sharply based on neighborhood status:\n*   **Poverty Rates:** Poverty rates dropped slightly (by 0.7 percentage points) in gentrifying tracts but climbed nearly 6.7 percentage points in eligible non-gentrifying low-income areas [Source: ev-1] [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 0.7, 6.7"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c34",
+      "text": "*   **Mobility:** Economic mobility worsened for low-income families in 48 of the 50 largest metros over a 15-year period; only Houston showed improvement, with a 1.1% gain for those growing up in the 1990 versus the 1980 cohort [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1.1%"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c35",
+      "text": "Broader urban demographics have also shifted since 2000. [Source: ev-2]",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2000"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c36",
+      "text": "The white population share fell by 7 points in urban cores and 8 points in suburbs [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 7, 8"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c37",
+      "text": "Currently, 53% of urban counties are majority nonwhite, compared to only 10% of suburban counties [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "ev-2",
+          "53%",
+          "10%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c38",
+      "text": "Additionally, educational gentrification is evident, as urban areas now have 35% of residents with bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "35%",
+          "31%",
+          "19%"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c39",
+      "text": "Since 1980, nearly 80% of the country’s under-45 population growth was concentrated in metro areas over 1 million residents [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c40",
+      "text": "**Structural Economic Shifts**\nThe labor market transformation contributed to these trends. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c41",
+      "text": "Manufacturing jobs fell from 19.5 million in 1979 to under 11.5 million during the pandemic, while finance and professional services grew from 12 million to 32 million jobs [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "19.5",
+          "1979",
+          "11.5",
+          "12",
+          "32"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c42",
+      "text": "This shift concentrated high-income professionals in urban cores, exacerbating inequality where urban centers house both top earners and low-wage service workers, whereas suburbs maintain more moderate income distributions [Source: ev-2] [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c43",
+      "text": "In San Francisco specifically, top incomes rose by approximately $120,000 between 2014 and 2016, while bottom quintile gains remained minimal across all cities [Source: ev-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "-",
+          "120,000",
+          "2014",
+          "2016"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c44",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Despite this growth, gentrification remains geographically concentrated. [Source: ev-2]",
+      "actionable_query": "Despite growth gentrification remains geographically concentrated",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "*   **Seattle, WA:** 50% of eligible tracts (7 tracts; total 132) [Source: ev-1] [Source: ev-2].",
+      "actionable_query": "* **Seattle, WA:** of eligible tracts ( tracts; total ) .",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "Other notable cities include Atlanta and Virginia Beach at 46.2%, Denver at 42.1%, and Austin at 39.7% [Source: ev-1].",
+      "actionable_query": "Other notable cities include Atlanta Virginia Beach Denver Austin",
+      "from_claim_id": "c11",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "In terms of raw volume, New York City had the highest number of gentrified tracts with 128, though its rate was lower at 29.8% due to a larger base of ineligible wealthy areas [Source: ev-1].",
+      "actionable_query": "terms raw volume New York City highest number gentrified tracts though rate lower due larger base ineligible wealthy areas",
+      "from_claim_id": "c12",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "Conversely, cities like Detroit (2.8%), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification [Source: ev-1].",
+      "actionable_query": "Conversely, cities like Detroit ( ), Las Vegas ( ), El Paso ( ), and Arlington, TX ( ) experienced little to no gentrification . (4, 1980, 2024)",
+      "from_claim_id": "c13",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "**Economic Inequality Widening (1980–2024)**\nAmerican cities have become wealthier in nominal terms but more unequal since 1980 [Source: ev-2].",
+      "actionable_query": "1980 2024 Economic Inequality Widening American cities have become wealthier nominal terms unequal since",
+      "from_claim_id": "c14",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "*   **Atlanta and Miami:** Followed closely at a Gini coefficient of 0.57 [Source: ev-2].",
+      "actionable_query": "Atlanta Miami Followed closely Gini coefficient",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "The gap between top and bottom earners has widened significantly. [Source: ev-2]",
+      "actionable_query": "gap top bottom earners widened significantly",
+      "from_claim_id": "c42",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "Federal Reserve data tracking over 3,140 series confirms inequality reached record levels by 2018–2021, with the U.S. [Source: ev-2]",
+      "actionable_query": "Federal Reserve data tracking series confirms inequality reached record levels U.S",
+      "from_claim_id": "c24",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g10",
+      "text": "showing the sharpest increase among advanced economies since the 1980s [Source: ev-2].",
+      "actionable_query": "1980 showing sharpest increase among advanced economies since",
+      "from_claim_id": "c25",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g11",
+      "text": "This divergence is particularly acute on the West Coast; California cities exhibit price-to-income ratios between 9.6 and 12.2, more than double the national average of 4.7 [Source: ev-2].",
+      "actionable_query": "This divergence is particularly acute on the West Coast; California cities exhibit price-to-income ratios between and more than double the n",
+      "from_claim_id": "c29",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "**Displacement and Demographic Shifts (1980–Present)**\nGentrification has driven distinct demographic changes. [Source: ev-2]",
+      "actionable_query": "1980 Displacement Demographic Shifts Gentrification driven distinct changes",
+      "from_claim_id": "c30",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g13",
+      "text": "Gentrifying neighborhoods recorded population increases and became whiter, with the share of non-Hispanic white residents increasing by an average of 4.3 percentage points [Source: ev-1] [Source: ev-2].",
+      "actionable_query": "Gentrifying neighborhoods recorded population increases and became whiter, with the share of non-Hispanic white residents increasing by an a",
+      "from_claim_id": "c31",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "In contrast, lower-income neighborhoods that did not gentrify experienced slight population losses (-2.4%) and saw minority concentrations increase, with a -5.0 percentage point change in white share [Source: ev-1].",
+      "actionable_query": "In contrast, lower-income neighborhoods that did not gentrify experienced slight population losses (- ) and saw minority concentrations incr",
+      "from_claim_id": "c32",
+      "corroboration": null
+    },
+    {
+      "id": "g15",
+      "text": "Economic outcomes for residents diverged sharply based on neighborhood status:\n*   **Poverty Rates:** Poverty rates dropped slightly (by 0.7 percentage points) in gentrifying tracts but climbed nearly 6.7 percentage points in eligible non-gentrifying low-income areas [Source: ev-1] [Source: ev-2].",
+      "actionable_query": "Economic outcomes for residents diverged sharply based on neighborhood status: * **Poverty Rates:** Poverty rates dropped slightly (by perce",
+      "from_claim_id": "c33",
+      "corroboration": null
+    },
+    {
+      "id": "g16",
+      "text": "The white population share fell by 7 points in urban cores and 8 points in suburbs [Source: ev-2].",
+      "actionable_query": "The white population share fell by points in urban cores and points in suburbs .",
+      "from_claim_id": "c36",
+      "corroboration": null
+    },
+    {
+      "id": "g17",
+      "text": "Additionally, educational gentrification is evident, as urban areas now have 35% of residents with bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-2].",
+      "actionable_query": "Additionally educational gentrification evident urban areas now have residents bachelor's degrees higher compared suburbs rural",
+      "from_claim_id": "c38",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g18",
+      "text": "Since 1980, nearly 80% of the country’s under-45 population growth was concentrated in metro areas over 1 million residents [Source: ev-2].",
+      "actionable_query": "nearly of the country’s under- population growth was concentrated in metro areas over million residents .",
+      "from_claim_id": "c39",
+      "corroboration": null
+    },
+    {
+      "id": "g19",
+      "text": "**Structural Economic Shifts**\nThe labor market transformation contributed to these trends. [Source: ev-2]",
+      "actionable_query": "Structural Economic Shifts labor market transformation contributed trends",
+      "from_claim_id": "c40",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

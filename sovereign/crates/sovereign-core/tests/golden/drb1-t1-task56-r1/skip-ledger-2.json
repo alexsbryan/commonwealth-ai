@@ -1,0 +1,49 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "round": 2,
+  "entries": [
+    {
+      "url": "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+      "title": "8 Minutes to Master Solving Sealed Bid First Price Auction ...",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://brocku.ca/repec/pdf/0504.pdf",
+      "title": "A Simple Approach to Analyzing Asymmetric First Price ...",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pi.math.cornell.edu/~mec/Winter2009/Spulido/Auctions/english.html",
+      "title": "English and second-price sealed-bid auctions",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://kasberger.github.io/assets/pdf/fpa_robust.pdf",
+      "title": "Robust Bidding in First-Price Auctions:",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions",
+      "title": "Linear Bid in Asymmetric First-Price Auctions",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

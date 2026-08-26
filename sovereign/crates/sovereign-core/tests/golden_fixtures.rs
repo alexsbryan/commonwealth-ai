@@ -17,7 +17,7 @@ use sovereign_core::deep_research::render::{final_claims, render_report};
 
 const GOLDEN: &str = "tests/golden";
 const RUN_ID: &str = "run-meridian-1";
-const HASH: &str = "e55d99dbe827fc3f";
+const HASH: &str = "3ab42923e19a639d";
 
 fn load(name: &str) -> String {
     std::fs::read_to_string(format!("{GOLDEN}/{name}"))
@@ -452,6 +452,7 @@ fn renderer_is_pinned_by_the_golden_report() {
         RUN_ID,
         None,
         None,
+        &[],
         &[],
     );
     let golden = load("report.md");

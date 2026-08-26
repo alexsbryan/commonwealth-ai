@@ -27,6 +27,7 @@ pub(super) async fn finish_with_paths(paths: ModelPaths, opts: &Opts) -> i32 {
 
     let cfg = SetupConfig {
         compute: Default::default(),
+        search: Default::default(),
         models: ModelsSection {
             primary: paths.primary,
             // `svrn setup` always prompts for an explicit fast

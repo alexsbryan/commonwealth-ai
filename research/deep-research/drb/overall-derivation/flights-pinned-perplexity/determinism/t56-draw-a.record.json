@@ -1,0 +1,11 @@
+{
+ "id": 56,
+ "overall_score": 0.4352076351674826,
+ "comprehensiveness": 0.42326332794830374,
+ "insight": 0.4227129337539432,
+ "instruction_following": 0.4712482468443198,
+ "readability": 0.4432677760968231,
+ "target_total": 7.04525,
+ "reference_total": 9.143
+}
+OVERALL x100 = 43.5208

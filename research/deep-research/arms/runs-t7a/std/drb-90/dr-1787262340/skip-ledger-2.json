@@ -1,0 +1,105 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787262340",
+  "charter_hash": "7a9a364495f9f05b",
+  "round": 2,
+  "entries": [
+    {
+      "url": "https://www.innovationautoglass.com/14-passive-and-active-ways-an-adas-system-works",
+      "title": "14 Passive and Active Ways an ADAS System Works",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.instagram.com/reel/DRhx2n9EXw1?hl=en",
+      "title": "Instagram",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dorleco.com/adas-sensor-fusion-and-data-integration",
+      "title": "ADAS Sensor Fusion and Data Integration | Dorleco",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://blog.rgbsi.com/sensor-fusion-autonomous-driving-systems-part-2",
+      "title": "What is Sensor Fusion for Autonomous Driving Systems? – Part 2",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11679148",
+      "title": "Sensor Fusion Method for Object Detection and Distance Estimation in Assisted Driving Applications",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cyient.com/blog/sensor-fusion-driving-enhanced-safety-of-adas-ad-vehicles",
+      "title": "Sensor fusion for ADAS / AD vehicles road safety",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2410.19872v1",
+      "title": "Radar and Camera Fusion for Object Detection and Tracking: A Comprehensive Survey",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dewesoft.com/blog/types-of-adas-sensors",
+      "title": "Types of ADAS Sensors in Use Today | Dewesoft",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/groups/686033031947950/posts/1958709624680278",
+      "title": "Three wheel seller - ත්‍රී වීල් විකුණුම් කරුවෝ | ADAS Sensor System  | Facebook",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://caradas.com/active-safety-and-passive-safety",
+      "title": "Passive vs. Active ADAS Safety Systems",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://dewesoft.com/blog/what-is-adas",
+      "title": "What is ADAS (Advanced Driver Assistance Systems) | Dewesoft",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11479187",
+      "title": "Analysis of Advanced Driver-Assistance Systems for Safe and Comfortable Driving of Motor Vehicles",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

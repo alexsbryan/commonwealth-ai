@@ -1,0 +1,118 @@
+{
+  "provenance": "HF dataset muset-ai/DeepResearch-Bench-II-Dataset (main), downloaded 2026-08-19 via resolve URLs; official shipped reports, no scores",
+  "extraction": "pdftotext -layout (deterministic, text-only, images ignored) \u2014 named amendment N2",
+  "files": {
+    "Perplexity-Research/idx-112.md": {
+      "source_sha256": "7f1b006ff8a5fcb755174a76fa89bbe3982d3f01380a04fe0b65c3891b33572a",
+      "pages": null,
+      "chars": 13349,
+      "judged_sha256": "7f1b006ff8a5fcb755174a76fa89bbe3982d3f01380a04fe0b65c3891b33572a",
+      "judged_at": "reports/Perplexity-Research/idx-112.md"
+    },
+    "Perplexity-Research/idx-114.md": {
+      "source_sha256": "9e8e52dbc8e5b5e66dd8fb444591da02ecb82875d1911a833a25a6f7ad95eb08",
+      "pages": null,
+      "chars": 41320,
+      "judged_sha256": "9e8e52dbc8e5b5e66dd8fb444591da02ecb82875d1911a833a25a6f7ad95eb08",
+      "judged_at": "reports/Perplexity-Research/idx-114.md"
+    },
+    "Perplexity-Research/idx-126.pdf": {
+      "source_sha256": "3ab24f3db0f7975a7e4f25ebeaad55ae007fc57e50e436aa0a2eb63d26586dbd",
+      "pages": 7,
+      "chars": 14679,
+      "judged_sha256": "ab459100ce90bead180014aca3d9cc29ec1b1af452a37aac6b3f478407f2b291",
+      "judged_at": "reports/Perplexity-Research/idx-126.md"
+    },
+    "Perplexity-Research/idx-128.md": {
+      "source_sha256": "f4024cf13a8b149aca10dd6d7a67c8d3649de64f641943f1b774623ff14cac89",
+      "pages": null,
+      "chars": 20423,
+      "judged_sha256": "f4024cf13a8b149aca10dd6d7a67c8d3649de64f641943f1b774623ff14cac89",
+      "judged_at": "reports/Perplexity-Research/idx-128.md"
+    },
+    "Perplexity-Research/idx-4.md": {
+      "source_sha256": "51a944bf6c1e4722be6ec7d0c95c84c57d24952b923ad4da9d03d88ea3b8f65f",
+      "pages": null,
+      "chars": 46360,
+      "judged_sha256": "51a944bf6c1e4722be6ec7d0c95c84c57d24952b923ad4da9d03d88ea3b8f65f",
+      "judged_at": "reports/Perplexity-Research/idx-4.md"
+    },
+    "Perplexity-Research/idx-70.md": {
+      "source_sha256": "46ee11feaefeb83db145e335e94ebd222b3a0dec0075a4138eb54a74d46897f8",
+      "pages": null,
+      "chars": 31627,
+      "judged_sha256": "46ee11feaefeb83db145e335e94ebd222b3a0dec0075a4138eb54a74d46897f8",
+      "judged_at": "reports/Perplexity-Research/idx-70.md"
+    },
+    "Perplexity-Research/idx-96.md": {
+      "source_sha256": "b05a8555697e3a5314721019f7698c6f4cab5f62c7dfff74c6f5510d07f52424",
+      "pages": null,
+      "chars": 30231,
+      "judged_sha256": "b05a8555697e3a5314721019f7698c6f4cab5f62c7dfff74c6f5510d07f52424",
+      "judged_at": "reports/Perplexity-Research/idx-96.md"
+    },
+    "Perplexity-Research/idx-98.md": {
+      "source_sha256": "2c3146751e96a1e04dbb77c393354d7b972f1cfdb44114a1d06e41a0de430379",
+      "pages": null,
+      "chars": 38976,
+      "judged_sha256": "2c3146751e96a1e04dbb77c393354d7b972f1cfdb44114a1d06e41a0de430379",
+      "judged_at": "reports/Perplexity-Research/idx-98.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-112.pdf": {
+      "source_sha256": "ecefa6d9fbf0d460ba51143cd0e1fdbdc8281f1cb1143e4eb312b5618f05380f",
+      "pages": 17,
+      "chars": 55148,
+      "judged_sha256": "2b67c08d12e1e93c5d3bf9f186dd499c162f5021ab727fbf9551bdcb674f1d1f",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-112.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-114.pdf": {
+      "source_sha256": "8acb15a0094ae5d5beba50d2ebff1f3091816ed7a3ca6a430e9281ab15af898a",
+      "pages": 13,
+      "chars": 51008,
+      "judged_sha256": "583c7156df348082f9df44b8074e2211fdb9e781cc48d59c5507002c0aabe001",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-114.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-126.pdf": {
+      "source_sha256": "ccd9dc25ca68442a292e5d84a8f59b8b36b5c7a30a6cd20145531b345bd40018",
+      "pages": 13,
+      "chars": 51458,
+      "judged_sha256": "801ef501e368beadea79be493ad8dd409d6b4d8e43dc46c632def36d20b2f72b",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-126.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-128.pdf": {
+      "source_sha256": "3c4f9cdd004974b213981d2ca2506ef1a9f9f7104ab1488ac7e5accccff69af2",
+      "pages": 11,
+      "chars": 39543,
+      "judged_sha256": "92a857064378b8cdcf249b41d88091dd8e272b4e079c8da80e44d76b5ecb6ccc",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-128.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-4.pdf": {
+      "source_sha256": "d46b4805cd01269dc7a7ce52721144005ddd8f9cb98f4c7d472d9c4af3b92183",
+      "pages": 20,
+      "chars": 73622,
+      "judged_sha256": "bff3d6db9c48243a5861c8699e6cc3060ee8c92733a830f450733228f1e54c40",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-4.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-70.pdf": {
+      "source_sha256": "d5109005304576343e7537334010df8a723672a831d33cfa2602de204f987962",
+      "pages": 21,
+      "chars": 81229,
+      "judged_sha256": "51f7b4ee935968c75bfbc44921020f23b439bd1f2e689f77f5bafae44f81cfb8",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-70.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-96.pdf": {
+      "source_sha256": "9f3cd4a89dc2478297c4aedcf6909edfad8d2171e39892009414c7ffb04abdae",
+      "pages": 18,
+      "chars": 67977,
+      "judged_sha256": "bf41b0d7ac1bb9a013dc04b97581ec19caa565c837555bb6ee64e033ba8a1231",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-96.md"
+    },
+    "Qwen-3-Max-DeepResearch/idx-98.pdf": {
+      "source_sha256": "2801f315bf22ee9cbb0481f5ca462de44e22f54973f9e03d3e9d9f9ddbfa101e",
+      "pages": 12,
+      "chars": 48728,
+      "judged_sha256": "7d08a9c5db6844303a704e83c27ba3ec60e08413dea41d191f5380482bde1dab",
+      "judged_at": "reports/Qwen-3-Max-DeepResearch/idx-98.md"
+    }
+  }
+}

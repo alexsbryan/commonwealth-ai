@@ -1,0 +1,24 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1787262188",
+  "charter_hash": "479ce77955d9a805",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS applications. Your report should: 1) List major manufacturers, specific device models, and their configurations. 2) Include images of these devices. 3) Analyze the primary use cases and scenarios where these devices are deployed. 4) Investigate the market penetration, common usage scenarios, typical price ranges, and estimated installed base for such devices across different regions (North America, Japan/Korea, Southeast Asia, South America).",
+      "hits": []
+    },
+    {
+      "query": "Acting as a senior hardware product manager, conduct in-depth research on tablet-style devices used for payments or SaaS applications",
+      "hits": []
+    }
+  ],
+  "estate_answer": "No evidence was retrieved this round."
+}

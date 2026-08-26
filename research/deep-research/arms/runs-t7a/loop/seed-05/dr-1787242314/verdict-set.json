@@ -1,0 +1,45 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787242314",
+  "charter_hash": "63e56e6c3d32832c",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The EU AI Act entered into force in phases between 2024 and 2027 to ensure that obligations land as institutional capacity and technology mature, a schedule that also serves as the compliance roadmap exported worldwide through the Brussels effect [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "These deadlines are supported by enforcement mechanisms where fines reach €35 million or 7% of global annual turnover for prohibited-practice violations and €15 million or 3% for most other breaches [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

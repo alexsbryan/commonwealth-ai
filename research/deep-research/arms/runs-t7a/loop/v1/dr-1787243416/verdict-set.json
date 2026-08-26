@@ -1,0 +1,448 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787243416",
+  "charter_hash": "694eb377cf58479d",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "American cities have undergone a fundamental transformation from 1980 to 2024, characterized by accelerating gentrification, widening economic inequality, deteriorating housing affordability relative to income growth, and the displacement of lower-income residents [Source: ev-1].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-1"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        },
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c2",
+      "text": "Since 1980, nearly 80% of the country’s under-45 population growth has concentrated in metropolitan areas with over one million residents [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "However, this phenomenon remains geographically uneven [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "The most intensive transformation occurred in specific metropolitan areas where over half of eligible tracts changed status. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Portland saw 58.1% of its eligible tracts gentrify, representing 36 out of 62 eligible tracts [Source: ev-2].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        },
+        {
+          "evidence_id": "ev-2",
+          "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "chunk_id": "ev-2"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Washington D.C. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "experienced a rate of 51.9%, or 54 out of 104 eligible tracts [Source: ev-2].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        },
+        {
+          "evidence_id": "ev-2",
+          "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "chunk_id": "ev-2"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Minneapolis recorded a rate of 50.6%, which was 39 out of 77 eligible tracts [Source: ev-2].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2",
+        "ev-1"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        },
+        {
+          "evidence_id": "ev-2",
+          "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "chunk_id": "ev-2"
+        },
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 3,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c9",
+      "text": "Seattle had a rate of 50%, corresponding to 7 out of 14 eligible tracts [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c10",
+      "text": "Other cities with high gentrification rates include Atlanta and Virginia Beach at 46.2%, Denver at 42.1%, and Austin at 39.7% [Source: ev-2].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-2",
+        "ev-1"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        },
+        {
+          "evidence_id": "ev-2",
+          "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+          "chunk_id": "ev-2"
+        },
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report",
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 3,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c11",
+      "text": "In contrast, major metros like Detroit (2.8%), Las Vegas (2%), El Paso (0%), and Arlington, TX (0%) experienced little to no gentrification among eligible tracts [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "New York City had the highest raw number of gentrified tracts (128), despite a lower percentage rate of 29.8% due to its large total tract count [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "Inequality has risen in cities since the 1980s, reaching record levels by 2018–2021 according to Federal Reserve data tracking over 3,140 inequality series [Source: ev-1].",
+      "verdict": "passed",
+      "status": "passed",
+      "evidence_ids": [
+        "ev-1",
+        "ev-1"
+      ],
+      "citations": [
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        },
+        {
+          "evidence_id": "ev-1",
+          "url": "https://v1-demo.example/source-report",
+          "chunk_id": "ev-1"
+        }
+      ],
+      "flag": null,
+      "corroboration": {
+        "origins": [
+          "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c14",
+      "text": "Specific city-level metrics include New York City with a Gini coefficient of 0.5469 [Source: ev-1], Atlanta and Miami with Gini coefficients of approximately 0.57 [Source: ev-1], and New Orleans with a Gini coefficient of 0.56 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "Income ratios further illustrate this divide. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "This divergence is most acute on the West Coast; California cities exhibit price-to-income ratios between 9.6 and 12.2, more than double the national average of 4.7 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "Gentrifying tracts saw population increases (+6.5%) and became whiter, with the non-Hispanic white share increasing by an average of 4.3 percentage points while poverty rates dropped slightly (0.7 percentage point decrease) [Source: ev-2] [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c18",
+      "text": "Conversely, lower-income areas that failed to gentrify experienced population losses (-2.4%), increased minority concentration (non-white share change noted as -5.0 in table context implying relative increase or specific metric shift), and sharp rises in poverty, which climbed nearly 7% (specifically a 6.7 percentage point increase) [Source: ev-2] [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "Educational gentrification is also evident, with urban areas now having 35% of residents holding bachelor's degrees or higher, compared to 31% in suburbs and 19% in rural areas [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "This shift concentrated high-income professionals in urban cores, contributing to income polarization where urban centers house both top earners and low-wage service workers, unlike the more moderate distributions found in suburbs [Source: ev-1] [Source: ev-2].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c21",
+      "text": "Only Houston showed improvement, with a mere 1.1% gain in income outcomes [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "**Gentrification Acceleration and Geographic Concentration**\nSince 1980, nearly 80% of the country’s under-45 population growth has concentrated in metropolitan areas with over one million residents [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c23",
+      "text": "However, this phenomenon remains geographically uneven. [Source: ev-2]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c24",
+      "text": "Specific city-level metrics include:\n*   **New York City:** Gini coefficient of 0.5469 [Source: ev-1]\n*   **Atlanta and Miami:** Gini coefficients of approximately 0.57 [Source: ev-1]\n*   **New Orleans:** Gini coefficient of 0.56 [Source: ev-1]\n\nIncome ratios further illustrate this divide.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": []
+}

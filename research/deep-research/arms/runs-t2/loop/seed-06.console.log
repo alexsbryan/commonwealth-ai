@@ -1,0 +1,61 @@
+svrnmesh: bridged 2 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+deep-research: web backends: tavily keyed, duckduckgo (fallback)
+deep-research: no consent grant — the web leg is default-deny for non-public-web payloads (--consent <public-web|peer|personal> to release)
+deep-research: run dr-1787350321 — Why did a single CrowdStrike software update cause a global IT outage in July 2024, and what were the consequences?
+deep-research: run dir /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t2/loop/seed-06/dr-1787350321
+deep-research: web backend mock
+deep-research: search source mock
+deep-research: mock deck /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/decks/seed-06 (search/fetch served from the deck; drafts delegated)
+deep-research: daemon http://localhost:9741/v1 (draft Qwen3.8-27B-UD-Q6_K_XL, embed Qwen3-Embedding-0.6B-Q8_0)
+[dr-estate-dr-1787350321] Pre-build dedupe pass (0/3)...
+[dr-estate-dr-1787350321] Dedupe: no duplicates found (1 rows)
+[dr-estate-dr-1787350321] Dedupe preserved 1 legacy hashless rows (no content_hash to compare)
+[dr-estate-dr-1787350321] Skipping vector index — fewer than 256 rows (1/3)
+[dr-estate-dr-1787350321] Building FTS content index (2/3)...
+[dr-estate-dr-1787350321] FTS content index done
+[dr-estate-dr-1787350321] Building FTS title index (3/3)...
+[dr-estate-dr-1787350321] FTS title index done
+deep-research: estate corpus dr-estate-dr-1787350321 built — 1 chunks (retrieval-visible)
+
+deep-research: RunOutcome { terminal_state: DonePartial, report_path: "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t2/loop/seed-06/dr-1787350321/report.md", manifest: Manifest { icd: "manifest", version: 1, run_id: "dr-1787350321", charter_hash: "d252c81318228768", terminal_state: "done-partial", aborted_at_round: None, truncation_declared: true, rounds: [RoundRow { round: 1, gaps_before: 0, gaps_after: 1, fetched: 1, search_calls: 4 }, RoundRow { round: 2, gaps_before: 1, gaps_after: 9, fetched: 0, search_calls: 4 }, RoundRow { round: 3, gaps_before: 9, gaps_after: 9, fetched: 0, search_calls: 4 }], sources: SourceLedger { fetched: [FetchedSource { url: "https://estate.example/seed-06", custody: "public-web", ingested_into: Some("dr-estate-dr-1787350321") }], failed: [] }, budget: BudgetTotals { spent: {"web-search:mock": 12, "web-fetch:pages": 1}, remaining: {"web-search:mock": 0, "web-fetch:pages": 11} }, not_covered: ["The single CrowdStrike software update caused a global IT outage in July 2024 because, on July 19, 2024, a faulty CrowdStrike Falcon Sensor content update crashed approximately 8.5 million Windows devices into blue-screen loops [Source: ev-1].", "The root cause was identified as an out-of-bounds memory read in the sensor's C++ code, specifically an untrusted pointer dereference triggered by a 21-byte input that bypassed flawed validation due to missing input checks and a memory-safety defect [Source: ev-1].", "This incident occurred because of \"monoculture concentration,\" where one security agent deployed at enterprise scale with fast-cadence updates became a single point of failure for critical infrastructure worldwide [Source: ev-1].", "The consequences were severe across multiple sectors:\n*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500 million in costs; the airline later sued CrowdStrike and hired David Boies [Source: ev-1].", "*   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced significant disruptions [Source: ev-1].", "*   **Financial Impact:** CrowdStrike shares fell by approximately 11% on Monday, July 22, 2024 [Source: ev-1].", "*   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024. [Source: ev-1]", "The company apologized and promised changes to its deployment process, moving toward staged rollouts with canary testing and added sensor-level validation [Source: ev-1].", "Additionally, the episode drove industry-wide discussions regarding chaos engineering and blast-radius limits for endpoint agents [Source: ev-1].", "On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by crashing approximately 8.5 million Windows devices into blue-screen loops [Source: ev-1].", "The episode also drove industry-wide discussions regarding chaos engineering and blast-radius limits for endpoint agents [Source: ev-1]."], reframe: None, alignment: None, residue: [], consent: None, lock: LockRecord { id: "dr-1787350321", acquired_at_unix: 1787350321, released_at_unix: Some(1787350501) } }, artifacts: ["charter.json", "plan.json", "survey-1.json", "survey-1.json", "draft-1.json", "gap-list-1.json", "fetch-list-1.json", "skip-ledger-1.json", "evidence-window-1.json", "checkpoint.json", "draft-2.json", "gap-list-2.json", "fetch-list-2.json", "skip-ledger-2.json", "evidence-window-2.json", "draft-3.json", "gap-list-3.json", "fetch-list-3.json", "skip-ledger-3.json", "evidence-window-3.json", "verdict-set.json", "source-registry.json", "report.md", "manifest.json"] }
+terminal state: done-partial
+report: /home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t2/loop/seed-06/dr-1787350321/report.md
+rounds: 3 | gaps after last round: 9 | searches: 12 | fetched sources: 1
+open questions (could-not-judge):
+  - The single CrowdStrike software update caused a global IT outage in July 2024 because, on July 19, 2024, a faulty CrowdStrike Falcon Sensor content update crashed approximately 8.5 million Windows devices into blue-screen loops [Source: ev-1].
+  - The root cause was identified as an out-of-bounds memory read in the sensor's C++ code, specifically an untrusted pointer dereference triggered by a 21-byte input that bypassed flawed validation due to missing input checks and a memory-safety defect [Source: ev-1].
+  - This incident occurred because of "monoculture concentration," where one security agent deployed at enterprise scale with fast-cadence updates became a single point of failure for critical infrastructure worldwide [Source: ev-1].
+  - The consequences were severe across multiple sectors:
+*   **Aviation:** Delta Air Lines cancelled roughly 7,000 flights and incurred about $500 million in costs; the airline later sued CrowdStrike and hired David Boies [Source: ev-1].
+  - *   **Critical Services:** Banks, hospitals, broadcasters, and 911 services experienced significant disruptions [Source: ev-1].
+  - *   **Financial Impact:** CrowdStrike shares fell by approximately 11% on Monday, July 22, 2024 [Source: ev-1].
+  - *   **Corporate & Regulatory Response:** CEO George Kurtz testified before Congress on September 24, 2024. [Source: ev-1]
+  - The company apologized and promised changes to its deployment process, moving toward staged rollouts with canary testing and added sensor-level validation [Source: ev-1].
+  - Additionally, the episode drove industry-wide discussions regarding chaos engineering and blast-radius limits for endpoint agents [Source: ev-1].
+  - On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by crashing approximately 8.5 million Windows devices into blue-screen loops [Source: ev-1].
+  - The episode also drove industry-wide discussions regarding chaos engineering and blast-radius limits for endpoint agents [Source: ev-1].
+artifacts (flight recorder):
+  charter.json
+  plan.json
+  survey-1.json
+  survey-1.json
+  draft-1.json
+  gap-list-1.json
+  fetch-list-1.json
+  skip-ledger-1.json
+  evidence-window-1.json
+  checkpoint.json
+  draft-2.json
+  gap-list-2.json
+  fetch-list-2.json
+  skip-ledger-2.json
+  evidence-window-2.json
+  draft-3.json
+  gap-list-3.json
+  fetch-list-3.json
+  skip-ledger-3.json
+  evidence-window-3.json
+  verdict-set.json
+  source-registry.json
+  report.md
+  manifest.json

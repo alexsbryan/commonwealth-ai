@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787351186",
+  "charter_hash": "1801528f54121ee6",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Microsoft's Recall feature became a privacy scandal in 2024 because it was initially designed to screenshot the user’s screen every few seconds and store that data locally, effectively acting as a \"photographic memory\" for the PC [Source: ev-1]. The controversy escalated when security researchers demonstrated that these screenshots were stored unencrypted (in plaintext) within a local SQLite database, contradicting Microsoft’s claims of encryption [Source: ev-1]. This vulnerability meant that sensitive information visible on the screen—such as passwords, health data, private messages, and other confidential content—was captured by default and could be accessed by any process running under the same user account [Source: ev-1]. Consequently, privacy regulators including the Irish Data Protection Commission, the UK Information Commissioner's Office, and the Washington State Attorney General raised concerns or opened investigations into the feature [Source: ev-1].\n\nIn response to this backlash, which marked the AI PC era's first major privacy crisis, Microsoft delayed the launch in June 2024 and fundamentally changed how Recall operates [Source: ev-1]. The revised version is now opt-in (default OFF) rather than enabled by default [Source: ev-1]. To access the timeline of screenshots, users are required to use Windows Hello authentication and presence detection [Source: ev-1]. Additionally, the updated feature excludes incognito browsing sessions and DRM-protected content from being captured [Source: ev-1]. This modified, opt-in version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-12",
+      "custody": "public-web"
+    }
+  ]
+}

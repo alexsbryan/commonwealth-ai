@@ -1,0 +1,105 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787349925",
+  "charter_hash": "dcdccad9e474d1f7",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "-mini on April . (3, 4, 2025)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "launch signaled shift frontier reasoning models toward integrating vision directly model architecture rather bolting well incorporating native tool use web search code interpreter trained itself",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Additionally, OpenAI introduced \"budget forcing,\" a technique using a fixed maximum thought budget with dynamic compute that allows harder q (3, 4, 2025)",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "’s pricing of $ per million input tokens and $ -mini’s pricing of $ per million input tokens and dollars per million output tokens . (3, 4, 2025)",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 4.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 4.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

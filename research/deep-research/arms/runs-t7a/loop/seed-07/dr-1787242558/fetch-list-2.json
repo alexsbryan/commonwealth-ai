@@ -1,0 +1,175 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787242558",
+  "charter_hash": "2f7d0ea1ddce8ce1",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "United States moved force TikTok's sale ban primarily due national-security concerns specifically potential Chinese government access user data platform’s algorithm",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "2024 concern formalized through CFIUS review led passage Protecting Americans Foreign Adversary Controlled Applications Act President Biden signed April",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "law required ByteDance divest TikTok's operations within roughly days extendable additional face ban United States",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q4",
+      "text": "The dispute proceeded as follows: * On January — day before the effective date—the Supreme Court upheld the law with a unanimous - per curia (2024, 2025)",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "2025 TikTok went dark January approximately hours",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "* The app was restored on January (noted as Jan events), after President Trump pledged to pause enforcement and issued an executive order on (2024, 2025)",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "2025 dispute ultimately resolved through deal announced June",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "Under agreement Oracle received approximately stake TikTok's operations",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "SoftBank other investors participated investment",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "ByteDance retained majority interest company",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q11",
+      "text": "Vice President Vance led White House negotiations deal",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 14.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

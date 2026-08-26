@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787292698",
+  "charter_hash": "6d90c96601efa04f",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "DeepSeek's R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the cost previously assumed necessary [Source: ev-1]. This event revealed to markets that the thesis regarding frontier-AI capital expenditure and Nvidia's demand being moated by compute scale was incorrect, as an open-weights frontier-class reasoning model had been achieved at significantly lower costs than incumbent standards [Source: ev-1].\n\nSpecifically, DeepSeek-R1 was released on January 20, 2025 [Source: ev-1], following its predecessor DeepSeek-V3 (released December 26, 2024), which reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-02",
+      "custody": "public-web"
+    }
+  ]
+}

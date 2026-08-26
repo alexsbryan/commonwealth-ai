@@ -1,0 +1,130 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787270518",
+  "charter_hash": "8253a2eebd49352b",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Date the EU AI Act entered into force and specific dates for each phase of application between 2024 and 2027",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "List of prohibited AI practices under Article 5 and their effective date in February 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Regulatory requirements for high-risk AI systems listed in Annex III and their compliance deadline in August 2026",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Obligation to comply with transparency obligations for certain AI systems (e.g., deepfakes, chatbots) and its effective date in August 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Requirements for general-purpose AI models regarding technical documentation, copyright policies, and training data summaries and their applicable timeline from August 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Penalties and fines structure for non-compliance with the EU AI Act including maximum fine amounts as a percentage of global turnover",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q7",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 11.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

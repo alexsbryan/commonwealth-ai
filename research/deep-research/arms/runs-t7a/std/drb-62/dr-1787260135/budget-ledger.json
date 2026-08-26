@@ -1,0 +1,149 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1787260135",
+  "charter_hash": "7f31e60a98521c35",
+  "allowance": {
+    "web-search:web": 12,
+    "web-fetch:pages": 12
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260165,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260168,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260170,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260172,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260174,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260178,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260180,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260182,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260185,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260187,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260190,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "web",
+      "units": 1,
+      "at_unix": 1787260192,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260194,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260194,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260194,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787260194,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-fetch:pages": 4,
+    "web-search:web": 12
+  },
+  "remaining": {
+    "web-search:web": 0,
+    "web-fetch:pages": 8
+  },
+  "refused_urls": []
+}

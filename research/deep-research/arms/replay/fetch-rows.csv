@@ -1,0 +1,773 @@
+task,round,rank,url,noise_class,queue,recorded,replayed_outcome,spend,health,content_verdict,coverage,prose_line,reason,gold
+56,1,2,https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf,,1,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: Execution error: fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+56,1,1,https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf,,2,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+56,1,3,https://economics.yale.edu/sites/default/files/symmetric_0.pdf,,3,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: Execution error: fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+56,1,15,https://www.jstor.org/stable/2648842,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+56,1,23,https://www.jstor.org/stable/2648842,,5,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,8,https://kasberger.github.io/assets/pdf/fpa_robust.pdf,,6,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,true
+56,1,9,https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,true
+56,1,17,http://digital.csic.es/bitstream/10261/1848/1/57803.pdf,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,22,https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,true
+56,1,4,https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf,,10,failed,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,7,https://brocku.ca/repec/pdf/0504.pdf,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,true
+56,1,14,https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,21,https://capcp.la.psu.edu/wp-content/uploads/sites/11/numericalanalysis.pdf,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,12,https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf,,14,dead-refused,dead-refused,0,dead,n/a,0.0000,0,,false
+56,1,18,https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf,,15,dead-refused,dead-refused,0,dead,n/a,0.0000,0,,false
+56,1,10,https://www.sciencedirect.com/science/article/abs/pii/S0165176511002473,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,true
+56,1,6,https://python.quantecon.org/two_auctions.html,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,11,https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf,,18,failed,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,24,https://economics.mit.edu/sites/default/files/publications/paper_83_first_price_auctions%281%29.pdf,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,16,https://pi.math.cornell.edu/~mec/Winter2009/Spulido/Auctions/english.html,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,25,https://users.eecs.northwestern.edu/~hartline/papers/unique-bne-EC-13.pdf,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,1,19,https://users.ssc.wisc.edu/~dquint/econ805%202007/econ%20805%20lecture%209.pdf,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,2,2,https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf,,1,dead-refused,dead-refused,0,dead,n/a,0.0000,0,,false
+56,2,1,https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf,,2,dead-refused,dead-refused,0,dead,n/a,0.0000,0,,false
+56,2,3,https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf,,3,dedup-refused,dedup-refused,0,dedup,n/a,0.0000,0,,false
+56,2,4,https://python.quantecon.org/two_auctions.html,,4,fetched,admit,1,ok,admit,0.5517,837,,false
+56,2,6,https://brocku.ca/repec/pdf/0504.pdf,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,true
+56,2,9,https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,true
+56,2,7,https://pi.math.cornell.edu/~mec/Winter2009/Spulido/Auctions/english.html,,7,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+56,2,8,https://kasberger.github.io/assets/pdf/fpa_robust.pdf,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,true
+56,3,1,https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf,,1,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: Execution error: fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+56,3,3,https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf,,2,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: Execution error: fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+56,3,4,https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf,,3,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: Execution error: fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+56,3,2,https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf,,4,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: Execution error: fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+56,3,9,https://www.chegg.com/homework-help/questions-and-answers/suppose-interested-bidding-piece-land-know-one-bidder-interested-seller-announced-highest--q119671261,,5,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,16,https://direct.mit.edu/rest/article/107/3/755/114759/Bidding-on-Price-and-Quality-An-Experiment-on-the,,6,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,5,https://www.filippremik.com/uploads/1/4/2/3/142331340/premik_jmp.pdf,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,19,https://www.scribd.com/document/648536111/Buyer-s-optimal-information-revelation-strategy-in-procurement-auctions,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,8,https://atlaspolicy.com/estimating-the-impacts-of-direct-to-consumer-electric-vehicle-sales,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,11,https://arxiv.org/pdf/2202.07517,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,13,https://www.anderson.ucla.edu/sites/default/files/document/2025-06/Modeling%20Bidder%20Risk%20Preferences%20to%20Optimize%20Auction%20Design.pdf,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,18,https://economia.uniroma2.it/master-science/economics/corso/asset/YTo0OntzOjI6ImlkIjtzOjM6IjQyMSI7czozOiJpZGEiO3M6NDoiMTExMiI7czoyOiJlbSI7TjtzOjE6ImMiO3M6NToiMjRhMDciO30=,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,14,https://www.aeaweb.org/conference/2023/program/paper/9HzFTrtZ,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,17,https://milgrom.people.stanford.edu/wp-content/uploads/1985/03/Economics-Of-Competitive-Bidding.pdf,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,10,https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,true
+56,3,7,http://www.econport.org/content/handbook/auctions/usefulconcepts/revequiv.html,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+56,3,20,http://www.parisschoolofeconomics.com/compte-olivier/Chapter11Auctions.pdf,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,11,https://europepmc.org/article/med/35235827,,1,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,1,51,https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full,,2,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,1,58,https://www.cell.com/molecular-plant/fulltext/S1674-2052(22)00049-1,,3,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,1,65,https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,1,43,https://academic.oup.com/mbe/article/25/3/559/1060663,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,1,74,https://pubmed.ncbi.nlm.nih.gov/18158322,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,1,3,https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243,,7,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,12,https://pmc.ncbi.nlm.nih.gov/articles/PMC3493653,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,14,https://www.researchgate.net/publication/232648417_Widespread_impact_of_horizontal_gene_transfer_on_plant_colonization_of_land,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,44,http://mccutcheonlab.org/s/17_husnik_nrm.pdf,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,47,https://www.mdpi.com/2413-4155/8/3/56,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,50,http://mccutcheonlab.org/s/17_husnik_nrm.pdf,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,57,https://pmc.ncbi.nlm.nih.gov/articles/PMC12448838,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,60,https://www.sciencedirect.com/science/article/pii/S0022283625004693,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,27,https://www.researchgate.net/publication/354845682_Variation_and_Evolution_of_Genome_Size_in_Gymnosperms,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,28,https://reference-global.com/download/article/10.2478/sg-2021-0013.pdf,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,32,https://europepmc.org/articles/pmc11530473?pdf=render,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,66,https://pmc.ncbi.nlm.nih.gov/articles/PMC11530473,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,4,https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2024.1338026/full,,19,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,1,https://en.wikipedia.org/wiki/Horizontal_gene_transfer,,20,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,6,https://academic.oup.com/ismecommun/article/4/1/ycae073/7671050,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,8,https://www.biorxiv.org/content/10.1101/2022.08.25.505314.full,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,9,https://maxapress.com/data/article/tp/preview/pdf/TP-2023-0003.pdf,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,10,https://www.mdpi.com/2075-1729/11/8/857,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,15,https://thescholarship.ecu.edu/bitstreams/a19e875b-66b9-4fca-9ddc-585d665b3ab8/download,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,17,https://genome.cshlp.org/content/24/5/831,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,21,https://www.pnas.org/doi/10.1073/pnas.0907584106,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,24,https://www.sciencedirect.com/science/article/pii/S1674205222000491,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,26,https://dspace.mit.edu/entities/publication/23743508-c0b7-43a2-9bc1-03479aabe1c2,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,48,https://www.nature.com/articles/s41559-024-02357-0,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,54,https://www.the-innovation.org/article/doi/10.59717/j.xinn-life.2026.100223,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,55,https://elifesciences.org/articles/25950,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,59,https://www.science.org/doi/10.1126/sciadv.abj5056,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,62,https://cgm.sjtu.edu.cn/hgt,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,73,https://royalsocietypublishing.org/rspb/article/277/1683/819/73019/Horizontal-gene-transfer-in-evolution-facts-and,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,75,https://enviromicro-journals.onlinelibrary.wiley.com/doi/full/10.1111/1462-2920.16629,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,79,https://academic.oup.com/gbe/article/11/10/2750/5554466,,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,63,https://www.yourgenome.org/theme/timeline-the-past-present-and-future-of-sequencing-technologies,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,31,https://www.sciencedirect.com/science/article/pii/S2590346226001227,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,33,https://pmc.ncbi.nlm.nih.gov/articles/PMC9357157,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,34,https://pubmed.ncbi.nlm.nih.gov/35853453,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,35,https://www.cell.com/cell/fulltext/S0092-8674(22)00719-X?dgcid=raven_jbs_aip_email,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,20,https://pmc.ncbi.nlm.nih.gov/articles/PMC5575156,,43,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,23,https://www.cd-genomics.com/resource-overview-plant-genomics-complexity-plant-genomes-functions.html,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,7,https://www.technologynetworks.com/immunology/articles/horizontal-gene-transfer-meaning-methods-detection-and-outcomes-397911,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,16,https://hal.science/hal-05307487/document,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,19,https://en.wikipedia.org/wiki/Horizontal_gene_transfer,,47,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,29,https://pmc.ncbi.nlm.nih.gov/articles/PMC4246719,,48,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,45,https://en.wikipedia.org/wiki/Horizontal_gene_transfer,,49,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,52,https://en.wikipedia.org/wiki/Horizontal_gene_transfer,,50,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,64,https://www.ebsco.com/research-starters/science/horizontal-gene-transfer,,51,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,76,https://link.springer.com/article/10.1186/s13059-018-1526-x,,52,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,77,https://prizedwriting.ucdavis.edu/horizontal-gene-transfer-between-host-eukaryotes-and-their-bacterial-endosymbionts-analyses-and,,53,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,80,https://research-repository.uwa.edu.au/files/31605052/49602.pdf,,54,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,18,https://academic.oup.com/gpb/article/22/5/qzae078/7876281,,55,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,68,https://nph.onlinelibrary.wiley.com/doi/10.1111/nph.19544,,56,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,49,https://pmc.ncbi.nlm.nih.gov/articles/PMC13320244,,57,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,69,https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2018.00418/full,,58,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,78,https://iipseries.org/assets/docupload/rsl2024282E40CC887C896.pdf,,59,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,25,https://nph.onlinelibrary.wiley.com/doi/10.1111/nph.19272,,60,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,36,https://link.springer.com/article/10.1186/s12915-016-0264-3,,61,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,38,https://pmc.ncbi.nlm.nih.gov/articles/PMC4876562,,62,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,40,https://bmcbiol.biomedcentral.com/articles/10.1186/s12915-016-0264-3,,63,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,41,https://link.springer.com/10.1186/s12915-016-0264-3?fromPaywallRec=true,,64,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,72,https://www.researchgate.net/publication/313536848_Lateral_gene_transfer_between_prokaryotes_and_eukaryotes,,65,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,39,https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2014.00638/xml/nlm?isPublishedV2=false,,66,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,56,https://www.sciencedaily.com/releases/2026/04/260416071953.htm,,67,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,30,https://bionumbers.hms.harvard.edu/bionumber.aspx?s=n&v=1&id=113543,,68,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,70,https://www.insect-genome.com/hgt,,69,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,71,https://microbiologyclass.net/glossary-of-microbiology,,70,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,5,https://www.embl.org/about/info/planetary-biology/projects/hgt,,71,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,1,42,https://en.wikipedia.org/wiki/Endosymbiont,,72,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,1,https://en.wikipedia.org/wiki/Horizontal_gene_transfer,,1,dedup-refused,dedup-refused,0,dedup,n/a,0.0000,0,,false
+58,2,4,https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118,,2,fetched,admit,1,ok,admit,0.3182,826,,false
+58,2,3,https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243,,3,dedup-refused,dedup-refused,0,dedup,n/a,0.0000,0,,false
+58,2,2,https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer,,4,fetched,admit,1,ok,admit,0.2727,719,,false
+58,2,9,https://www.mdpi.com/2073-4425/8/1/39,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,2,22,https://www.pasteur.fr/en/research-journal/news/antibiotic-resistance-how-bacteria-become-resistant,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,2,20,https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms,,7,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,2,5,https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full,,8,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+58,2,6,https://www.ars.usda.gov/ARSUserFiles/50620500/Publications/HCK/horizon.pdf,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,7,https://prizedwriting.ucdavis.edu/horizontal-gene-transfer-between-host-eukaryotes-and-their-bacterial-endosymbionts-analyses-and,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,10,https://learn.genetics.utah.edu/content/microbiome/resistance,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,12,https://www.sciencedirect.com/science/article/pii/S1876034121003403,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,13,https://pmc.ncbi.nlm.nih.gov/articles/PMC3623377,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,16,https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,19,https://pmc.ncbi.nlm.nih.gov/articles/PMC4033532,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,24,https://www.researchgate.net/figure/Distribution-of-HGT-events-across-the-different-eukaryotic-superkingdoms-Distribution-of_fig2_311779001,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,18,https://en.wikipedia.org/wiki/Horizontal_gene_transfer,,17,dedup-refused,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,15,https://en.wikipedia.org/wiki/Category:Eukaryotes,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,25,https://en.wikipedia.org/wiki/Wikipedia:Contents/Categories,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,21,https://www.sciencedirect.com/topics/biochemistry-genetics-and-molecular-biology/bacterial-virulence,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,14,https://en.wikipedia.org/wiki/Eukaryote,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+58,2,23,https://www.britannica.com/science/eukaryote,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,3,https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way,,1,fetched,admit,1,ok,admit,0.6316,503,,false
+59,1,4,https://www.sciencedirect.com/science/article/pii/S1574954125002274,,2,failed,fetch-failed,1,http-status,n/a,0.0000,0,fetch https://www.sciencedirect.com/science/article/pii/S1574954125002274: Execution error: HTTP 403 Forbidden for https://www.sciencedirect.com/science/article/pii/S1574954125002274,false
+59,1,2,https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate,,3,fetched,admit,1,ok,admit,0.4211,908,,false
+59,1,1,https://en.wikipedia.org/wiki/Bird_migration,,4,fetched,admit,1,ok,admit,0.4737,906,,false
+59,1,9,https://www.sciencealert.com/variations-in-earth-s-magnetic-field-serve-as-stop-signs-for-migratory-birds,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+59,1,28,https://spacedaily.com/t-migrating-birds-see-magnetic-field-cryptochrome-quantum-compass,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+59,1,60,https://www.researchgate.net/publication/320205130_Disruption_of_Magnetic_Compass_Orientation_in_Migratory_Birds_by_Radiofrequency_Electromagnetic_Fields,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,20,https://pmc.ncbi.nlm.nih.gov/articles/PMC2843996,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,8,https://www.newscientist.com/article/2455948-migratory-birds-can-use-earths-magnetic-field-like-a-gps,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,24,https://www.researchgate.net/publication/250932623_Outdoor_Experiments_with_Migrating_European_Robins_in_Artificial_Magnetic_Fields,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,49,https://ace-eco.org/vol19/iss2/art13,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,53,https://www.semanticscholar.org/paper/c67b43e491a39edef00e4a4cfbe4f21b79d72587,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,5,https://pigeon.psy.tufts.edu/asc/Bingman/Default.htm,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,30,https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2022.862279/full,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,42,https://pmc.ncbi.nlm.nih.gov/articles/PMC6513191,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,44,https://pmc.ncbi.nlm.nih.gov/articles/PMC9532420,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,10,https://www.audubon.org/news/lost-birds-rely-earths-magnetic-field-get-back-track,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,15,https://www.researchgate.net/publication/21316492_Orientation_in_birds_The_sun_compass,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,27,https://www.audubon.org/news/lost-birds-rely-earths-magnetic-field-get-back-track,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,32,https://pmc.ncbi.nlm.nih.gov/articles/PMC4568659,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,37,https://phys.org/news/2026-08-pulsed-radiofrequency-magnetic-fields-disorient.html,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,48,https://www.sciencedirect.com/science/article/pii/S1574954125002274,,22,dead-refused,dead-refused,0,dead,n/a,0.0000,0,,false
+59,1,54,https://www.emf-portal.org/en/article/22022,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,56,https://www.mpg.de/6965131/magnetic-pulses-robins,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,14,https://ssec.si.edu/stemvisions-blog/how-do-birds-navigate,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,45,https://birdcast.org/new-methods-make-tracking-individual-birds-during-migration-possible,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,51,https://humbirdy.com/blogs/entry-door-expert-guides/how-birds-navigate-migration-magnetic-fields-stars,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,33,https://aa.usno.navy.mil/data/celnav,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,35,https://www.scribd.com/document/363301318/Sights-of-Celestial-Object,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,47,https://www.marineornithology.org/PDF/53_2/53_2_331-335.pdf,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,43,https://esmed.org/recovery-strategies-for-electromagnetic-intolerance,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,13,https://www.10000birds.com/bird-magnetic-sense-disrupted-by-human-emf.htm,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,6,https://www.climatecentral.org/climate-matters/birds-at-risk-2026,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,22,https://www.research.ed.ac.uk/files/105061936/journal.pcbi.1007123.pdf,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,25,https://cordis.europa.eu/article/id/31425-european-robins-see-earths-magnetic-field,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,46,https://digitalcommons.uri.edu/cgi/viewcontent.cgi?article=2837&context=theses,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,59,https://astronavigationdemystified.com/2019/02/19/the-importance-of-morning-and-evening-star-sights,,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,41,https://apps.fcc.gov/els/GetAtt.html?id=171433&x=.,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,21,https://www.nwf.org/Magazines/National-Wildlife/1999/Navigating-With-A-Built-In-Compass,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,64,https://gmd.copernicus.org/articles/19/7705/2026,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,29,https://pmc.ncbi.nlm.nih.gov/articles/PMC9564291,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,63,https://barryyeoman.com/2019/10/going-the-distance-bird-migration,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,38,https://books.allogy.com/v1/tenant/8/books/6bb33ad8-459f-42cc-ba9e-4d3c2c4b1e68,,43,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,39,https://interferencetechnology.com/man-made-electromagnetic-noise-disrupts-bird-navigation,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,58,https://pierdusud.com/en/how-to-plan-your-star-sights,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,61,https://www.arpansa.gov.au/understanding-radiation/what-is-radiation/non-ionising-radiation/radiofrequency-radiation,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,1,55,https://www.ngdc.noaa.gov/geomag-web,,47,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,3,https://avesbiology.com/nav_orient.html,,1,fetched,admit,1,ok,admit,0.4444,3934,,false
+59,2,1,https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901,,2,failed,fetch-failed,1,binary,n/a,0.0000,0,fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: Execution error: fetch https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901: non-text payload (application/pdf) — binary content refused (would poison the evidence window),false
+59,2,2,https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way,,3,dedup-refused,dedup-refused,0,dedup,n/a,0.0000,0,,false
+59,2,4,https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788,,4,fetched,admit,1,ok,admit,0.1667,783,,false
+59,2,8,https://www.researchgate.net/publication/281673037_Avian_Navigation_A_Combination_of_Innate_and_Learned_Mechanisms,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+59,2,15,https://www.theguardian.com/science/2019/apr/06/scientists-suggest-human-body-may-detect-earths-magnetic-field,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+59,2,17,https://pmc.ncbi.nlm.nih.gov/articles/PMC9151822,,7,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+59,2,27,https://theconversation.com/new-evidence-for-a-human-magnetic-sense-that-lets-your-brain-detect-the-earths-magnetic-field-113536,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,39,https://www.science.org/content/article/humans-other-animals-may-sense-earth-s-magnetic-field,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,6,https://pigeon.psy.tufts.edu/asc/Bingman/Default.htm,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,7,https://www.allaboutbirds.org/news/the-basics-migration-navigation,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,34,https://www.sciencetimes.com/articles/61515/20260323/bird-migration-navigation-how-birds-travel-thousands-miles-incredible-precision.htm,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,30,https://pmc.ncbi.nlm.nih.gov/articles/PMC9546057,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,36,https://www.hhmi.org/news/changing-circadian-clock-seasons,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,41,https://www.biorxiv.org/content/10.64898/2026.04.08.717233v1,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,18,https://sos.noaa.gov/catalog/datasets/earths-magnetic-field-compass-needles,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,20,https://www.esa.int/Applications/Observing_the_Earth/FutureEO/Swarm/Swarm_reveals_growing_weak_spot_in_Earth_s_magnetic_field,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,21,https://www.sciencedaily.com/releases/2026/02/260224023221.htm,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,28,https://pmc.ncbi.nlm.nih.gov/articles/PMC9151822,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,22,https://www.sciencedaily.com/releases/2018/07/180731125604.htm,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,29,https://pure.mpg.de/rest/items/item_2197660_2/component/file_2197659/content,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,13,https://pmc.ncbi.nlm.nih.gov/articles/PMC11226552,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,38,https://www.fepblue.org/news/2020/04/28/17/49/internal-clock,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,16,https://www.eneuro.org/content/6/2/ENEURO.0483-18.2019,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,26,https://maglab.caltech.edu/human-magnetic-reception-laboratory,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,5,https://www.encyclopedie-environnement.org/en/life/orientation-migratory-birds,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,44,https://www.researchgate.net/publication/395408150_Intergenerational_transmission_of_problem_behavior_Genetic_and_environmental_pathways,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,9,https://learn.genetics.utah.edu/content/basics/clockgenes,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,33,https://www.ogtr.gov.au/sites/default/files/2024-10/dnir_list_august_2024.pdf,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,10,https://www.communicatingpsychologicalscience.com/blog/your-inner-clock,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,12,https://www.sleepfoundation.org/circadian-rhythm,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,14,https://news.umich.edu/humans-are-seasonal-creatures-according-to-our-circadian-rhythms,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+59,2,31,https://www.nature.com/articles/s41380-025-02981-7,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,3,https://pennylane.ai/demos/tutorial_trapped_ions,,1,fetched,admit,1,ok,admit,0.4792,645,,false
+62,1,1,https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale,,2,fetched,admit,1,ok,admit,0.3958,563,,false
+62,1,4,https://m-malinowski.github.io/2024/02/06/scaling-ions.html,,3,fetched,admit,1,ok,admit,0.3750,391,,false
+62,1,63,https://link.aps.org/doi/10.1103/tk99-76gb,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,105,https://quantumcomputing.stackexchange.com/questions/23650/how-to-calculate-the-number-of-qubits-in-surface-code-for-given-physical-error,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,10,https://quantum-journal.org/papers/q-2024-11-07-1516,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,12,https://thequantuminsider.com/2026/06/12/trapped-ion-quantum-computing-companies-technology-and-where-it-stands-in-2026,,7,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,5,https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions,,8,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,41,https://postquantum.com/quantum-modalities/trapped-ion-qubits,,9,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,48,https://pmc.ncbi.nlm.nih.gov/articles/PMC9908934,,10,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,50,https://inspirehep.net/files/4ec90af54b0c2e961032d2bda1c61987,,11,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,53,https://link.aps.org/doi/10.1103/p3cy-8yjk,,12,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+62,1,54,https://www.quantinuum.com/blog/quantinuum-announces-a-world-record-in-fidelity-for-quantum-computing-qubits,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,81,https://arxiv.org/html/2605.09580v2,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,90,https://postquantum.com/quantum-modalities/trapped-ion-qubits,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,104,https://www.researchgate.net/publication/368363526_A_high-fidelity_quantum_matter-link_between_ion-trap_microchip_modules,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,27,https://tf.nist.gov/general/pdf/3181.pdf,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,8,https://www.quantinuum.com/press-releases/quantinuum-launches-industry-first-trapped-ion-56-qubit-quantum-computer-that-challenges-the-worlds-best-supercomputers,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,67,https://iontrap.duke.edu/files/2025/03/Accurate_measurement_of_the_12.6_GHz_clock_transition_in_trapped__sup_171_Yb_sup___ions.pdf,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,16,https://link.aps.org/doi/10.1103/h4wk-v31j,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,32,https://ui.adsabs.harvard.edu/abs/2024arXiv241103301R/abstract,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,99,https://link.aps.org/doi/10.1103/h4wk-v31j,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,17,https://entangledfuture.com/guides/trapped-ion-quantum-computing,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,23,https://arxiv.org/html/2308.05071v2,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,25,https://quantum-journal.org/papers/q-2024-11-07-1516,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,39,https://www.patsnap.com/resources/blog/rd-blog/trapped-ion-quantum-computing-2026-patsnap-eureka,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,40,https://entangledfuture.com/guides/trapped-ion-quantum-computing,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,45,https://ar5iv.labs.arxiv.org/html/1904.04178,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,89,https://arxiv.org/html/2308.05071v2,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,26,https://iontrap.duke.edu/files/2025/03/forshit.pdf,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,30,https://iontrap.physics.indiana.edu/papers/Donofrio2021.pdf,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,44,https://cacm.acm.org/research/toward-systematic-architectural-design-of-near-term-trapped-ion-quantum-computers,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,46,https://www.ionq.com/blog/achieving-remote-ion-ion-entanglement-paving-the-way-for-scalable-quantum,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,66,https://www.quantummetrology.de/quaccs/research/multi-ion-clocks,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,76,https://link.aps.org/doi/10.1103/PhysRevLett.96.253003,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,87,https://www.abilityengineering.com/quantum-computing-cooling-system,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,88,https://pennylane.ai/demos/tutorial_sc_qubits,,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,93,https://pubs.aip.org/aip/apr/article/6/2/021314/570103/Trapped-ion-quantum-computing-Progress-and,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,97,https://arxiv.org/html/2601.08578v1,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,102,https://arxiv.org/html/2510.07590,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,108,https://www.researchgate.net/publication/260515587_Energy-Efficient_Superconducting_Computing-Power_Budgets_and_Requirements,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,47,https://link.aps.org/doi/10.1103/PRXQuantum.4.040313,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,64,https://arxiv.org/html/2408.13687v1,,43,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,78,https://www.research-collection.ethz.ch/bitstreams/bb700c66-a055-4ca6-8542-998181c65022/download,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,106,https://www.researchgate.net/publication/48188629_Microfabricated_Ion_Traps,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,107,https://www.semanticscholar.org/paper/Segmented-ion-trap-fabrication-using-high-precision-Ragg-Decaroli/ba2ad3254f8be01a0cfd8255d397dbb00bc88632,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,28,https://pmc.ncbi.nlm.nih.gov/articles/PMC11349922,,47,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,31,https://arxiv.org/abs/2007.04149,,48,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,18,https://postquantum.com/quantum-research/oxford-qubit-gate-error,,49,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,22,https://www.ionq.com/blog/accelerating-towards-fault-tolerance-unlocking-99-99-two-qubit-gate,,50,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,49,https://russfein.substack.com/p/qubit-modalities-trapped-ions,,51,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,98,https://www.ionq.com/technology,,52,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,56,https://www.patsnap.com/resources/blog/rd-blog/topological-qubit-error-correction-2026-patsnap-eureka,,53,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,57,https://multiwaresolutions.com/blog/quantum-error-correction-surface-codes-in-2026-d488-2026-06-09,,54,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,58,https://quantumzeitgeist.com/what-is-the-surface-code,,55,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,61,https://www.ionq.com/blog/our-novel-efficient-approach-to-quantum-error-correction,,56,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,62,https://pmc.ncbi.nlm.nih.gov/articles/PMC9946823,,57,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,43,https://iontrap.duke.edu/page/2,,58,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,65,https://tf.nist.gov/general/pdf/3330.pdf,,59,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,70,https://www.semanticscholar.org/paper/High-Stability-Single-Ion-Clock-with-5.5%C3%9710%5E%7B-19%7D-Marshall-Castillo/2150eeb98a1b60a82851c552e9c88eb1ad7923fb/figure/0,,60,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,95,https://www.ionq.com/resources/quantum-computing-101-introduction-evaluation-applications,,61,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,6,https://www.nationalacademies.org/read/25196/chapter/9,,62,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,14,https://iontrap.duke.edu/category/uncategorized,,63,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,33,https://link.aps.org/doi/10.1103/PhysRevLett.132.133003,,64,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,35,https://www.ictp-saifr.org/wfqm2025,,65,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,52,https://www.nist.gov/programs-projects/quantum-networking-trapped-ions-optical-cavities,,66,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,72,https://www.frontiersin.org/journals/physics/articles/10.3389/fphy.2025.1597737/full,,67,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,74,https://www.nist.gov/document/112-sandia-styluspdf,,68,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,79,https://aip.scitation.org/doi/abs/10.1063/5.0082740,,69,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,80,https://arxiv.org/html/2112.09723v1,,70,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,85,https://patentpc.com/blog/quantum-computing-energy-consumption-how-sustainable-is-it-latest-data,,71,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,86,https://www.spinquanta.com/news-detail/what-is-cryogenic-quantum-computing-and-why-it-matters,,72,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,91,https://iontrap.duke.edu/publications/research-articles,,73,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,94,https://link.aps.org/doi/10.1103/PhysRevLett.102.170501,,74,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,69,https://www.researchgate.net/publication/386042163_Progress_on_cadmium-ion_and_ytterbium-ion_Microwave_Frequency_Standards_at_Tsinghua_University,,75,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,73,https://www.opticsjournal.net/Articles/GetArticlePDF/OJd28985dfbe606e6c,,76,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,96,https://quantumsystemsaccelerator.org/2025/06/10/trapped-ions,,77,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,109,https://tf.nist.gov/general/pdf/2182.pdf,,78,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,19,https://russfein.substack.com/p/qubit-modalities-trapped-ions,,79,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,60,https://errorcorrectionzoo.org/list/quantum_realizations,,80,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,9,https://www.spinquanta.com/news-detail/quantum-computer-manufacturers,,81,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,7,https://www.quantinuum.com/press-releases/quantinuum-proves-their-quantum-computers-will-scale-with-major-hardware-innovation,,82,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,15,https://qir.mit.edu/benchmarking,,83,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,21,https://www.oxionics.com/announcements/oxford-ionics-breaks-global-quantum-performance-records,,84,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,37,https://www.nits.ac.in/research/conferences,,85,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,38,https://www.otso.com.au,,86,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,55,https://nano-qt.com/passive-quantum-interconnects-are-intrinsically-robust-to-motion-induced-errors,,87,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,82,https://russfein.substack.com/p/are-quantum-computers-energy-hogs,,88,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,100,https://linkelab.umd.edu/research,,89,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,71,https://arxiv.org/pdf/2402.16807,,90,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,13,https://www.ionq.com/roadmap,,91,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,34,https://arxiv.org/list/cond-mat.str-el/new,,92,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,75,https://escholarship.org/content/qt8vx3307d/qt8vx3307d.pdf,,93,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,101,https://arxiv.org/list/cond-mat/new,,94,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+62,1,103,https://arxiv.org/list/math/new,,95,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,17,https://www.technavio.com/report/precision-agriculture-market-industry-analysis,,1,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+65,1,1,https://www.mdpi.com/2073-4395/15/11/2518,,2,failed,fetch-failed,1,http-status,n/a,0.0000,0,fetch https://www.mdpi.com/2073-4395/15/11/2518: Execution error: HTTP 403 Forbidden for https://www.mdpi.com/2073-4395/15/11/2518,false
+65,1,2,https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5,,3,fetched,content-refused,1,ok,content-refused,0.0000,0,empty-content,false
+65,1,30,https://www.newswise.com/articles/new-deep-learning-model-sharpens-accuracy-in-wheat-spike-counting,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+65,1,3,https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325,,5,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,10,https://www.sphericalinsights.com/reports/agriculture-robots-market,,6,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,11,https://www.psmarketresearch.com/market-analysis/agricultural-robots-market-report,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,12,https://www.grandviewresearch.com/industry-analysis/agriculture-4-market-report,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,16,https://www.fortunebusinessinsights.com/agricultural-robots-market-109044,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,24,https://www.sciencedirect.com/science/article/abs/pii/S0168169918305829,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,25,https://www.semanticscholar.org/paper/Computer-vision-and-artificial-intelligence-in-for-Patr%C3%ADcio-Rieder/24696daab4cf7795fea37000108051ea6d9cab23,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,27,https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2023.1187301/full,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,53,https://pmc.ncbi.nlm.nih.gov/articles/PMC12274707,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,86,https://openknowledge.fao.org/bitstreams/64cdae9c-d160-4809-8c6a-62f94d48b6f6/download,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,75,https://pipeline-conference.com/abstracts/automated-3d-point-cloud-analysis-pipeline-corridors-high-density-point-clouds-change,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,78,https://www.pipeline-conference.com/abstracts/automated-3d-point-cloud-analysis-pipeline-corridors-high-density-point-clouds-change,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,82,https://www.researchgate.net/publication/349853225_Interactive_Holographic_Display_for_Real-Time_Drawing_and_Erasing_of_3D_Point-Cloud_Images_With_a_Fingertip,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,21,https://www.mdpi.com/2073-4395/12/11/2659,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,28,https://www.researchgate.net/publication/392065303_Harnessing_deep_learning_for_wheat_variety_classification_a_convolutional_neural_network_and_transfer_learning_approach,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,29,https://pmc.ncbi.nlm.nih.gov/articles/PMC12355334,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,34,https://www.sciencedirect.com/science/article/pii/S2772375522001009,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,84,https://academic.oup.com/gigascience/article/8/1/giy153/5232233,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,65,https://link.springer.com/article/10.1007/s40192-026-00449-2,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,76,https://www.productteacher.com/quick-product-tips/point-cloud-processing-for-3d-mapping,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,83,https://www.irit.fr/recherches/STORM/MelladoNicolas/real-time-3d-reconstruction-from-single-photon-lidar-data-using-plug-and-play-point-cloud-denoisers,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,14,https://www.coherentmarketinsights.com/market-insight/agriculture-robots-market-1183,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,15,https://www.snsinsider.com/reports/agriculture-robots-market-2548,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,18,https://www.marketsandmarkets.com/Market-Reports/precision-farming-market-1243.html,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,39,https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2026.1731852/full,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,55,https://www.ers.usda.gov/amber-waves/2022/june/investment-in-u-s-public-agricultural-research-and-development-has-fallen-by-a-third-over-past-two-decades-lags-major-trade-competitors,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,74,https://www.credenceresearch.com/report/3d-point-cloud-processing-software-market,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,26,https://medium.com/@jacob_marks/computer-vision-in-agriculture-2023-bb9a6d958f21,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,46,https://www.mdpi.com/1424-8220/25/11/3401,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,47,https://pure.iiasa.ac.at/id/eprint/20739/1/s41597-025-05331-y.pdf,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,48,https://agpolicyreview.card.iastate.edu/winter-2023/world-spending-agricultural-research-and-development,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,33,https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2026.1724501/full,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,85,https://mospace.umsystem.edu/items/b5dd20da-f4ca-49f3-a0ba-431677d85550,,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,64,https://www.nature.com/articles/s41598-022-26809-4,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,70,https://journals.biologists.com/dev/article/151/8/dev202550/346998/Acto3D-an-open-source-user-friendly-volume,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,35,https://harvest.usask.ca/bitstreams/ae81de04-4682-44b1-9227-58421a280946/download,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,68,https://chanzuckerberg.com/eoss/proposals,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,79,http://arxiv.org/html/2511.02293v1,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,80,https://arxiv.org/html/2511.02293v1,,43,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,81,https://www.semanticscholar.org/paper/LiDAR-Point-Cloud-Data-Processing-in-Autonomous-Saravanarajan-Chen/8dcdb4ec2336a1733cf9d0f961e67d0d464be6cf,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,51,https://www.fortunebusinessinsights.com/crop-monitoring-market-104782,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,32,https://vtechworks.lib.vt.edu/bitstreams/0773d655-ebf8-403a-8abc-e7f814224d5c/download,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,49,https://globalagriculturalproductivity.org/gap-bulletin/cornell-research-quantifies-funding-needs-as-us-agricultural-rd-spending-falls-behind,,47,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,87,https://www.researchgate.net/publication/396520771_Implementing_artificial_intelligence_and_machine_learning_algorithms_for_optimized_crop_management_a_systematic_review_on_data-driven_approach_to_enhancing_resource_use_and_agricultural_sustainability,,48,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,5,https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2022.974339/full,,49,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,36,https://link.springer.com/article/10.1186/s13007-023-01062-6,,50,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,57,https://www.datainsightsreports.com/reports/grain-graders-334236,,51,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,6,https://www.researchgate.net/publication/380253946_Research_on_automatic_3D_reconstruction_of_plant_phenotype_based_on_Multi-View_images,,52,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,9,https://arxiv.org/abs/2311.04154,,53,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,42,https://www.24marketreports.com/machines/global-multispectral-d-plant-scanner-forecast-market,,54,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,54,https://nimss.org/projects/view/mrp/outline/18868,,55,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,56,https://www.oecd.org/en/publications/progress-in-implementing-the-european-union-coordinated-plan-on-artificial-intelligence-volume-2_3ac96d41-en/full-report/ai-in-agriculture_c9ac6d24.html,,56,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,7,https://rae.agriculturejournals.cz/in-press.php,,57,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,37,https://pmc.ncbi.nlm.nih.gov/articles/PMC12983262,,58,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,62,https://link.springer.com/article/10.1007/s42452-025-07191-y,,59,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,63,https://www.niti.gov.in/sites/default/files/2023-03/National-Strategy-for-Artificial-Intelligence.pdf,,60,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,4,https://pmc.ncbi.nlm.nih.gov/articles/PMC7184763,,61,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,41,https://arxiv.org/html/2504.16840v1,,62,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,44,https://www.researchgate.net/publication/326641896_What_is_cost-efficient_phenotyping_Optimizing_costs_for_different_scenarios,,63,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,66,https://arxiv.org/html/2510.01296v1,,64,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,71,https://www.open3d.org,,65,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,52,https://www.sciencedirect.com/science/article/pii/S0034425726002087,,66,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,61,https://marketintelo.com/report/automated-produce-grading-systems-market,,67,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,20,https://kimstp.github.io/files/kimspublications_complete.pdf,,68,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,22,https://arxiv.org/pdf/2502.16950,,69,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,8,https://ui.adsabs.harvard.edu/abs/2021Agric..11.1010Y/abstract,,70,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,69,https://www.sciencedirect.com/science/article/pii/S0092867424006366,,71,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,72,https://www.kitware.com/open-source,,72,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,73,https://www.biorxiv.org/content/10.1101/2020.11.09.374926.full,,73,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,38,https://dataintelo.com/report/biofilm-detection-sensors-for-food-plants-market,,74,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,45,https://acsess.onlinelibrary.wiley.com/doi/10.1002/ppj2.70034,,75,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,60,https://pmc.ncbi.nlm.nih.gov/articles/PMC12274707,,76,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,43,https://www.sciencedirect.com/science/article/pii/S2773126X26000274,,77,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,1,58,https://www.sciencedirect.com/science/article/pii/S0022474X25000475,,78,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,3,https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature,,1,fetched,admit,1,ok,admit,0.7692,979,,false
+65,2,2,https://libguides.asu.edu/evidence_synthesis/search-strategy,,2,fetched,admit,1,ok,admit,0.6923,1223,,false
+65,2,1,https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462,,3,fetched,admit,1,ok,admit,0.8462,1096,,false
+65,2,15,https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+65,2,9,https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374,,5,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,10,https://www.plantphenomics.org.au/resources/published-research,,6,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,13,https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1245&context=plantscifacpub,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,14,https://academic.oup.com/jxb/article/66/18/5429/482901,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,4,https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309,,9,failed,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,5,https://www.mdpi.com/2078-2489/14/8/427,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,16,https://journals.sagepub.com/doi/10.1177/0306312719863494,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,17,https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,18,https://www.researchgate.net/publication/318456745_Deep_Plant_Phenomics_A_Deep_Learning_Platform_for_Complex_Plant_Phenotyping_Tasks,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,7,https://arxiv.org/html/2509.14457v1,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,6,https://direct.mit.edu/qss/article/doi/10.1162/QSS.a.396/133676/Coverage-and-metadata-completeness-and-accuracy-of,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,8,https://blog.scholasticahq.com/post/metadata-elements-publishers-should-prioritize,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,2,11,https://biotechlab.forestry.oregonstate.edu/sites/default/files/PlantPhenomics2022.pdf,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,3,1,https://www.plantphenomics.org.au/resources/published-research,,1,fetched,admit,1,ok,admit,0.7500,948,,false
+65,3,3,https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66,,2,fetched,content-refused,1,ok,content-refused,0.0000,0,empty-content,false
+65,3,2,https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374,,3,fetched,admit,1,ok,admit,0.5000,765,,false
+65,3,4,https://link.springer.com/article/10.1186/s13007-020-00653-x,,4,fetched,admit,1,ok,admit,0.3750,211,,false
+65,3,7,https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3,,5,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,3,8,https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1245&context=plantscifacpub,,6,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,3,10,https://academic.oup.com/jxb/article/66/18/5429/482901,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,3,5,https://www.frontiersin.org/journals/plant-science/articles/10.3389/fpls.2017.01190/full,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,3,9,https://www.researchgate.net/publication/318456745_Deep_Plant_Phenomics_A_Deep_Learning_Platform_for_Complex_Plant_Phenotyping_Tasks,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+65,3,6,https://biotechlab.forestry.oregonstate.edu/sites/default/files/PlantPhenomics2022.pdf,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,1,https://atlan.com/know/mcp/mcp-vs-a2a-protocol,,1,fetched,admit,1,ok,admit,0.3667,340,,false
+69,1,2,https://www.descope.com/blog/post/mcp-vs-a2a,,2,fetched,admit,1,ok,admit,0.5667,1642,,false
+69,1,3,https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter,,3,fetched,admit,1,ok,admit,0.5667,656,,false
+69,1,19,https://www.cybage.com/blog/mastering-google-s-a2a-protocol-the-complete-guide-to-agent-to-agent-communication,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+69,1,55,https://hidekazu-konishi.com/entry/mcp_specification_version_timeline.html,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+69,1,5,https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+69,1,7,https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,18,https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,24,https://codelabs.developers.google.com/intro-a2a-purchasing-concierge,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,37,https://ikala.ai/blog/ai-trends/an-in-depth-analysis-of-googles-a2a-protocol-and-its-relationship-with-anthropics-mcp-en,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,41,https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,43,https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,51,https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,59,https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,11,https://www.descope.com/learn/post/mcp,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,6,https://www.digitalapplied.com/blog/google-a2a-protocol-agent-to-agent-communication-guide,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,36,https://www.glukhov.org/ai-systems/comparisons/a2a-protocol-2026-adoption,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,47,https://www.glukhov.org/ai-systems/comparisons/a2a-protocol-2026-adoption,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,28,https://dev.to/pockit_tools/mcp-vs-a2a-the-complete-guide-to-ai-agent-protocols-in-2026-30li,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,30,https://www.stackone.com/blog/mcp-vs-a2a-protocol,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,50,https://medium.com/@aftab001x/mcp-and-a2a-the-protocols-building-the-ai-agent-internet-bc807181e68a,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,32,https://redis.io/blog/mcp-vs-a2a-which-protocol-do-you-need,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,54,https://blog.modelcontextprotocol.io/posts/2026-07-28,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,14,https://cloud.google.com/discover/what-is-model-context-protocol,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,15,https://www.anthropic.com/news/model-context-protocol,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,17,https://agent2agent.info,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,34,https://aishwaryasrinivasan.substack.com/p/a2a-vs-mcp-the-two-protocols-reshaping,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,40,https://atlan.com/know/google-a2a-protocol,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,42,https://galileo.ai/blog/google-agent2agent-a2a-protocol-guide,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,46,https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,52,https://www.prnewswire.com/news-releases/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year-302737641.html,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,64,https://composio.dev/content/ai-agent-tool-calling-guide,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,8,https://workos.com/blog/mcp-vs-a2a,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,9,https://auth0.com/blog/mcp-vs-a2a,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,66,https://arxiv.org/html/2605.00737v1,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,58,https://www.digitalapplied.com/blog/mcp-adoption-statistics-2026-model-context-protocol,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,74,https://www.philschmid.de/mcp-introduction,,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,56,https://github.com/a2aproject/A2A,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,12,https://en.wikipedia.org/wiki/Model_Context_Protocol,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,31,https://arxiv.org/html/2505.02279v1,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,75,https://modelcontextprotocol.io/docs/2026-07-28/getting-started/intro,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,22,https://a2a-protocol.org/latest/specification,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,23,https://www.wwt.com/blog/agent-2-agent-protocol-a2a-a-deep-dive,,43,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,27,https://pickaxe.co/post/mcp-vs-a2a-protocol,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,45,https://www.digitalapplied.com/blog/ai-agent-protocol-ecosystem-map-2026-mcp-a2a-acp-ucp,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,53,https://credal.ai/blog/what-happened-to-a2a-protocol,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,63,https://credal.ai/blog/what-happened-to-a2a-protocol,,47,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,65,https://www.augmentcode.com/guides/a2a-vs-mcp,,48,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,70,https://pub.towardsai.net/a2a-protocol-v1-2026-how-ai-agents-actually-talk-to-each-other-c500079bca73,,49,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,73,https://glaforge.dev/talks/2026/01/16/on-ai-standards-and-protocols-focus-on-mcp-and-a2a,,50,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,21,https://medium.com/@saeedhajebi/a2a-protocol-an-in-depth-guide-78387f992f59,,51,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,25,https://www.datacamp.com/blog/a2a-agent2agent,,52,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,26,https://www.truefoundry.com/blog/mcp-vs-a2a,,53,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,71,https://tianpan.co/blog/2026-01-29-code-execution-mcp-efficient-ai-agents,,54,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,38,https://www.descope.com/blog/post/mcp-vs-a2a,,55,dedup-refused,dedup-refused,0,dedup,n/a,0.0000,0,,false
+69,1,49,https://nevermined.ai/blog/emerging-standards-adoption-statistics,,56,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,72,https://nango.dev/blog/build-reliable-tool-calls-for-ai-agents-integrating-with-external-apis,,57,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,69,https://achan2013.medium.com/how-many-tools-functions-can-an-ai-agent-has-21e0a82b7847,,58,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,1,10,https://modelcontextprotocol.io/specification/2026-07-28,,59,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,1,https://www.k2view.com/what-is-mcp-ai,,1,fetched,admit,1,ok,admit,0.4375,1205,,false
+69,2,4,https://cloud.google.com/discover/what-is-model-context-protocol,,2,fetched,admit,1,ok,admit,0.5000,737,,false
+69,2,2,https://www.merge.dev/blog/model-context-protocol-alternatives,,3,fetched,admit,1,ok,admit,0.3750,1070,,false
+69,2,3,https://modelcontextprotocol.info/blog/mcp-guide,,4,fetched,admit,1,ok,admit,0.6875,434,,false
+69,2,36,https://blog.marcnuri.com/model-context-protocol-mcp-introduction,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+69,2,5,https://www.backslash.security/blog/what-is-mcp-model-context-protocol,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+69,2,23,https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future,,7,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,34,https://www.databricks.com/blog/what-is-model-context-protocol,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,38,https://www.backslash.security/blog/what-is-mcp-model-context-protocol,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,24,https://blog.doubleslash.de/en/software-technologien/kuenstliche-intelligenz/the-a2a-protocol-when-ai-agents-finally-learn-to-talk-to-each-other,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,26,https://onereach.ai/blog/what-is-a2a-agent-to-agent-protocol,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,27,https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,6,https://www.anthropic.com/news/model-context-protocol,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,35,https://modelcontextprotocol.io/docs/2026-07-28/getting-started/intro,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,20,https://newsletter.pragmaticengineer.com/p/mcp,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,32,https://galileo.ai/blog/agent-to-agent-interaction-frameworks,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,11,https://redis.io/blog/why-multi-agent-llm-systems-fail,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,33,https://arxiv.org/html/2505.02279v1,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,10,https://futureagi.substack.com/p/why-do-multi-agent-llm-systems-fail,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,31,https://www.salesforce.com/ap/agentforce/ai-agents/agent2agent-protocol,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,8,https://www.kosmoy.com/resources/blog/why-every-company-running-more-than-one-llm-needs-an-ai-gateway,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,29,https://www.solo.io/topics/ai-infrastructure/what-is-a2a,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,30,https://www.ruh.ai/blogs/ai-agent-protocols-2026-complete-guide,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,22,https://handsonarchitects.com/blog/2026/what-makes-mcp-server-successful,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,39,https://blog.cloudflare.com/mcp-v2,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,16,https://workos.com/blog/everything-your-team-needs-to-know-about-mcp-in-2026,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,17,https://medium.com/mongodb/understanding-mcp-the-universal-bridge-for-ai-models-8ff8b4392e21,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,21,https://blog.modelcontextprotocol.io/posts/2026-01-26-mcp-apps,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,7,https://media.defense.gov/2026/Jun/02/2003943289/-1/-1/0/CSI_MCP_SECURITY.PDF,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+69,2,9,https://medium.com/@abhaychougule0907/underlying-factors-behind-inconsistency-in-llm-responses-with-multi-tool-calling-628ce7b4de76,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,19,https://www.nature.com/articles/s41598-021-94255-9,,1,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,7,https://www.nature.com/articles/npjparkd201513,,2,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,12,https://pmc.ncbi.nlm.nih.gov/articles/PMC7313565,,3,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,6,https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2021.678373/full,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,8,https://neurotorium.org/article/non-motor-symptoms-in-parkinsons-disease-nature-and-burden,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,10,https://www.sciencedirect.com/science/article/abs/pii/S0303846712004246,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,23,https://www.nature.com/articles/s41598-021-04356-8,,7,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,9,https://parkinsonsnewstoday.com/news/most-untreated-parkinsons-patients-have-non-motor-symptoms-study,,8,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,17,https://pmc.ncbi.nlm.nih.gov/articles/PMC11464440,,9,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,88,https://www.frontiersin.org/journals/human-neuroscience/articles/10.3389/fnhum.2025.1684229/full,,10,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,93,https://www.neurologylive.com/view/early-intervention-deep-brain-stimulation-results-improvements-in-motor-non-motor-symptoms-parkinsons,,11,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,35,https://www.sciencedirect.com/science/article/pii/S1041610224042005,,12,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+78,1,13,https://pubmed.ncbi.nlm.nih.gov/33553493,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,25,https://pmc.ncbi.nlm.nih.gov/articles/PMC4831034,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,32,https://www.nature.com/articles/s41531-024-00642-0,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,43,https://pmc.ncbi.nlm.nih.gov/articles/PMC2668811,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,61,https://journals.sagepub.com/doi/10.1177/1877718X261418987,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,86,https://pmc.ncbi.nlm.nih.gov/articles/PMC5673981,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,52,https://www.pcla.org/blog/young-onset-parkinsons-disease,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,34,https://practicalneurology.com/diseases-diagnoses/movement-disorders/diagnosis-and-management-of-sleep-disorders-in-individuals-with-parkinson-disease/37652,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,36,https://photopharmics.com/a-guide-to-understanding-and-managing-sleep-problems-in-parkinsons-disease,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,41,https://pubmed.ncbi.nlm.nih.gov/15596611,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,44,https://academic.oup.com/braincomms/article/4/2/fcac040/6548788,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,5,https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,14,https://www.parkinson.org/understanding-parkinsons/non-movement-symptoms,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,18,https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,22,https://www.apdaparkinson.org/article/factors-in-parkinson-disease-progression,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,24,https://jamanetwork.com/journals/jamaneurology/fullarticle/784012,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,27,https://www.hopkinsmedicine.org/health/conditions-and-diseases/parkinsons-disease/youngonset-parkinsons-disease,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,29,https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,30,https://www.mayoclinic.org/diseases-conditions/parkinsons-disease/symptoms-causes/syc-20376055,,31,failed,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,31,https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,33,https://www.parkinson.org/blog/science-news/sleep-disorders,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,40,https://www.apdaparkinson.org/what-is-parkinsons/symptoms/sleep-problems,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,47,https://www.frontiersin.org/journals/cognition/articles/10.3389/fcogn.2024.1369538/full,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,48,https://www.parkinson.org/understanding-parkinsons/non-movement-symptoms/cognitive,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,54,https://davisphinneyfoundation.org/blog/a-primer-on-young-onset-parkinsons-disease-yopd-and-whats-coming-next,,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,55,https://www.hopkinsmedicine.org/health/conditions-and-diseases/parkinsons-disease/youngonset-parkinsons-disease,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,56,https://pmc.ncbi.nlm.nih.gov/articles/PMC7592661,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,57,https://www.apdaparkinson.org/what-is-parkinsons/early-onset-parkinsons-disease,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,59,https://www.medrxiv.org/content/10.1101/2025.08.05.25332959v2.full,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,60,https://pmc.ncbi.nlm.nih.gov/articles/PMC3606768,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,65,https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages,,43,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,66,https://www.bgs.org.uk/frequency-of-fall-risk-increasing-drugs-in-a-large-sample-of-people-with-parkinson%E2%80%99s-disease,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,79,https://www.sciencedirect.com/science/article/abs/pii/S1388245718300038,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,80,https://link.springer.com/article/10.1186/s12984-025-01616-w,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,81,https://pmc.ncbi.nlm.nih.gov/articles/PMC5822622,,47,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,83,https://www.dbsandme.com/en/support-and-resources/articles/what-to-expect-after-dbs-surgery.html,,48,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,97,https://pubs.asha.org/doi/10.1044/2019_JSLHR-19-00014,,49,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,98,https://www.researchgate.net/publication/363122400_Deep_Brain_Stimulation_Impact_on_Voice_and_Speech_Quality_in_Parkinson's_Disease_A_Systematic_Review,,50,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,101,https://www.neurologyadvisor.com/features/weighing-the-risks-of-deep-brain-stimulation,,51,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,102,https://www.medbridge.com/educate/courses/speech-treatment-post-deep-brain-stimulation-in-parkinsons-disease-cynthia-fox,,52,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,103,https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages,,53,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,105,https://www.bumrungrad.com/en/health-blog/april-2026/understanding-signs-symptoms-treatment-parkinson-disease,,54,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,106,https://www.michaeljfox.org/deep-brain-stimulation,,55,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,107,https://parkinsonsnewstoday.com/news/mds-updrs-patient-may-fail-to-assess-true-impact-of-motor-symptoms-in-parkinsons-study-suggests,,56,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,4,https://www.nia.nih.gov/health/parkinsons-disease/parkinsons-disease-causes-symptoms-and-treatments,,57,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,2,https://www.mayoclinic.org/diseases-conditions/parkinsons-disease/symptoms-causes/syc-20376055,,58,failed,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,42,https://www.alzforum.org/news/research-news/risk-score-forecasts-cognitive-decline-parkinsons,,59,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,1,https://www.neurosurgeryone.com/condition/parkinsons,,60,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,16,https://www.sciencedirect.com/science/article/abs/pii/S1353802014004118,,61,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,77,https://propelphysiotherapy.com/neurological/deep-brain-stimulation-parkinsons-disease-therapy,,62,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,90,https://medisyn.org/deep-brain-stimulation-success-rate,,63,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,94,https://www.ajmc.com/view/deep-brain-stimulation-still-effective-after-15-years-in-people-with-parkinson-disease-study-shows,,64,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,78,https://cdn.clinicaltrials.gov/large-docs/82/NCT03181282/Prot_SAP_000.pdf,,65,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,92,https://www.cns.org/Assets/f5045084-8179-4997-9f51-b20bc6621c8d/637020867970100000/24235-pdf,,66,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,26,https://www.epicresearch.org/articles/most-parkinsons-diagnoses-occur-after-age-70-with-a-slight-rise-in-diagnosis-age-since-2017,,67,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,49,https://www.aetna.com/cpb/medical/data/300_399/0349.html,,68,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,51,https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/young-onset-parkinsons,,69,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,53,https://photopharmics.com/young-onset-parkinsons-navigating-your-journey-after-an-early-diagnosis,,70,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,62,https://onlinelibrary.wiley.com/doi/10.1111/j.1468-1331.2012.03821.x,,71,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,89,https://www.medscape.com/viewarticle/deep-brain-stimulation-parkinsons-yields-lasting-benefits-2025a1000ox5,,72,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,99,https://davisphinneyfoundation.org/blog/deep-brain-stimulation-and-speech-impacts,,73,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,15,https://pmc.ncbi.nlm.nih.gov/articles/PMC12404927,,74,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,87,https://pmc.ncbi.nlm.nih.gov/articles/PMC3825788,,75,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,100,https://pmc.ncbi.nlm.nih.gov/articles/PMC11086900,,76,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,45,https://www.nature.com/articles/s41572-021-00280-3,,77,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,38,https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2022.927994/full,,78,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,21,https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0123231,,79,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,67,https://link.springer.com/article/10.1007/s00415-020-10234-6,,80,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,69,https://www.capc.org/blog/new-data-on-family-caregivers-in-the-us,,81,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,70,https://aspe.hhs.gov/reports/does-high-caregiver-stress-lead-nursing-home-entry-1,,82,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,72,https://pmc.ncbi.nlm.nih.gov/articles/PMC4573667,,83,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,96,https://www.pmdalliance.org/wp-content/uploads/2023/06/Speech-in-Individuals-with-PD.pdf,,84,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,68,https://www.aplaceformom.com/senior-living-data/caregiver-burnout-statistics,,85,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,63,https://www.physio-pedia.com/Hoehn_and_Yahr_Scale,,86,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,74,https://www.ltcnews.com/articles/new-survey-caregiver-burnout-soars-as-millions-care-for-aging-loved-ones,,87,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,76,https://www.aarp.org/caregiving/basics/caregiving-in-us-survey-2025,,88,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,95,https://www.ohsu.edu/brain-institute/dbs-outcomes,,89,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+78,1,75,https://www.meadowlark.org/blog/2023/11/02/caregiver-stress-transition,,90,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,41,https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800,,1,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,54,https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800,,2,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,33,https://market.us/report/pos-terminals-market,,3,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,40,https://www.researchgate.net/publication/368916598_POS_Terminals_Market_Share_Size_2023-2030,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,42,https://www.szzcs.com/News/the-rise-of-mobile-pos-systems.html,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,59,https://www.fortunebusinessinsights.com/point-of-sale-pos-market-106336,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,85,https://www.fortunebusinessinsights.com/point-of-sale-pos-market-106336,,7,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,97,https://www.marketresearchfuture.com/reports/cloud-pos-market-7709,,8,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,103,https://www.grandviewresearch.com/industry-analysis/point-of-sale-pos-software-market,,9,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,35,https://www.maximizemarketresearch.com/market-report/wireless-pos-terminal-market/1967,,10,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,18,https://www.abiresearch.com/press/ingenico-beats-verifone-and-pax-technology-to-firs,,11,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,20,https://finance.yahoo.com/news/europe-pos-terminals-market-report-103700559.html,,12,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+83,1,16,https://www.clearlypayments.com/blog/a-market-overview-of-payment-terminals-in-the-usa-in-2024,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,29,https://www.limelightpayments.com/blog/top-7-handheld-pos-systems-for-2026,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,53,https://www.marketdataforecast.com/market-reports/north-america-pos-terminals-market,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,58,https://www.clearlypayments.com/blog/a-market-overview-of-payment-terminals-in-the-usa-in-2024,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,79,https://www.clearlypayments.com/blog/a-market-overview-of-payment-terminals-in-the-usa-in-2024,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,90,https://www.marketdataforecast.com/market-reports/north-america-pos-terminals-market,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,99,https://www.marketdataforecast.com/market-reports/cloud-based-pos-market,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,104,https://www.meti.go.jp/english/press/2026/0424_003.html,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,45,https://www.42gears.com/white-papers/tablets-future-of-pos-technology,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,14,https://builtin.com/articles/fintech-payments-companies-examples,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,26,https://www.szzcs.com/News/the-rise-of-mobile-pos-systems.html,,23,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,27,https://www.bimipossystem.com/top-12-pos-hardware-manufacturers,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,38,https://www.fortunebusinessinsights.com/u-s-point-of-sale-pos-market-107526,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,52,https://market.us/report/handheld-point-of-sale-pos-market,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,63,https://www.eposnow.com/us/resources/card-reader-for-small-business,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,77,https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminals-market-14723081,,28,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,80,https://www.grandviewresearch.com/industry-analysis/mobile-pos-terminals-market,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,82,https://dataintelo.com/report/global-pos-mobile-card-reader-market,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,87,https://hostmerchantservices.com/articles/point-of-sale-market-share,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,88,https://www.marketsandata.com/industry-reports/united-states-pos-payment-market,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,91,https://market.us/report/restaurant-point-of-sale-terminal-market,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,93,https://www.databridgemarketresearch.com/reports/us-restaurant-pos-software-market,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,94,https://www.fortunebusinessinsights.com/u-s-point-of-sale-pos-market-107526,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,98,https://www.persistencemarketresearch.com/market-research/point-of-sale-market.asp,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,34,https://tadviser.com/index.php/Article:POS_Terminals_(Global_Market),,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,55,https://researchdive.com/8963/mobile-pos-terminals-market,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,62,https://technologyadvice.com/blog/sales/card-reader-for-small-business,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,64,https://www.bestbuy.com/site/shop/card-readers-for-small-business,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,46,https://vikingpayments.com/decoding-the-dilemma-tablet-pos-systems-vs-traditional-pos-systems,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,50,https://beyondbancard.com/pos-systems-vs-payment-terminals-vs-mobile-payments-explained,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,3,https://www.sunmi.com/en/news/486,,43,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,28,https://blog.rospertech.com/retail-pos-hardware,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,10,https://ordwaylabs.com/resources/research/list-of-largest-saas-companies,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,69,https://medium.com/point-nine-news/the-state-of-vertical-saas-in-europe-21900b8aefc5,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,110,https://www.researchgate.net/publication/372734013_Digital_Transformation_of_the_Retail_Point_of_Sale_in_the_Artificial_Intelligence_Era,,47,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,8,https://www.coherentmarketinsights.com/market-insight/tablet-market-1741,,48,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,9,https://www.swipesum.com/insights/8-top-tablet-based-pos-systems-for-your-business,,49,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,68,https://www.businesswire.com/news/home/20210820005229/en/Software-as-a-service-SaaS-Global-Market-Report-2021-Focus-on-Customer-Relationship-Management-Enterprise-Resource-Planning-Human-Resource-Manufacturing-and-Operations-Supply-Chain-Management---ResearchAndMarkets.com,,50,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,95,https://www.grandviewresearch.com/industry-analysis/us-restaurant-point-of-sale-solution-market-report,,51,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,96,https://scoop.market.us/point-of-sale-software-statistics,,52,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,112,https://midwestpay.com/mobile-tablet-point-of-sale,,53,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,49,https://prioritycommerce.com/resource-center/future-of-pos-systems,,54,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,86,https://www.clearlypayments.com/blog/payment-processing-usa-2024-market-overview,,55,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,17,https://allstarterminals.com/blogs/hardware-insights/pax-vs-ingenico-vs-verifone-vs-dejavoo-terminal-comparison,,56,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,21,https://www.paxtechnology.com,,57,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,24,https://www.pax.us,,58,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,43,https://technologyadvice.com/blog/retail/tablet-pos,,59,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,25,https://soireeinc.com/blog/explore-the-top-7-mobile-pos-systems-options-2026,,60,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,19,https://www.coherentmarketinsights.com/industry-reports/payment-devices-market,,61,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,37,https://www.grandviewresearch.com/industry-analysis/mobile-pos-terminals-market,,62,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,56,https://www.strategicmarketresearch.com/market-report/mobile-pos-terminals-market,,63,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,61,https://www.business.org/software/point-of-sale/best-credit-card-readers,,64,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,76,https://www.fortunebusinessinsights.com/software-as-a-service-saas-market-102222,,65,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,78,https://www.strategicmarketresearch.com/market-report/mobile-pos-terminals-market,,66,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,101,https://www.manh.com/our-insights/resources/articles/top-10-enterprise-pos-platforms-2026,,67,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,12,https://www.sunmi.com/en/news/486,,68,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,60,https://www.poszeo.com/blog-channel/small-business-credit-card-reader,,69,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,66,https://us.amazon.com/Best-Sellers-Mobile-Credit-Card-Readers/zgbs/office-products/7606658011,,70,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,74,https://www.industryresearch.biz/market-reports/software-as-a-service-saas-market-112626,,71,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,71,https://www.venasolutions.com/blog/saas-statistics,,72,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,11,https://www.dozuki.com/resources/shop-floor-tablet-recommendations,,73,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,32,https://beyondbancard.com/pos-systems-guide-for-2026-hardware-setup-features-and-costs,,74,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,72,https://www.marketdataforecast.com/market-reports/software-as-a-service-saas-market,,75,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,67,https://www.precedenceresearch.com/software-as-a-service-market,,76,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,70,https://www.verifiedmarketresearch.com/product/logistics-saas-market,,77,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,30,https://technologyadvice.com/blog/sales/mobile-pos-system,,78,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,15,https://www.fxcintel.com/research/reports/the-top-100-cross-border-payment-companies,,79,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,44,https://www.tcang.net/blog-mobile-pos-system-a-complete-guide-for-2026.html,,80,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,89,https://squareup.com/us/en/compare/square-vs-toast,,81,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,6,https://www.sysaid.com/blog/asset-management/blog-software-visibility-shadow-ai,,82,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,84,https://www.census.gov/retail/ecommerce.html,,83,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,108,https://www.cdw.com/content/cdw/en/articles/hardware/choosing-a-business-tablet.html,,84,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,75,https://avasant.com/research/it-spending-and-staffing-study-europe,,85,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,109,https://en.wikipedia.org/wiki/Verifone,,86,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+83,1,7,https://ofac.treasury.gov/faqs/added,,87,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,1,https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability,,1,fetched,admit,1,ok,admit,0.4000,640,,false
+90,1,3,https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles,,2,fetched,admit,1,ok,admit,0.4600,878,,false
+90,1,14,https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems,,3,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,1,15,https://tsr.international/TSR/article/view/25177,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,1,79,https://www.ppic.org/publication/driving-change-reducing-vehicle-miles-traveled-in-california-summary,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,1,80,https://www.researchgate.net/publication/308087710_The_effectiveness_of_lane_departure_warning_systems-A_reduction_in_real-world_passenger_car_injury_crashes,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,1,2,https://www.iihs.org/research-areas/advanced-driver-assistance,,7,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,4,https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems,,8,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,31,https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,17,https://www.sciencedirect.com/science/article/pii/S0022437525001525,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,6,https://www.martinandjones.com/blog/who-is-liable-when-the-failure-of-advanced-driver-assistance-systems-cause-a-car-accident,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,7,https://www.mdpi.com/1424-8220/24/19/6223,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,36,https://www.casepeer.com/blog/personal-injury-settlement-amount-examples,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,9,https://market.us/report/advanced-driver-assistance-systems-market,,14,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,52,https://heplerbroom.com/blog/when-no-one-has-to-drive-navigating-liability-in-the-era-of-driverless-vehicles,,15,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,19,https://afdc.energy.gov/data/10315,,16,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,71,https://samandashlaw.com/resources/product-liability-lawsuits-2026-key-cases-stats-how-to-get-justice,,17,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,74,https://www.lexisnexis.com/community/pressroom/b/news/posts/lex-machina-releases-2023-product-liability-litigation-report,,18,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,77,https://www.jdsupra.com/legalnews/global-trends-in-product-liability-and-2825903,,19,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,62,https://pacificdrivereducation.com/blog/new-driving-laws-for-2026-what-every-u.s.-driver-needs-to-know,,20,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,32,https://crashstats.nhtsa.dot.gov/Api/Public/ViewPublication/813663,,21,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,33,https://pubmed.ncbi.nlm.nih.gov/30121111,,22,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,73,https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems,,23,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,18,https://www.marketsandmarkets.com/Market-Reports/driver-assistance-systems-market-1201.html,,24,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,5,https://cleanfleetreport.com/adas-safety-limits-and-driver-responsibility-in-modern-vehicle-accidents,,25,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,8,https://aaafoundation.org/research/examining-the-safety-benefits-of-partial-vehicle-automation-technologies-in-an-uncertain-future,,26,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,11,https://injuryfacts.nsc.org/motor-vehicle/occupant-protection/advanced-driver-assistance-systems/data-details,,27,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,45,https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles,,28,dedup-refused,dedup-refused,0,dedup,n/a,0.0000,0,,false
+90,1,34,https://dklaw.com/insights/personal-injury-settlement-amounts-2026,,29,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,35,https://fairsettlement.org,,30,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,72,https://www.expertinstitute.com/resources/insights/latest-product-liability-payouts,,31,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,76,https://www.swissre.com/press-release/Litigation-costs-drive-US-liability-claims-by-57-over-past-decade-reveals-Swiss-Re-Institute/0b538159-9648-47da-a152-4550a7640d35,,32,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,25,https://ir.cccis.com/news-releases/news-release-details/ccc-crash-course-report-highlights-forces-reshaping-us-vehicle,,33,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,50,https://www.brookings.edu/articles/setting-the-standard-of-liability-for-self-driving-cars,,34,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,70,https://www.autobodynews.com/news/preventing-common-adas-failures-can-save-shops-millions-in-liability-costs-analyst-says,,35,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,81,https://repository.law.miami.edu/cgi/viewcontent.cgi?article=2243&context=fac_articles,,36,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,26,https://www.craftlawfirm.com/autonomous-vehicle-accidents-2019-2024-crash-data,,37,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,54,https://www.craftlawfirm.com/autonomous-vehicle-accidents-2019-2024-crash-data,,38,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,27,https://usclaims.com/educational-resources/non-licensed-drivers-responsible-for-20-percent-of-all-auto-accidents,,39,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,78,https://roadwaydynamics.com/adas-crash-analysis-liability-1,,40,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,82,https://www.federalregister.gov/documents/2024/05/09/2024-09054/federal-motor-vehicle-safety-standards-automatic-emergency-braking-systems-for-light-vehicles,,41,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,16,https://www.itskrs.its.dot.gov/2023-b01753,,42,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,12,https://www.iihs.org/research-areas/advanced-driver-assistance,,43,fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,59,https://www.nhtsa.gov/research-data/crash-avoidance,,44,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,43,https://www.federalregister.gov/documents/2016/08/15/2016-18399/finding-that-greenhouse-gas-emissions-from-aircraft-cause-or-contribute-to-air-pollution-that-may,,45,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,20,https://www.gminsights.com/industry-analysis/passenger-vehicle-adas-market,,46,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,24,https://vitalsigns.mtc.ca.gov/indicators/daily-miles-traveled,,47,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,44,https://www.mdpi.com/2032-6653/17/1/32,,48,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,75,https://www.iii.org/fact-statistic/facts-statistics-product-liability,,49,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,60,https://www.consumershield.com/articles/self-driving-car-accidents-trends,,50,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,47,https://www.sciencedirect.com/science/article/pii/S2590198224000198,,51,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,67,https://www.ghsa.org/state-laws-issues/distracted-driving,,52,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,69,https://pmc.ncbi.nlm.nih.gov/articles/PMC4001667,,53,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,23,https://css.umich.edu/publications/factsheets/mobility/personal-transportation-factsheet,,54,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,55,https://www.nhtsa.gov/parts-partnership-for-analytics-research-in-traffic-safety,,55,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,63,https://www.ncsl.org/transportation/traffic-safety-review-states-focus-on-distracted-driving,,56,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,57,https://www.nhtsa.gov/press-releases/nhtsa-2025-vehicles-5-star-safety-ratings-testing,,57,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,10,https://www.nhtsa.gov/laws-regulations/standing-general-order-crash-reporting,,58,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,28,https://www.nhtsa.gov/laws-regulations/standing-general-order-crash-reporting,,59,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,51,https://www.nhtsa.gov/vehicle-safety/automated-vehicle-safety,,60,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,37,https://trellis.law/doc/202886280/170-6-peremptory-challenge-peremptory-challenge-pursuant-to-ccp-170-6-filed,,61,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,46,https://farahandfarah.com/blog/self-driving-cars-liability-current-legislation-more,,62,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,41,https://dailypioneer.com/uploads/2026/epaper/august/thiruvananthapuram-english-edition-2026-08-21.pdf,,63,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,58,https://www.nhtsa.gov/automated-vehicles-safety/published-reports-and-documents,,64,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,53,https://www.knrlegal.com/car-accident-lawyer/self-driving-car-accident-statistics,,65,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,29,https://naqvilaw.com/self-driving-car-accident-statistics,,66,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,49,https://www.ncsl.org/transportation/autonomous-vehicles,,67,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,61,https://www.iihs.org/research-areas/distracted-driving,,68,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,64,https://www.aamva.org/getmedia/122cb514-786f-4854-bffd-287947150081/Strengthening-Distracted-Driving-Education_final.pdf,,69,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,22,https://highways.dot.gov/media/116921,,70,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,42,https://www.documentation.ca-cib.com/IssuerInformation/DownloadDocument?id=3e65d17a-e8c3-42bd-8c51-5743c6975b69,,71,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,1,40,https://www.mauicounty.gov/CivicAlerts.aspx?CID=6,,72,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,2,1,https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems,,1,dedup-refused,dedup-refused,0,dedup,n/a,0.0000,0,,false
+90,2,2,https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html,,2,fetched,admit,1,ok,admit,0.3333,139,,false
+90,2,3,https://www.spiceworks.com/soft-tech/what-is-adas,,3,fetched,admit,1,ok,admit,0.4000,1807,,false
+90,2,5,https://www.innovationautoglass.com/14-passive-and-active-ways-an-adas-system-works,,4,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,2,14,https://caradas.com/active-safety-and-passive-safety,,5,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,2,15,https://dewesoft.com/blog/what-is-adas,,6,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,2,16,https://pmc.ncbi.nlm.nih.gov/articles/PMC11479187,,7,never-fetched,fetched-content-unknown,1,ok,content-unknown,0.0000,0,no recorded content,false
+90,2,12,https://dewesoft.com/blog/types-of-adas-sensors,,8,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,2,8,https://blog.rgbsi.com/sensor-fusion-autonomous-driving-systems-part-2,,9,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,2,7,https://dorleco.com/adas-sensor-fusion-and-data-integration,,10,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,2,10,https://www.cyient.com/blog/sensor-fusion-driving-enhanced-safety-of-adas-ad-vehicles,,11,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,2,9,https://pmc.ncbi.nlm.nih.gov/articles/PMC11679148,,12,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false
+90,2,11,https://arxiv.org/html/2410.19872v1,,13,never-fetched,not-attempted-round-cap,0,round-cap,n/a,0.0000,0,,false

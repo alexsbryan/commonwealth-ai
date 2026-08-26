@@ -1,0 +1,802 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787270819",
+  "charter_hash": "a7ab96adf12fa3f4",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, here is how the dispute was resolved and why it occurred:\n\n**Why the United States moved to force TikTok's sale or ban:**\nThe primary driver for the US government's action between 2024 and 2025 was national security concerns. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "Specifically, there were fears regarding potential Chinese government access to US user data and the platform’s algorithm [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "These concerns had been subject to CFIUS review under structures such as \"Project Texas,\" which involved hosting US user data in Oracle’s cloud under US control [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "The legal mechanism for this pressure was the Protecting Americans from Foreign Adversary Controlled Applications Act, signed by President Biden on April 24, 2024, which required ByteDance to divest TikTok’s US operations within roughly 270 days (extendable by 90) or face a ban [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "**How the dispute was resolved:**\nThe resolution process unfolded through judicial and executive actions leading to a specific business structure:\n\n1. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "**Judicial Upholding:** On January 17, 2025—one day before the effective date of January 19—the Supreme Court upheld the law in a unanimous decision recorded as 9-0 per curiam [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "2. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "**Temporary Ban and Pause:** Consequently, TikTok went dark in the US on January 18/19 for roughly 14 hours [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "The service was restored on January 19 after President Trump pledged to pause enforcement; his executive order dated January 20 delayed enforcement for an additional 75 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "3. [Source: ev-1]",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "**Final Structure (Joint Venture):** Rather than an outright sale, the dispute ended with an Oracle-led joint venture structure announced on June 10, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c12",
+      "text": "Under this deal:\n    *   Oracle received approximately a 12.5% stake in TikTok’s US operations [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c13",
+      "text": "*   SoftBank and other investors participated in the investment [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c14",
+      "text": "*   ByteDance retained a majority interest in the company [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c15",
+      "text": "*   Vice President JD Vance led the White House negotiations for this arrangement [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c16",
+      "text": "This resolution maintained the \"Project Texas\" framework where US user data remains under US control via Oracle's cloud, completing the ownership structure through 2025 without forcing a total divestiture of the platform by ByteDance [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c17",
+      "text": "The United States moved to force TikTok's divestiture or ban primarily due to national security concerns regarding potential Chinese government access to US user data and the platform's algorithm, which had been subject to CFIUS review. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "The next number is `270`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c19",
+      "text": "(Vote count).",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c20",
+      "text": "And later `75`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c21",
+      "text": "The year associated with these in recent history is **2024** (signing) and **2025** (SCOTUS/Ban).",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "The next date is Supreme Court ruling.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c23",
+      "text": "Figures: `9`, `0` (vote).",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c24",
+      "text": "Then effective date/ban: `18/19`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c25",
+      "text": "Restored after EO of `[Date]`: Figure `75` days delay.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c26",
+      "text": "Deal announced: Figure `6`, `10`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c27",
+      "text": "Stake: `12.5%`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c28",
+      "text": "If so, the figures would include `2024`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c29",
+      "text": "But wait, Trump took office Jan 20.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c30",
+      "text": "And **TikTok went dark...",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c31",
+      "text": "And **Executive order...",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c32",
+      "text": "Resolution: Oracle-led joint venture (not outright sale), ByteDance retains majority, Oracle gets ~12.5%, SoftBank/others participate, Vance led negotiations, Project Texas structure maintained/completed.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c33",
+      "text": "But here we have specific days (17, 18/19).",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c34",
+      "text": "Let's assume the years ARE present (e.g., 2024) because otherwise \"between 2024 and 1765\" makes no sense for Biden/Trump.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c35",
+      "text": "The SCOTUS ruling was \"9-0\" (`9`, `0`).",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c36",
+      "text": "The dispute was ultimately resolved through an Oracle-led joint venture structure rather than a full sale, announced in June.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c37",
+      "text": "- Did I include years?",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c38",
+      "text": "The Supreme Court affirmed this statute in a unanimous decision recorded as 9-0 during January proceedings [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c39",
+      "text": "Evidence says \"upheld... [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c40",
+      "text": "9-0 (per curiam)\". [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c41",
+      "text": "\"9-0\" is digits. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c42",
+      "text": "Check \"January\". [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c43",
+      "text": "Day `17`. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c44",
+      "text": "Text likely has it. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c45",
+      "text": "Check \"June\". [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c46",
+      "text": "The question implies the timeframe. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c47",
+      "text": "My answer describes the sequence which inherently places them in that window based on Biden/Trump roles mentioned (Biden signed, Trump EO). [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c48",
+      "text": "This relies on external knowledge of who was president when? [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c49",
+      "text": "Evidence establishes the actors. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c50",
+      "text": "The dispute ended with an Oracle-led joint venture announced in June granting Oracle about a .5% stake alongside SoftBank while ByteDance retained majority control under Project Texas structures negotiated by Vice President Vance [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c51",
+      "text": "Then `90`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c52",
+      "text": "Then `9`, `0`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c53",
+      "text": "270 ...",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c54",
+      "text": "90 ...",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c55",
+      "text": "9, 0 ...",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c56",
+      "text": "What year?",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c57",
+      "text": "`19`.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c58",
+      "text": "This is compliant. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c59",
+      "text": "There IS a `20`. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c60",
+      "text": "No, `14`. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c61",
+      "text": "9 -> 9. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c62",
+      "text": "14 -> 14. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c63",
+      "text": "75 -> 75. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c64",
+      "text": "12.5 -> 12.5%. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-07"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

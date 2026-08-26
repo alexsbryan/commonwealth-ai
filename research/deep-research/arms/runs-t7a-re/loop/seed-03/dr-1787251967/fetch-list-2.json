@@ -1,0 +1,87 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787251967",
+  "charter_hash": "076eeb7fc0fba4ce",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "crewed flight because the spacecraft experienced reaction-control system thruster anomalies during docking, and these anomalies could not be (1, mean)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "decision meant astronauts Butch Wilmore Suni Williams remained International Space Station until March resulting stay roughly months compared planned days",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "The program faced significant financial strain under its fixed-price contract from the Commercial Crew program, with Boeing disclosing cumul",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 13.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "snippet": "NASA ordered Starliner to return uncrewed from its first crewed flight after thruster anomalies could not be guaranteed safe for the deorbit burn.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 12.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

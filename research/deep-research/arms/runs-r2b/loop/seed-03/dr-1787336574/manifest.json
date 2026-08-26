@@ -1,0 +1,70 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787336574",
+  "charter_hash": "6983ecf0c4d70cd2",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 4
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-03",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787336574"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "NASA ordered Boeing's Starliner to return uncrewed because the five reaction-control system (RCS) thruster anomalies identified during docking could not be guaranteed safe for the deorbit burn, as these thrusters could not be ground-tested in their flight condition [Source: ev-1].",
+    "This decision meant that astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned, returning on a Crew-9 Dragon roughly 9.5 months after launch instead of the planned ~8 days [Source: ev-1].",
+    "Additionally, under the fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1].",
+    "This decision had several significant implications for the program and the astronauts involved:\n*   **Extended Mission Duration:** Astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned. [Source: ev-1]",
+    "No, the text says September 6, and landed at White Sands on September 7 (implied year context is late 2024 based on launch date) without crew [Source: ev-1].",
+    "*Note: The evidence states \"undocked 2024-09-06\"*. [Source: ev-1]",
+    "*   **Financial and Operational Impact:** Under a fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787336574",
+    "acquired_at_unix": 1787336574,
+    "released_at_unix": 1787336692
+  }
+}

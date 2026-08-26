@@ -1,0 +1,67 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787242079",
+  "charter_hash": "47316214969ad1cb",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 10
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 3,
+      "fetched": 0,
+      "search_calls": 2
+    },
+    {
+      "round": 3,
+      "gaps_before": 3,
+      "gaps_after": 3,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-02",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787242079"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "DeepSeek's R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained at a fraction of incumbent costs, thereby repricing the market thesis that demand for compute (and thus Nvidia) is protected by scale.",
+    "Specifically:\n\n*   **Cost and Efficiency Revelation:** DeepSeek-V3, released on 2024-12-26 [Source: ev-1], reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+    "*   **Market Reaction:** On 2025-01-27, Nvidia lost approximately US$589 billion in market capitalization, the largest single-day loss in stock-market history, with about US$1 trillion erased across the tech complex [Source: ev-1].",
+    "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained at a fraction of incumbent costs, thereby repricing the market thesis that demand for compute (and thus Nvidia) is protected by scale."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787242079",
+    "acquired_at_unix": 1787242079,
+    "released_at_unix": 1787242173
+  }
+}

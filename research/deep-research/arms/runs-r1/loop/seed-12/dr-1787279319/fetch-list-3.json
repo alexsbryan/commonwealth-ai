@@ -1,0 +1,97 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787279319",
+  "charter_hash": "602065f91080bdf7",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "2024 Microsoft's Recall feature became privacy scandal because security researchers notably Kevin Beaumont demonstrated memory tool stored screenshots users screens unencrypted plaintext within local",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q2",
+      "text": "contradicted Microsoft’s claims data encrypted allowed any process running user access sensitive content captured default passwords health private messages",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "The incident drew scrutiny from regulatory bodies including the Irish Data Protection Commission, the UK Information Commissioner's Office,  (2024)",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "revised version Recall reached general availability Copilot PCs",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 19.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-12",
+      "title": "Microsoft's Recall feature (2024-2025)",
+      "snippet": "Microsoft's Recall feature became a privacy scandal in 2024 and was relaunched opt-in.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 17.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

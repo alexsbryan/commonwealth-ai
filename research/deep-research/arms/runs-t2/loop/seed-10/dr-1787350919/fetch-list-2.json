@@ -1,0 +1,100 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787350919",
+  "charter_hash": "72588ccfbaa08272",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "on August . (5, 2025)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "This launch represented a deliberate strategic shift to \"give-away-the-frontier\" pricing by making the model available immediately to free u (5, 2025)",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "The release changed how the company sells its models in several key ways: * **Product Consolidation:** It retired separate o-series products (5, 2025)",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "* **Pricing Structure:** The pricing collapsed to include a free tier; Plus at $ month with unlimited access; Pro at $ month; API pricing of (5, 2025)",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 3.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 3.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "icd": "survey",
+  "version": 1,
+  "run_id": "dr-1787262042",
+  "charter_hash": "e92111801f41e19c",
+  "round": 1,
+  "estate_precondition": {
+    "asserted": true,
+    "estate_searchable": true,
+    "detail": "estate corpora: 0 listed, all searchable: true"
+  },
+  "estate_corpora": [],
+  "searched": [
+    {
+      "query": "Parkinson's disease has a profound impact on patients. What are the potential health warning signs associated with different stages of the disease? As family members, which specific signs should alert us to intervene or seek medical advice regarding the patient's condition? Furthermore, for patients who have undergone Deep Brain Stimulation (DBS) surgery, what daily life adjustments and support strategies can be implemented to improve their comfort and overall well-being?",
+      "hits": []
+    },
+    {
+      "query": "Parkinson's disease has a profound impact on patients",
+      "hits": []
+    }
+  ],
+  "estate_answer": "No evidence was retrieved this round."
+}

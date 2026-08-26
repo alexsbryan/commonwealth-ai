@@ -33,8 +33,8 @@
 //! named, not silent.
 
 use super::estate::{
-    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
-    FRONTIER_MAX,
+    estate_snippet, read_staged_alignment, AlignmentDecision, DraftLeg, EstateListing, PortHit,
+    ResearchPort, FRONTIER_MAX,
 };
 use super::icd::CorpusEntry;
 use super::icd::Plan;
@@ -306,27 +306,10 @@ impl Deck {
     }
 }
 
-/// The one tokenizer (T1.9): lowercase, split on non-alphanumeric,
-/// empty tokens dropped, deduped in first-appearance order. Applied
-/// identically to queries and to the deck's indexed surface — one
-/// decider for both sides. A decimal figure splits at the point
-/// ("0.5469" → "0", "5469") — the same split a punctuation-splitting
-/// analyzer makes.
-fn terms(text: &str) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for t in text
-        .to_ascii_lowercase()
-        .split(|c: char| !c.is_alphanumeric())
-    {
-        if t.is_empty() {
-            continue;
-        }
-        if !out.iter().any(|o| o == t) {
-            out.push(t.to_string());
-        }
-    }
-    out
-}
+// The one tokenizer (T1.9) lives in acquisition.rs since drb1-t1
+// (production's admission path owns it; the gym imports it). The move
+// was verbatim — no behavior change.
+use super::acquisition::terms;
 
 /// The corpus admission decider's deterministic second key (order
 /// deep-research-t2c — the t1h residual): inside an equal-score bucket
@@ -722,6 +705,7 @@ impl ResearchPort for MockBackendImpl {
 
     async fn draft(
         &self,
+        _leg: DraftLeg,
         _prompt: &str,
         _system_message: Option<&str>,
         _allowed_urls: &[String],
@@ -729,8 +713,31 @@ impl ResearchPort for MockBackendImpl {
         match &self.draft_surface {
             MockDraftSurface::Scripted(text) => Ok(text.clone()),
             MockDraftSurface::Delegated(inner) => {
-                inner.draft(_prompt, _system_message, _allowed_urls).await
+                inner
+                    .draft(_leg, _prompt, _system_message, _allowed_urls)
+                    .await
             }
+        }
+    }
+
+    async fn gap_queries(&self, question: &str, gaps: &[String]) -> Result<Vec<String>, String> {
+        // The deck's stand-in for the live port's model rewrite: the
+        // gap's OWN TEXT is the query. Deterministic (the drills depend
+        // on it), no model, and it preserves the property under test —
+        // a self-contained query derived from the gap, rather than the
+        // deterministic template's slice of it.
+        //
+        // The P5 drill is why this exists. Its poisoned arm's gap text
+        // is "OpenAI acquired Anthropic in March 2025." — a perfectly
+        // good query — which `template_query` reduces to " (2025)". The
+        // query validity gate then refuses that, rounds 2-3 search
+        // nothing, and the drill loses its dedup coverage. The template
+        // mangling a usable claim IS the defect the gap-query
+        // reformulation exists to fix, so the mock exercises the fixed
+        // seam and the drill keeps testing what it was written to test.
+        match &self.draft_surface {
+            MockDraftSurface::Delegated(inner) => inner.gap_queries(question, gaps).await,
+            MockDraftSurface::Scripted(_) => Ok(gaps.to_vec()),
         }
     }
 
@@ -1413,7 +1420,7 @@ mod tests {
             MockDraftSurface::Scripted("The canned draft.".to_string()),
         );
         let port: &dyn ResearchPort = &port;
-        let text = port.draft("p", None, &[]).await.unwrap();
+        let text = port.draft(DraftLeg::Round, "p", None, &[]).await.unwrap();
         assert_eq!(text, "The canned draft.");
         assert!(port.terminal_poll().await.is_ok());
     }

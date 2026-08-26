@@ -1,0 +1,81 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787242401",
+  "charter_hash": "d0e50262d0074795",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 11,
+      "fetched": 0,
+      "search_calls": 5
+    },
+    {
+      "round": 3,
+      "gaps_before": 11,
+      "gaps_after": 11,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-06",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787242401"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "On July 19, 2024, a faulty CrowdStrike Falcon Sensor content update caused a global IT outage by triggering an out-of-bounds memory read in the sensor's C++ code [Source: ev-1].",
+    "Specifically, an untrusted pointer dereference was triggered by a 21-byte input that passed through a flawed content validator due to missing input validation and a memory-safety defect [Source: ev-1].",
+    "The root cause of the widespread impact was monoculture concentration, where one security agent deployed at enterprise scale with fast-cadence updates became a global single point of failure [Source: ev-1].",
+    "The consequences were severe and far-reaching [Source: ev-1].",
+    "Approximately 8.5 million Windows devices were affected according to Microsoft’s estimate [Source: ev-1].",
+    "Disruptions extended across multiple critical sectors, including airlines (with Delta cancelling roughly 7,000 flights), banks, hospitals, 911 services, and broadcasters [Source: ev-1].",
+    "Financially, Delta incurred about $500M in costs from the outage [Source: ev-1].",
+    "In response to the incident, CrowdStrike shares fell by approximately 11% on Monday, July 22, 2024 [Source: ev-1].",
+    "Following the event, CEO George Kurtz testified before Congress on September 24, 2024 [ev-1] [Source: ev-1].",
+    "The company apologized and promised changes to its deployment processes, moving toward staged rollouts with canary testing and added sensor-level validation [Source: ev-1].",
+    "Additionally, Delta later sued CrowdStrike and hired David Boies as part of its legal response [Source: ev-1].",
+    "The consequences were severe and far-reaching. [Source: ev-1]",
+    "Following the event, CEO George Kurtz testified before Congress on September 24, 2024 [ev-1]. [Source: ev-1]"
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [
+    {
+      "query": "consequences severe far-reaching",
+      "round": 2
+    }
+  ],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787242401",
+    "acquired_at_unix": 1787242401,
+    "released_at_unix": 1787242558
+  }
+}

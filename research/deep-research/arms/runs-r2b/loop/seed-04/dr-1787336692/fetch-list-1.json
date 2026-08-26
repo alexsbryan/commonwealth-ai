@@ -1,0 +1,103 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787336692",
+  "charter_hash": "c879eabeb8746942",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did OpenAI release o3 and o4-mini in April 2025, and what did the launch signal about the direction of frontier reasoning models?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "OpenAI official announcement date for o3 model release in April 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Count of OpenAI models released between January 1 and April 30, 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "List of technical capabilities highlighted by OpenAI for o3 and o4-mini at launch",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 14.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-04",
+      "title": "OpenAI o3 and o4-mini (2025-04-16)",
+      "snippet": "OpenAI released o3 and o4-mini on 2025-04-16 — the first OpenAI reasoning models with vision built in and native tool use.",
+      "content": null,
+      "engine": "mock",
+      "score": 5.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1"
+    ],
+    "threshold": 7.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

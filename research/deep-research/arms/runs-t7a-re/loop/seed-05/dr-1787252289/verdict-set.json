@@ -1,0 +1,112 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787252289",
+  "charter_hash": "3f2f8a3c7ee72366",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate to ensure that obligations land as institutional capacity and technology mature, while also serving as a compliance roadmap for global providers [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The law itself was published on 2024-07-12 and initially entered into force on 2025-08-01 [Source: ev-1].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "Specific deadlines require different actions based on risk tiers.[Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Prohibited practices, which are classified as unacceptable risks such as social scoring or manipulative uses, apply from 2025-2-02 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "Obligations for general-purpose AI models begin applying from 2026-08-02, with duties scaled by systemic-risk status using a threshold of 10^26 FLOPs [Source: ev-1].",
+      "verdict": "failed",
+      "status": "failed",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "refuted by the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "Specific deadlines require different actions based on risk tiers. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Prohibited practices, which are classified as unacceptable risks such as social scoring or manipulative uses, apply from 2025-02-02 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787260135",
+  "charter_hash": "7f31e60a98521c35",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Current number of qubits in the largest operational ion trap quantum computing systems (count, 2023-2024)",
+      "Gate fidelity rates for single-qubit and two-qubit operations in state-of-the-art trapped-ion processors (percentage, current technology benchmarks)",
+      "Coherence times of individual ions versus collective motional modes in linear vs. 2D lattice traps (seconds/milliseconds, experimental data)",
+      "Scalability limits of linear ion chains due to phonon mode coupling frequencies compared to gate operation speeds (Hz ratio, physical constraints)",
+      "Number of active qubits demonstrated in modular ion trap architectures with photonic interconnects (count, recent experiments)",
+      "Fidelity loss per photon transmission event in fiber-based or free-space quantum links connecting ion trap modules (percentage/error rate, link efficiency metrics)",
+      "Error correction overhead ratios for surface code implementation on trapped-ion hardware requiring nearest-neighbor connectivity (ratio, logical-to-physical qubit count)",
+      "Comparison of clock transition stability between different ion species used for long-term coherence such as Yb+ vs. Ca+ (fractional frequency instability, Hz/second)",
+      "Manufacturing yield and defect rates for microfabricated segmented electrodes required for reconfigurable ion traps (percentage/count, fabrication data)",
+      "Energy consumption per gate operation compared to superconducting qubits in cryogenic environments (watts/joules, power metric)",
+      "Latency times for state preparation and measurement cycles in high-throughput trapped-ion systems (microseconds/milliseconds, cycle time statistics)"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

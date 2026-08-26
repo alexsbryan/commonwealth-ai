@@ -1,0 +1,100 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787350502",
+  "charter_hash": "2f5521d0abc66532",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did the United States move to force TikTok's sale or ban it between 2024 and 2025, and how was the dispute resolved?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Number of US federal laws passed in 2024 and early 2025 mandating TikTok divestiture or ban",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Percentage share of US adult users accessing TikTok daily as reported by Pew Research Center in late 2023 to mid-2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Count of US House and Senate votes on the Protecting Americans from Foreign Adversary Controlled Applications Act (PAAFCA) in April 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 9.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-07",
+      "title": "The US TikTok divest-or-ban saga (2024-2025)",
+      "snippet": "The US moved to force TikTok's sale or ban it between 2024 and 2025; an Oracle-led joint-venture deal resolved it.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 8.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

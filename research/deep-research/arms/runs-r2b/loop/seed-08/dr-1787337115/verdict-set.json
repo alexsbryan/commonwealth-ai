@@ -1,0 +1,142 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787337115",
+  "charter_hash": "76b58eae9a7ebb22",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "The US court found Google's search business a monopoly because Judge Amit Mehta of the US District Court for the District of Columbia ruled on August 5, 2024 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The primary theory of harm was \"default-distribution deals,\" where Google paid companies like Apple, Samsung, and Mozilla billions to be their default search engine [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Evidence showed Google paid approximately $26.3 billion for distribution in 2021, including roughly 36% of Safari search-ad revenue to Apple [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "The court determined this conduct created an exclusionary loop where defaults create scale, which creates data, leading to quality that protects the default position against rivals [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "As a result, on August 5, 2015 (noted as 2025-08-05 in evidence), Judge Mehta ordered structural remedies requiring Google to sell Chrome and prohibiting it from paying for default search placement through revenue-sharing agreements [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "The ruling also includes limits on acquisitions and AI-related investments [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Google appealed to the DC Circuit in 2025, arguing that the trial court punished procompetitive innovation; as of 2025, the final outcome remained pending [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "A US court found Google's search business a monopoly because Judge Amit Mehta of the US District Court for the District of Columbia ruled on August 5, 2024 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "*   **Investment Limits:** The ruling includes limits on acquisitions and AI-related investments [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

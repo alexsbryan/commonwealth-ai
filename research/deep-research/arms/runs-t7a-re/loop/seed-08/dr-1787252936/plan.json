@@ -1,0 +1,21 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787252936",
+  "charter_hash": "906016683911f4d9",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The specific legal standard or test used by the US District Court to determine if Google held monopoly power in general web search, including the relevant market definition and share threshold",
+      "The percentage of global and US general web searches attributed to Google as cited in the court's findings for 2019-2023",
+      "The number of exclusive distribution agreements between Google and major device manufacturers (such as Apple) that were found to be anticompetitive, along with their annual payment values",
+      "The specific remedies ordered regarding the divestiture of Chrome browser, including whether it was mandated or rejected",
+      "The specific remedies ordered regarding Android operating system pre-installs on mobile devices, specifically which partners are prohibited from receiving payments for default status",
+      "The deadline date set by the court for compliance with the structural and conduct remedies"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787253291",
+  "charter_hash": "3a0c6a04f348958f",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "OpenAI GPT-5 release date and official announcement details",
+      "GPT-5 model architecture improvements or benchmark scores compared to GPT-4o",
+      "Changes in OpenAI API pricing structure for GPT-5 tokens per million input/output units",
+      "New licensing terms or enterprise contract models introduced with the launch of GPT-5",
+      "Number of new features added to ChatGPT interface specifically tied to GPT-5 capabilities"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "5",
+      "2025"
+    ]
+  }
+}

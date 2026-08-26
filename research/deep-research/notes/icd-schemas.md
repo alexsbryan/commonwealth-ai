@@ -248,6 +248,9 @@ the guarantee that always exists.
     { "id": "c2", "text": "Its engineer was Helena Voss.",
       "verdict": "could-not-judge", "status": "open", "evidence_ids": [],
       "citations": [], "flag": "specifics absent from evidence" }
+  ],
+  "empty_rounds": [
+    { "round": 2, "reason": "all-admitted-fetches-refused" }
   ]
 }
 ```
@@ -258,6 +261,7 @@ the guarantee that always exists.
 | `citations[].chunk_id` | chunk-level citations: each claim's supporting evidence resolves to window chunks with URLs (R-2 surfaces) |
 | `corroboration` | GAP-2: the gate's corroboration record, verdict-visible on the final claim — `{origins, support_chunks, floor, passes_floor}`; a floor-capped claim (single-origin support) carries `passes_floor: false` and its flag names the cause ("open question: single-origin support (corroboration floor)") |
 | `flag` | never-remove: a failed/never-ran claim is carried with its reason, never stripped from the report |
+| `empty_rounds` | T7b, additive (an old reader deserializes it as empty): the rounds that added no evidence — `{round, reason}`, the closed enum `refused \| failed \| mixed \| no_admits` (one decider over the round window's own fields, audit.rs `empty_round_reason`). The report's "## No evidence fetched" section renders exactly these rounds; a no-evidence round reads as no-evidence at the verdict surface, not as per-claim could-not-judge. Verdicts themselves are untouched |
 
 ## §11 report.md — the rendered artifact (R9)
 

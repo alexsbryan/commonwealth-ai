@@ -1,0 +1,26 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787293436",
+  "charter_hash": "933fd76feced166e",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Anthropic Claude 4 release date and model names May 2025",
+      "Number of distinct models in the Anthropic Claude 4 family released in May 2025",
+      "Pricing per million input tokens for Anthropic Claude Opus 4 vs Sonnet 4",
+      "Context window size comparison between Anthropic Claude Opus 4 and Sonnet 4",
+      "Benchmark scores on SWE-bench Verified for Anthropic Claude Opus 3.7 Sonnet versus Anthropic Claude Sonnet 4",
+      "Market share percentage of AI coding assistants among developers using agentic tools Q1 2025",
+      "Growth rate of enterprise adoption for autonomous software engineering agents from January to May 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2",
+      "2025"
+    ]
+  }
+}

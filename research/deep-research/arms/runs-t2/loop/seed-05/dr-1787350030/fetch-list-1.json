@@ -1,0 +1,100 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787350030",
+  "charter_hash": "e49a6f17e13e8fe9",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "The specific dates and corresponding legal provisions of the EU AI Act that entered into force on February 2, 2024",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "The list of prohibited AI practices under Article 5 of the EU AI Act effective August 2, 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "The compliance requirements for General Purpose AI (GPAI) models under Chapter V of the EU AI Act applicable from August 2, 20",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 11.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-05",
+      "title": "The EU AI Act's phased entry into force (2024-2027)",
+      "snippet": "The EU AI Act — the world's first comprehensive AI law — entered into force 2024-08-01 with obligations phased through 2027.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 8.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

@@ -1,0 +1,125 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787293436",
+  "charter_hash": "933fd76feced166e",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Anthropic released Claude 4 as two models, Opus 4 and Sonnet 4, on May 8, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This dual-model strategy aimed to capture both high-end reliability needs with the flagship Opus 4 (priced at $15 per million input tokens and $75 per million output tokens) and cost-effective development requirements with the faster workhorse Sonnet 4 (positioned as the developer-default model priced at $3 per million input tokens and $15 per million output tokens) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "The launch signaled that agentic coding had become a defining market segment in 2025, with Claude Code emerging as its key product [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "A major signal of this shift was the improved capability of Claude 4’s “computer use 2.0” feature for browser control, which was roughly twice as reliable as the previous generation [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "By positioning these models for safety and reliability, Anthropic reported record API usage driven by Claude Code adoption, ultimately cementing its position as a coding-agent leader that led to a large funding round in late September 2025 at a reported valuation of approximately $183 billion [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "Anthropic released the \"Claude 4\" family, consisting of two models—Opus 4 and Sonnet 4—on May 8, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "By positioning Opus 4 as the flagship model at $15 per million input tokens and $75 per million output tokens, and Sonnet 4 as a faster workhorse priced at $3 per million input tokens and $15 per million output tokens (positioned as the developer-default), Anthropic aimed to capture both high-end reliability and cost-effective development needs [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "A major signal was the improved capability of Claude 4’s “computer use 2.0” feature for browser control, which was roughly twice as reliable as the previous generation [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "This focus on safety and reliability allowed Anthropic to report record API usage driven by Claude Code adoption, ultimately cementing its position as a coding-agent leader that led to a large funding round in late September 2025 at a reported valuation of approximately $183 billion [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1787350502",
+  "charter_hash": "2f5521d0abc66532",
+  "allowance": {
+    "web-search:mock": 12,
+    "web-fetch:pages": 12
+  },
+  "entries": [
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350521,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350521,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350521,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350521,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-fetch",
+      "key": "pages",
+      "units": 1,
+      "at_unix": 1787350521,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350573,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350573,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350573,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350600,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350600,
+      "decision": "allow",
+      "reason": null
+    },
+    {
+      "family": "web-search",
+      "key": "mock",
+      "units": 1,
+      "at_unix": 1787350600,
+      "decision": "allow",
+      "reason": null
+    }
+  ],
+  "spent": {
+    "web-search:mock": 10,
+    "web-fetch:pages": 1
+  },
+  "remaining": {
+    "web-search:mock": 2,
+    "web-fetch:pages": 11
+  },
+  "refused_urls": []
+}

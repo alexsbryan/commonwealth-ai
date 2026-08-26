@@ -1,0 +1,26 @@
+  judge 383s
+  task 78: T=7.58 R=9.42 overall=44.59 (383s, 4526w)
+  judge 374s
+  task 65: T=6.64 R=7.63 overall=46.56 (374s, 5169w)
+Traceback (most recent call last):
+  File "/home/alexbryan/dev/deep_research_bench/utils/api.py", line 177, in generate
+    data = self._post(payload)
+  File "/home/alexbryan/dev/deep_research_bench/utils/api.py", line 152, in _post
+    raise Exception(
+    ...<2 lines>...
+    )
+Exception: openai chat/completions 503: {"error":{"message":"local inference failed: Inference error: Prompt too long: 35363 tokens already meets or exceeds the context window of 32764. Shorten the conversation.","type":"backend_error","code":null}}
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/lab/run_all.py", line 92, in <module>
+    main()
+    ~~~~^^
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/lab/run_all.py", line 62, in main
+    jj = judge(t, open(rp).read(), a.judge)
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/lab/score_one.py", line 103, in judge
+    raw = client.generate(user_prompt=user, system_prompt="")
+  File "/home/alexbryan/dev/deep_research_bench/utils/api.py", line 179, in generate
+    raise Exception(f"Failed to generate content: {e}")
+Exception: Failed to generate content: openai chat/completions 503: {"error":{"message":"local inference failed: Inference error: Prompt too long: 35363 tokens already meets or exceeds the context window of 32764. Shorten the conversation.","type":"backend_error","code":null}}

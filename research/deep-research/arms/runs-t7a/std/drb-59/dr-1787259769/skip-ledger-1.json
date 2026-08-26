@@ -1,0 +1,441 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787259769",
+  "charter_hash": "1911271c489f36f3",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://pigeon.psy.tufts.edu/asc/Bingman/Default.htm",
+      "title": "Behavioral and Neural Mechanisms of Homing and Migration in Birds",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.climatecentral.org/climate-matters/birds-at-risk-2026",
+      "title": "How Climate Change Puts Birds at Risk | Climate Central",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/RoyalSocietyPublishing/posts/millions-of-migratory-birds-cover-great-distances-twice-a-year-a-sophisticated-n/1591780169576754",
+      "title": "Millions of migratory birds cover great distances twice a year ... - Facebook",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.newscientist.com/article/2455948-migratory-birds-can-use-earths-magnetic-field-like-a-gps",
+      "title": "Migratory birds can use Earth's magnetic field like a GPS | New Scientist",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencealert.com/variations-in-earth-s-magnetic-field-serve-as-stop-signs-for-migratory-birds",
+      "title": "Birds Use Earth's Magnetic Field For 'Stop Signs' When They Migrate : ScienceAlert",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.audubon.org/news/lost-birds-rely-earths-magnetic-field-get-back-track",
+      "title": "Lost Birds Rely on Earth's Magnetic Field to Get Back on Track | Audubon",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/RoyalSocietyPublishing/posts/millions-of-migratory-birds-cover-great-distances-twice-a-year-a-sophisticated-n/1591780169576754",
+      "title": "Millions of migratory birds cover great distances twice a year ... - Facebook",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.10000birds.com/bird-magnetic-sense-disrupted-by-human-emf.htm",
+      "title": "Birdie Magnetic Sense and Human Generated Electromagnetic Fields - 10,000 Birds",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ssec.si.edu/stemvisions-blog/how-do-birds-navigate",
+      "title": "How Do Birds Navigate? | Smithsonian Science Education Center",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/21316492_Orientation_in_birds_The_sun_compass",
+      "title": "(PDF) Orientation in birds. The sun compass",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=HRQ8pRezG4E",
+      "title": "Deviation by Azimuth (Sun) | Problem 7 | Celestial Navigation",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=UbF4wgYcCF8",
+      "title": "Deviation by Amplitude (Sun) | Problem 9 | Celestial Navigation",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=39Ft7KxbJbg",
+      "title": "Deviation by Amplitude (Sun) | Problem 3 | Celestial Navigation",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2843996",
+      "title": "Directional orientation of birds by the magnetic field under ...",
+      "score": 0.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nwf.org/Magazines/National-Wildlife/1999/Navigating-With-A-Built-In-Compass",
+      "title": "Navigating With A Built-In Compass",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.research.ed.ac.uk/files/105061936/journal.pcbi.1007123.pdf",
+      "title": "A computational model of the insect polarised light compass",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/groups/MDBirding/posts/3577739172335651",
+      "title": "Here's a very interesting article about recent work published ...",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/250932623_Outdoor_Experiments_with_Migrating_European_Robins_in_Artificial_Magnetic_Fields",
+      "title": "Outdoor Experiments with Migrating European Robins in ...",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://cordis.europa.eu/article/id/31425-european-robins-see-earths-magnetic-field",
+      "title": "European robins 'see' Earth's magnetic field | News | CORDIS | European Commission",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.audubon.org/news/lost-birds-rely-earths-magnetic-field-get-back-track",
+      "title": "Lost Birds Rely on Earth's Magnetic Field to Get Back ...",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://spacedaily.com/t-migrating-birds-see-magnetic-field-cryptochrome-quantum-compass",
+      "title": "Migrating birds may see Earth’s magnetic field superimposed on the world around them — the result, scientists suspect, of a quantum reaction inside light-sensitive proteins in their eyes called cryptochromes.",
+      "score": 0.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9564291",
+      "title": "Magnetoreceptory Function of European Robin Retina: Electrophysiological and Morphological Non-Homogeneity",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/neural-circuits/articles/10.3389/fncir.2022.862279/full",
+      "title": "Frontiers | Weighting of Celestial and Terrestrial Cues in the Monarch Butterfly Central Complex",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=yuP4N84Qu_k",
+      "title": "Celestial Navigation Episode 28: Twilight",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4568659",
+      "title": "Neural coding underlying the cue preference for celestial ...",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://aa.usno.navy.mil/data/celnav",
+      "title": "Celestial Navigation Data for Assumed Position and Time",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.scribd.com/document/363301318/Sights-of-Celestial-Object",
+      "title": "Celestial Sights and Star Navigation Guide | PDF | Twilight",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=uJAkfOZbQcI",
+      "title": "Celestial Navigation, Episode 11: Star sights, pre-calculating ...",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://phys.org/news/2026-08-pulsed-radiofrequency-magnetic-fields-disorient.html",
+      "title": "Pulsed radiofrequency magnetic fields may disorient migratory birds, experiments suggest",
+      "score": 0.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://books.allogy.com/v1/tenant/8/books/6bb33ad8-459f-42cc-ba9e-4d3c2c4b1e68",
+      "title": "Suspected Radio Frequency Electromagnetic Field Overexposure",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://interferencetechnology.com/man-made-electromagnetic-noise-disrupts-bird-navigation",
+      "title": "Man-Made Electromagnetic Noise Disrupts Bird Navigation",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://apps.fcc.gov/els/GetAtt.html?id=171433&x=.",
+      "title": "Birds' navigation affected by low level RF, articles, 5-14",
+      "score": 0.0,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6513191",
+      "title": "Possible Effects of Radiofrequency Electromagnetic Field ...",
+      "score": 0.0,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://esmed.org/recovery-strategies-for-electromagnetic-intolerance",
+      "title": "Recovery Strategies for Electromagnetic Intolerance - European Society of Medicine",
+      "score": 0.0,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9532420",
+      "title": "Predicting performance of naïve migratory animals, from many wrongs to self-correction",
+      "score": 0.0,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://birdcast.org/new-methods-make-tracking-individual-birds-during-migration-possible",
+      "title": "New Methods Make Tracking Individual Species During Migration Possible – BirdCast",
+      "score": 0.0,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://digitalcommons.uri.edu/cgi/viewcontent.cgi?article=2837&context=theses",
+      "title": "[PDF] TRACKING MIGRATORY BIRDS - DigitalCommons@URI",
+      "score": 0.0,
+      "rank": 46,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.marineornithology.org/PDF/53_2/53_2_331-335.pdf",
+      "title": "[PDF] QUANTIFYING THE EFFECT OF TIME ON GEOLOCATION ACCURACY ...",
+      "score": 0.0,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+      "title": "Multi-modal, interrelated navigation in migratory birds",
+      "score": 0.0,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://ace-eco.org/vol19/iss2/art13",
+      "title": "Conservation of North American migratory birds: insights from developments in tracking technologies - Avian Conservation and Ecology",
+      "score": 0.0,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/RoyalSocietyPublishing/posts/millions-of-migratory-birds-cover-great-distances-twice-a-year-a-sophisticated-n/1591780169576754",
+      "title": "Millions of migratory birds cover great distances twice a year ... - Facebook",
+      "score": 0.0,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://humbirdy.com/blogs/entry-door-expert-guides/how-birds-navigate-migration-magnetic-fields-stars",
+      "title": "How Birds Navigate: Magnetic Fields & Star Compasses – HUMBIRDY",
+      "score": 0.0,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/weareUKRI/videos/ever-wondered-how-birds-know-where-to-go-during-migration-spoiler-they-have-buil/3536270273333723",
+      "title": "Ever wondered how birds know where to go during migration? Spoiler",
+      "score": 0.0,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/c67b43e491a39edef00e4a4cfbe4f21b79d72587",
+      "title": "Sensitivity threshold of avian magnetic compass to ...",
+      "score": 0.0,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.emf-portal.org/en/article/22022",
+      "title": "Magnetic field changes activate the trigeminal brainstem ...",
+      "score": 0.0,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ngdc.noaa.gov/geomag-web",
+      "title": "NCEI Geomagnetic Calculators",
+      "score": 0.0,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mpg.de/6965131/magnetic-pulses-robins",
+      "title": "Magnetic pulses disrupt the magnetic sense of robins  | Max-Planck-Gesellschaft",
+      "score": 0.0,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/NaturePortfolioJournals/posts/observations-of-magnetic-sensitivity-in-a-protein-from-the-eyes-of-the-european-/10158706866463167",
+      "title": "Observations of magnetic sensitivity in a protein from ...",
+      "score": 0.0,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pierdusud.com/en/how-to-plan-your-star-sights",
+      "title": "How to plan your star sights",
+      "score": 0.0,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://astronavigationdemystified.com/2019/02/19/the-importance-of-morning-and-evening-star-sights",
+      "title": "The Importance Of Morning And Evening Star Sights",
+      "score": 0.0,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/320205130_Disruption_of_Magnetic_Compass_Orientation_in_Migratory_Birds_by_Radiofrequency_Electromagnetic_Fields",
+      "title": "Disruption of Magnetic Compass Orientation in Migratory ...",
+      "score": 0.0,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.arpansa.gov.au/understanding-radiation/what-is-radiation/non-ionising-radiation/radiofrequency-radiation",
+      "title": "Radiofrequency radiation",
+      "score": 0.0,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://barryyeoman.com/2019/10/going-the-distance-bird-migration",
+      "title": "Going the Distance - Barry Yeoman",
+      "score": 0.0,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://gmd.copernicus.org/articles/19/7705/2026",
+      "title": "Advancing the capabilities for efficient hurricane-centric simulations ... - GMD",
+      "score": 0.0,
+      "rank": 64,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

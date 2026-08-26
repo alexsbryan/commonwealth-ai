@@ -1,0 +1,363 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787279419",
+  "charter_hash": "94ee3fc840c1f5db",
+  "round": 2,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "While this phenomenon remains rare nationally—with only of all reviewed neighborhoods experiencing it—certain metropolitan areas saw extensi (4, 1980, 2024)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "intensive gentrification occurred specific regions",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q3",
+      "text": "Portland experienced the highest rate, with (or approximately ) of eligible tracts gentrifying .",
+      "from_gap_id": "g3",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "terms raw volume New York City highest number gentrified tracts despite lower percentage share due large total tract count",
+      "from_gap_id": "g4",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q5",
+      "text": "Other cities high shares include Atlanta Virginia Beach Denver Austin",
+      "from_gap_id": "g5",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q6",
+      "text": "Conversely, cities like Detroit ( ), Las Vegas ( ), El Paso ( ), and Arlington, TX ( ) experienced minimal or no gentrification in eligible  (4, 1980, 2024)",
+      "from_gap_id": "g6",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "1980 cities generally became wealthier nominal terms since prosperity unevenly distributed",
+      "from_gap_id": "g7",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q8",
+      "text": "New York City led Gini coefficient Atlanta Miami recorded coefficients Orleans reached",
+      "from_gap_id": "g8",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q9",
+      "text": "Several metros showed extreme patterns Gini coefficients exceeding income ratios reaching top bottom earners",
+      "from_gap_id": "g9",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q10",
+      "text": "Specific income ratio analyses confirm widening gap",
+      "from_gap_id": "g10",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q11",
+      "text": "Federal Reserve data tracking series confirmed U.S",
+      "from_gap_id": "g11",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q12",
+      "text": "inequality reached record levels showing sharpest increase among advanced economies since",
+      "from_gap_id": "g12",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [
+          "https://v1-demo.example/source-report"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q13",
+      "text": "Affordability Economic Mobility relationship income growth housing costs deteriorated significantly",
+      "from_gap_id": "g13",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q14",
+      "text": "This disparity is most acute on the West Coast; California cities exhibit price-to-income ratios between and more than double the national a",
+      "from_gap_id": "g14",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q15",
+      "text": "Displacement Demographic Transformation Gentrification driven distinct changes patterns",
+      "from_gap_id": "g15",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q16",
+      "text": "Gentrifying neighborhoods saw population increases (averaging + ) and became whiter, with the non-Hispanic white share increasing by an aver",
+      "from_gap_id": "g16",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q17",
+      "text": "In contrast, lower-income areas that did not gentrify experienced slight population losses (- ), a decrease in white residents (- percentage",
+      "from_gap_id": "g17",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q18",
+      "text": "Displacement uniform across racial lines",
+      "from_gap_id": "g18",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q19",
+      "text": "Research indicates residents historically Black gentrifying neighborhoods tend move poorer non-gentrifying areas other wealthier suggesting minority communities face greater challenges during",
+      "from_gap_id": "g19",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q20",
+      "text": "Structural Economic Shifts four-decade transformation fueled shift away manufacturing toward service industries",
+      "from_gap_id": "g20",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "q21",
+      "text": "nearly of the country's population growth among those under was concentrated in metro areas with over million residents, as urban counties g",
+      "from_gap_id": "g21",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q22",
+      "text": "In summary, between and American cities shifted toward higher income polarization and gentrification-driven demographic change.",
+      "from_gap_id": "g22",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "snippet": "Governing analyzed Census tract data for the nation's 50 largest cities. Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) led; nearly 20 percent of lower-income neighborhoods gentrified since 2000, compared to 9 percent in the 1990s; poverty rate percentage-point change -0.7 gentrifying vs +6.7 not gentrifying.",
+      "content": null,
+      "engine": "mock",
+      "score": 17.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h11",
+      "query_id": "q1",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 16.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "title": "Gentrification in America",
+      "snippet": "Governing analyzed Census tract data for the nation's 50 largest cities. Portland (58.1% of eligible tracts), Washington D.C. (51.9%), Minneapolis (50.6%), and Seattle (50%) led; nearly 20 percent of lower-income neighborhoods gentrified since 2000, compared to 9 percent in the 1990s; poverty rate percentage-point change -0.7 gentrifying vs +6.7 not gentrifying.",
+      "content": null,
+      "engine": "mock",
+      "score": 15.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h11",
+      "query_id": "q3",
+      "url": "https://v1-demo.example/source-report",
+      "title": "Urban Gentrification Metrics: Four Decades of American City Transformation (the exemplar report)",
+      "snippet": "The operator's exemplar report (vendored as source-report.pdf): New York City leads with a Gini coefficient of 0.5469 versus the national average of 0.40 in 2013, while Atlanta and Miami follow at 0.57 and New Orleans at 0.56; the Case-Shiller Index reached 325.78 in July 2024 (+225% since January 2000); 48 of the 50 largest metros saw worsening mobility with Houston the sole improvement (+1.1%).",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h11",
+      "h1"
+    ],
+    "eps_admits": [
+      "h11"
+    ],
+    "below_cut": [
+      "h11",
+      "h1",
+      "h5",
+      "h10",
+      "h11",
+      "h8",
+      "h4",
+      "h9",
+      "h6",
+      "h7",
+      "h5",
+      "h5",
+      "h9",
+      "h4",
+      "h6",
+      "h10",
+      "h4",
+      "h6",
+      "h2",
+      "h11",
+      "h2",
+      "h7",
+      "h8",
+      "h2",
+      "h7",
+      "h8",
+      "h10",
+      "h1",
+      "h9",
+      "h5",
+      "h8",
+      "h10",
+      "h9"
+    ],
+    "threshold": 15.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

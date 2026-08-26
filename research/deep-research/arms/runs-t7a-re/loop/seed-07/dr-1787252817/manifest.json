@@ -1,0 +1,70 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787252817",
+  "charter_hash": "f21e0ab8656a46d6",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 6,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 6,
+      "gaps_after": 6,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-07",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787252817"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "The United States moved to force TikTok’s divestiture or ban due to national security concerns, specifically the risk of Chinese government access to US user data and its recommendation algorithm [Source: ev-1].",
+    "This concern was formalized in legislation signed by President Biden on 2024-04-24, which required ByteDance to divest TikTok's US operations within roughly 270 days (extendable by an additional 90 days) or face a ban [Source: ev-1].",
+    "The Supreme Court upheld this law with a unanimous 9-0 decision on 2025-01-17, one day before the effective date of 2025-1-19 [Source: ev-1].",
+    "Following a brief service outage in the US from 2025-18/19 that lasted roughly 14 hours, President Trump pledged to pause enforcement and issued an executive order on 2025--01-20 delaying it for 75 days [Source: ev-1].",
+    "The dispute was resolved through a negotiated deal rather than an outright sale. [Source: ev-1]",
+    "The final resolution, announced per Bloomberg on 202-6-10, established TikTok's US operations as a joint venture where ByteDance retained majority interest, but Oracle received approximately a 12.5% stake along with other investors like SoftBank [Source: ev-1].",
+    "The Supreme Court upheld this law with a unanimous 9-0 decision on 2025-01-17, one day before the effective date of 2025-0-19 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787252817",
+    "acquired_at_unix": 1787252817,
+    "released_at_unix": 1787252936
+  }
+}

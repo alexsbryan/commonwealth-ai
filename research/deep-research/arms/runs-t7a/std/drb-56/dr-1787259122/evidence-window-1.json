@@ -1,0 +1,32 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "round": 1,
+  "chunks": [],
+  "fetch_failures": [
+    {
+      "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+      "error": "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    },
+    {
+      "url": "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+      "error": "fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: Execution error: fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    },
+    {
+      "url": "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+      "error": "fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: Execution error: fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    },
+    {
+      "url": "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+      "error": "fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: Execution error: fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+      "absent": true
+    }
+  ],
+  "dedup_refused": [],
+  "derived_custody": "public-web"
+}

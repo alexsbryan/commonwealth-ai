@@ -1,0 +1,225 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787337552",
+  "charter_hash": "e4324e1e3f375dbb",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Microsoft's Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "Microsoft's Recall feature",
+          "Privacy scandal"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "This allowed any process running as the user to access sensitive information captured by default, including passwords and private content visible on screen [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "The incident drew scrutiny from regulatory bodies such as the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "Irish Data Protection Commission",
+          "UK Information Commissioner's Office",
+          "Washington State Attorney General Bob Ferguson",
+          "ev-1"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "In response, Microsoft changed the feature significantly. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "Initially delayed in June 2024, Recall was relaunched with several key modifications: it is now opt-in (default OFF), requires Windows Hello and presence detection to open the timeline, and excludes incognito or DRM-protected content [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c6",
+      "text": "This revised version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "Copilot+ PCs",
+          "General Availability"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Microsoft's Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that screenshots were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+      "actionable_query": "2024 Microsoft's Recall feature became privacy scandal because despite claims data encrypted security researchers demonstrated screenshots stored unencrypted plaintext within local SQLite database",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This allowed any process running as the user to access sensitive information captured by default, including passwords and private content visible on screen [Source: ev-1].",
+      "actionable_query": "allowed any process running user access sensitive information captured default including passwords private content visible screen",
+      "from_claim_id": "c5",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "The incident drew scrutiny from regulatory bodies such as the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson [Source: ev-1].",
+      "actionable_query": "The incident drew scrutiny from regulatory bodies such as the Irish Data Protection Commission, the UK Information Commissioner's Office, an (2024)",
+      "from_claim_id": "c3",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "In response, Microsoft changed the feature significantly. [Source: ev-1]",
+      "actionable_query": "response Microsoft changed feature significantly",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "This revised version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "actionable_query": "revised version reached general availability Copilot PCs",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

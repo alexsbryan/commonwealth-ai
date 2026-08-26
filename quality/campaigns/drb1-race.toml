@@ -1,0 +1,250 @@
+# Flight rules — read raw. Verdicts come from measurement rows
+# (~/.sovereign/comaintainer/bar-measurements.jsonl), never from prose here.
+# Defer/descope = edit a bar's `status`; git history is the ledger.
+#
+# Campaign drb1-race executes directive 49486cfc: the next DRB-I flight beats
+# Perplexity's 40.46, honesty floor intact. Diagnosis: arms/t7a-flight-forensics.md.
+# Lesson map: aiq-teardown.md (adopt registry/decomposition/writer-separation;
+# skip identity-only verification — our floor stays).
+id        = "drb1-race"
+objective = "The next pre-registered DRB-I flight's official RACE overall beats Perplexity's 40.46, honesty floor intact"
+spec      = "research/deep-research/arms/t7a-flight-forensics.md + research/deep-research/aiq-teardown.md"
+declared  = "2026-08-20"
+status    = "active"
+
+[[bar]]
+id           = "drb1-overall"
+one_line     = "A pre-registered DRB-I flight's official RACE overall clears Perplexity's 40.46 with judge-noise headroom"
+derives_from = "t7a-flight-forensics.md §Score; directive 49486cfc"
+status       = "open"
+target       = 41.0
+floor        = 15.6783
+floor_basis  = "race-20260820T151943 (t7a, 9/9 scored, 27B judge pin, official scorer) — the loop AS-IS this campaign starts from"
+direction    = "higher_is_better"
+kill         = "a score bought by trading the honesty bar is a failed campaign, not a met bar; if every rung lands and the flight still reads below 20, the strategy is falsified — escalate with the curve, never re-fly for weather"
+instrument   = '''python3 - <<'PY'
+import glob, json, re, sys
+rows = []
+for p in glob.glob("research/deep-research/drb/overall-derivation/flights/*/*/race_result.txt"):
+    m = re.search(r"Overall Score:\s*([0-9.]+)", open(p).read())
+    if m:
+        rows.append((p.split("/")[-3], float(m.group(1)), p))
+if not rows:
+    sys.exit(3)  # no flight result on disk — absent, named
+flight, val, p = max(rows)
+print(json.dumps({"value": val, "flight": flight, "artifact": p}))
+PY'''
+
+[[bar]]
+id           = "honesty-floor"
+one_line     = "Zero ungrounded claims on the flight — the weakest task is the honesty"
+derives_from = "research/deep-research/notes/corroboration.md; t7a flight honesty 1.0 on 9/9"
+status       = "open"
+target       = 1.0
+direction    = "higher_is_better"
+# Zero-tolerance shape (financial-corpora F2 case law, directive 0c042797):
+# NO floor, NO noise band — a floor on an honesty bar licenses occasional
+# fabrication. Value = MIN task honesty over the newest flight's task runs
+# (forensics-collect.py's own derivation: numeric claims not tracing to the
+# evidence window). The floor is never a tuning knob (see Tuning).
+instrument   = '''python3 - <<'PY'
+import glob, json, subprocess, sys
+mans = sorted(glob.glob("research/deep-research/drb/overall-derivation/flights/*/manifest.json"))
+if not mans:
+    sys.exit(3)  # no flight manifest — absent, named
+dirs = json.load(open(mans[-1])).get("landed_dirs") or {}
+if not dirs:
+    sys.exit(3)
+first = next(iter(dirs.values())).split("/")
+root = "/".join(first[:-2])  # strip drb-<id>/dr-<ts> -> runs-<label>/<arm>
+out = subprocess.run(["python3", "research/deep-research/arms/forensics-collect.py", root],
+                     capture_output=True, text=True)
+rows = [json.loads(l) for l in out.stdout.splitlines() if l.strip().startswith("{")]
+h = [r["honesty"] for r in rows if r.get("honesty") is not None]
+if not h:
+    sys.exit(3)
+print(json.dumps({"value": min(h), "tasks": len(h), "run_root": root,
+                  "flight": mans[-1].split("/")[-2]}))
+PY'''
+
+[[bar]]
+id           = "no-early-stop-open-gaps"
+one_line     = "No task ends with round budget unused while its gap set is still growing (F4)"
+derives_from = "t7a-flight-forensics.md §Taxonomy F4 (tasks 62, 78, 83; 83 = worst score 2.84)"
+status       = "open"
+target       = 0
+floor        = 3
+floor_basis  = "t7a flight 2026-08-20: 3/9 tasks ended at 2 of 3 rounds with gaps growing (manifests runs-t7a/std)"
+direction    = "lower_is_better"
+kill         = "if consuming the round budget on open gaps regresses the banks, the stop rule is wrong, not the banks — escalate the design, never lower the bar"
+instrument   = '''python3 - <<'PY'
+import glob, json, sys
+MAXR = 3  # the flight card's max-rounds; a card that changes it changes this constant
+mans = sorted(glob.glob("research/deep-research/drb/overall-derivation/flights/*/manifest.json"))
+if not mans:
+    sys.exit(3)
+dirs = json.load(open(mans[-1])).get("landed_dirs") or {}
+if not dirs:
+    sys.exit(3)
+bad = []
+for tid, d in dirs.items():
+    m = json.load(open(f"{d}/manifest.json"))
+    rounds = m.get("rounds") or []
+    if len(rounds) < MAXR and rounds and rounds[-1]["gaps_after"] > rounds[-1]["gaps_before"]:
+        bad.append(tid)
+print(json.dumps({"value": len(bad), "tasks": bad, "flight": mans[-1].split("/")[-2]}))
+PY'''
+
+[[bar]]
+id           = "gap-trajectory-shrinks"
+one_line     = "A gap round closes what earlier rounds opened: the ledger ends strictly below every level it touched (t6f trajectory bar, closure form)"
+derives_from = "deep-research-t6f order §Gates (trajectory bar, frozen text); SPINE gap ledger"
+status       = "open"
+target       = 1
+floor        = 0
+floor_basis  = "closure form measured 2026-08-20: 0 legs across every runs-* manifest on disk. The literal 'final < round-2' reading is WEAK — 6 legs dip marginally (drb-58 9->8, drb-65 2->1) without closing; closure (final < min of all earlier rounds) has never occurred"
+direction    = "higher_is_better"
+kill         = "if gap-derived queries shrink the ledger only by dropping gaps (re-framing, not closing), that is instrument gaming — the gap fold is fact-identity (t6c) and stays"
+instrument   = '''python3 - <<'PY'
+import glob, json, sys
+shrink = []
+for p in glob.glob("research/deep-research/arms/runs-*/**/manifest.json", recursive=True):
+    try:
+        rounds = (json.load(open(p)) or {}).get("rounds") or []
+    except Exception:
+        continue
+    ga = [r["gaps_after"] for r in rounds if "gaps_after" in r]
+    if len(ga) >= 2 and ga[-1] < min(ga[:-1]):
+        shrink.append(p)
+print(json.dumps({"value": len(shrink), "legs": shrink[:10]}))
+PY'''
+
+[[bar]]
+id           = "p4v1-redraft-cap"
+one_line     = "The strict-shape re-draft keeps 12/16 v1 coverage keys — the render truncation bar the t6d battery measured (F3)"
+derives_from = "score-arms.py P4-v1 leg (>=12/16); t6d battery #5: 10/16 stalled at strict-shape re-draft truncation"
+status       = "open"
+target       = 12
+floor        = 6
+floor_basis  = "freshest bank read: runs-t7a-re GATE-VERDICT 2026-08-20 P4-v1 6/16 (gate1 read 5/16 same day; t6d #5 and t6c-r3 read 10/16) — the leg swings 5-10 across same-day battery runs"
+direction    = "higher_is_better"
+noise_band   = 4  # same-day swing 5-10 measured 2026-08-20 (t6d note: +/-3-4 seeds)
+instrument   = '''python3 - <<'PY'
+import glob, json, os, sys
+cands = (glob.glob("research/deep-research/arms/score-report*.json")
+         + glob.glob("research/deep-research/arms/runs-*/score*.json")
+         + glob.glob("research/deep-research/arms/runs-*/GATE-VERDICT.json"))
+rows = []
+for p in cands:
+    if "corp-scale" in p:
+        continue  # a DIFFERENT arm's report (t6a thin/deep corpus-scale legs) — named
+                  # exclusion, never a silent substitute for the standard battery's banks
+    try:
+        d = json.load(open(p))
+    except Exception:
+        continue
+    vs = (d.get("bars") or {}).get("verdicts") or d.get("verdicts")
+    if d.get("scored_at") and vs:
+        rows.append((d["scored_at"], os.path.getmtime(p), p, d))
+if not rows:
+    sys.exit(3)  # no bank score report — absent, named
+sa, _, p, d = max(rows)
+for v in ((d.get("bars") or {}).get("verdicts") or d["verdicts"]):
+    if v["leg"].startswith("P4-v1"):
+        print(json.dumps({"value": int(v["measured"].split("/")[0]),
+                          "measured": v["measured"], "report": p, "scored_at": sa}))
+        sys.exit(0)
+sys.exit(3)
+PY'''
+
+[[bar]]
+id           = "p4v0-bank-floor"
+one_line     = "The P4-v0 bank holds its line while the loop changes under it — the no-regression tripwire every rung re-arms"
+derives_from = "score-arms.py P4-v0 leg (>=58/72, the scorer's own bar)"
+status       = "open"
+target       = 58
+floor        = 58
+floor_basis  = "the scorer's declared pass line 58/72; freshest reads 62-64/72 (GATE-VERDICT 2026-08-20); range across the campaign 52-70"
+direction    = "higher_is_better"
+noise_band   = 4
+kill         = "a rung that moves P4-v0 below 58 does not land without a disposition — hold-the-line, not a stretch bar"
+instrument   = '''python3 - <<'PY'
+import glob, json, os, sys
+cands = (glob.glob("research/deep-research/arms/score-report*.json")
+         + glob.glob("research/deep-research/arms/runs-*/score*.json")
+         + glob.glob("research/deep-research/arms/runs-*/GATE-VERDICT.json"))
+rows = []
+for p in cands:
+    if "corp-scale" in p:
+        continue  # a DIFFERENT arm's report (t6a thin/deep corpus-scale legs) — named
+                  # exclusion, never a silent substitute for the standard battery's banks
+    try:
+        d = json.load(open(p))
+    except Exception:
+        continue
+    vs = (d.get("bars") or {}).get("verdicts") or d.get("verdicts")
+    if d.get("scored_at") and vs:
+        rows.append((d["scored_at"], os.path.getmtime(p), p, d))
+if not rows:
+    sys.exit(3)
+sa, _, p, d = max(rows)
+for v in ((d.get("bars") or {}).get("verdicts") or d["verdicts"]):
+    if v["leg"] == "P4-v0":
+        print(json.dumps({"value": int(v["measured"].split("/")[0]),
+                          "measured": v["measured"], "report": p, "scored_at": sa}))
+        sys.exit(0)
+sys.exit(3)
+PY'''
+
+[[bar]]
+id           = "findings-not-walled"
+one_line     = "Substantive claims render as provenance-labeled findings, not open questions — the floor taxes corroboration, never presentation"
+derives_from = "aiq-teardown.md §6.3 (writer contract tiering); flight finding 2026-08-20: 127/137 claims render could-not-judge, Findings empty on 8/9 tasks"
+status       = "open"
+target       = 0.30
+floor        = 0.927
+floor_basis  = "race-20260820T151943: 127/137 report markers are could-not-judge (0.927); section sizes — task 90 Findings 392b vs Open-questions 7801b, task 62 406b vs 6176b"
+direction    = "lower_is_better"
+kill         = "the corroboration floor is NEVER the knob: single-origin content renders AS single-origin-labeled findings (honest), never as corroborated and never as resolved; only the render contract moves this bar — a floor change to move it is a kill, not a tune"
+instrument   = '''python3 - <<'PY'
+import glob, json, re, sys
+mans = sorted(glob.glob("research/deep-research/drb/overall-derivation/flights/*/manifest.json"))
+if not mans:
+    sys.exit(3)
+dirs = json.load(open(mans[-1])).get("landed_dirs") or {}
+if not dirs:
+    sys.exit(3)
+tot = cnj = 0
+for d in dirs.values():
+    txt = open(f"{d}/report.md").read()
+    marks = re.findall(r"\[(passed|failed|refuted|could-not-judge|single-origin[a-z-]*)\]", txt)
+    tot += len(marks)
+    cnj += marks.count("could-not-judge")
+if not tot:
+    sys.exit(3)
+print(json.dumps({"value": round(cnj / tot, 4), "markers": tot,
+                  "cnj": cnj, "flight": mans[-1].split("/")[-2]}))
+PY'''
+
+[[bar]]
+id           = "no-render-truncation"
+one_line     = "The deliverable is never the truncated artifact — its budget exceeds the working stages' (the AIQ 32K-writer precedent)"
+derives_from = "aiq-teardown.md §6.1 (writer max_tokens 32768 = 2x every other stage); t7a flight truncation_declared 9/9"
+status       = "open"
+target       = 0
+floor        = 9
+floor_basis  = "race-20260820T151943: truncation_declared=true on 9/9 manifests (the strict-shape re-draft cap; t6d's measured P4-v1 loss)"
+direction    = "lower_is_better"
+kill         = "if un-truncating regresses the strict-shape contract's readers (scorer/goldens), the cap mechanism is redesigned, not the contract silently loosened"
+instrument   = '''python3 - <<'PY'
+import glob, json, sys
+mans = sorted(glob.glob("research/deep-research/drb/overall-derivation/flights/*/manifest.json"))
+if not mans:
+    sys.exit(3)
+dirs = json.load(open(mans[-1])).get("landed_dirs") or {}
+if not dirs:
+    sys.exit(3)
+n = sum(1 for d in dirs.values()
+        if (json.load(open(f"{d}/manifest.json")) or {}).get("truncation_declared"))
+print(json.dumps({"value": n, "tasks": len(dirs), "flight": mans[-1].split("/")[-2]}))
+PY'''

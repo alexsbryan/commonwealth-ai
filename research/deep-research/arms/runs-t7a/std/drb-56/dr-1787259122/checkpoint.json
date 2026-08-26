@@ -1,0 +1,276 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "written_after_round": 3,
+  "config": {
+    "run_id": "dr-1787259122",
+    "question": "Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-56/dr-1787259122",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "tavily",
+    "search_source": "Web",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": {
+      "run-id": "dr-1787259122",
+      "granted-at-unix": 1787259122,
+      "release-floor": "personal"
+    }
+  },
+  "question": "Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?",
+  "frontier": [
+    "General solution for first-price sealed-bid auction with two asymmetric bidders",
+    "Specific equilibrium bidding functions in asymmetric first-price auctions"
+  ],
+  "frontier_question": "Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?",
+  "figure_specifiers": [
+    "2",
+    "price"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 1,
+      "reason": "failed"
+    },
+    {
+      "round": 3,
+      "reason": "failed"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259122",
+      "charter_hash": "704a46672a27359c",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259122",
+      "charter_hash": "704a46672a27359c",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [
+        {
+          "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+          "error": "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        },
+        {
+          "url": "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+          "error": "fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: Execution error: fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        },
+        {
+          "url": "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+          "error": "fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: Execution error: fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        },
+        {
+          "url": "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+          "error": "fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: Execution error: fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        }
+      ],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259122",
+      "charter_hash": "704a46672a27359c",
+      "round": 2,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://python.quantecon.org/two_auctions.html",
+          "source_url": "https://python.quantecon.org/two_auctions.html",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "140. First-Price and Second-Price Auctions Intermediate Quantitative Economics with Python On this page 140.1. First-price sealed-bid auction (FPSB) 140.1.1. Characterization of FPSB auction 140.2. Second-price sealed-bid auction (SPSB) 140.3. Characterization of SPSB auction 140.4. Uniform distribution of private values 140.5. Setup 140.6. First price sealed bid auction 140.7. Second price sealed bid auction 140.8. Python code 140.9. Revenue equivalence theorem 140.10. Calculation of bid price in FPSB 140.11. \\(\\chi^2\\) Distribution 140.12. Code summary 140.13. References Powered by Jupyter Book\n↑ Top Intermediate Quantitative Economics with Python\nThomas J. Sargent and John Stachurski Last changed: Jul 28, 2026 ▼ Changelog (full history)\n364f150 Chihiro Watanabe 2 weeks ago Update rng usage in two_auctions.md (#960) 6e967af Daisuke Oyama 9 months ago [two_auctions] Fix conditional expectation simulation (#652) be0af2e Humphrey Yang 11 months ago [two_auction] Lecture review with math and warning fixes (#556) 2ea0317 Copilot 1 year ago Upgrade all HTTP links to HTTPS across lecture series (#523) bab7a8e Smit Lunagariya 2 years ago Remove unused imports (#357) 1bf43db Humphrey Yang 3 years ago FIX: Broken Links and Redirects (#264) fb2c000 Natasha 4 years ago Correct some typos in two_auctions.md 86aca79 John Stachurski 4 years ago Fixed minor typos in Auction lecture (#204) 7be425a thomassargent30 4 years ago Tom's Feb 8 edits of two lectures d6642a2 thomassargent30 4 years ago Tom's latest edits of five new lectures 140. First-Price and Second-Price Auctions#\nThis lecture is designed to set the stage for a subsequent lecture about Multiple Good Allocation Mechanisms\nIn that lecture, a planner or auctioneer simultaneously allocates several goods to set of people.\nIn the present lecture, a single good is allocated to one person within a set of people.\nHere we’ll learn about and simulate two classic auctions :\na First-Price Sealed-Bid Auction (FPSB)\na Second-Price Sealed-Bid Auction (SPSB) created by William Vickrey [Vickrey, 1961]\nWe’ll also learn about and apply a\nRevenue Equivalent Theorem\nWe recommend watching this video about second price auctions by Anders Munk-Nielsen:\nand\nAnders Munk-Nielsen put his code on GitHub.\nMuch of our Python code below is based on his.\n140.1. First-price sealed-bid auction (FPSB)#\nProtocols:\nA single good is auctioned.\nProspective buyers simultaneously submit sealed bids.\nEach bidder knows only his/her own bid.\nThe good is allocated to the person who submits the highest bid.\nThe winning bidder pays price she has bid.\nDetailed Setting:\nThere are \\(n>2\\) prospective buyers named \\(i = 1, 2, \\ldots, n\\).\nBuyer \\(i\\) attaches value \\(v_i\\) to the good being sold.\nBuyer \\(i\\) wants to maximize the expected value of her surplus defined as \\(v_i - p\\), where \\(p\\) is the price that she pays, conditional on her winning the auction.\nEvidently,\nIf \\(i\\) bids exactly \\(v_i\\), she pays what she thinks it is worth and gathers no surplus value.\nBuyer \\(i\\) will never want to bid more than \\(v_i\\).\nIf buyer \\(i\\) bids \\(b < v_i\\) and wins the auction, then she gathers surplus value \\(v_i - b > 0\\).\nIf buyer \\(i\\) bids \\(b < v_i\\) and someone else bids more than \\(b\\), buyer \\(i\\) loses the auction and gets no surplus value.\nTo proceed, buyer \\(i\\) wants to know the probability that she wins the auction as a function of her bid \\(v_i\\)\nthis requires that she know a probability distribution of bids \\(v_j\\) made by prospective buyers \\(j \\neq i\\)\nGiven her idea about that probability distribution, buyer \\(i\\) wants to set a bid that maximizes the mathematical expectation of her surplus value.\nBids are sealed, so no bidder knows bids submitted by other prospective buyers.\nThis means that bidders are in effect participating in a game in which players do not know payoffs of other players.\nThis is a Bayesian game, a Nash equilibrium of which is called a Bayesian Nash equilibrium.\nTo complete the specificatio",
+          "ingested_into": null,
+          "tags": [
+            "140",
+            "auctions",
+            "first",
+            "price",
+            "second"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+        "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+        "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787259122",
+      "charter_hash": "704a46672a27359c",
+      "round": 3,
+      "chunks": [],
+      "fetch_failures": [
+        {
+          "url": "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+          "error": "fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: Execution error: fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        },
+        {
+          "url": "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+          "error": "fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: Execution error: fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        },
+        {
+          "url": "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+          "error": "fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: Execution error: fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        },
+        {
+          "url": "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+          "error": "fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: Execution error: fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)",
+          "absent": true
+        }
+      ],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "The text in [ev-1] outlines the setup for a First-Price Sealed-Bid Auction (FPSB) involving \\(n > 2\\) prospective buyers and describes the bidder's objective to maximize expected surplus conditional on winning. [Source: ev-1]",
+    "It mentions that buyer \\(i\\) needs to know the probability distribution of bids made by other prospective buyers to set an optimal bid [Source: ev-1]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "The text in [ev-1] outlines the setup for a First-Price Sealed-Bid Auction (FPSB) involving \\(n > 2\\) prospective buyers and describes the bidder's objective to maximize expected surplus conditional on winning. [Source: ev-1]",
+      "actionable_query": "The text in [ev- \\) prospective buyers and describes the bidder's objective to maximize expected surplus conditional on winning. (2, price)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "It mentions that buyer \\(i\\) needs to know the probability distribution of bids made by other prospective buyers to set an optimal bid [Source: ev-1].",
+      "actionable_query": "mentions buyer needs know probability distribution bids made other prospective buyers set optimal bid",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 6,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 0,
+      "search_calls": 3
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 1
+    },
+    {
+      "round": 3,
+      "gaps_before": 1,
+      "gaps_after": 2,
+      "fetched": 0,
+      "search_calls": 2
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://python.quantecon.org/two_auctions.html",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [
+    {
+      "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+      "error": "fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: Execution error: fetch https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    },
+    {
+      "url": "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+      "error": "fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: Execution error: fetch https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    },
+    {
+      "url": "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+      "error": "fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: Execution error: fetch https://economics.yale.edu/sites/default/files/symmetric_0.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    },
+    {
+      "url": "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+      "error": "fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: Execution error: fetch https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    },
+    {
+      "url": "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+      "error": "fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: Execution error: fetch https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    },
+    {
+      "url": "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+      "error": "fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: Execution error: fetch https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    },
+    {
+      "url": "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+      "error": "fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: Execution error: fetch https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    },
+    {
+      "url": "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+      "error": "fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: Execution error: fetch https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf: non-text payload (application/pdf) — binary content refused (would poison the evidence window)"
+    }
+  ],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json",
+    "draft-3.json",
+    "gap-list-3.json",
+    "fetch-list-3.json",
+    "skip-ledger-3.json",
+    "evidence-window-3.json"
+  ],
+  "aborted_at_round": null
+}

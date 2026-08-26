@@ -1,0 +1,218 @@
+{
+  "icd": "source_registry",
+  "version": 1,
+  "run_id": "replay",
+  "charter_hash": "replay",
+  "sources": [
+    {
+      "url": "https://python.quantecon.org/two_auctions.html",
+      "title": "140. First-Price and Second-Price Auctions",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+      "title": "Horizontal Gene Transfer Happens More Often Than Anyone Thought | The Scientist",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+      "title": "20.3B: Horizontal Gene Transfer - Biology LibreTexts",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+      "title": "How birds find their way – CALS News",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+      "title": "How Migrating Birds Use Quantum Effects to Navigate | Scientific American",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Bird_migration",
+      "title": "Bird migration",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://avesbiology.com/nav_orient.html",
+      "title": "Avian Navigation and Orientation",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+      "title": "Migratory birds can extract positional information from magnetic inclination and magnetic declination alone - PMC",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://pennylane.ai/demos/tutorial_trapped_ions",
+      "title": "Trapped ion quantum computers | PennyLane Demos",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale",
+      "title": "Engineering Ion Trap Quantum Computers at Scale",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+      "title": "Are trapped ions hard to scale? | Reading the quantum",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+      "title": "[PDF] High-Resolution 3D Crop Reconstruction and Automatic Analysis of Phenotyping Index Using Machine Learning | Semantic Scholar",
+      "source_type": "web",
+      "round": 1,
+      "admitted": false
+    },
+    {
+      "url": "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+      "title": "Research Paper APIs for Scientific Literature in 2026 | IntuitionLabs",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+      "title": "Write a Search Strategy - Evidence Synthesis in the Social Sciences - LibGuides at Arizona State University",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+      "title": "The Role of Title, Metadata and Abstract in Identifying Clinically Relevant Journal Articles",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.plantphenomics.org.au/resources/published-research",
+      "title": "Published Research",
+      "source_type": "web",
+      "round": 3,
+      "admitted": true
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+      "title": "Deep Plant Phenomics: A Deep Learning Platform for Complex Plant Phenotyping Tasks | Semantic Scholar",
+      "source_type": "web",
+      "round": 3,
+      "admitted": false
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+      "title": "The evolution of plant phenomics: global insights, trends, and ...",
+      "source_type": "web",
+      "round": 3,
+      "admitted": true
+    },
+    {
+      "url": "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+      "title": "Developmental normalization of phenomics data generated by high throughput plant phenotyping systems",
+      "source_type": "web",
+      "round": 3,
+      "admitted": true
+    },
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "title": "MCP vs A2A Protocol: Architecture, Differences and When to Use",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+      "title": "A2A vs. MCP",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+      "title": "AI Agent Protocols: A2A vs MCP and Why They Matter",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.k2view.com/what-is-mcp-ai",
+      "title": "What is the Model Context Protocol for AI (MCP AI) | A Practical Guide",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://cloud.google.com/discover/what-is-model-context-protocol",
+      "title": "What is Model Context Protocol (MCP)? A guide",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.merge.dev/blog/model-context-protocol-alternatives",
+      "title": "6 Model Context Protocol alternatives to consider in 2026",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://modelcontextprotocol.info/blog/mcp-guide",
+      "title": "Model Context Protocol (MCP): A New Standard for AI Application and External Data Integration – Model Context Protocol （MCP）",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+      "title": "How Advanced Driver Assistance Systems (ADAS) Impact Liability in Car Accidents - TFLcar",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles",
+      "title": "Navigating Liability in the Age of Autonomous Vehicles",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    },
+    {
+      "url": "https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html",
+      "title": "What is ADAS? Advanced Driver Assistance Basics - NI",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    },
+    {
+      "url": "https://www.spiceworks.com/soft-tech/what-is-adas",
+      "title": "ADAS Working, Types, Applications",
+      "source_type": "web",
+      "round": 2,
+      "admitted": true
+    }
+  ]
+}

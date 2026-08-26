@@ -1,0 +1,156 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787350746",
+  "charter_hash": "756408068f166f4c",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, Anthropic released Claude 4 as two models in May 2025 to establish a tiered product strategy where Opus 4 serves as the flagship and Sonnet 4 acts as a faster \"workhorse\" for developers.",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: no citation handle (ref-required — the draft must cite the chunks it asserts against)",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This launch signaled that agentic coding was becoming the defining product category of 2025, timed to coincide with the rise of Claude Code, while demonstrating significant reliability improvements through features like \"computer use 2.0.\"\n\nSpecific details supported by the evidence include:\n*   Anthropic released the Claude 4 family, consisting of two models—Claude Opus 4 and Claude Sonnet 4—on May 8, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "*   This dual-model strategy positioned Opus 4 as the flagship model with pricing at $15 per million input tokens and $75 per million output tokens, while positioning Sonnet 4 as a faster \"workhorse\" developer-default coding model priced at $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "*   The launch signaled that agentic coding was becoming a defining product category for AI in 2025 (specifically tied to Claude Code), though the evidence describes it as the \"defining agentic-coding product of 2025\" rather than explicitly stating it became the single most important category overall without further context [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "*   The release highlighted significant improvements in reliability, noting that the new \"computer use 2.0\" capability was roughly twice as reliable as the previous generation's features [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*   This strategic move contributed to record API usage and supported a large funding round in late September 2025 at a reported valuation of approximately $183 billion, cementing Anthropic's position as a leader in the market [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "Anthropic released the Claude 4 family, consisting of two models—Claude Opus 4 and Claude Sonnet 4—on May 8, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "This dual-model strategy positioned Opus 4 as the flagship model with pricing at $15 per million input tokens and $75 per million output tokens, while positioning Sonnet 4 as a faster \"workhorse\" developer-default coding model priced at $3 per million input tokens and $15 per million output tokens [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "The launch signaled that agentic coding was becoming the defining product category for AI in 2025, specifically timed to coincide with the rise of Claude Code [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "The release highlighted significant improvements in reliability, noting that the new \"computer use 2.0\" capability was roughly twice as reliable as the previous generation's features [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "This strategic move successfully cemented Anthropic's position as a leader in the market, contributing to record API usage and supporting a large funding round in late September 2025 at a reported valuation of approximately $183 billion [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-09"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

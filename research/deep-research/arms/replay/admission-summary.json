@@ -1,0 +1,1163 @@
+{
+  "flight_root": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std",
+  "gold_rows": [
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "skip",
+      "replayed_score": 0.4444444444444444,
+      "round": 1,
+      "snippet_source": "overlay",
+      "task": 56,
+      "url": "https://brocku.ca/repec/pdf/0504.pdf"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "admit",
+      "replayed_score": 0.5555555555555556,
+      "round": 1,
+      "snippet_source": "absent",
+      "task": 56,
+      "url": "https://kasberger.github.io/assets/pdf/fpa_robust.pdf"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "skip",
+      "replayed_score": 0.5555555555555556,
+      "round": 1,
+      "snippet_source": "absent",
+      "task": 56,
+      "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "skip",
+      "replayed_score": 0.4166666666666667,
+      "round": 1,
+      "snippet_source": "absent",
+      "task": 56,
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S0165176511002473"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "skip",
+      "replayed_score": 0.5555555555555556,
+      "round": 1,
+      "snippet_source": "absent",
+      "task": 56,
+      "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "admit",
+      "replayed_score": 0.13793103448275862,
+      "round": 2,
+      "snippet_source": "overlay",
+      "task": 56,
+      "url": "https://brocku.ca/repec/pdf/0504.pdf"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "skip",
+      "replayed_score": 0.06896551724137931,
+      "round": 2,
+      "snippet_source": "absent",
+      "task": 56,
+      "url": "https://kasberger.github.io/assets/pdf/fpa_robust.pdf"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "skip",
+      "replayed_score": 0.13793103448275862,
+      "round": 2,
+      "snippet_source": "absent",
+      "task": 56,
+      "url": "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+    },
+    {
+      "logged_score": 0.0,
+      "recorded_decision": "skip",
+      "replayed_decision": "skip",
+      "replayed_score": 0.0,
+      "round": 3,
+      "snippet_source": "absent",
+      "task": 56,
+      "url": "https://eml.berkeley.edu/~mcfadden/eC103_f03/auctionlect.pdf"
+    }
+  ],
+  "parity_failures": 0,
+  "production_defaults": {
+    "code_set_k": 5,
+    "eps_quota": 0.1
+  },
+  "stage": "admission",
+  "tasks": {
+    "56": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+            "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+            "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+            "https://www.jstor.org/stable/2648842",
+            "https://www.jstor.org/stable/2648842",
+            "https://kasberger.github.io/assets/pdf/fpa_robust.pdf"
+          ],
+          "after_threshold": 0.5555555555555556,
+          "parity_ok": true,
+          "phantoms": 2,
+          "recorded_admitted": [
+            "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+            "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+            "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+            "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf"
+          ],
+          "round": 1,
+          "rows": 23,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+                "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+                "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+                "https://www.jstor.org/stable/2648842"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5862068965517241
+            },
+            "k5": {
+              "admitted": [
+                "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+                "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+                "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+                "https://www.jstor.org/stable/2648842",
+                "https://www.jstor.org/stable/2648842",
+                "https://kasberger.github.io/assets/pdf/fpa_robust.pdf"
+              ],
+              "gold_admitted": [
+                "https://kasberger.github.io/assets/pdf/fpa_robust.pdf"
+              ],
+              "threshold": 0.5555555555555556
+            },
+            "k6": {
+              "admitted": [
+                "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+                "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+                "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+                "https://www.jstor.org/stable/2648842",
+                "https://www.jstor.org/stable/2648842",
+                "https://kasberger.github.io/assets/pdf/fpa_robust.pdf",
+                "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+              ],
+              "gold_admitted": [
+                "https://kasberger.github.io/assets/pdf/fpa_robust.pdf",
+                "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+              ],
+              "threshold": 0.5555555555555556
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+            "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+            "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+            "https://python.quantecon.org/two_auctions.html",
+            "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+            "https://brocku.ca/repec/pdf/0504.pdf"
+          ],
+          "after_threshold": 0.20689655172413793,
+          "parity_ok": true,
+          "phantoms": 0,
+          "recorded_admitted": [
+            "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+            "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+            "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+            "https://python.quantecon.org/two_auctions.html"
+          ],
+          "round": 2,
+          "rows": 9,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+                "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+                "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+                "https://python.quantecon.org/two_auctions.html"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5517241379310345
+            },
+            "k5": {
+              "admitted": [
+                "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+                "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+                "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+                "https://python.quantecon.org/two_auctions.html",
+                "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+                "https://brocku.ca/repec/pdf/0504.pdf"
+              ],
+              "gold_admitted": [
+                "https://brocku.ca/repec/pdf/0504.pdf"
+              ],
+              "threshold": 0.20689655172413793
+            },
+            "k6": {
+              "admitted": [
+                "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+                "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+                "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+                "https://python.quantecon.org/two_auctions.html",
+                "https://www.youtube.com/watch?v=EK7b6DA-8NU",
+                "https://brocku.ca/repec/pdf/0504.pdf",
+                "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+              ],
+              "gold_admitted": [
+                "https://brocku.ca/repec/pdf/0504.pdf",
+                "https://www.researchgate.net/publication/228319685_Linear_Bid_in_Asymmetric_First-Price_Auctions"
+              ],
+              "threshold": 0.13793103448275862
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+            "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+            "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+            "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+            "https://www.chegg.com/homework-help/questions-and-answers/suppose-interested-bidding-piece-land-know-one-bidder-interested-seller-announced-highest--q119671261",
+            "https://direct.mit.edu/rest/article/107/3/755/114759/Bidding-on-Price-and-Quality-An-Experiment-on-the"
+          ],
+          "after_threshold": 0.2,
+          "parity_ok": true,
+          "phantoms": 1,
+          "recorded_admitted": [
+            "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+            "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+            "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+            "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf"
+          ],
+          "round": 3,
+          "rows": 19,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+                "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+                "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+                "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.45
+            },
+            "k5": {
+              "admitted": [
+                "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+                "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+                "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+                "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+                "https://www.chegg.com/homework-help/questions-and-answers/suppose-interested-bidding-piece-land-know-one-bidder-interested-seller-announced-highest--q119671261",
+                "https://direct.mit.edu/rest/article/107/3/755/114759/Bidding-on-Price-and-Quality-An-Experiment-on-the"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.2
+            },
+            "k6": {
+              "admitted": [
+                "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+                "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+                "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+                "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+                "https://www.chegg.com/homework-help/questions-and-answers/suppose-interested-bidding-piece-land-know-one-bidder-interested-seller-announced-highest--q119671261",
+                "https://direct.mit.edu/rest/article/107/3/755/114759/Bidding-on-Price-and-Quality-An-Experiment-on-the",
+                "https://www.youtube.com/watch?v=w67K0PY7n9U"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.2
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787259122"
+    },
+    "58": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://www.youtube.com/watch?v=BiRc2FGh71o",
+            "https://europepmc.org/article/med/35235827",
+            "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+            "https://www.cell.com/molecular-plant/fulltext/S1674-2052(22)00049-1",
+            "https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms",
+            "https://academic.oup.com/mbe/article/25/3/559/1060663"
+          ],
+          "after_threshold": 0.42857142857142855,
+          "parity_ok": true,
+          "phantoms": 7,
+          "recorded_admitted": [
+            "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+            "https://www.youtube.com/watch?v=BiRc2FGh71o",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+            "https://www.frontiersin.org/journals/microbiology/articles/10.3389/fmicb.2024.1338026/full"
+          ],
+          "round": 1,
+          "rows": 73,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.youtube.com/watch?v=BiRc2FGh71o",
+                "https://europepmc.org/article/med/35235827",
+                "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(22)00049-1"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.42857142857142855
+            },
+            "k5": {
+              "admitted": [
+                "https://www.youtube.com/watch?v=BiRc2FGh71o",
+                "https://europepmc.org/article/med/35235827",
+                "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(22)00049-1",
+                "https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms",
+                "https://academic.oup.com/mbe/article/25/3/559/1060663"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.42857142857142855
+            },
+            "k6": {
+              "admitted": [
+                "https://www.youtube.com/watch?v=BiRc2FGh71o",
+                "https://europepmc.org/article/med/35235827",
+                "https://www.biorxiv.org/content/10.1101/2022.07.26.501571.full",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(22)00049-1",
+                "https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms",
+                "https://academic.oup.com/mbe/article/25/3/559/1060663",
+                "https://pubmed.ncbi.nlm.nih.gov/18158322"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.4117647058823529
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+            "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+            "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+            "https://www.mdpi.com/2073-4425/8/1/39",
+            "https://www.pasteur.fr/en/research-journal/news/antibiotic-resistance-how-bacteria-become-resistant"
+          ],
+          "after_threshold": 0.2727272727272727,
+          "parity_ok": true,
+          "phantoms": 2,
+          "recorded_admitted": [
+            "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+            "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+            "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118"
+          ],
+          "round": 2,
+          "rows": 23,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+                "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+                "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5454545454545454
+            },
+            "k5": {
+              "admitted": [
+                "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+                "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+                "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+                "https://www.mdpi.com/2073-4425/8/1/39",
+                "https://www.pasteur.fr/en/research-journal/news/antibiotic-resistance-how-bacteria-become-resistant"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.2727272727272727
+            },
+            "k6": {
+              "admitted": [
+                "https://en.wikipedia.org/wiki/Horizontal_gene_transfer",
+                "https://www.the-scientist.com/horizontal-gene-transfer-happens-more-often-than-anyone-thought-70118",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC3068243",
+                "https://bio.libretexts.org/Bookshelves/Introductory_and_General_Biology/General_Biology_(Boundless)/20%3A_Phylogenies_and_the_History_of_Life/20.03%3A_Perspectives_on_the_Phylogenetic_Tree/20.3B%3A_Horizontal_Gene_Transfer",
+                "https://www.mdpi.com/2073-4425/8/1/39",
+                "https://www.pasteur.fr/en/research-journal/news/antibiotic-resistance-how-bacteria-become-resistant",
+                "https://www.researchgate.net/publication/400672249_Mechanisms_and_Research_Advances_of_Horizontal_Gene_Transfer_HGT_in_Plants_and_Microorganisms"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.2727272727272727
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787259198"
+    },
+    "59": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+            "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+            "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+            "https://en.wikipedia.org/wiki/Bird_migration",
+            "https://www.sciencealert.com/variations-in-earth-s-magnetic-field-serve-as-stop-signs-for-migratory-birds",
+            "https://spacedaily.com/t-migrating-birds-see-magnetic-field-cryptochrome-quantum-compass"
+          ],
+          "after_threshold": 0.3333333333333333,
+          "parity_ok": true,
+          "phantoms": 6,
+          "recorded_admitted": [
+            "https://en.wikipedia.org/wiki/Bird_migration",
+            "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+            "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+            "https://www.sciencedirect.com/science/article/pii/S1574954125002274"
+          ],
+          "round": 1,
+          "rows": 58,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+                "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+                "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+                "https://en.wikipedia.org/wiki/Bird_migration"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.42105263157894735
+            },
+            "k5": {
+              "admitted": [
+                "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+                "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+                "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+                "https://en.wikipedia.org/wiki/Bird_migration",
+                "https://www.sciencealert.com/variations-in-earth-s-magnetic-field-serve-as-stop-signs-for-migratory-birds",
+                "https://spacedaily.com/t-migrating-birds-see-magnetic-field-cryptochrome-quantum-compass"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3333333333333333
+            },
+            "k6": {
+              "admitted": [
+                "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+                "https://www.sciencedirect.com/science/article/pii/S1574954125002274",
+                "https://www.scientificamerican.com/article/how-migrating-birds-use-quantum-effects-to-navigate",
+                "https://en.wikipedia.org/wiki/Bird_migration",
+                "https://www.sciencealert.com/variations-in-earth-s-magnetic-field-serve-as-stop-signs-for-migratory-birds",
+                "https://spacedaily.com/t-migrating-birds-see-magnetic-field-cryptochrome-quantum-compass",
+                "https://www.researchgate.net/publication/320205130_Disruption_of_Magnetic_Compass_Orientation_in_Migratory_Birds_by_Radiofrequency_Electromagnetic_Fields"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://avesbiology.com/nav_orient.html",
+            "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+            "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+            "https://www.researchgate.net/publication/281673037_Avian_Navigation_A_Combination_of_Innate_and_Learned_Mechanisms",
+            "https://www.facebook.com/weareUKRI/videos/ever-wondered-how-birds-know-where-to-go-during-migration-spoiler-they-have-buil/3536270273333723"
+          ],
+          "after_threshold": 0.2222222222222222,
+          "parity_ok": true,
+          "phantoms": 4,
+          "recorded_admitted": [
+            "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+            "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+            "https://avesbiology.com/nav_orient.html",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788"
+          ],
+          "round": 2,
+          "rows": 40,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://avesbiology.com/nav_orient.html",
+                "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+                "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.4444444444444444
+            },
+            "k5": {
+              "admitted": [
+                "https://avesbiology.com/nav_orient.html",
+                "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+                "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+                "https://www.researchgate.net/publication/281673037_Avian_Navigation_A_Combination_of_Innate_and_Learned_Mechanisms",
+                "https://www.facebook.com/weareUKRI/videos/ever-wondered-how-birds-know-where-to-go-during-migration-spoiler-they-have-buil/3536270273333723"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.2222222222222222
+            },
+            "k6": {
+              "admitted": [
+                "https://avesbiology.com/nav_orient.html",
+                "https://journals.ansfoundation.org/index.php/jans/article/download/2684/2030/6901",
+                "https://news.cals.wisc.edu/2012/10/30/how-birds-find-their-way",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC12365788",
+                "https://www.researchgate.net/publication/281673037_Avian_Navigation_A_Combination_of_Innate_and_Learned_Mechanisms",
+                "https://www.facebook.com/weareUKRI/videos/ever-wondered-how-birds-know-where-to-go-during-migration-spoiler-they-have-buil/3536270273333723",
+                "https://www.theguardian.com/science/2019/apr/06/scientists-suggest-human-body-may-detect-earths-magnetic-field"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.1875
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787259769"
+    },
+    "62": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://www.youtube.com/watch?v=DUHTY9OK6XE",
+            "https://pennylane.ai/demos/tutorial_trapped_ions",
+            "https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale",
+            "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+            "https://link.aps.org/doi/10.1103/tk99-76gb",
+            "https://quantumcomputing.stackexchange.com/questions/23650/how-to-calculate-the-number-of-qubits-in-surface-code-for-given-physical-error"
+          ],
+          "after_threshold": 0.3125,
+          "parity_ok": true,
+          "phantoms": 11,
+          "recorded_admitted": [
+            "https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale",
+            "https://www.youtube.com/watch?v=DUHTY9OK6XE",
+            "https://pennylane.ai/demos/tutorial_trapped_ions",
+            "https://m-malinowski.github.io/2024/02/06/scaling-ions.html"
+          ],
+          "round": 1,
+          "rows": 98,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.youtube.com/watch?v=DUHTY9OK6XE",
+                "https://pennylane.ai/demos/tutorial_trapped_ions",
+                "https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale",
+                "https://m-malinowski.github.io/2024/02/06/scaling-ions.html"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.375
+            },
+            "k5": {
+              "admitted": [
+                "https://www.youtube.com/watch?v=DUHTY9OK6XE",
+                "https://pennylane.ai/demos/tutorial_trapped_ions",
+                "https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale",
+                "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+                "https://link.aps.org/doi/10.1103/tk99-76gb",
+                "https://quantumcomputing.stackexchange.com/questions/23650/how-to-calculate-the-number-of-qubits-in-surface-code-for-given-physical-error"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3125
+            },
+            "k6": {
+              "admitted": [
+                "https://www.youtube.com/watch?v=DUHTY9OK6XE",
+                "https://pennylane.ai/demos/tutorial_trapped_ions",
+                "https://simutechgroup.com/engineering-ion-trap-quantum-computers-at-scale",
+                "https://m-malinowski.github.io/2024/02/06/scaling-ions.html",
+                "https://link.aps.org/doi/10.1103/tk99-76gb",
+                "https://quantumcomputing.stackexchange.com/questions/23650/how-to-calculate-the-number-of-qubits-in-surface-code-for-given-physical-error",
+                "https://quantum-journal.org/papers/q-2024-11-07-1516"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3125
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787260135"
+    },
+    "65": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://www.technavio.com/report/precision-agriculture-market-industry-analysis",
+            "https://www.mdpi.com/2073-4395/15/11/2518",
+            "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+            "https://www.newswise.com/articles/new-deep-learning-model-sharpens-accuracy-in-wheat-spike-counting",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+            "https://www.sphericalinsights.com/reports/agriculture-robots-market"
+          ],
+          "after_threshold": 0.38461538461538464,
+          "parity_ok": true,
+          "phantoms": 8,
+          "recorded_admitted": [
+            "https://www.mdpi.com/2073-4395/15/11/2518",
+            "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC7184763"
+          ],
+          "round": 1,
+          "rows": 79,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.technavio.com/report/precision-agriculture-market-industry-analysis",
+                "https://www.mdpi.com/2073-4395/15/11/2518",
+                "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+                "https://www.newswise.com/articles/new-deep-learning-model-sharpens-accuracy-in-wheat-spike-counting"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.4358974358974359
+            },
+            "k5": {
+              "admitted": [
+                "https://www.technavio.com/report/precision-agriculture-market-industry-analysis",
+                "https://www.mdpi.com/2073-4395/15/11/2518",
+                "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+                "https://www.newswise.com/articles/new-deep-learning-model-sharpens-accuracy-in-wheat-spike-counting",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+                "https://www.sphericalinsights.com/reports/agriculture-robots-market"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.38461538461538464
+            },
+            "k6": {
+              "admitted": [
+                "https://www.technavio.com/report/precision-agriculture-market-industry-analysis",
+                "https://www.mdpi.com/2073-4395/15/11/2518",
+                "https://www.semanticscholar.org/paper/High-Resolution-3D-Crop-Reconstruction-and-Analysis-Yang-Cho/bd837ce6796367b090ff5e8a0e63d113c8c2ddd5",
+                "https://www.newswise.com/articles/new-deep-learning-model-sharpens-accuracy-in-wheat-spike-counting",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC13109325",
+                "https://www.sphericalinsights.com/reports/agriculture-robots-market",
+                "https://www.psmarketresearch.com/market-analysis/agricultural-robots-market-report"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.36363636363636365
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+            "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+            "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+            "https://www.plantphenomics.org.au/resources/published-research"
+          ],
+          "after_threshold": 0.375,
+          "parity_ok": true,
+          "phantoms": 1,
+          "recorded_admitted": [
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+            "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+            "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+            "https://onlinelibrary.wiley.com/doi/full/10.1111/itor.13309"
+          ],
+          "round": 2,
+          "rows": 17,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+                "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.6153846153846154
+            },
+            "k5": {
+              "admitted": [
+                "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+                "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+                "https://www.plantphenomics.org.au/resources/published-research"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.375
+            },
+            "k6": {
+              "admitted": [
+                "https://intuitionlabs.ai/articles/research-paper-apis-scientific-literature",
+                "https://libguides.asu.edu/evidence_synthesis/search-strategy",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC1560462",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+                "https://www.plantphenomics.org.au/resources/published-research",
+                "https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1245&context=plantscifacpub"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.375
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://www.plantphenomics.org.au/resources/published-research",
+            "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+            "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+            "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3",
+            "https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1245&context=plantscifacpub"
+          ],
+          "after_threshold": 0.5,
+          "parity_ok": true,
+          "phantoms": 0,
+          "recorded_admitted": [
+            "https://www.plantphenomics.org.au/resources/published-research",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+            "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+            "https://link.springer.com/article/10.1186/s13007-020-00653-x"
+          ],
+          "round": 3,
+          "rows": 10,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.plantphenomics.org.au/resources/published-research",
+                "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+                "https://link.springer.com/article/10.1186/s13007-020-00653-x"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.625
+            },
+            "k5": {
+              "admitted": [
+                "https://www.plantphenomics.org.au/resources/published-research",
+                "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+                "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3",
+                "https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1245&context=plantscifacpub"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5
+            },
+            "k6": {
+              "admitted": [
+                "https://www.plantphenomics.org.au/resources/published-research",
+                "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+                "https://link.springer.com/article/10.1186/s13007-020-00653-x",
+                "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3",
+                "https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1245&context=plantscifacpub",
+                "https://academic.oup.com/jxb/article/66/18/5429/482901"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787260359"
+    },
+    "69": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+            "https://www.youtube.com/watch?v=56BXHCkngss",
+            "https://www.descope.com/blog/post/mcp-vs-a2a",
+            "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+            "https://www.cybage.com/blog/mastering-google-s-a2a-protocol-the-complete-guide-to-agent-to-agent-communication",
+            "https://hidekazu-konishi.com/entry/mcp_specification_version_timeline.html"
+          ],
+          "after_threshold": 0.35,
+          "parity_ok": true,
+          "phantoms": 7,
+          "recorded_admitted": [
+            "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+            "https://www.descope.com/blog/post/mcp-vs-a2a",
+            "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+            "https://www.youtube.com/watch?v=56BXHCkngss"
+          ],
+          "round": 1,
+          "rows": 68,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+                "https://www.youtube.com/watch?v=56BXHCkngss",
+                "https://www.descope.com/blog/post/mcp-vs-a2a",
+                "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5
+            },
+            "k5": {
+              "admitted": [
+                "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+                "https://www.youtube.com/watch?v=56BXHCkngss",
+                "https://www.descope.com/blog/post/mcp-vs-a2a",
+                "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+                "https://www.cybage.com/blog/mastering-google-s-a2a-protocol-the-complete-guide-to-agent-to-agent-communication",
+                "https://hidekazu-konishi.com/entry/mcp_specification_version_timeline.html"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.35
+            },
+            "k6": {
+              "admitted": [
+                "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+                "https://www.youtube.com/watch?v=56BXHCkngss",
+                "https://www.descope.com/blog/post/mcp-vs-a2a",
+                "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+                "https://www.cybage.com/blog/mastering-google-s-a2a-protocol-the-complete-guide-to-agent-to-agent-communication",
+                "https://hidekazu-konishi.com/entry/mcp_specification_version_timeline.html",
+                "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3181818181818182
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://www.k2view.com/what-is-mcp-ai",
+            "https://cloud.google.com/discover/what-is-model-context-protocol",
+            "https://www.merge.dev/blog/model-context-protocol-alternatives",
+            "https://modelcontextprotocol.info/blog/mcp-guide",
+            "https://blog.marcnuri.com/model-context-protocol-mcp-introduction",
+            "https://www.backslash.security/blog/what-is-mcp-model-context-protocol"
+          ],
+          "after_threshold": 0.3125,
+          "parity_ok": true,
+          "phantoms": 3,
+          "recorded_admitted": [
+            "https://www.k2view.com/what-is-mcp-ai",
+            "https://www.merge.dev/blog/model-context-protocol-alternatives",
+            "https://modelcontextprotocol.info/blog/mcp-guide",
+            "https://cloud.google.com/discover/what-is-model-context-protocol"
+          ],
+          "round": 2,
+          "rows": 36,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.k2view.com/what-is-mcp-ai",
+                "https://cloud.google.com/discover/what-is-model-context-protocol",
+                "https://www.merge.dev/blog/model-context-protocol-alternatives",
+                "https://modelcontextprotocol.info/blog/mcp-guide"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.375
+            },
+            "k5": {
+              "admitted": [
+                "https://www.k2view.com/what-is-mcp-ai",
+                "https://cloud.google.com/discover/what-is-model-context-protocol",
+                "https://www.merge.dev/blog/model-context-protocol-alternatives",
+                "https://modelcontextprotocol.info/blog/mcp-guide",
+                "https://blog.marcnuri.com/model-context-protocol-mcp-introduction",
+                "https://www.backslash.security/blog/what-is-mcp-model-context-protocol"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3125
+            },
+            "k6": {
+              "admitted": [
+                "https://www.k2view.com/what-is-mcp-ai",
+                "https://cloud.google.com/discover/what-is-model-context-protocol",
+                "https://www.merge.dev/blog/model-context-protocol-alternatives",
+                "https://modelcontextprotocol.info/blog/mcp-guide",
+                "https://blog.marcnuri.com/model-context-protocol-mcp-introduction",
+                "https://www.backslash.security/blog/what-is-mcp-model-context-protocol",
+                "https://blog.modelcontextprotocol.io/posts/2025-12-19-mcp-transport-future"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.25
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787260761"
+    },
+    "78": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://www.nature.com/articles/s41598-021-94255-9",
+            "https://www.nature.com/articles/npjparkd201513",
+            "https://pmc.ncbi.nlm.nih.gov/articles/PMC7313565",
+            "https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2021.678373/full",
+            "https://neurotorium.org/article/non-motor-symptoms-in-parkinsons-disease-nature-and-burden",
+            "https://www.sciencedirect.com/science/article/abs/pii/S0303846712004246"
+          ],
+          "after_threshold": 0.5833333333333334,
+          "parity_ok": true,
+          "phantoms": 9,
+          "recorded_admitted": [
+            "https://www.neurosurgeryone.com/condition/parkinsons",
+            "https://www.mayoclinic.org/diseases-conditions/parkinsons-disease/symptoms-causes/syc-20376055",
+            "https://www.facebook.com/communitymedicalcenters/posts/before-dbs-surgery-parkinsons-controlled-glendas-daily-lifeafter-deep-brain-stim/1505295098263252",
+            "https://www.nia.nih.gov/health/parkinsons-disease/parkinsons-disease-causes-symptoms-and-treatments"
+          ],
+          "round": 1,
+          "rows": 98,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.nature.com/articles/s41598-021-94255-9",
+                "https://www.nature.com/articles/npjparkd201513",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC7313565",
+                "https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2021.678373/full"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.75
+            },
+            "k5": {
+              "admitted": [
+                "https://www.nature.com/articles/s41598-021-94255-9",
+                "https://www.nature.com/articles/npjparkd201513",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC7313565",
+                "https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2021.678373/full",
+                "https://neurotorium.org/article/non-motor-symptoms-in-parkinsons-disease-nature-and-burden",
+                "https://www.sciencedirect.com/science/article/abs/pii/S0303846712004246"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5833333333333334
+            },
+            "k6": {
+              "admitted": [
+                "https://www.nature.com/articles/s41598-021-94255-9",
+                "https://www.nature.com/articles/npjparkd201513",
+                "https://pmc.ncbi.nlm.nih.gov/articles/PMC7313565",
+                "https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2021.678373/full",
+                "https://neurotorium.org/article/non-motor-symptoms-in-parkinsons-disease-nature-and-burden",
+                "https://www.sciencedirect.com/science/article/abs/pii/S0303846712004246",
+                "https://www.nature.com/articles/s41598-021-04356-8"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.5833333333333334
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787262042"
+    },
+    "83": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://www.linkedin.com/pulse/trends-global-point-of-sale-pos-terminals-market-share-demand-uwt1e",
+            "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+            "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+            "https://www.linkedin.com/pulse/north-america-retail-point-of-sale-pos-terminals-bfglf",
+            "https://www.linkedin.com/pulse/north-america-retail-point-of-sale-pos-terminals-bfglf",
+            "https://market.us/report/pos-terminals-market"
+          ],
+          "after_threshold": 0.35,
+          "parity_ok": true,
+          "phantoms": 11,
+          "recorded_admitted": [
+            "https://www.okta.com/company/careers/product/senior-product-manager-okta-device-access-8066241",
+            "https://www.amazon.jobs/en/jobs/10433598/senior-product-manager-tech-devices-services-new-initiatives",
+            "https://www.sunmi.com/en/news/486",
+            "https://www.indeed.com/q-senior-product-manager-iot-connected-device-jobs.html"
+          ],
+          "round": 1,
+          "rows": 101,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.linkedin.com/pulse/trends-global-point-of-sale-pos-terminals-market-share-demand-uwt1e",
+                "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+                "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+                "https://www.linkedin.com/pulse/north-america-retail-point-of-sale-pos-terminals-bfglf"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.35714285714285715
+            },
+            "k5": {
+              "admitted": [
+                "https://www.linkedin.com/pulse/trends-global-point-of-sale-pos-terminals-market-share-demand-uwt1e",
+                "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+                "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+                "https://www.linkedin.com/pulse/north-america-retail-point-of-sale-pos-terminals-bfglf",
+                "https://www.linkedin.com/pulse/north-america-retail-point-of-sale-pos-terminals-bfglf",
+                "https://market.us/report/pos-terminals-market"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.35
+            },
+            "k6": {
+              "admitted": [
+                "https://www.linkedin.com/pulse/trends-global-point-of-sale-pos-terminals-market-share-demand-uwt1e",
+                "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+                "https://www.marketreportsworld.com/market-reports/point-of-sale-pos-terminal-market-14728800",
+                "https://www.linkedin.com/pulse/north-america-retail-point-of-sale-pos-terminals-bfglf",
+                "https://www.linkedin.com/pulse/north-america-retail-point-of-sale-pos-terminals-bfglf",
+                "https://market.us/report/pos-terminals-market",
+                "https://www.researchgate.net/publication/368916598_POS_Terminals_Market_Share_Size_2023-2030"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.2857142857142857
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787262188"
+    },
+    "90": {
+      "recorded_eps": 0.1,
+      "recorded_k": 3,
+      "rounds": [
+        {
+          "after_admitted": [
+            "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+            "https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles",
+            "https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems",
+            "https://tsr.international/TSR/article/view/25177",
+            "https://www.ppic.org/publication/driving-change-reducing-vehicle-miles-traveled-in-california-summary",
+            "https://www.researchgate.net/publication/308087710_The_effectiveness_of_lane_departure_warning_systems-A_reduction_in_real-world_passenger_car_injury_crashes"
+          ],
+          "after_threshold": 0.3333333333333333,
+          "parity_ok": true,
+          "phantoms": 7,
+          "recorded_admitted": [
+            "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+            "https://www.iihs.org/research-areas/advanced-driver-assistance",
+            "https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles",
+            "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems"
+          ],
+          "round": 1,
+          "rows": 75,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+                "https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles",
+                "https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems",
+                "https://tsr.international/TSR/article/view/25177"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.36363636363636365
+            },
+            "k5": {
+              "admitted": [
+                "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+                "https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles",
+                "https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems",
+                "https://tsr.international/TSR/article/view/25177",
+                "https://www.ppic.org/publication/driving-change-reducing-vehicle-miles-traveled-in-california-summary",
+                "https://www.researchgate.net/publication/308087710_The_effectiveness_of_lane_departure_warning_systems-A_reduction_in_real-world_passenger_car_injury_crashes"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3333333333333333
+            },
+            "k6": {
+              "admitted": [
+                "https://tflcar.com/2025/03/how-advanced-driver-assistance-systems-adas-impact-liability",
+                "https://www.wshblaw.com/publication-navigating-liability-in-the-age-of-autonomous-vehicles",
+                "https://aaafoundation.org/research/potential-reduction-in-crashes-injuries-and-deaths-from-large-scale-deployment-of-advanced-driver-assistance-systems",
+                "https://tsr.international/TSR/article/view/25177",
+                "https://www.ppic.org/publication/driving-change-reducing-vehicle-miles-traveled-in-california-summary",
+                "https://www.researchgate.net/publication/308087710_The_effectiveness_of_lane_departure_warning_systems-A_reduction_in_real-world_passenger_car_injury_crashes",
+                "https://www.iihs.org/research-areas/advanced-driver-assistance"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3333333333333333
+            }
+          }
+        },
+        {
+          "after_admitted": [
+            "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+            "https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html",
+            "https://www.spiceworks.com/soft-tech/what-is-adas",
+            "https://www.facebook.com/Mobileye/posts/adas-capabilities-are-quickly-becoming-baseline-safety-requirements-not-premium-/1455234786647361",
+            "https://www.innovationautoglass.com/14-passive-and-active-ways-an-adas-system-works",
+            "https://caradas.com/active-safety-and-passive-safety"
+          ],
+          "after_threshold": 0.3333333333333333,
+          "parity_ok": true,
+          "phantoms": 0,
+          "recorded_admitted": [
+            "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+            "https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html",
+            "https://www.spiceworks.com/soft-tech/what-is-adas",
+            "https://www.facebook.com/Mobileye/posts/adas-capabilities-are-quickly-becoming-baseline-safety-requirements-not-premium-/1455234786647361"
+          ],
+          "round": 2,
+          "rows": 16,
+          "sweep": {
+            "k3": {
+              "admitted": [
+                "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+                "https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html",
+                "https://www.spiceworks.com/soft-tech/what-is-adas",
+                "https://www.facebook.com/Mobileye/posts/adas-capabilities-are-quickly-becoming-baseline-safety-requirements-not-premium-/1455234786647361"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.4666666666666667
+            },
+            "k5": {
+              "admitted": [
+                "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+                "https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html",
+                "https://www.spiceworks.com/soft-tech/what-is-adas",
+                "https://www.facebook.com/Mobileye/posts/adas-capabilities-are-quickly-becoming-baseline-safety-requirements-not-premium-/1455234786647361",
+                "https://www.innovationautoglass.com/14-passive-and-active-ways-an-adas-system-works",
+                "https://caradas.com/active-safety-and-passive-safety"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3333333333333333
+            },
+            "k6": {
+              "admitted": [
+                "https://www.hurwitzfine.com/blog/liability-for-defective-advanced-driver-assistance-systems",
+                "https://www.ni.com/en/solutions/transportation/adas-and-autonomous-driving-testing/what-is-adas.html",
+                "https://www.spiceworks.com/soft-tech/what-is-adas",
+                "https://www.facebook.com/Mobileye/posts/adas-capabilities-are-quickly-becoming-baseline-safety-requirements-not-premium-/1455234786647361",
+                "https://www.innovationautoglass.com/14-passive-and-active-ways-an-adas-system-works",
+                "https://caradas.com/active-safety-and-passive-safety",
+                "https://dewesoft.com/blog/what-is-adas"
+              ],
+              "gold_admitted": [],
+              "threshold": 0.3333333333333333
+            }
+          }
+        }
+      ],
+      "run_id": "dr-1787262340"
+    }
+  },
+  "total_phantom_rows": 79
+}

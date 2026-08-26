@@ -73,6 +73,15 @@ pub struct SetupConfig {
     /// them, so a ggml SIGABRT kills only a child, not the daemon.
     #[serde(default)]
     pub compute: ComputeSection,
+    /// `[search]` — the operator's web-search provider and its key. The
+    /// ONE search config surface: the deep-research loop, the desktop's
+    /// chat tools and the conversation tool builder all read this, so a
+    /// key set once works everywhere. Before this existed the desktop
+    /// kept its own `[search_backend]` in `desktop.toml` while the loop
+    /// read `SVRNMESH_TAVILY_API_KEY`, and neither could see the other —
+    /// which is why a desktop-configured provider never reached a run.
+    #[serde(default)]
+    pub search: SearchSection,
     /// External MCP servers whose tools are loaded into the agent's tool
     /// registry at startup (the `[[mcp_servers]]` array). Read by every chat
     /// surface — `sovereign chat`, the desktop, and `sovereign serve` — via
@@ -84,6 +93,34 @@ pub struct SetupConfig {
     /// `save()`/`load()` round-trip instead of being dropped as an unknown key.
     #[serde(default)]
     pub mcp_servers: Vec<crate::mcp_config::McpServerConfig>,
+}
+
+/// `[search]` — the web-search provider the operator configured.
+///
+/// DuckDuckGo is always available and needs no key; it is the
+/// zero-config fallback and is registered whatever this section says.
+/// `provider` names the one to PREFER when it is keyed — the closed set
+/// is what `sovereign_tools_base::web::search` implements: `duckduckgo`,
+/// `tavily`, `brave`.
+///
+/// The key may also arrive as `SVRNMESH_TAVILY_API_KEY` (the older path,
+/// and still the right shape for CI and one-off shells). This section
+/// wins when both are present; the env var keeps existing setups working.
+///
+/// ```toml
+/// [search]
+/// provider = "tavily"
+/// api_key = "tvly-..."
+/// ```
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SearchSection {
+    /// The preferred backend id. Empty ⇒ no preference: DuckDuckGo.
+    #[serde(default)]
+    pub provider: String,
+    /// The provider's key. `None` ⇒ the provider is not keyed and the
+    /// preference is inert — DuckDuckGo serves.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
 }
 
 /// Dial-by-key mesh access over iroh (Track W of
@@ -1194,6 +1231,10 @@ impl SetupConfig {
             shared_model: SharedModelSection::default(),
             discovery: DiscoverySection::default(),
             compute: ComputeSection::default(),
+            // Added on main while this branch was out. `unconfigured()`'s
+            // contract is "every other section at its documented default",
+            // so the default is the answer here, not a judgement call.
+            search: SearchSection::default(),
             mcp_servers: Vec::new(),
         }
     }
@@ -1565,6 +1606,7 @@ embed = "/m/e.gguf"
     fn roundtrip_minimal_config() {
         let cfg = SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/models/primary.gguf"),
                 fast: Some(PathBuf::from("/models/fast.gguf")),
@@ -1605,6 +1647,7 @@ embed = "/m/e.gguf"
         use crate::mcp_config::{McpAuthConfig, McpServerConfig, McpTransportConfig};
         let cfg = SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/m/p.gguf"),
                 fast: None,

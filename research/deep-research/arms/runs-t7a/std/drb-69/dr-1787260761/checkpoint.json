@@ -1,0 +1,380 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787260761",
+  "charter_hash": "49d304d9f02b574b",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787260761",
+    "question": "Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7a/std/drb-69/dr-1787260761",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "tavily",
+    "search_source": "Web",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": {
+      "run-id": "dr-1787260761",
+      "granted-at-unix": 1787260761,
+      "release-floor": "personal"
+    }
+  },
+  "question": "Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.",
+  "frontier": [
+    "Official definition and technical specification of the Model Context Protocol (MCP) by Anthropic, including its architecture for connecting LLMs to tools (2)",
+    "List of core features and capabilities defined in the Google Agent2Agent (A2A) protocol documentation, specifically regarding agent discovery and communication standards",
+    "Comparison table or official statement detailing the architectural differences between MCP's client-server model and A2A's peer-to-peer agent interaction model",
+    "Specific use cases cited by Google where the A2A protocol is designed to solve interoperability issues that MCP does not address",
+    "Number of initial partners or organizations announced as supporting the A2A protocol at launch compared to the number of early adopters for MCP",
+    "Date of public release announcement for the Google A2A protocol versus the date of the Model Context Protocol open-source repository creation",
+    "List of specific technical limitations in current LLM tool-calling frameworks that the A2A documentation explicitly states it aims to resolve"
+  ],
+  "frontier_question": "Please provide a detailed explanation of the differences and connections between Google's recently released A2A protocol and the MCP protocol. Furthermore, elaborate on the innovative aspects of the A2A protocol and the specific problems it is designed to address.",
+  "figure_specifiers": [
+    "2"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787260761",
+      "charter_hash": "49d304d9f02b574b",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787260761",
+      "charter_hash": "49d304d9f02b574b",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+          "source_url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "MCP vs A2A Protocol: Architecture, Differences and When to Use\nProduct\nEnterprise Data Graph\nConnect all your business systems and pull context across your data estate into one living graph.\nConnectors & Apps\nData Lineage\nData Marketplace\nGive humans the context they need to understand your business.\nEVERYWHERE YOU WORKSlackTeamsClaudeChatGPT\nContext Agents\nAI teammates that document tacit knowledge and make your data AI-ready.\nOntologyDescriptionsMetricsQualityGlossaryREADME\nContext Engineering Studio\nBootstrap, test, and ship the business understanding every AI needs.\nDEPLOY ANYWHERECortexGenieClaudeCodex\nContext Lakehouse\nThe world's first context store engineered natively for AI.\nIceberg-nativeOpen formatsGraph+file architectureVector-native AI search\nCustomers\nFinance\nCase study→\nTechnology\nCase study→\nCase study→\nManufacturing\nCase study→\nMedia\nCase study→\nHealthcare\nCase study→\nRetail\nCase study→\nSee all customer stories →\nResources Demo Videos Company\nAbout us\nNewsroom\nCareers\nEvents\nPartners\nBlogs\nWhere AI's biggest voices define the discipline · Oct 28 · Virtual\nRegister now →\nTalk to Us See the context layer, built live Product\nEnterprise Data Graph\nConnect all your business systems and pull context across your data estate into one living graph.\nConnectors & Apps\nData Lineage\nData Marketplace\nGive humans the context they need to understand your business.\nEVERYWHERE YOU WORK\nSlackTeamsClaudeChatGPT\nContext Agents\nAI teammates that document tacit knowledge and make your data AI-ready.\nOntologyDescriptionsMetricsQualityGlossaryREADME\nContext Engineering Studio\nBootstrap, test, and ship the business understanding every AI needs.\nDEPLOY ANYWHERE\nCortexGenieClaudeCodex\nContext Lakehouse\nThe world's first context store engineered natively for AI.\nIceberg-nativeOpen formatsGraph+file architectureVector-native AI search\nCustomers\nSee all customer stories →\nFinance\nCase study\nTechnology\nCase study\nCase study\nManufacturing\nCase study\nMedia\nCase study\nHealthcare\nCase study\nRetail\nCase study\nResources\nDemo Videos\nCompany\nAbout us\nNewsroom\nCareers\nEvents\nPartners\nBlogs\nWhere AI's biggest voices define the discipline · Oct 28 · Virtual\nRegister now →\nWatch Context Layer LiveGet the Context Layer EbookTalk to Us\nMCP vs A2A Protocol: What's the Difference?\nHome\n›Context Layer\n›MCP vs A2A Protocol: Whats the Difference?\nHome\n›Context Layer\n›MCP vs A2A Protocol: Whats the Difference?\nContext Layer\nEmily Winks\nData Governance Expert\nData Governance Specialist\n18+ years in information architecture, data governance, and enterprise data management\nMasters, Library and Information Science, Queens College; Certificate in Archives, Records Management and Preservation\nAtlan Product Essentials\nView LinkedIn Profile\nEmily WinksData Governance ExpertData Governance Specialist18+ years in information architecture, data governance, and enterprise data managementMasters, Library and Information Science, Queens College; Certificate in Archives, Records Management and PreservationAtlan Product EssentialsLinkedIn Profile\nUpdated:05/27/2026\n|\nPublished:05/27/2026\n19 min read\nWatch Context Layer LiveGet the Context Layer Ebook\nKey takeaways\nMCP is vertical: model to tools and data. A2A is horizontal: agent to agent. They are complementary, not competing.\nProduction multi-agent systems need both — MCP for data access per agent, A2A for task coordination between agents.\nNeither MCP nor A2A governs context quality or versioning. The context layer is the substrate both protocols run on.\nEnterprises that build the context layer first make their protocol choices reversible.\nIn this article\nWhat is MCP (Model Context Protocol)? What is A2A (Agent2Agent protocol)? MCP vs A2A: head-to-head comparison How MCP and A2A work together When to use MCP vs A2A Common mistakes when choosing between MCP and A2A The missing layer: what MCP and A2A don’t solve Real stories from real customers: when the context layer came before the prot",
+          "ingested_into": null,
+          "tags": [
+            "a2a",
+            "architecture",
+            "differences",
+            "mcp",
+            "protocol",
+            "use"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://www.descope.com/blog/post/mcp-vs-a2a",
+          "source_url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "A2A vs. MCP\nSkip to main contentArrow Right\nWelcome to AI Launch Week! Follow along for updates related to the Agentic Identity Hub. Lets go >\nLog InUser Circle\nProduct\nUse Cases\nDevelopers\nCustomers\nResources\nCompany\nPricing\nSign upArrow Right\nBook a demoArrow Right\n# Contents ## Summary Compares MCP and A2A protocols, explaining how they address different aspects of AI system integration and work together rather than compete. ## Key concepts - Model Context Protocol (MCP) – Standardizes how LLMs connect with external data sources and tools - Agent-to-Agent (A2A) – Enables autonomous agents to communicate and collaborate with each other - Agent Cards – A2A mechanism describing agent capabilities without exposing implementation details ## Main points - MCP solves vertical integration (LLM-to-tools), A2A solves horizontal collaboration (agent-to-agent) - MCP addresses the N×M problem of connecting multiple LLMs with multiple systems - A2A enables capability discovery, task management, collaboration, and UX negotiation between agents - Protocols are complementary, not competitive—designed to work together - Both require standard security practices like robust authentication and least privilege access # Context ## Audience Developers and technical leaders evaluating AI integration protocols. ## Taxonomy Comparison guide. Part of Descopes AI protocols series. ## Prerequisites / Related reading **Related reading:** - [MCP fundamentals](https://www.descope.com/learn/post/mcp) – MCP architecture - [A2A fundamentals](https://www.descope.com/learn/post/a2a) – A2A architecture # Authority ## Descopes authority Descope provides authentication solutions for agentic implementations. ## Why this matters Understanding the distinction between MCP and A2A helps teams choose the right integration approach. Most enterprise AI deployments benefit from both protocols working in tandem.\nBlogArrow Left\nA2A vs. MCP\nAuth ThoughtsApril 21, 2026Copy link\nAlex Brown\nContent Marketing Manager\nShare on:\nShare on LinkedIn\nShare on X\nShare on Blusky\nTable of Contents\nWhat is MCP?\nOpen table of contents\nTable of Contents\nWhat is MCP?\nWhat is A2A?\nA2A vs MCP: Key differences explained\nA2A vs MCP or A2A + MCP?\nMCP and A2A: The beginning of a new era\nFAQs about A2A vs. MCP\nIdentity and auth news.\nStraight to your inbox.\nSubscribe\nSummarize with AI\nDont have the time to read the entire post? Our human writers will be sad, but we understand. Summarize the post with your preferred LLM here instead.\nSummarize with AI\nAs large language models (LLMs) move deeper into enterprise workflows, the need for seamless, scalable integration has become clear. Two emerging protocols—Model Context Protocol (MCP) and Agent2Agent (A2A)—address this challenge from different angles. Both are designed to reduce complexity, streamline operations, and support smarter automation.\nWhile MCP and A2A are often thought of as competing protocols, they share similarities and are often used together to great effect. For some use cases, sticking to one or the other is ideal, but many organizations will unlock the most value by utilizing both.\nThis guide will cover:\nWhat MCP is and how it works\nWhat A2A is and how it works\nKey differences between MCP and A2A\nHow to choose between or combine these protocols\nWhat is MCP?\nMCP is an open-source protocol that standardizes how LLMs such as ChatGPT or Claude connect with data sources and tools. Without MCP, connecting an LLM with Google, GitHub, and other external sources often requires several unique application programming interfaces (APIs). With MCP, you can leverage one protocol across most use cases.\nAnthropic developed MCP to address issues faced by developers and end users related to this complexity. For developers, the core issue is the N×M problem, where N is the number of LLMs and M is the number of systems they need to integrate with. Each combination requires custom logic or infrastructure, leading to unsustainable complexi",
+          "ingested_into": null,
+          "tags": [
+            "a2a",
+            "mcp"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+          "source_url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "AI Agent Protocols: A2A vs MCP and Why They Matter Skip to content Product\nDashboards & Visualizations\nEXPLORE Embedded Analytics\nEXPLORE Semantic Layer\nEXPLORE Agentic BI\nEXPLORE Unify your data\nEXPLORE Document AI\nEXPLORE Why Knowi\nPricing\nResources\nDatasources Knowledge Center Docs Video Tutorials Security About Knowi Login Start Trial Request Demo a AI Agent Protocols Explained: What Are A2A and MCP and Why They Matter\nSanskriti Garg Share on facebook Share on linkedin Share on twitter Share on email If youre building or exploring AI agents, youve likely hit a wall: agents built on different frameworks cant talk to each other, and connecting them to real-world tools is messy and unreliable. Enter A2A (Agent-to-Agent) and MCP (Model Context Protocol), two emerging open standard AI agent protocols, designed to solve these exact problems. A2A lets agents interoperate across ecosystems, while MCP connects them to the data and tools they need to function in real-world workflows. Together, they form the backbone of scalable, autonomous, and intelligent agentic systems.\nTL;DR\nA2A (Agent-to-Agent) is an open protocol that lets AI agents from different frameworks communicate and collaborate on tasks.\nMCP (Model Context Protocol) connects AI agents to external tools, databases, and APIs through a standardized interface.\nA2A handles agent-to-agent communication; MCP handles agent-to-tool connectivity. They solve different problems and work together.\nBoth are open standards backed by major players (Google for A2A, Anthropic for MCP) and are gaining rapid adoption.\nKnowi uses agentic architecture with specialized AI agents for queries, dashboards, documents, widgets, and data connections. Table of Contents\nWhat is A2A?\nHow A2A Works\nA2A: Key Takeaways\nWhat Are MCPs?\nHow the MCP Ecosystem Works\nA2A vs MCP\nA2A vs MCP: Protocol Comparison\nFrequently Asked Questions (FAQs)\nWhat is A2A?\nA2A stands for Agent-to-Agent protocol. The big issue with AI agents today is fragmentation, they’re built using different frameworks, APIs, tools, and by different companies. A2A fixes that by creating a universal language for AI agents to talk to each other, no matter who built them.\nThink of A2A like English for AI agents. Just as English allows people from different countries to communicate, A2A enables AI agents from different platforms to interoperate securely and easily.\nHow A2A Works\nA2A follows 4 key concepts\nAgent Card\nThink of this as the agent’s digital business card in JSON format. It tells others what the agent can do and how to interact with it.\nA2A Server\nThis is the live bot running in the background, listening for tasks, doing the work, and returning results. It handles execution.\nA2A Client\nThis can be a user-facing app or another agent. It reads the Agent Card, packages the task, sends it to the server, and receives the result. It acts as the bridge.\nA2A Task\nThis is a single unit of work that gets passed between agents. It has a lifecycle, submitted, in-progress, completed, and provides a clean way to track the job. A2A: Key Takeaways\nA2A is the future of scalable, interoperable AI agents.\nYou can use any framework, LangGraph, Crew AI, Semantic Kernel, OpenAI SDK, etc., as long as it supports A2A.\nThis is month zero. Everything will get better: UIs, tooling, frameworks. What matters is understanding the foundations now.\nWhat Are MCPs?\nAs AI assistants move from novelty to necessity in the modern workplace, one challenge continues to limit their full potential: access to real-world data. Even the most powerful language models struggle when siloed from the systems and information users rely on every day. Model Context Protocol (MCP) is an open-source new universal standard that makes it easy to connect AI assistants to the systems where data lives, from content repositories to business tools to development environments.\nThink about REST APIs, those are standardized ways for systems to talk to one another. Standards are what allow syste",
+          "ingested_into": null,
+          "tags": [
+            "a2a",
+            "agent",
+            "matter",
+            "mcp",
+            "protocols",
+            "why"
+          ]
+        },
+        {
+          "id": "ev-4",
+          "locator": "https://www.youtube.com/watch?v=56BXHCkngss",
+          "source_url": "https://www.youtube.com/watch?v=56BXHCkngss",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "All You Need To Know About Google Agent2Agent Protocol- A2A Vs MCP - YouTube\nAboutPressCopyrightContact usCreatorsAdvertiseDevelopersTermsPrivacyPolicy & SafetyHow YouTube worksTest new featuresNFL Sunday Ticket\n&copy; 2026 Google LLC",
+          "ingested_into": null,
+          "tags": [
+            "a2a",
+            "agent2agent",
+            "all",
+            "google",
+            "know",
+            "mcp"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787260761",
+      "charter_hash": "49d304d9f02b574b",
+      "round": 2,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://www.k2view.com/what-is-mcp-ai",
+          "source_url": "https://www.k2view.com/what-is-mcp-ai",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "What is the Model Context Protocol for AI (MCP AI) | A Practical Guide 🎉 K2view named a Visionary in Gartner’s latest Magic Quadrant for Data Integration\nPlatform Overview\nData Product Platform Micro-Database Technology Demo Video Capabilities\nData Integration Data Virtualization Data-as-a-Service Automation Data Governance Data Catalog Data Orchestration Architecture\nData Fabric Data Mesh Data Hub Solutions Data Privacy and Compliance\nSynthetic Data Generation Test Data Management Data Masking Data Tokenization Data for Generative AI\nAI Data Readiness Data-Grounded AI Chatbots MCP Data Integration Retrieval-Augmented Generation (RAG) Data Integration\nCustomer Data Integration Data Pipelining Cloud Data Integration (iPaaS) Data Migration -- Company Company\nWho we are News Customers Partners Reach Out\nContact Us Support Careers News Updates\nK2view Recognized as Visionary for Third Consecutive Year in 2025 Gartner® Magic Quadrant™ for Data Integration Tools K2view secures $15M to fuel the next generation of Agentic AI, powered by AI-ready data Rocket Software and K2view partner to accelerate mainframe modernization Resources Resources\nBlog eBooks Whitepapers Videos Education & Training\nAcademy Knowledge Base Community K2view is a Visionary in the 2025 Gartner MQ 🎉\nRead more Platform Solutions Company Resources Platform Overview Data Product Platform Micro-Database Technology Demo Video Capabilities Data Integration Data Virtualization Data-as-a-Service Automation Data Governance Data Catalog Data Orchestration Architecture Data Fabric Data Mesh Data Hub Solutions Data Privacy and Compliance Synthetic Data Generation Test Data Management Data Masking Data Tokenization Data for Generative AI AI Data Readiness Data-Grounded AI Chatbots MCP Data Integration Retrieval-Augmented Generation (RAG) Data Integration Customer Data Integration Data Pipelining Cloud Data Integration (iPaaS) Data Migration Company Company Who we are News Customers Partners Reach Out Contact Us Support Careers K2view Recognized as Visionary for Third Consecutive Year in 2025 Gartner® Magic Quadrant™ for Data Integration Tools K2view secures $15M to fuel the next generation of Agentic AI, powered by AI-ready data Rocket Software and K2view partner to accelerate mainframe modernization All News Updates Resources Resources Blog eBooks Whitepapers Videos Education & Training Academy Knowledge Base Community A practical guide to implementing Model Context Protocol for AI (MCP AI)\nMaking enterprise adoption of MCP more effective\nLast updated on December 9, 2025\nSee Agentic AI in Action\nGo behind the scenes and see how we ground AI agents with enterprise data\nStart your live product tour\nDownload PDF Table of Contents\nNew! 2025 State of Test Data Management Survey 📊\nThe key to enterprise adoption of MCP AI (Model Context Protocol for AI) is protected, unified, and context-rich company data delivered in real time.\n01\nKey takeaways\nModel Context Protocol (MCP) is an open-source client-server standard that helps LLMs and GenAI apps securely access and use enterprise data and tools without custom per-system integrations.\nEnterprises adopt MCP to speed up AI rollout, reuse integrations, support autonomous agents, and maintain consistent conversational context across use cases.\nEffective MCP adoption depends on best practices: A centralized MCP server, entity-level data guardrails, low-latency real-time retrieval, and a rich semantic layer for accurate, transparent AI outputs.\nMCP introduces real risks – especially around OAuth token exposure, MCP server compromise, indirect prompt injection, and overly broad aggregated permissions.\nIn multi-source enterprises, MCP must overcome many challenges including data freshness, harmonization, lineage, and precision to avoid stale or incorrect AI responses.\nRAG and MCP are complementary – MCP provides the governed data-access layer, and RAG can run on top of it to retrieve the most relevant context at query tim",
+          "ingested_into": null,
+          "tags": [
+            "context",
+            "guide",
+            "mcp",
+            "model",
+            "practical",
+            "protocol"
+          ]
+        },
+        {
+          "id": "ev-2",
+          "locator": "https://www.merge.dev/blog/model-context-protocol-alternatives",
+          "source_url": "https://www.merge.dev/blog/model-context-protocol-alternatives",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "6 Model Context Protocol alternatives to consider in 2026\n-- -- Instantly cut token spend in half: introducing Merge for Workforce\nLearn More\nClose\ndocument.addEventListener('DOMContentLoaded', function () { const banner = document.querySelector('.nav__banner'); const closeButton = document.getElementById('banner-close'); const link = banner?.querySelector('.nav-banner__content__wrapper'); // Check: if the link points to the current page, hide the banner if (link) { const bannerHref = link.getAttribute('href'); const currentUrl = window.location.pathname + window.location.search + window.location.hash; const a = document.createElement('a'); a.href = bannerHref; // Compare only the path and parameters (exclude domain) if (a.pathname + a.search + a.hash === currentUrl) { banner.classList.add('hide'); return; } } // Get the date the banner was last shown const lastShown = localStorage.getItem('bannerLastShown'); const now = new Date(); // If the banner was shown in the last 7 days, hide it if (lastShown) { const lastShownDate = new Date(lastShown); const diffDays = Math.floor((now - lastShownDate) / (1000 * 60 * 60 * 24)); // If less than 7 days have passed, keep the banner hidden if (diffDays Products\nFor Builders\nShip it in your product\nData integrations\nUnified\nShip customer-facing integrations across hundreds of apps through one API\nAgentic tools\nAgent Handler\nConnect your agent to thousands of pre-built tools\nLLM routing\nGateway\nRoute every LLM through one API, with spend and performance control\nFor Workforce\nGovern internal AI\nEmployee governance\nMerge for Workforce\nPush approved models, MCPs and skills straight to your teams AI tools, with cost controls and audit logging\nPlatform\nSecurity\nSOC 2 · HIPAA · RBAC\nObservability\nLogs & health monitoring\nCatalog\nData integrations\nBrowse all\nMCP connectors\nBrowse all\nAI models\nBrowse all\nSolutions\nBy use case\nPower AI products\nGovern employee AI\nAuto-provision\nCandidate sourcing\nKnowledge base\nProject analysis\nFinancial analysis\nSource leads\nReconcile vendor payments\nReconcile customer payments\nView all use cases\nBy industry\nFinancial services\nHR technology\nPrivate equity\nBy function\nProduct\nDeveloper\nGTM\nCustomers\nResources\nResources\nDiscover all of the resources Merge has to offer\nVisit resources\nBlog\nData sheets\neBooks\nHelp center\nEvents and webinars\nCareers\nPartners\nPricing\nDocs\nMerge Unified\nMerge Agent Handler\nMerge Gateway\nSecurity\nSign inSign up\nGet a demo\nMerge’s Cookie Policy\nWe use cookies to improve your experience on our site. By clicking “Accept”, you are agreeing to the collection and use of data as described in our Privacy Policy.\nAccept all cookies\nCookie settings\n×\nWe use cookies to improve your experience on our site. By using our site, you are agreeing to the collection and use of data as described in our Privacy Policy.\nCookie Settings×\nTable of contents\nIntroduction\nThousands of companies trust Merge to accelerate AI from PoC to production.\nGet a demo\nJust for you\nThe hidden security threats of MCP—and how to mitigate them\nWhy MCP token management falls short of your security needs\n6 Model Context Protocol alternatives to consider in 2026\nSamuel Umoren\nat Merge\nThe Model Context Protocol (MCP) standardizes how AI agents connect to tools. And since Anthropic introduced MCP in November 2024, rapid adoption by Microsoft, OpenAI, and Google has positioned MCP as the leading standard for AI tool integration.\nHowever, MCPs security problems are concerning. For example, Equixlys security assessment found command injection vulnerabilities in 43 percent of tested MCP implementations, with another 30 percent vulnerable to server-side request forgery (SSRF) attacks and 22 percent allowing arbitrary file access. To help you integrate AI agents with 3rd-party applications successfully and securely, we’ll then review six MCP alternatives through a three-part comparison framework.\n{{this-blog-only-cta}} Work with Apps\nOpenAI’s Work with Apps uses macOS Acces",
+          "ingested_into": null,
+          "tags": [
+            "2026",
+            "alternatives",
+            "consider",
+            "context",
+            "model",
+            "protocol"
+          ]
+        },
+        {
+          "id": "ev-3",
+          "locator": "https://modelcontextprotocol.info/blog/mcp-guide",
+          "source_url": "https://modelcontextprotocol.info/blog/mcp-guide",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "Model Context Protocol (MCP): A New Standard for AI Application and External Data Integration – Model Context Protocol （MCP）\nModel Context Protocol （MCP） Home Documentation Specification Tools Blog About\nCTRL K\nCTRL K\nRecent Articles\nMCP Apps Now Official - Bringing UI Capabilities to MCP Clients\nJanuary 26, 2026\nJanuary MCP Core Maintainer Update\nJanuary 23, 2026\nExploring the Future of MCP Transports\nDecember 19, 2025\nMCP joins the Agentic AI Foundation\nDecember 9, 2025\nOne Year of MCP: November 2025 Spec Release\nNovember 25, 2025\nAdopting the MCP Bundle Format (.mcpb) for Portable Local Servers\nNovember 21, 2025\nServer Instructions: Giving LLMs a User Manual for Your Server\nNovember 3, 2025\nUpdate on the Next MCP Protocol Release\nSeptember 26, 2025\nChrome DevTools MCP: Giving AI Coding Assistants Eyes to See Beyond Blind Programming\nSeptember 24, 2025\nIntroducing the MCP Registry\nSeptember 8, 2025\nView All Articles →\nTags\nMCP Guide\nOn this page\nI. Pain Points in AI Integration Development: Why Do We Need MCP?\nII. The Launch of MCP: Perfect Timing, Outstanding Advantages\n1. Claude’s Brand Influence\n2. The Appeal of Open Standards\n3. Solving the Wheel Reinvention Problem\nIII. How Does MCP Work? — From Architecture to Examples\nMCP Core Architecture\nEvolution from AI Chat to AI Agent\nA Simple Example: GitHub MCP Server\nIV. MCP’s Ecosystem Value: More Powerful AI Agents\nV. Conclusion: Why Has MCP Won Favor?\nScroll to top MCP Protocol Blog\nModel Context Protocol (MCP): A New Standard for AI Application and External Data Integration\nModel Context Protocol (MCP): A New Standard for AI Application and External Data Integration\nMarch 1, 2025·\nMCPcn\n·MCP, Guide\nThe Model Context Protocol (MCP) introduced by Claude in late 2024 has quickly gained widespread attention and recognition from developers and the community. As a developer who has been involved in several small AI projects over the past year, I deeply understand the challenges of integrating AI models into existing systems or third-party services.\nThe emergence of MCP comes at the perfect time, not only solving these pain points but also bringing a vision of an open, standardized ecosystem. Below, I&rsquo;ll analyze why it has been widely accepted from a developer&rsquo;s perspective, combining MCP&rsquo;s working principles and advantages.\nI. Pain Points in AI Integration Development: Why Do We Need MCP? Integrating models with external systems is often a major challenge in AI project development. From my personal experience, whether connecting to local databases or calling third-party APIs, the entire process is full of complexity and uncertainty. While there are some tools and frameworks in the market trying to solve this problem, the results are not satisfactory:\nLangChain and LlamaIndex\nThese two open-source projects promote the concept of &ldquo;implementing AI features in a few lines of code,&rdquo; which is convenient for demos. However, once business requirements become complex, their shortcomings become apparent:\nOver-abstracted Code: While high-level encapsulation lowers the entry barrier, in actual development, this design makes code difficult to debug and extend, resulting in poor programming experience.\nChaotic Ecosystem: The projects focus too much on commercialization, neglecting long-term community ecosystem building, with documentation and updates often failing to keep up with actual needs.\nVercel AI SDK\nIn comparison, Vercel AI SDK has more elegant code abstraction, particularly in frontend UI integration and some AI feature encapsulation. However, its limitations are also obvious:\nNext.js Coupling: Deep coupling with the Next.js framework, insufficient support for other frameworks or languages, limiting its applicability.\nThese tools, while each having their highlights, fail to provide a unified, flexible solution. Developers still need to reinvent the wheel in different projects, wasting significant time and effort.\nII. The Launch of MC",
+          "ingested_into": null,
+          "tags": [
+            "application",
+            "context",
+            "data",
+            "external",
+            "integration",
+            "mcp"
+          ]
+        },
+        {
+          "id": "ev-4",
+          "locator": "https://cloud.google.com/discover/what-is-model-context-protocol",
+          "source_url": "https://cloud.google.com/discover/what-is-model-context-protocol",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "What is Model Context Protocol (MCP)? A guide | Google Cloud\nPage Contents\nTopics\nModel Context Protocol (MCP)\nWhat is the MCP and how does it work?\nLarge language models (LLMs) are powerful, but they have two major limitations: their knowledge is frozen at the time of their training, and they can't interact with the outside world. This means they can't access real-time data or perform actions like booking a meeting or updating a customer record. The Model Context Protocol (MCP) is an open standard designed to solve this. Introduced by Anthropic in November 2024, MCP provides a secure and standardized \"language\" for LLMs to communicate with external data, applications, and services. It acts as a bridge, allowing AI to move beyond static knowledge and become a dynamic agent that can retrieve current information and take action, making it more accurate, useful, and automated.\nGet started for free\nUnderstanding the Model Context Protocol\nThe MCP creates a standardized, two-way connection for AI applications, allowing LLMs to easily connect with various data sources and tools. MCP builds on existing concepts like tool use and function calling but standardizes them. This reduces the need for custom connections for each new AI model and external system. It enables LLMs to use current, real-world data, perform actions, and access specialized features not included in their original training.\nMCP architecture and components\nThe Model Context Protocol has a clear structure with components that work together to help LLMs and outside systems interact easily.\nMCP host\nThe LLM is contained within the MCP host, an AI application or environment such as an AI-powered IDE or conversational AI. This is typically the user's interaction point, where the MCP host uses the LLM to process requests that may require external data or tools.\nMCP client\nThe MCP client, located within the MCP host, helps the LLM and MCP server communicate with each other. It translates the LLM's requests for the MCP and converts the MCP's replies for the LLM. It also finds and uses available MCP servers.\nMCP server\nThe MCP server is the external service that provides context, data, or capabilities to the LLM. It helps LLMs by connecting to external systems like databases and web services, translating their responses into a format the LLM can understand which helps developers provide diverse functionalities.\nTransport layer\nThe transport layer uses JSON-RPC 2.0 messages to communicate between the client and server, mainly through two transport methods:\nStandard input/output (stdio): Works well for local resources, offering fast, synchronous message transmission\nServer-sent events (SSE): Preferred for remote resources, allowing efficient, real-time data streaming\nHow does the MCP work?\nAt its core, the Model Context Protocol allows an LLM to request help from external tools to answer a query or complete a task. Imagine you ask an AI assistant: \"Find the latest sales report in our database and email it to my manager.\"\nHere is a simplified look at how MCP would handle this:\nRequest and tool discovery: The LLM understands it cannot access a database or send emails on its own. It uses the MCP client to search for available tools, where it finds two relevant tools registered on MCP servers: a database_query tool and an email_sender tool.\nTool invocation: The LLM generates a structured request to use these tools. First, it calls the database_query tool, specifying the report name. The MCP client then sends this request to the appropriate MCP server.\nExternal action and data return: The MCP server receives the request, translates it into a secure SQL query for the company's database, and retrieves the sales report. It then formats this data and sends it back to the LLM.\nSecond action and response generation: Now equipped with the report data, the LLM calls the email_sender tool, providing the manager's email address and the report content. After the email is sent, the MCP server co",
+          "ingested_into": null,
+          "tags": [
+            "context",
+            "guide",
+            "mcp",
+            "model",
+            "protocol",
+            "what"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "The Model Context Protocol, or MCP, and the Agent2Agent protocol, or A2A, are distinct but complementary standards designed to solve different integration challenges in artificial intelligence systems. [Source: ev-3]",
+    "It addresses the N times M problem where connecting multiple LLMs with various systems requires unsustainable custom logic for each combination [Source: ev-2].",
+    "By providing one universal interface, MCP allows developers to leverage a single protocol across most use cases instead of building unique application programming interfaces for every tool connection [Source: ev-2].",
+    "While MCP handles agent-to-tool connectivity, A2A manages agent-to-agent communication, allowing AI teammates to interoperate securely regardless of who built them or what framework they use [Source: ev-1] [Source: ev-3].",
+    "The innovative aspects of the A2A protocol lie in its mechanism for capability discovery and task management without exposing implementation details. [Source: ev-3]",
+    "It introduces Agent Cards, which act as digital business cards in JSON format that describe an agent's capabilities and how to interact with it [Source: ev-2] [Source: ev-3].",
+    "The protocol operates through four key concepts including the Agent Card, the A2A Server which handles execution, the A2A Client which packages tasks, and the A2A Task itself which is a single unit of work with a defined lifecycle from submitted to completed [Source: ev-3].",
+    "This structure allows agents to negotiate user experience and manage collaboration effectively across ecosystems [Source: ev-2]."
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "The Model Context Protocol, or MCP, and the Agent2Agent protocol, or A2A, are distinct but complementary standards designed to solve different integration challenges in artificial intelligence systems. [Source: ev-3]",
+      "actionable_query": "2 Model Context Protocol MCP distinct complementary standards designed solve different integration challenges artificial intelligence systems",
+      "from_claim_id": "c15",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "It addresses the N times M problem where connecting multiple LLMs with various systems requires unsustainable custom logic for each combination [Source: ev-2].",
+      "actionable_query": "addresses times problem connecting multiple LLMs various systems requires unsustainable custom logic combination",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "By providing one universal interface, MCP allows developers to leverage a single protocol across most use cases instead of building unique application programming interfaces for every tool connection [Source: ev-2].",
+      "actionable_query": "By providing universal interface, MCP allows developers to leverage a single protocol across most use cases instead of building unique appli (2)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "While MCP handles agent-to-tool connectivity, A2A manages agent-to-agent communication, allowing AI teammates to interoperate securely regardless of who built them or what framework they use [Source: ev-1] [Source: ev-3].",
+      "actionable_query": "A manages agent-to-agent communication, allowing AI teammates to interoperate securely regardless of who built them or what framework they u (2)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "The innovative aspects of the A2A protocol lie in its mechanism for capability discovery and task management without exposing implementation details. [Source: ev-3]",
+      "actionable_query": "A protocol lie in its mechanism for capability discovery and task management without exposing implementation details. (2)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "It introduces Agent Cards, which act as digital business cards in JSON format that describe an agent's capabilities and how to interact with it [Source: ev-2] [Source: ev-3].",
+      "actionable_query": "introduces Agent Cards act digital business JSON format describe agent's capabilities interact",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "The protocol operates through four key concepts including the Agent Card, the A2A Server which handles execution, the A2A Client which packages tasks, and the A2A Task itself which is a single unit of work with a defined lifecycle from submitted to completed [Source: ev-3].",
+      "actionable_query": "The protocol operates through A Task itself which is a single unit of work with a defined lifecycle from submitted to completed . (2)",
+      "from_claim_id": "c9",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "This structure allows agents to negotiate user experience and manage collaboration effectively across ecosystems [Source: ev-2].",
+      "actionable_query": "This structure allows agents to negotiate user experience and manage collaboration effectively across ecosystems . (2)",
+      "from_claim_id": "c12",
+      "corroboration": null
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 4,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 8,
+      "fetched": 4,
+      "search_calls": 4
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://atlan.com/know/mcp/mcp-vs-a2a-protocol",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.descope.com/blog/post/mcp-vs-a2a",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.knowi.com/blog/ai-agent-protocols-explained-what-are-a2a-and-mcp-and-why-they-matter",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=56BXHCkngss",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.k2view.com/what-is-mcp-ai",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://www.merge.dev/blog/model-context-protocol-alternatives",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://modelcontextprotocol.info/blog/mcp-guide",
+      "custody": "public-web",
+      "ingested_into": null
+    },
+    {
+      "url": "https://cloud.google.com/discover/what-is-model-context-protocol",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2-degenerate.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787336869",
+  "charter_hash": "70351897caa18833",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of Windows devices affected by the CrowdStrike Falcon sensor update in July 2024",
+      "Percentage of global airline flights delayed or cancelled during the first 48 hours following the July 19, 2024 outage",
+      "Count of US hospitals that reported IT system failures due to the CrowdStrike incident in July 2023",
+      "Estimated financial cost of the disruption to Microsoft and its enterprise clients from the July 2024 CrowdStrike failure",
+      "Median downtime duration for individual Windows endpoints recovering from the CrowdSense crash loop in July 2025",
+      "Share of Fortune 500 companies experiencing operational disruptions due to the CrowdStrike software defect in July 2026"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024"
+    ]
+  }
+}

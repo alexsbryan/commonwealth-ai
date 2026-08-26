@@ -1,0 +1,25 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787337230",
+  "charter_hash": "bf65194665d36fb5",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Anthropic Claude 4 model names and release date in May 2025",
+      "Claude Opus 4 vs Sonnet 4 benchmark scores on agentic coding tasks (SWE-bench, Terminal-Bench)",
+      "Price per million tokens for Claude Opus 4 and Claude Sonnet 4 at launch",
+      "Share of enterprise AI market held by Anthropic versus OpenAI as of Q1-Q2 2025",
+      "Number of developers using Claude Code or similar agentic tools reported in early 2025",
+      "Percentage change in API usage volume for Anthropic models following the May 2025 launch"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "4",
+      "2",
+      "2025"
+    ]
+  }
+}

@@ -1,0 +1,100 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787336574",
+  "charter_hash": "6983ecf0c4d70cd2",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "NASA ordered Boeing's Starliner to return uncrewed because the five reaction-control system (RCS) thruster anomalies identified during docking could not be guaranteed safe for the deorbit burn, as these thrusters could not be ground-tested in their flight condition [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This decision meant that astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned, returning on a Crew-9 Dragon roughly 9.5 months after launch instead of the planned ~8 days [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "Additionally, under the fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "This decision had several significant implications for the program and the astronauts involved:\n*   **Extended Mission Duration:** Astronauts Butch Wilmore and Suni Williams remained aboard the International Space Station far longer than planned. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "No, the text says September 6, and landed at White Sands on September 7 (implied year context is late 2024 based on launch date) without crew [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "*Note: The evidence states \"undocked 2024-09-06\"*. [Source: ev-1]",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-03"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "*   **Financial and Operational Impact:** Under a fixed-price contract from NASA’s 2014 Commercial Crew program, Boeing had already incurred cumulative losses of more than $1.5 billion by 2025 compared to SpaceX's lower cost structure ($4.2B vs $2.6B total contracts respectively) [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    },
+    {
+      "round": 3,
+      "reason": "refused"
+    }
+  ]
+}

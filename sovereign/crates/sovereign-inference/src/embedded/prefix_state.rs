@@ -391,6 +391,45 @@ impl PrefixStateCache {
         if let Some(entry) = self.entries.get(&key) {
             let entry_len = entry.tokens.len();
             if tokens.len() > entry_len && tokens[..entry_len] == entry.tokens[..] {
+                // A matching entry SHORTER than the caller's declaration by
+                // more than a pin's worth is re-learned, not restored.
+                //
+                // Restoring it is bit-faithful but leaves the difference to
+                // be prefilled on EVERY sibling call, forever: the entry is
+                // never replaced while it keeps matching, so a pin learned
+                // once against a small window stays that size no matter how
+                // much the declared prefix grows. Measured on the 2026-08-24
+                // deep-research task-69 flight, where the audit's window grew
+                // with greedy acquisition but the pin did not: 124 restores,
+                // every one `restored_tokens=1064`, mean `suffix_tokens=2289`
+                // re-prefilled — 283,874 tokens, about 35 minutes of a
+                // 39.5-minute leg, spent re-reading evidence that was already
+                // declared stable.
+                //
+                // The existing "restoring more matched tokens is strictly
+                // better" rule still holds and is untouched: it is about an
+                // entry LONGER than the directive. This branch is the
+                // opposite case, which that rule never covered.
+                //
+                // Re-learning costs one full prefill plus one save, once,
+                // and every later sibling restores the whole declared
+                // prefix. The `min_pin` margin keeps a trivial difference
+                // from churning the pin.
+                if directed_pin > entry_len.saturating_add(self.min_pin) {
+                    tracing::info!(
+                        target: "prefix_state",
+                        key = format_args!("{key:016x}"),
+                        pinned_tokens = entry_len,
+                        directed_tokens = directed_pin,
+                        would_reprefill = tokens.len().saturating_sub(entry_len),
+                        "prefix_state: pin is short of the declared prefix — re-learning"
+                    );
+                    self.last_seen.remove(&key);
+                    return PrefixPlan::Learn {
+                        key,
+                        pin_len: directed_pin,
+                    };
+                }
                 self.touch(key);
                 return PrefixPlan::Restore {
                     key,
@@ -748,6 +787,88 @@ mod tests {
                 key,
                 pin_len: pin_c
             }
+        );
+    }
+
+    /// **A pin far shorter than the declared prefix is RE-LEARNED, not
+    /// restored.**
+    ///
+    /// Restoring it is bit-faithful, so nothing errors — the difference is
+    /// silently prefilled on every sibling call, and because the entry keeps
+    /// matching it is never replaced. A pin learned once against a small
+    /// window therefore stays that size forever while the declared prefix
+    /// grows around it.
+    ///
+    /// That is not hypothetical: the 2026-08-24 deep-research task-69 flight
+    /// logged 124 restores, every one `restored_tokens=1064` against a
+    /// declared window that had grown past 3,300 — mean `suffix_tokens=2289`
+    /// re-prefilled, 283,874 tokens total, roughly 35 minutes of a
+    /// 39.5-minute audit leg.
+    ///
+    /// Watched red before the branch existed: the assertion below came back
+    /// `Restore { prefix_len: <short entry> }`.
+    #[test]
+    fn directed_relearns_a_pin_shorter_than_the_declaration() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let short = family_member(200, 1, 40);
+        let pin_short = PROBE_TOKENS + 100;
+        let PrefixPlan::Learn { key, .. } = cache.plan_directed(&short, pin_short) else {
+            panic!("expected Learn on first sighting");
+        };
+        cache.commit(key, short[..pin_short].to_vec(), cache.state_path(key));
+
+        // The same family, now declaring a MUCH longer stable prefix — the
+        // shape of an evidence window that grew between passes. The short
+        // entry still strict-prefix-matches, which is exactly why the old
+        // code restored it and left the rest to re-prefill.
+        let mut grown = short[..pin_short].to_vec();
+        grown.extend((0..900i32).map(|i| LlamaToken(700_000 + i)));
+        let directed = pin_short + 800;
+        assert!(grown.len() > directed);
+        assert_eq!(
+            cache.plan_directed(&grown, directed),
+            PrefixPlan::Learn {
+                key,
+                pin_len: directed
+            },
+            "a pin short of the declaration by more than min_pin must re-learn — \
+             restoring it re-prefills the difference on every sibling, forever"
+        );
+    }
+
+    /// The re-learn branch must NOT churn on a small difference, and must not
+    /// touch the established "an entry LONGER than the directive restores at
+    /// its own length" rule — restoring more matched tokens is still better.
+    #[test]
+    fn directed_keeps_restoring_when_the_pin_is_close_or_longer() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let base = family_member(200, 1, 40);
+        let pin = PROBE_TOKENS + 200;
+        let PrefixPlan::Learn { key, .. } = cache.plan_directed(&base, pin) else {
+            panic!("expected Learn");
+        };
+        cache.commit(key, base[..pin].to_vec(), cache.state_path(key));
+
+        let mut longer = base[..pin].to_vec();
+        longer.extend((0..600i32).map(|i| LlamaToken(800_000 + i)));
+
+        // Declaration only slightly longer than the pin: restore, do not churn.
+        assert_eq!(
+            cache.plan_directed(&longer, pin + 10),
+            PrefixPlan::Restore {
+                key,
+                prefix_len: pin
+            },
+            "a trivial shortfall must not re-learn"
+        );
+        // Declaration SHORTER than the pin: the original rule, unchanged.
+        assert_eq!(
+            cache.plan_directed(&longer, pin - 50),
+            PrefixPlan::Restore {
+                key,
+                prefix_len: pin
+            },
+            "an entry longer than the directive still restores at its own length"
         );
     }
 

@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787272509",
+  "charter_hash": "a65f573e21714f98",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "OpenAI released GPT-5 on August 7, 2025 [Source: ev-1]. This release represented a deliberate strategic shift toward \"give-away-the-frontier\" pricing by making the model available to free users immediately [Source: ev-1]. The launch consolidated OpenAI's strategy around one unified model and aggressive distribution via the free tier [Source: ev-1].\n\nThis release fundamentally changed how the company sells its models in several ways:\n*   **Unified Model Architecture:** It retired separate o-series products (o3, o4-mini, o3-mini, and o3-pro), folding them into internal \"reasoning modes\" within GPT-5, thereby ending the split between reasoning and non-reasoning models and removing the need for a model picker [Source: ev-1].\n*   **Pricing Structure:** Prices collapsed compared to previous offerings. While API pricing is set at $1.25 per million input tokens and $10 per million output tokens for GPT-5 ($0.25/$2 for GPT-5 mini) [Source: ev-1], consumer tiers include free access on the base tier, unlimited GPT-5 usage for Plus subscribers at $20/month, and Pro access at $200/month [Source: ev-1].\n*   **Competitive Focus:** The competitive battleground shifted from benchmark demos to \"default agency,\" emphasizing models that act rather than just answer [Source: ev-1].\n\nAdditionally, GPT-5 introduced a 5-million-token context window, native image generation without a separate model, integrated deep research, file upload, and web search capabilities out of the box [Source: ev-1]. Performance-wise, GPT-5 scored approximately 78.6% on SWE-bench Verified, with GPT-5 mini performing closely behind both at a fraction of previous o-series prices [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-10",
+      "custody": "public-web"
+    }
+  ]
+}

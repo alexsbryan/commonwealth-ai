@@ -85,8 +85,11 @@ PIN = "469cce54ea7f6a63c163d3d9fec879cf289ec484"
 
 SUBSET_IDS = [56, 58, 59, 62, 65, 69, 78, 83, 90, 95]
 SUBSET_ARTICLES_SHA = "b1ce57831916bd0e487b8816d3ef6b3fe3c3cb1ce73e26cdce4d6e9da4f3b0e7"
-DIMS = ["comprehensiveness", "insight", "instruction_following", "readability"]
-JUDGE_PIN = "Qwen3.5-122B-A10B-UD-Q5_K_XL-00001-of-00003"   # the seat's 122B
+JUDGE_PIN = "Qwen3.8-27B-UD-Q6_K_XL"   # the daemon primary — the standard
+# stack (order deep-research-t7a amendment, directive 7f0e276b,
+# pre-registered pre-registration.md "T7a amendment — the DRB-I flight":
+# rung-1 baseline on the 27B; the 122B window is rung 2, gated on this
+# baseline)
 MAX_RETRIES = int(os.environ.get("MAX_RETRIES", "10"))       # official recipe
 
 # ---- sources -----------------------------------------------------------
@@ -129,6 +132,14 @@ sys.path.insert(0, str(DRB / "vendor"))                            # vendored
 from utils.api import AIClient                                    # noqa: E402
 from utils.json_extractor import extract_json_from_markdown       # noqa: E402
 from utils.score_calculator import calculate_weighted_scores      # noqa: E402
+
+# The judge instrument — the greedy sampling pin (amendment N6) and the
+# scorable-verdict predicate — is ONE decider shared with
+# arms/lab/score_one.py (§10.6). A pinned reading is never compared
+# against an unpinned one, so both scorers must pin identically.
+sys.path.insert(0, str(REPO))
+from judge_instrument import (DIMS, JUDGE_TEMPERATURE, JUDGE_TOP_P,   # noqa: E402
+                             pin_sampling, unscorable)
 
 # byte-identity: vendored copies == the clone's (vendored verbatim)
 for name in ("score_calculator.py", "json_extractor.py", "api.py"):
@@ -216,7 +227,12 @@ def served_models() -> dict:
 
 def judge_call(client: AIClient, prompt: str, task_id: int) -> dict:
     """One task's judge call with the official retry recipe (10 × 1.5^retry
-    backoff). Returns the parsed, dim-complete JSON."""
+    backoff), paced to the daemon's queue-shed signal: when the 503 names a
+    retry_after_secs (local_queue_full), the backoff honors it —
+    sleep(max(1.5^(retry+1), retry_after_secs)) — so a retry lands in the
+    slot's idle gap instead of firing inside the busy window. Judge prompt,
+    output and scoring math are untouched (transport resilience only).
+    Returns the parsed, dim-complete JSON."""
     last_err = None
     for retry in range(MAX_RETRIES):
         try:
@@ -225,14 +241,16 @@ def judge_call(client: AIClient, prompt: str, task_id: int) -> dict:
             if not extracted:
                 raise ValueError("no JSON extracted from judge response")
             out = json.loads(extracted)
-            missing = [d for d in DIMS if d not in out]
-            if missing:
-                raise ValueError(f"missing expected dimensions: {missing}")
+            why = unscorable(out)
+            if why:
+                raise ValueError(f"unscorable judge verdict: {why}")
             return out
         except Exception as e:                      # noqa: BLE001 — official recipe
             last_err = e
             if retry + 1 < MAX_RETRIES:
-                time.sleep(1.5 ** (retry + 1))
+                m = re.search(r'retry_after_secs["\s:=]+(\d+)', str(e))
+                shed = int(m.group(1)) if m else 0
+                time.sleep(max(1.5 ** (retry + 1), shed))
     raise RuntimeError(f"task {task_id}: judge failed after {MAX_RETRIES} "
                        f"retries — {last_err}")
 
@@ -290,11 +308,17 @@ def score_task(task_id: int, prompts: dict, criteria: dict, references: dict,
 
 def run_arm(name: str, article_1s: dict, prompts: dict, criteria: dict,
             references: dict, client: AIClient | None, dry_run: bool,
-            out_dir: Path) -> int:
-    """One arm, fresh judge calls. Returns the number of scored tasks."""
+            out_dir: Path, skipped: frozenset = frozenset()) -> int:
+    """One arm, fresh judge calls. Returns the number of scored tasks.
+    Skipped ids (never-ran) print a named NEVER-RAN line — never a judge
+    call, never an error row."""
     print(f"== arm {name} (fresh judge calls) ==")
     records, sidecar = [], []
     for task_id in SUBSET_IDS:
+        if task_id in skipped:
+            print(f"  id {task_id}: NEVER-RAN (pre-registered cap stop) — "
+                  f"skipped, no judge call")
+            continue
         try:
             rec = score_task(task_id, prompts, criteria, references,
                              article_1s[task_id], client, dry_run, sidecar)
@@ -376,13 +400,15 @@ def _sidecar_issues(name: str, rows: list) -> list:
     return issues
 
 
-def sidecar_derivable(name: str, sidecar_path: Path) -> bool:
-    """True when the persisted sidecar covers all 10 tasks with OUR judge's
-    complete output. Refusal reasons are NAMED here, never silent (§18.3)."""
+def sidecar_derivable(name: str, sidecar_path: Path,
+                      skipped: frozenset = frozenset()) -> bool:
+    """True when the persisted sidecar covers every non-skipped task with
+    OUR judge's complete output. Refusal reasons are NAMED here, never
+    silent (§18.3)."""
     rows = load_jsonl(sidecar_path)
     issues = _sidecar_issues(name, rows)
     by_id = {r["id"]: r for r in rows}
-    missing = [i for i in SUBSET_IDS if i not in by_id]
+    missing = [i for i in SUBSET_IDS if i not in by_id and i not in skipped]
     if missing:
         issues.append(f"missing ids {missing}")
     if issues:
@@ -392,16 +418,17 @@ def sidecar_derivable(name: str, sidecar_path: Path) -> bool:
     return True
 
 
-def retry_sidecar_ready(name: str, sidecar_path: Path, retry_id: int) -> bool:
-    """True when the persisted sidecar covers exactly the other 9 tasks with
-    OUR judge's output — the precondition for a one-call retry. Refusal
-    reasons are NAMED here, never silent (§18.3)."""
+def retry_sidecar_ready(name: str, sidecar_path: Path, retry_id: int,
+                        skipped: frozenset = frozenset()) -> bool:
+    """True when the persisted sidecar covers exactly the other non-skipped
+    tasks with OUR judge's output — the precondition for a one-call retry.
+    Refusal reasons are NAMED here, never silent (§18.3)."""
     rows = load_jsonl(sidecar_path)
     issues = _sidecar_issues(name, rows)
     by_id = {r["id"]: r for r in rows}
     if retry_id in by_id:
         issues.append(f"task {retry_id} already scored — nothing to retry")
-    missing = [i for i in SUBSET_IDS if i not in by_id]
+    missing = [i for i in SUBSET_IDS if i not in by_id and i not in skipped]
     if missing != [retry_id]:
         issues.append(f"coverage mismatch: missing {missing}, expected "
                       f"exactly [{retry_id}]")
@@ -413,7 +440,8 @@ def retry_sidecar_ready(name: str, sidecar_path: Path, retry_id: int) -> bool:
 
 def retry_task(name: str, retry_id: int, sidecar_path: Path, article_1s: dict,
                prompts: dict, criteria: dict, references: dict,
-               client: AIClient, out_dir: Path) -> int:
+               client: AIClient, out_dir: Path,
+               skipped: frozenset = frozenset()) -> int:
     """One fresh judge call for retry_id, merged with the persisted sidecar
     (which must cover the other 9 tasks) and re-derived COMPLETE through
     compute_record — the one decider. A failure of the single call is LOUD
@@ -427,7 +455,7 @@ def retry_task(name: str, retry_id: int, sidecar_path: Path, article_1s: dict,
                       key=lambda r: SUBSET_IDS.index(r["id"]))
     by_id = {r["id"]: r for r in combined}
     records = [compute_record(i, by_id[i]["judge_output"], prompts[i], criteria)
-               for i in SUBSET_IDS]
+               for i in SUBSET_IDS if i not in skipped]
     scored = write_arm_outputs(name, records, combined, out_dir)
     print(f"  ARM {name}: task {retry_id} re-scored fresh; full arm "
           f"re-derived from {len(combined)} sidecar rows (1 judge call total)")
@@ -440,22 +468,24 @@ def run_one_arm(a: str, article_1s: dict, prompts: dict, criteria: dict,
     """Dispatch one arm by its decided mode: derive (0 calls), retry (1
     call), fresh (10 calls). Refusals were already named at mode decision;
     the retry precondition is re-checked here before any call."""
+    skipped = args.skip
     if modes[a] == "derive":
         return derive_from_sidecar(a, args.resume / a / "judge_output.jsonl",
-                                   prompts, criteria, out_dir)
+                                   prompts, criteria, out_dir, skipped)
     if modes[a] == "retry":
         sp = args.resume / a / "judge_output.jsonl"
-        if not retry_sidecar_ready(a, sp, args.retry):
+        if not retry_sidecar_ready(a, sp, args.retry, skipped):
             sys.exit(f"exit 3: retry {args.retry} refused in arm {a} — "
                      f"see above")
         return retry_task(a, args.retry, sp, article_1s, prompts, criteria,
-                          references, client, out_dir)
+                          references, client, out_dir, skipped)
     return run_arm(a, article_1s, prompts, criteria, references,
-                   client, dry_run, out_dir)
+                   client, dry_run, out_dir, skipped)
 
 
 def derive_from_sidecar(name: str, sidecar_path: Path, prompts: dict,
-                        criteria: dict, out_dir: Path) -> int:
+                        criteria: dict, out_dir: Path,
+                        skipped: frozenset = frozenset()) -> int:
     """Re-derive an arm from a persisted judge_output.jsonl — ZERO judge
     calls (the seat's recovery order: never re-burn judge calls when the
     data is on disk). Deterministic and identical to the fresh path (same
@@ -463,7 +493,7 @@ def derive_from_sidecar(name: str, sidecar_path: Path, prompts: dict,
     rows = load_jsonl(sidecar_path)
     by_id = {r["id"]: r for r in rows}
     records = [compute_record(i, by_id[i]["judge_output"], prompts[i], criteria)
-               for i in SUBSET_IDS]
+               for i in SUBSET_IDS if i not in skipped]
     scored = write_arm_outputs(name, records, rows, out_dir)
     print(f"  ARM {name}: derived from {sidecar_path.name} — 0 judge calls")
     return scored
@@ -493,7 +523,28 @@ def main() -> None:
                          "re-derived complete (one decider). Refuses when "
                          "the task is already scored or the sidecar misses "
                          "any other task. No other judge calls.")
+    ap.add_argument("--skip-tasks", default="", metavar="IDS",
+                    help="comma-separated subset ids to SKIP (never-ran "
+                         "tasks — the pre-registered cumulative-search cap "
+                         "stop). Named in the manifest with the reason; "
+                         "never a judge call, never an error row; means "
+                         "stay over the SCORED rows only (unchanged "
+                         "aggregation).")
     args = ap.parse_args()
+
+    try:
+        skipped = frozenset(int(x) for x in args.skip_tasks.split(",") if x)
+    except ValueError:
+        sys.exit(f"exit 3: --skip-tasks ids must be integers: "
+                 f"{args.skip_tasks!r}")
+    bad = sorted(skipped - set(SUBSET_IDS))
+    if bad:
+        sys.exit(f"exit 3: --skip-tasks ids {bad} not in subset {SUBSET_IDS}")
+    if skipped:
+        print(f"skip: {sorted(skipped)} — never-ran (pre-registered cap "
+              f"stop); named in the manifest, excluded from the means over "
+              f"scored rows only")
+    args.skip = skipped
 
     # the t6a extension: a named label re-brands the hybrid arm's
     # article-1 source (pre-registered; the recipe is unchanged)
@@ -514,6 +565,8 @@ def main() -> None:
     def load_landed_articles(root: Path) -> dict:
         articles = {}
         for i in SUBSET_IDS:
+            if i in skipped:
+                continue
             rp = landed_report(i, root)
             # charter linkage: the flight answered the frozen prompt (never
             # silent)
@@ -578,7 +631,7 @@ def main() -> None:
         if not args.dry_run and args.resume is not None:
             sp = args.resume / a / "judge_output.jsonl"
             if sp.exists():
-                if sidecar_derivable(a, sp):
+                if sidecar_derivable(a, sp, skipped):
                     modes[a] = "derive"
                     continue
             else:
@@ -600,9 +653,10 @@ def main() -> None:
         models = served_models()
         if JUDGE_PIN not in models or not models[JUDGE_PIN]:
             sys.exit(f"exit 2: judge {JUDGE_PIN} not LOADED (have {models}) — "
-                     f"the 122B window is not open; no judge call made")
+                     f"the judge window is not open; no judge call made")
         print(f"judge guard: {JUDGE_PIN} loaded")
-        client = AIClient(model=JUDGE_PIN)
+        client = pin_sampling(AIClient(model=JUDGE_PIN))
+        print(f"judge pin: temperature={JUDGE_TEMPERATURE} top_p={JUDGE_TOP_P} (amendment N6)")
     elif not args.dry_run:
         print("resume: every arm derives from disk — no judge calls, no guard")
     else:
@@ -634,14 +688,36 @@ def main() -> None:
 
     if not args.dry_run:
         manifest = {
-            "order": "deep-research-t5a",
+            "order": "deep-research-t7a",
             "created_at": ts,
             "resumed_from": str(args.resume) if args.resume else None,
             "retry": ({"arm": retry_arm, "id": args.retry}
                       if args.retry is not None else None),
-            "judge": {"pin": JUDGE_PIN, "caveat": "different model from the "
+            "judge": {"pin": JUDGE_PIN,
+                      "sampling": {
+                          "temperature": JUDGE_TEMPERATURE,
+                          "top_p": JUDGE_TOP_P,
+                          "amendment": "greedy — N6, 2026-08-23",
+                          # Which tasks this run's pin actually covers. A
+                          # resumed arm is re-derived from a sidecar this run
+                          # did not produce, and a retry pins exactly ONE
+                          # task — stamping either "greedy" wholesale would
+                          # substitute a claim for a measurement (§18.3).
+                          "covers": {k: ("every task" if modes[k] == "fresh"
+                                         else f"task {args.retry} only"
+                                         if modes[k] == "retry"
+                                         else "no task — re-derived from a "
+                                              "sidecar this run did not judge")
+                                     for k in scored_counts},
+                          "note": "a manifest with NO sampling block was "
+                                  "flown before this amendment, at the daemon "
+                                  "default temperature 0.7. A pinned reading "
+                                  "is never compared against an unpinned one.",
+                      },
+                      "caveat": "different model from the "
                       "official judges (gemini-2.5-pro / GPT-5.5 era)"},
-            "arms": {k: {"tasks": len(SUBSET_IDS), "scored": scored_counts[k],
+            "arms": {k: {"tasks": len(SUBSET_IDS) - len(skipped),
+                         "scored": scored_counts[k],
                          "source": modes[k]} for k in scored_counts},
             "cleaning": "article_1 uncleaned in both arms (named caveat — the "
                         "report IS the deliverable; the official cleaned "
@@ -649,10 +725,15 @@ def main() -> None:
             "inputs": {"clone_pin": PIN,
                        "subset_articles_sha": SUBSET_ARTICLES_SHA},
             "landed_arm": flown_hybrid if args.arm == "hybrid" else "local",
+            "skipped": ({"ids": sorted(skipped),
+                         "reason": "never-ran — the pre-registered "
+                                   "cumulative-search cap stop (task "
+                                   "boundary; per-task allowance never "
+                                   "reduced)"} if skipped else None),
             "landed_dirs": {str(i): str(landed_report(
                 i, (args.landed_root or DEMO12_HYBRID)
                 if args.arm == "hybrid" else DEMO12_LOCAL
-            ).parent) for i in SUBSET_IDS},
+            ).parent) for i in SUBSET_IDS if i not in skipped},
         }
         (out_dir / "manifest.json").write_text(
             json.dumps(manifest, indent=2) + "\n", encoding="utf-8")

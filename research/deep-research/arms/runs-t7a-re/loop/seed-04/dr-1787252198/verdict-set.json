@@ -1,0 +1,59 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787252198",
+  "charter_hash": "c6a95ea52d2e3f16",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "OpenAI released o3 and o4-mini on April 16, 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The launch signaled that the direction of frontier reasoning models is shifting toward native integration of vision and tool use (such as web search and code interpreter) directly into the model architecture, rather than bolting these capabilities on externally [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Strategically, with GPT-5 not yet shipping, OpenAI used this release to defend its position at the frontier against competitors like DeepSeek and Anthropic by reframing capability as tool-using reasoning available at commodity prices [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "This was demonstrated through aggressive pricing—o3 at $10/$40 per million tokens (input/output) and o4-mini at $1.10/$4.40—and high performance, such as o3 setting a record of about 87.5% on ARC-AGI-1, which met or exceeded the ~85% human baseline [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

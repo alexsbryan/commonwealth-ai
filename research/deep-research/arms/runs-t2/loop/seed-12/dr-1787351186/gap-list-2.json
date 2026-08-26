@@ -1,0 +1,295 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787351186",
+  "charter_hash": "1801528f54121ee6",
+  "round": 2,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Microsoft's Recall feature became a privacy scandal in 2024 because it was initially designed to screenshot the user’s screen every few seconds and store that data locally, effectively acting as a \"photographic memory\" for the PC [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2024",
+          "Privacy scandal"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c2",
+      "text": "The controversy escalated when security researchers demonstrated that these screenshots were stored unencrypted (in plaintext) within a local SQLite database, contradicting Microsoft’s claims of encryption [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "This vulnerability meant that sensitive information visible on the screen—such as passwords, health data, private messages, and other confidential content—was captured by default and could be accessed by any process running under the same user account [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Consequently, privacy regulators including the Irish Data Protection Commission, the UK Information Commissioner's Office, and the Washington State Attorney General raised concerns or opened investigations into the feature [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "In response to this backlash, which marked the AI PC era's first major privacy crisis, Microsoft delayed the launch in June 2024 and fundamentally changed how Recall operates [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "The revised version is now opt-in (default OFF) rather than enabled by default [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c7",
+      "text": "To access the timeline of screenshots, users are required to use Windows Hello authentication and presence detection [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c8",
+      "text": "Additionally, the updated feature excludes incognito browsing sessions and DRM-protected content from being captured [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c9",
+      "text": "This modified, opt-in version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "2025",
+          "Copilot+ PCs",
+          "ev-1"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "No evidence was retrieved this round.",
+      "verdict": "failed",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Microsoft's Recall feature became a privacy scandal in 2024 because it was initially designed to screenshot the user’s screen every few seconds and store that data locally, effectively acting as a \"photographic memory\" for the PC [Source: ev-1].",
+      "actionable_query": "2024 Microsoft's Recall feature became privacy scandal because initially designed screenshot user’s screen few seconds store data locally effectively acting photographic memory",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "The controversy escalated when security researchers demonstrated that these screenshots were stored unencrypted (in plaintext) within a local SQLite database, contradicting Microsoft’s claims of encryption [Source: ev-1].",
+      "actionable_query": "controversy escalated security researchers demonstrated screenshots stored unencrypted plaintext within local SQLite database contradicting Microsoft’s claims encryption",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "In response to this backlash, which marked the AI PC era's first major privacy crisis, Microsoft delayed the launch in June 2024 and fundamentally changed how Recall operates [Source: ev-1].",
+      "actionable_query": "In response to this backlash, which marked the AI PC era's and fundamentally changed how Recall operates . (2024)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "The revised version is now opt-in (default OFF) rather than enabled by default [Source: ev-1].",
+      "actionable_query": "revised version now opt-in default OFF rather enabled",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "To access the timeline of screenshots, users are required to use Windows Hello authentication and presence detection [Source: ev-1].",
+      "actionable_query": "access timeline screenshots users required use Windows Hello authentication presence detection",
+      "from_claim_id": "c7",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g6",
+      "text": "Additionally, the updated feature excludes incognito browsing sessions and DRM-protected content from being captured [Source: ev-1].",
+      "actionable_query": "Additionally updated feature excludes incognito browsing sessions DRM-protected content captured",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "This modified, opt-in version reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+      "actionable_query": "modified opt-in version reached general availability Copilot PCs",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-12"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": false
+}

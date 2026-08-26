@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787270662",
+  "charter_hash": "de6d8693820c5af3",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The global IT outage on July 19, 2024 [Source: ev-1], was caused by a faulty CrowdStrike Falcon Sensor content update that crashed Windows machines worldwide [Source: ev-1]. The root cause of the failure was an out-of-bounds memory read in the sensor's C++ code, specifically triggered by a flawed content validator and missing input validation for a 21-byte input [Source: ev-1]. This incident highlighted the risks of monoculture concentration, where one security agent deployed at enterprise scale with fast-cadence updates became a global single point of failure [Source: ev-1].\n\nThe consequences were extensive. Approximately 8.5 million Windows devices were affected according to Microsoft's estimate [Source: ev-1]. Major industries experienced significant disruptions, including airlines (with Delta cancelling roughly 7,000 flights), banks, hospitals, broadcasters, and 911 services [Source: ev-1]. Financially, Delta incurred about $500M in costs and later sued CrowdStrike [Source: ev-1]. In the stock market, CrowdStrike shares fell by approximately 11% on July 22, 2024, following the incident [Source: ev-1].\n\nIn response to the outage, CEO George Kurtz testified before Congress on September 24, 2024; the company apologized and promised changes to its deployment process [Source: ev-1]. CrowdStrike implemented staged (phased) rollouts with canary testing and added sensor-level validation [Source: ev-1]. The episode also drove industry-wide discussions regarding chaos-engineering and blast-radius limits for endpoint agents [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-06",
+      "custody": "public-web"
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787329381",
+  "charter_hash": "ee3eed1192125bea",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Nvidia’s market value crossed $4 trillion on July 9, 2025, becoming the first company in history to close above this threshold [Source: ev-1].\n\nThis milestone was driven by several key factors related to AI infrastructure spending:\n\n*   **Accelerator Demand and Market Dominance:** The primary driver was demand for Blackwell accelerator rack systems (GB200/GB300), with Nvidia holding a dominant share of the AI-accelerator market [Source: ev-1].\n*   **Major Infrastructure Projects:** Spending was bolstered by the Stargate project’s approximately $500 billion AI-infrastructure plan [Source: ev-1].\n*   **Hyperscaler Capital Expenditure:** Hyperscalers, including Microsoft, Meta, Google, and Amazon, repeatedly raised their capital expenditure guidance throughout 2025 [Source: ev-1].\n\nThis milestone signifies that the market is pricing AI infrastructure as the largest new capital cycle since the internet era, effectively treating it as an \"AI-capex supercycle\" where Nvidia acts as a central toll-booth for compute sales [Source: ev-1]. CEO Jensen Huang framed this moment as the transition from training to inference demand, describing \"AI factories\" selling compute as a commodity [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-11",
+      "custody": "public-web"
+    }
+  ]
+}

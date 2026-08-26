@@ -1,0 +1,100 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787350746",
+  "charter_hash": "756408068f166f4c",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did Anthropic release Claude 4 as two models in May 2025, and what did the launch signal about the agentic-coding market?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "Anthropic Claude 4 model names and release date in May 2025, count of models",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Claude Opus 4 vs Claude Sonnet 4 pricing per million tokens, price difference percentage",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Claude Opus 4 benchmark scores on agentic coding tasks (e.g., SWE-bench Verified), score comparison to previous generation",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 12.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q2",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-09",
+      "title": "Anthropic's Claude 4 launch (2025-05-08)",
+      "snippet": "Anthropic released Claude Opus 4 and Sonnet 4 on 2025-05-08, timed to the rise of agentic coding.",
+      "content": null,
+      "engine": "mock",
+      "score": 8.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [],
+    "below_cut": [],
+    "threshold": 8.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

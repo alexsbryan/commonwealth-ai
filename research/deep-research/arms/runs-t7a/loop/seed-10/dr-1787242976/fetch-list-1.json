@@ -1,0 +1,130 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787242976",
+  "charter_hash": "0d92e594303284df",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Why did OpenAI release GPT-5 in August 2025, and what did it change about how the company sells its models?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "OpenAI GPT-5 official release date in August 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Percentage change in OpenAI API pricing for GPT-4o versus GPT-5 per million tokens",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q4",
+      "text": "Share of enterprise customers using OpenAI's new tiered subscription model post-GPT-5 launch",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q5",
+      "text": "Count of major features removed or deprecated from the ChatGPT interface upon GPT-5 release",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q6",
+      "text": "Median latency reduction in milliseconds between GPT-4 Turbo and GPT-5 inference times",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q7",
+      "text": "Revenue share attributed to API usage versus consumer subscriptions for OpenAI in Q3 2025",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "h1",
+      "query_id": "q1",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q3",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 10.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q4",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 7.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "h1",
+      "query_id": "q5",
+      "url": "https://estate.example/seed-10",
+      "title": "OpenAI's GPT-5 (2025-08-07)",
+      "snippet": "OpenAI released GPT-5 on 2025-08-07 with the o-series retired into unified reasoning modes and free-tier availability.",
+      "content": null,
+      "engine": "mock",
+      "score": 6.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "eps_admits": [
+      "h1"
+    ],
+    "below_cut": [
+      "h1",
+      "h1",
+      "h1",
+      "h1"
+    ],
+    "threshold": 7.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

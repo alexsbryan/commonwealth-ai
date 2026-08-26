@@ -1,0 +1,19 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787337115",
+  "charter_hash": "76b58eae9a7ebb22",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The specific legal grounds cited by the US District Court for finding Google's search business a monopoly in the DOJ v. Google antitrust case",
+      "The list of structural remedies ordered by Judge Mehta regarding the divestiture or licensing of Chrome and Android",
+      "The count of default browser agreements terminated as part of the court-ordered remedies against Google",
+      "The percentage share of US general web searches held by Google at the time of the 2024 ruling"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": []
+  }
+}

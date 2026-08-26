@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787337003",
+  "charter_hash": "077d85b8d7dd773f",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The United States moved to force the sale or ban of TikTok between 2024 and 2025 primarily due to national security concerns, specifically the risk that the Chinese government could access US user data and the platform’s algorithm [Source: ev-1].\n\nLegally, President Biden signed the Protecting Americans from Foreign Adversary Controlled Applications Act on April 24, 2024, requiring ByteDance to divest TikTok's US operations within roughly 270 days (extendable by 90) or face a ban [Source: ev-1]. The Supreme Court upheld this law with a unanimous 9-0 per curiam decision on January 17, 2025 [Source: ev-1].\n\nThe dispute was resolved through an Oracle-led deal announced on June 10, 2023 (noted as 2025-06-10 per Bloomberg in evidence), which structured the resolution as a joint venture rather than an outright sale [Source: ev-1]. Under this agreement, Oracle received about a 12.5% stake in TikTok's US operations, with participation from SoftBank and other investors, while ByteDance retained a majority interest [Source: ev-1]. Vice President JD Vance led the White House negotiations for this final ownership structure, which remained live throughout the process [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-07",
+      "custody": "public-web"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787242173",
+  "charter_hash": "d12ea3ba1ab92515",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 1,
+      "fetched": 0,
+      "search_calls": 1
+    },
+    {
+      "round": 3,
+      "gaps_before": 1,
+      "gaps_after": 2,
+      "fetched": 0,
+      "search_calls": 2
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-03",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787242173"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 10
+    },
+    "remaining": {
+      "web-search:mock": 2,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "NASA ordered Boeing's Starliner to return uncrewed because the thruster anomalies identified during the docking approach could not be guaranteed safe for the deorbit burn, as the thrusters could not be ground-tested in their flight condition [Source: ev-1].",
+    "Regarding the implications of this decision on the program and crew, specifically concerning **Crew Duration**: The astronauts, Butch Wilmore and Suni Williams, remained aboard the International Space Station until March 18, 2025, spending roughly 9.5 months aloft instead of the planned ~8 days before returning via a Crew-9 Dragon spacecraft [Source: ev-1].",
+    "This decision had several significant implications for the program and crew:\n*   **Crew Duration:** The astronauts, Butch Wilmore and Suni Williams, remained aboard the International Space Station until March 18, 2025, spending roughly 9.5 months aloft instead of the planned ~8 days before returning via a Crew-9 Dragon spacecraft [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787242173",
+    "acquired_at_unix": 1787242173,
+    "released_at_unix": 1787242254
+  }
+}

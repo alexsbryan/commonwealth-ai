@@ -1,0 +1,761 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787262042",
+  "charter_hash": "e92111801f41e19c",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+      "title": "Parkinson's Disease: What It Is, Symptoms & Treatment",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2021.678373/full",
+      "title": "Frontiers | Frequency of Non-motor Symptoms in Parkinson's Patients With Motor Fluctuations",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/npjparkd201513",
+      "title": "The range and nature of non-motor symptoms in drug-naive Parkinson’s disease patients: a state-of-the-art systematic review | npj Parkinson's Disease",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://neurotorium.org/article/non-motor-symptoms-in-parkinsons-disease-nature-and-burden",
+      "title": "Non-motor symptoms in Parkinson’s disease: nature and burden - Neurotorium",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://parkinsonsnewstoday.com/news/most-untreated-parkinsons-patients-have-non-motor-symptoms-study",
+      "title": "Most Untreated Parkinson's Patients Have Non-Motor ...",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S0303846712004246",
+      "title": "Prevalence of non motor features in a cohort of Parkinson's ...",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7313565",
+      "title": "Prevalence of Non-motor Symptoms in Parkinson's Disease and Its Impact on Quality of Life in Tertiary Care Center in India",
+      "score": 0.0,
+      "rank": 12,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/33553493",
+      "title": "Prevalence of Non-Motor Symptoms and ...",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/understanding-parkinsons/non-movement-symptoms",
+      "title": "Non-Movement Symptoms | Parkinson's Foundation",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12404927",
+      "title": "Identifying subtypes of longitudinal motor symptom severity ...",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S1353802014004118",
+      "title": "Parkinson's disease severity levels and MDS-Unified Parkinson's Disease Rating Scale",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11464440",
+      "title": "Rate of motor progression in Parkinson's disease - PMC - NIH",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages",
+      "title": "Stages of Parkinson's",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41598-021-94255-9",
+      "title": "The severity progression of non-motor symptoms in Parkinson’s disease: a 6-year longitudinal study in Taiwanese patients",
+      "score": 0.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://journals.plos.org/plosone/article?id=10.1371%2Fjournal.pone.0123231",
+      "title": "Relationship between Motor Symptoms, Cognition, and ...",
+      "score": 0.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.apdaparkinson.org/article/factors-in-parkinson-disease-progression",
+      "title": "Parkinson’s disease progression | APDA",
+      "score": 0.0,
+      "rank": 22,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41598-021-04356-8",
+      "title": "Impact of age at onset on symptom profiles, treatment characteristics and health-related quality of life in Parkinson’s disease | Scientific Reports",
+      "score": 0.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://jamanetwork.com/journals/jamaneurology/fullarticle/784012",
+      "title": "Parkinson Disease With Old-Age Onset",
+      "score": 0.0,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4831034",
+      "title": "Age at onset and Parkinson disease phenotype - PMC",
+      "score": 0.0,
+      "rank": 25,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.epicresearch.org/articles/most-parkinsons-diagnoses-occur-after-age-70-with-a-slight-rise-in-diagnosis-age-since-2017",
+      "title": "Most Parkinson's Diagnoses Occur After Age 70, with a ...",
+      "score": 0.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.hopkinsmedicine.org/health/conditions-and-diseases/parkinsons-disease/youngonset-parkinsons-disease",
+      "title": "Young-Onset Parkinson's Disease",
+      "score": 0.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages",
+      "title": "Stages of Parkinson's",
+      "score": 0.0,
+      "rank": 29,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.mayoclinic.org/diseases-conditions/parkinsons-disease/symptoms-causes/syc-20376055",
+      "title": "Parkinson's disease - Symptoms and causes",
+      "score": 0.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://my.clevelandclinic.org/health/diseases/8525-parkinsons-disease-an-overview",
+      "title": "Parkinson's Disease: What It Is, Symptoms & Treatment",
+      "score": 0.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41531-024-00642-0",
+      "title": "Sleep disorders in Parkinson’s disease, an early and multiple problem | npj Parkinson's Disease",
+      "score": 0.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/blog/science-news/sleep-disorders",
+      "title": "Study Shows Multiple Sleep Problems Are Common in Early Parkinson's | Parkinson's Foundation",
+      "score": 0.0,
+      "rank": 33,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://practicalneurology.com/diseases-diagnoses/movement-disorders/diagnosis-and-management-of-sleep-disorders-in-individuals-with-parkinson-disease/37652",
+      "title": "Sleep Disorders in Individuals with Parkinson Disease",
+      "score": 0.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/pii/S1041610224042005",
+      "title": "Factors related to sleep disturbances for individuals with Parkinson’s disease: a regional perspective",
+      "score": 0.0,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://photopharmics.com/a-guide-to-understanding-and-managing-sleep-problems-in-parkinsons-disease",
+      "title": "A Guide to Understanding and Managing Sleep Problems in Parkinson's Disease - PhotoPharmics",
+      "score": 0.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/neurology/articles/10.3389/fneur.2022.927994/full",
+      "title": "Bidirectional Relationship Between Sleep Disturbances ...",
+      "score": 0.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/StLukesUniversityHealthNetwork/posts/neurologic-disorders-and-sleep-when-the-brain-wont-rest-sleep-challenges-are-com/1636361461388635",
+      "title": "Neurologic Disorders and Sleep - When the Brain Won't Rest ...",
+      "score": 0.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.apdaparkinson.org/what-is-parkinsons/symptoms/sleep-problems",
+      "title": "Sleep Problems in Parkinson's | APDA",
+      "score": 0.0,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pubmed.ncbi.nlm.nih.gov/15596611",
+      "title": "The rate of cognitive decline in Parkinson disease - PubMed",
+      "score": 0.0,
+      "rank": 41,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.alzforum.org/news/research-news/risk-score-forecasts-cognitive-decline-parkinsons",
+      "title": "Risk Score Forecasts Cognitive Decline in Parkinson's | ALZFORUM",
+      "score": 0.0,
+      "rank": 42,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2668811",
+      "title": "Mild cognitive impairment is common in Parkinson’s disease patients with normal Mini-Mental State Examination (MMSE) scores",
+      "score": 0.0,
+      "rank": 43,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/braincomms/article/4/2/fcac040/6548788",
+      "title": "Prediction and early biomarkers of cognitive decline in Parkinson ...",
+      "score": 0.0,
+      "rank": 44,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.nature.com/articles/s41572-021-00280-3",
+      "title": "Parkinson disease-associated cognitive impairment | Nature Reviews Disease Primers",
+      "score": 0.0,
+      "rank": 45,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/cognition/articles/10.3389/fcogn.2024.1369538/full",
+      "title": "Frontiers | Mild cognitive impairment in Parkinson's disease: current view",
+      "score": 0.0,
+      "rank": 47,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/understanding-parkinsons/non-movement-symptoms/cognitive",
+      "title": "Cognitive Changes | Parkinson's Foundation",
+      "score": 0.0,
+      "rank": 48,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.aetna.com/cpb/medical/data/300_399/0349.html",
+      "title": "Alzheimer's Disease Tests - Medical Clinical Policy Bulletins",
+      "score": 0.0,
+      "rank": 49,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/IAFORJAPAN/videos/understanding-cognitive-impairment-placing-dementia-within-a-realistic-framework/2137913497136988",
+      "title": "Understanding Cognitive Impairment: Placing Dementia Within a Realistic ...",
+      "score": 0.0,
+      "rank": 50,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/young-onset-parkinsons",
+      "title": "Young-Onset Parkinson's | Parkinson's Foundation",
+      "score": 0.0,
+      "rank": 51,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pcla.org/blog/young-onset-parkinsons-disease",
+      "title": "Young-Onset Parkinson's Disease: Causes, Symptoms, Treatment",
+      "score": 0.0,
+      "rank": 52,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://photopharmics.com/young-onset-parkinsons-navigating-your-journey-after-an-early-diagnosis",
+      "title": "Young-Onset Parkinson's: Navigating Your Journey After an Early Diagnosis - PhotoPharmics",
+      "score": 0.0,
+      "rank": 53,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://davisphinneyfoundation.org/blog/a-primer-on-young-onset-parkinsons-disease-yopd-and-whats-coming-next",
+      "title": "A Primer on Young Onset Parkinson's Disease (YOPD)",
+      "score": 0.0,
+      "rank": 54,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.hopkinsmedicine.org/health/conditions-and-diseases/parkinsons-disease/youngonset-parkinsons-disease",
+      "title": "Young-Onset Parkinson's Disease",
+      "score": 0.0,
+      "rank": 55,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7592661",
+      "title": "Young Onset Parkinson's Disease: A Modern and Tailored ...",
+      "score": 0.0,
+      "rank": 56,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.apdaparkinson.org/what-is-parkinsons/early-onset-parkinsons-disease",
+      "title": "Early Onset Parkinson's Disease | APDA",
+      "score": 0.0,
+      "rank": 57,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=AjnAmzB9vg8",
+      "title": "Early Onset Parkinson's: What You Need to Know",
+      "score": 0.0,
+      "rank": 58,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.medrxiv.org/content/10.1101/2025.08.05.25332959v2.full",
+      "title": "Fall Frequency, Risk Factors, and Outcomes in Parkinson’s Disease: A Cross-Sectional Analysis",
+      "score": 0.0,
+      "rank": 59,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3606768",
+      "title": "Recurrent Falls in Parkinson's Disease: A Systematic Review",
+      "score": 0.0,
+      "rank": 60,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://journals.sagepub.com/doi/10.1177/1877718X261418987",
+      "title": "A prospective analysis of falls in Parkinson's disease",
+      "score": 0.0,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://onlinelibrary.wiley.com/doi/10.1111/j.1468-1331.2012.03821.x",
+      "title": "Frequencies of falls and associated features at different ...",
+      "score": 0.0,
+      "rank": 62,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.physio-pedia.com/Hoehn_and_Yahr_Scale",
+      "title": "Hoehn and Yahr Scale",
+      "score": 0.0,
+      "rank": 63,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages",
+      "title": "Stages of Parkinson's",
+      "score": 0.0,
+      "rank": 65,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.bgs.org.uk/frequency-of-fall-risk-increasing-drugs-in-a-large-sample-of-people-with-parkinson%E2%80%99s-disease",
+      "title": "Frequency of fall risk increasing drugs in a large sample ...",
+      "score": 0.0,
+      "rank": 66,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/article/10.1007/s00415-020-10234-6",
+      "title": "Longitudinal prediction of falls and near falls frequencies in ...",
+      "score": 0.0,
+      "rank": 67,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.aplaceformom.com/senior-living-data/caregiver-burnout-statistics",
+      "title": "2026 Caregiver Burnout and Stress Statistics",
+      "score": 0.0,
+      "rank": 68,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.capc.org/blog/new-data-on-family-caregivers-in-the-us",
+      "title": "The National Alliance for Caregiving and AARP Release Caregiving Report - CAPC - News Bites | Center to Advance Palliative Care",
+      "score": 0.0,
+      "rank": 69,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://aspe.hhs.gov/reports/does-high-caregiver-stress-lead-nursing-home-entry-1",
+      "title": "Does High Caregiver Stress Lead to Nursing Home Entry? | ASPE",
+      "score": 0.0,
+      "rank": 70,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/aplaceformom/posts/caregiving-can-be-deeply-fulfilling-but-it-also-comes-with-challenges-that-often/1076886741135842",
+      "title": "Caregiving can be deeply fulfilling, but it also comes with ...",
+      "score": 0.0,
+      "rank": 71,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4573667",
+      "title": "The Effect of Transitions in Caregiving Status and Intensity on ...",
+      "score": 0.0,
+      "rank": 72,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ltcnews.com/articles/new-survey-caregiver-burnout-soars-as-millions-care-for-aging-loved-ones",
+      "title": "New Survey: Caregiver Burnout Soars as Millions Care for Aging Loved Ones | LTC News",
+      "score": 0.0,
+      "rank": 74,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.meadowlark.org/blog/2023/11/02/caregiver-stress-transition",
+      "title": "Caregiver Stress & Transition",
+      "score": 0.0,
+      "rank": 75,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.aarp.org/caregiving/basics/caregiving-in-us-survey-2025",
+      "title": "Caregiving Crisis in America Keeps Growing",
+      "score": 0.0,
+      "rank": 76,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://propelphysiotherapy.com/neurological/deep-brain-stimulation-parkinsons-disease-therapy",
+      "title": "Deep Brain Stimulation Parkinson's Disease Therapy - Propel Physiotherapy",
+      "score": 0.0,
+      "rank": 77,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://cdn.clinicaltrials.gov/large-docs/82/NCT03181282/Prot_SAP_000.pdf",
+      "title": "Physical Therapy and Deep Brain Stimulation in Parkinson ...",
+      "score": 0.0,
+      "rank": 78,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.sciencedirect.com/science/article/abs/pii/S1388245718300038",
+      "title": "Postoperative rehabilitation after deep brain stimulation surgery for movement disorders",
+      "score": 0.0,
+      "rank": 79,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://link.springer.com/article/10.1186/s12984-025-01616-w",
+      "title": "Is physical therapy recommended for people with parkinson’s disease treated with subthalamic deep brain stimulation? a delphi consensus study",
+      "score": 0.0,
+      "rank": 80,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5822622",
+      "title": "Physical therapy and deep brain stimulation in Parkinson’s Disease: protocol for a pilot randomized controlled trial",
+      "score": 0.0,
+      "rank": 81,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.dbsandme.com/en/support-and-resources/articles/what-to-expect-after-dbs-surgery.html",
+      "title": "What to Expect After Deep Brain Stimulation Surgery",
+      "score": 0.0,
+      "rank": 83,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/parkinsonsnsw/posts/exercise-is-second-only-to-medications-for-slowing-down-the-progression-of-parki/4249768865058657",
+      "title": "Exercise is second only to medications for slowing down the ...",
+      "score": 0.0,
+      "rank": 84,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=QNotxfB1CUQ",
+      "title": "Using the New Parkinson’s Exercise Recommendations as Part of Your Treatment Plan",
+      "score": 0.0,
+      "rank": 85,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5673981",
+      "title": "Outcome of subthalamic nucleus deep brain stimulation on long-term motor function of patients with advanced Parkinson disease - PMC",
+      "score": 0.0,
+      "rank": 86,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC3825788",
+      "title": "The MDS–UPDRS tracks motor and non–motor improvement due to ...",
+      "score": 0.0,
+      "rank": 87,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.frontiersin.org/journals/human-neuroscience/articles/10.3389/fnhum.2025.1684229/full",
+      "title": "Frontiers | Effect of deep brain stimulation on motor complications in Parkinson’s disease: a systematic review and meta-analysis",
+      "score": 0.0,
+      "rank": 88,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.medscape.com/viewarticle/deep-brain-stimulation-parkinsons-yields-lasting-benefits-2025a1000ox5",
+      "title": "Deep Brain Stimulation for Parkinson's Yields Lasting Benefits - Medscape",
+      "score": 0.0,
+      "rank": 89,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://medisyn.org/deep-brain-stimulation-success-rate",
+      "title": "DBS Success Rate by Condition: Parkinson's to Tremor",
+      "score": 0.0,
+      "rank": 90,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cns.org/Assets/f5045084-8179-4997-9f51-b20bc6621c8d/637020867970100000/24235-pdf",
+      "title": "[PDF] Outcomes Following Deep Brain Stimulation Lead Revision or ...",
+      "score": 0.0,
+      "rank": 92,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.neurologylive.com/view/early-intervention-deep-brain-stimulation-results-improvements-in-motor-non-motor-symptoms-parkinsons",
+      "title": "Early Intervention of Deep Brain Stimulation Results ... - NeurologyLive",
+      "score": 0.0,
+      "rank": 93,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ajmc.com/view/deep-brain-stimulation-still-effective-after-15-years-in-people-with-parkinson-disease-study-shows",
+      "title": "Deep Brain Stimulation Still Effective After 15 Years in People With Parkinson Disease, Study Shows",
+      "score": 0.0,
+      "rank": 94,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.ohsu.edu/brain-institute/dbs-outcomes",
+      "title": "DBS Outcomes | Brain Institute | OHSU",
+      "score": 0.0,
+      "rank": 95,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.pmdalliance.org/wp-content/uploads/2023/06/Speech-in-Individuals-with-PD.pdf",
+      "title": "[PDF] Speech in Individuals with PD - PMD Alliance",
+      "score": 0.0,
+      "rank": 96,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pubs.asha.org/doi/10.1044/2019_JSLHR-19-00014",
+      "title": "The Effects of Deep Brain Stimulation on Speech Intelligibility in Persons With Essential Tremor",
+      "score": 0.0,
+      "rank": 97,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/363122400_Deep_Brain_Stimulation_Impact_on_Voice_and_Speech_Quality_in_Parkinson's_Disease_A_Systematic_Review",
+      "title": "Deep Brain Stimulation Impact on Voice and Speech ...",
+      "score": 0.0,
+      "rank": 98,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://davisphinneyfoundation.org/blog/deep-brain-stimulation-and-speech-impacts",
+      "title": "Deep Brain Stimulation and Speech: Impacts, Outcomes, ...",
+      "score": 0.0,
+      "rank": 99,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11086900",
+      "title": "Speech, voice, and language outcomes following deep brain ...",
+      "score": 0.0,
+      "rank": 100,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.neurologyadvisor.com/features/weighing-the-risks-of-deep-brain-stimulation",
+      "title": "Weighing the Risks of Deep Brain Stimulation - Neurology Advisor",
+      "score": 0.0,
+      "rank": 101,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.medbridge.com/educate/courses/speech-treatment-post-deep-brain-stimulation-in-parkinsons-disease-cynthia-fox",
+      "title": "Speech Treatment Post Deep Brain Stimulation in Parkinson’s Disease | Medbridge",
+      "score": 0.0,
+      "rank": 102,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.parkinson.org/understanding-parkinsons/what-is-parkinsons/stages",
+      "title": "Stages of Parkinson's",
+      "score": 0.0,
+      "rank": 103,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.facebook.com/medanta/videos/parkinsons-disease-is-a-progressive-neurological-condition-that-can-affect-movem/1325954085619062",
+      "title": "Parkinson's disease is a progressive neurological condition ...",
+      "score": 0.0,
+      "rank": 104,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.bumrungrad.com/en/health-blog/april-2026/understanding-signs-symptoms-treatment-parkinson-disease",
+      "title": "Understanding the Signs, Symptoms, and Treatment of ...",
+      "score": 0.0,
+      "rank": 105,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.michaeljfox.org/deep-brain-stimulation",
+      "title": "Deep Brain Stimulation (DBS) for Parkinson’s Disease | MJFF",
+      "score": 0.0,
+      "rank": 106,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://parkinsonsnewstoday.com/news/mds-updrs-patient-may-fail-to-assess-true-impact-of-motor-symptoms-in-parkinsons-study-suggests",
+      "title": "Common Scale of Motor Symptom Severity May Have Flaws",
+      "score": 0.0,
+      "rank": 107,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

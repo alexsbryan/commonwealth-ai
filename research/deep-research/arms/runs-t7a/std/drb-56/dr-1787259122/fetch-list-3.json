@@ -1,0 +1,108 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "round": 3,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "The text in [ev- \\) prospective buyers and describes the bidder's objective to maximize expected surplus conditional on winning. (2, price)",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "mentions buyer needs know probability distribution bids made other prospective buyers set optimal bid",
+      "from_gap_id": "g2",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q1",
+      "url": "https://www.ideals.illinois.edu/items/28947/bitstreams/97029/data.pdf",
+      "title": "[PDF] The effect of regret on optimal bidding in auctions - IDEALS",
+      "snippet": "By definition, each bidder bids as if he were maximizing his expected utility from the auction as he sees it; while this describes what bid a bidder will make, it does not prescribe, or even necessarily describe, how the bidder comes up with the bid.\nOf course, the bid-der's utility depends on the outcome.\nThe outcome, in turn, depends -3-on how everyone bids. [...] In the model, bidders act as agents for their respective oil firms, but bid to maximize how much they win gross of what they must pay for it.\nOf course, without any constraint on how bidders bid, such an objective would drive up the price of leases without limit.\nSo, the oil firm, acting as the principal, places some constraint on how its agent may bid. [...] Thus, any theory for expected profit maximizing bidders applies equally well if bidders maximize expected gross winnings subject to an appropriate constraint on expected expenditures, but not if the constraint is on total exposure in a sale.\nThis helps broaden and define the limits of the existing theory.",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-1",
+      "query_id": "q1",
+      "url": "https://users.ssc.wisc.edu/~dquint/econ698/lecture%206.pdf",
+      "title": "[PDF] Lecture 6 - Optimal Auctions Continued",
+      "snippet": "t0 ) So if we think of the seller as being another possible buyer, with marginal revenue of t0, then the expected revenue is simply the expected value of the marginal revenue of the winner. [...] • Set up the Myerson auction environment: – n risk-neutral bidders – independent types ti ∼Fi with support [ai, bi] – residual valuation of t0 for the seller • Named our goal: maximize expected seller payoﬀover all conceivable auction/sales formats, subject to two constraints: bidders participate voluntarily and play equilibrium strategies • Deﬁned mechanisms, and showed the Revelation Principle – that without loss of generality, we can restrict attention to direct revelation mechanisms • [...] • the ﬁrst term is a constant (the payoﬀto doing nothing) • the second term is the total surplus created by selling the object • the third term, which is being subtracted, is the expected payoﬀgoing to the bidders Next, we do some work expressing the last term, expected bidder surplus, in a diﬀerent form: Et(pi(t)ti −xi(t)) = R bi ai Ui(ti)fi(ti)dti = R bi ai \u0010 Ui(ai) + R ti ai Qi(si)dsi \u0011 fi(ti)dti = Ui(ai) + R bi ai R ti ai Qi(si)fi(ti)dsidti = Ui(ai) + R bi ai R bi si fi(ti)Qi(si)dtidsi =",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-2",
+      "query_id": "q1",
+      "url": "https://kylewoodward.com/blog-data/pdfs/references/armstrong-the-review-of-economic-studies-2000A.pdf",
+      "title": "[PDF] Optimal Multi-Object Auctions - kyle woodward",
+      "snippet": "The seller wishes to maximize expected revenue (10) where Only one participation constraint, RLL~ 0, is relevant. The incentive constraints that guarantee a bidder truthfully announces her type are (II) for all pairs of types ij and i'j', These incentive constraints imply the following necessary inequalities among the pt: (12) so that the probability of receiving an object is necessarily increasing in the bidder's value for that object. [...] to the seller in (1), only involve the low-value probability PL. The resource constraints impose a trade-off for the seller between the likelihood of winning an object if a bidder has a high value or a low value, and the surplus S(p) from the auction, which is a benefit to the seller in (1), is certainly maximized by making the probability of a high-value bidder winning the object as high as possible. Because rents in the relaxed problem are increasing in the low value probabilities, there is [...] Downloaded from  by University of North Carolina at Chapel Hill user on 15 October 2018 ARMSTRONG MULTI-OBJECT AUCTIONS 459 For simplicity, assume the seller does not place a value on the object. Therefore she wishes to maximize expected revenue (1) where S(p) == Li a.p,v, is the expected surplus per bidder from the auction. Thus, the seller's expected revenue per bidder is just the expected surplus per bidder from the auction minus the expected rents per bidder.",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-3",
+      "query_id": "q1",
+      "url": "https://valueplan.wordpress.com/wp-content/uploads/2015/07/strategic-and-financial-bidders-in-takeover-auctions.pdf",
+      "title": "[PDF] Strategic and Financial Bidders in Takeover Auctions",
+      "snippet": "2 Do Strategic Buyers Pay More Conditional on Winning? The preceding scenario analysis explored the expected target revenue and its components. A very.",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-1",
+      "web-2"
+    ],
+    "eps_admits": [
+      "web-3"
+    ],
+    "below_cut": [
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-7",
+      "web-9",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-6",
+      "web-7",
+      "web-9",
+      "web-6",
+      "web-8",
+      "web-5",
+      "web-8"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

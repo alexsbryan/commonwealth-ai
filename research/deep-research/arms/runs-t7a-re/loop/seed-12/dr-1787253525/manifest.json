@@ -1,0 +1,69 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787253525",
+  "charter_hash": "16c4fed35fca03ac",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 8
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 1,
+      "search_calls": 0
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-12",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787253525"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-fetch:pages": 1,
+      "web-search:mock": 12
+    },
+    "remaining": {
+      "web-fetch:pages": 11,
+      "web-search:mock": 0
+    }
+  },
+  "not_covered": [
+    "Microsoft's Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that the screenshots it captured were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+    "This allowed any process running as the user to access sensitive content visible on screen, including passwords and private messages, which were captured by default [Source: ev-1].",
+    "Although Microsoft initially delayed the release of the feature announced at the Copilot+ PC launch on May 20, 2024 [Source: ev-1], public scrutiny from regulators such as the Irish Data Protection Commission, the UK Information Commissioner's Office, and an investigation opened by Washington State Attorney General Bob Ferguson forced a reversal in policy [Source: ev-1].",
+    "The revised opt-in version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1].",
+    "Microsoft’s Recall feature became a privacy scandal in 2024 because, despite claims that data was encrypted, security researchers demonstrated that the screenshots it captured were stored unencrypted (in plaintext) within a local SQLite database [Source: ev-1].",
+    "This updated, privacy-focused version of Recall reached general availability on Copilot+ PCs in 2025 [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787253525",
+    "acquired_at_unix": 1787253525,
+    "released_at_unix": 1787253628
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787252198",
+  "charter_hash": "c6a95ea52d2e3f16",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Official OpenAI blog post or press release date for the launch of o3 and o4-mini",
+      "List of technical specifications (parameter count, context window) disclosed by OpenAI for o3 and o4-mini in April 2025",
+      "Comparison table of benchmark scores (e.g., AIME, GPQA Diamond, SWE-bench Verified) between o1/o3-pro and o3/o4-mini published by OpenAI",
+      "Number of API requests processed per day on OpenAI's platform immediately following the April 2025 launch compared to pre-launch baseline",
+      "Price per million input tokens for o3 versus o1-preview as listed on OpenAI pricing page in May 2025",
+      "Percentage change in daily active users or enterprise adoption rate for reasoning models reported by third-party analytics firms like SemiAnalysis or Epoch AI post-April 2025",
+      "Count of competing frontier model releases from Anthropic (Claude), Google (Gemini), and Meta (Llama) between January 2025 and June 2025 with specific focus on reasoning capabilities",
+      "Median latency reduction percentage advertised by OpenAI for o4-mini relative to o3 in official documentation",
+      "Share of total inference compute allocated to \"reasoning\" vs. standard generation tasks at major cloud providers as estimated by industry reports Q1-Q2 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "3",
+      "4",
+      "2025"
+    ]
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787292698",
+  "charter_hash": "6d90c96601efa04f",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "DeepSeek's R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the cost previously assumed necessary [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "This event revealed to markets that the thesis regarding frontier-AI capital expenditure and Nvidia's demand being moated by compute scale was incorrect, as an open-weights frontier-class reasoning model had been achieved at significantly lower costs than incumbent standards [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Specifically, DeepSeek-R1 was released on January 20, 2025 [Source: ev-1], following its predecessor DeepSeek-V3 (released December 26, 2024), which reported training on roughly 2.79 million GPU-hours at a claimed cost of about US$5.6 million using export-restricted H800 chips [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c4",
+      "text": "DeepSeek’s R1 release triggered the largest single-day loss in Nvidia’s history because it demonstrated that a frontier-class, open-weights reasoning model could be trained for a fraction of the cost previously assumed necessary [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

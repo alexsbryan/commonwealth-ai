@@ -1,0 +1,525 @@
+The Impact of Protein Intake on Muscle and
+Bone Health in Older Adults
+Summary of Existing Recommended Protein Intakes
+The landscape of dietary protein recommendations for older adults has undergone a significant
+evolution, reflecting a paradigm shift from biochemical equilibrium to physiological function. The
+central debate revolves around the adequacy of the traditional Recommended Dietary Allowance
+(RDA) of 0.8 grams of protein per kilogram of body weight per day (g/kg/day), a value established
+decades ago by the World Health Organization (WHO) and the Food and Agriculture Organization
+       1 17
+(FAO) . This foundational recommendation was derived primarily from meta-analyses of nitrogen
+balance studies conducted in the early 2000s, which aimed to establish the minimum amount of
+                                                                            13
+protein required to maintain nitrogen equilibrium in healthy young adults . However, subsequent
+reanalyses have revealed a critical limitation: these studies included a very small number of older
+participants, with only 54 individuals aged 60 years or older in the most recent analysis, leading to
+insufficient statistical power to differentiate protein requirements between younger and older
+              1 13
+populations . Consequently, while the European Food Safety Authority (EFSA) formalized this
+figure as a Population Reference Intake (PRI) of 0.83 g/kg/day for all adults in 2012, its relevance to
+                                                                                 1 18
+the specific needs of an aging demographic has been increasingly questioned . This methodological
+critique forms the bedrock of the argument for higher protein intakes, which are now being
+advocated by numerous expert groups and national bodies based on a growing body of evidence
+linking protein consumption to the maintenance of lean body mass and physical function.
+
+In stark contrast to the conservative EFSA recommendation, a broad consensus among several
+authoritative international and regional bodies supports significantly higher protein intakes for older
+adults. The PROT-AGE Study Group, convened by the European Union Geriatric Medicine Society
+(EUGMS), stands out as a pioneering voice in this movement. In their 2013 recommendations, they
+advocate for an average daily protein intake of at least 1.0–1.2 g/kg/day for healthy older
+                                                                                          14 15 16
+individuals (>65 years) specifically to maintain and regain lean body mass and function     . Their
+rationale is rooted in the understanding of age-related changes in protein metabolism, including
+                                                                                                     14 15
+reduced anabolic responses to protein ingestion and high splanchnic extraction of amino acids .
+Recognizing that illness increases metabolic demand, the group further recommends higher intakes
+of 1.2–1.5 g/kg/day for older adults experiencing acute or chronic disease, and even up to 2.0 g/
+                                                               16 17
+kg/day in cases of severe illness or marked malnutrition . Similarly, the European Society for
+Clinical Nutrition and Metabolism (ESPEN) aligns closely with these recommendations, advising at
+least 1.0–1.2 g/kg/day for healthy older people and 1.2–1.5 g/kg/day for those who are
+                                                        1 13
+malnourished or at risk due to acute or chronic illness . These guidelines emphasize clinical
+nutrition support and are explicitly focused on preserving muscle health, representing a departure
+                                                       13
+from the more general approach of the earlier RDAs .
+This trend towards higher protein recommendations is also evident at the national level, though not
+universally adopted. The Nordic countries represent one of the earliest adopters of elevated
+guidelines, having updated their protein recommendation to 1.2 g/kg/day in 2012 and reaffirming
+this level in their 2023 Nordic Nutrition Recommendations (NNR 2023) for food planning purposes
+                                                      1 18 19
+to prevent declines in physical functioning    . This position is supported by evidence suggesting
+that protein intakes in the range of 1.2–1.5 g/kg/day may be optimal for older adults, especially
+given age-related decreases in energy intake that can make it difficult to meet absolute protein needs
+                                                 20
+within a lower percentage of total energy . In direct opposition, some German-speaking countries—
+Germany, Austria, and Switzerland—revised their national guideline in 2019 to recommend a lower
+                                                                      1 13
+intake of 1.0 g/kg/day for adults over 65 years old . Meanwhile, other nations like the United
+Kingdom and the Netherlands continue to adhere to the official RDA of ≥0.8 g/kg/day, citing a
+                                                                 13
+lack of sufficient evidence to warrant an increase . This divergence highlights the ongoing scientific
+and political debate about the threshold of evidence required to revise long-standing dietary
+guidelines. A notable example of this nuance is seen in Ireland, where the Food Safety Authority
+advised in 2021 that older adults at risk of frailty, sarcopenia, or undernutrition should consume a
+minimum of 1.0–1.2 g/kg/day, effectively tailoring the recommendation to a vulnerable subgroup
+                                      1 13
+rather than applying it universally          .
+
+The recommendations related to osteoporosis management further illustrate this evolving
+perspective. The International Osteoporosis Foundation (IOF) and the European Society for Clinical
+and Economic Aspects of Osteoporosis and Osteoarthritis (ESCEO) initially recommended 1.0 g/
+kg/day of protein for osteoporosis management in 2013, but this specific value was removed in their
+                                                                                                    1 13
+2019 update, replaced with a more general advisory to consume 'sufficient dietary protein' . More
+recently, in 2023, the French Rheumatology Society and the Osteoporosis Research and Information
+Group issued the first specific dietary recommendations for osteoporosis, advising at least 1.0–1.2
+g/kg/day of high-quality animal protein as part of a balanced diet containing adequate calories,
+                         1 13
+calcium, and vitamin D . This represents a sophisticated integration of protein quantity and quality
+within a broader nutritional framework for bone health. Conversely, some reviews have concluded
+that increasing protein intake above 0.8 g/kg/day provides insufficient evidence for health benefits
+                                                                                                           13 20
+in terms of muscle strength, physical performance, or bone health without concurrent exercise . A
+2022 systematic review by the Health Council of the Netherlands, for instance, found that while
+increased protein combined with exercise had a possible beneficial effect on lean body mass, protein
+                                                          13
+alone likely had no effect on these outcomes . However, this review notably excluded frail,
+hospitalized, or care-home residents, limiting its applicability to more robust community-dwelling
+             1 13
+older adults . The following table summarizes the key differences in recommended protein intakes
+across various organizations and countries.
+
+ Organization /            Recommendation                       Recommendation       Basis for Formulation
+ Country                   (Healthy Older                       (Older Adults with
+                           Adults)                              Acute/Chronic
+                                                                Disease)
+
+ World Health       0.8 g/kg/day (RDA) Not specified in                              Nitrogen balance studies
+ Organization (WHO)                    provided sources                              1 17
+ Organization /          Recommendation          Recommendation             Basis for Formulation
+ Country                 (Healthy Older          (Older Adults with
+                         Adults)                 Acute/Chronic
+                                                 Disease)
+
+ Food and Agriculture 0.8 g/kg/day (RDA) Not specified in                   Nitrogen balance studies
+ Organization (FAO)                      provided sources                   1 17
+
+
+
+
+ European Food           0.83 g/kg/day (PRI) Not specified in               Meta-analysis of nitrogen
+ Safety Authority                            provided sources               balance studies (2003,
+ (EFSA)                                                                     2014)
+                                                                                    1 13 18
+
+
+
+
+ PROT-AGE Study          1.0–1.2 g/kg/day        1.2–1.5 g/kg/day           Evidence supporting
+ Group                                                                      muscle mass and function
+                                                                            maintenance; age-related
+                                                                                                               1 14 15
+                                                                            metabolic changes
+
+ European Society for 1.0–1.2 g/kg/day           1.2–1.5 g/kg/day           Clinical nutrition support
+ Clinical Nutrition and                                                     for muscle health
+                                                                                                           1 13
+
+
+ Metabolism
+ (ESPEN)
+
+ Nordic Countries        1.2 g/kg/day (for       1.2–1.5 g/kg/day (for      Recent studies suggesting
+                         food planning)          food planning)             intakes above PRI are
+                                                                            optimal to prevent
+                                                                            decline in physical
+                                                                                              1 18 19
+                                                                            functioning
+
+ Germany, Austria,       1.0 g/kg/day            Not specified in           National guideline
+ Switzerland                                     provided sources           revision in 2019
+                                                                                                        1 13
+
+
+
+
+ Ireland (Food Safety    1.0–1.2 g/kg/day        Not specified in           Advice for older adults at
+ Authority)                                      provided sources           risk of frailty, sarcopenia,
+                                                                                                           1 13
+                                                                            or undernutrition
+
+ United Kingdom &        ≥0.8 g/kg/day           Not specified in           Official dietary guidelines
+ Netherlands                                     provided sources           maintained at RDA level
+                                                                            due to insufficient
+                                                                                                                     13
+                                                                            evidence for increase
+
+
+Research on the Impact on Muscle Health
+A substantial body of evidence from randomized controlled trials (RCTs) demonstrates that
+increasing protein intake, particularly when combined with physical activity, plays a crucial role in
+mitigating age-related muscle loss (sarcopenia). The findings consistently indicate that while protein
+is a necessary component for muscle maintenance, it is not sufficient on its own for significant
+improvements in muscle strength and physical function. Instead, a synergistic effect emerges when
+protein supplementation is paired with resistance exercise training, leading to tangible gains in lean
+body mass, muscle strength, and overall physical performance. This conclusion is strongly supported
+by a series of well-regarded studies, including the ProMuscle trials, the PROMISS trial, and the
+CALM trial, which collectively provide a comprehensive picture of the impact of protein on muscle
+health in older adults.
+
+The ProMuscle series of studies, conducted in the Netherlands, provides a clear hierarchy of effects
+based on the combination of protein and exercise interventions. The original ProMuscle trial (2012)
+involved four arms: milk protein concentrate (31g/day) and/or resistance exercise training for 24
+       1
+weeks . The results showed that increased lean body mass was observed only in the group receiving
+                               1
+both protein and exercise . Interestingly, improvements in muscle strength and physical
+performance were seen in both the protein-only and exercise-only groups, suggesting that protein
+may offer a modest benefit for performance even in the absence of exercise, but that exercise is a
+                                   1 13
+critical driver for strength gains . Building on this, the ProMuscle in Practice (PiP) trial (2020)
+investigated the effect of increasing protein intake to 25g per main meal in conjunction with twice-
+                                                                  5 10
+weekly supervised progressive resistance exercise over 12 weeks . This intervention resulted in
+significant improvements in lean body mass, muscle strength, and the Short Physical Performance
+                                                                             56
+Battery (SPPB) score compared to a control group receiving usual care . Subgroup analyses from
+PiP revealed interesting nuances; participants aged 75 years or younger experienced significantly
+greater gains in lean body mass compared to those older than 75, indicating an age-related difference
+                       5
+in muscle response . Furthermore, women demonstrated significantly greater improvement in leg
+press strength compared to men, despite similar adherence rates, highlighting potential sex-based
+                           5
+differences in response . The ProMuscle Implementation Pilots (IP) further explored the real-world
+effectiveness of tailored nutrition advice aiming for 20–25g of protein per main meal, combined
+with resistance exercise. This pilot study demonstrated significant improvements in chair-rise
+performance and leg strength, suggesting that flexible, practitioner-led implementation can yield
+                  17
+strong results .
+
+Further reinforcing the synergy between protein and exercise, the PROMISS trial (2022) examined
+the effect of personalized dietary advice to increase protein intake to at least 1.2 g/kg/day, with or
+                                                                  12
+without advice on timing protein intake around physical activity . After six months, participants in
+the intervention group showed significant improvements in 400-meter walking time and leg
+                                                                                  1 12
+extension strength compared to a control group that received no dietary advice . This finding
+underscores that achieving a target protein intake, regardless of specific timing strategies, can
+positively impact physical function in older adults. Finally, the CALM (Counteracting Age-related
+Loss of Skeletal Muscle Mass) trial (2021) provided definitive evidence for the necessity of
+combining protein with exercise. This one-year RCT evaluated protein supplementation (20g twice
+                                                                         1
+daily) with or without resistance exercise training against a placebo . The results were unequivocal:
+quadriceps size and leg strength improved significantly in the group that received both exercise and
+protein supplementation. Critically, there was no improvement in the protein-only group compared
+to the placebo group, demonstrating a clear lack of efficacy for protein supplementation alone in this
+           1 13
+context . While baseline protein intakes in these five key RCTs were often above the 0.8 g/kg/day
+RDA, the beneficial effects on muscle health were still observed, particularly when protein
+                                                                   13
+supplementation was combined with resistance exercise training . This suggests that even
+individuals with suboptimal but not critically low intakes can benefit from targeted interventions, and
+that the greatest benefits would likely be seen in those starting from a lower baseline.
+
+The following table compiles the key characteristics and findings from these pivotal RCTs, providing
+a structured overview of their contributions to the understanding of protein's role in muscle health.
+
+ Study         Characteristics of        Intervention Details               Key Research Findings
+ Name          Study Population
+
+ ProMuscle     Dutch community-          24 weeks of resistance             Increased lean body mass
+ (2012)        dwelling older adults     exercise program.                  in the protein + exercise
+               (≥65 years), prefrail     Intervention group received        group. Strength and
+               or frail according to     protein supplementation (milk      physical performance
+               Fried criteria.           protein concentrate, 31g/day);     improved in both protein-
+                                         control group received             only and exercise-only
+                                         placebo.                           groups. No improvement
+                                                                            in protein-only vs. placebo
+                                                                                     179
+                                                                            group.
+
+ ProMuscle Dutch community-              12-week intensive support          Significant improvements
+ in Practice  dwelling older adults      phase (twice-weekly                in SPPB score, chair rise
+ (PiP) (2020) (≥65 years), prefrail,     supervised progressive             time, lean body mass, and
+              frail, or non-frail with   resistance exercise + dietitian-   lower limb strength
+              activity difficulties.     guided increase in protein to      compared to controls.
+                                                                                                       5 6 10 11
+
+
+              Mean age 75 ± 6            ≥25g per main meal via dairy
+              years.                     products), followed by a 12-
+                                         week moderate support phase.
+
+ PROMISS       Community-dwelling        Personalized dietary advice to     Improved 400-m walking
+ (2022)        older adults (≥65         increase protein intake to         time and leg extension
+               years) in Finland and     ≥1.2 g/kg/day for 6 months,        strength compared to no
+               the Netherlands with      with or without advice on          dietary advice.
+                                                                                                1 12
+
+
+               habitual protein          timing protein intake close to
+               intake <1.0 g/kg/day.     physical activity.
+
+ CALM          Danish community-         1-year RCT with four arms:         Quadriceps size and leg
+ (2021)        dwelling older adults     protein supplementation (20g       strength improved
+               (≥65 years). Median       twice daily) with or without       significantly in the exercise
+               age 70 years.             resistance exercise training vs.   + protein group compared
+                                         placebo.                           to protein-only and
+                                                                            placebo groups. No
+                                                                            improvement in the
+                                                                            protein-only group vs.
+                                                                                       1 4 13
+                                                                            placebo.
+Collectively, these trials build a compelling case for a dual-pronged approach to combating
+sarcopenia. Simply increasing protein intake is insufficient to stimulate meaningful muscle growth
+and strength. Resistance exercise acts as the essential trigger, creating a demand signal that allows the
+additional dietary protein to be utilized for muscle repair and synthesis. Therefore, effective
+interventions must integrate both components to achieve optimal outcomes for muscle health in
+older adults.
+
+
+Research on the Impact on Bone Health
+The relationship between protein intake and bone health in older adults is complex and multifaceted,
+with evidence pointing towards a protective effect, particularly concerning fracture risk, while the
+impact on bone mineral density (BMD) remains less conclusive. Observational studies have provided
+consistent signals of benefit, showing that higher habitual protein consumption is associated with
+better baseline BMD and a lower incidence of fractures over time. Interventional studies, particularly
+those involving exercise, further support a positive role for protein, although the direct synergistic
+effect of combining protein supplementation with exercise for improving BMD is not yet firmly
+established by high-quality randomized controlled trials. The overall effect appears highly contingent
+on the presence of other key nutrients, most notably calcium and vitamin D, which modulate
+protein's influence on bone metabolism.
+
+Key observational studies published after 2019 have strengthened the link between protein and bone
+integrity. A prospective cohort study by Weaver et al. (2021), part of the Health, Aging, and Body
+Composition Study, found that older adults with a higher protein intake (1.1±0.4 g/kg/day) had
+significantly higher hip and lumbar spine BMD at baseline compared to those with a lower intake
+                     13
+(0.8±0.3 g/kg/day) . Beyond baseline measures, the most striking finding was a 64% reduction in
+the risk of developing vertebral fractures over a five-year period for those in the highest protein
+                               13
+tertile compared to the lowest . This suggests that a higher protein intake confers a protective
+advantage against fragility fractures, a major consequence of osteoporosis. Another large prospective
+cohort study corroborated these findings, showing that higher dietary protein intake (≥15% of total
+energy intake) was associated with 1.8%-6.0% higher mean BMD at the hip, whole body, and lumbar
+                                                          3
+spine compared to lower intake (<13% of total energy) . Although this study did not find that
+protein intake affected the rate of BMD change over 4–5 years, the robust association with reduced
+                                                                                               3
+vertebral fracture risk highlights its importance in maintaining bone structure and resilience .
+
+Interventional evidence, while supportive, presents a more nuanced picture. The Kemmler et al.
+(2020) study is a prominent example of a successful intervention. Over an 18-month period, older
+men with osteoporosis and sarcopenia participated in a program combining high-intensity dynamic
+resistance exercise with whey protein supplementation to achieve a target intake of 1.5–1.6 g/kg/
+    1
+day . At the end of the study, the intervention group showed significantly higher BMD at the lumbar
+                                                                                                   1
+spine and total hip compared to a control group that consumed 1.2 g/kg/day without exercise . This
+again points to a powerful synergy between protein and mechanical loading from exercise in
+promoting bone health. However, the translation of this evidence into general practice is complicated
+by the findings of a systematic review and meta-analysis assessing the effects of combined protein
+                                                                       2
+and exercise interventions on bone mineral content (BMC) or BMD . This comprehensive review,
+which identified ten RCTs, concluded that there was currently insufficient evidence to draw robust
+                                                                    2
+conclusions due to high heterogeneity and serious risks of bias . The authors noted that many
+studies were underpowered, had short durations (mostly less than 28 weeks, which may be too brief
+to detect measurable changes in bone turnover), and failed to adequately control for confounding
+                                       2
+factors like baseline calcium intake .
+
+A critical factor that emerges from the literature is the interaction between protein and calcium
+status. Multiple sources suggest that the benefits of protein on bone health are most pronounced
+                                  20
+when calcium intake is adequate . One study indicated that high animal protein intake could
+increase fracture risk if calcium intake was low (<800 mg/day), whereas it may reduce fracture risk
+                                                20
+when calcium intake exceeded 800 mg/day . A randomized controlled study by Dawson-Hughes
+and Harris provided mechanistic insight, finding that the association between higher protein intake
+and less bone loss was only significant among participants who were also receiving calcium (500 mg/
+                                                     20
+day) and vitamin D (17.5 μg/day) supplements . This underscores that protein should be viewed as
+part of a holistic nutritional strategy for bone health, where adequate co-factors are non-negotiable
+prerequisites for realizing its full potential. The following table summarizes the core details of the
+two key post-2019 studies on bone health.
+
+ Study        Study Population         Intervention or Follow-up         Key Results
+ Name                                  Details
+
+ Weaver et Prospective                 Observational study assessing     Higher protein intake
+ al. (2021) cohort of 2160             habitual dietary protein intake   (1.1±0.4 g/kg/day) was
+            community-                 via Food Frequency                associated with 1.8% higher
+            dwelling older             Questionnaire and measuring       hip BMD and 6.0% higher
+            adults (mean age           BMD at baseline and after 4       lumbar spine BMD at baseline.
+            73.5 ± 2.8 years).         years. Fracture incidence was     Over 5 years, the higher intake
+                                       adjudicated every 6 months        group had a 64% reduced risk
+                                       over 5 years.                     of vertebral fractures (HR/SD
+                                                                                                      13
+                                                                         0.36, 95% CI: 0.14, 0.97).
+
+ Kemmler      Older men with           18-month intervention             The intervention group
+ et al.       osteoporosis and         combining high-intensity          showed significantly higher
+ (2020)       sarcopenia.              dynamic resistance exercise       BMD at the lumbar spine
+                                       with whey protein                 (mean difference 0.012 mg/
+                                       supplementation to achieve        cm²) and total hip (mean
+                                       1.5–1.6 g/kg/day. Compared        difference 0.013 mg/cm²) after
+                                       to a control group (1.2 g/kg/     18 months compared to
+                                       day, no exercise).                controls.
+                                                                                     1
+
+
+
+
+In summary, while observational data robustly links higher protein intake to better bone health and
+reduced fracture risk, the evidence from interventional trials, particularly regarding BMD, is more
+tentative. The existing RCT evidence base is limited by methodological shortcomings and a lack of
+long-term studies designed to measure skeletal outcomes. Nevertheless, the overwhelming consensus
+supports the inclusion of sufficient protein as part of a comprehensive strategy for maintaining bone
+health in older adults, a strategy that must also prioritize adequate calcium and vitamin D intake.
+
+
+The Importance of Protein Quality
+Beyond the quantity of protein consumed, the quality of that protein is a critical determinant of its
+biological value, particularly for older adults who experience a phenomenon known as anabolic
+resistance—their muscles become less responsive to the stimuli that normally promote protein
+synthesis. Animal proteins are generally considered superior to most plant proteins in this regard,
+possessing characteristics that make them more effective at building and maintaining muscle and
+bone tissue. This distinction poses a significant challenge when advising older adults to adopt plant-
+based diets, necessitating careful planning to ensure nutritional adequacy and compensate for
+inherent differences in digestibility and amino acid profiles.
+
+The superiority of animal proteins stems from three key factors: digestibility, amino acid
+composition, and the presence of antinutritional factors. Animal proteins, sourced from meat, fish,
+dairy, and eggs, are typically more easily digested and contain all indispensable (essential) amino acids
+                                                           23 25
+in proportions that closely match human requirements . Plant proteins, conversely, often have
+lower digestibility due to structural components like fiber and the presence of antinutritional factors
+                                                                                                   19 22 23
+such as phytates and protease inhibitors, which can hinder the absorption of amino acids        . More
+importantly, most plant proteins are deficient in one or more essential amino acids. For example,
+cereal grains like wheat and maize are typically low in lysine, while legumes like soybeans and lentils
+                                                                                22 29
+are limited in sulfur-containing amino acids like methionine and cysteine . This incomplete amino
+acid profile means that plant proteins are less efficient at stimulating muscle protein synthesis (MPS)
+22
+ . This differential effect has been directly measured in older adults. A crossover randomized trial
+comparing whole-food meals found that a MEAT meal (lean beef) resulted in significantly higher
+postprandial MPS rates over a 6-hour period compared to a PLANT meal (soy, chickpeas, etc.) with
+                                           28
+identical total protein and energy content . This difference was driven by markedly higher plasma
+                                                                                              28
+concentrations of essential amino acids and, crucially, leucine, following the meat meal . Another
+study confirmed that animal-based whole foods (lean pork, whole eggs) produced significantly
+greater increases in plasma EAA concentrations than plant-based equivalents (black beans, almonds)
+                                                                                   26
+in older adults, correlating with their enhanced potential to stimulate MPS .
+
+Leucine, a branched-chain amino acid, is repeatedly highlighted as a key regulator of MPS. Animal
+proteins, particularly dairy products like whey and casein, tend to have a higher leucine content
+                                   22 26
+compared to most plant proteins . To maximally stimulate MPS in older adults, who require a
+higher per-meal stimulus, a threshold of approximately 2.5–2.8 g of leucine per meal is needed,
+                                                                        14
+which is often easier to achieve with high-quality animal proteins . While strategies exist to improve
+the quality of plant proteins, such as blending complementary sources (e.g., combining legumes with
+cereals to create a complete amino acid profile), fortifying with limiting amino acids, or using isolated
+                                                       22 25
+protein concentrates, these solutions add complexity           . For older adults, who may already face
+                                                                                                              1 25
+challenges with appetite and digestive efficiency, these practical considerations are significant                    .
+Simply replacing animal protein with plant protein without strategic planning risks delivering a
+                                                                                                1 24
+suboptimal dose of essential amino acids, potentially compromising muscle and bone health              .
+
+This concern extends beyond muscle to bone health. Observational data has linked higher serum
+concentrations of various essential amino acids to better bone outcomes. Specifically, higher levels of
+valine, leucine, isoleucine, and tryptophan were associated with a slower rate of hip BMD decline
+                1
+over four years . Furthermore, higher tryptophan levels were linked to fewer major osteoporotic
+fractures, and higher valine levels were associated with a lower risk of hip fracture, a connection that
+                                               1
+has been replicated in multiple cohort studies . Given that plant proteins are often lower in these
+same amino acids, ensuring adequate intake through a varied diet or fortified products becomes even
+more critical for bone health. Replacing animal proteins with plant proteins in Nordic diets, for
+instance, has been modeled to decrease intakes of vitamin B12 and iodine, and markers indicated
+                                                                  20
+enhanced bone turnover with a possible increased fracture risk . Therefore, when promoting plant-
+based diets for older adults, it is imperative to focus not just on total protein quantity but also on
+strategies to enhance quality, such as consuming a diverse array of plant foods, incorporating
+fortified products, and educating individuals on the principles of protein complementation. Without
+this careful attention, the promotion of plant-based diets could inadvertently lead to nutrient
+deficiencies that undermine the very goals of healthy aging.
+
+
+
+
+Reference
+
+1. Discussion on protein recommendations for supporting ... https://www.frontiersin.org/journals/
+   nutrition/articles/10.3389/fnut.2024.1394916/full
+2. Effects of combined protein and exercise interventions on ... https://pmc.ncbi.nlm.nih.gov/
+   articles/PMC12064458/
+3. Effect of Dietary Protein Intake on Bone Mineral Density and ... https://
+   pubmed.ncbi.nlm.nih.gov/33677533/
+4. Development of a Mobility Diet Score (MDS) and ... https://www.frontiersin.org/journals/
+   nutrition/articles/10.3389/fnut.2019.00114/full
+5. Who Benefits Most From ProMuscle in Practice? https://pmc.ncbi.nlm.nih.gov/articles/
+   PMC8599037/
+6. Effectiveness of a Diet and Resistance Exercise ... https://pubmed.ncbi.nlm.nih.gov/31948853/
+7. Effects and contextual factors of a diet and resistance exercise ... https://
+   bmcgeriatr.biomedcentral.com/articles/10.1186/s12877-021-02733-6
+8. Effect, process, and economic evaluation of a combined ... https://pubmed.ncbi.nlm.nih.gov/
+   30005654/
+9. an overview of three successive ProMuscle interventions. https://europepmc.org/article/pmc/
+   pmc8905865
+10. Effect, process, and economic evaluation of a combined ... https://
+    bmcpublichealth.biomedcentral.com/articles/10.1186/s12889-018-5788-8
+11. A mito-centric view on muscle aging and function https://www.frontiersin.org/journals/public-
+    health/articles/10.3389/fpubh.2023.1330131/pdf
+12. Effectiveness and cost-effectiveness of personalised dietary ... https://pmc.ncbi.nlm.nih.gov/
+    articles/PMC7682452/
+13. Discussion on protein recommendations for supporting ... https://pmc.ncbi.nlm.nih.gov/
+    articles/PMC11150820/
+14. A Position Paper From the PROT-AGE Study Group. https://www.researchgate.net/
+    publication/250919383_Evidence-
+    based_Recommendations_for_Optimal_Dietary_Protein_Intake_in_Older_People_A_Position_
+    Paper_From_the_PROT-AGE_Study_Group
+15. a position paper from the PROT-AGE Study Group - PubMed https://
+    pubmed.ncbi.nlm.nih.gov/23867520/
+16. Evidence-based recommendations for optimal dietary protein ... https://
+    researchexperts.utmb.edu/en/publications/evidence-based-recommendations-for-optimal-
+    dietary-protein-intake
+17. Protein Requirements for Muscle Preservation During Ageing https://www.emjreviews.com/wp-
+    content/uploads/2024/06/Infographic-Muscle-Matters-Protein-Requirements-for-Muscle-
+    Preservation-During-Ageing.pdf
+18. NORDIC NUTRITION RECOMMENDATIONS 2023 https://pub.norden.org/
+    nord2023-003/nord2023-003.pdf
+19. Protein - NORDIC NUTRITION RECOMMENDATIONS ... https://pub.norden.org/
+    nord2023-003/protein-.html
+20. Protein – a scoping review for Nordic Nutrition ... https://pmc.ncbi.nlm.nih.gov/articles/
+    PMC10770649/
+21. From evidence to action implementing the Nordic Nutrition ... https://orbit.dtu.dk/files/
+    408771920/25_Erkkola_from-evidence-to-action-implementing-the-nordic-nutrition-
+    recommendations-in-national-policy.pdf
+22. The Role of the Anabolic Properties of Plant- versus Animal ... https://pmc.ncbi.nlm.nih.gov/
+    articles/PMC6723444/
+23. The effect of animal versus plant protein on muscle mass ... https://
+    systematicreviewsjournal.biomedcentral.com/articles/10.1186/s13643-022-01951-2
+24. Perspective: Vegan Diets for Older Adults? A ... https://www.sciencedirect.com/science/article/
+    pii/S2161831322000229
+25. The role of dietary plant and animal protein intakes on... https://journals.lww.com/co-
+    clinicalnutrition/fulltext/2022/11000/the_role_of_dietary_plant_and_animal_protein.10.aspx
+26. Effects of Consuming Ounce-Equivalent Portions of Animal https://www.mdpi.com/
+    2072-6643/15/13/2870
+27. Alternative proteins vs animal proteins: The influence of ... https://www.sciencedirect.com/
+    science/article/pii/S092422442200070X
+28. Higher Muscle Protein Synthesis Rates Following Ingestion of ... https://jn.nutrition.org/article/
+    S0022-3166(23)72723-5/fulltext
+29. Comprehensive overview of the quality of plant‐ And ... https://onlinelibrary.wiley.com/doi/
+    10.1002/fsn3.1809
+30. Plant-based food patterns to stimulate muscle protein ... https://cdnsciencepub.com/doi/
+    10.1139/apnm-2021-0806
+

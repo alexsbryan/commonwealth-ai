@@ -1,0 +1,67 @@
+{
+  "icd": "manifest",
+  "version": 1,
+  "run_id": "dr-1787293777",
+  "charter_hash": "66b68fa60ea96453",
+  "terminal_state": "done-partial",
+  "aborted_at_round": null,
+  "truncation_declared": true,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 4
+    },
+    {
+      "round": 3,
+      "gaps_before": 4,
+      "gaps_after": 4,
+      "fetched": 0,
+      "search_calls": 1
+    }
+  ],
+  "sources": {
+    "fetched": [
+      {
+        "url": "https://estate.example/seed-12",
+        "custody": "public-web",
+        "ingested_into": "dr-estate-dr-1787293777"
+      }
+    ],
+    "failed": []
+  },
+  "budget": {
+    "spent": {
+      "web-search:mock": 12,
+      "web-fetch:pages": 1
+    },
+    "remaining": {
+      "web-search:mock": 0,
+      "web-fetch:pages": 11
+    }
+  },
+  "not_covered": [
+    "Microsoft’s Recall feature became a privacy scandal in 2024 because it was initially designed as an AI \"memory\" tool that automatically screenshotted the user's screen every few seconds and stored this data locally [Source: ev-1].",
+    "The changed version of Recall is now opt-in (default OFF) rather than enabled by default [Source: ev-1].",
+    "Additionally, accessing the timeline requires Windows Hello authentication and presence detection, and the feature explicitly excludes incognito browsing sessions and DRM content [Source: ev-1].",
+    "While this revised, more secure version reached general availability on Copilot+ PCs in 2025, the initial controversy permanently shaped privacy conversations surrounding AI PCs [Source: ev-1]."
+  ],
+  "reframe": null,
+  "alignment": null,
+  "residue": [],
+  "consent": null,
+  "lock": {
+    "id": "dr-1787293777",
+    "acquired_at_unix": 1787293777,
+    "released_at_unix": 1787293892
+  }
+}

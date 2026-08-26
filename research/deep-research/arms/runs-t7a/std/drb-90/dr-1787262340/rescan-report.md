@@ -1,0 +1,60 @@
+# Analyze the complex issue of liability allocation in accidents involving vehicles with advanced driver-assistance systems (ADAS) operating in a shared human-machine driving context. Your analysis should integrate technical principles of ADAS, existing legal frameworks, and relevant case law to systematically examine the boundaries of responsibility between the driver and the system. Conclude with proposed regulatory guidelines or recommendations.
+
+- run: `dr-1787262340` — every claim below is verdict-stamped; citations are chunk-level.
+
+## Findings
+
+- **[passed]** light vehicle sales committed to making front crash prevention technology standard by September 2022 . — `ev-2` [https://www.iihs.org/research-areas/advanced-driver-assistance](https://www.iihs.org/research-areas/advanced-driver-assistance), `ev-2` [https://www.iihs.org/research-areas/advanced-driver-assistance](https://www.iihs.org/research-areas/advanced-driver-assistance)
+
+## Refuted claims (flagged, never removed)
+
+- **[failed]** ### 2.  — *refuted by the evidence*
+
+## Open questions
+
+- **[could-not-judge]** Based on the evidence provided, here is an analysis of liability allocation in accidents involving Advanced Driver Assistance Systems (ADAS).  — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** ### 1.  — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** Technical Principles and System Capabilities
+To understand liability, one must distinguish between passive and active ADAS systems . — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** Passive systems are designed to alert the driver but do not actively control vehicle movements; common examples include anti-lock braking systems (ABS), electronic stability control (ESC), and tire pressure monitoring systems (TPMS) . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** In contrast, active systems take actionable steps to avoid potential accidents, such as adaptive cruise control (ACC), automatic emergency breaking (AEB), blind spot monitoring (BSM), and lane departure warnings (LDW) . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** These systems rely on a fusion of data from cameras, radars, ultrasonic sensors, and other inputs to assess the environment . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** For instance, front crash prevention systems use sensors like cameras, radar, or lidar to detect when a vehicle is getting too close to another in front of it . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** These technologies are increasingly becoming standard; 20 automakers representing 99% of U.S.  — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** Furthermore, some driver assistance technologies have shown real-world benefits, including actual reductions in crashes for features such as front crash prevention, lane departure prevention, blind spot detection, and rear crash prevention . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** Legal Frameworks and Regulatory Landscape
+The regulatory environment is fragmented and evolving . — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** In the United States, slightly over half of the fifty states have enacted some form of legislation regulating autonomous vehicles (AVs), creating a volatile landscape for insurance carriers operating across jurisdictions . — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** State laws vary significantly; for example, New York requires a natural person holding a valid license to be present within the vehicle during operation on public highways, whereas Nevada allows the testing and operation of fully autonomous vehicles provided they can achieve a minimal risk condition upon failure . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** Texas views the owner as the operator for compliance purposes even if not physically present in the vehicle . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** At the federal level, National Highway Traffic Safety Administration (NHTSA) finalized a requirement in 2024 mandating front crash prevention on nearly all new vehicles with a gross vehicle weight rating of 10,000 pounds or less by September 2029 . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** This rule requires systems to be operable in both daylight and dark conditions and capable of warning and braking at speeds up to 90 mph . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** ### 3.  — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** Boundaries of Responsibility: Driver vs.  — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** System
+Traditional liability frameworks were designed for human-driven vehicles but are being disrupted as AVs blur the lines between human error and technological malfunction . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** Determining negligence often involves assessing the extent of ADAS use and its reliability at the time of the crash . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** The driver can be held liable if they over-relied on these systems, while manufacturers or software developers may face liability if their technology was defective or negligent under the circumstances  . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** Research indicates that Waymo’s driverless vehicles have crash rates 68% lower than human drivers, suggesting that removing the human element significantly reduces risk . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** This supports the need for robust black-box data that can distinguish between driver inaction and sensor/algorithmic failure . — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** As technology advances toward higher levels of automation—where the Society of Automotive Engineers identifies six levels ranging from full human control to no onboard input—the legal burden will likely continue shifting from individual drivers to manufacturers and software developers as human intervention decreases . — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** ### Conclusion and Recommendations
+Given that active systems take actionable control steps, regulatory guidelines should reinforce manufacturer responsibility for defects in these specific components (e.g., AEB, ACC), distinct from passive alert-only systems  . — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** The evidence supports a shift away from traditional models focusing solely on driver error toward frameworks that account for shared or shifting fault among drivers, manufacturers, and software developers based on the level of automation and system reliability at the time of an incident.  — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** Technical Principles and System Capabilities
+To understand liability, one must distinguish between passive and active ADAS systems.  — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** Legal Frameworks and Regulatory Landscape
+The regulatory environment is fragmented and evolving.  — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** Boundaries of Responsibility: Driver vs.  — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** This supports the need for robust black-box data that can distinguish between driver inaction and sensor/algorithmic failure.  — *open question: single-origin support (corroboration floor)*
+- **[could-not-judge]** **Manufacturer Accountability for Active Systems:** Given that active systems take actionable control steps, regulatory guidelines should reinforce manufacturer responsibility for defects in these specific components (e.g., AEB, ACC), distinct from passive alert-only systems  . — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** ### 1.  — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** ### 5.  — *open question: extracted specifics absent from the evidence*
+- **[could-not-judge]** 4.  — *open question: extracted specifics absent from the evidence*
+
+## Searched but absent
+
+The queries below were executed and returned no evidence. An absence is a finding, not a failure — we looked for these and found no evidence either way.
+
+- round 2: "###" — searched, no evidence returned
+

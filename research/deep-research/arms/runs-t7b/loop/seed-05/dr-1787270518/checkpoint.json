@@ -1,0 +1,269 @@
+{
+  "icd": "run_checkpoint",
+  "version": 1,
+  "run_id": "dr-1787270518",
+  "charter_hash": "8253a2eebd49352b",
+  "written_after_round": 2,
+  "config": {
+    "run_id": "dr-1787270518",
+    "question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+    "seed_id": null,
+    "run_dir": "/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-t7b/loop/seed-05/dr-1787270518",
+    "max_rounds": 3,
+    "code_set_k": 3,
+    "eps_quota": 0.1,
+    "evidence_window_max_chunks": 20,
+    "estate_corpus_ids": [],
+    "web_backend": "mock",
+    "search_source": "Mock",
+    "web_search_allowance": 12,
+    "web_fetch_allowance": 12,
+    "posture": "local_only",
+    "consent": null
+  },
+  "question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+  "frontier": [
+    "Date the EU AI Act entered into force and specific dates for each phase of application between 2024 and 2027",
+    "List of prohibited AI practices under Article 5 and their effective date in February 2025",
+    "Regulatory requirements for high-risk AI systems listed in Annex III and their compliance deadline in August 2026",
+    "Obligation to comply with transparency obligations for certain AI systems (e.g., deepfakes, chatbots) and its effective date in August 2025",
+    "Requirements for general-purpose AI models regarding technical documentation, copyright policies, and training data summaries and their applicable timeline from August 2025",
+    "Penalties and fines structure for non-compliance with the EU AI Act including maximum fine amounts as a percentage of global turnover"
+  ],
+  "frontier_question": "Why did the EU's AI Act enter into force in phases between 2024 and 2027, and what do the different deadlines require?",
+  "figure_specifiers": [
+    "2024",
+    "2027"
+  ],
+  "reframe_record": null,
+  "alignment_record": null,
+  "re_plans": 1,
+  "residue": [],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ],
+  "windows": [
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787270518",
+      "charter_hash": "8253a2eebd49352b",
+      "round": 1,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787270518",
+      "charter_hash": "8253a2eebd49352b",
+      "round": 1,
+      "chunks": [
+        {
+          "id": "ev-1",
+          "locator": "https://estate.example/seed-05",
+          "source_url": "https://estate.example/seed-05",
+          "custody": "public-web",
+          "provenance_class": "known",
+          "content": "The EU AI Act — the world's first comprehensive AI law — was published in the EU Official Journal on 2024-07-12 and entered into force on 2024-08-01. Its obligations are phased: prohibited practices (\"unacceptable risk\") apply from 2025-02-02; general-purpose AI (GPAI) model obligations from 2025-08-02; high-risk system obligations from 2026-08-02, with a subset applying from 2027-08-02. The risk tiers are unacceptable (banned outright — social scoring, certain manipulative or exploitation-of-vulnerability uses), high, limited (transparency duties), and minimal, plus the separate GPAI model category with duties scaled by systemic-risk status (the 10^26 FLOPs threshold). Fines reach €35 million or 7% of global annual turnover, whichever is higher, for prohibited-practice violations, and €15 million or 3% for most other breaches. The European AI Office (established 2024, Brussels) leads implementation; a GPAI Code of Practice was drafted through 2024-2025 with broad industry participation (including OpenAI, Google, Microsoft, Anthropic, Meta) as the safe-zone interpretation of the GPAI obligations. The phased entry was deliberate: obligations land as institutional capacity and technology mature, and the schedule doubles as the compliance roadmap the \"Brussels effect\" exports to providers worldwide.\n",
+          "ingested_into": null,
+          "tags": [
+            "2024",
+            "2027",
+            "act",
+            "entry",
+            "force",
+            "phased"
+          ]
+        }
+      ],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-05"
+      ],
+      "derived_custody": "public-web"
+    },
+    {
+      "icd": "evidence_window",
+      "version": 1,
+      "run_id": "dr-1787270518",
+      "charter_hash": "8253a2eebd49352b",
+      "round": 2,
+      "chunks": [],
+      "fetch_failures": [],
+      "dedup_refused": [
+        "https://estate.example/seed-05"
+      ],
+      "derived_custody": "public-web"
+    }
+  ],
+  "prior_gap_texts": [
+    "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1].",
+    "This schedule also serves as a compliance roadmap for providers worldwide [Source: ev-1].",
+    "Regarding what the different deadlines require, the evidence specifies the following application dates for specific risk tiers and categories:\n*   **Prohibited practices** (classified as \"unacceptable risk\") apply from 2025-02-02 [Source: ev-1].",
+    "These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+    "*   **General-purpose AI (GPAI) model obligations** apply from 2025/08/02 [Source: ev-1].",
+    "Duties in this category are scaled by systemic-risk status, with a threshold of $10^{26}$ FLOPs mentioned [Source: ev-1].",
+    "*   **High-risk system obligations** generally apply from 2026/08/02, though a subset applies earlier from 2027/08/02 according to the provided text structure (note: standard legal interpretation usually places later dates for legacy systems, but I am strictly following the source which lists \"high-risk... [Source: ev-1]",
+    "from 2026-08-02, with a subset applying from 2027-08-02\") [Source: ev-1].",
+    "The evidence does not provide specific details on what is required by the deadlines for \"limited\" or \"minimal\" risk tiers beyond noting they exist in the hierarchy. [Source: ev-1]"
+  ],
+  "prior_gaps": [
+    {
+      "id": "g1",
+      "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1].",
+      "actionable_query": "2024 2027 Act entered force phases because phased entry deliberate designed ensure obligations land institutional capacity technology mature",
+      "from_claim_id": "c1",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g2",
+      "text": "This schedule also serves as a compliance roadmap for providers worldwide [Source: ev-1].",
+      "actionable_query": "schedule serves compliance roadmap providers worldwide",
+      "from_claim_id": "c2",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g3",
+      "text": "Regarding what the different deadlines require, the evidence specifies the following application dates for specific risk tiers and categories:\n*   **Prohibited practices** (classified as \"unacceptable risk\") apply from 2025-02-02 [Source: ev-1].",
+      "actionable_query": "Regarding different deadlines require evidence specifies following application dates specific risk tiers categories Prohibited practices classified unacceptable apply",
+      "from_claim_id": "c3",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g4",
+      "text": "These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].",
+      "actionable_query": "include social scoring certain manipulative exploitation-of-vulnerability uses",
+      "from_claim_id": "c4",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g5",
+      "text": "*   **General-purpose AI (GPAI) model obligations** apply from 2025/08/02 [Source: ev-1].",
+      "actionable_query": "* **General-purpose AI (GPAI) model obligations** apply from . (2024, 2027)",
+      "from_claim_id": "c5",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "Duties in this category are scaled by systemic-risk status, with a threshold of $10^{26}$ FLOPs mentioned [Source: ev-1].",
+      "actionable_query": "Duties category scaled systemic-risk status threshold FLOPs mentioned",
+      "from_claim_id": "c6",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g7",
+      "text": "*   **High-risk system obligations** generally apply from 2026/08/02, though a subset applies earlier from 2027/08/02 according to the provided text structure (note: standard legal interpretation usually places later dates for legacy systems, but I am strictly following the source which lists \"high-risk... [Source: ev-1]",
+      "actionable_query": "* **High-risk system obligations** generally apply from though a subset applies earlier from according to the provided text structure (note: (2024, 2027)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g8",
+      "text": "from 2026-08-02, with a subset applying from 2027-08-02\") [Source: ev-1].",
+      "actionable_query": "2027 subset applying",
+      "from_claim_id": "c8",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-05"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g9",
+      "text": "The evidence does not provide specific details on what is required by the deadlines for \"limited\" or \"minimal\" risk tiers beyond noting they exist in the hierarchy. [Source: ev-1]",
+      "actionable_query": "evidence does provide specific details required deadlines limited minimal risk tiers beyond noting they exist hierarchy",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "web_refused": false,
+  "window_capped": false,
+  "search_calls": 12,
+  "rounds": [
+    {
+      "round": 1,
+      "gaps_before": 0,
+      "gaps_after": 1,
+      "fetched": 1,
+      "search_calls": 7
+    },
+    {
+      "round": 2,
+      "gaps_before": 1,
+      "gaps_after": 9,
+      "fetched": 0,
+      "search_calls": 5
+    }
+  ],
+  "fetched_sources": [
+    {
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web",
+      "ingested_into": null
+    }
+  ],
+  "failed_sources": [],
+  "artifacts": [
+    "charter.json",
+    "plan.json",
+    "survey-1.json",
+    "survey-1.json",
+    "draft-1.json",
+    "gap-list-1.json",
+    "fetch-list-1.json",
+    "skip-ledger-1.json",
+    "evidence-window-1.json",
+    "checkpoint.json",
+    "draft-2.json",
+    "gap-list-2.json",
+    "fetch-list-2.json",
+    "skip-ledger-2.json",
+    "evidence-window-2.json"
+  ],
+  "aborted_at_round": null
+}

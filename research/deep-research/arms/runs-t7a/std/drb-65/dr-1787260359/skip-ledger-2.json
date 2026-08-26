@@ -1,0 +1,113 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787260359",
+  "charter_hash": "eb22b805c469965b",
+  "round": 2,
+  "entries": [
+    {
+      "url": "https://www.mdpi.com/2078-2489/14/8/427",
+      "title": "Metadata Standard for Continuous Preservation, Discovery, and Reuse of Research Data in Repositories by Higher Education Institutions: A Systematic Review",
+      "score": 0.0,
+      "rank": 5,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://direct.mit.edu/qss/article/doi/10.1162/QSS.a.396/133676/Coverage-and-metadata-completeness-and-accuracy-of",
+      "title": "Coverage and metadata completeness and accuracy of ...",
+      "score": 0.0,
+      "rank": 6,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://arxiv.org/html/2509.14457v1",
+      "title": "Keywords are not always the key: A metadata field analysis for natural language search on open data portals",
+      "score": 0.0,
+      "rank": 7,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://blog.scholasticahq.com/post/metadata-elements-publishers-should-prioritize",
+      "title": "In pursuit of rich article-level metadata: 5 elements journal publishers should prioritize",
+      "score": 0.0,
+      "rank": 8,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11298374",
+      "title": "The evolution of plant phenomics: global insights, trends, and collaborations (2000-2021)",
+      "score": 0.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.plantphenomics.org.au/resources/published-research",
+      "title": "Australian Plant Phenomics Network | Published Research",
+      "score": 0.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://biotechlab.forestry.oregonstate.edu/sites/default/files/PlantPhenomics2022.pdf",
+      "title": "PLANTPHENOMICS_9893639 1..17",
+      "score": 0.0,
+      "rank": 11,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://digitalcommons.unl.edu/cgi/viewcontent.cgi?article=1245&context=plantscifacpub",
+      "title": "Advances in plant phenomics - UNL Digital Commons",
+      "score": 0.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://academic.oup.com/jxb/article/66/18/5429/482901",
+      "title": "Plant phenomics and the need for physiological phenotyping ...",
+      "score": 0.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.cell.com/molecular-plant/fulltext/S1674-2052(20)30008-3",
+      "title": "Crop Phenomics and High-Throughput Phenotyping: Past ...",
+      "score": 0.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://journals.sagepub.com/doi/10.1177/0306312719863494",
+      "title": "Metadata accounts: Achieving data and evidence in ...",
+      "score": 0.0,
+      "rank": 16,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.semanticscholar.org/paper/Deep-Plant-Phenomics%3A-A-Deep-Learning-Platform-for-Ubbens-Stavness/39bc14bda0e5b2887aa5cf9512d8dcb2b160fa66",
+      "title": "A Deep Learning Platform for Complex Plant Phenotyping ...",
+      "score": 0.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip"
+    },
+    {
+      "url": "https://www.researchgate.net/publication/318456745_Deep_Plant_Phenomics_A_Deep_Learning_Platform_for_Complex_Plant_Phenotyping_Tasks",
+      "title": "(PDF) Deep Plant Phenomics: A Deep Learning Platform ...",
+      "score": 0.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip"
+    }
+  ]
+}

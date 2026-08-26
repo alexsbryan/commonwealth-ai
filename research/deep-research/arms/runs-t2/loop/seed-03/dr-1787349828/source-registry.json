@@ -1,0 +1,15 @@
+{
+  "icd": "source_registry",
+  "version": 1,
+  "run_id": "dr-1787349828",
+  "charter_hash": "f71523d15ad32954",
+  "sources": [
+    {
+      "url": "https://estate.example/seed-03",
+      "title": "Boeing Starliner's uncrewed return decision (2024-2025)",
+      "source_type": "web",
+      "round": 1,
+      "admitted": true
+    }
+  ]
+}

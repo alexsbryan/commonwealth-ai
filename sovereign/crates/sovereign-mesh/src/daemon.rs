@@ -3965,6 +3965,7 @@ mod tests {
 
         let cfg = SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::from("/m/qwen3-coder-30b.gguf"),
                 fast: Some(PathBuf::from("/m/qwen3-1.7b.gguf")),

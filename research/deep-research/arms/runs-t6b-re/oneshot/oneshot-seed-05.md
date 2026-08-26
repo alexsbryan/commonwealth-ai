@@ -1,8 +1,9 @@
-The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed so that obligations would land as institutional capacity and technology mature [Source: ev-1]. This schedule also serves to double as a compliance roadmap that is exported worldwide via the "Brussels effect" [Source: ev-1].
+The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1]. Additionally, this schedule serves a dual purpose by acting as the compliance roadmap for the "Brussels effect," which exports these standards to providers worldwide [Source: ev-1].
 
-The specific deadlines require the following actions based on risk tiers and system categories:
-*   **Prohibited practices** (classified as "unacceptable risk," such as social scoring or manipulative uses) apply from February 2, 2025 [Source: ev-1]. Violations of these prohibited practices carry fines reaching €35 million or 7% of global annual turnover, whichever is higher [Source: ev-1].
-*   **General-purpose AI (GPAI)** model obligations apply from August 2, 2026? No, wait. The text says GPAI model obligations are from August 2, **2025** [Source: ev-1]. These duties are scaled by systemic-risk status, utilizing a threshold of $10^{26}$ FLOPs [Source: ev-1]. A GPAI Code of Practice was drafted through the period ending in 2024 to serve as a safe-zone interpretation for these obligations [Source: ev-1]. Most other breaches carry fines of €15 million or 3% of global annual turnover [Source: ev-1].
-*   **High-risk system** obligations apply from August 2, **2026**, with a subset applying later on August 2, **2027** [Source: ev-1].
+The different deadlines require specific actions based on risk tiers and system types:
+*   **2025-02-02:** Prohibited practices (classified as "unacceptable risk") apply. These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].
+*   **2025-08-02:** General-purpose AI (GPAI) model obligations begin applying. These duties are scaled by systemic-risk status, with a threshold of 10^26 FLOPs [Source: ev-1]. A GPAI Code of Practice was drafted through the period from 2024 to 2025 to provide safe-zone interpretations for these obligations [Source: ev-1].
+*   **2026-08-02:** High-risk system obligations apply [Source: ev-1].
+*   **2027-08-02:** A subset of high-risk system obligations applies [Source: ev-1].
 
-The Act itself was published on July 12, 2024, and entered into force on August 1, 2024 [Source: ev-1]. Implementation is led by the European AI Office, which was established in Brussels in 2024 [Source: ev-1].
+The Act itself was published in the EU Official Journal on 2024-07-12 and entered into force on 2024-8-01 [Source: ev-1]. Implementation is led by the European AI Office, which was established in 2024 in Brussels [Source: ev-1].

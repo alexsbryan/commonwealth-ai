@@ -1,0 +1,3 @@
+# Runtime caches, not evidence.
+.cache/
+__pycache__/

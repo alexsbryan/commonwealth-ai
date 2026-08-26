@@ -1,0 +1,55 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787351331",
+  "charter_hash": "9f73b2d381087123",
+  "round": 3,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "American cities have undergone a fundamental transformation since 1980, characterized by accelerating gentrification and widening economic inequality [Source: ev-1]. Gentrification levels were at their lowest in the 1970s and increased every decade until 2010 [Source: ev-3]. The rate of gentrification doubled after 2000 compared to the 1990s, affecting nearly 20% of lower-income neighborhoods in major cities [Source: ev-1] [Source: ev-2]. In New York, 128 tracts gentrified, which was the highest raw total among cities reviewed [Source: ev-2].\n\nEconomic disparities have intensified significantly across metropolitan areas. By 2018–2021, Federal Reserve data tracking over 3,140 inequality series confirmed that inequality had reached record levels [Source: ev-1]. Several metros exhibit extreme patterns where income ratios reach 18:1 between top and bottom earners [Source: ev-1]. Specifically, Atlanta and Washington D.C. have a 95/20 ratio of 18:1 [Source: ev-1]. New York City leads with a Gini coefficient of 0.5469, compared to the national average of 0.40 in 2013 [Source: ev-1].\n\nHousing affordability has deteriorated as costs outpaced wage growth. Since 2000, home prices increased 177% while median household income grew only 92% [Source: ev-1] [Source: ev-4]. On an inflation-adjusted basis, incomes rose just 8.5%, whereas home prices rose more than 56% [Source: ev-4]. The national price-to-income ratio is approximately 4.6–4.7 [Source: ev-1] [Source: ev-4]. In California cities such as Los Angeles, San Jose, Long Beach, San Francisco, and San Diego, ratios range from 9.6 to 12.2—more than double the national average [Source: ev-1] [Source: ev-4]. Five of the six large U.S. cities with the highest price-to-income ratios are in California [Source: ev-4].\n\nDemographic shifts have accompanied these economic changes. Gentrifying neighborhoods saw population increases (+6.5%) and became whiter (non-Hispanic white share increased by +4.3 percentage points), while poverty rates decreased by 0.7 percentage points [Source: ev-1] [Source: ev-2]. In contrast, lower-income areas that did not gentrify experienced slight population losses (-2.4%), an increase in minority concentration, and a rise in poverty of 6.7 percentage points [Source: ev-1] [Source: ev-2]. Displacement patterns vary by race; residents from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying areas, whereas residents from other gentrifying areas often move to wealthier ones [Source: ev-1]. Since 1980, nearly 80% of the country's under-45 population growth was concentrated in metro areas with over 1 million residents [Source: ev-1] [ev-4].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://v1-demo.example/source-report",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://www.governing.com/archive/gentrification-in-cities-governing-report.html",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-3",
+      "url": "https://www.terry.uga.edu/news/gentrification-by-the-numbers/",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-4",
+      "url": "https://constructioncoverage.com/research/cities-with-highest-home-price-to-income-ratios",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-1",
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-2",
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-3",
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "custody": "public-web"
+    },
+    {
+      "evidence_id": "ev-4",
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "custody": "public-web"
+    }
+  ]
+}

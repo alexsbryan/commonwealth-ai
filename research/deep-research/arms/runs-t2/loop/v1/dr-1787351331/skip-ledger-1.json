@@ -1,0 +1,239 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787351331",
+  "charter_hash": "9f73b2d381087123",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 10.0,
+      "rank": 9,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities."
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 10.0,
+      "rank": 10,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "Stanford sociologist Jackelyn Hwang found the negative effects of gentrification are felt disproportionately by minority communities: poor residents moving from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying neighborhoods within the city, while residents moving from other gentrifying neighborhoods tend to move to wealthier neighborhoods."
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 8.0,
+      "rank": 13,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "SmartAsset ranked 98 of the largest U.S. cities by income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. New Orleans tops the list with a ratio of 7.87; Boston follows with 7.81 ($172,476 at the 80th percentile versus $22,095 at the 20th)."
+    },
+    {
+      "url": "https://www.pewresearch.org/social-trends/2018/05/22/demographic-and-economic-trends-in-urban-suburban-and-rural-communities/",
+      "title": "Demographic and economic trends in urban, suburban and rural communities",
+      "score": 8.0,
+      "rank": 14,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "The white share of the population fell 8 percentage points since 2000 in the suburbs, 7 points in the urban core; 53% of urban counties are majority nonwhite; today 35% of urban residents and 31% in the suburbs have a bachelor's degree or more education, compared with 19% in rural counties."
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 8.0,
+      "rank": 15,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "Stanford sociologist Jackelyn Hwang found the negative effects of gentrification are felt disproportionately by minority communities: poor residents moving from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying neighborhoods within the city, while residents moving from other gentrifying neighborhoods tend to move to wealthier neighborhoods."
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 7.0,
+      "rank": 17,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "SmartAsset ranked 98 of the largest U.S. cities by income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. New Orleans tops the list with a ratio of 7.87; Boston follows with 7.81 ($172,476 at the 80th percentile versus $22,095 at the 20th)."
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 7.0,
+      "rank": 18,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities."
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 7.0,
+      "rank": 19,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "Manufacturing jobs, which peaked at 19.5 million in 1979, fell to under 11.5 million during the pandemic, while employment in finance and professional and business services soared from 12 million to 32 million; nearly 80 percent of the country's growth in its under-45 population has been concentrated in metro areas with over a million residents."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+      "title": "Income inequality in the United States",
+      "score": 7.0,
+      "rank": 20,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "According to the Census Bureau, income inequality reached then-record levels in 2018, with a Gini of 0.485, then 0.488 in 2020 and 0.494 in 2021, per pre-tax money income."
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 6.0,
+      "rank": 21,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 6.0,
+      "rank": 23,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "New York is the state with the highest inequality; the economy of New York City (Gini index 0.5469) relies greatly on high-salary earners."
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 6.0,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "Stanford sociologist Jackelyn Hwang found the negative effects of gentrification are felt disproportionately by minority communities: poor residents moving from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying neighborhoods within the city, while residents moving from other gentrifying neighborhoods tend to move to wealthier neighborhoods."
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 5.0,
+      "rank": 27,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "Manufacturing jobs, which peaked at 19.5 million in 1979, fell to under 11.5 million during the pandemic, while employment in finance and professional and business services soared from 12 million to 32 million; nearly 80 percent of the country's growth in its under-45 population has been concentrated in metro areas with over a million residents."
+    },
+    {
+      "url": "https://www.brookings.edu/articles/city-and-metropolitan-inequality-on-the-rise-driven-by-declining-incomes/",
+      "title": "City and metropolitan inequality on the rise, driven by declining incomes",
+      "score": 5.0,
+      "rank": 28,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "The 95/20 ratio for the United States was 9.3 in 2014 (up from 8.5 in 2007); among the 100 largest metro areas, 57 have a significantly higher 95/20 ratio in 2014 than in 2007; Atlanta and Washington D.C. are among the high-inequality cities."
+    },
+    {
+      "url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "title": "Since the pandemic, young adults have fueled the revival of small towns and rural areas",
+      "score": 5.0,
+      "rank": 30,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "Manufacturing jobs, which peaked at 19.5 million in 1979, fell to under 11.5 million during the pandemic, while employment in finance and professional and business services soared from 12 million to 32 million; nearly 80 percent of the country's growth in its under-45 population has been concentrated in metro areas with over a million residents."
+    },
+    {
+      "url": "https://news.stanford.edu/report/2020/12/01/gentrification-disproportionately-affects-minorities/",
+      "title": "Gentrification disproportionately affects minorities",
+      "score": 5.0,
+      "rank": 31,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "Stanford sociologist Jackelyn Hwang found the negative effects of gentrification are felt disproportionately by minority communities: poor residents moving from historically Black gentrifying neighborhoods tend to move to poorer non-gentrifying neighborhoods within the city, while residents moving from other gentrifying neighborhoods tend to move to wealthier neighborhoods."
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 4.0,
+      "rank": 32,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "SmartAsset ranked 98 of the largest U.S. cities by income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. New Orleans tops the list with a ratio of 7.87; Boston follows with 7.81 ($172,476 at the 80th percentile versus $22,095 at the 20th)."
+    },
+    {
+      "url": "https://smartasset.com/data-studies/income-inequality-2024",
+      "title": "Cities Where Income Inequality Is Highest and Lowest in 2024",
+      "score": 4.0,
+      "rank": 34,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "SmartAsset ranked 98 of the largest U.S. cities by income inequality, measured by comparing the incomes of the top 80% of earners with the bottom 20%. New Orleans tops the list with a ratio of 7.87; Boston follows with 7.81 ($172,476 at the 80th percentile versus $22,095 at the 20th)."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+      "title": "Income inequality in the United States",
+      "score": 3.0,
+      "rank": 36,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q3",
+      "snippet": "According to the Census Bureau, income inequality reached then-record levels in 2018, with a Gini of 0.485, then 0.488 in 2020 and 0.494 in 2021, per pre-tax money income."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 2.0,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "New York is the state with the highest inequality; the economy of New York City (Gini index 0.5469) relies greatly on high-salary earners."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+      "title": "Income inequality in the United States",
+      "score": 2.0,
+      "rank": 38,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q1",
+      "snippet": "According to the Census Bureau, income inequality reached then-record levels in 2018, with a Gini of 0.485, then 0.488 in 2020 and 0.494 in 2021, per pre-tax money income."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/List_of_U.S._states_and_territories_by_income_inequality",
+      "title": "List of U.S. states and territories by income inequality",
+      "score": 2.0,
+      "rank": 39,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "New York is the state with the highest inequality; the economy of New York City (Gini index 0.5469) relies greatly on high-salary earners."
+    },
+    {
+      "url": "https://en.wikipedia.org/wiki/Income_inequality_in_the_United_States",
+      "title": "Income inequality in the United States",
+      "score": 2.0,
+      "rank": 40,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q2",
+      "snippet": "According to the Census Bureau, income inequality reached then-record levels in 2018, with a Gini of 0.485, then 0.488 in 2020 and 0.494 in 2021, per pre-tax money income."
+    }
+  ]
+}

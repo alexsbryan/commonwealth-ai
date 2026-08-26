@@ -1,0 +1,23 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787252289",
+  "charter_hash": "3f2f8a3c7ee72366",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of distinct compliance deadlines specified in the EU AI Act Article 113, years",
+      "List of prohibited AI practices under Article 5 and their specific enforcement start date in August 2024, entities: European Union Member States",
+      "General applicability date for high-risk AI systems listed in Annex III versus those integrated into products under Annex I, dates: February 2026, August 2027",
+      "Scope of obligations for providers of general-purpose AI (GPAI) models regarding transparency and copyright policy, effective date: August 2025",
+      "Final deadline for full application of all remaining provisions not covered by earlier phases, date: August 2030"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2024",
+      "2027"
+    ]
+  }
+}

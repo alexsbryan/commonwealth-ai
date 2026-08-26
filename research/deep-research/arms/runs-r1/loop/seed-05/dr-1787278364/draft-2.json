@@ -1,0 +1,20 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787278364",
+  "charter_hash": "5d4b5b1c9ce525c4",
+  "round": 2,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "The EU AI Act entered into force in phases between 2024 and 2027 because the phased entry was deliberate, designed to ensure that obligations land as institutional capacity and technology mature [Source: ev-1]. This schedule also serves as a compliance roadmap for providers worldwide [Source: ev-1].\n\nThe different deadlines require the following specific actions based on risk tiers and system categories:\n*   **2025-02-02**: Prohibited practices (classified as \"unacceptable risk\") apply. These include social scoring and certain manipulative or exploitation-of-vulnerability uses [Source: ev-1].\n*   **2025-08-02**: Obligations for general-purpose AI (GPAI) models take effect, with duties scaled by systemic-risk status using the 10^26 FLOPs threshold [Source: ev-1].\n*   **2026-08-02**: High-risk system obligations begin to apply [Source: ev-1].\n*   **2027-08-02**: A subset of high-risk system obligations applies from this date [Source: ev-1].\n\nThe Act was published in the EU Official Journal on 2024-07-12 and entered into force initially on 2024-12-31 (though the text specifies entry into force as 2024-08-01, it notes publication on 2024/07/12) [Source: ev-1]. Note: The evidence states it \"entered into force on 2024.08.01\" but also mentions publication on \"2024.07.12\". The phased obligations begin later as listed above. Violations of prohibited practices carry fines reaching €35 million or 7% of global annual turnover, while most other breaches face fines of €15 million or 3% [Source: ev-1].",
+  "citations": [
+    {
+      "evidence_id": "ev-1",
+      "url": "https://estate.example/seed-05",
+      "custody": "public-web"
+    }
+  ]
+}

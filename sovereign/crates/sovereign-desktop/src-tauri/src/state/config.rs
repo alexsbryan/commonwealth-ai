@@ -290,6 +290,11 @@ pub fn resolve_node_name(configured: &str) -> String {
     }
 }
 
+/// DEPRECATED — migrated into `SetupConfig`'s `[search]` on load
+/// (`migrate_legacy_search_backend`). Kept so an existing `desktop.toml`
+/// still deserializes and its value can be recovered once; every reader
+/// now goes through `sovereign_tools_base::web::search::configured_search`
+/// over `SetupConfig.search`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct SearchBackendConfig {
     #[serde(default = "default_search_provider")]
@@ -446,6 +451,7 @@ impl DesktopConfig {
         // them over. Guarantees no existing user loses their configured
         // models when they upgrade to the single-source-of-truth build.
         Self::migrate_legacy_model_fields(raw.as_deref());
+        Self::migrate_legacy_search_backend(&config);
 
         // Friendly first-launch node name. Without this, anyone who
         // never opened the node-name input ends up identified by their
@@ -478,6 +484,48 @@ impl DesktopConfig {
         }
 
         config
+    }
+
+    /// One-time migration of `desktop.toml`'s `[search_backend]` into
+    /// `SetupConfig`'s `[search]` — the same one-way shape as the model
+    /// paths above, and for the same reason: two config surfaces for one
+    /// fact means the two can disagree, and here they did. The desktop
+    /// kept its provider in `desktop.toml` while the deep-research loop
+    /// read `SVRNMESH_TAVILY_API_KEY`, so a provider configured in the
+    /// app was invisible to a run.
+    ///
+    /// Runs only when `desktop.toml` names a real provider AND
+    /// `SetupConfig` has no `[search]` of its own — an already-migrated
+    /// or CLI-configured operator is never clobbered. Does not rewrite
+    /// `desktop.toml`: surfacing a stale value is the better error mode
+    /// than losing one, and every reader now consults `[search]` first.
+    fn migrate_legacy_search_backend(config: &DesktopConfig) {
+        use sovereign_core::setup_config::SetupConfig;
+
+        let provider = config.search_backend.provider.trim();
+        // `duckduckgo` is the zero-config default, not a choice worth
+        // migrating — it is what an empty `[search]` already means.
+        if provider.is_empty() || provider == "duckduckgo" {
+            return;
+        }
+        let Ok(mut setup) = SetupConfig::load() else {
+            // No daemon config yet (fresh install, pre-wizard). The
+            // wizard writes one; nothing to migrate into.
+            return;
+        };
+        if !setup.search.provider.trim().is_empty() {
+            return;
+        }
+        setup.search.provider = provider.to_string();
+        setup.search.api_key = config.search_backend.api_key.clone();
+        match setup.save() {
+            Ok(path) => tracing::info!(
+                provider,
+                path = %path.display(),
+                "migrated desktop.toml [search_backend] into SetupConfig [search]"
+            ),
+            Err(e) => tracing::warn!("failed to migrate [search_backend] into SetupConfig: {e}"),
+        }
     }
 
     /// One-time migration of legacy `desktop.toml` model-slot paths +
@@ -561,6 +609,7 @@ impl DesktopConfig {
 
         let mut setup = existing.unwrap_or_else(|| SetupConfig {
             compute: Default::default(),
+            search: Default::default(),
             models: ModelsSection {
                 primary: PathBuf::new(),
                 fast: None,

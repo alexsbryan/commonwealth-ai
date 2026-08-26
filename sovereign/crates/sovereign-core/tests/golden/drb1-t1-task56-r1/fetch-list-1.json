@@ -1,0 +1,116 @@
+{
+  "icd": "fetch_list",
+  "version": 1,
+  "run_id": "dr-1787259122",
+  "charter_hash": "704a46672a27359c",
+  "round": 1,
+  "queries": [
+    {
+      "id": "q1",
+      "text": "Is there a general method for solving a first-price sealed-bid auction with two bidders who have independent private values drawn from different distributions (i.e., ex-ante asymmetric bidders)?",
+      "from_gap_id": "g1",
+      "formed_by": "gap-template",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q2",
+      "text": "General solution for first-price sealed-bid auction with two asymmetric bidders",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    },
+    {
+      "id": "q3",
+      "text": "Specific equilibrium bidding functions in asymmetric first-price auctions",
+      "from_gap_id": null,
+      "formed_by": "plan-subquestion",
+      "provider": "deterministic",
+      "corroboration": null
+    }
+  ],
+  "search_hits": [
+    {
+      "id": "web-0",
+      "query_id": "q1",
+      "url": "https://capcp.la.psu.edu/wp-content/uploads/sites/11/2020/07/NumericalSolutions.pdf",
+      "title": "[PDF] Numerical Solutions of Asymmetric, First-Price, Independent Private ...",
+      "snippet": "1 1 Introduction In this paper, we propose a powerful numerical algorithm to solve ﬁrst-price, single-object auctions, where bidders draw Independent and Private Values (hereafter IPV) from hetero-geneous distributions, allowing for subsets of bidders to collude and for a set reserve price. [...] Bidders are ex-ante heterogeneous. Each bidder belongs to one of n types. Each type is characterized by a distribution function Fi on a common support [v, v]. There are ki bidders in group i for a total of N = ∑n i=1ki (potential) bidders. [...] Other numerical algorithms have been proposed in the literature. Of particular inter-est is the program BIDCOMP2 by Li, Riley and Tang.1 The program is user-friendly but restricted to (truncated) power and/or Normal density functions. It has allowed Riley and Li (1997) to make several strong claims relative to a variety of asymmetric scenarios. Two quotes from the authors are relevant for the present paper: “Possibly there are other impor-tant classes of distributions for which quite different",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-1",
+      "query_id": "q1",
+      "url": "https://www.cirje.e.u-tokyo.ac.jp/research/workshops/micro/documents/March20.pdf",
+      "title": "Asymmetric First-Price Auctions with Uniform Distributions",
+      "snippet": "1 Introduction While research on auctions, including asymmetric auctions, has grown signif-icantly in recent years, there are still very few analytic solutions of …rst-price auctions outside the symmetric case. Surprisingly, even what is possibly the most natural environment to study has not been solved analytically, namely, the uniform case with two buyers and private values drawn from indepen-dent but asymmetric distributions. This is a fundamental case that would \u0003Dept. of Economics, [...] 2 The Model and the Equilibrium Conditions We consider a …rst-price, independent, private-value auction for an indivisible object with two buyers having two general uniform distributions: U[v1; v1] for buyer 1 and U[v2; v2] for buyer 2 (where \u00001 < v1; v1; v2; v2 < 1, as a uniform distribution has a …nite support). Without loss of generality, we assume that v1 \u0014 v2: As usual, we are interested in the Bayes-Nash equilibrium of this game with incomplete information, that is, a pair of bidding [...] There does exist a solution to a special case, which dates back to Gries-mer et al. (1967), with distributions V1 \u0018 U[0; 1]; V2 \u0018 U[0; ] that has the following equilibrium inverse-bid functions:1 v1(b) = 2b\f2 2 \u0000 b2(1 \u0000 2); v2(b) = 2b\f2 2 + b2(1 \u0000 2): (1) However, this result has the restriction that the distribution of buyers’ values have the same lower end.2 This is a substantial assumption: it restricts the asymmetry between the buyers to one dimension, namely, one distribution being a",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-2",
+      "query_id": "q1",
+      "url": "https://economics.yale.edu/sites/default/files/symmetric_0.pdf",
+      "title": "SYMMETRIC AUCTIONS",
+      "snippet": "We consider a general independent private value setting with ex-ante heterogenous buyers. We say that a direct mechanism has a symmetric implementation if there is a symmetric auction that has an equilibrium (in undominated strategies) for which the outcome yields the same (ex-post) allocation rule and the same expected (interim) payments.4 Our main result (Theorems 1 and 2) is a complete characterization of the set of implementable direct mechanisms. Additionally, we provide a simple [...] We can rewrite these together as ∀l = 0 . . . ˆ k, (Gˆ k+1)l = ˆ k ∑ i=1 αi(Gi)l, We now have ˆ k + 1 functional equations, but only ˆ k variables (α’s). Since the distributions are different, it should be intutive that this system of equations cannot have a solution.\nClaim 2. Suppose the distributions G1 to Gˆ k+1 are pairwise different. Then, ∃˜ β ∈∆R s.t. G1( ˜ β) to Gˆ k+1( ˜ β) are all different. [...] To construct the payments for bids bi ∈B1 ∩B2 that lie in the support of both virtual value distributions, we ﬁrst observe that, for asymmetric buyers (F1 ̸= F2), there exists a ˆ b ∈R such that G1(ˆ b) ̸= G2(ˆ b). In other words, different value distributions yield different virtual values distributions. Consider the payment rule ps(bi, bj) = ( pu(bi) if bj ≥ˆ b and bj ∈B1 ∪B2, pl(bi) if bj < ˆ b and bj ∈B1 ∪B2, (2) where pu(bi) = p∗ 1(φ−1 1 (bi))G1(ˆ b) −p∗ 2(φ−1 2 (bi))G2(ˆ b) G1(ˆ b) −G2(ˆ",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    },
+    {
+      "id": "web-3",
+      "query_id": "q1",
+      "url": "https://www.uoguelph.ca/economics/repec/workingpapers/2015/2015-02.pdf",
+      "title": "Asymmetric Auctions with More Than Two Bidders",
+      "snippet": "Proposition 1 is what simpliﬁes the dimensionality of this general problem, making the complexity of its solution akin to that of the common bid support setting as we suggested earlier. In the general case, there are evidently two possibilities: either b v = v1 (no bid bifurcation) or b v < v1 (bid bifurcation occurs). Given (8), the latter holds if and only if bn exceeds the critical value bc, where bc = m1vn −(m1 −1)v1, (9) which is indicated in the subplots of Figure 1 as the kink points in [...] Example 4: Having given some credibility to the solution approach suggested by considering examples with uniform distributions, let us venture into territory that is less convenient analytically. The general solution approach we provide is not limited in any way by the distribution considered so long as the standard conditions for uniqueness are satisﬁed (see the conditions we discussed at the beginning of Section 2, just before Lemma 1). Consider instead an auction with two bidders from each [...] 4.1 General solution approach Unlike the symmetric ﬁrst-price model which admits a closed-form solution for the Bayes–Nash equilibrium bid functions, asymmetric auctions rarely allow for such tractability. As such, researchers are left resorting to numerical methods to solve the system of diﬀerential equations under the appropriate boundary conditions. Hub-bard and Paarsch (2014) summarize the various ways in which researchers have gone about solving for the equilibrium which can be broadly",
+      "content": null,
+      "engine": "web",
+      "score": 0.0,
+      "custody": "public-web"
+    }
+  ],
+  "triage": {
+    "code_set_k": [
+      "web-0",
+      "web-1",
+      "web-2"
+    ],
+    "eps_admits": [
+      "web-3"
+    ],
+    "below_cut": [
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-0",
+      "web-1",
+      "web-2",
+      "web-3",
+      "web-4",
+      "web-5",
+      "web-6",
+      "web-7",
+      "web-8"
+    ],
+    "threshold": 0.0,
+    "eps_quota": 0.1,
+    "admission_rule": "score-then-figure-bearing"
+  }
+}

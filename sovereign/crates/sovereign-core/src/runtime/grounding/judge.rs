@@ -2004,6 +2004,69 @@ mod tests {
     /// The specifics scan's prefix-cache declaration (D1a). Two scans of the
     /// **The replay seam is the register, byte for byte.** The judge-replay
     /// harness scores recorded evidence through
+    /// **The family split is a CACHE boundary, never a prompt change.**
+    ///
+    /// `claim_violation_joint`'s `n_stable` decides how much of the window
+    /// `EvidenceFamily` renders as the shared prefix and how much each call
+    /// appends. The whole safety argument for CHANGING a caller's `n_stable`
+    /// is that the two halves render to the same bytes — same bytes to the
+    /// judge means the same logits and therefore the same verdict, so moving
+    /// the split can only cost or save prefill.
+    ///
+    /// This pins it directly: every split of one window, 0..=n, must issue a
+    /// byte-identical prompt, while the DECLARED boundary tracks the split.
+    /// The deep-research audit passed `n_stable = 0` until 2026-08-24 and so
+    /// never declared a prefix at all — every sibling claim re-prefilled the
+    /// entire evidence window. The fix that declares it is only safe because
+    /// of this property, which until now was argued and not asserted.
+    #[tokio::test]
+    async fn the_family_split_moves_the_boundary_not_the_prompt() {
+        let window = family_evidence();
+        let claim = "Lovelace wrote the first algorithm.";
+        let mut rendered: Vec<String> = Vec::new();
+        let mut boundaries: Vec<Option<usize>> = Vec::new();
+
+        for split in 0..=window.len() {
+            let cap = Arc::new(CaptureProvider::default());
+            let inf: Arc<dyn InferenceProvider> = cap.clone();
+            claim_violation_joint(
+                &inf,
+                claim,
+                &window,
+                window.len(),
+                split,
+                ShardingPrivacy::LocalOnly,
+            )
+            .await;
+            let all = cap.0.lock().unwrap();
+            assert_eq!(all.len(), 1, "one judge call per split");
+            rendered.push(all[0].prompt.clone());
+            boundaries.push(all[0].stable_prefix_len);
+        }
+
+        for (split, prompt) in rendered.iter().enumerate() {
+            assert_eq!(
+                prompt, &rendered[0],
+                "split {split} rendered DIFFERENT prompt bytes than split 0 — \
+                 moving the family boundary would change the verdict, and every \
+                 caller's n_stable would be a judge change, not a cache hint"
+            );
+        }
+        assert_eq!(
+            boundaries[0], None,
+            "split 0 declares NO stable window — absence reported, never a zero-length claim"
+        );
+        assert!(
+            boundaries[window.len()].is_some_and(|b| b > 0),
+            "declaring the whole window stable must yield a real byte boundary"
+        );
+        assert!(
+            boundaries[window.len()] > boundaries[1],
+            "a larger stable half must declare a larger prefix — the boundary \
+             tracks the split even though the bytes do not"
+        );
+    }
+
     /// `replay_render_claim_prompt` + `replay_claim_violation_joint`
     /// (grounding/mod.rs wrappers); an offline verdict transfers to the
     /// production gate only if those wrappers send the same bytes the gate

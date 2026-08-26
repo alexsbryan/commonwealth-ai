@@ -1,0 +1,32 @@
+{
+  "icd": "evidence_window",
+  "version": 1,
+  "run_id": "dr-1787243416",
+  "charter_hash": "694eb377cf58479d",
+  "round": 2,
+  "chunks": [
+    {
+      "id": "ev-1",
+      "locator": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "source_url": "https://statchatva.org/2024/09/17/since-the-pandemic-young-adults-have-fueled-the-revival-of-small-towns-and-rural-areas/",
+      "custody": "public-web",
+      "provenance_class": "known",
+      "content": "Manufacturing jobs, which peaked at 19.5 million in 1979, fell to under 11.5 million during the pandemic, while employment in finance and professional and business services soared from 12 million to 32 million. This economic shift brought with it a demographic realignment, with population growth concentrating in large metros where service industries thrived. While it remains uncertain whether we are now witnessing another such shift, Census data released over the summer shows that the demographic trends that have persisted this decade are unlike any seen since before 1980. Image Change in 25 to 44 Population from Migration by Metro Size Source: Age-Specific Net Migration Estimates for US Counties, 1950-2020. Applied Population Laboratory, University of Wisconsin, Census Age Estimates. Migration rates for previous decades are over three year periods for comparison with 2020 to 2023. In the decades prior to 2020, large metro areas drew an increasing share of young adults In the decades that followed 1980, America’s large cities and metro areas grew more economically and demographically different from its small towns and rural areas. Unlike manufacturing plants, most white-collar service industries tended to cluster in the largest cities, such as Washington D.C. or San Francisco, where employers and employees could benefit from large networks of expertise and the rapid exchange of ideas . The influx of young white-collar workers into large cities since 1980, meant that in the following decades nearly 80 percent of the country’s growth in its under 45 population has been concentrated in metro areas with over a million residents. In contrast, in rural counties and small metro areas, the total population of those younger than 45 is smaller today than in 1980. Image Median Age, 1980 Source: 1980 Decennial Census Count The migration of yo\n",
+      "ingested_into": null,
+      "tags": [
+        "adults",
+        "areas",
+        "fueled",
+        "pandemic",
+        "revival",
+        "rural"
+      ]
+    }
+  ],
+  "fetch_failures": [],
+  "dedup_refused": [
+    "https://v1-demo.example/source-report",
+    "https://www.governing.com/archive/gentrification-in-cities-governing-report.html"
+  ],
+  "derived_custody": "public-web"
+}

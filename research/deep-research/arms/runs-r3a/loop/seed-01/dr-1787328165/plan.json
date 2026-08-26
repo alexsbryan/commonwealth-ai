@@ -1,0 +1,24 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787328165",
+  "charter_hash": "6f64b6a0e10a8339",
+  "rounds_planned": 3,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Wiz acquisition price by Google in March 2025",
+      "Google's stated strategic rationale for acquiring Wiz in official press releases or earnings calls",
+      "Global cloud security market size forecast from 2024 to 2030",
+      "Market share of top five cloud security vendors globally as of early 2025",
+      "Number of enterprise customers using Wiz platform prior to the acquisition",
+      "Annual revenue growth rate of Wiz leading up to its IPO and subsequent years",
+      "Comparison of average deal value for cybersecurity acquisitions between 2019 and 2025"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2025"
+    ]
+  }
+}

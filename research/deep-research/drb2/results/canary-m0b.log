@@ -1,0 +1,14 @@
+PROMPT_CHARS 21720
+[err] HTTP 503 body: {"error":{"message":"local inference failed: Inference error: MTP inference deadline exceeded after 300s (3712 tokens)","type":"backend_error","code":null}}
+Traceback (most recent call last):
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/canary-m0b.py", line 38, in <module>
+    raw = judge.call(prompt)
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 187, in call
+    return self._call(prompt)
+           ~~~~~~~~~~^^^^^^^^
+  File "/home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/drb2-score.py", line 172, in _call
+    r.raise_for_status()
+    ~~~~~~~~~~~~~~~~~~^^
+  File "/home/alexbryan/.local/lib/python3.14/site-packages/requests/models.py", line 1028, in raise_for_status
+    raise HTTPError(http_error_msg, response=self)
+requests.exceptions.HTTPError: 503 Server Error: Service Unavailable for url: http://127.0.0.1:9741/v1/chat/completions

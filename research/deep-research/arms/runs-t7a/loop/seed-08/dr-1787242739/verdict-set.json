@@ -1,0 +1,106 @@
+{
+  "icd": "verdict_set",
+  "version": 1,
+  "run_id": "dr-1787242739",
+  "charter_hash": "1e87406bf0d24961",
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the evidence provided, Judge Amit Mehta of the US District Court for the District of Columbia found Google's search business to be a monopoly because he ruled on 2024-08-05 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "The primary theory of harm was \"default-distribution deals,\" where Google paid companies like Apple, Samsung, and Mozilla billions of dollars to remain their default search engine [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c3",
+      "text": "Specifically, trial evidence showed that Google paid approximately $26.3 billion for distribution in 2021 and gave Apple roughly 36% of Safari search-ad revenue [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [
+          "https://estate.example/seed-08"
+        ],
+        "support_chunks": 1,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c4",
+      "text": "Judge Mehta determined this conduct was exclusionary because it created a self-reinforcing loop where defaults generate scale, which creates data, improves quality, and ultimately protects the default status against rivals [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c5",
+      "text": "The remedies ordered by Judge Mehta on 2025-08-05 included requiring Google to sell Chrome (the first forced divestiture of a major tech company since the Microsoft case of 2000), prohibiting Google from paying for default search placement or entering into revenue-sharing agreements, and imposing limits on acquisitions and AI-related investments [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "A US court found Google’s search business to be a monopoly because Judge Amit Mehta of the US District Court for the District of Columbia ruled on 2024-08-05 that Google violated Section 2 of the Sherman Act by acting as a monopolist in general search services and general search text advertising [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: extracted specifics absent from the evidence",
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "Additionally, the ruling imposed limits on Google’s acquisitions and AI-related investments [Source: ev-1].",
+      "verdict": "could-not-judge",
+      "status": "could-not-judge",
+      "evidence_ids": [],
+      "citations": [],
+      "flag": "open question: single-origin support (corroboration floor)",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    }
+  ],
+  "empty_rounds": [
+    {
+      "round": 2,
+      "reason": "refused"
+    }
+  ]
+}

@@ -1,19 +1,19 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn deep-research "<question>"` — run the THIN local-only research
-//! loop (order deep-research-t1a) end to end through the shipped CLI.
+//! `svrn deep-research "<question>"` — drive the THIN local-only research
+//! loop (order deep-research-t1a) end to end from the shipped CLI.
 //!
-//! The verb implements the loop's `ResearchPort` (sovereign-core
-//! `deep_research::estate`) over the real estate (corpus-engine indexes),
-//! the real network (web search — DuckDuckGo always as the zero-config
-//! fallback, Tavily when the operator's key is present — plus
-//! fetch-and-extract), and the daemon's OpenAI-compatible surface
-//! (embed + draft, with the URL allowlist constraint on every draft ask).
-//! The loop itself lives in sovereign-core (`deep_research::run`);
-//! nothing in this file re-implements a loop step.
+//! This file is the VERB, not the loop and not the port. Both of those
+//! live in sovereign-core: `deep_research::run` is the loop, and
+//! `deep_research::port::LiveResearchPort` is the production surface
+//! (real estate, real network, real daemon) that used to live here. It
+//! moved because a port is runtime, not a host — while it sat in this
+//! crate, every other surface that wanted deep research had to SPAWN
+//! this binary, and config does not cross a process boundary.
 //!
-//! Custody is stamped here, by code, never by a model (R-2/R-6): estate
-//! hits carry `personal` (a local corpus is the operator's own data), web
-//! hits carry `public-web`. The loop's gate refuses unknown provenance.
+//! What stays here is what only a CLI has: argument parsing and
+//! validation, the launch banner, the resume sidecar, the post-run
+//! estate ingest, and the summary. Nothing in this file re-implements a
+//! loop step or a port method.
 //!
 //! `--backend mock --mock-deck DIR` (the P5 drill surface): the port's
 //! search/fetch legs are served from the deck directory (`deck.toml` +
@@ -40,692 +40,12 @@ use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
 use oicp_client::RemoteApiProvider;
-use sovereign_contracts::types::CompletionRequest;
-use sovereign_contracts::types::CompletionResponse;
-use sovereign_contracts::types::Speed;
-use sovereign_core::deep_research::estate::{
-    estate_snippet, read_staged_alignment, AlignmentDecision, EstateListing, PortHit, ResearchPort,
-};
-use sovereign_core::deep_research::gym::{
-    CorpusSurface, Deck, MockBackendImpl, MockDraftSurface, ProviderEmbed,
-};
 use sovereign_core::deep_research::icd::ICD_VERSION;
-use sovereign_core::deep_research::icd::{CorpusEntry, EvidenceWindow, Plan, Survey, VerdictSet};
-use sovereign_core::deep_research::render::render_race;
-use sovereign_core::deep_research::{
-    read_checkpoint, resume, run, RunConfig, RunOutcome, SearchSource,
-};
-use sovereign_core::egress::{ConsentGrant, EgressPayload};
-use sovereign_core::oicp::ShardingPrivacy;
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_core::deep_research::launch::{self, ResumeInput};
+use sovereign_core::deep_research::port::build_port;
+use sovereign_core::deep_research::{read_checkpoint, resume, run, RunOutcome, SearchSource};
 use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::Custody;
-
-use corpus_engine::index::{CorpusIndex, InsertChunk};
-
-/// The canonical index directory (the estate).
-fn indexes_dir() -> PathBuf {
-    SetupConfig::default_path()
-        .parent()
-        .map(|p| p.to_path_buf())
-        .unwrap_or_default()
-        .join("indexes")
-}
-
-/// A corpus directory is searchable iff it carries a LanceDB table
-/// (the same validity gate the engine's `installed_indexes` uses).
-fn corpus_searchable(dir: &std::path::Path) -> bool {
-    std::fs::metadata(dir.join("chunks.lance").join("_versions")).is_ok()
-        || std::fs::metadata(dir.join("_corpus_meta.json")).is_ok()
-}
-
-/// The chunk count from `_corpus_meta.json` when present; 0 when the
-/// file is absent or unreadable — a listed-but-uncounted corpus is
-/// still searchable. The engine's meta schema v3 writes the count as
-/// `chunks_expected` (null in some pipelines) with `next_chunk_id`
-/// carrying the committed chunk count — measured: the demo re-ask's
-/// survey listed apollo11-evidence with chunks_count 0 because the
-/// read looked for the schema-v2 `chunk_count` key.
-fn corpus_chunk_count(dir: &std::path::Path) -> i64 {
-    std::fs::read_to_string(dir.join("_corpus_meta.json"))
-        .ok()
-        .and_then(|meta| serde_json::from_str::<serde_json::Value>(&meta).ok())
-        .and_then(|v| {
-            v["chunks_expected"]
-                .as_i64()
-                .or_else(|| v["next_chunk_id"].as_i64())
-        })
-        .unwrap_or(0)
-}
-
-/// The estate snippet: center on the deepest first-occurrence query
-/// term instead of taking the page prefix. Long pages lead with nav
-/// chrome, and the prefix-left window was measured wrong in the demo's
-/// re-ask (dr-1786727099): the Smithsonian timeline chunk's 240-char
-/// prefix ended at the donate blurb, the round-0 draft anchored its
-/// claims on that blurb, and the gap-derived web queries drifted to
-/// museum-grant pages. Prefix fallback when no term occurs (short
-/// chunks, non-lexical matches). `to_ascii_lowercase` keeps byte
-/// offsets valid for slicing (case folding can change length).
-///
-/// Two calibrations were measured by the watched test:
-///   - function words (when/were/...) are filtered — the first pass
-///     anchored on "were" at the sentence end and cut "July 20, 1969";
-///   - the window leads 200 chars before the anchor so the answer
-///     sentence's context survives the cut.
-/// The port implementation for the CLI: real estate, real network, real
-/// daemon. All inference goes through one `RemoteApiProvider` against the
-/// local daemon's `/v1` surface — the loop never touches a frontier.
-struct CliResearchPort {
-    provider: Arc<dyn InferenceProvider>,
-    client: reqwest::Client,
-    orchestrator: sovereign_tools_base::web::search::SearchOrchestrator,
-    /// The run's typed consent grant (order deep-research-t2a): the
-    /// port carries it to the egress boundary for every web-leg
-    /// dispatch. `None` is default-deny — the web leg refuses
-    /// non-public-web payloads (the run's machine-formed queries).
-    consent: Option<ConsentGrant>,
-    /// True iff the operator's Tavily key was present at port
-    /// construction. The ONE source of the loop's web-backend default
-    /// (`default_web_backend`); no second read of the env var exists.
-    tavily_keyed: bool,
-    indexes: std::path::PathBuf,
-    daemon_endpoint: String,
-}
-
-impl CliResearchPort {
-    fn new(provider: Arc<dyn InferenceProvider>, consent: Option<ConsentGrant>) -> Self {
-        // The boundary's search-client factory — the ONE construction
-        // site for clients that carry query egress (F26 census:
-        // everything else in this file is LocalDaemon).
-        let client =
-            sovereign_core::egress::search_client().expect("egress boundary search client build");
-        let mut registry = sovereign_tools_base::web::search::WebSearchRegistry::new();
-        // DuckDuckGo is the zero-config fallback — always registered
-        // (the same fallback-first shape the desktop uses).
-        registry.register(Arc::new(
-            sovereign_tools_base::web::search::DuckDuckGoBackendImpl::new(),
-        ));
-        // Tavily rides on the operator's key when present. The read is
-        // the house canonical (sovereign-contracts::rebrand::svrnmesh_env):
-        // SVRNMESH_TAVILY_API_KEY preferred, the legacy
-        // SOVEREIGN_TAVILY_API_KEY spelling bridged at CLI startup.
-        // Presence is logged; the value never is. The read is declared
-        // in quality/env-flags.toml (env-gate's registry).
-        let tavily_key = sovereign_contracts::rebrand::svrnmesh_env("TAVILY_API_KEY")
-            .and_then(|v| v.into_string().ok())
-            .filter(|s| !s.is_empty());
-        let tavily_keyed = tavily_key.is_some();
-        if let Some(key) = &tavily_key {
-            registry.register(Arc::new(
-                sovereign_tools_base::web::search::TavilyBackendImpl::new(key.clone()),
-            ));
-        }
-        eprintln!(
-            "deep-research: web backends: tavily {}, duckduckgo (fallback)",
-            if tavily_keyed { "keyed" } else { "absent" }
-        );
-        // The web-leg consent posture is declared once here and
-        // carried to the boundary at every dispatch.
-        match &consent {
-            Some(g) => eprintln!(
-                "deep-research: consent grant for run {} — release floor {} (recorded in the manifest)",
-                g.run_id, g.release_floor
-            ),
-            None => eprintln!(
-                "deep-research: no consent grant — the web leg is default-deny for \
-                 non-public-web payloads (--consent <public-web|peer|personal> to release)"
-            ),
-        }
-        let orchestrator =
-            sovereign_tools_base::web::search::SearchOrchestrator::new(Arc::new(registry));
-        let daemon_endpoint = format!(
-            "http://localhost:{}",
-            SetupConfig::load()
-                .map(|c| c.daemon.client_port)
-                .unwrap_or(9741)
-        );
-        CliResearchPort {
-            provider,
-            client,
-            orchestrator,
-            consent,
-            tavily_keyed,
-            indexes: indexes_dir(),
-            daemon_endpoint,
-        }
-    }
-
-    /// The loop's web backend when the operator named none: the keyed
-    /// Tavily when a key is present (the house prefer list puts tavily
-    /// before duckduckgo — "best for citation-heavy synthesis"),
-    /// DuckDuckGo otherwise. One decider, one name: the key presence
-    /// decided in `new` is the only source of this choice.
-    fn default_web_backend(&self) -> &'static str {
-        if self.tavily_keyed {
-            "tavily"
-        } else {
-            "duckduckgo"
-        }
-    }
-}
-
-#[async_trait::async_trait]
-impl ResearchPort for CliResearchPort {
-    async fn estate_listing(&self, corpus_ids: &[String]) -> Result<EstateListing, String> {
-        let mut corpora = Vec::new();
-        for id in corpus_ids {
-            let dir = self.indexes.join(id);
-            if !dir.is_dir() {
-                // Absent corpus — still listed, not searchable (the
-                // survey's F16 assert sees the truth).
-                corpora.push(CorpusEntry {
-                    corpus_id: id.clone(),
-                    kind: "knowledge".to_string(),
-                    chunks_count: 0,
-                    searchable: false,
-                    custody: Custody::Personal.as_str().to_string(),
-                });
-                continue;
-            }
-            corpora.push(CorpusEntry {
-                corpus_id: id.clone(),
-                kind: "knowledge".to_string(),
-                chunks_count: corpus_chunk_count(&dir),
-                searchable: corpus_searchable(&dir),
-                custody: Custody::Personal.as_str().to_string(),
-            });
-        }
-        Ok(EstateListing { corpora })
-    }
-
-    async fn estate_search(
-        &self,
-        corpus_ids: &[String],
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<PortHit>, String> {
-        let embedding = self
-            .provider
-            .embed(query)
-            .await
-            .map_err(|e| format!("embed `{query}`: {e}"))?;
-        let mut hits = Vec::new();
-        for id in corpus_ids {
-            let dir = self.indexes.join(id);
-            if !corpus_searchable(&dir) {
-                continue;
-            }
-            let index = CorpusIndex::open(&dir)
-                .await
-                .map_err(|e| format!("open corpus `{id}`: {e}"))?;
-            let results = index
-                .search(&embedding, query, limit)
-                .await
-                .map_err(|e| format!("search `{id}`: {e}"))?;
-            for r in results {
-                hits.push(PortHit {
-                    id: r.chunk_id.unwrap_or_default().to_string(),
-                    // The locator carries the CHUNK id (t1g rung 2 —
-                    // the estate window's `estate:<corpus>:<chunk>`
-                    // convention): a corpus-level-only locator made
-                    // every chunk of a corpus identical to the
-                    // window's dedup-by-url, collapsing multi-hit
-                    // estate searches to one chunk (journaled in the
-                    // t1g declaration). Synthetic chunks (chunk_id
-                    // None — atlas-virtual summaries, one per corpus)
-                    // keep the corpus-level locator, which is correct
-                    // for them.
-                    url: r.url.clone().unwrap_or_else(|| {
-                        format!("estate:{id}:{}", r.chunk_id.unwrap_or_default())
-                    }),
-                    title: r.title.unwrap_or_default(),
-                    snippet: estate_snippet(&r.content, query, 600),
-                    // The BODY rides the hit (t1h — the triage
-                    // boundary: the term-centered snippet cut can miss
-                    // the digits; the decider reads the body). Parity
-                    // with the gym's corpus surface — one shape.
-                    content: Some(r.content.clone()),
-                    score: r.score as f64,
-                    source: format!("estate:{id}"),
-                    custody: Custody::Personal,
-                });
-            }
-        }
-        Ok(hits)
-    }
-
-    async fn web_search(
-        &self,
-        backend: &str,
-        query: &str,
-        limit: usize,
-    ) -> Result<Vec<PortHit>, String> {
-        // The privacy posture's provider id must be `'static` (it is
-        // the backend's stable audit id). The known backends are a
-        // closed set — map the trait's `&str` onto the static ids,
-        // fail-closed on anything else (a misspelled or unregistered
-        // backend must not silently route).
-        let provider: &'static str = match backend {
-            "duckduckgo" => "duckduckgo",
-            "brave" => "brave",
-            "tavily" => "tavily",
-            other => {
-                return Err(format!(
-                    "unknown web backend `{other}` (closed set: duckduckgo, brave, tavily)"
-                ))
-            }
-        };
-        // The egress boundary's release rule, before any request is
-        // built (order deep-research-t2a, rung 3): the run's queries
-        // are MACHINE-formed (the loop's gap templates — the user's
-        // question folded with estate residue), so they carry the
-        // run's consent grant; without one the leg refuses, typed,
-        // naming what was withheld.
-        sovereign_core::egress::verify(
-            &EgressPayload {
-                privacy: sovereign_tools_base::web::search::SearchPrivacy::External { provider },
-                custody: Custody::Personal,
-                what: "query",
-                target: provider,
-                detail: query,
-                user_formed: false,
-            },
-            self.consent.as_ref(),
-        )
-        .map_err(|r| format!("web search refused: {r}"))?;
-        let out = self
-            .orchestrator
-            .search(
-                &self.client,
-                sovereign_tools_base::web::search::SelectInputs {
-                    query,
-                    max_results: limit,
-                    max_privacy: sovereign_tools_base::web::search::SearchPrivacy::External {
-                        provider,
-                    },
-                    prefer: &[provider],
-                },
-            )
-            .await;
-        // Zero results is a RECORD, not a failure: the orchestrator
-        // already logged the backend failure ("synthetic 0-results"),
-        // and the loop journals the honest empty round (empty window →
-        // never-ran abstention → done-partial with truncation
-        // declared). Killing the run here would abandon the run dir
-        // without a manifest — the F28 "instrument unavailable ≠
-        // could-not-judge" shape, measured in demo run dr-1786720584.
-        Ok(out
-            .results
-            .into_iter()
-            .enumerate()
-            .map(|(i, r)| PortHit {
-                id: format!("web-{i}"),
-                url: r.url,
-                title: r.title,
-                snippet: r.snippet,
-                // Web results carry no body through this surface.
-                content: None,
-                score: 0.0,
-                source: format!("web:{backend}"),
-                custody: Custody::PublicWeb,
-            })
-            .collect())
-    }
-
-    async fn web_fetch(&self, url: &str) -> Result<String, String> {
-        // The estate scheme (t1g rung 2): `estate:<corpus_id>:<chunk_id>`
-        // — the corpus IS the evidence store, the chunk's own content
-        // is the fetch. The acquisition's corpus-source hits fetch
-        // through here; a malformed or missing locator refuses loudly.
-        if let Some(rest) = url.strip_prefix("estate:") {
-            let (id, chunk) = rest.split_once(':').ok_or_else(|| {
-                format!("malformed estate locator: {url} (expected estate:<corpus_id>:<chunk_id>)")
-            })?;
-            let chunk_id: u64 = chunk.parse().map_err(|_| {
-                format!("malformed estate locator: {url} (chunk id `{chunk}` is not an id)")
-            })?;
-            let dir = self.indexes.join(id);
-            if !corpus_searchable(&dir) {
-                return Err(format!(
-                    "estate fetch {url}: corpus `{id}` is not searchable"
-                ));
-            }
-            let index = CorpusIndex::open(&dir)
-                .await
-                .map_err(|e| format!("estate fetch {url}: open corpus `{id}`: {e}"))?;
-            let stored = index
-                .get_chunks(&[chunk_id])
-                .await
-                .map_err(|e| format!("estate fetch {url}: {e}"))?;
-            return stored
-                .into_iter()
-                .next()
-                .map(|c| c.content)
-                .ok_or_else(|| format!("estate fetch {url}: chunk {chunk_id} not found"));
-        }
-        // The fetch URL is a public-web payload (it came from web
-        // search hits) — the boundary releases it unconditionally and
-        // traces the egress event.
-        sovereign_core::egress::verify(
-            &EgressPayload {
-                privacy: sovereign_tools_base::web::search::SearchPrivacy::External {
-                    provider: "web-fetch",
-                },
-                custody: Custody::PublicWeb,
-                what: "url",
-                target: url,
-                detail: url,
-                user_formed: false,
-            },
-            self.consent.as_ref(),
-        )
-        .map_err(|r| format!("fetch refused: {r}"))?;
-        sovereign_tools_base::web::extract::fetch_and_extract(&self.client, url)
-            .await
-            .map_err(|e| format!("fetch {url}: {e}"))
-    }
-
-    async fn terminal_poll(&self) -> Result<(), String> {
-        let probe = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_secs(2))
-            .build()
-            .map_err(|e| format!("http client build: {e}"))?;
-        // The daemon's model listing is `/v1/models` (the surface every
-        // other CLI consumer probes — awareness, code-index). The earlier
-        // bare `/models` probe 404'd against the real daemon (measured
-        // 08-14 during the demo's run 2 preflight).
-        let url = format!("{}/v1/models", self.daemon_endpoint);
-        match probe.get(&url).send().await {
-            Ok(r) if r.status().is_success() => Ok(()),
-            Ok(r) => Err(format!("daemon returned {} from {url}", r.status())),
-            Err(e) => Err(format!(
-                "daemon unreachable at {}: {e}",
-                self.daemon_endpoint
-            )),
-        }
-    }
-
-    async fn draft(
-        &self,
-        prompt: &str,
-        system_message: Option<&str>,
-        allowed_urls: &[String],
-    ) -> Result<String, String> {
-        let resp = complete_with_shed_retry(
-            &*self.provider,
-            &CompletionRequest {
-                prompt: prompt.to_string(),
-                system_message: system_message.map(|s| s.to_string()),
-                preferred_speed: Speed::Slow,
-                max_tokens: None,
-                temperature: Some(0.4),
-                structured_output: None,
-                think_budget: None,
-                url_allowlist: Some(allowed_urls.to_vec()),
-                ..Default::default()
-            },
-            "draft",
-        )
-        .await
-        .map_err(|e| format!("draft ask: {e}"))?;
-        Ok(resp.text)
-    }
-
-    async fn plan_subquestions(&self, question: &str) -> Result<Vec<String>, String> {
-        // t1d fix 2 (breadth): the acquisition frontier — a constrained
-        // draft asking for the question's decomposition, one sub-
-        // question per line. Same inference leg as the drafts
-        // (Speed::Slow, temperature 0.4) with NO url allowlist: the
-        // frontier is a question list, not report content, and must not
-        // cite. Lines are parsed deterministically (marker-stripped,
-        // deduped, capped at the shared FRONTIER_MAX).
-        //
-        // t1e (figure-hunting): the instruction asks, generically, what
-        // measures and numbers each sub-question implies — an index, a
-        // ratio, a share, a rate, a count, a median, a price, a
-        // percentage change — and the entities (cities, years) they
-        // involve, so the search can retrieve the DATA the question
-        // asks for. SHAPE, never the test: no bank vocabulary, no named
-        // measures from any deck — the draft names the measures from
-        // its own knowledge. The loop's deterministic fold-in
-        // (acquisition::figure_hunt_frontier) then guarantees every
-        // sub-question carries a specifier structurally.
-        let prompt = format!(
-            "Decompose the research question into sub-questions that a web search could answer. \
-             For each sub-question, name the specific measure or statistic it implies — an index, \
-             a ratio, a share, a rate, a count, a median, a price, a percentage change — and the \
-             entities it involves (cities, years), so a search for the data can retrieve it. If the \
-             question implies specific numbers, name them. One sub-question per line, no citations, \
-             no numbering, no commentary.\n\nQuestion: {question}"
-        );
-        let resp = complete_with_shed_retry(
-            &*self.provider,
-            &CompletionRequest {
-                prompt,
-                system_message: None,
-                preferred_speed: Speed::Slow,
-                max_tokens: None,
-                temperature: Some(0.4),
-                structured_output: None,
-                think_budget: None,
-                url_allowlist: None,
-                ..Default::default()
-            },
-            "plan-subquestions",
-        )
-        .await
-        .map_err(|e| format!("plan-subquestions ask: {e}"))?;
-        let mut out: Vec<String> = Vec::new();
-        for line in resp.text.lines() {
-            let line = line.trim().trim_start_matches(['-', '*', ' ']).trim();
-            let line = line
-                .trim_start_matches(|c: char| c.is_ascii_digit() || c == '.' || c == ')')
-                .trim();
-            if line.is_empty() || out.contains(&line.to_string()) {
-                continue;
-            }
-            out.push(line.to_string());
-            if out.len() >= sovereign_core::deep_research::estate::FRONTIER_MAX {
-                break;
-            }
-        }
-        Ok(out)
-    }
-
-    async fn alignment_decision(
-        &self,
-        _plan: &Plan,
-        run_dir: &Path,
-    ) -> Result<AlignmentDecision, String> {
-        // STEER 2: the product's alignment gate is the STAGED INPUT —
-        // the launcher writes `<run_dir>/alignment-input.json`
-        // (ReframeInput shape, the operator's redirect + reason) before
-        // the run; the shared reader consumes the file (one decider,
-        // mock and CLI alike). Absent → Proceed. The run shows the
-        // plan + acceptance shapes at the gate; the operator's call is
-        // on the record (alignment-1.json, manifest, report header).
-        read_staged_alignment(run_dir).map(|staged| staged.unwrap_or(AlignmentDecision::Proceed))
-    }
-}
-
-// ----------------------------------------------------------------------
-// T6b pre-window slice — shed retry around the inference leg (order
-// deep-research-t6b, pre-registered). The daemon surfaces stuck
-// generations as a named shed: 503 + Retry-After. The loop client
-// previously DIED on the first 503 — evidenced by the seed-05 re-flight,
-// which died on its FIRST draft call (arms/runs-t6b/loop/seed-05.console
-// .log) with no retry despite the daemon's shed shape. Bounded retry,
-// honoring the Retry-After hint when the wire carries one.
-// ----------------------------------------------------------------------
-
-/// Shed retries granted before the error is surfaced — the loop never
-/// sits in a 503 loop past MAX_SHED_RETRIES + 1 total attempts.
-const MAX_SHED_RETRIES: usize = 3;
-
-/// Default backoff when the shed body carries no retry hint — mirrors
-/// the mesh's yield-refusal default (sovereign-mesh decision_log.rs
-/// YIELD_REFUSAL_DEFAULT_BACKOFF_SECS).
-const SHED_DEFAULT_BACKOFF_SECS: u64 = 5;
-
-/// Is this inference error the daemon's shed shape (503 busy /
-/// overloaded / shutting down)? Mirrors the mesh's `looks_shed`
-/// classification token-for-token — same lowercase contains.
-fn looks_shed(text: &str) -> bool {
-    let t = text.to_lowercase();
-    [
-        "503",
-        "service unavailable",
-        "too many requests",
-        "429",
-        "retry-after",
-    ]
-    .iter()
-    .any(|tok| t.contains(tok))
-}
-
-/// The Retry-After hint from a shed body, in seconds. Tries the
-/// admission shape's `retry_after_secs` key first (a bare `retry_after`
-/// search would match inside `retry_after_secs`), then the busy
-/// shape's `retry_after` key. Mesh-style digit parse, clamped to
-/// [1, 300] so a shed can never command a multi-minute stall.
-fn shed_retry_hint_secs(text: &str) -> Option<u64> {
-    for key in ["retry_after_secs", "retry_after"] {
-        if let Some(idx) = text.find(key) {
-            let tail = &text[idx + key.len()..];
-            let digits: String = tail
-                .chars()
-                .skip_while(|c| !c.is_ascii_digit())
-                .take_while(|c| c.is_ascii_digit())
-                .collect();
-            if !digits.is_empty() {
-                if let Ok(secs) = digits.parse::<u64>() {
-                    return Some(secs.clamp(1, 300));
-                }
-            }
-        }
-    }
-    None
-}
-
-/// Bounded retry around `provider.complete` for the loop's inference
-/// legs (draft, plan-subquestions): a shed (503) is retried up to
-/// MAX_SHED_RETRIES times with the Retry-After hint (or the default
-/// backoff); anything else — and the last shed — surfaces IMMEDIATELY
-/// as the raw error text, so callers keep their own `draft ask: {e}`
-/// / `plan-subquestions ask: {e}` framing and the evidenced seed-05
-/// error shape survives exhausted retries unchanged.
-async fn complete_with_shed_retry(
-    provider: &dyn InferenceProvider,
-    request: &CompletionRequest,
-    what: &str,
-) -> Result<CompletionResponse, String> {
-    let mut attempt: usize = 0;
-    loop {
-        match provider.complete(request).await {
-            Ok(resp) => {
-                if attempt > 0 {
-                    tracing::info!(
-                        what,
-                        attempt,
-                        "deep-research: inference recovered after a shed"
-                    );
-                }
-                return Ok(resp);
-            }
-            Err(e) => {
-                let text = e.to_string();
-                if attempt >= MAX_SHED_RETRIES || !looks_shed(&text) {
-                    // Honest error, surfaced raw — never a substitution.
-                    return Err(text);
-                }
-                attempt += 1;
-                let backoff = shed_retry_hint_secs(&text).unwrap_or(SHED_DEFAULT_BACKOFF_SECS);
-                tracing::warn!(
-                    what,
-                    attempt,
-                    max = MAX_SHED_RETRIES,
-                    backoff_secs = backoff,
-                    "deep-research: inference shed (503) — honoring Retry-After, will retry"
-                );
-                tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
-            }
-        }
-    }
-}
-
-/// The ONE port construction (order deep-research-t3a): `auto` — the
-/// real network port; `mock` — the deck's search/fetch surface with
-/// drafts delegated to the real port, and (when the search source is
-/// corpus) the estate's REAL indexes as the acquisition surface. Used
-/// by both the fresh launch and the resume — one implementation, one
-/// decider, never two constructions that can drift.
-async fn build_port(
-    backend: &str,
-    mock_deck_dir: Option<&Path>,
-    search_source: SearchSource,
-    corpora: &[String],
-    provider: Arc<dyn InferenceProvider>,
-    consent: Option<ConsentGrant>,
-) -> Result<(Arc<dyn ResearchPort>, String), String> {
-    if backend == "mock" {
-        let deck_dir = mock_deck_dir.ok_or("--backend mock requires --mock-deck DIR")?;
-        let deck = Deck::load(deck_dir).map_err(|e| format!("mock deck load failed: {e}"))?;
-        let real = Arc::new(CliResearchPort::new(provider.clone(), consent.clone()));
-        let mock = if search_source == SearchSource::Corpus {
-            let mut indexes = Vec::new();
-            let mut missing = Vec::new();
-            for id in corpora {
-                let dir = indexes_dir().join(id);
-                if !corpus_searchable(&dir) {
-                    missing.push(id.clone());
-                    continue;
-                }
-                match CorpusIndex::open(&dir).await {
-                    Ok(i) => indexes.push(i),
-                    Err(e) => return Err(format!("open corpus `{id}`: {e}")),
-                }
-            }
-            if !missing.is_empty() {
-                return Err(format!(
-                    "--search-source corpus: corpus not searchable at the estate: {} — a \
-                     named corpus is never silently skipped",
-                    missing.join(", ")
-                ));
-            }
-            MockBackendImpl::with_corpus(
-                deck,
-                MockDraftSurface::Delegated(real),
-                CorpusSurface {
-                    indexes,
-                    embed: Box::new(ProviderEmbed(provider.clone())),
-                },
-            )
-        } else {
-            MockBackendImpl::new(deck, MockDraftSurface::Delegated(real))
-        };
-        Ok((Arc::new(mock), MockBackendImpl::BACKEND_ID.to_string()))
-    } else {
-        let real = Arc::new(CliResearchPort::new(provider.clone(), consent));
-        let web_backend = real.default_web_backend().to_string();
-        Ok((real, web_backend))
-    }
-}
-
-/// The launch-sidecar (order deep-research-t3a): the run's backend
-/// identity, written by the verb into the run dir before launch and
-/// read back on `--resume` — the operator's `--backend`/`--mock-deck`
-/// flags are verified against it flag-by-flag, never silently
-/// substituted.
-#[derive(serde::Serialize, serde::Deserialize)]
-struct ResumeInput {
-    icd: String,
-    version: u32,
-    run_id: String,
-    backend: String,
-    #[serde(default)]
-    mock_deck_dir: Option<String>,
-}
 
 /// `svrn deep-research "<question>" [--run-dir DIR] [--max-rounds N]
 /// [--corpora id1,id2] [--code-set-k N] [--eps-quota F] [--search N]
@@ -748,10 +68,26 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     let mut resume_dir: Option<PathBuf> = None;
     let mut max_rounds = 3u32;
     let mut corpora: Vec<String> = Vec::new();
-    let mut code_set_k = 3usize;
-    let mut eps_quota = 0.1f64;
-    let mut search_allowance = 4u32;
-    let mut fetch_allowance = 4u32;
+    // drb1-t1: the admission thresholds default from the ONE decider
+    // (acquisition::{DEFAULT_CODE_SET_K, DEFAULT_EPS_QUOTA}) — the
+    // charter, the flags, and the replay harness read the same consts.
+    let mut code_set_k = sovereign_core::deep_research::acquisition::DEFAULT_CODE_SET_K;
+    let mut eps_quota = sovereign_core::deep_research::acquisition::DEFAULT_EPS_QUOTA;
+    // Greedy acquisition (2026-08-24). AIQ's own `resource_limits` are up
+    // to 20 research queries and 100 source-tool calls per job, and its
+    // InfoRecall lead over every frontier entry is a breadth result, not a
+    // scorer trick. Ours were 4 and 4 — a toy budget on a command named
+    // "deep research". Measured cost of the old shape on a logged DRB-I
+    // flight: a mean of 5 distinct sources per task, and 17.6% of the
+    // evidence available for those tasks ever reaching the window.
+    //
+    // These are CEILINGS, not spend: the round split
+    // (`budget::round_allowance_cap`) still divides them across rounds,
+    // the decider still refuses past them, and `--search` / `--fetch`
+    // still override. Nothing here makes a run spend more than the
+    // evidence it can actually find.
+    let mut search_allowance = 20u32;
+    let mut fetch_allowance = 100u32;
     // Which flags the operator ACTUALLY passed (order deep-research-t3a):
     // a `--resume` inherits the checkpoint's frozen values for flags that
     // were NOT passed — only explicitly-passed flags are verified against
@@ -925,6 +261,33 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
         eprintln!("deep-research: --search-source corpus requires --corpora id1,id2");
         return 1;
     }
+    // A run whose acquisition leg CANNOT acquire is refused here, at
+    // launch, rather than after it has spent its round budget.
+    //
+    // `LiveResearchPort::web_search` calls `egress::verify` on every
+    // query with `user_formed: false`; with no `ConsentGrant` that
+    // refuses, every round returns zero hits, and the loop lands an
+    // honest-but-empty report. `LiveResearchPort::new` already PRINTS the
+    // posture at launch and names the flag; what it did not do is stop, so
+    // the run spent its whole budget to deliver an empty report the operator
+    // could have been spared. A warning that is followed by doing it anyway
+    // is not a refusal. `--backend
+    // mock` is exempt: it serves search and fetch from the deck and
+    // never reaches the egress boundary. The corpus source is exempt:
+    // `estate_search` is local.
+    let needs_egress = backend != "mock" && search_source != SearchSource::Corpus;
+    if needs_egress && consent_floor.is_none() {
+        eprintln!(
+            "deep-research: refusing to start — the {} search source releases queries to the \n\
+             open web, and this run carries no consent grant, so every query would be refused \n\
+             at the egress boundary and the run would produce an empty report.\n\
+             \n\
+             Grant it:      --consent public-web\n\
+             Or stay local: --search-source corpus --corpora <id>",
+            search_source.as_str()
+        );
+        return 2;
+    }
     // A fresh launch needs a question; a resume refuses one (the
     // checkpoint's question is the frozen identity). Naming both a run
     // dir and a resume dir would name two run dirs — refused.
@@ -946,29 +309,12 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     }
 
     // Daemon + models: the loop is local-only, but it still needs the
-    // local daemon's embed + draft surface.
-    let cfg = match SetupConfig::load() {
-        Ok(c) => c,
+    // local daemon's embed + draft surface. The ONE read (the fresh
+    // launch reads the same accessor through `launch::prepare`).
+    let (endpoint, draft_model, embed_model) = match launch::daemon_targets() {
+        Ok(t) => t,
         Err(e) => {
-            eprintln!("read ~/.svrnmesh/config.toml: {e}");
-            return 1;
-        }
-    };
-    let port = cfg.daemon.client_port;
-    let endpoint = format!("http://localhost:{port}/v1");
-    let draft_model = match cfg.models.primary.file_stem().and_then(|s| s.to_str()) {
-        Some(m) => m.to_string(),
-        None => {
-            eprintln!("deep-research: SetupConfig.models.primary has no filename stem (the draft model id)");
-            return 1;
-        }
-    };
-    let embed_model = match cfg.models.embed.file_stem().and_then(|s| s.to_str()) {
-        Some(m) => m.to_string(),
-        None => {
-            eprintln!(
-                "deep-research: SetupConfig.models.embed has no filename stem (the embed model id)"
-            );
+            eprintln!("deep-research: {e}");
             return 1;
         }
     };
@@ -1014,46 +360,37 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     // resume branch already returned for the resume shape.
     let question = question.expect("a fresh launch has a question (validated above)");
 
-    let run_id = format!("dr-{}", now_unix());
-    let run_dir = run_dir.join(&run_id);
-
-    // The run-scoped consent grant (order deep-research-t2a): minted
-    // once, here, from the operator's `--consent` class — then frozen
-    // (FR-3) into both the port (the egress boundary's check) and the
-    // RunConfig (the manifest record). Default-deny: no flag, no
-    // grant, non-public-web egress refuses.
-    let consent: Option<ConsentGrant> = consent_floor.map(|release_floor| ConsentGrant {
-        run_id: run_id.clone(),
-        granted_at_unix: now_unix(),
-        release_floor,
-    });
-
-    let provider: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(&endpoint, None, &draft_model, 8192));
-    // The ONE port construction (shared with the resume path — see
-    // build_port): `--backend mock` serves search/fetch from the deck
-    // directory with drafting delegated to the real port (the daemon);
-    // the corpus source attaches the estate's real indexes.
-    let (port, web_backend) = match build_port(
-        &backend,
-        mock_deck_dir.as_deref(),
+    // The ONE launch (sovereign-core `deep_research::launch::prepare`):
+    // the daemon targets, the run id + dir, the consent grant, the
+    // provider, the port, the RunConfig and the resume sidecar. The verb
+    // supplies only what an operator typed; nothing here re-decides a
+    // runtime default, and the desktop launches through the same call.
+    let launch = match launch::prepare(launch::LaunchOptions {
+        question: question.clone(),
+        runs_base: run_dir,
+        max_rounds,
+        code_set_k,
+        eps_quota,
+        search_allowance,
+        fetch_allowance,
+        estate_corpus_ids: corpora.clone(),
         search_source,
-        &corpora,
-        provider.clone(),
-        consent.clone(),
-    )
+        backend: backend.clone(),
+        mock_deck_dir: mock_deck_dir.clone(),
+        consent_floor,
+    })
     .await
     {
-        Ok(p) => p,
+        Ok(l) => l,
         Err(e) => {
             eprintln!("deep-research: {e}");
             return 1;
         }
     };
 
-    eprintln!("deep-research: run {run_id} — {question}");
-    eprintln!("deep-research: run dir {}", run_dir.display());
-    eprintln!("deep-research: web backend {web_backend}");
+    eprintln!("deep-research: run {} — {question}", launch.run_id);
+    eprintln!("deep-research: run dir {}", launch.run_dir.display());
+    eprintln!("deep-research: web backend {}", launch.web_backend);
     eprintln!("deep-research: search source {}", search_source.as_str());
     if backend == "mock" {
         eprintln!(
@@ -1064,59 +401,15 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
     if search_source == SearchSource::Corpus {
         eprintln!("deep-research: corpus source over: {}", corpora.join(", "));
     }
-    eprintln!("deep-research: daemon {endpoint} (draft {draft_model}, embed {embed_model})");
-
-    let config = RunConfig {
-        run_id: run_id.clone(),
-        question: question.clone(),
-        seed_id: None,
-        run_dir: run_dir.clone(),
-        max_rounds,
-        code_set_k,
-        eps_quota,
-        evidence_window_max_chunks: 20,
-        estate_corpus_ids: corpora,
-        web_backend,
-        search_source,
-        web_search_allowance: search_allowance,
-        web_fetch_allowance: fetch_allowance,
-        posture: ShardingPrivacy::LocalOnly,
-        consent,
-    };
-
-    // The launch sidecar (order deep-research-t3a): the run's backend
-    // identity, recorded BEFORE launch so a later `--resume` verifies
-    // the operator's flags against it flag-by-flag (never a silent
-    // substitution). Written by the verb, read by the verb.
-    if let Err(e) = std::fs::create_dir_all(&run_dir) {
-        eprintln!("deep-research: create run dir {}: {e}", run_dir.display());
-        return 1;
-    }
-    let sidecar = ResumeInput {
-        icd: "resume_input".to_string(),
-        version: ICD_VERSION,
-        run_id: run_id.clone(),
-        backend: backend.clone(),
-        mock_deck_dir: mock_deck_dir
-            .as_ref()
-            .map(|p| p.to_string_lossy().to_string()),
-    };
-    let sidecar_json = match serde_json::to_string_pretty(&sidecar) {
-        Ok(j) => j,
-        Err(e) => {
-            eprintln!("deep-research: resume sidecar serialize: {e}");
-            return 1;
-        }
-    };
-    if let Err(e) = std::fs::write(run_dir.join("resume-input.json"), sidecar_json) {
-        eprintln!("deep-research: resume sidecar write: {e}");
-        return 1;
-    }
+    eprintln!(
+        "deep-research: daemon {} (draft {}, embed {})",
+        launch.endpoint, launch.draft_model, launch.embed_model
+    );
 
     let mut outcome = match run(
-        config,
-        port,
-        provider.clone(),
+        launch.config.clone(),
+        launch.port.clone(),
+        launch.provider.clone(),
         Arc::new(AtomicBool::new(false)),
     )
     .await
@@ -1127,23 +420,15 @@ pub async fn cmd_deep_research(args: &[String]) -> i32 {
             return 1;
         }
     };
-    // The run-close estate ingest (scene 6 of the dr-journey bar): the
-    // run's fetched evidence lands in `dr-estate-<run_id>`, stamped
-    // indexes-built and ingestion-complete — retrieval-visible without
-    // a manual ritual. A failed ingest fails the verb loudly; it never
-    // passes in silence.
-    if let Err(e) = ingest_run_estate(&mut outcome, &provider, &embed_model).await {
-        eprintln!("deep-research: estate ingest failed: {e}");
-        return 1;
-    }
-    print_summary(&outcome);
-    // T6b pre-window slice (pre-registered): the clean RACE article
-    // page, written post-flight beside report.md. A write failure
-    // fails the verb loudly — the deliverable is missing.
-    if let Err(e) = write_race_render(&outcome.report_path) {
+    // Closing the run is not optional: the fetched evidence lands in
+    // `dr-estate-<run_id>` (retrieval-visible without a manual ritual)
+    // and the clean RACE page is written beside report.md. Either
+    // failure fails the verb loudly — never in silence.
+    if let Err(e) = launch::close(&mut outcome, &launch.provider, &launch.embed_model).await {
         eprintln!("deep-research: {e}");
         return 1;
     }
+    print_summary(&outcome);
     0
 }
 
@@ -1391,174 +676,10 @@ async fn resume_run_inner(
     let mut outcome = resume(c, port, provider.clone(), Arc::new(AtomicBool::new(false)))
         .await
         .map_err(|e| format!("resume failed: {e}"))?;
-    if let Err(e) = ingest_run_estate(&mut outcome, &provider, embed_model).await {
-        return Err(format!("estate ingest failed: {e}"));
-    }
+    // Same close sequence as a fresh launch (estate ingest + the RACE
+    // page) — one implementation, never a second one that can drift.
+    launch::close(&mut outcome, &provider, embed_model).await?;
     print_summary(&outcome);
-    write_race_render(&outcome.report_path)?;
-    Ok(())
-}
-
-/// The run-close estate ingest (order deep-research-t3a — scene 6 of
-/// the dr-journey bar, the local cache): every source the run
-/// actually fetched (the round-1 survey's estate hits + every
-/// evidence-window's chunks, deduped by source url) is ingested into
-/// the run's estate corpus `dr-estate-<run_id>`, stamped
-/// indexes-built and ingestion-complete (the two stamps listing AND
-/// retrieval check — no manual ritual), and stamped `ingested_into`
-/// on the manifest's fetched sources. A later run's `--corpora
-/// dr-estate-<run_id>` reads the corpus BEFORE the web leg and cites
-/// `estate:dr-estate-<run_id>:` locators — the cache that means we do
-/// not always rebuild from web search.
-async fn ingest_run_estate(
-    outcome: &mut RunOutcome,
-    provider: &Arc<dyn InferenceProvider>,
-    embed_model: &str,
-) -> Result<(), String> {
-    let corpus_id = format!("dr-estate-{}", outcome.manifest.run_id);
-    let corpus_dir = indexes_dir().join(&corpus_id);
-    if corpus_dir.exists() {
-        eprintln!("deep-research: estate corpus {corpus_id} already exists — skip (idempotent)");
-        return Ok(());
-    }
-    let run_dir = outcome
-        .report_path
-        .parent()
-        .ok_or_else(|| "the run's report path has no parent (no run dir)".to_string())?
-        .to_path_buf();
-
-    // Collect the run's evidence: window chunks + survey hits,
-    // deduped by source url (survey first — its chunks carry the
-    // estate locators the windows repeat).
-    let mut collected: Vec<(String, Option<String>, String)> = Vec::new();
-    let mut seen = std::collections::BTreeSet::new();
-    let survey_path = run_dir.join("survey-1.json");
-    if let Ok(raw) = std::fs::read_to_string(&survey_path) {
-        if let Ok(survey) = serde_json::from_str::<Survey>(&raw) {
-            for q in &survey.searched {
-                for hit in &q.hits {
-                    if let Some(content) = hit.content.as_deref().filter(|c| !c.trim().is_empty()) {
-                        let url = hit.url.clone().unwrap_or_else(|| {
-                            format!("estate:{}:{}", hit.corpus_id, hit.chunk_id)
-                        });
-                        if seen.insert(url.clone()) {
-                            collected.push((url, Some(hit.chunk_id.clone()), content.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    let mut window_paths: Vec<PathBuf> = std::fs::read_dir(&run_dir)
-        .map_err(|e| format!("read run dir {}: {e}", run_dir.display()))?
-        .filter_map(|e| e.ok())
-        .map(|e| e.path())
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .map(|n| n.starts_with("evidence-window-") && n.ends_with(".json"))
-                .unwrap_or(false)
-        })
-        .collect();
-    window_paths.sort();
-    for path in window_paths {
-        let raw =
-            std::fs::read_to_string(&path).map_err(|e| format!("read {}: {e}", path.display()))?;
-        let window: EvidenceWindow =
-            serde_json::from_str(&raw).map_err(|e| format!("parse {}: {e}", path.display()))?;
-        for chunk in &window.chunks {
-            if chunk.content.trim().is_empty() {
-                continue;
-            }
-            let url = if chunk.source_url.is_empty() {
-                chunk.locator.clone()
-            } else {
-                chunk.source_url.clone()
-            };
-            if seen.insert(url.clone()) {
-                collected.push((url, Some(chunk.locator.clone()), chunk.content.clone()));
-            }
-        }
-    }
-    if collected.is_empty() {
-        eprintln!("deep-research: run fetched no content — estate corpus {corpus_id} not created");
-        return Ok(());
-    }
-
-    // Embed + insert through the ONE embed path (ProviderEmbed — the
-    // same surface the estate leg uses).
-    let mut pairs: Vec<(InsertChunk, Vec<f32>)> = Vec::with_capacity(collected.len());
-    let mut dim = 0usize;
-    for (url, title, content) in &collected {
-        let embedding = provider
-            .embed(content)
-            .await
-            .map_err(|e| format!("embed estate chunk `{url}`: {e}"))?;
-        if dim == 0 {
-            dim = embedding.len();
-        }
-        pairs.push((
-            InsertChunk {
-                content: content.clone(),
-                title: title.clone(),
-                url: Some(url.clone()),
-                metadata: None,
-                content_hash: None,
-                source_doc_id: Some(url.clone()),
-                source_file: None,
-                code: Default::default(),
-                unit_id: None,
-            },
-            embedding,
-        ));
-    }
-    let index = CorpusIndex::create_with_sharing(
-        &corpus_dir,
-        &corpus_id,
-        &corpus_id,
-        embed_model,
-        dim,
-        false,
-        Some(false),
-        "dr-estate",
-    )
-    .await
-    .map_err(|e| format!("create estate corpus {corpus_id}: {e}"))?;
-    index
-        .insert_batch(&pairs)
-        .await
-        .map_err(|e| format!("insert into estate corpus {corpus_id}: {e}"))?;
-    // Index build is best-effort (a warn; a small corpus's IVF/FTS
-    // matters less than the stamps below).
-    if let Err(e) = index.build_indexes(true, true, None).await {
-        eprintln!("deep-research: estate corpus {corpus_id}: index build warned: {e}");
-    }
-    // The two stamps retrieval and listing check — mark_indexes_built
-    // MUST stamp; a failure propagates (an invisible corpus would be
-    // a silent failure).
-    index
-        .mark_indexes_built()
-        .map_err(|e| format!("stamp indexes-built on {corpus_id}: {e}"))?;
-    index
-        .mark_ingestion_complete()
-        .map_err(|e| format!("stamp ingestion-complete on {corpus_id}: {e}"))?;
-
-    // Stamp the manifest's fetched sources and re-write the record.
-    let ingested: std::collections::BTreeSet<&String> =
-        collected.iter().map(|(url, _, _)| url).collect();
-    for f in &mut outcome.manifest.sources.fetched {
-        if ingested.contains(&f.url) {
-            f.ingested_into = Some(corpus_id.clone());
-        }
-    }
-    let manifest_json = serde_json::to_string_pretty(&outcome.manifest)
-        .map_err(|e| format!("manifest serialize: {e}"))?;
-    std::fs::write(run_dir.join("manifest.json"), manifest_json)
-        .map_err(|e| format!("manifest re-write: {e}"))?;
-    eprintln!(
-        "deep-research: estate corpus {corpus_id} built — {} chunks (retrieval-visible)",
-        pairs.len()
-    );
     Ok(())
 }
 
@@ -1587,82 +708,9 @@ fn print_summary(outcome: &RunOutcome) {
     }
 }
 
-/// T6b pre-window slice (pre-registered 2026-08-19): the post-flight
-/// RACE article page. Reads the run's verdict-set.json (the structured
-/// channel — typed citations and verdicts) and writes `render-race.md`
-/// beside report.md: passed findings with typed citations, downgraded
-/// claims stamped, zero model-written tails. The page's question is
-/// report.md's own H1 — the question the transcript actually answers
-/// (a reframed/redirected run's title comes from the record, never a
-/// silent substitute). Skipped with a named note when the verdict set
-/// is absent (an aborted run); a write failure fails the verb loudly —
-/// the deliverable is missing.
-fn write_race_render(report_path: &std::path::Path) -> Result<(), String> {
-    let dir = report_path
-        .parent()
-        .ok_or_else(|| "the run's report path has no parent (no run dir)".to_string())?;
-    let question = match std::fs::read_to_string(report_path) {
-        Ok(text) => text
-            .lines()
-            .find_map(|l| l.strip_prefix("# ").map(str::to_string))
-            .ok_or_else(|| {
-                format!(
-                    "render-race.md skipped — report.md carries no `# ` heading: {}",
-                    report_path.display()
-                )
-            })?,
-        Err(_) => {
-            eprintln!(
-                "deep-research: render-race.md skipped — report.md unreadable at {}",
-                report_path.display()
-            );
-            return Ok(());
-        }
-    };
-    let verdict_path = dir.join("verdict-set.json");
-    let verdict_set: VerdictSet = match std::fs::read(&verdict_path)
-        .ok()
-        .and_then(|raw| serde_json::from_slice(&raw).ok())
-    {
-        Some(vs) => vs,
-        None => {
-            eprintln!(
-                "deep-research: render-race.md skipped — {} absent or unreadable (aborted run?)",
-                verdict_path.display()
-            );
-            return Ok(());
-        }
-    };
-    let page = render_race(&question, &verdict_set.claims, &verdict_set.run_id);
-    let race_path = dir.join("render-race.md");
-    std::fs::write(&race_path, page).map_err(|e| {
-        format!(
-            "render-race.md write failed at {}: {e}",
-            race_path.display()
-        )
-    })
-}
-
-fn now_unix() -> i64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0)
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        complete_with_shed_retry, looks_shed, shed_retry_hint_secs, write_race_render,
-        MAX_SHED_RETRIES,
-    };
-    use futures::Stream;
-    use sovereign_contracts::error::Error as ContractError;
-    use sovereign_contracts::types::{CompletionRequest, CompletionResponse, Speed};
     use sovereign_core::deep_research::estate::estate_snippet;
-    use sovereign_core::traits::InferenceProvider;
-    use std::pin::Pin;
-    use std::sync::{Arc, Mutex};
 
     /// Measured fixture (demo re-ask dr-1786727099): the Smithsonian
     /// timeline chunk's 240-char prefix is nav + donate blurb; the
@@ -1699,285 +747,5 @@ mod tests {
         let content = "short chunk with no matching terms here";
         let snippet = estate_snippet(content, "zzzqqq wwww", 50);
         assert_eq!(snippet, content);
-    }
-
-    // ------------------------------------------------------------------
-    // T6b pre-window slice — the post-flight RACE page (RED-FIRST: the
-    // write path did not exist at HEAD; the render test in sovereign-core
-    // watched the red first — order deep-research-t6b, pre-registered).
-    // ------------------------------------------------------------------
-
-    /// write_race_render reads a run dir's verdict-set.json (the
-    /// structured channel, real wire shape) + report.md's H1 (the
-    /// question the transcript actually answers) and writes the clean
-    /// article page beside the transcript — typed citations in [passed]
-    /// position, no model-written tails, downgraded claims stamped.
-    #[test]
-    fn write_race_render_produces_the_clean_page_from_a_run_dir() {
-        let tmp = std::env::temp_dir().join(format!("dr-race-render-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        let report = "# Meridian Bridge history\n\n- run: `dr-test`\n\n\
-            ## Findings\n\n- **[passed]** The bridge was completed in 1873. — `ev-1` \
-            [https://example.com/a](https://example.com/a)\n";
-        std::fs::write(tmp.join("report.md"), report).unwrap();
-        let verdict_set = serde_json::json!({
-            "icd": "verdict_set",
-            "version": 1,
-            "run_id": "dr-test",
-            "charter_hash": "h",
-            "claims": [
-                {"id": "c1",
-                 "text": "The bridge was completed in 1873 [Source: https://example.com/draft]. ",
-                 "verdict": "passed", "status": "passed",
-                 "evidence_ids": ["ev-1"],
-                 "citations": [{"evidence_id": "ev-1", "url": "https://example.com/a",
-                                "chunk_id": "ev-1"}],
-                 "flag": null},
-                {"id": "c2",
-                 "text": "The engineer was Helena Voss.",
-                 "verdict": "failed", "status": "failed",
-                 "evidence_ids": [], "citations": [],
-                 "flag": "refuted by the evidence"}
-            ]
-        });
-        std::fs::write(
-            tmp.join("verdict-set.json"),
-            serde_json::to_vec_pretty(&verdict_set).unwrap(),
-        )
-        .unwrap();
-        write_race_render(&tmp.join("report.md")).unwrap();
-        let page = std::fs::read_to_string(tmp.join("render-race.md")).unwrap();
-        assert!(page.starts_with("# Meridian Bridge history"), "{page}");
-        assert!(page.contains("## Findings"), "{page}");
-        let findings = page.split("## Findings").nth(1).expect("findings present");
-        assert!(findings.contains("ev-1"), "{findings}");
-        assert!(findings.contains("https://example.com/a"), "{findings}");
-        assert!(!findings.contains("[Source:"), "{findings}");
-        assert!(page.contains("[refuted]"), "{page}");
-        assert!(page.contains("Helena Voss"), "{page}");
-        // The transcript file is untouched, byte-for-byte.
-        assert_eq!(
-            std::fs::read_to_string(tmp.join("report.md")).unwrap(),
-            report
-        );
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    /// No verdict set (an aborted run) skips with a note — never an
-    /// error and never a page pretending to be complete.
-    #[test]
-    fn write_race_render_skips_without_a_verdict_set() {
-        let tmp = std::env::temp_dir().join(format!("dr-race-render-skip-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&tmp);
-        std::fs::create_dir_all(&tmp).unwrap();
-        std::fs::write(tmp.join("report.md"), "# Q\n\n## Findings\n\n").unwrap();
-        write_race_render(&tmp.join("report.md")).unwrap();
-        assert!(
-            !tmp.join("render-race.md").exists(),
-            "no verdict set — no race page"
-        );
-        let _ = std::fs::remove_dir_all(&tmp);
-    }
-
-    // ------------------------------------------------------------------
-    // T6b pre-window slice — the shed (503 + Retry-After) retry
-    // (RED-FIRST: complete_with_shed_retry did not exist at HEAD; the
-    // seed-05 re-flight died on its FIRST draft call with no retry —
-    // arms/runs-t6b/loop/seed-05.console.log — order deep-research-t6b,
-    // pre-registered).
-    // ------------------------------------------------------------------
-
-    /// A provider that sheds (503) the first `fails` completes, then
-    /// answers. Attempts are counted so tests can assert the exact
-    /// retry bound.
-    struct ShedStub {
-        fails: usize,
-        error_text: String,
-        attempts: Arc<Mutex<usize>>,
-    }
-
-    #[async_trait::async_trait]
-    impl InferenceProvider for ShedStub {
-        async fn complete(
-            &self,
-            _request: &CompletionRequest,
-        ) -> std::result::Result<CompletionResponse, ContractError> {
-            let mut attempts = self.attempts.lock().unwrap();
-            *attempts += 1;
-            if *attempts <= self.fails {
-                Err(ContractError::Inference(self.error_text.clone()))
-            } else {
-                Ok(CompletionResponse {
-                    text: "the answer".to_string(),
-                    tokens_used: 0,
-                    prompt_tokens: 0,
-                    model_id: "shed-stub".to_string(),
-                    latency_ms: 0,
-                    oicp_meta: None,
-                    finish_reason: None,
-                    completion_tokens: None,
-                })
-            }
-        }
-
-        async fn complete_stream(
-            &self,
-            _request: &CompletionRequest,
-        ) -> std::result::Result<
-            Pin<Box<dyn Stream<Item = std::result::Result<String, ContractError>> + Send>>,
-            ContractError,
-        > {
-            Err(ContractError::NotImplemented("ShedStub".into()))
-        }
-
-        async fn embed(&self, _text: &str) -> std::result::Result<Vec<f32>, ContractError> {
-            Ok(vec![])
-        }
-
-        fn capabilities(&self) -> sovereign_contracts::types::ProviderCapabilities {
-            sovereign_contracts::types::ProviderCapabilities {
-                max_context_tokens: 4096,
-                supports_structured_output: true,
-                relative_speed: Speed::Fast,
-                relative_reasoning: sovereign_contracts::types::Depth::Moderate,
-            }
-        }
-    }
-
-    /// The classifier and hint parser read the REAL wire shapes — the
-    /// admission shape (retry_after_secs key), the busy shape (bare
-    /// retry_after key), the evidenced seed-05 death (no retry key at
-    /// all — default backoff), and a transport failure (never a shed).
-    #[test]
-    fn shed_classifier_and_hint_parse_the_real_wire_shapes() {
-        let seed_05 = "Inference error: Remote API returned 503 Service Unavailable: \
-            {\"error\":{\"message\":\"local inference failed: Inference error: MTP inference \
-            deadline exceeded after 300s (3560 tokens)\",\"type\":\"backend_error\",\"code\":null}}";
-        assert!(looks_shed(seed_05), "the evidenced death is a shed");
-        assert_eq!(
-            shed_retry_hint_secs(seed_05),
-            None,
-            "no retry key — default backoff"
-        );
-        let admission = "Remote API returned 503 Service Unavailable: \
-            {\"error\":\"local queue full\",\"reason\":\"local_queue_full\",\"retry_after_secs\":30}";
-        assert!(looks_shed(admission));
-        assert_eq!(shed_retry_hint_secs(admission), Some(30));
-        let busy = "Remote API returned 503 Service Unavailable: \
-            {\"error\":\"host busy\",\"retry_after\":14,\"queue_position\":3}";
-        assert!(looks_shed(busy));
-        assert_eq!(shed_retry_hint_secs(busy), Some(14));
-        assert_eq!(
-            shed_retry_hint_secs("retry_after_secs\":3600"),
-            Some(300),
-            "clamped"
-        );
-        assert!(!looks_shed("connection refused"));
-        assert_eq!(shed_retry_hint_secs("connection refused"), None);
-    }
-
-    /// The evidenced seed-05 death — through the helper, with the
-    /// DEFAULT backoff (the body carries no retry key) — recovers on
-    /// the retry and answers. This is the exact text that killed the
-    /// seed-05 flight.
-    #[tokio::test]
-    async fn the_evidenced_seed_05_death_is_a_shed_the_client_now_survives() {
-        let seed_05 = "Inference error: Remote API returned 503 Service Unavailable: \
-            {\"error\":{\"message\":\"local inference failed: Inference error: MTP inference \
-            deadline exceeded after 300s (3560 tokens)\",\"type\":\"backend_error\",\"code\":null}}";
-        let stub = Arc::new(ShedStub {
-            fails: 1,
-            error_text: seed_05.to_string(),
-            attempts: Arc::new(Mutex::new(0)),
-        });
-        let request = CompletionRequest {
-            prompt: "q".to_string(),
-            ..Default::default()
-        };
-        let resp = complete_with_shed_retry(&*stub, &request, "draft")
-            .await
-            .unwrap();
-        assert_eq!(resp.text, "the answer");
-        assert_eq!(
-            *stub.attempts.lock().unwrap(),
-            2,
-            "one shed + the answering call"
-        );
-    }
-
-    /// Sheds twice with a 1s hint, then succeeds: three attempts, the
-    /// Retry-After hint honored, the success surfaced.
-    #[tokio::test]
-    async fn shed_twice_then_succeed_retries_with_the_hint_backoff() {
-        let stub = Arc::new(ShedStub {
-            fails: 2,
-            error_text: "Remote API returned 503 Service Unavailable: \
-                {\"error\":\"host busy\",\"retry_after\":1}"
-                .to_string(),
-            attempts: Arc::new(Mutex::new(0)),
-        });
-        let request = CompletionRequest {
-            prompt: "q".to_string(),
-            ..Default::default()
-        };
-        let resp = complete_with_shed_retry(&*stub, &request, "draft")
-            .await
-            .unwrap();
-        assert_eq!(resp.text, "the answer");
-        assert_eq!(
-            *stub.attempts.lock().unwrap(),
-            3,
-            "two sheds + the answering call"
-        );
-    }
-
-    /// Always-shed: attempts bounded at MAX_SHED_RETRIES + 1, the last
-    /// honest error surfaced — never a silent substitution, never an
-    /// unbounded stall.
-    #[tokio::test]
-    async fn always_shed_is_bounded_and_surfaces_the_last_error() {
-        let stub = Arc::new(ShedStub {
-            fails: usize::MAX,
-            error_text: "Remote API returned 503 Service Unavailable: \
-                {\"error\":\"host busy\",\"retry_after\":1}"
-                .to_string(),
-            attempts: Arc::new(Mutex::new(0)),
-        });
-        let request = CompletionRequest {
-            prompt: "q".to_string(),
-            ..Default::default()
-        };
-        let err = complete_with_shed_retry(&*stub, &request, "plan-subquestions")
-            .await
-            .unwrap_err();
-        assert_eq!(*stub.attempts.lock().unwrap(), MAX_SHED_RETRIES + 1);
-        assert!(
-            err.contains("503"),
-            "the honest error, not a substitution: {err}"
-        );
-    }
-
-    /// A non-shed failure (connection refused) surfaces immediately —
-    /// no retry, no stall; the seed-05 sibling errors keep their shape.
-    #[tokio::test]
-    async fn non_shed_error_surfaces_immediately_without_retry() {
-        let stub = Arc::new(ShedStub {
-            fails: usize::MAX,
-            error_text: "connection refused".to_string(),
-            attempts: Arc::new(Mutex::new(0)),
-        });
-        let request = CompletionRequest {
-            prompt: "q".to_string(),
-            ..Default::default()
-        };
-        let err = complete_with_shed_retry(&*stub, &request, "draft")
-            .await
-            .unwrap_err();
-        assert_eq!(*stub.attempts.lock().unwrap(), 1, "no retry on a non-shed");
-        // The honest wire shape, prefix included — exactly what the
-        // evidence shows the loop client sees (seed-05: "Inference
-        // error: Remote API returned 503 ...").
-        assert_eq!(err, "Inference error: connection refused");
     }
 }

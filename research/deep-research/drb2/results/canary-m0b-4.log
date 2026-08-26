@@ -1,0 +1,15 @@
+BATCH_ITEMS 4
+PROMPT_CHARS 20617
+CALL_SECS 74.6
+STRIP_EVENTS []
+USAGE {"prompt_tokens": 5573, "completion_tokens": 570, "total_tokens": 6143}
+TOKPS 7.64 PER_ITEM_TOKENS 142.5 TOTAL_OUTPUT_TOKENS 570
+RAW_SAVED /home/alexbryan/dev/commonwealth-ai/research/deep-research/drb2/results/canary-m0b-raw.txt RAW_CHARS 2419
+RAW_START '{\n    "results": [\n        {\n            "rubric_item": "Explicitly state that Indonesia\'s \'Taspen - JP\' is a mandatory Pay-As-You-Go Defined Benefit (PAYG DB) scheme for public sector employees.",\n            "score": 1,\n            "reason": "The article explicitly identifies Taspen - JP as a PAYG DB scheme and states it is mandatory for civil servants and public sector employees. No blocked references are cited in the supporting sentences.",\n            "evidence": "**Taspen - JP (Jaminan Pensiun)** - Public Sector\\n\\n**Type:** Pay-As-You-Go Define Benefit (PAYG DB)\\n**Coverage:** Mandatory for all civil servants and public sector employees"\n        },\n        {\n            "rubric_item": "Explicitly state that Indonesia\'s \'BPJS - JHT\' is a mandatory Asset-backed Defined Contribution (Asset-backed DC) scheme for employees of large, medium, and small-sized private enterprises, and voluntary for micro-enterprise employees.",\n            "score": 0,\n            "reason": "The article mentions BPJS Ketenagakerjaan - JHT as an Asset-backed DC scheme, but it does not specify the coverage distinction between large/medium/small private enterprises (mandatory) and micro-enterprises (voluntary). It only states it is \'Mandatory for all private sector employees\'.",\n            "evidence": ""\n        },\n        {\n            "rubric_item": "Explicitly state that Indonesia\'s \\"BPJS - JP\\" is a mandatory Pay-As-Your-Go Defined Benefit (PAYG PB) scheme for employees of large and medium-si'
+RAW_END ' an Asset-backed Defined Benefit scheme, not a PAYG DB. Furthermore, the rubric item contains typos (\'Pay-As-Your\', \'PB\') which do not match any standard terminology in the text, but more importantly, the specific claim about it being PAYG is false according to the article and general pension knowledge represented here.",\n            "evidence": ""\n        },\n        {\n            "rubric_item": "Explicitly state that Indonesia\'s \\"Taspen - THT\\" is a mandatory Asset-based Defined Contribution (Asset-based DC) scheme for public-sector employees.",\n            "score": 0,\n            "reason": "The article does not mention a scheme named \'Taspen - THT\'. It mentions Taspen JP. There is no information provided regarding Taspen THT in the passage.",\n            "evidence": ""\n        }\n    ]\n}'
+FENCES []
+COUNT_LBRACE 5 RBRACE 5 LBRACKET 1 RBRACKET 1
+HAS_RESULTS_KEY True
+RAW_DECODE_START_OK end_at 2419 of 2419
+ENDS_CLEAN True
+M0B_CANARY_DONE

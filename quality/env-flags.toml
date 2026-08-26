@@ -616,6 +616,13 @@ status = "guard"
 purpose = "Kill-switch: disable multi-token-prediction speculative decoding."
 
 [[flag]]
+name = "SOVEREIGN_MTP_DRAFT_MAX"
+cluster = "inference"
+default = "3"
+status = "shipped"
+purpose = "MTP speculative draft depth (n_draft_max). Admitted range is 1..mtp_n_rs_seq (structural cap n_rs_seq - 1: one slot of headroom for partial KV rollback on the recurrent layers). Out-of-range or unparseable values WARN and fall back to 3 — a named substitution, never silent (ARCH_PRINCIPLES §18.3). Default 3 is upstream's Qwen3.6-A3B sweet spot; the 3.8-UD A/B is order deep-research-t7c (2026-08-19)."
+
+[[flag]]
 name = "SOVEREIGN_NEXT_EDIT_FALLBACK"
 cluster = "inference"
 default = "off"
@@ -1224,9 +1231,30 @@ purpose = "Tavily Search API key for the web-search orchestrator's Tavily backen
 [[flag]]
 name = "SOVEREIGN_DEMO_DR_FLAGS"
 cluster = "demo"
-default = "unset (real flows are byte-identical)"
+default = "unset (real flows get the live port)"
 status = "guard"
-purpose = "Appended verb flags for the desktop's `dr_start` spawn (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. The desktop remains a driver — every token passes the verb's own closed-set parsing and run-dir verification. Only the demo global-setup writes it; every real flow leaves it unset."
+purpose = "The desktop's demo-only backend override (order deep-research-t3b evidence pass (f)): tests/e2e/demo's global-setup sets `--backend mock --mock-deck <bank v1 deck>` so the recorded beat films a deterministic deck run. Still spelled as flags because the demo global-setup and this registry already name it that way, but since the desktop stopped spawning the CLI it is PARSED into typed `launch::LaunchOptions` fields (`backend`, `mock_deck_dir`) rather than appended to a subprocess argv — a token the closed set does not name is ignored, not forwarded, because there is no second process to give it meaning. Read in exactly one place (`deep_research_commands::demo_backend_override`). Only the demo global-setup writes it; every real flow leaves it unset and gets the live port."
+
+[[flag]]
+name = "SOVEREIGN_DR_REPORT_OUTLINE"
+cluster = "deep-research"
+default = "off"
+status = "experiment"
+purpose = "drb1-r5: the composed report's sections come from a PLANNED OUTLINE rather than from the acquisition frontier. On-form: SOVEREIGN_DR_REPORT_OUTLINE=1 (also true, case-insensitive); every other value, including unset, keeps one-section-per-sub-question. Requires SOVEREIGN_DR_COMPOSED_REPORT=1 — there is no outline without a composed deliverable to structure. Why it exists: compose_report wrote one section per planned sub-question, and those come from the planner prompt that deliberately asks for the measure or statistic each implies, so the task-69 web arm shipped sections titled `Count of distinct error handling states defined in the A2A message schema`. Three of that arm's four largest weighted losses were structural with 98 sources in hand — the judge wrote `Article 2 dedicates Section III to MCP ... Article 1 lacks a comprehensive standalone explanation` (5.0 vs 9.0), `Article 2 has a dedicated Section VI (Interplay and Relationship)` (6.0 vs 9.5), `Article 2 explicitly maps problems to solutions in Section IX` (6.5 vs 9.5) — and a fourth said the granularity costs insight, the worst of our four dimensions. The outline is planned over the evidence actually gathered so it cannot promise sections nothing supports; the prompt describes a shape and never an answer. An unusable outline (fewer than 2 briefed sections) REFUSES and the loop falls back to the frontier with the fallback named in the trace, never silently. Cost: one extra Slow-slot draft call per run. Read in exactly one place (deep_research::report_outline_enabled). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
+name = "SOVEREIGN_DR_RESEARCH_NOTES"
+cluster = "deep-research"
+default = "off"
+status = "experiment"
+purpose = "drb1-r4: the composed report's sections are written from DISTILLED FINDINGS produced by one researcher worker per sub-question, instead of from the top-SECTION_PASSAGES retrieved passages. On-form: SOVEREIGN_DR_RESEARCH_NOTES=1 (also true, case-insensitive); every other value, including unset, leaves the passage path in place. Requires SOVEREIGN_DR_COMPOSED_REPORT=1 — notes feed the composer's sections, so with the composed report off there is no writer to feed and this flag does nothing. Why it exists: our AIQ teardown (research/deep-research/aiq-teardown.md §1.3) attributes that system's DRB-II InfoRecall lead (49.23, above o3, Gemini-3-Pro and Grok) to handing the writer structured research notes rather than raw passages; ours showed each section eight passages by cosine, so on the logged task-69 flight a 38-chunk window reached the writer eight chunks at a time. What does NOT change when it is on: the citation contract and therefore the gate. A finding carries the ev-N handles of the window chunks it rests on, the writer cites those same handles, and the audit locates spans exactly as before; a finding citing an id the window does not hold is REFUSED WHOLE and recorded with its reason, never admitted with the bad id dropped (that would re-attribute the claim to a chunk that never supported it — watched red in deep_research::notes::tests). A sub-question whose findings are all refused falls back to passages, named in the trace, never composed from nothing. Cost: one extra Slow-slot draft call per sub-question per run. Read in exactly one place (deep_research::research_notes_enabled). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
+name = "SOVEREIGN_DR_COMPOSED_REPORT"
+cluster = "deep-research"
+default = "off"
+status = "shipped"
+purpose = "drb1-t5: the deep-research deliverable is COMPOSED (one section per planned sub-question over the whole merged evidence window, plus a closing synthesis — AIQ teardown §1.6/§6.3) instead of being rebuilt from atomised claim rows. On-form: SOVEREIGN_DR_COMPOSED_REPORT=1 (also true, case-insensitive); every other value, including unset, leaves the claim-ledger render in place. Why it exists: measured on the logged t7a flight, the ledger shape scored 2.16/10 against the DRB-I reference's 9.32 on the benchmark's own criteria, with `## Findings` empty or near-empty on all nine deliverables because 127 of 137 claims landed could-not-judge — the page was the bookkeeping rather than the answer. What does NOT change when it is on: the gate. The audit runs over the COMPOSED text (so the audited artefact and the delivered artefact are one document), the corroboration floor, custody veto and containment witness are untouched, refuted claims are marked in place, and everything unverified is named in a closing Verification section. Read in exactly one place (deep_research::composed_report_enabled). Reversal condition + evidence: sovereign/DEFAULTS_LEDGER.md."
 
 # ── daemon-lifecycle: host headroom, the resource that actually runs out ──
 
