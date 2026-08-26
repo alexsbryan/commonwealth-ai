@@ -481,17 +481,18 @@ mod tests {
         let initial = SetupConfig::load_from(&path).unwrap();
         assert_eq!(initial.models.context_size, None, "fixture starts at auto");
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial.clone()).await;
+        // Commissioned through the total constructor, like every other test in
+        // this file. These two tests arrived on main written against the
+        // `set_*` builders daemon-convergence Phase 2 deleted; the merge took
+        // both sides' text and only the compiler noticed.
         let counter = Arc::new(AtomicUsize::new(0));
-        daemon
-            .set_provider_factory(Arc::new(StubFactory {
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial.clone(),
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
                 build_count: Arc::clone(&counter),
-            }))
-            .await;
-        daemon
-            .set_inference_provider(Arc::new(StubProvider { version: 0 }))
-            .await;
+            })),
+        );
 
         let mut modified = initial;
         modified.models.context_size = Some(65_536);
@@ -532,17 +533,18 @@ mod tests {
         let path = write_cfg(&tmp, "/m/primary.gguf");
         let initial = SetupConfig::load_from(&path).unwrap();
 
-        let daemon = Arc::new(EmbeddedDaemon::new(tmp.path().to_path_buf()));
-        daemon.set_setup_config(initial.clone()).await;
+        // Commissioned through the total constructor, like every other test in
+        // this file. These two tests arrived on main written against the
+        // `set_*` builders daemon-convergence Phase 2 deleted; the merge took
+        // both sides' text and only the compiler noticed.
         let counter = Arc::new(AtomicUsize::new(0));
-        daemon
-            .set_provider_factory(Arc::new(StubFactory {
+        let daemon = EmbeddedDaemon::new(
+            tmp.path().to_path_buf(),
+            initial.clone(),
+            crate::daemon_services::fixtures::headless_with_factory(Arc::new(StubFactory {
                 build_count: Arc::clone(&counter),
-            }))
-            .await;
-        daemon
-            .set_inference_provider(Arc::new(StubProvider { version: 0 }))
-            .await;
+            })),
+        );
 
         let mut modified = initial;
         modified.models.code = Some(PathBuf::from("/m/coder.gguf"));
