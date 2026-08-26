@@ -129,7 +129,7 @@ impl Runtime {
         // this, a stray document-attached message would burn an
         // embed call producing useless context.
         let attached_source: Option<String> = message
-            .strip_prefix("[Document attached: ")
+            .strip_prefix(crate::runtime::DOCUMENT_ATTACHED_PREFIX)
             .and_then(|rest| rest.find(']').map(|end| rest[..end].to_string()));
 
         // Run the DeepQuery retrieval pipeline — the ordered, traced

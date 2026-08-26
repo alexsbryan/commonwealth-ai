@@ -31,6 +31,36 @@ use crate::types::*;
 /// arbitrary length.
 pub const MAX_TURN_MESSAGE_CHARS: usize = 16_000;
 
+/// The marker a host prepends when the user attached a document, and the
+/// ONE name for it.
+///
+/// This literal was written out at six production sites across four files
+/// (`runtime/streaming.rs`, `runtime/turn.rs` ×2, `runtime/retrieval/mod.rs`,
+/// and the two host fallbacks) — a magic string carrying a routing decision,
+/// which is ARCH §2.1 and §10.6 at the same time. A typo in any one of them
+/// silently reclassifies a document turn as an ordinary one, and nothing
+/// fails; it just answers the wrong way.
+pub const DOCUMENT_ATTACHED_PREFIX: &str = "[Document attached: ";
+
+/// Does this turn belong to the document-operation path?
+///
+/// **This is the only question that decides whether a turn can token-stream**,
+/// and it is a property of the message, not an error to be caught. Hosts used
+/// to discover the answer by calling [`Runtime::handle_message_stream`] and
+/// pattern-matching what came back — `sovereign-cli-llm`'s chat surface
+/// matched the error *string*, the eval harness matched the *variant*, and
+/// they dispatched to two different handlers as a result. Worse, the streaming
+/// path persists the user message BEFORE it bails, so those two fallbacks were
+/// not interchangeable: one of them wrote the user's turn to the conversation
+/// twice.
+///
+/// Asking first removes the round-trip and the ambiguity — see
+/// [`crate::runtime::serve_turn`], which is now the single host-facing
+/// implementation of the fallback.
+pub fn is_document_attached(message: &str) -> bool {
+    message.starts_with(DOCUMENT_ATTACHED_PREFIX)
+}
+
 /// Error text shown when a message exceeds `MAX_TURN_MESSAGE_CHARS`.
 /// Surfaced unchanged to the user via the Tauri command layer, so it
 /// needs to be action-guidance, not a stack trace. `pub` so the desktop
@@ -229,7 +259,7 @@ pub mod retrieval_pipeline;
 /// that turns a `Runtime` into `TurnFrame`s, so a host does not have to be
 /// in the same process as the store to learn what a turn concluded.
 pub mod serve;
-pub use serve::{message_metadata, serve_turn, TurnSink};
+pub use serve::{collect_turn, message_metadata, serve_turn, CollectedTurn, TurnSink};
 /// G4 — the per-turn stage attribution ledger
 /// (`NATIVE_GROUNDING_ECONOMY.md` §3.4, §9 Phase 1). Measurement and
 /// reporting only; nothing in the runtime branches on it.

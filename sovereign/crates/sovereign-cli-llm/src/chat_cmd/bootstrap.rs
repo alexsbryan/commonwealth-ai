@@ -34,7 +34,7 @@ use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::SkillRegistry;
 use sovereign_runtime_recipe::{
-    LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring, ShellAccess,
+    LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring,
 };
 // Re-exported (not just `use`d) so the other CLI modules that referenced the
 // formerly-local `chat_cmd::bootstrap::SplitInferenceProvider` (raptor,
@@ -246,9 +246,23 @@ pub async fn build_session_with_skills(
             inference_config,
             indexes_dir: indexes_dir.clone(),
             embed_model: embed_model.clone(),
-            // An interactive CLI, running as the invoking user in the
-            // directory they invoked it from.
-            shell: ShellAccess::Granted,
+            // The families this surface's turn registry carries. Shell is
+            // present because an interactive CLI runs as the invoking user,
+            // in the directory they invoked it from, for the length of one
+            // command they are watching.
+            tool_bundles: {
+                let mut b = sovereign_runtime_recipe::baseline_bundles(
+                    &store,
+                    &inference,
+                    &corpus_engine,
+                    sovereign_tools::bundles::WebReach::Granted(
+                        sovereign_core::egress::search_client()
+                            .expect("egress boundary search client build"),
+                    ),
+                );
+                b.push(Box::new(sovereign_tools::bundles::ShellTools));
+                b
+            },
             // A one-shot answering one question would rather wait once than
             // answer it with less. Byte-identical to the behaviour this
             // function had when the recipe was inline.

@@ -324,6 +324,11 @@ pub(super) fn raptor_scored_chunk(
         chunk_id: None,
         source_doc_id: Some(conv_uuid),
         vector_distance: Some(1.0 - score),
+        // A RAPTOR rollup: model-authored prose ABOUT conversation text. The
+        // legacy bag said the same thing with `metadata["source"] = "raptor"`
+        // and a string compare at three sites; `manufactured_summary` is those
+        // three compares as one typed fact.
+        provenance: corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary"),
     }
 }
 

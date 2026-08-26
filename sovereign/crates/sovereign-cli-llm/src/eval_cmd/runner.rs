@@ -55,6 +55,26 @@ pub struct EvalRun {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvalResult {
+    /// Why this question produced no measurement, when it produced none.
+    ///
+    /// `None` means the run answered — well or badly, but it answered, and the
+    /// scores below are a measurement. `Some` means it did NOT, and the scores
+    /// are the shape of a measurement rather than one.
+    ///
+    /// Minted 2026-08-26. `empty_synth_result` was scoring a failed turn as
+    /// `source_score 0.0 / fact_score 0.0`, printing the error to stderr and
+    /// putting nothing in the report — so a daemon returning
+    /// `503 host busy / local_queue_full` was indistinguishable from a model
+    /// that answered with nothing, and the baseline diff counted it as a
+    /// regression. That is ARCH §18.3's named smell exactly ("an `Err`
+    /// collapsed into a success-shaped value"), and §18.2's four verdicts
+    /// collapsed to two. Measured: `synth:sep` reported FAIL(3reg) with 9 of
+    /// 15 questions holding a 503 and NOT ONE EXECUTED QUESTION REGRESSED.
+    ///
+    /// Consumers must EXCLUDE these rows from a comparison rather than score
+    /// them — see `bench_cmd::all::classify_retrieval`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
     pub question_id: String,
     pub category: String,
     pub question: String,
@@ -1155,6 +1175,7 @@ async fn run_question_prod(
     }
 
     let empty_result = |qq: &Question| EvalResult {
+        error: None,
         question_id: qq.id.clone(),
         category: qq.category.clone(),
         question: qq.question.clone(),
@@ -1256,6 +1277,7 @@ async fn run_question_prod(
         .collect();
 
     EvalResult {
+        error: None,
         question_id: q.id.clone(),
         category: q.category.clone(),
         question: q.question.clone(),
@@ -1310,9 +1332,9 @@ async fn run_question(
                 essay_readiness: None,
                 atlas_navigation: Vec::new(),
                 meta_atlas_hits: Vec::new(),
-                // Note: error message isn't carried in the result row
-                // today; the runner's stderr already logged it. Add a
-                // `note: Option<String>` field if this becomes annoying.
+                // `with_error` below sets `error`, which is what keeps this
+                // row out of the baseline comparison instead of scoring it 0.
+                error: None,
             }
             .with_error(format!("embed: {e}"));
         }
@@ -1328,40 +1350,46 @@ async fn run_question(
     // workload. Skipped entirely when the runtime config opts atlas
     // weight to zero (the default) or when no atlases are loaded —
     // baseline-A/B remains byte-equivalent to prior runs.
-    let atlas_article_scores: HashMap<String, f32> =
-        if session.runtime.lane_sources.rerank.config.atlas_weight.abs() > f32::EPSILON
-            && !atlases.is_empty()
-            && !embedding.is_empty()
-        {
-            let mut by_slug: HashMap<String, f32> = HashMap::new();
-            for ctx in atlases {
-                let slug = ctx
-                    .atlas_corpus_id
-                    .strip_prefix("sep-")
-                    .unwrap_or(&ctx.atlas_corpus_id)
-                    .to_string();
-                let mut best: f32 = 0.0;
-                for entry in &ctx.entries {
-                    let s = cosine(&embedding, &entry.embedding);
-                    if s > best {
-                        best = s;
-                    }
-                }
-                if best > 0.0 {
-                    by_slug
-                        .entry(slug)
-                        .and_modify(|cur| {
-                            if best > *cur {
-                                *cur = best;
-                            }
-                        })
-                        .or_insert(best);
+    let atlas_article_scores: HashMap<String, f32> = if session
+        .runtime
+        .lane_sources
+        .rerank
+        .config
+        .atlas_weight
+        .abs()
+        > f32::EPSILON
+        && !atlases.is_empty()
+        && !embedding.is_empty()
+    {
+        let mut by_slug: HashMap<String, f32> = HashMap::new();
+        for ctx in atlases {
+            let slug = ctx
+                .atlas_corpus_id
+                .strip_prefix("sep-")
+                .unwrap_or(&ctx.atlas_corpus_id)
+                .to_string();
+            let mut best: f32 = 0.0;
+            for entry in &ctx.entries {
+                let s = cosine(&embedding, &entry.embedding);
+                if s > best {
+                    best = s;
                 }
             }
-            by_slug
-        } else {
-            HashMap::new()
-        };
+            if best > 0.0 {
+                by_slug
+                    .entry(slug)
+                    .and_modify(|cur| {
+                        if best > *cur {
+                            *cur = best;
+                        }
+                    })
+                    .or_insert(best);
+            }
+        }
+        by_slug
+    } else {
+        HashMap::new()
+    };
 
     // 3. Search every matching corpus index.
     let t_search = Instant::now();
@@ -1832,6 +1860,7 @@ async fn run_question(
         .collect();
 
     EvalResult {
+        error: None,
         question_id: q.id.clone(),
         category: q.category.clone(),
         question: q.question.clone(),
@@ -1855,8 +1884,15 @@ impl EvalResult {
     /// Used by the embed-failure branch above. Today this just returns
     /// `self`; kept as a hook so a future revision can attach the
     /// error string to a `note` field without changing call sites.
-    fn with_error(self, msg: String) -> Self {
+    /// Mark this row as UNMEASURED, with why.
+    ///
+    /// It used to `eprintln!` and return `self` untouched, so the error left
+    /// no trace in the report and the row's `0.0` scores read as a
+    /// measurement. Consumers must exclude an errored row rather than score
+    /// it (ARCH §18.2, §18.3).
+    fn with_error(mut self, msg: String) -> Self {
         eprintln!("  [{}] {msg}", self.question_id);
+        self.error = Some(msg);
         self
     }
 }
@@ -1984,60 +2020,35 @@ async fn run_question_synth(
     //    here become an empty-row result so one model-side error
     //    doesn't void the rest of the bank.
     //
-    // Fallback path: `handle_message_stream` returns
-    // `Error::NotImplemented("Streaming not supported for this intent")`
-    // for ComplexTask / MetalingualQuery / ConationQuery /
-    // CommissiveQuery. Without a fallback, those questions would
-    // score 0 across the board even though the daemon has a
-    // perfectly good non-streaming handler. Fall back to
-    // `handle_message` (same persistence semantics) so the bench
-    // measures the actual chat behavior on those intents.
-    let (message_id, raw, stream_wall_ms) = match session
-        .runtime
-        .handle_message_stream(&q.question, &conversation_id)
-        .await
+    // ONE turn driver (TOPOLOGY §10 phase 6). Instrument-NEUTRAL: this drove
+    // `handle_message_stream` and `collect_turn` is `serve_turn` with a
+    // collecting sink, so the pipeline under measurement is unchanged.
+    //
+    // What it deletes is a hand-rolled drain and a fallback whose stated
+    // contract had been retired. The comment here used to say
+    // `handle_message_stream` returns `NotImplemented` for ComplexTask /
+    // Metalingual / Conation / Commissive; all four are handled INLINE now,
+    // specifically so they "must NOT dead-end". The one case that still
+    // refuses is a document-attached turn, and catching it after the fact was
+    // a latent double-write — the streaming path persists the user message
+    // BEFORE it bails, so re-running `handle_message` wrote the question
+    // twice. `serve_turn` decides that case up front, so it cannot happen.
+    let (message_id, raw, stream_wall_ms) = match sovereign_core::runtime::collect_turn(
+        &session.runtime,
+        session.store.as_ref(),
+        &conversation_id,
+        &q.question,
+        sovereign_contracts::types::TurnMode::Grounded,
+        None,
+    )
+    .await
     {
-        Ok(handle) => {
-            let mid = handle.message_id.clone();
-            let mut stream = handle.stream;
-            let mut buf = String::new();
-            while let Some(item) = stream.next().await {
-                match item {
-                    Ok(chunk) => buf.push_str(&chunk),
-                    Err(e) => {
-                        let elapsed = t_wall.elapsed().as_millis() as u64;
-                        return empty_synth_result(q, format!("stream error: {e}"), elapsed);
-                    }
-                }
-            }
+        Ok(turn) => {
             let wall = t_wall.elapsed().as_millis() as u64;
-            (mid, buf, wall)
-        }
-        Err(sovereign_core::error::Error::NotImplemented(_)) => {
-            // Non-streamable intent — fall back to the synchronous
-            // path. Same store-persist semantics; we read provenance
-            // + retrieved_chunks from the persisted message below.
-            match session
-                .runtime
-                .handle_message(&q.question, &conversation_id)
-                .await
-            {
-                Ok(resp) => {
-                    let wall = t_wall.elapsed().as_millis() as u64;
-                    (resp.message.id, resp.message.content, wall)
-                }
-                Err(e) => {
-                    let elapsed = t_wall.elapsed().as_millis() as u64;
-                    return empty_synth_result(
-                        q,
-                        format!("non-streaming fallback failed: {e}"),
-                        elapsed,
-                    );
-                }
-            }
+            (turn.message_id, turn.text, wall)
         }
         Err(e) => {
-            return empty_synth_result(q, format!("stream start: {e}"), 0);
+            return empty_synth_result(q, format!("turn: {e}"), 0);
         }
     };
 
@@ -2065,6 +2076,10 @@ async fn run_question_synth(
     //    answered without retrieval is a valid (if pessimistic)
     //    measurement.
     let prov = metadata.as_ref().and_then(|m| m.get("provenance"));
+    // Was the host ROUTING when it answered this? See `degraded_router` — the
+    // answer decides whether the scores below are a measurement or the shape
+    // of one.
+    let degraded = degraded_router(prov);
     let total_latency_ms = prov
         .and_then(|p| p.get("total_latency_ms"))
         .and_then(|v| v.as_u64());
@@ -2184,7 +2199,13 @@ async fn run_question_synth(
     //     adds a parallel column in the report. Skipped under
     //     `--no-judge`. The judge call also returns a per-fact
     //     evidence trail (quote or "(absent)") for auditability.
-    let (judge_fact_score, judge_evidence): (Option<ScoreSnapshot>, _) = if judge {
+    // `degraded.is_none()` is not an optimisation. The judge is one more model
+    // call against the same host that just failed to build a single classifier,
+    // and a judgement produced there is no more a measurement than the answer it
+    // would be judging. The row is excluded below either way.
+    let (judge_fact_score, judge_evidence): (Option<ScoreSnapshot>, _) = if judge
+        && degraded.is_none()
+    {
         let (score, details) = crate::eval_cmd::score::score_facts_judge(
             &q.expected_facts,
             &visible,
@@ -2209,7 +2230,8 @@ async fn run_question_synth(
         judge_evidence,
     };
 
-    EvalResult {
+    let row = EvalResult {
+        error: None,
         question_id: q.id.clone(),
         category: q.category.clone(),
         question: q.question.clone(),
@@ -2234,12 +2256,60 @@ async fn run_question_synth(
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits,
+    };
+
+    // The scores above are real arithmetic over a real answer — and on a
+    // degraded host they are arithmetic over an answer the router never routed.
+    // `with_error` is the ONE way this shape says "not a measurement", and
+    // `drop_unmeasured` is already the ONE consumer that honours it.
+    match degraded {
+        Some(why) => row.with_error(why),
+        None => row,
     }
 }
 
+/// The router's own account of whether it was ROUTING, read off the turn's
+/// provenance. `Some(why)` means it was not, and the row is not a measurement.
+///
+/// THE FAILING INPUT IS PRODUCTION, not a hypothetical. On 2026-08-26 a dead
+/// embed slot left `build_llm_router` returning `None` for all four
+/// classifiers; atlas grounding went from 1082 loads to zero and turns KEPT
+/// ANSWERING — worse, not louder. This harness scored those answers against a
+/// baseline and reported SEP overview title-coverage 1.00 -> 0.83 as a code
+/// regression. It cost most of a session to attribute, and the lesson is that
+/// REPRODUCIBLE IS NOT ATTRIBUTABLE (note `f4972e1b`).
+///
+/// It returns an error STRING rather than its own verdict on purpose.
+/// `EvalResult` already has exactly one way to say "this row is not a
+/// measurement", and `bench_cmd::all::classify_retrieval` already excludes on
+/// it via `drop_unmeasured`. A second exclusion rule would be a second decider
+/// for one question (ARCH §10.6) — and the one that exists was earned by the
+/// same class of defect (note `933dccee`).
+///
+/// `None` covers two turns and treats them alike, correctly: one that reports
+/// no router at all (an old message, or a path that never routed) and one that
+/// routed with at least one classifier live. Neither is degraded, and absent
+/// is deliberately not the same value as all-four-false (`RouterStamp`).
+fn degraded_router(prov: Option<&serde_json::Value>) -> Option<String> {
+    let stamp: sovereign_contracts::types::RouterStamp = prov
+        .and_then(|p| p.get("router"))
+        .and_then(|v| serde_json::from_value(v.clone()).ok())?;
+    stamp.routed_by_none().then(|| {
+        "router: no classifier was live — the host was degraded when this turn was \
+         routed, so its answer is not a measurement (see `RouterStamp`)"
+            .to_string()
+    })
+}
+
+/// A synth row for a question the run could NOT measure — the turn errored.
+///
+/// The scores below are zero because there is nothing to score, NOT because
+/// the answer was empty. `with_error` is what says so; without it a daemon
+/// returning `503 host busy` is indistinguishable in the report from a model
+/// that answered with nothing (ARCH §18.3).
 fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalResult {
-    eprintln!("  [{}] {err}", q.id);
-    EvalResult {
+    let row = EvalResult {
+        error: None,
         question_id: q.id.clone(),
         category: q.category.clone(),
         question: q.question.clone(),
@@ -2267,5 +2337,109 @@ fn empty_synth_result(q: &Question, err: String, stream_wall_ms: u64) -> EvalRes
         essay_readiness: None,
         atlas_navigation: Vec::new(),
         meta_atlas_hits: Vec::new(),
+    };
+    row.with_error(err)
+}
+
+
+#[cfg(test)]
+mod degraded_router_tests {
+    use super::*;
+    use sovereign_contracts::types::{ResponseProvenance, RouterStamp};
+
+    /// The legacy shape from `router_stamp_tests::the_field_is_backward_compatible`
+    /// — the minimum a `ResponseProvenance` needs to parse.
+    fn provenance() -> ResponseProvenance {
+        serde_json::from_str(
+            r#"{"intent":"SIMPLE","search_method":null,"sources":[],
+                "inference_backend":"m","oicp_match":null,
+                "total_latency_ms":1,"tokens_used":2}"#,
+        )
+        .expect("legacy provenance parses")
+    }
+
+    /// SERIALISED BY SERDE, never hand-written, and that is the whole point of
+    /// this test. The key this reads (`router`) and the four field names inside
+    /// it are `ResponseProvenance`'s and `RouterStamp`'s to choose. A hand-typed
+    /// `"router"` here would keep passing after a `#[serde(rename)]` renamed the
+    /// wire field, and the detector would then silently never fire again —
+    /// which is exactly the failure it exists to catch (ARCH §18.1).
+    fn as_metadata(stamp: Option<RouterStamp>) -> serde_json::Value {
+        let mut p = provenance();
+        p.router = stamp;
+        serde_json::to_value(&p).expect("provenance serialises")
+    }
+
+    #[test]
+    fn a_turn_routed_by_no_classifier_is_not_a_measurement() {
+        let degraded = as_metadata(Some(RouterStamp::from_liveness(
+            false, false, false, false,
+        )));
+        let why = degraded_router(Some(&degraded))
+            .expect("all four classifiers dead is the degraded host");
+        assert!(
+            why.contains("not a measurement"),
+            "the reason reaches the report and one example is printed by \
+             `classify_retrieval` — it has to say what happened; got {why}"
+        );
+    }
+
+    /// The two ways a healthy run reaches here, and neither may be excluded.
+    /// Collapsing either into "degraded" would silently shrink every bank.
+    #[test]
+    fn a_partial_router_and_an_absent_one_are_both_measurements() {
+        let partial = as_metadata(Some(RouterStamp::from_liveness(true, false, false, false)));
+        assert_eq!(
+            degraded_router(Some(&partial)),
+            None,
+            "one live classifier still routed — degradation is a degree, and \
+             `routed_by_none` is the one implementation of the question (§10.6)"
+        );
+
+        let absent = as_metadata(None);
+        assert_eq!(
+            degraded_router(Some(&absent)),
+            None,
+            "a turn that does not REPORT a router is not a turn that reports a \
+             dead one; old messages have no `router` key at all"
+        );
+
+        assert_eq!(
+            degraded_router(None),
+            None,
+            "no provenance block at all is not evidence of degradation"
+        );
+    }
+
+    /// The exclusion has to survive the trip through `EvalResult`, because that
+    /// is the only shape `drop_unmeasured` can see.
+    #[test]
+    fn the_degraded_row_carries_the_error_drop_unmeasured_filters_on() {
+        let row = EvalResult {
+            error: None,
+            question_id: "q1".into(),
+            category: "c".into(),
+            question: "why".into(),
+            retrieved: Vec::new(),
+            source_score: score_sources(&[], &[]).into(),
+            fact_score: score_facts_in_text(&[], "").into(),
+            embed_ms: 0,
+            search_ms: 0,
+            corpora_hit: Vec::new(),
+            vector_eligible: false,
+            synth: None,
+            loose_source_score: None,
+            loose_source_evidence: Vec::new(),
+            essay_readiness: None,
+            atlas_navigation: Vec::new(),
+            meta_atlas_hits: Vec::new(),
+        };
+        let degraded = as_metadata(Some(RouterStamp::default()));
+        let why = degraded_router(Some(&degraded)).expect("default stamp is all-false");
+        assert!(
+            row.with_error(why).error.is_some(),
+            "a row whose scores are arithmetic over an unrouted answer must not \
+             reach the baseline diff as a measurement"
+        );
     }
 }

@@ -220,15 +220,27 @@ pub fn set_rpc_worker_provider(provider: impl Fn() -> Vec<String> + Send + Sync 
 /// auto-discovery provider. The single source every distribution decision reads
 /// — registration, dead-worker pruning, the has-workers gate — so they can't
 /// disagree about which workers exist.
-fn gather_rpc_endpoints() -> Vec<String> {
-    let mut endpoints: Vec<String> = Vec::new();
-    if let Ok(raw) = std::env::var("SOVEREIGN_RPC_WORKERS") {
-        endpoints.extend(
+/// THE reader of `SOVEREIGN_RPC_WORKERS` (TOPOLOGY §10 phase 10, ARCH §10.6).
+///
+/// A comma-separated endpoint list, trimmed, empties dropped. The CLI daemon's
+/// bootstrap carried a byte-identical copy of this parse, so "which workers did
+/// the operator name" had two answers that only happened to agree — and the two
+/// sites feed different things (bootstrap seeds discovery, this seeds the
+/// actual distribution).
+pub fn rpc_workers_from_env() -> Vec<String> {
+    std::env::var("SOVEREIGN_RPC_WORKERS")
+        .ok()
+        .map(|raw| {
             raw.split(',')
                 .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty()),
-        );
-    }
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn gather_rpc_endpoints() -> Vec<String> {
+    let mut endpoints: Vec<String> = rpc_workers_from_env();
     if let Some(provider) = RPC_WORKER_PROVIDER.get() {
         endpoints.extend(provider());
     }
@@ -1409,11 +1421,33 @@ fn rpc_quorum_anchors() -> u32 {
 /// 1.2, clamped to >= 1.0. `svrn mesh plan` defaults its `--headroom` to this
 /// same value, so a previewed plan uses the headroom the load executes with.
 pub(crate) fn rpc_headroom_factor() -> f64 {
+    rpc_headroom_from_env().unwrap_or(RPC_HEADROOM_DEFAULT)
+}
+
+/// The default headroom factor, named once.
+///
+/// `svrn mesh plan` defaults `--headroom` to the same value so a previewed
+/// plan uses the headroom the load executes with — a promise that was kept by
+/// two copies of the literal `1.2` agreeing, which is the weakest way to keep
+/// one (§10.6).
+pub const RPC_HEADROOM_DEFAULT: f64 = 1.2;
+
+/// `SOVEREIGN_RPC_HEADROOM` as the operator set it, or `None`.
+///
+/// Split out from [`rpc_headroom_factor`] so a caller that has ANOTHER source
+/// to fall back to can tell "unset" from "set to the default" — `svrn mesh
+/// plan` falls back to `[shared_model] headroom` when it runs before bootstrap
+/// has bridged config into the environment, and could not express that against
+/// a function that had already substituted a default.
+///
+/// The `>= 1.0` filter lives here rather than at each call site: a headroom
+/// below 1.0 asks the host to gate on LESS memory than the model needs, and a
+/// reader that accepted it would plan a load the executing layer refuses.
+pub fn rpc_headroom_from_env() -> Option<f64> {
     std::env::var("SOVEREIGN_RPC_HEADROOM")
         .ok()
         .and_then(|v| v.trim().parse::<f64>().ok())
         .filter(|&f| f >= 1.0)
-        .unwrap_or(1.2)
 }
 
 /// Optional explicit floor (bytes) on pooled cluster memory, from

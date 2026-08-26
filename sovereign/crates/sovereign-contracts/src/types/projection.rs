@@ -115,6 +115,60 @@ pub struct Citation {
     /// scored `retrieved_chunks` list (preserved even when earlier
     /// entries are filtered out for lacking a corpus handle).
     pub rank: usize,
+    /// Source URL, when the chunk carries one.
+    ///
+    /// Added for phase 6: `svrn chat ask` prints it in the sources footer
+    /// whose "whole point is diagnostic visibility", and a surface can only
+    /// render what the protocol carries. Dropping it would have made
+    /// converting that host to a client a quiet downgrade of the exact thing
+    /// the host exists to show. Optional and `skip_serializing_if`, so a
+    /// citation without one is byte-identical to before.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    /// Grounding tier the retrieval assigned this chunk. Same reason as
+    /// [`Self::url`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub provenance_tier: Option<String>,
+}
+
+/// The background task a turn spawned, projected for a client.
+///
+/// A turn that runs the agentic path produces one; a plain chat turn does
+/// not. It reached a client through exactly one door before phase 6 —
+/// `sovereign-server`'s non-streaming REST route, which read `Response.task`
+/// directly — while the STREAMING path, the door both apps actually use,
+/// called the same handler, received the same `Response`, and kept only
+/// `message.id` and `message.content`. The task was dropped on the floor, so
+/// the same turn asked two ways reported different things.
+///
+/// It travels in the persisted metadata blob now, like `provenance`,
+/// `citations` and `epistemic_state` — one mechanism, so both doors project
+/// the same value rather than one of them knowing a fact the other cannot.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TaskSummary {
+    /// Task id — also what progress events correlate on.
+    pub id: String,
+    /// Lifecycle state, rendered (`Running`, `Paused`, `Completed`, …).
+    pub status: String,
+    /// How many steps of the plan have finished.
+    pub steps_completed: usize,
+}
+
+/// Project the persisted task block, when the turn spawned one.
+pub fn project_task(meta: &Option<Value>) -> Option<TaskSummary> {
+    let t = meta.as_ref()?.get("task")?;
+    Some(TaskSummary {
+        id: t.get("id").and_then(Value::as_str)?.to_string(),
+        status: t
+            .get("status")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .to_string(),
+        steps_completed: t
+            .get("steps_completed")
+            .and_then(Value::as_u64)
+            .unwrap_or(0) as usize,
+    })
 }
 
 /// Project a persisted `Message.metadata` blob into the typed
@@ -230,6 +284,8 @@ fn project_citation(c: &Value, rank: usize) -> Option<Citation> {
         .to_string();
     let score = c.get("score").and_then(Value::as_f64).unwrap_or(0.0);
     let title = non_empty_str(c.get("title"));
+    let url = non_empty_str(c.get("url"));
+    let provenance_tier = non_empty_str(c.get("provenance_tier"));
     Some(Citation {
         corpus_id,
         chunk_id,
@@ -237,6 +293,8 @@ fn project_citation(c: &Value, rank: usize) -> Option<Citation> {
         snippet,
         score,
         rank,
+        url,
+        provenance_tier,
     })
 }
 

@@ -6,6 +6,7 @@ pub mod atlas_postinstall;
 pub mod atlas_status;
 pub mod atlas_view;
 pub mod attached_document_search;
+pub mod bundles;
 pub mod calendar;
 pub mod catalog;
 pub mod catalog_ingest;

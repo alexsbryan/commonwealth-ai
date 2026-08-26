@@ -64,17 +64,56 @@ const CANONICAL_CONSTRUCTOR: &str = "sovereign/crates/sovereign-runtime-recipe/s
 ///
 /// **Target: empty.** Each entry is a copy of a recipe that has drifted from
 /// the others before and will again; the list may SHRINK freely.
+///
+/// # The tool-registry blocker is CLOSED (2026-08-26, phase 7b)
+///
+/// What stalled this list was never effort or plumbing — `common_parts`
+/// already anticipated both hosts by name. It was that **the recipe's tool
+/// registry was not a superset of theirs**: counted by type name,
+/// `sovereign-server` registered 31 and the recipe 11, and the sets were not
+/// nested in either direction (the server had no `knowledge_lookup` and no
+/// `attached_document_search`; the recipe had no code intel, no notes, no
+/// recipe authoring). Adopting the recipe as it stood would have DELETED ~20
+/// tools from the hub, so the open question read as policy — "which of those
+/// twenty belong to every host?" — and on a multi-tenant hub, code intel over
+/// another tenant's workspace looked like a security decision.
+///
+/// It was a structural defect wearing a policy costume. The recipe OWNED the
+/// list, so no host could add a family without editing a file every host
+/// shares — open/closed stated as a bug. `sovereign_contracts::tool_bundle`
+/// inverts it: a host composes `Vec<Box<dyn ToolBundle>>` and the recipe
+/// folds it, naming no tool (falsifier:
+/// `sovereign-runtime-recipe/tests/recipe_names_no_tool.rs`, watched to fail).
+///
+/// The capability question answers itself under the seam. A bundle is
+/// constructed FROM the collaborators its tools need — `CodeIntelTools` from
+/// a `ScipGraphHandle`, `NotesTools` from an open `NoteStore` — so a host can
+/// only offer code intel over an index it owns. A tenant-scoped host has no
+/// other tenant's handle to compose from, which makes the hazard
+/// unrepresentable rather than merely disallowed (ARCH §7).
+///
+/// # What is left, therefore
+///
+/// Per-host wiring, not tools. Each remaining entry names its own.
 const UNSHARED_RECIPES: &[&str] = &[
-    // The desktop, in `bootstrap_with_progress`. The hard one: embedded mode
-    // runs the daemon in-process, so "talk to the daemon" and "be the daemon"
-    // are the same sentence until Phase 6 separates them. It also has the most
-    // genuinely-its-own slots — compaction, landscape digests, folder
-    // metadata, the sensitivity oracle — which is why it is not simply a
-    // struct-update over the recipe's baseline yet.
+    // The desktop, in `bootstrap_with_progress`. Blocked on GLiNER, and on
+    // nothing else structural: the recipe loads the extractor EAGERLY and the
+    // desktop lazily (`LazyGlinerExtractor`, a ~950ms load moved to a
+    // background thread and shared with document ingest). The desktop's is
+    // better, and folding it in changes when the extractor is warm for the
+    // other two hosts — a retrieval-timing change, so a bench question and not
+    // a build (ARCH §18.4). Its own slots (compaction, landscape digests,
+    // folder metadata, the sensitivity oracle) are struct-update overrides on
+    // `CommonParts::parts`, which is what that field is for.
     "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs",
-    // `sovereign-server`. Its extra slot is `corpus_principal` (tenancy), and
-    // its whole reason to exist as a separate assembly is the multi-tenant hub
-    // shape the daemon does not have.
+    // `sovereign-server`. Mechanical since the tool-bundle seam landed
+    // (2026-08-26): its 31 tools are now expressible as bundles it composes
+    // — `CodeIntelTools` over the SCIP handle it opens, `NotesTools` over its
+    // `notes.db`, `RecipeAuthoringTools`, `WorkflowAuthoringTools`,
+    // `ComputeTools`, `DocumentOperations` — so adoption no longer costs it a
+    // capability. Its extra Runtime slot is `corpus_principal` (tenancy), a
+    // struct-update override; its lane construction is already a near-copy of
+    // the recipe's, which is the drift this list exists to end.
     "sovereign/crates/sovereign-server/src/main.rs",
 ];
 
@@ -98,6 +137,125 @@ const COMMISSIONING_PROCESSES: &[&str] = &[
     "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
     "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs",
     "sovereign/crates/sovereign-server/src/main.rs",
+];
+
+/// The turn-execution methods. Calling one of these IS executing a turn.
+const TURN_ENTRY_POINTS: &[&str] = &[
+    ".handle_message_stream(",
+    ".handle_message_stream_as(",
+    ".handle_message_stream_naked(",
+    ".handle_message_any(",
+    ".handle_message(",
+    ".handle_turn(",
+];
+
+/// Files outside the runtime that execute a turn themselves.
+///
+/// # Why this bar exists, and why `COMMISSIONING_PROCESSES` could not serve
+///
+/// ARCH §18.4 — validate the instrument before the result. The commissioning
+/// census above counts FILES THAT BUILD A RUNTIME, and phase 6 cannot move it:
+/// `chat_cmd/bootstrap.rs` is one entry, and it stays on the list while ANY of
+/// its thirteen callers still needs an in-process assembly — including the
+/// atlas backfills and the chaos harness, which are not turns and never
+/// become surfaces. Converting the two real chat surfaces moved that number
+/// by zero. A number that cannot move under real progress is not a
+/// measurement of it.
+///
+/// This counts what §3.5 actually cares about: **who re-implements driving a
+/// turn**.
+///
+/// The bar is ONE DRIVER, not one process — a correction made after the first
+/// pass of this list called three hosts blocked that were not. An in-process
+/// host reaches the driver through a [`TurnSink`](sovereign_core::runtime::TurnSink);
+/// an out-of-process one reaches it through `sovereign-turn-client`. Both go
+/// through `serve_turn`, which is the property that matters: one answer to
+/// "which handler runs, what happens on a turn that cannot stream, and how is
+/// the result projected".
+///
+/// Requiring every host to speak HTTP would have been a different and worse
+/// bar. `svrn govern ask` needs a corpus engine to render its sources footer,
+/// which is not a turn concern and does not belong on the turn wire; it can
+/// hold one and still not own a turn loop. Conflating those two is what made
+/// the first version of this list read as blocked.
+///
+/// **Target: empty.** The list may SHRINK freely; adding to it means a new
+/// host learned to run a turn in-process, which is the thing phase 6 exists
+/// to stop.
+///
+/// Each entry is annotated with what it would take to remove it, because
+/// "still on the list" and "cannot come off the list yet" are different
+/// states and only one of them is work.
+const TURN_EXECUTION_SITES: &[&str] = &[
+    // `govern_cmd/ask.rs`, `portfolio_cmd/ask.rs` and `proxy_cmd/ask.rs` were
+    // here, called blocked on two capabilities the turn protocol lacked.
+    // One was real and is now closed — a caller-pinned intent is
+    // `TurnRequest::Message.intent`. The other was a category error: they
+    // read corpus indexes for their own sources footer, which never made
+    // them turn hosts. All three drive `serve_turn` through a sink now, and
+    // converting them deleted the SAME double-write from each.
+    // ── Measurement harnesses that run the NON-STREAMING pipeline ──
+    //
+    // The only remaining entries, and the reason is §18.4 rather than effort.
+    // `collect_turn` drives `serve_turn`, which is the STREAMING pipeline
+    // with a collecting sink. These call `handle_message` / `handle_turn`,
+    // which is a different pipeline with different synthesis. Converting them
+    // is a re-baseline of every bank they score, so it needs a pre-registered
+    // expected direction of movement and a bench run (§18.6) — not a build.
+    //
+    // The three harnesses that were ALREADY on the streaming path
+    // (`eval_cmd/runner.rs`, `eval_cmd/runner_threads.rs`,
+    // `bench_cmd/live_runner.rs`) converted for exactly that reason: for them
+    // `collect_turn` is instrument-neutral, so it was a deletion of a
+    // hand-rolled drain rather than a change to what is measured.
+    "sovereign/crates/sovereign-cli-llm/src/bench_cmd/book_report.rs",
+    // PARTIALLY converted, and on the list because of what is left. Its main
+    // scoring path drove `handle_message_stream` and moved to `collect_turn`
+    // (instrument-neutral). Its DOCUMENT-SESSION path still calls
+    // `handle_turn` directly, and that one is not neutral: the question
+    // carries no `[Document attached: ` prefix — the document is attached via
+    // a session row — so `serve_turn` would route it through the streaming
+    // classifier instead of the document path the bench means to measure.
+    //
+    // This test caught that; the file had been removed from this list on the
+    // assumption that converting the main path converted the file. A census
+    // that only counts what you remembered to look at is not one.
+    "sovereign/crates/sovereign-cli-llm/src/bench_cmd/live_runner.rs",
+    "sovereign/crates/sovereign-cli-llm/src/voice_eval/runner.rs",
+    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/recall.rs",
+    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/replay.rs",
+    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/runner.rs",
+    "sovereign/crates/sovereign-cli-llm/src/inner_chaos/synth.rs",
+    // `sovereign-desktop`'s `commands/chat.rs` and `commands/document_asset.rs`
+    // were here, and the reasons given were wrong twice over.
+    //
+    // First the GLiNER fork was cited; that blocks the desktop adopting the
+    // shared RECIPE (phase 5a) and has nothing to do with driving a turn —
+    // since 5c the desktop hands its OWN `Runtime` to its in-process daemon.
+    // Then a structural mismatch was cited: `send_message_stream` returns the
+    // message id SYNCHRONOUSLY, before a token exists, and `serve_turn` owns
+    // handle acquisition. That one was real and is now solved rather than
+    // worked around — `TurnSink::on_turn_started` fires at acquisition, which
+    // is the same moment the old code learned the id, so the UI places its
+    // placeholder exactly as early as before.
+    //
+    // Nothing moved in TypeScript. The sink emits the same three events with
+    // the same payloads, and reads the persisted metadata blob in-process —
+    // `serve_turn` projects typed values for callers across a socket, and a
+    // caller that owns the store is not one of those.
+    //
+    // Two behaviours became everyone's instead of the desktop's alone: the
+    // graceful guards (oversize paste, contentless message) are answered as a
+    // turn rather than errored, which only this host used to get right; and
+    // `send_message` / `document_ask` now run the same pipeline as
+    // `send_message_stream`, where the answer used to depend on which door
+    // the user came through.
+    // `sovereign-server/src/routes.rs` and `tenant.rs` were here. Both are
+    // gone: the REST route drives `collect_turn` — the same driver its own
+    // WebSocket route uses — and `TenantRuntime`'s two turn wrappers were
+    // deleted outright, because what that type owns is TENANCY. Running a
+    // turn only looked like its job because there was nowhere else to put the
+    // call. `Runtime::handle_message_any` went with them.
 ];
 
 fn repo_root() -> PathBuf {
@@ -344,5 +502,48 @@ fn only_the_declared_processes_commission_a_runtime() {
             .map(|s| s.as_str())
             .collect::<Vec<_>>()
             .join("\n  ")
+    );
+}
+
+/// Files outside `sovereign-core`'s runtime that execute a turn.
+fn turn_execution_sites() -> Vec<String> {
+    files_containing(|prod| {
+        TURN_ENTRY_POINTS
+            .iter()
+            .map(|entry| prod.matches(entry).count())
+            .sum()
+    })
+    .into_iter()
+    // The runtime owns these methods and `serve_turn` is the sanctioned
+    // caller — that is the whole point of the bar, not a violation of it.
+    .filter(|f| !f.starts_with("sovereign/crates/sovereign-core/src/runtime"))
+    .collect()
+}
+
+/// The phase 6 bar: a turn runs where the `Runtime` lives, and nowhere else.
+///
+/// Watched to fail before it was kept (ARCH §18.1): adding a
+/// `runtime.handle_message(..)` call back into the converted
+/// `chat_cmd/ask.rs` fails this test naming that exact file, and telling the
+/// reader the two ways out — convert it, or add it to the list with the
+/// reason it cannot be.
+#[test]
+fn turn_execution_happens_where_the_runtime_lives() {
+    let found = turn_execution_sites();
+    let expected: Vec<String> = TURN_EXECUTION_SITES.iter().map(|s| s.to_string()).collect();
+
+    let new_hosts: Vec<&String> = found.iter().filter(|f| !expected.contains(f)).collect();
+    assert!(
+        new_hosts.is_empty(),
+        "a new host learned to execute a turn in-process — phase 6 moves the other way.\n\
+         Convert it to `sovereign_turn_client::TurnClient`, or add it to \
+         TURN_EXECUTION_SITES with the reason it cannot be:\n  {new_hosts:#?}"
+    );
+
+    let converted: Vec<&String> = expected.iter().filter(|e| !found.contains(e)).collect();
+    assert!(
+        converted.is_empty(),
+        "these no longer execute a turn — delete them from TURN_EXECUTION_SITES \
+         so the count keeps meaning something (ARCH §18.4):\n  {converted:#?}"
     );
 }

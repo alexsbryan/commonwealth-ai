@@ -722,6 +722,24 @@ pub fn frames_to_text_stream(
 /// the classification is `decide_policy`'s job.
 #[async_trait]
 pub trait Router: Send + Sync {
+    /// Which classifiers this router had LIVE — the decider set behind every
+    /// verdict it returns.
+    ///
+    /// `None` means "this router does not report its liveness", which is a
+    /// DIFFERENT fact from "no classifier was live" and must stay different
+    /// (ARCH §18.3). The default is `None` so a stub or a passthrough router
+    /// is not mistaken for a degraded production one.
+    ///
+    /// The reason this is on the trait rather than passed per turn: classifier
+    /// liveness is fixed at bootstrap, not per request. It became worth
+    /// recording on 2026-08-26, when a dead embed slot left all four `None`,
+    /// turns kept answering, and the harness scored the degradation as a
+    /// quality regression (note `f4972e1b`). See
+    /// [`RouterStamp::routed_by_none`](crate::types::RouterStamp::routed_by_none).
+    fn stamp(&self) -> Option<crate::types::RouterStamp> {
+        None
+    }
+
     /// Classify `message` into intent candidates with confidences. Must not mutate state or enact anything.
     async fn classify(
         &self,
@@ -999,19 +1017,30 @@ pub trait ConversationStore: Send + Sync {
     /// Create an empty conversation row if one doesn't already exist
     /// (INSERT OR IGNORE semantics). Needed by surfaces that must set
     /// per-conversation state — `skill_id`, `enabled_corpora` — *before*
-    /// the first message is processed (the desktop "new chat" flow, and
-    /// the eval harness's per-corpus isolation mode). A no-op default
-    /// keeps test doubles / in-memory stores compiling; real backends
-    /// override.
-    #[allow(unused_variables)]
+    /// the first message is processed: the desktop "new chat" flow, the
+    /// daemon's `POST /v1/conversations`, and the eval harness's
+    /// per-corpus isolation mode.
+    ///
+    /// **Required, deliberately — this had a no-op `Ok(())` default until
+    /// 2026-08-25 and it told two lies.** `InMemoryStateStore` reported
+    /// success for a write it never performed, so every seed-then-turn
+    /// path was untestable against it (this is what
+    /// `sovereign-mesh/tests/turn_surface.rs` found on its first run). And
+    /// `PostgresStateStore` — the multi-tenant hub's backend, production
+    /// code, not a double — inherited the same no-op, so a hub
+    /// conversation seeded with `skill_id = "recipe-author"` silently lost
+    /// the tag and fell through to the standard turn chain instead of the
+    /// agent loop, with the store reporting success both times.
+    ///
+    /// An absence dressed as a result is ARCH §18.3. A store that cannot
+    /// hold a conversation row says so with an `Err`; it does not return
+    /// `Ok` and mean no.
     async fn insert_empty_conversation(
         &self,
         id: &str,
         created_at: i64,
         surface_skill_id: Option<&str>,
-    ) -> Result<()> {
-        Ok(())
-    }
+    ) -> Result<()>;
 }
 
 /// Whole-task snapshot persistence. Contrast `StepExecutionStore`, the per-attempt ledger (ARCH §5.3).
@@ -1385,6 +1414,15 @@ pub struct MeshScoredChunk {
     pub chunk_id: Option<u64>,
     /// Stable id of the chunk's parent document on the producing peer, when known.
     pub source_doc_id: Option<String>,
+    /// The custody class the SERVING index recorded, parsed once at the mesh
+    /// client boundary. `None` = the peer recorded none, or predates the wire
+    /// field — which the acquisition door joins into a refusal rather than a
+    /// permissive default (ARCH §18.3).
+    pub custody: Option<kernel_types::Custody>,
+    /// Source text or prose about it, per the serving index. `None` = an
+    /// un-upgraded peer, which the door reads as `Summary` — the refusing
+    /// value for grain, since `Leaf` is the one that may be quoted.
+    pub grain: Option<kernel_types::Grain>,
 }
 
 /// Why a corpus the turn would have searched could not serve it.

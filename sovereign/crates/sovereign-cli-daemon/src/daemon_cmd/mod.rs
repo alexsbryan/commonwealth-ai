@@ -887,9 +887,10 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
     // Two host inputs differ from the CLI's and both are decisions, not
     // defaults:
     //
-    //   * `shell: Withheld` — §10 "Decisions taken" 1. Shell execution does
-    //     not move into a long-lived daemon running as a different user with a
-    //     different cwd.
+    //   * shell WITHHELD — §10 "Decisions taken" 1. Shell execution does not
+    //     move into a long-lived daemon running as a different user with a
+    //     different cwd. Named in `tool_bundles` as a `Withheld` family, so it
+    //     reads as a decision rather than an omission.
     //   * `mesh_knowledge` left at the recipe's `None`. §3.5 lists it among
     //     the five capabilities that leave the Runtime entirely: the client
     //     posts to `127.0.0.1:9741/v1/knowledge/search`, which INSIDE this
@@ -917,7 +918,27 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // Derived ONCE, by the corpus-engine builder, and handed here —
             // see `build_corpus_engine`. The atlas embedding cache keys on it.
             embed_model: embed_model_id.clone(),
-            shell: sovereign_runtime_recipe::ShellAccess::Withheld,
+            // The families this daemon's turn registry carries. Shell is
+            // named as WITHHELD rather than simply absent, so the decision is
+            // a value a reader finds here (TOPOLOGY §10 "Decisions taken" 1;
+            // ARCH §18.3).
+            tool_bundles: {
+                let mut b = sovereign_runtime_recipe::baseline_bundles(
+                    &state_store,
+                    &routed_provider,
+                    &engine,
+                    sovereign_tools::bundles::WebReach::Granted(
+                        sovereign_core::egress::search_client()
+                            .expect("egress boundary search client build"),
+                    ),
+                );
+                b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                    "shell",
+                    "no shell in a long-lived daemon running as a different user \
+                     with a different cwd (TOPOLOGY §10 decision 1)",
+                )));
+                b
+            },
             // A service must reach `listening` promptly. The meta-atlas is a
             // ~1 GB JSON parse (981 MB on the authoring host) and blocking
             // boot on it is a daemon that looks hung to `svrn daemon start`;

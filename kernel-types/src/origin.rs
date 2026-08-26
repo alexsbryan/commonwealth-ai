@@ -212,6 +212,18 @@ impl Grain {
         matches!(self, Grain::Leaf)
     }
 
+    /// Parse a wire spelling. Exact — a typo is `None`, never a silent
+    /// `Leaf`, because `Leaf` is the PERMISSIVE value here: it is the one that
+    /// may be quoted. The other direction of this contract is [`Self::as_str`],
+    /// and the two live together so a spelling cannot drift (ARCH §10.6).
+    pub fn parse_wire(s: &str) -> Option<Grain> {
+        match s {
+            "leaf" => Some(Grain::Leaf),
+            "summary" => Some(Grain::Summary),
+            _ => None,
+        }
+    }
+
     /// The wire spelling, matching the `snake_case` serde form.
     pub const fn as_str(self) -> &'static str {
         match self {

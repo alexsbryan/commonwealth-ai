@@ -99,9 +99,7 @@ pub(crate) async fn load_inference(
             // for THIS process and continue — the in-process load below then
             // configures the chat slot with `n_gpu_layers=0`. Skipped when the
             // var is already set or when no GPU is configured anyway.
-            let env_force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
-                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-                .unwrap_or(false);
+            let env_force_cpu = sovereign_inference::cpu_compat::force_cpu_chat();
             if !env_force_cpu {
                 let smoke_gpu_layers =
                     sovereign_inference::hardware::HardwareProfile::detect().recommended_gpu_layers;

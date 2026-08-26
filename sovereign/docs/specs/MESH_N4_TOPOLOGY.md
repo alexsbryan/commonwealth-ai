@@ -1262,7 +1262,9 @@ exceeds the 5 ms domain threshold.
 `SOVEREIGN_MAX_QUEUE_WAIT_SECS`). Piece 1 (make the wait visible) SHIPPED ·
 piece 2 (bound it) SHIPPED · piece 3 (stamp `X-Node-Id`) SHIPPED in `a45905e9`
 (`peer_inference.rs:1199`). The `Retry-After` HEADER gap (note bef03728) is
-CLOSED 2026-08-07 — see "How a shed reaches the client" below.**
+CLOSED 2026-08-07 — see "How a shed reaches the client" below. The shed
+DECISION was corrected and the hint is now HONOURED by the last-resort client,
+2026-08-26 (note `bf432b4d`) — see the two blocks after that one.**
 
 > **The bound, as built.** `SlotQueue` (`sovereign-inference::embedded::model_slot`)
 > now owns the permit, the depth gauge, the turn-duration EWMA and the shed
@@ -1338,10 +1340,62 @@ CLOSED 2026-08-07 — see "How a shed reaches the client" below.**
 > without the next-peer fix, and must be a deliberate decision, not a
 > quiet one.
 >
+> **What the bound was actually measuring** (corrected 2026-08-26, note
+> `bf432b4d`). Over ~5 h on a 27B host the daemon emitted 625 sheds and **624
+> of them had `position = 1`** — an EMPTY queue, one turn in flight, nobody
+> parked. The prediction was `ceil(position/slots) · avg_turn_ms`, so at
+> position 1 it degenerated to `avg_turn_ms > max_wait_ms`, a rule with no load
+> term in it at all. Median `avg_turn_ms` at shed was 30,690 against the 30,000
+> default: the whole failure was a 2.3% overshoot, and the host was refusing
+> all concurrency because its own turns are naturally slower than the bound.
+> The EWMA aggravates it — one 8-minute synthesis takes the average to ~143 s
+> and needs about seven short turns to come back under, during which only
+> sequential turns can land.
+>
+> `EtaEwma::predict_wait_ms` now takes `in_flight_elapsed_ms` and returns
+> `ceil(position/slots) · avg − elapsed`, saturating at zero. `SlotQueue` holds
+> `holder_since` (set on acquire, cleared by `SlotPermit::drop`) because the
+> caller deciding whether to park cannot see the permit. A caller arriving 30 s
+> into a 31 s turn is now told 1 s and served, where it used to be told 31 s
+> and refused; real queueing (`position >= 2`) sheds exactly as before. It is a
+> CORRECTNESS fix, not a policy change — the bound's number is untouched.
+> `SchedCore::status` passes `0` and says why at the call site: it tracks
+> principals and positions, not per-turn start times, and `0` over-states the
+> wait rather than under-stating it.
+>
+> **And the hint is now honoured, at exactly one seam.** The response was
+> correct and nobody read it: `oicp-client` had no retry loop, and nothing
+> under `sovereign/crates` slept on `retry_after_secs`. The hint was computed,
+> serialised, transported and dropped — which is how three sub-requests of ONE
+> turn's own fan-out came back refused inside 17 ms against a 32-second hint,
+> with no other client on the machine.
+>
+> `RemoteApiProvider::send_honouring_shed` is the one body that waits, and it
+> is **off by default**, which is the load-bearing half. A PEER that sheds is
+> giving a ROUTING signal — try local, try another peer — and re-dialling it
+> inside its own window is the failed-hop tax §9.1.1 measures; shipping this on
+> by default broke `a_yielding_peer_is_asked_once_not_once_per_turn` and
+> `repeated_sheds_never_quarantine_a_healthy_peer` on the way in.
+> `SplitInferenceProvider::new` is the only caller that opts in, and it opts in
+> *structurally* rather than by convention: that provider owns no weights, so
+> the daemon it points at is the only holder there is and there is nowhere to
+> route. Every daemon-backed client — `svrn chat`, the desktop's Attach mode,
+> the recipe and enrich paths — gets the behaviour by construction, and
+> `provider_for_peer` cannot acquire it by accident because it builds a bare
+> `RemoteApiProvider`. Bounded by `SHED_MAX_ATTEMPTS` and `SHED_TOTAL_WAIT_CAP`,
+> with the per-hint clamp DERIVED from that cap so there is no hint the client
+> would accept and could never honour. Out of budget, the shed is reported AS a
+> shed, never as a crash (§18.3).
+>
 > **30 seconds is an operator decision, not a derived constant**, and the
 > tradeoff it encodes is written at the constant: shedding gives a hub
 > deployment with no alternative holder *nothing* instead of a slow answer.
 > `=0` restores the pre-M5 unbounded wait.
+>
+> Fix 3 narrows what that tradeoff costs without changing the number: a
+> deployment with no alternative holder now waits out the hint rather than
+> getting nothing. Fix 2 from the note — making the bound RELATIVE to workload,
+> `max(bound, k · avg_turn)` — was NOT taken, and remains the operator's call.
 >
 > **Gates.** lint `--full` 0 errors workspace-wide; 312 + 21 + 15 in
 > sovereign-inference, 161 commonwealth-core, 159 sovereign-contracts, 68

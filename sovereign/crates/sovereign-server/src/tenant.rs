@@ -60,26 +60,21 @@ impl TenantRuntime {
             .collect())
     }
 
-    pub async fn handle_message(&self, message: &str, conversation_id: &str) -> Result<Response> {
-        let scoped = self.scoped_id(conversation_id);
-        self.runtime.handle_message(message, &scoped).await
-    }
-
-    /// Non-streaming entry that routes workspace-tagged conversations
-    /// (recipe-author) into the agent loop; generic ones behave like
-    /// [`Self::handle_message`]. The conversation API uses this.
-    pub async fn handle_message_any(
-        &self,
-        message: &str,
-        conversation_id: &str,
-    ) -> Result<Response> {
-        let scoped = self.scoped_id(conversation_id);
-        self.runtime.handle_message_any(message, &scoped).await
-    }
+    // `handle_message` and `handle_message_any` used to live here: two
+    // thin wrappers that scoped an id and then ran a turn. Both are gone
+    // (TOPOLOGY §10 phase 6). Their only caller, the REST message route,
+    // now scopes the id itself — once, visibly, exactly as `ws.rs` does —
+    // and hands it to `sovereign_core::runtime::collect_turn`, the same
+    // driver the WebSocket route uses.
+    //
+    // What this host actually owns is TENANCY, and that is what is left
+    // here: `scoped_id`, the corpus visibility filter, and seeding. Running
+    // a turn was never this type's job; it only looked like it because
+    // there was nowhere else to put the call.
 
     /// Seed an empty conversation row + optional skill tag before the
     /// first message (scoped to this tenant). `skill_id =
-    /// "recipe-author"` makes [`Self::handle_message_any`] drive the
+    /// "recipe-author"` makes the turn driver dispatch into the
     /// agent loop.
     pub async fn seed_conversation(
         &self,

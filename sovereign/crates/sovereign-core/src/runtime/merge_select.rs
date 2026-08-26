@@ -89,7 +89,17 @@ pub(crate) fn concept_obligations_enabled() -> bool {
     )
 }
 
-fn source_tag_is(c: &ScoredChunk, tag: &str) -> bool {
+/// Was this chunk routed into the pool by a named leg THIS TURN?
+///
+/// Deliberately still the metadata tag, and not `provenance.producer()`.
+/// `source = "atom-enum"` is written onto chunks the atom-enum leg FETCHED
+/// (`retrieval/atom_enum.rs:687` re-tags an already-acquired chunk), so it is
+/// a per-turn routing annotation rather than a fact about where the content
+/// came from — the `Candidate` half of the split TOPOLOGY §10 rung 9.1
+/// describes, not the `Evidence` half. Reading it off the producer would
+/// silently drop every fetched atom-enum chunk from the pin below, since a
+/// fetched chunk is `Acquired` and has no producer.
+fn routed_by(c: &ScoredChunk, tag: &str) -> bool {
     c.metadata.get("source").map(|s| s == tag).unwrap_or(false)
 }
 
@@ -116,9 +126,13 @@ pub(crate) fn merge_demand_select(
     // 1. Pins. RAPTOR is additive (does not consume budget); atom-enum
     //    consumes budget as it did under the legacy reserve.
     for (i, c) in chunks.iter().enumerate() {
-        if source_tag_is(c, "raptor") {
+        // Summary tier, off the typed stamp — was `source == "raptor"`, which
+        // matched an indexed rollup row and an in-process one through a
+        // shared tag. Unlike `atom-enum` above, nothing re-tags an acquired
+        // chunk as a rollup, so this one IS provenance.
+        if c.provenance.grain() == kernel_types::Grain::Summary {
             selected[i] = true;
-        } else if source_tag_is(c, "atom-enum") && spent < budget {
+        } else if routed_by(c, "atom-enum") && spent < budget {
             selected[i] = true;
             spent += 1;
         }
@@ -224,6 +238,16 @@ mod tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1). A
+            // `raptor` fixture states its tier on the STAMP, because that is
+            // where the pin reads it; the `atom-enum` tag stays in the bag,
+            // because that is where the routing pin reads it.
+            provenance: match tag {
+                Some("raptor") => {
+                    corpus_engine::index::ChunkProvenance::manufactured_summary("raptor_summary")
+                }
+                _ => corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
+            },
         }
     }
 

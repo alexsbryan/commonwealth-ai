@@ -33,7 +33,7 @@ use common::{desktop_services_with_store, mesh_admin_services, spawn_router, Tes
 use std::sync::Arc;
 
 use futures::{SinkExt, StreamExt};
-use sovereign_contracts::types::{TurnFrame, TurnRequest};
+use sovereign_contracts::types::{TurnFrame, TurnMode, TurnRequest};
 use sovereign_core::setup_config::SetupConfig;
 use sovereign_core::traits::StateStore;
 use sovereign_mesh::{turn_http::turn_router, EmbeddedDaemon};
@@ -105,6 +105,8 @@ async fn a_daemon_streams_a_turn_to_a_websocket_client() {
     ws.send(tokio_tungstenite::tungstenite::Message::Text(
         serde_json::to_string(&TurnRequest::Message {
             content: "who answered?".to_string(),
+            mode: TurnMode::Grounded,
+            intent: None,
         })
         .unwrap()
         .into(),
@@ -281,6 +283,8 @@ async fn a_socket_still_reads_while_its_turn_is_running() {
         tokio_tungstenite::tungstenite::Message::Text(
             serde_json::to_string(&TurnRequest::Message {
                 content: text.to_string(),
+                mode: TurnMode::Grounded,
+                intent: None,
             })
             .unwrap()
             .into(),

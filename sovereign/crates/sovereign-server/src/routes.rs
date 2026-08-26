@@ -18,6 +18,7 @@ use crate::tenant::TenantRuntime;
 use sovereign_contracts::types::projection::{
     project_epistemic_state, project_message_metadata, Citation, Provenance,
 };
+use sovereign_contracts::types::TurnMode;
 
 // ─── Request/Response Types ───────────────────────────────────
 
@@ -267,28 +268,52 @@ pub async fn send_message(
     // Set task_id context for approval channel (will be updated by executor if needed).
     approval.set_task_id(&conversation_id).await;
 
-    match tr.handle_message_any(&body.content, &conversation_id).await {
-        Ok(response) => {
-            let task_summary = response.task.map(|t| TaskSummary {
+    // The SAME driver the WebSocket route uses, with a collecting sink
+    // instead of a forwarding one (TOPOLOGY §10 phase 6). This called
+    // `handle_message_any`, which existed only because REST needed a
+    // non-streaming path and which re-implemented the recipe-author dispatch
+    // `handle_message_stream` already performs internally — two
+    // implementations of one decider, and this was the one that saw less
+    // traffic (ARCH §10.6).
+    //
+    // NAMED, because it is a behaviour change and not only a refactor: this
+    // endpoint now runs the same pipeline the WebSocket route runs. It used
+    // to run the non-streaming one, so the same question asked over REST and
+    // over WS could be answered by different code. That divergence is the
+    // thing this phase exists to remove, and the streaming path is the one
+    // both apps exercise — but a reader diffing behaviour should find this
+    // sentence rather than infer it.
+    //
+    // Scoping is applied HERE, once, exactly as `ws.rs` does it: the turn
+    // service takes an already-scoped id because prefixing is this host's
+    // policy, not the runtime's.
+    let scoped = tr.scoped_id(&conversation_id);
+    match sovereign_core::runtime::collect_turn(
+        &tr.runtime,
+        tr.store.as_ref(),
+        &scoped,
+        &body.content,
+        TurnMode::Grounded,
+        None,
+    )
+    .await
+    {
+        Ok(turn) => Json(MessageResponse {
+            message_id: turn.message_id,
+            // Always the assistant: this endpoint returns the reply to the
+            // message the caller just sent.
+            role: "assistant".to_string(),
+            content: turn.text,
+            task: turn.task.map(|t| TaskSummary {
                 id: t.id,
-                status: format!("{:?}", t.status),
-                steps_completed: t.completed_steps.len(),
-            });
-
-            let role = response.message.role_str().to_string();
-            let (provenance, citations) = project_message_metadata(&response.message.metadata);
-            let epistemic_state = project_epistemic_state(&response.message.metadata);
-            Json(MessageResponse {
-                message_id: response.message.id,
-                role,
-                content: response.message.content,
-                task: task_summary,
-                provenance,
-                citations,
-                epistemic_state,
-            })
-            .into_response()
-        }
+                status: t.status,
+                steps_completed: t.steps_completed,
+            }),
+            provenance: turn.provenance,
+            citations: turn.citations,
+            epistemic_state: turn.epistemic_state,
+        })
+        .into_response(),
         Err(e) => api_error(StatusCode::INTERNAL_SERVER_ERROR, &e.to_string()).into_response(),
     }
 }

@@ -768,3 +768,32 @@ mod tests {
         assert!(format!("{err}").contains("outside"), "got: {err}");
     }
 }
+
+/// The workflow-authoring family, as a [`ToolBundle`].
+///
+/// Lives here rather than in `sovereign-tools`' bundle module on purpose: a
+/// tool family belongs with the crate that owns its tools, and the seam
+/// exists precisely so a shared file never has to name it
+/// (`quality/TOPOLOGY.md` §10 phase 7b).
+///
+/// Surfaced only when `active_mode == workflow-author` by the narrowed
+/// catalog, so generic chat is unaffected by composing it.
+pub struct WorkflowAuthoringTools;
+
+#[async_trait::async_trait]
+impl sovereign_contracts::tool_bundle::ToolBundle for WorkflowAuthoringTools {
+    fn name(&self) -> &'static str {
+        "workflow-authoring"
+    }
+
+    async fn register_into(
+        &self,
+        reg: &mut sovereign_contracts::registry::ToolRegistry,
+    ) -> sovereign_contracts::tool_bundle::BundleReport {
+        let mut r = sovereign_contracts::tool_bundle::BundleReport::new(self.name());
+        for tool in author_tools() {
+            r = r.registered(reg.register_reporting(tool));
+        }
+        r
+    }
+}

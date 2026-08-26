@@ -6,6 +6,7 @@ mod create;
 mod enrichment;
 mod evidence;
 mod maintain;
+mod provenance;
 pub use maintain::MaintenanceStats;
 pub mod raptor;
 mod read;
@@ -13,6 +14,8 @@ mod search;
 mod write;
 
 pub use evidence::{Evidence, EvidenceSet};
+pub use provenance::{Acquisition, ChunkProvenance};
+pub(crate) use provenance::{custody_of, grain_of};
 pub use read::NeighborWindow;
 
 use std::path::{Path, PathBuf};

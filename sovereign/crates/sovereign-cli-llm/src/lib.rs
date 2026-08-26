@@ -63,6 +63,7 @@ mod corpus_watch_cmd;
 mod enrich_cmd;
 mod eval_cmd;
 mod govern_cmd;
+mod turn_sink;
 mod gym_judge;
 mod inner_chaos;
 mod knowledge_gym_cmd;

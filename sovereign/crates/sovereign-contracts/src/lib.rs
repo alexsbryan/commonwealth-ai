@@ -34,6 +34,7 @@ pub mod run_lock;
 pub mod setup_config;
 pub mod skills;
 pub mod slot_policy;
+pub mod tool_bundle;
 pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;

@@ -513,16 +513,25 @@ fn worker_allowlist() -> Option<Vec<String>> {
 /// separated). These never enter the eligible-worker snapshot — discovery only
 /// ever adds to them — so any gate reading that snapshot has to union them back
 /// in or it would permanently hold a manual setup.
+/// THE reader of `SOVEREIGN_RPC_DISCOVER` (TOPOLOGY §10 phase 10, ARCH §10.6).
+///
+/// A PRESENCE check — any value, including empty, arms discovery. That is the
+/// established semantics and it is preserved here rather than tightened;
+/// changing what counts as "set" is a behaviour change and this rung is about
+/// having one answer, not a new one.
+///
+/// Three sites asked independently (`bootstrap`, `build/containment`,
+/// `doctor_cmd`), and two of them feed a containment VERDICT — so a divergence
+/// would mean the doctor reporting a containment posture the daemon does not
+/// actually run under.
+pub(crate) fn rpc_discovery_armed() -> bool {
+    std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok()
+}
+
 fn env_rpc_workers() -> Vec<String> {
-    std::env::var("SOVEREIGN_RPC_WORKERS")
-        .ok()
-        .map(|raw| {
-            raw.split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
-        .unwrap_or_default()
+    // One reader, in `sovereign_inference::embedded` — this function used to
+    // carry a byte-identical copy (TOPOLOGY §10 phase 10).
+    sovereign_inference::embedded::rpc_workers_from_env()
 }
 
 /// Spawn the mesh RPC-worker auto-discovery loop (opt-in via `SOVEREIGN_RPC_DISCOVER`).
@@ -537,7 +546,7 @@ pub(super) fn spawn_rpc_worker_discovery(
     // model across the cluster needs no manual `SOVEREIGN_RPC_WORKERS` list.
     // (Applies on the next model load after discovery populates; an eagerly
     // loaded model picks workers up on reload — see register_rpc_workers.)
-    if std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok() {
+    if rpc_discovery_armed() {
         let snapshot = Arc::new(std::sync::RwLock::new(Vec::<String>::new()));
         sovereign_inference::embedded::set_rpc_worker_provider({
             let snap = Arc::clone(&snapshot);

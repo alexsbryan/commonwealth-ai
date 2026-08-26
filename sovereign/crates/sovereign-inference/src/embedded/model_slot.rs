@@ -1008,6 +1008,12 @@ pub(crate) struct SlotQueue {
     eta: std::sync::Mutex<EtaEwma>,
     /// Shed past this predicted wait. `0` = never shed.
     max_wait_ms: u64,
+    /// When the current permit holder acquired; `None` while the slot is
+    /// free. The shed decision reads it so an arriving caller is charged the
+    /// REMAINING turn rather than a whole one — see
+    /// [`EtaEwma::predict_wait_ms`]. Held here rather than on [`SlotPermit`]
+    /// because the caller deciding whether to park cannot see the permit.
+    holder_since: std::sync::Mutex<Option<std::time::Instant>>,
     /// Names this queue in every event it emits.
     label: String,
 }
@@ -1019,6 +1025,7 @@ impl SlotQueue {
             queued: std::sync::atomic::AtomicU32::new(0),
             eta: std::sync::Mutex::new(EtaEwma::new(seed_turn_ms)),
             max_wait_ms: max_queue_wait_ms(),
+            holder_since: std::sync::Mutex::new(None),
             label: label.into(),
         }
     }
@@ -1071,6 +1078,30 @@ impl SlotQueue {
         self.inflight.close();
     }
 
+    /// How long the current holder has been running, `0` when the slot is
+    /// free or was just taken. Feeds the shed decision.
+    fn holder_elapsed_ms(&self) -> u64 {
+        self.holder_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .map(|t| t.elapsed().as_millis().min(u128::from(u64::MAX)) as u64)
+            .unwrap_or(0)
+    }
+
+    fn mark_holder_start(&self, at: std::time::Instant) {
+        *self
+            .holder_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(at);
+    }
+
+    fn clear_holder(&self) {
+        *self
+            .holder_since
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = None;
+    }
+
     pub(crate) fn record_turn(&self, dur_ms: u64) {
         self.eta
             .lock()
@@ -1106,6 +1137,9 @@ impl Drop for SlotPermit {
     fn drop(&mut self) {
         let ms = self.started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64;
         self.queue.record_turn(ms);
+        // The slot is free again, so the next caller's prediction must stop
+        // subtracting this turn's elapsed time.
+        self.queue.clear_holder();
     }
 }
 
@@ -1129,10 +1163,16 @@ pub(super) async fn acquire_with_queue_gauge(
 ) -> Result<SlotPermit> {
     use std::sync::atomic::Ordering;
 
-    let grant = |permit| SlotPermit {
-        _permit: permit,
-        queue: Arc::clone(queue),
-        started: std::time::Instant::now(),
+    let grant = |permit| {
+        // ONE place a turn's start is stamped, so the permit's own clock and
+        // the queue's view of "how far along is the holder" cannot disagree.
+        let started = std::time::Instant::now();
+        queue.mark_holder_start(started);
+        SlotPermit {
+            _permit: permit,
+            queue: Arc::clone(queue),
+            started,
+        }
     };
 
     // Fast path: the permit is free, which is every request on an idle host.
@@ -1153,7 +1193,12 @@ pub(super) async fn acquire_with_queue_gauge(
     // plus everyone already parked ahead of it.
     let position = queue.depth() + 1;
     let eta = queue.eta_snapshot();
-    let predicted_wait_ms = eta.predict_wait_ms(position, 1);
+    // Charge the caller the REMAINING in-flight turn, not a whole one. Without
+    // the elapsed term this reduces to `avg_turn_ms > max_wait_ms` at
+    // position 1 — a rule with no load in it, which is how a host with an
+    // EMPTY queue refused 624 of 625 requests (note `bf432b4d`).
+    let in_flight_elapsed_ms = queue.holder_elapsed_ms();
+    let predicted_wait_ms = eta.predict_wait_ms(position, 1, in_flight_elapsed_ms);
 
     if queue.max_wait_ms > 0 && predicted_wait_ms > queue.max_wait_ms {
         // Shed BEFORE parking. Refusing after a wait would be the worst of
@@ -1326,9 +1371,7 @@ impl ModelSlot {
         // Vulkan backend on a particular quant/architecture combo and
         // you want to confirm whether the fault is in the GPU path or
         // upstream of it. Restart the desktop / daemon after setting.
-        let force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+        let force_cpu = crate::cpu_compat::force_cpu_chat();
         let effective_gpu_layers = if force_cpu { 0 } else { n_gpu_layers };
 
         // Distributed inference + never-wedge guard. Streaming a large model's
@@ -2025,9 +2068,7 @@ impl ModelSlot {
         n_ubatch: u32,
         n_gpu_layers: u32,
     ) -> Result<Self> {
-        let force_cpu = std::env::var("SOVEREIGN_FORCE_CPU_CHAT")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
+        let force_cpu = crate::cpu_compat::force_cpu_chat();
         // `&& n_gpu_layers > 0` matches the three sibling sites (`ModelSlot::load`,
         // `EmbedSlot::load`, `RerankSlot::load`). This constructor was the only one
         // deciding on the OS alone, and that is a bug: `HardwareProfile::detect` has

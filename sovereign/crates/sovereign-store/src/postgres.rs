@@ -316,6 +316,40 @@ impl ConversationStore for PostgresStateStore {
         Ok(())
     }
 
+    /// Seed a conversation row before its first message, carrying the
+    /// surface tag. `ON CONFLICT DO NOTHING` mirrors SQLite's `INSERT OR
+    /// IGNORE`, so a retried create is a no-op rather than an error.
+    ///
+    /// Until 2026-08-25 this store inherited the trait's no-op `Ok(())`
+    /// default, so on the hub the row was never written and the
+    /// `skill_id` that routes a conversation into an agent loop was
+    /// silently dropped — while the caller was told the write succeeded.
+    /// The trait no longer has a default for exactly that reason.
+    async fn insert_empty_conversation(
+        &self,
+        id: &str,
+        created_at: i64,
+        surface_skill_id: Option<&str>,
+    ) -> Result<()> {
+        let client = self
+            .pool
+            .get()
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        client
+            .execute(
+                "INSERT INTO conversations (id, title, created_at, updated_at, skill_id) \
+                 VALUES ($1, NULL, $2, $2, $3) \
+                 ON CONFLICT (id) DO NOTHING",
+                &[&id, &created_at, &surface_skill_id],
+            )
+            .await
+            .map_err(|e| Error::Storage(e.to_string()))?;
+
+        Ok(())
+    }
+
     async fn get_conversation(&self, id: &str) -> Result<Conversation> {
         let client = self
             .pool

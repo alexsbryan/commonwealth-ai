@@ -93,7 +93,20 @@ backstage = [
 # scores an edge out of it as a BACKFLOW violation.
 [[layer]]
 name = "contract"
-crates = ["oicp-types", "kernel-types", "sovereign-contracts", "oicp-client", "arch-layers", "sovereign-time"]
+crates = [
+    "oicp-types",
+    "kernel-types",
+    "sovereign-contracts",
+    "oicp-client",
+    # The CLIENT half of the turn protocol, here for the same reason
+    # `oicp-client` is: protocol types plus the client that speaks them. Its
+    # only non-leaf dependency is `sovereign-contracts` — it cannot see a
+    # Runtime, a store or a corpus, which is what lets a surface depend on it
+    # without dragging a serving host's world along (TOPOLOGY §10 phase 6).
+    "sovereign-turn-client",
+    "arch-layers",
+    "sovereign-time",
+]
 
 # The knowledge layer: corpus-engine + its carve-outs. "Self-contained by
 # design — neither sovereign nor commonwealth types appear here" was the claim

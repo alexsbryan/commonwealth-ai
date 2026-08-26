@@ -58,19 +58,12 @@ impl Runtime {
         let index = corpus_engine::index::CorpusIndex::open(&info.path)
             .await
             .ok()?;
-        let stored = index.get_chunks(&[chunk_id]).await.ok()?;
-        let s = stored.into_iter().next()?;
-        Some(corpus_engine::ScoredChunk {
-            content: s.content,
-            title: s.title,
-            url: None,
-            corpus_id: corpus_id.to_string(),
-            score: 0.0,
-            metadata: std::collections::HashMap::new(),
-            chunk_id: Some(s.id),
-            source_doc_id: None,
-            vector_distance: None,
-        })
+        // Through the index's own re-acquisition door rather than rebuilt
+        // here: this IS index content, and assembling it by hand is how real
+        // corpus passages entered the pool with no provenance (TOPOLOGY §10
+        // rung 9.1, hazard 1).
+        let acquired = index.acquire_chunks(&[chunk_id]).await.ok()?;
+        acquired.into_iter().next()
     }
     pub(crate) async fn apply_atlas_grounding(
         &self,

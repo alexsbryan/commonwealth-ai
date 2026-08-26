@@ -172,15 +172,28 @@ pub async fn knowledge_search(
                     .await
                 {
                     Ok(results) => {
-                        all_results.extend(results.into_iter().map(|r| KnowledgeResult {
-                            content: r.content,
-                            title: r.title,
-                            corpus_id: corpus_id.clone(),
-                            url: r.url,
-                            score: r.score,
-                            metadata: Default::default(),
-                            chunk_id: r.chunk_id,
-                            source_doc_id: r.source_doc_id,
+                        all_results.extend(results.into_iter().map(|r| {
+                            KnowledgeResult {
+                                // Provenance the SERVING index stamped, forwarded
+                                // rather than dropped (TOPOLOGY §10 rung 9.1).
+                                // `stamped_custody` and not `custody` so "this
+                                // index recorded no class" stays ABSENT on the
+                                // wire instead of becoming the string "unknown" —
+                                // the requester joins absence into a refusal.
+                                custody: r
+                                    .provenance
+                                    .stamped_custody()
+                                    .map(|c| c.as_str().to_string()),
+                                grain: Some(r.provenance.grain().as_str().to_string()),
+                                content: r.content,
+                                title: r.title,
+                                corpus_id: corpus_id.clone(),
+                                url: r.url,
+                                score: r.score,
+                                metadata: Default::default(),
+                                chunk_id: r.chunk_id,
+                                source_doc_id: r.source_doc_id,
+                            }
                         }));
                     }
                     Err(e) => {

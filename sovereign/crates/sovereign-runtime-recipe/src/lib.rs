@@ -34,9 +34,11 @@
 //! - the **state store** — this crate never opens one. One writer per data
 //!   root is a property of the process (TOPOLOGY phase 1), and a recipe that
 //!   opened `sovereign.db` would be a second writer by construction,
-//! - **shell access** ([`ShellAccess`]), because it is a real policy fork and
-//!   §10 decided it: shell execution does not move into a long-lived daemon
-//!   running as a different user with a different cwd,
+//! - the **tool bundles** ([`RecipeInputs::tool_bundles`]) — which FAMILIES
+//!   of tools this host's turn registry carries. This crate registers no tool
+//!   by name; it folds the host's bundles. See
+//!   [`sovereign_contracts::tool_bundle`] for why, and [`baseline_bundles`]
+//!   for the composition a corpus-grounded host starts from,
 //! - the five slots §3.5 says leave the `Runtime` entirely — `mesh_knowledge`,
 //!   `compaction`, `routing_events`, `landscape_digests`, `corpus_principal`.
 //!   They are left at named absence in the returned parts and a host that has
@@ -52,7 +54,9 @@ use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, RoutingEventSink, StateStore};
 use sovereign_core::types::InferenceConfig;
 use sovereign_core::{RuntimeParts, SkillRegistry, ToolRegistry};
+use sovereign_contracts::tool_bundle::{ToolBundle, Withheld};
 use sovereign_tools::atlas_context_manager::AtlasContextManager;
+use sovereign_tools::bundles::{CoreTurnTools, KnowledgeFrontDoor, WebReach, WebTools};
 
 /// Where the recipe's progress lines go.
 ///
@@ -74,25 +78,6 @@ impl RecipeProgress for TracingProgress {
     fn note(&self, line: &str) {
         tracing::info!(target: "runtime_recipe", "{line}");
     }
-}
-
-/// Whether the turn's tool registry gets a shell.
-///
-/// A closed set of two, as an enum rather than a `bool`, because the two arms
-/// are not symmetric preferences — one of them is a decision with a reason
-/// (ARCH §2.1).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ShellAccess {
-    /// Register `ShellTool`. Correct for an interactive CLI: it runs as the
-    /// invoking user, in the directory they invoked it from, for the length of
-    /// one command they are watching.
-    Granted,
-    /// Do not register `ShellTool`. `quality/TOPOLOGY.md` §10 "Decisions
-    /// taken" 1: shell execution does not move into a long-lived daemon
-    /// running as a different user with a different cwd. Withheld is written
-    /// down here so a reader sees a decision rather than an omission
-    /// (ARCH §18.3).
-    Withheld,
 }
 
 /// How much of the enrichment lane is loaded before commissioning returns.
@@ -189,8 +174,20 @@ pub struct RecipeInputs {
     /// The resolved embed model id. Keys the atlas embedding cache, so a host
     /// that swaps models invalidates rather than mixes dimensionalities.
     pub embed_model: String,
-    /// Shell policy — see [`ShellAccess`].
-    pub shell: ShellAccess,
+    /// Which tool FAMILIES this host's turn registry carries.
+    ///
+    /// The recipe folds these and names no tool itself. A host starts from
+    /// [`baseline_bundles`] and pushes its own — code intel over a graph it
+    /// owns, a note store it opened — or pushes
+    /// [`Withheld`](sovereign_contracts::tool_bundle::Withheld) to record a
+    /// family it deliberately does not carry, so a decision is a value rather
+    /// than a line missing from a file (ARCH §18.3).
+    ///
+    /// Replaced `shell: ShellAccess` on 2026-08-26 (TOPOLOGY phase 7b). That
+    /// enum could only express ONE fork; every other family was hardcoded
+    /// here, which is why "adopt the shared recipe" read as "lose twenty
+    /// tools" to `sovereign-server` and stalled the phase.
+    pub tool_bundles: Vec<Box<dyn ToolBundle>>,
     /// Lane loading policy — see [`LaneWarmth`]. A field rather than a default
     /// because getting it wrong is invisible in opposite directions: an eager
     /// service looks hung, and a deferred one-shot silently answers its only
@@ -242,14 +239,14 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         inference_config,
         indexes_dir,
         embed_model,
-        shell,
+        tool_bundles,
         warmth,
         rerank,
     } = inputs;
 
     log_installed_corpora(&corpus_engine, progress).await;
 
-    let tools = build_tools(&store, &inference, &corpus_engine, shell, progress).await;
+    let tools = build_tools(&tool_bundles, progress).await;
     let (router, planner) =
         build_router_and_planner(&inference, &store, &skills, Arc::clone(&tools), progress).await;
     let (lane, atlas_context) = build_lane(
@@ -288,17 +285,50 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
 
 // ─── Tools ────────────────────────────────────────────────────────────────
 
-/// The turn's tool registry.
+/// The tool families every corpus-grounded host carries.
 ///
-/// Kept as one list, in one place, because the alternative is what
-/// `sovereign-core/tests/turn_tool_census.rs` measured on 2026-08-25: 33 tools
-/// across the hosts, 7 common, 26 divergent — so which tools a model may call
-/// depended on which binary you happened to be talking to.
-async fn build_tools(
+/// A host composes this and then pushes its own — it does NOT write the
+/// baseline out again, which is the duplication `turn_tool_census.rs` measured
+/// on 2026-08-25 (33 tools across the hosts, 7 common, 26 divergent, so which
+/// tools a model could call depended on which binary you were talking to).
+///
+/// Shell is deliberately absent: it is a privilege, not a baseline. A host
+/// that wants it pushes [`sovereign_tools::bundles::ShellTools`]; a host that
+/// does not pushes [`Withheld`](sovereign_contracts::tool_bundle::Withheld)
+/// naming the reason, so the daemon's "no shell in a long-lived daemon" stays
+/// a written decision (TOPOLOGY §10 "Decisions taken" 1).
+pub fn baseline_bundles(
     store: &Arc<dyn StateStore>,
     inference: &Arc<dyn InferenceProvider>,
     corpus_engine: &Arc<corpus_engine::CorpusEngine>,
-    shell: ShellAccess,
+    web: WebReach,
+) -> Vec<Box<dyn ToolBundle>> {
+    let web_family: Box<dyn ToolBundle> = match &web {
+        WebReach::Granted(_) => Box::new(WebTools::new(Arc::clone(corpus_engine))),
+        WebReach::Withheld(why) => Box::new(Withheld::new("web", why)),
+    };
+    vec![
+        Box::new(CoreTurnTools::new(
+            Arc::clone(store),
+            Arc::clone(inference),
+            Arc::clone(corpus_engine),
+            web,
+        )),
+        web_family,
+        Box::new(KnowledgeFrontDoor::new(
+            Arc::clone(store),
+            Arc::clone(inference),
+        )),
+    ]
+}
+
+/// The turn's tool registry: fold the host's bundles, then connect MCP.
+///
+/// This function names no tool. That is the phase-7b property — a family is
+/// added by the host that has it, never by editing a shared list, so adopting
+/// this recipe can no longer mean losing a capability (ARCH §19 open/closed).
+async fn build_tools(
+    bundles: &[Box<dyn ToolBundle>],
     progress: &dyn RecipeProgress,
 ) -> Arc<ToolRegistry> {
     // Tier 4 — shared tool-result cache. Per-conversation cache slices, 5-turn
@@ -307,71 +337,22 @@ async fn build_tools(
     let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
 
-    match shell {
-        ShellAccess::Granted => tools.register(Box::new(sovereign_tools::shell::ShellTool)),
-        ShellAccess::Withheld => {
-            tracing::debug!(
-                "runtime_recipe: shell withheld — TOPOLOGY.md §10 decision 1 \
-                 (no shell in a long-lived daemon)"
-            );
-        }
+    for report in sovereign_contracts::tool_bundle::install(&mut tools, bundles).await {
+        // Every family reports, present or absent, so the boot record answers
+        // "does this host have X?" without reading the host's source.
+        progress.note(&format!("Tools:       {}", report.summary()));
     }
-
-    tools.register(Box::new(
-        sovereign_tools::document::DocumentTool::new(Arc::clone(store), Arc::clone(inference))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::ClaimSearchTool::new(Arc::clone(corpus_engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::EpistemicLandscapeTool::new(Arc::clone(corpus_engine)).declared(),
-    ));
-    // Deterministic land-value-tax analytics over parcel corpora (e.g.
-    // sf-assessor-roll) — pre-cited figures the ComplexTask synthesizer quotes
-    // verbatim ("no confabulated numbers").
-    tools.register(Box::new(
-        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(corpus_engine))
-            .declared(),
-    ));
-    // Typed SEC-filing figures with basis + accession, or first-class
-    // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
-    tools.register(Box::new(
-        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(corpus_engine)).declared(),
-    ));
-    tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
-        Arc::clone(store),
-        Arc::clone(inference),
-        // Client built by the egress boundary (order deep-research-t2a):
-        // tools-base is contract-only and must not construct an
-        // egress-capable HTTP client itself.
-        sovereign_core::egress::search_client().expect("egress boundary search client build"),
-        // DuckDuckGo — free, no key required.
-        sovereign_tools::web::search::SearchBackend::DuckDuckGo,
-    )));
-    // Unified knowledge-lookup front door (Tool-Mastery Phase 5). Returns a
-    // single Evidence envelope across corpus + memory + note channels.
-    tools.register(Box::new(
-        sovereign_tools::KnowledgeLookupTool::new(Arc::clone(store), Arc::clone(inference))
-            .declared(),
-    ));
-    tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
-    tools.register(Box::new(
-        sovereign_tools::WikipediaFetchTool::new(Arc::clone(corpus_engine)).declared(),
-    ));
-    // Registered unconditionally; `execute()` returns a clear "no document
-    // attached" payload on conversations without a DocumentSession, so the
-    // model can probe it harmlessly (sovereign decision 7693f16b: attached
-    // docs as Tool, not parallel pipeline).
-    tools.register(Box::new(
-        sovereign_tools::AttachedDocumentSearchTool::new(Arc::clone(store), Arc::clone(inference))
-            .declared(),
-    ));
 
     // External MCP servers (the `[[mcp_servers]]` array of the canonical
     // config): connect over HTTP and register their tools into the SAME
     // registry the agent plans against, so a server added via `svrn mcp add`
     // or the desktop settings pane is callable here too.
+    //
+    // NOT a bundle: `ToolBundle::register_into` returns a report, and this
+    // door also yields a manager whose per-server statuses the boot banner
+    // prints. Modelling that needs a keep-alive in the trait's return, which
+    // is a change to the seam rather than a use of it — named here rather
+    // than half-done (ARCH §18.3).
     let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
     for st in mcp.server_statuses().await {
         if st.connected {
@@ -608,10 +589,7 @@ async fn load_wikipedia_graph(
     // Memory-pressure escape hatch. The graph is a 7M-edge sqlite mmap; on a
     // host already running the daemon, loading it twice has tipped past
     // available RAM in practice.
-    if std::env::var("SOVEREIGN_DISABLE_WIKI_GRAPH")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-    {
+    if sovereign_tools::corpus::wiki_graph_disabled() {
         progress.note("Wiki graph:  disabled via SOVEREIGN_DISABLE_WIKI_GRAPH");
         return None;
     }
@@ -675,10 +653,10 @@ fn load_reranker(lane: &mut LaneSources, wiring: RerankWiring, progress: &dyn Re
         cfg.per_article = true;
         cfg.dedup_corpus_filter = dedup_filter.clone();
         cfg.dedup_picker = dedup_picker;
-        if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
-            if let Ok(n) = s.parse::<usize>() {
-                cfg.candidates_k = n;
-            }
+        // One reader, in `sovereign_tools::corpus` — this branch used to
+        // carry its own copy of the parse (TOPOLOGY §10 phase 10).
+        if let Some(n) = sovereign_tools::corpus::rerank_candidates_k_from_env() {
+            cfg.candidates_k = n;
         }
         progress.note(&format!(
             "Rerank dedup-only ablation: candidates_k={}, per_article=true, \

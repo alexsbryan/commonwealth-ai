@@ -80,13 +80,12 @@ fn insufficiency_threshold() -> f64 {
 /// — without this the loop is invisible exactly where it's being
 /// evaluated.
 fn dbg(msg: &str) {
-    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
-    let on = *ON.get_or_init(|| {
-        std::env::var("SOVEREIGN_AGENTIC_KQ_DEBUG")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false)
-    });
-    if on {
+    // ONE reader of the flag (TOPOLOGY §10 phase 10, ARCH §10.6). This
+    // function used to carry its own `OnceLock` and its own parse — the same
+    // three lines as `grounding::config::debug_enabled`, cached separately, so
+    // the gate's glassbox and the loop's glassbox could in principle disagree
+    // about whether debugging was on.
+    if crate::runtime::grounding::config::debug_enabled() {
         eprintln!("    [agentic_kq] {msg}");
         // Mirror to tracing too: a detached daemon discards stderr, so the loop
         // was invisible in daemon.err. Default target (`sovereign_core::…`)
@@ -367,6 +366,10 @@ impl Runtime {
                     chunk_id: None,
                     source_doc_id: None,
                     vector_distance: None,
+                    // A knowledge-atlas record composed here from a corpus
+                    // description plus previews — not a row an index vouched
+                    // for (TOPOLOGY §10 rung 9.1).
+                    provenance: corpus_engine::index::ChunkProvenance::manufactured("atlas_atom"),
                 };
                 if seen.insert(key(&chunk)) {
                     dbg(&format!("atlas atom hits={hits} desc={desc:?}"));
@@ -766,6 +769,8 @@ mod tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

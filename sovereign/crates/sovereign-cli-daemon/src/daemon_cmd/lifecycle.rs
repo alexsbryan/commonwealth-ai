@@ -204,7 +204,13 @@ async fn await_exit_or_sigkill(pid: i32, found_via: &str) -> i32 {
 
 /// See the sandbox note in `stop_daemon` — automation-only escape
 /// hatch confining stop to the pidfile legs.
-fn stop_sandboxed() -> bool {
+///
+/// THE reader of `SOVEREIGN_STOP_SANDBOXED` (TOPOLOGY §10 phase 10, ARCH
+/// §10.6). `service_install::service_manager_is_addressed` had its own copy of
+/// this parse; two spellings of "is this an isolated daemon" is exactly the
+/// shape that let the service-manager leg get added ABOVE the guard in the
+/// first place.
+pub(crate) fn stop_sandboxed() -> bool {
     std::env::var("SOVEREIGN_STOP_SANDBOXED").ok().as_deref() == Some("1")
 }
 
@@ -591,6 +597,45 @@ async fn finish_service_start(unit: &str) -> i32 {
         );
         return 0;
     }
+    // "The manager accepted the command" is not "the job ran". Both managers
+    // can reach a state where they take a start request and then never run
+    // the job — launchd when a rebuilt binary invalidates the job's code
+    // identity, systemd when the unit on disk has drifted from the loaded one
+    // or the unit has hit its start limit. In every case the start verb exits
+    // 0, the daemon log keeps a timestamp from hours ago because the process
+    // dies before opening it, and this function blames slow model loading.
+    // Diagnose before blaming (ARCH §18.3).
+    if let Some(svc) = crate::service_install::managing_service() {
+        if let Some(reason) = svc.needs_reregister() {
+            eprintln!("✗ {unit} will not start as registered: {reason}.\n  Re-registering …");
+            match svc.reregister() {
+                Ok(()) => {
+                    // Re-registering only makes the manager re-read the job; it
+                    // does not necessarily start it.
+                    let _ = svc.start();
+                    if wait_for_ready(timeout).await {
+                        eprintln!(
+                            "✓ daemon ready at http://127.0.0.1:{} (re-registered {unit})",
+                            client_port()
+                        );
+                        return 0;
+                    }
+                    eprintln!(
+                        "✗ re-registered {unit} but :{} still didn't respond within {}s \
+                         — check the daemon log for a startup failure",
+                        client_port(),
+                        timeout.as_secs()
+                    );
+                    return 1;
+                }
+                Err(e) => {
+                    eprintln!("✗ could not re-register {unit}: {e}");
+                    return 1;
+                }
+            }
+        }
+    }
+
     eprintln!(
         "⚠ {unit} accepted the command but :{} didn't respond within {}s\n\
          the daemon may still be loading models — re-check with `svrn daemon status`",

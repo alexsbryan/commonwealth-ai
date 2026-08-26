@@ -1087,12 +1087,72 @@ const CORPUS_MIX_DRIFT_BAND: f32 = 0.08;
 /// chat archive, and this lane stayed green because the expected facts still
 /// arrived. A bench that gates SEP could not see a defect reproducing on SEP.
 /// The data was already in the baseline; nothing scored it.
+/// Drop the questions this run could not MEASURE, from both sides.
+///
+/// A row carrying `EvalResult::error` is a turn that failed — a 503 from a
+/// busy daemon, an embed error — and its zeroed scores are the shape of a
+/// measurement, not one. Scoring it sinks the mean and reports a regression
+/// that says nothing about the code (ARCH §18.2's four verdicts; §18.3's
+/// "an `Err` collapsed into a success-shaped value").
+///
+/// Named failing input: `synth:sep` on 2026-08-26 reported FAIL(3reg) with 9
+/// of 15 questions holding `503 host busy / local_queue_full` and NOT ONE
+/// EXECUTED QUESTION REGRESSED.
+///
+/// Both sides are filtered to the same question ids, because a 6-question
+/// mean against a 15-question mean is not a comparison either.
+fn drop_unmeasured(prev: &EvalRun, cur: &EvalRun) -> (EvalRun, EvalRun, usize) {
+    let measured: std::collections::BTreeSet<&str> = cur
+        .results
+        .iter()
+        .filter(|r| r.error.is_none())
+        .map(|r| r.question_id.as_str())
+        .collect();
+    let unmeasured = cur.results.len() - measured.len();
+    let keep = |run: &EvalRun| EvalRun {
+        results: run
+            .results
+            .iter()
+            .filter(|r| measured.contains(r.question_id.as_str()))
+            .cloned()
+            .collect(),
+        ..run.clone()
+    };
+    (keep(prev), keep(cur), unmeasured)
+}
+
 fn classify_retrieval(
     prev: &EvalRun,
     cur: &EvalRun,
     threshold: f32,
     use_answer_equiv: bool,
 ) -> BenchStatus {
+    // Unmeasured rows leave FIRST — before the mix-drift check too, because a
+    // failed turn contributes no chunks and would read as composition drift.
+    let (prev_owned, cur_owned, unmeasured) = drop_unmeasured(prev, cur);
+    let (prev, cur) = (&prev_owned, &cur_owned);
+    if unmeasured > 0 {
+        // Never silently: the count and one example reach the lane output, so
+        // "the bank shrank" cannot be mistaken for "the bank held".
+        let example = cur_owned
+            .results
+            .iter()
+            .chain(prev_owned.results.iter())
+            .find_map(|r| r.error.as_deref())
+            .unwrap_or("");
+        println!(
+            "  ⚠ {unmeasured} question(s) returned an ERROR and are EXCLUDED from \
+             this comparison, not scored 0.0{}{}",
+            if example.is_empty() { "" } else { " — e.g. " },
+            example
+        );
+    }
+    if cur.results.is_empty() {
+        // Every question errored. Nothing was verified, and "nothing verified
+        // is not a pass" (ARCH §18.1) — but it is not a regression either.
+        println!("  0 regressed (unmeasured — every question errored)");
+        return BenchStatus::Stale;
+    }
     // Composition first: a pool that changed WHAT IT IS made of is a finding
     // regardless of which way the recall means moved, and reporting it as
     // "improved" because recall ticked up is how D1 hid.
@@ -1275,7 +1335,10 @@ mod tests {
         // would score one and file it under the other's name.
         for other in ["--synth", "--routing-only"] {
             let err = parse_args(&["--prod-pipeline".into(), other.into()]).unwrap_err();
-            assert!(err.contains("--prod-pipeline") && err.contains(other), "got: {err}");
+            assert!(
+                err.contains("--prod-pipeline") && err.contains(other),
+                "got: {err}"
+            );
         }
     }
 
@@ -1297,7 +1360,10 @@ mod tests {
         // `sovereign-cli-llm`, a binary no user invokes.
         let rendered = format!("error: {}", parse_args(&["--nope".into()]).unwrap_err());
         assert!(!rendered.starts_with("error: error:"), "got: {rendered}");
-        assert!(rendered.contains("Usage: svrn bench all"), "got: {rendered}");
+        assert!(
+            rendered.contains("Usage: svrn bench all"),
+            "got: {rendered}"
+        );
     }
 
     fn outcome_with(status: BenchStatus) -> BenchOutcome {
@@ -1366,6 +1432,7 @@ mod tests {
             .chunks(per_q.max(1))
             .enumerate()
             .map(|(i, c)| EvalResult {
+                error: None,
                 question_id: format!("q{i}"),
                 category: "summarize".into(),
                 question: "q".into(),
@@ -1450,6 +1517,77 @@ mod tests {
         assert!(matches!(
             classify_retrieval(&a, &b, 0.02, false),
             BenchStatus::Green
+        ));
+    }
+
+    /// Build a run whose questions all scored `ratio`, with the first
+    /// `n_errored` of them marked UNMEASURED (a failed turn, zeroed scores).
+    fn run_with_errors(n: usize, ratio: f32, n_errored: usize) -> EvalRun {
+        let mut run = run_with_mix(&[("sep", n * 4)], n);
+        for (i, r) in run.results.iter_mut().enumerate() {
+            let scored = if i < n_errored { 0.0 } else { ratio };
+            r.source_score.ratio = Some(scored);
+            r.fact_score.ratio = Some(scored);
+            r.retrieved.clear();
+            if i < n_errored {
+                r.error = Some(
+                    "turn: Inference error: Remote typed stream API returned 503 \
+                     Service Unavailable: host busy"
+                        .into(),
+                );
+            }
+        }
+        run
+    }
+
+    /// A turn that ERRORED is not a turn that scored zero.
+    ///
+    /// Named failing input (ARCH §18.1): `synth:sep` on 2026-08-26 reported
+    /// FAIL(3reg) with 9 of 15 questions holding a `503 host busy` and not one
+    /// executed question regressed. Before `drop_unmeasured`, this fixture
+    /// reds; after it, the six real measurements decide the verdict.
+    #[test]
+    fn errored_questions_are_excluded_not_scored_zero() {
+        let baseline = run_with_errors(15, 1.0, 0);
+        let current = run_with_errors(15, 1.0, 9);
+        let (_, cur_kept, unmeasured) = drop_unmeasured(&baseline, &current);
+        assert_eq!(unmeasured, 9, "the errored rows must be counted");
+        assert_eq!(cur_kept.results.len(), 6, "six measurements survive");
+        assert!(
+            matches!(
+                classify_retrieval(&baseline, &current, 0.02, false),
+                BenchStatus::Green
+            ),
+            "nine 503s must not read as a quality regression"
+        );
+    }
+
+    /// …and a real drop among the questions that DID run still reds, so the
+    /// exclusion cannot be used to hide one.
+    #[test]
+    fn a_real_drop_among_measured_questions_still_reds() {
+        let baseline = run_with_errors(15, 1.0, 0);
+        let mut current = run_with_errors(15, 0.2, 9);
+        // The nine errored rows keep their zeroes; the six that ran dropped.
+        for r in current.results.iter_mut().filter(|r| r.error.is_none()) {
+            r.source_score.ratio = Some(0.2);
+            r.fact_score.ratio = Some(0.2);
+        }
+        assert!(matches!(
+            classify_retrieval(&baseline, &current, 0.02, false),
+            BenchStatus::Regressed
+        ));
+    }
+
+    /// Every question errored: nothing was verified, which is neither a pass
+    /// nor a regression (ARCH §18.1/§18.2).
+    #[test]
+    fn an_all_errored_run_is_unmeasured_not_regressed() {
+        let baseline = run_with_errors(5, 1.0, 0);
+        let current = run_with_errors(5, 1.0, 5);
+        assert!(matches!(
+            classify_retrieval(&baseline, &current, 0.02, false),
+            BenchStatus::Stale
         ));
     }
 

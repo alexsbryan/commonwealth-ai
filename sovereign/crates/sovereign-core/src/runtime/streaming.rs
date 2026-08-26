@@ -624,12 +624,12 @@ async fn gate_held_answer(
             .and_then(|a| a.as_str())
             .unwrap_or("?")
             .to_string();
-        let gate_out_len = outcome.text.chars().count();
-        let gate_out_tail = tail_chars(&outcome.text, 48);
+        let gate_out_len = outcome.answer.text().chars().count();
+        let gate_out_tail = tail_chars(outcome.answer.text(), 48);
         // Present the gated answer: strip phantom tool-call envelopes the model
         // reflexes (chat wires no tools) so the persisted record + non-desktop
         // surfaces don't carry a raw `<tool_call>` / `:code_search(...)` leak.
-        *full_text = crate::pipeline::presenter::present_answer(&outcome.text);
+        *full_text = crate::pipeline::presenter::present_answer(outcome.answer.text());
         // Citation-attribution (faithfulness audit 2026-06-30): the value gate
         // passed the answer's TOP-LINE value, but synthesis may have propped it up
         // with FABRICATED supporting citations — `[Source: Re: Advertising Campaign
@@ -730,8 +730,25 @@ impl Runtime {
     /// returned [`StreamHandle`] yields response chunks; once the stream
     /// completes, the assistant message is persisted under `message_id`.
     ///
-    /// Returns [`Error::NotImplemented`] for ComplexTask intents — callers
-    /// should fall back to [`Self::handle_message`] in that case.
+    /// Returns [`Error::NotImplemented`] for **document-attached turns only**
+    /// — those are owned by the map-reduce document path and never reach this
+    /// surface for synthesis.
+    ///
+    /// This said "for ComplexTask intents" until 2026-08-25 and had been
+    /// wrong for a while: ComplexTask, MetalingualQuery, ConationQuery and
+    /// CommissiveQuery are all handled INLINE below, deliberately, because
+    /// "the streaming endpoint is the ONLY one both apps use" and dead-ending
+    /// them stranded the desktop in a loading state. Two callers were still
+    /// guarding against the retired contract, one of them by substring-
+    /// matching this error's message text (§7.2 — a comment asserting a
+    /// behaviour that is not there).
+    ///
+    /// Callers should not catch this at all. Ask
+    /// [`crate::runtime::is_document_attached`] BEFORE calling, the way
+    /// [`crate::runtime::serve_turn`] does — this path persists the user
+    /// message before it bails, so a caller that discovers the refusal
+    /// afterwards has to know that to pick a fallback that does not write it
+    /// twice.
     #[tracing::instrument(
         name = "runtime.handle_message_stream",
         skip(self, message),
@@ -1658,6 +1675,9 @@ impl Runtime {
         // field measures from the spawn and therefore excludes retrieval.
         // Two numbers, two meanings; the strip's is the one a user waited.
         let turn_started = retrieval_start_at;
+        // Copied out before the spawn: `self` does not outlive the task, and a
+        // `RouterStamp` is `Copy`, so the turn carries the router that routed it.
+        let router_stamp = self.router.stamp();
         tokio::spawn(stage_ledger_for_turn.scope(async move {
             let started = std::time::Instant::now();
 
@@ -2145,6 +2165,9 @@ impl Runtime {
                 );
             }
             let provenance = ResponseProvenance {
+                // Which classifiers were live behind this route; `None` from a router
+                // that does not report. `routed_by_none()` marks a DEGRADED host.
+                router: router_stamp,
                 // Report the ACTUAL routed intent, not a hardcoded label. This
                 // handler serves both KnowledgeQuery AND ComparisonQuery
                 // (turn.rs dispatch), so hardcoding "KnowledgeQuery" made every
@@ -3156,6 +3179,9 @@ impl Runtime {
         // both scopes append to one shared row list.
         let stage_ledger_for_turn = stage_ledger.clone();
         let turn_started = turn_start_at;
+        // Copied out before the spawn: `self` does not outlive the task, and a
+        // `RouterStamp` is `Copy`, so the turn carries the router that routed it.
+        let router_stamp = self.router.stamp();
         tokio::spawn(stage_ledger_for_turn.scope(async move {
             let started = std::time::Instant::now();
             let mut full_text = String::new();
@@ -3317,6 +3343,9 @@ impl Runtime {
                 );
             }
             let provenance = ResponseProvenance {
+                // Which classifiers were live behind this route; `None` from a router
+                // that does not report. `routed_by_none()` marks a DEGRADED host.
+                router: router_stamp,
                 intent: intent_label,
                 search_method,
                 sources,
@@ -4320,7 +4349,7 @@ impl Runtime {
         // Document-attached turns are owned by the document-operation path and
         // never reach the streaming surface for synthesis — keep the explicit
         // bail.
-        if message.starts_with("[Document attached: ") {
+        if crate::runtime::is_document_attached(message) {
             tracing::info!("runtime: document-attached stream — falling back");
             return Err(Error::NotImplemented(
                 "Streaming not supported for document-attached turns".into(),

@@ -744,16 +744,27 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // `SOVEREIGN_RPC_HEADROOM` env wins (the daemon reads it directly), else the
     // `[shared_model] headroom` config (bootstrap bridges config→env), else 1.2.
     // `--headroom` overrides this for what-if planning.
-    let mut headroom: f64 = std::env::var("SOVEREIGN_RPC_HEADROOM")
-        .ok()
-        .and_then(|v| v.trim().parse::<f64>().ok())
+    // ONE parser, ONE default (§10.6). The env read, the `>= 1.0` filter and
+    // the literal `1.2` used to exist here AND in
+    // `sovereign_inference::embedded::rpc_headroom_factor` — the function that
+    // actually gates the load. They agreed, which is the weakest way for a
+    // promise to hold: this command's whole contract is that "a previewed plan
+    // uses the headroom the load executes with", and it was kept by two copies
+    // of a number matching.
+    //
+    // The config fallback stays here, and is why the shared helper returns an
+    // `Option`: this CLI can run BEFORE bootstrap has bridged
+    // `[shared_model] headroom` into the environment, so it has a second
+    // source the daemon does not. The filter applies to that source too — a
+    // headroom below 1.0 gates on less memory than the model needs.
+    let mut headroom: f64 = sovereign_inference::embedded::rpc_headroom_from_env()
         .or_else(|| {
             sovereign_core::setup_config::SetupConfig::load()
                 .ok()
                 .and_then(|c| c.shared_model.headroom)
+                .filter(|&h| h >= 1.0)
         })
-        .filter(|&h| h >= 1.0)
-        .unwrap_or(1.2);
+        .unwrap_or(sovereign_inference::embedded::RPC_HEADROOM_DEFAULT);
     let mut headroom_from_flag = false;
     let mut json = false;
     let mut from_mesh = false;

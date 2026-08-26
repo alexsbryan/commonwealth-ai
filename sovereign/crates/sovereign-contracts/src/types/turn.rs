@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::epistemic::EpistemicState;
 use crate::types::narration::NarrationPhase;
-use crate::types::projection::{Citation, Provenance};
+use crate::types::projection::{Citation, Provenance, TaskSummary};
 
 /// Host → client, for ONE turn, down the ONE connection that asked for it.
 ///
@@ -86,6 +86,13 @@ pub enum TurnFrame {
         /// closes the wire gap; mobile rendering stays deferred.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         epistemic_state: Option<EpistemicState>,
+        /// The background task this turn spawned, when it ran the agentic
+        /// path. Added in phase 6: the streaming door produced one and threw
+        /// it away, so a streaming client could not learn a task existed
+        /// while a REST client could. Optional + `skip_serializing_if`, so a
+        /// plain chat turn's frame is byte-identical to before.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        task: Option<TaskSummary>,
     },
     /// A streaming turn failed, or the host was busy. `retry_after_secs`
     /// is set on the busy case so the client mirrors REST `503` behaviour
@@ -138,6 +145,37 @@ pub enum TurnFrame {
     },
 }
 
+/// How much of the Sovereign pipeline a turn runs through.
+///
+/// `Naked` is the desktop's "Raw model" setting and `svrn chat ask --naked`:
+/// retrieval, the router, the grounding gate, tools and the atlas are all
+/// bypassed, and the user talks to the model directly. Both hosts had it and
+/// it had **no wire representation** — so a surface that stopped assembling
+/// its own `Runtime` and started connecting to the daemon (TOPOLOGY phase 6)
+/// would have silently lost the flag: the answer comes back grounded, the
+/// client cannot tell, and "raw model" quietly stops meaning anything. A
+/// capability that exists in-process and not on the wire is what blocks a
+/// host from becoming a surface, which is why this is here rather than in a
+/// host's flag parser (ARCH §18.3).
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum TurnMode {
+    /// The full pipeline: retrieval, routing, grounding gate, tools, atlas.
+    #[default]
+    Grounded,
+    /// Raw model — every Sovereign affordance bypassed.
+    Naked,
+}
+
+impl TurnMode {
+    /// `skip_serializing_if` hook: the default mode is not written to the
+    /// wire, so a grounded turn's bytes are unchanged from before the field
+    /// existed.
+    pub fn is_default(&self) -> bool {
+        matches!(self, TurnMode::Grounded)
+    }
+}
+
 /// Client → host, for one turn.
 ///
 /// The inbound half has no fan-out counterpart to be confused with — one
@@ -152,6 +190,26 @@ pub enum TurnRequest {
     Message {
         /// The user's message.
         content: String,
+        /// Skip the router and classify this turn as the named intent.
+        ///
+        /// `svrn govern ask`, `portfolio ask` and `proxy ask` all pin
+        /// `KnowledgeQuery` — they are asking a corpus a question and the
+        /// router's opinion is not wanted. That was reachable only in-process
+        /// (`Runtime::handle_message_stream_as`), which is what kept those
+        /// three hosts running their own turns: not that they were doing
+        /// something un-turn-like, but that one turn PARAMETER had no wire
+        /// form. `None` routes normally.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        intent: Option<crate::types::routing::Intent>,
+        /// How much of the pipeline to run. Absent on the wire means
+        /// [`TurnMode::Grounded`], and `Grounded` is OMITTED when writing —
+        /// so the bytes are byte-for-byte what they were before this field
+        /// existed, in both directions. `turn_request_wire_form` asserts
+        /// round-trip symmetry, so a plain `#[serde(default)]` here would
+        /// have re-serialised every existing client's message with a key it
+        /// never sent.
+        #[serde(default, skip_serializing_if = "TurnMode::is_default")]
+        mode: TurnMode,
     },
     /// Answer a pending [`crate::types::ui::ActionPreview`] approval.
     Approve {

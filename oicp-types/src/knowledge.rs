@@ -77,6 +77,32 @@ pub struct KnowledgeResult {
     /// extractor didn't tag chunks with a document id.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_doc_id: Option<String>,
+    /// The custody class the SERVING index recorded, in the wire spelling
+    /// `kernel_types::Custody::as_str` defines (`public-web` | `personal` |
+    /// `peer`). `None` means the serving side recorded none — which is
+    /// different from `unknown` and must stay different: the requester joins
+    /// this with its own "arrived from another node" fact and refuses on
+    /// absence.
+    ///
+    /// Deliberately a `String` and not `kernel_types::Custody`. `oicp-types`
+    /// is pinned to ZERO internal dependencies (`boundary_gate::
+    /// allowed_leaf_deps`) so the protocol crate stays liftable by a third
+    /// party; the wire spelling is the contract and `Custody::parse_wire` is
+    /// its one parser.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub custody: Option<String>,
+    /// `leaf` | `summary` — whether the serving index vouched for this as
+    /// source text or as prose ABOUT source text
+    /// (`kernel_types::Grain::as_str`).
+    ///
+    /// Added 2026-08-26. Before it the requester could not tell a peer-served
+    /// RAPTOR rollup from a peer-served passage, so it had to treat every mesh
+    /// hit as unciteable content built in-process. `None` from a peer that
+    /// predates this field, and the requester must read absence as `summary`,
+    /// the refusing value — a rollup wrongly marked `leaf` becomes quotable,
+    /// which is the direction that fabricates.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub grain: Option<String>,
 }
 
 // -----------------------------------------------------------------
@@ -167,8 +193,15 @@ mod tests {
         assert_eq!(parsed.chunk_id, None);
         assert_eq!(parsed.source_doc_id, None);
         assert_eq!(parsed.corpus_id, "brothers_karamazov");
+        // A peer that predates the provenance fields says NOTHING about them,
+        // and the requester must read that as absence — never as a class.
+        // `acquired_from_peer` turns both `None`s into the refusing value
+        // (`Custody::Unknown` through the join, `Grain::Summary`), so an
+        // un-upgraded peer's hits stay exactly as unquotable as they were.
+        assert_eq!(parsed.custody, None);
+        assert_eq!(parsed.grain, None);
 
-        // And a forward-compat round-trip preserves both fields.
+        // And a forward-compat round-trip preserves every field.
         let modern = KnowledgeResult {
             content: "passage".into(),
             title: Some("title".into()),
@@ -178,11 +211,47 @@ mod tests {
             metadata: Default::default(),
             chunk_id: Some(42),
             source_doc_id: Some("bk-ch01".into()),
+            custody: Some("public-web".into()),
+            grain: Some("summary".into()),
         };
         let json = serde_json::to_string(&modern).unwrap();
         let back: KnowledgeResult = serde_json::from_str(&json).unwrap();
         assert_eq!(back.chunk_id, Some(42));
         assert_eq!(back.source_doc_id.as_deref(), Some("bk-ch01"));
+        assert_eq!(back.custody.as_deref(), Some("public-web"));
+        assert_eq!(back.grain.as_deref(), Some("summary"));
+
+        // An OLD peer reading a NEW payload must not choke on the additions —
+        // the other half of interop, and the half a `skip_serializing_if`
+        // does not prove on its own.
+        #[derive(serde::Deserialize)]
+        #[allow(dead_code)]
+        struct LegacyShape {
+            content: String,
+            corpus_id: String,
+            score: f32,
+        }
+        let old_reader: LegacyShape =
+            serde_json::from_str(&json).expect("a new payload still parses as the old shape");
+        assert_eq!(old_reader.corpus_id, "bk");
+
+        // A recorded-nothing stamp stays ABSENT on the wire rather than
+        // becoming the string "unknown" — the two mean different things to
+        // the join on the far side.
+        let silent = KnowledgeResult {
+            custody: None,
+            grain: None,
+            ..modern
+        };
+        let json = serde_json::to_string(&silent).unwrap();
+        assert!(
+            !json.contains("custody"),
+            "absence must not be serialised: {json}"
+        );
+        assert!(
+            !json.contains("grain"),
+            "absence must not be serialised: {json}"
+        );
     }
 
     #[test]

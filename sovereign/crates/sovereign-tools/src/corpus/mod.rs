@@ -80,16 +80,54 @@ pub fn rerank_dedup_picker_from_env() -> corpus_engine::DedupPicker {
 /// consumers like the PPR admission gate (`SOVEREIGN_PPR_EXPAND`)
 /// while leaving `enabled = false`, so the leaf search stays
 /// byte-identical to baseline.
+/// THE reader of `SOVEREIGN_DISABLE_WIKI_GRAPH` (TOPOLOGY §10 phase 10,
+/// ARCH §10.6).
+///
+/// The memory-pressure escape hatch. The graph is a 7M-edge sqlite mmap; on a
+/// host already running the daemon, loading it twice has tipped past available
+/// RAM in practice.
+///
+/// The shared recipe and the desktop each carried this three-line parse, and
+/// the desktop's own comment said so — "probe logic mirrors bootstrap.rs
+/// `load_wikipedia_graph`; dedup to a shared crate is a follow-up". This is
+/// the follow-up. Both hosts reach `sovereign-tools`, which is why the
+/// predicate lives here rather than in either of them.
+pub fn wiki_graph_disabled() -> bool {
+    std::env::var("SOVEREIGN_DISABLE_WIKI_GRAPH")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// THE reader of `SOVEREIGN_RERANK_CANDIDATES_K` (TOPOLOGY §10 phase 10,
+/// ARCH §10.6).
+///
+/// `None` means unset or unparseable, which are the same instruction to the
+/// caller — keep the default — and are distinguished in the trace rather than
+/// in the type. The shared recipe had its own identical parse in its
+/// dedup-only ablation branch, so an operator tuning one number could get two
+/// answers depending on which host built the config.
+pub fn rerank_candidates_k_from_env() -> Option<usize> {
+    let raw = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K").ok()?;
+    match raw.parse::<usize>() {
+        Ok(n) => Some(n),
+        Err(_) => {
+            tracing::warn!(
+                value = %raw,
+                "SOVEREIGN_RERANK_CANDIDATES_K is not a number — keeping the default"
+            );
+            None
+        }
+    }
+}
+
 pub fn rerank_config_from_env() -> corpus_engine::RerankConfig {
     let mut cfg = corpus_engine::RerankConfig::default();
     let gate_only = std::env::var("SOVEREIGN_RERANK_GATE_ONLY")
         .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
         .unwrap_or(false);
     cfg.enabled = !gate_only;
-    if let Ok(s) = std::env::var("SOVEREIGN_RERANK_CANDIDATES_K") {
-        if let Ok(n) = s.parse::<usize>() {
-            cfg.candidates_k = n;
-        }
+    if let Some(n) = rerank_candidates_k_from_env() {
+        cfg.candidates_k = n;
     }
     if let Ok(s) = std::env::var("SOVEREIGN_RERANK_MIN_SCORE") {
         if let Ok(f) = s.parse::<f32>() {

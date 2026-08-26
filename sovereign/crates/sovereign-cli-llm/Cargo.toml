@@ -44,6 +44,9 @@ sovereign-core = { workspace = true }
 # paths, catalog}` are re-exports of this crate (rung nc-16-shared-capability).
 sovereign-enrichment-catalog = { workspace = true }
 sovereign-contracts = { workspace = true }
+# Phase 6: the chat surface asks the daemon for a turn instead of building
+# a Runtime to run one itself (TOPOLOGY §10).
+sovereign-turn-client = { workspace = true }
 sovereign-inference = { workspace = true }
 # OICP feature-string constants (constraint:json_schema/json_object) for
 # discovery-driven StructuredOutputMode negotiation — see enrich_cmd/providers.rs.

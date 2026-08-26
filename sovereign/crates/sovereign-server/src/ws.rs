@@ -161,7 +161,11 @@ async fn handle_ws(
         };
 
         match event {
-            TurnRequest::Message { content } => {
+            TurnRequest::Message {
+                content,
+                mode,
+                intent,
+            } => {
                 if in_flight.is_some() {
                     // Refused, not queued: a client that sent a second turn
                     // and heard nothing cannot tell "queued" from "lost".
@@ -220,7 +224,17 @@ async fn handle_ws(
                 in_flight = Some(tokio::spawn(async move {
                     // Moved, not borrowed: the permit drops when the turn ends.
                     let _permit = permit;
-                    serve_turn(&rt, st.as_ref(), &scoped, &content, Some(&ntx), &otx).await;
+                    serve_turn(
+                        &rt,
+                        st.as_ref(),
+                        &scoped,
+                        &content,
+                        mode,
+                        intent,
+                        Some(&ntx),
+                        &otx,
+                    )
+                    .await;
                 }));
             }
             TurnRequest::Approve {

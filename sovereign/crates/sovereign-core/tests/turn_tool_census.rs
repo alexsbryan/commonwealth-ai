@@ -70,6 +70,13 @@ const TURN_REGISTRIES: &[(&str, &str)] = &[
     // shrinking by construction rather than by anyone editing a baseline —
     // two of the columns this file was built to compare cannot disagree any
     // more, because there is nothing left for them to disagree with.
+    // Two hops since 2026-08-26 (TOPOLOGY phase 7b). The recipe registers no
+    // tool by name — it folds the `ToolBundle`s a host composes — so scanning
+    // its source finds zero, which is what the instrument guard caught the day
+    // the seam landed. The set a recipe host carries is now the union of the
+    // bundles it composes, and `bundle_composed_tools` resolves it. The row's
+    // membership is unchanged: `baseline_bundles` plus what `svrn chat` pushes,
+    // which is what this row has always measured.
     (
         "recipe",
         "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
@@ -93,6 +100,21 @@ const TURN_REGISTRIES: &[(&str, &str)] = &[
 /// which is exactly where Phase 6 has to work. A baseline lowered on the
 /// strength of a refactor that did not move it would be a ratchet with slack
 /// pretending to be a gate.
+/// RE-MEASURED AGAIN 2026-08-26, after the tool-bundle seam (TOPOLOGY phase
+/// 7b) moved the recipe's registrations out of its source and into
+/// `sovereign-tools::bundles`: **union 33, common 7, divergent 26 — unchanged
+/// a second time.** That is the result the seam was supposed to produce and
+/// the reason to state it: composing the same tools through bundles instead
+/// of a hardcoded list is behaviour-preserving BY MEASUREMENT, not by
+/// assertion. A refactor of a registry that moved this number would have been
+/// a quality change wearing a refactor's clothes (ARCH §18.4).
+///
+/// Getting there cost two instrument defects, both caught by the guards this
+/// file already carried: the recipe scanned to ZERO the moment its
+/// registrations left its source (the `MIN_TOOLS_PER_HOST` check), and the
+/// first bundle resolver missed `Box::new(sovereign_tools::bundles::ShellTools)`
+/// — a path-qualified unit struct — and reported a 27th divergence that had
+/// not happened.
 const DIVERGENT_BASELINE: usize = 26;
 
 /// Below this, the extractor found nothing and the run proves nothing.
@@ -142,52 +164,59 @@ fn registry_span(src: &str) -> Option<String> {
 /// count — see the instrument note in the module docs.
 fn registered_tools(span: &str) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
-    let bytes = span.as_bytes();
-    let mut at = 0usize;
-    while let Some(rel) = span[at..].find(".register(") {
-        let idx = at + rel;
-        at = idx + ".register(".len();
+    // Two registration verbs, and the receiver is checked for both. A host
+    // writes `tools.register(Box::new(..))`; a `ToolBundle` writes
+    // `reg.register_reporting(Box::new(..))`. Anything else — notably the
+    // desktop's `mcp_tools.register(..)`, which sits inside the turn
+    // registry's span and would inflate that host 21 -> 30 — is skipped.
+    const VERBS: &[(&str, &str)] = &[
+        (".register(", "tools"),
+        (".register_reporting(", "reg"),
+    ];
+    for (verb, receiver) in VERBS {
+        let mut at = 0usize;
+        while let Some(rel) = span[at..].find(verb) {
+            let idx = at + rel;
+            at = idx + verb.len();
 
-        // Receiver must be exactly `tools`, not a longer identifier ending in it.
-        let before = &span[..idx];
-        let recv = before.trim_end();
-        if !recv.ends_with("tools") {
-            continue;
-        }
-        let head = &recv[..recv.len() - "tools".len()];
-        if head
-            .chars()
-            .next_back()
-            .is_some_and(|c| c.is_alphanumeric() || c == '_')
-        {
-            continue;
-        }
+            let recv = span[..idx].trim_end();
+            if !recv.ends_with(receiver) {
+                continue;
+            }
+            let head = &recv[..recv.len() - receiver.len()];
+            if head
+                .chars()
+                .next_back()
+                .is_some_and(|c| c.is_alphanumeric() || c == '_')
+            {
+                continue;
+            }
 
-        // `Box::new(<Path>` — the constructed tool.
-        let rest = span[at..].trim_start();
-        let Some(after_box) = rest.strip_prefix("Box::new(") else {
-            continue;
-        };
-        let path: String = after_box
-            .trim_start()
-            .chars()
-            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
-            .collect();
-        let _ = bytes; // span is ASCII source; indexing above is byte-safe
+            // `Box::new(<Path>` — the constructed tool.
+            let rest = span[at..].trim_start();
+            let Some(after_box) = rest.strip_prefix("Box::new(") else {
+                continue;
+            };
+            let path: String = after_box
+                .trim_start()
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
+                .collect();
 
-        // Drop the constructor segment so `X::new` and `X::with_web` agree.
-        let mut parts: Vec<&str> = path.split("::").filter(|s| !s.is_empty()).collect();
-        while parts.len() > 1 && is_ctor(parts[parts.len() - 1]) {
-            parts.pop();
+            // Drop the constructor segment so `X::new` and `X::with_web` agree.
+            let mut parts: Vec<&str> = path.split("::").filter(|s| !s.is_empty()).collect();
+            while parts.len() > 1 && is_ctor(parts[parts.len() - 1]) {
+                parts.pop();
+            }
+            let Some(name) = parts.last() else { continue };
+            // A lowercase head is a variable — the desktop registers
+            // MCP-discovered tools from a loop, and a bundle re-registers a
+            // `Vec<Box<dyn Tool>>` the same way. Neither is a named capability.
+            if name.chars().next().is_some_and(char::is_lowercase) {
+                continue;
+            }
+            out.insert((*name).to_string());
         }
-        let Some(name) = parts.last() else { continue };
-        // A lowercase head is a variable — the desktop registers MCP-discovered
-        // tools from a loop. Those are not a named capability and are counted
-        // by neither side.
-        if name.chars().next().is_some_and(char::is_lowercase) {
-            continue;
-        }
-        out.insert((*name).to_string());
     }
     out
 }
@@ -204,10 +233,80 @@ fn read(root: &Path, rel: &str) -> String {
     std::fs::read_to_string(root.join(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
 }
 
+/// Where a bundle-composing host declares its families, and where the
+/// families live. Both are scanned; a host that composes a bundle gets every
+/// tool that bundle registers.
+const BUNDLE_SOURCES: &[&str] = &[
+    "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
+    "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
+];
+const BUNDLE_DEFINITIONS: &str = "sovereign/crates/sovereign-tools/src/bundles.rs";
+
+/// Bundle type names composed across `BUNDLE_SOURCES`.
+///
+/// Matches `<Name>::new(` and the unit-struct form `Box::new(<Name>)`, both of
+/// which appear in a host's bundle vec.
+fn composed_bundles(root: &Path) -> BTreeSet<String> {
+    let defs = strip_comments(&read(root, BUNDLE_DEFINITIONS));
+    let known: BTreeSet<String> = defs
+        .match_indices("impl ToolBundle for ")
+        .map(|(i, m)| {
+            defs[i + m.len()..]
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_')
+                .collect::<String>()
+        })
+        .filter(|s| !s.is_empty())
+        .collect();
+    assert!(
+        !known.is_empty(),
+        "no `impl ToolBundle for` in {BUNDLE_DEFINITIONS} — the bundle scan is broken, \
+         not the hosts (ARCH §18.2)"
+    );
+
+    let mut out = BTreeSet::new();
+    for rel in BUNDLE_SOURCES {
+        let src = strip_comments(&read(root, rel));
+        for name in &known {
+            // Three spellings a host uses: a constructor call, a unit struct
+            // boxed bare, and a unit struct boxed through its full path
+            // (`Box::new(sovereign_tools::bundles::ShellTools)`). Missing the
+            // third is how the first run of this scan lost `ShellTool` and
+            // reported a divergence that had not happened.
+            if src.contains(&format!("{name}::new("))
+                || src.contains(&format!("Box::new({name})"))
+                || src.contains(&format!("::{name})"))
+            {
+                out.insert(name.clone());
+            }
+        }
+    }
+    out
+}
+
+/// Tools carried by the bundles a recipe host composes.
+fn bundle_composed_tools(root: &Path) -> BTreeSet<String> {
+    let defs = strip_comments(&read(root, BUNDLE_DEFINITIONS));
+    let mut out = BTreeSet::new();
+    for bundle in composed_bundles(root) {
+        let marker = format!("impl ToolBundle for {bundle} {{");
+        let Some(start) = defs.find(&marker) else {
+            continue;
+        };
+        let rest = &defs[start..];
+        let end = rest.find("\n}\n").map(|i| start + i).unwrap_or(defs.len());
+        out.extend(registered_tools(&defs[start..end]));
+    }
+    out
+}
+
 fn census(root: &Path) -> BTreeMap<&'static str, BTreeSet<String>> {
     TURN_REGISTRIES
         .iter()
         .map(|(host, rel)| {
+            if *host == "recipe" {
+                return (*host, bundle_composed_tools(root));
+            }
             let src = strip_comments(&read(root, rel));
             let span = registry_span(&src)
                 .unwrap_or_else(|| panic!("{host}: no turn registry span in {rel}"));

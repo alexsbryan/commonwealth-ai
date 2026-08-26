@@ -151,6 +151,110 @@ async fn http_post_json(url: &str, body: serde_json::Value) -> Option<reqwest::R
 
 // ── Checks ────────────────────────────────────────────────────────────────────
 
+/// Does the embed slot actually EMBED?
+///
+/// Liveness is not readiness. On 2026-08-26 this daemon's embed slot returned
+/// `Embed decode failed: Decode Error -3: unknown` for roughly five hours
+/// while `/v1/models` listed it and `/status` was green — so every check we
+/// had said "up". Downstream, silently: the router's exemplar re-embed failed,
+/// all four classifiers came back `None`, atlas grounding fell from 1082 loads
+/// to zero, and turns kept answering — worse. Measured cost on SEP overview
+/// questions: title-coverage 1.00 -> 0.83 (note `f4972e1b`).
+///
+/// So this check asks for a vector and looks at it. A slot that accepts the
+/// request and returns an error body is DOWN, and nothing else we run can see
+/// that (ARCH §18.1: a gate you have not watched fail is not a gate — this one
+/// was watched failing in production before it was written).
+async fn check_embed_slot() -> CheckResult {
+    const NAME: &str = "embed_slot";
+    let repair = Repair::Executable("sovereign daemon stop && sovereign daemon start".to_string());
+
+    let Some(resp) = http_post_json(
+        "http://127.0.0.1:9741/v1/embeddings",
+        serde_json::json!({ "model": "embed", "input": "doctor embed probe" }),
+    )
+    .await
+    else {
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Skipped,
+            message: "daemon not reachable — cannot probe the embed slot".to_string(),
+            repair: Repair::None,
+        };
+    };
+
+    let status = resp.status();
+    let body: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            return CheckResult {
+                name: NAME,
+                layer: Layer::Sovereign,
+                status: CheckStatus::Failed,
+                message: format!("embed response was not JSON: {e}"),
+                repair,
+            }
+        }
+    };
+
+    // An error BODY on a 200 is the shape that fooled every other check.
+    if let Some(err) = body.get("error") {
+        let msg = err
+            .get("message")
+            .and_then(|m| m.as_str())
+            .unwrap_or("(no message)");
+        return CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "embed slot is listed but does not embed ({status}): {msg}. \
+                 The router's classifiers and all atlas grounding go SILENTLY \
+                 off in this state and turns still answer"
+            ),
+            repair,
+        };
+    }
+
+    // A vector, and a non-degenerate one: an all-zero embedding is a slot
+    // answering without working, which would pass a mere "is it an array" test.
+    let dims = body
+        .get("data")
+        .and_then(|d| d.as_array())
+        .and_then(|d| d.first())
+        .and_then(|e| e.get("embedding"))
+        .and_then(|v| v.as_array());
+    match dims {
+        Some(v) if v.len() >= 2 && v.iter().any(|x| x.as_f64().is_some_and(|f| f != 0.0)) => {
+            CheckResult {
+                name: NAME,
+                layer: Layer::Sovereign,
+                status: CheckStatus::Passed,
+                message: format!("embed slot returned a {}-dim vector", v.len()),
+                repair: Repair::None,
+            }
+        }
+        Some(v) => CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!(
+                "embed slot returned a degenerate {}-dim vector (all zeros or too short)",
+                v.len()
+            ),
+            repair,
+        },
+        None => CheckResult {
+            name: NAME,
+            layer: Layer::Sovereign,
+            status: CheckStatus::Failed,
+            message: format!("embed slot returned no vector ({status}): {body}"),
+            repair,
+        },
+    }
+}
+
 async fn check_server_running() -> CheckResult {
     let up = tcp_connectable("127.0.0.1", 9741).await;
     if up {
@@ -828,7 +932,7 @@ fn check_distributed_primary_contained() -> CheckResult {
         config.compute.enabled && config.compute.distributed_primary,
         config.shared_model.role,
         false, // self node id is not resolved here; the role term carries it
-        std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok(),
+        crate::daemon_cmd::bootstrap::rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 
@@ -2385,6 +2489,7 @@ async fn run_checks(sovereign_dir: &std::path::Path) -> Vec<CheckResult> {
     // ── Sovereign layer ──────────────────────────────────────────
     results.push(check_server_running().await);
     results.push(check_server_tools().await);
+    results.push(check_embed_slot().await);
     results.push(check_scip_indexed().await);
     results.push(check_scip_exporters());
     results.push(check_rebuild_outcomes().await);

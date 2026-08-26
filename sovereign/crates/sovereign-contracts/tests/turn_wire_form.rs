@@ -23,7 +23,7 @@
 
 use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
 use sovereign_contracts::types::NarrationPhase;
-use sovereign_contracts::types::{TurnFrame, TurnRequest};
+use sovereign_contracts::types::{TurnFrame, TurnMode, TurnRequest};
 
 /// Serialise, compare against the bytes a client actually reads, then parse
 /// back and confirm the value survived. A frame that serialises correctly
@@ -59,6 +59,7 @@ fn complete_frame_wire_form() {
             provenance: None,
             citations: vec![],
             epistemic_state: None,
+            task: None,
         },
         r#"{"type":"complete","data":{"message_id":"m2"}}"#,
     );
@@ -90,8 +91,14 @@ fn complete_frame_carries_provenance_and_citations() {
                 snippet: "Compatibilism holds that...".into(),
                 score: 0.91,
                 rank: 0,
+                // Absent here on purpose: this case pins that a citation
+                // WITHOUT the phase-6 additions serializes byte-for-byte as
+                // it did before they existed.
+                url: None,
+                provenance_tier: None,
             }],
             epistemic_state: None,
+            task: None,
         },
         concat!(
             r#"{"type":"complete","data":{"message_id":"m3","#,
@@ -181,9 +188,25 @@ fn turn_request_wire_form() {
     // these literally.
     let cases = [
         (
+            // NO `mode` key — the bytes every client emitted before phase 6
+            // added one. This case is the compatibility guarantee: it must
+            // keep landing, and it must land as `Grounded`.
             r#"{"type":"message","data":{"content":"hello"}}"#,
             TurnRequest::Message {
                 content: "hello".into(),
+                mode: TurnMode::Grounded,
+                intent: None,
+            },
+        ),
+        (
+            // Raw model over the wire. Before phase 6 this was reachable only
+            // by a host holding its own `Runtime`, which is what kept
+            // `svrn chat --naked` from becoming a surface.
+            r#"{"type":"message","data":{"content":"hello","mode":"naked"}}"#,
+            TurnRequest::Message {
+                content: "hello".into(),
+                mode: TurnMode::Naked,
+                intent: None,
             },
         ),
         (

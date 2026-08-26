@@ -143,7 +143,7 @@ pub(crate) fn check_containment(config: &SetupConfig, self_node_id: Option<&str>
         child_owns_primary,
         config.shared_model.role,
         pinned_host_is_self,
-        std::env::var("SOVEREIGN_RPC_DISCOVER").is_ok(),
+        crate::daemon_cmd::bootstrap::rpc_discovery_armed(),
         std::env::var(OVERRIDE_ENV).is_ok(),
     );
 

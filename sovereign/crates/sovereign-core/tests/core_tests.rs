@@ -124,6 +124,25 @@ impl ConversationStore for MockStore {
     async fn search_messages(&self, _query: &str) -> Result<Vec<Message>> {
         Ok(Vec::new())
     }
+    /// MockStore is a message log: `get_conversation` reconstructs a
+    /// conversation from the messages in it, so there is no row to seed
+    /// and an empty conversation cannot be represented here at all.
+    ///
+    /// It therefore refuses by name rather than returning `Ok(())`. The
+    /// trait's no-op default did the latter until 2026-08-25 and that is
+    /// the defect this refusal exists to keep out: a test that seeds a
+    /// conversation against this double is testing nothing, and should
+    /// fail saying so instead of passing (ARCH §18.3).
+    async fn insert_empty_conversation(
+        &self,
+        _id: &str,
+        _created_at: i64,
+        _surface_skill_id: Option<&str>,
+    ) -> Result<()> {
+        Err(Error::Storage(
+            "MockStore holds messages only and cannot seed a conversation row".into(),
+        ))
+    }
     async fn delete_conversation(&self, _id: &str) -> Result<()> {
         Ok(())
     }

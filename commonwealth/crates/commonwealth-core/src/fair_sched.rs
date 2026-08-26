@@ -94,12 +94,30 @@ impl EtaEwma {
     }
 
     /// Predicted wait for a caller at 1-based `position`, given `slots`
-    /// draining the queue in parallel. `ceil(position / slots) · avg`,
-    /// which is honest about parallel drain rather than the `position ×
-    /// avg` that over-states a multi-slot host.
-    pub fn predict_wait_ms(&self, position: u32, slots: usize) -> u64 {
+    /// draining the queue in parallel and `in_flight_elapsed_ms` already
+    /// spent on the turn now holding the slot.
+    ///
+    /// `ceil(position / slots) · avg − elapsed`, which is honest about
+    /// parallel drain rather than the `position × avg` that over-states a
+    /// multi-slot host, AND honest about the turn already running.
+    ///
+    /// **The elapsed term is not a refinement; without it the shed rule is
+    /// wrong.** At `position = 1` the caller is not queued behind other
+    /// callers at all — it is waiting out the one in-flight turn — so
+    /// charging it a WHOLE `avg_turn_ms` makes `predicted > bound` collapse
+    /// into `avg_turn_ms > bound`, a condition with no load term in it.
+    /// Measured on a 27B host 2026-08-26: 624 of 625 sheds happened at
+    /// `position = 1` with an EMPTY queue, median `avg_turn_ms` 30,690
+    /// against a 30,000 bound — the host refused all concurrency because its
+    /// own turns are naturally slower than the bound (note `bf432b4d`).
+    ///
+    /// Saturating: a turn running longer than `avg` predicts `0`, i.e. "it
+    /// should finish any moment". That biases toward SERVING rather than
+    /// refusing, which is the correct direction for a shed decision — shed
+    /// only when even the optimistic estimate exceeds the bound.
+    pub fn predict_wait_ms(&self, position: u32, slots: usize, in_flight_elapsed_ms: u64) -> u64 {
         let slots = (slots.max(1)) as u64;
-        (position as u64).div_ceil(slots) * self.avg_turn_ms
+        ((position as u64).div_ceil(slots) * self.avg_turn_ms).saturating_sub(in_flight_elapsed_ms)
     }
 }
 
@@ -523,10 +541,19 @@ impl<K: Eq + Hash + Clone> SchedCore<K> {
 
     /// Decorate a bare position with an ETA, accounting for the N slots
     /// draining the queue in parallel.
+    ///
+    /// Passes `0` elapsed deliberately: this scheduler tracks principals and
+    /// positions, not per-turn start times, so it has no in-flight signal to
+    /// subtract. `0` is the CONSERVATIVE reading — "assume the running turn
+    /// just started" — which over-states the wait rather than under-stating
+    /// it. Stated rather than silently defaulted (ARCH §18.3); if this path
+    /// ever gates a shed the way `SlotQueue` does, it needs a real elapsed
+    /// term first, because the same omission is what made that gate refuse an
+    /// empty queue (note `bf432b4d`).
     pub fn status(&self, position: u32) -> QueueStatus {
         QueueStatus {
             position,
-            estimated_wait_ms: self.eta.predict_wait_ms(position, self.slots_total),
+            estimated_wait_ms: self.eta.predict_wait_ms(position, self.slots_total, 0),
         }
     }
 }
@@ -534,6 +561,45 @@ impl<K: Eq + Hash + Clone> SchedCore<K> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A caller at position 1 is not queued behind other callers — it is
+    /// waiting out the turn already running. Charging it a WHOLE turn is what
+    /// turned a wait bound into a ban on slow turns.
+    #[test]
+    fn an_almost_finished_turn_is_not_charged_as_a_whole_one() {
+        let eta = EtaEwma::new(31_000);
+        // Nothing elapsed: a full turn, as before.
+        assert_eq!(eta.predict_wait_ms(1, 1, 0), 31_000);
+        // 30s in, the honest wait is 1s — the caller is SERVED where it used
+        // to be refused.
+        assert_eq!(eta.predict_wait_ms(1, 1, 30_000), 1_000);
+        // A turn that has outrun the average predicts 0, never underflows.
+        assert_eq!(eta.predict_wait_ms(1, 1, 90_000), 0);
+        // Real queueing still predicts real waits.
+        assert_eq!(eta.predict_wait_ms(3, 1, 1_000), 3 * 31_000 - 1_000);
+        // Parallel drain is still honest.
+        assert_eq!(eta.predict_wait_ms(4, 2, 0), 2 * 31_000);
+    }
+
+    /// Named failing input (ARCH §18.1), taken from production rather than
+    /// invented: `avg_turn_ms = 30_690` against the 30_000 default bound, at
+    /// position 1 with an EMPTY queue. That is the median of 625 sheds
+    /// observed on a 27B host on 2026-08-26, 624 of them at position 1 — the
+    /// host refused all concurrency because its own turns are naturally
+    /// slower than the bound (note `bf432b4d`).
+    #[test]
+    fn the_bound_is_a_wait_bound_not_a_ban_on_slow_turns() {
+        const BOUND: u64 = 30_000;
+        let eta = EtaEwma::new(30_690);
+        // The defect, preserved: with nothing elapsed the prediction clears
+        // the bound and the caller is shed.
+        assert!(eta.predict_wait_ms(1, 1, 0) > BOUND);
+        // The fix: one second into the in-flight turn the honest remaining
+        // wait is under the bound, and the caller is served.
+        assert!(eta.predict_wait_ms(1, 1, 1_000) < BOUND);
+        // And genuine congestion still sheds — two callers already parked.
+        assert!(eta.predict_wait_ms(3, 1, 1_000) > BOUND);
+    }
 
     // String keys keep the policy tests domain-free.
     fn core(slots: usize, depth: usize) -> SchedCore<&'static str> {

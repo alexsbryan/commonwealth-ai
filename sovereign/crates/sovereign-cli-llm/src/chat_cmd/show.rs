@@ -103,6 +103,18 @@ pub async fn cmd_show(args: &[String]) -> i32 {
                     println!();
                     print!("{footer}");
                 }
+                // Per-segment grounding provenance (NATIVE_GROUNDING.md §6).
+                // It lives here rather than on the ask path because
+                // `TurnFrame::Complete` does not carry `answer_segments` —
+                // putting it on the wire means designing a typed per-segment
+                // surface, which is bigger than phase 6. `chat show` reads
+                // the persisted blob and can render it today, so the CLI
+                // keeps the capability instead of losing it to a conversion.
+                // Prints nothing unless the native grounding path ran.
+                let segments = render::answer_segments_footer(m.metadata.as_ref());
+                if !segments.is_empty() {
+                    print!("{segments}");
+                }
             }
             sovereign_core::types::Role::System => {
                 println!("{}", m.content);

@@ -44,40 +44,37 @@
 //! `ScoredChunk` carries provenance in `metadata: HashMap<String, String>`,
 //! and two of the keys in that bag decide whether a claim may be made:
 //!
-//! - `metadata["custody"]` — read at `sovereign-core/src/runtime/grounding/
-//!   mod.rs:459` through `Custody::parse_wire`, and it sets the egress floor.
-//! - `metadata["source"] == "raptor"` — compared at `grounding/mod.rs:483` to
-//!   decide `EvidenceSource::Summary` vs `Leaf`, i.e. **whether a chunk may
-//!   ground a claim verbatim is a string compare on an untyped map**, written
-//!   at one site and read at fifteen with no type in between.
+//! - `metadata["custody"]` — set the egress floor, through
+//!   `Custody::parse_wire` at the gate's evidence builder.
+//! - `metadata["source"] == "raptor"` — decided `Summary` vs `Leaf`, i.e.
+//!   **whether a chunk may ground a claim verbatim was a string compare on an
+//!   untyped map**, written at one site and read at several with no type in
+//!   between.
 //!
 //! Here both are fields: [`Custody`] is an enum whose `Unknown` variant
 //! refuses rather than defaults, and the summary/leaf question is
 //! [`Grain::may_be_quoted`] on the [`Origin`]. Neither can be misspelled, and
 //! neither can be absent.
+//!
+//! **Both keys are gone from the retrieval path as of 2026-08-26**
+//! (TOPOLOGY §10 rung 9.1, second half). [`ChunkProvenance`] carries the two
+//! facts on `ScoredChunk` itself, the five sites that read them read the
+//! typed stamp, and `CUSTODY_META_KEY` has no production writer left. The
+//! paragraph above is kept in the past tense because it is the argument for
+//! the shape, not a description of the tree.
 
-use kernel_types::{ContentHash, CorpusId, Custody, Grain, Locator, Origin, Seal, Server, Source};
+use kernel_types::{ContentHash, CorpusId, Custody, Locator, Origin, Seal, Server, Source};
 use serde::Serialize;
 
 use crate::error::Result;
 use crate::index::CorpusIndex;
 use crate::types::ScoredChunk;
 
-/// The legacy `metadata` key carrying a chunk's custody class. The wire
-/// spelling is `sovereign-contracts`' `CUSTODY_META_KEY`; corpus-engine cannot
-/// depend on that crate (it is a product domain, and the edge would run the
-/// wrong way), so the constant is restated here and pinned by a test rather
-/// than left as a bare literal at the read site.
-const LEGACY_CUSTODY_KEY: &str = "custody";
-
-/// The legacy `metadata` key carrying a chunk's acquisition tag.
-const LEGACY_SOURCE_KEY: &str = "source";
-
-/// The `metadata["source"]` value marking a RAPTOR rollup — model-authored
-/// prose ABOUT source text, which may orient retrieval but may not be quoted.
-/// Today this literal is compared at three sites with no constant behind it
-/// (`grounding/mod.rs:483`, `merge_select.rs:119`).
-const LEGACY_SOURCE_RAPTOR: &str = "raptor";
+// The three `LEGACY_*` metadata-key constants that used to live here moved to
+// `index/provenance.rs` on 2026-08-26 (TOPOLOGY §10 rung 9.1) along with the
+// parse that read them. They were dead the moment `evidence_from_hit` started
+// reading the typed stamp, and a dead constant beside a live one is how a
+// second spelling gets born (ARCH §10.6).
 
 /// One piece of knowledge corpus-engine is prepared to stand behind, with
 /// where it came from and where it stands for sharing.
@@ -304,19 +301,20 @@ fn evidence_from_hit(hit: &ScoredChunk) -> Option<Evidence> {
     // means widening `search`'s projection, which is a separate change.
     let document = ContentHash::of(hit.content.as_bytes());
 
-    // Provenance cannot be determined => Unknown, which refuses. Never
-    // `Personal` or `PublicWeb` by default: an unstamped chunk and a chunk
-    // stamped as estate material must not be the same value.
-    let custody = hit
-        .metadata
-        .get(LEGACY_CUSTODY_KEY)
-        .and_then(|v| Custody::parse_wire(v))
-        .unwrap_or(Custody::Unknown);
-
-    let grain = match hit.metadata.get(LEGACY_SOURCE_KEY).map(String::as_str) {
-        Some(LEGACY_SOURCE_RAPTOR) => Grain::Summary,
-        _ => Grain::Leaf,
-    };
+    // Read off the TYPED stamp the acquisition door already applied, not
+    // re-parsed from the metadata bag (TOPOLOGY §10 rung 9.1). Behaviour is
+    // identical by construction — `search` computes the stamp from this same
+    // bag at the moment of acquisition — and what changes is that the parse
+    // happens once instead of here and at fifteen other sites (ARCH §10.6).
+    //
+    // A chunk that never passed a door is `Manufactured`, which yields
+    // `Custody::Unknown` — it refuses. It reaches this function only if some
+    // caller hands a manufactured chunk to an evidence builder; the honest
+    // reading of one is "nothing vouched for this", and Unknown is exactly
+    // that (ARCH §18.3). Grain comes off the same stamp for both arms, so a
+    // manufactured rollup is a summary here too rather than silently a leaf.
+    let custody = hit.provenance.custody();
+    let grain = hit.provenance.grain();
 
     Some(Evidence::acquired(
         hit.content.clone(),
@@ -352,22 +350,36 @@ fn locator_of(hit: &ScoredChunk) -> Option<Locator> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kernel_types::Grain;
     use std::collections::HashMap;
 
     fn hit(meta: &[(&str, &str)]) -> ScoredChunk {
+        let md: HashMap<String, String> = meta
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
         ScoredChunk {
             content: "the text".into(),
             title: Some("A title".into()),
             url: None,
             corpus_id: "wikipedia".into(),
             score: 0.5,
-            metadata: meta
-                .iter()
-                .map(|(k, v)| (k.to_string(), v.to_string()))
-                .collect::<HashMap<_, _>>(),
+            metadata: md.clone(),
             chunk_id: Some(42),
             source_doc_id: None,
             vector_distance: None,
+            // Stamped the way `CorpusIndex::search` stamps it, from this same
+            // bag. That is the point of the fixture: these tests used to
+            // exercise a parse inside `evidence_from_hit`, and since rung 9.1
+            // the parse lives at the acquisition door, so the fixture has to
+            // BE a door to keep testing the same property.
+            provenance: crate::index::ChunkProvenance::Acquired(
+                crate::index::Acquisition::stamped(
+                    "wikipedia",
+                    crate::index::custody_of(&md),
+                    crate::index::grain_of(&md),
+                ),
+            ),
         }
     }
 
@@ -387,14 +399,6 @@ mod tests {
         // A typo is absence, not a new class — `parse_wire` is exact.
         let typo = evidence_from_hit(&hit(&[("custody", "public_web")])).unwrap();
         assert_eq!(typo.custody(), Custody::Unknown);
-    }
-
-    #[test]
-    fn the_legacy_custody_key_matches_the_contract_spelling() {
-        // Pinned rather than left as a bare literal: this constant restates
-        // `sovereign-contracts`' CUSTODY_META_KEY across a crate boundary
-        // corpus-engine may not take a dependency on.
-        assert_eq!(LEGACY_CUSTODY_KEY, "custody");
     }
 
     #[test]

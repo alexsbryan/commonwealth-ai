@@ -58,6 +58,8 @@ fn marker_chunk(title: &str) -> corpus_engine::ScoredChunk {
         chunk_id: None,
         source_doc_id: None,
         vector_distance: None,
+        // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+        provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
     }
 }
 

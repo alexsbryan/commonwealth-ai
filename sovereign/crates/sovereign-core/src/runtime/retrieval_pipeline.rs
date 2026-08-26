@@ -2226,6 +2226,18 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                 metadata.insert("peer".to_string(), name.clone());
                 metadata.insert("source".to_string(), "mesh".to_string());
             }
+            // A PEER's index vouched for this, and since 2026-08-26 the wire
+            // carries what it stamped (TOPOLOGY §10 rung 9.1). The door joins
+            // the peer's custody claim with this node's own "arrived from
+            // another node" fact and reads a missing grain as `Summary`, so an
+            // un-upgraded peer's hits stay exactly as unquotable as they were
+            // while they were `Manufactured` — no loosening, ever, from a peer
+            // that says nothing.
+            let provenance = corpus_engine::index::ChunkProvenance::acquired_from_peer(
+                hit.corpus_id.clone(),
+                hit.custody,
+                hit.grain,
+            );
             st.chunks.push(corpus_engine::ScoredChunk {
                 content: hit.content,
                 title: hit.title,
@@ -2239,6 +2251,7 @@ fn step_main_retrieval_mesh<'a, 'ctx>(
                 // wire today; the cross-corpus merge falls back to
                 // score-sort for them.
                 vector_distance: None,
+                provenance,
             });
         }
         if mesh_sealed_out > 0 {
@@ -2282,29 +2295,29 @@ fn step_store_search<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>)
                     continue;
                 }
             }
-            // The estate stamp (custody.md §2, red R-2): StateStore
-            // corpus documents ARE estate material — stamped `personal`
-            // with the estate path as the source URL at acquisition, by
-            // this code, never by a model (ARCH §7.6). The stamp rides
-            // the chunk's metadata under the ONE shared key
-            // (`CUSTODY_META_KEY`) and the gate's evidence builder reads
-            // the same key, so the judge sees the same provenance the
-            // release carries.
-            let mut metadata = HashMap::new();
-            metadata.insert(
-                crate::types::CUSTODY_META_KEY.to_string(),
-                crate::types::Custody::Personal.as_str().to_string(),
-            );
+            // The estate stamp (custody.md §2, red R-2): StateStore corpus
+            // documents ARE estate material — `personal`, stamped by this
+            // code at acquisition, never by a model (ARCH §7.6).
+            //
+            // It used to be written into `metadata[CUSTODY_META_KEY]` here
+            // and read back out by a string compare in the gate's evidence
+            // builder. It is now the store's acquisition door, so the class
+            // is not something this call site chooses — walking through
+            // `acquired_from_estate` is the only way to get it, and there is
+            // no argument that could ask for another (TOPOLOGY §10 rung 9.1).
             st.chunks.push(corpus_engine::ScoredChunk {
                 content: doc.content.clone(),
                 title: Some(doc.source.clone()),
                 url: Some(format!("estate:{corpus_id}")),
                 corpus_id: corpus_id.clone(),
                 score: 0.5,
-                metadata,
+                metadata: HashMap::new(),
                 chunk_id: None,
                 source_doc_id: None,
                 vector_distance: None,
+                provenance: corpus_engine::index::ChunkProvenance::acquired_from_estate(
+                    corpus_id.clone(),
+                ),
             });
         }
         StepOutcome::default()
@@ -2562,6 +2575,8 @@ mod tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 

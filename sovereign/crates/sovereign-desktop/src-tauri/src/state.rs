@@ -1699,13 +1699,11 @@ pub async fn bootstrap_with_progress(
     // Both probe LOCAL build artifacts and no-op when absent, so they're safe
     // in attach mode (not daemon-owned). Without them the desktop dropped the
     // wiki graph-expansion and the cross-corpus articulation boost the benches
-    // exercise. (Probe logic mirrors bootstrap.rs `load_wikipedia_graph`;
-    // dedup to a shared crate is a follow-up.)
+    // exercise. (The disable probe is now ONE reader in
+    // `sovereign_tools::corpus::wiki_graph_disabled` — the follow-up this
+    // comment used to defer; TOPOLOGY §10 phase 10.)
     let t_wiki = std::time::Instant::now();
-    if std::env::var("SOVEREIGN_DISABLE_WIKI_GRAPH")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
-    {
+    if sovereign_tools::corpus::wiki_graph_disabled() {
         tracing::debug!("wikipedia_graph: disabled via SOVEREIGN_DISABLE_WIKI_GRAPH");
     } else if let Ok(infos) = corpus_engine.installed_indexes().await {
         let idx_dir = corpus_engine.index_dir().to_path_buf();

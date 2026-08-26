@@ -1052,6 +1052,10 @@ impl Runtime {
                     chunk_id: None,
                     source_doc_id: None,
                     vector_distance: None,
+                    // An atlas claim atom injected as a virtual chunk.
+                    provenance: corpus_engine::index::ChunkProvenance::manufactured(
+                        "atom_enum_claim",
+                    ),
                 });
             }
         }

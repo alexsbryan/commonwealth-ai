@@ -8,6 +8,69 @@ use serde::{Deserialize, Serialize};
 
 // ─── Response Provenance ──────────────────────────────────────
 
+/// Which classifiers were LIVE when a turn was routed — the DECIDER set, not
+/// the decision.
+///
+/// `ResponseProvenance` already records what a turn was routed AS
+/// (`intent`, `coarse_intent`). It records nothing about what did the routing,
+/// so a turn classified by a live embed router and a turn that fell through
+/// with no classifier at all are indistinguishable in the data.
+///
+/// That gap has a measured cost. On 2026-08-26 this host's embed slot died;
+/// `build_llm_router` returned `None` for all four classifiers, atlas
+/// grounding went from 1082 loads to zero, and turns kept answering — worse.
+/// The degradation reached the operator as a `progress.note` and reached the
+/// regression harness as a QUALITY REGRESSION: SEP overview title-coverage
+/// 1.00 -> 0.83, which cost most of a session to attribute (note `f4972e1b`).
+/// A turn produced in that state is not a measurement, and nothing in the
+/// record said so.
+///
+/// [`Self::routed_by_none`] is the question worth asking, and it has one
+/// implementation (ARCH §10.6) so a bench, a UI and a log line cannot each
+/// decide "degraded" differently.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct RouterStamp {
+    /// The embedding-similarity router over exemplars.
+    pub embed: bool,
+    /// Scope classifier (is this about the estate, the web, the code?).
+    pub scope: bool,
+    /// Effort classifier (how much work does this deserve?).
+    pub effort: bool,
+    /// Current-info classifier (does this need fresh data?).
+    pub current_info: bool,
+}
+
+impl RouterStamp {
+    /// Build from the four `Option`s a router bootstrap yields.
+    pub fn from_liveness(embed: bool, scope: bool, effort: bool, current_info: bool) -> Self {
+        Self {
+            embed,
+            scope,
+            effort,
+            current_info,
+        }
+    }
+
+    /// **No classifier was live.** The turn was routed by fallback, and
+    /// nothing it produced should be read as a quality measurement.
+    ///
+    /// This is the state a dead embed slot puts the whole host into, and the
+    /// one a harness must exclude rather than score — the same rule
+    /// `EvalResult::error` enforces for a failed turn (ARCH §18.2, §18.3).
+    pub fn routed_by_none(&self) -> bool {
+        !(self.embed || self.scope || self.effort || self.current_info)
+    }
+
+    /// How many of the four were live. For a log line or a status row that
+    /// wants degradation as a degree rather than a boolean.
+    pub fn live_count(&self) -> u8 {
+        u8::from(self.embed)
+            + u8::from(self.scope)
+            + u8::from(self.effort)
+            + u8::from(self.current_info)
+    }
+}
+
 /// Glassbox provenance attached to an assistant message — how the answer was
 /// produced (route, sources, backend, cost). Rendered by the desktop
 /// `RoutingMeta` footer; stored in message metadata.
@@ -31,6 +94,11 @@ pub struct ResponseProvenance {
     /// `None` for old messages that predate this field.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub coarse_intent: Option<String>,
+    /// Which classifiers were live when this turn was routed. `None` for old
+    /// messages; `Some(stamp)` where `stamp.routed_by_none()` means the host
+    /// was DEGRADED and the turn is not a measurement. See [`RouterStamp`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub router: Option<RouterStamp>,
     /// Self-assessment gate result, set on SIMPLE paths only.
     /// `None` when not applicable or for old messages.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -251,4 +319,52 @@ pub enum InsightSinkState {
         /// Why the push failed.
         error: String,
     },
+}
+
+#[cfg(test)]
+mod router_stamp_tests {
+    use super::*;
+
+    /// `routed_by_none` is the question a harness asks before scoring a turn.
+    ///
+    /// Named failing input (ARCH §18.1), from production: on 2026-08-26 a dead
+    /// embed slot left `build_llm_router` returning `None` for all four, and
+    /// turns kept answering — SEP overview title-coverage 1.00 -> 0.83, read
+    /// as a code regression for most of a session (note `f4972e1b`).
+    #[test]
+    fn a_router_with_no_live_classifier_says_so() {
+        let degraded = RouterStamp::from_liveness(false, false, false, false);
+        assert!(degraded.routed_by_none());
+        assert_eq!(degraded.live_count(), 0);
+
+        // One live classifier is not "none" — degradation is a degree, and a
+        // partial router still routed.
+        let partial = RouterStamp::from_liveness(true, false, false, false);
+        assert!(!partial.routed_by_none());
+        assert_eq!(partial.live_count(), 1);
+
+        let healthy = RouterStamp::from_liveness(true, true, true, true);
+        assert!(!healthy.routed_by_none());
+        assert_eq!(healthy.live_count(), 4);
+    }
+
+    /// `None` on the provenance means "this router does not report", which is
+    /// NOT the same fact as a stamp whose classifiers are all false. Collapsing
+    /// them would make every stub router look like a degraded host (§18.3).
+    #[test]
+    fn absent_and_degraded_are_different_values() {
+        let absent: Option<RouterStamp> = None;
+        let degraded = Some(RouterStamp::default());
+        assert_ne!(absent, degraded);
+        assert!(degraded.unwrap().routed_by_none());
+    }
+
+    /// Old messages have no `router` key and must still deserialize.
+    #[test]
+    fn the_field_is_backward_compatible() {
+        let legacy = r#"{"intent":"SIMPLE","search_method":null,"sources":[],
+            "inference_backend":"m","oicp_match":null,"total_latency_ms":1,"tokens_used":2}"#;
+        let p: ResponseProvenance = serde_json::from_str(legacy).expect("legacy provenance parses");
+        assert_eq!(p.router, None);
+    }
 }

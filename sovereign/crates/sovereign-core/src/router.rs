@@ -1691,6 +1691,23 @@ Reply with JSON only:
 
 #[async_trait]
 impl Router for LlmRouter {
+    /// The four classifiers this router actually holds.
+    ///
+    /// Reported from the fields rather than from the bootstrap's report, so it
+    /// cannot go stale: what a turn is stamped with is what routed it. All
+    /// four `None` means the host is DEGRADED — see
+    /// [`RouterStamp::routed_by_none`](sovereign_contracts::types::RouterStamp::routed_by_none)
+    /// and note `f4972e1b`, where exactly that state answered turns for five
+    /// hours and reached the harness as a quality regression.
+    fn stamp(&self) -> Option<sovereign_contracts::types::RouterStamp> {
+        Some(sovereign_contracts::types::RouterStamp::from_liveness(
+            self.embed_router.is_some(),
+            self.scope_classifier.is_some(),
+            self.effort_classifier.is_some(),
+            self.current_info_classifier.is_some(),
+        ))
+    }
+
     async fn classify(
         &self,
         message: &str,

@@ -182,6 +182,7 @@ crates/
 ├── sovereign-work-atlas     # Coordination atlas for agents on the mesh
 ├── sovereign-enrichment-catalog # The enrichment store below every host that reads it: the `<data-root>/enrichment/<corpus>/` layout, the `config.json` schema (`EnrichConfig`) and the inventory. Minted 2026-08-20 (rung nc-16-shared-capability) — the schema lived in `sovereign-cli-llm`, a BINARY, so the daemon's watched-folder driver mirrored it by hand in `sovereign-tools` (four fields behind) and the desktop hand-parsed the same file. All three now read one definition; the CLI's `enrich_cmd::{config,paths}` are re-exports
 ├── sovereign-runtime-recipe # THE recipe that commissions a `Runtime`: the router classifier stack, the turn tool registry and the enrichment lane, below every host. Minted 2026-08-25 (TOPOLOGY.md §10 phase 5c) — the recipe needs `sovereign-tools` + `sovereign-gliner` and every crate that could already see both was a host BINARY, so `svrn chat`, the desktop and `sovereign-server` each carried their own ~600-line copy and only ONE of eleven optional slots was wired by all three. `commission` is the only `Runtime::new` in first-party production code; `sovereign-core/tests/runtime_commission_census.rs` counts what still bypasses it
+├── sovereign-turn-client  # THE client half of the turn protocol — how a surface asks a serving host for a turn. Minted 2026-08-25 (TOPOLOGY.md §10 phase 6) in the **contract** layer beside `oicp-client`, the existing precedent for "protocol types plus the client that speaks them"; its only non-leaf dependency is `sovereign-contracts`, so it cannot see a `Runtime`, a store or a corpus — which is what lets a surface depend on it without dragging a serving host's world along. `TurnClient::run_turn` is the client-side mirror of `sovereign_core::runtime::serve_turn`: ONE implementation of "drive a turn to completion and tell me what it did", where five CLI ask commands each had their own and each ended by re-reading the store — which only works from inside the process that owns it. `svrn chat ask` and `svrn chat session` are its first callers and hold no `Runtime`. Before it, the only Rust code that had ever SENT a `TurnRequest` was two integration tests, each with its own hand-rolled WebSocket dance
 ├── sovereign-mesh           # In-process cmnwlth embed
 ├── sovereign-compute        # Supervised compute-child process boundary (P1): child-process supervisor + native lossless wire + child server/entrypoint + daemon-side single-child routing facade. Value = crash isolation + distributed case, NOT parallelism (see doc)
 ├── sovereign-server         # Axum REST + WebSocket, multi-tenant + approvals
@@ -909,6 +910,56 @@ Progress is polled via `GET /internal/corpus/collaborate/status`
 poll-based `assistProgress.svelte.ts` store, wired into the folder-drop flow
 (one-shot), the watched-folder detail (standing grant), and installed-recipe
 rows. The local ingest is never gated on any of this.
+
+### What a retrieved chunk vouches for (`ChunkProvenance`)
+
+**Two facts decide whether a chunk may ground a claim, and until 2026-08-26
+both were strings in `ScoredChunk.metadata`.** `metadata["custody"]` set the
+egress floor; `metadata["source"] == "raptor"` decided quotable-vs-orienting.
+A missing key and a misspelled key were the same value, so a chunk sovereign
+manufactured in-process — an atlas atom, a RAPTOR rollup, a rendered
+conversation turn — was indistinguishable from one an index vouched for.
+
+`corpus_engine::index::ChunkProvenance` is that pair as a required field with
+no `Default` and no `Deserialize`. `Acquired(Acquisition)` is stamped by a
+door; `Manufactured { producer, grain }` names what built it and is not
+citable. The `Acquired` arm has no public constructor, so `sovereign` reads
+provenance and writes only `Manufactured`.
+
+**The doors.** `CorpusIndex::search` and `acquire_chunks` stamp from the
+index's own facts. `ChunkProvenance::acquired_from_estate` is the estate
+store's, and it is named for the store precisely so no argument can ask it for
+a different class — a door taking a `custody` parameter would be a public
+constructor for `Acquired` wearing a door's name. `acquired_from_peer` is the
+mesh reply path's: it JOINS the peer's custody claim with this node's own
+`Custody::Peer` fact (max-restrictiveness, so a peer cannot talk its content
+down to a looser class) and reads a missing grain as `Summary`, the refusing
+value. Both defaults preserve exactly what a peer hit did while it was
+`Manufactured`, so an un-upgraded peer loosens nothing.
+
+That door needed the wire: `commonwealth-api`'s two knowledge routes were
+building `KnowledgeResult { metadata: Default::default(), .. }` and discarding
+the stamp the serving index had just applied. They now forward
+`stamped_custody()` and `grain()`, carried on `oicp-types` as their canonical
+wire spellings — the protocol crate is pinned to zero internal deps so a third
+party can implement OICP without `kernel-types`, and `Custody::parse_wire` /
+`Grain::parse_wire` are the one parser each. The mesh client parses once at its
+boundary into a typed `MeshScoredChunk`.
+
+The declared door set is ratcheted by
+`sovereign-core/tests/chunk_provenance_census.rs`, which also holds the
+manufacturer list — five, and every one of them content this process genuinely
+builds (atlas entities and atoms, atlas claim atoms, conversation turns, RAPTOR
+rollups).
+
+**Reading it.** `custody()` answers "what class is this" (`Unknown` refuses);
+`stamped_custody()` answers "did a door record one" (`None` when nobody did).
+The gate needs the second — `custody_engaged` is `any(is_some())`, and a pool
+where nothing is stamped must leave the custody machinery off rather than
+refuse the turn. `grain()` answers leaf-vs-summary for both arms. Five sites
+read these and none re-parses the bag: `grounding/mod.rs` (custody + grain),
+`formatters.rs`, `merge_select.rs`, `question_analysis.rs`. `CUSTODY_META_KEY`
+has no production writer left.
 
 ### The chunk → section join (`chapters.json` `chunk_ids`)
 

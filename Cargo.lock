@@ -12227,6 +12227,7 @@ dependencies = [
  "sovereign-runtime-recipe",
  "sovereign-store",
  "sovereign-tools",
+ "sovereign-turn-client",
  "sovereign-work-atlas",
  "sovereign-workflow",
  "sovereign-workflow-host",
@@ -12607,6 +12608,7 @@ version = "0.5.0"
 dependencies = [
  "corpus-engine",
  "corpus-engine-notes",
+ "sovereign-contracts",
  "sovereign-core",
  "sovereign-gliner",
  "sovereign-inference",
@@ -12782,6 +12784,19 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.2",
+ "tracing",
+]
+
+[[package]]
+name = "sovereign-turn-client"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "reqwest 0.12.28",
+ "serde_json",
+ "sovereign-contracts",
+ "tokio",
+ "tokio-tungstenite",
  "tracing",
 ]
 

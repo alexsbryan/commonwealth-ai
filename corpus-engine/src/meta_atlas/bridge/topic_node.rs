@@ -412,6 +412,8 @@ mod tests {
             chunk_id: Some(42),
             source_doc_id: Some("12345".into()),
             vector_distance: Some(0.2),
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: crate::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let t = topic_from_chunk("wikipedia", &hit).unwrap();
         assert_eq!(t.corpus_id, "wikipedia");

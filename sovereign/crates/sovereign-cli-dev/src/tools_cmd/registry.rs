@@ -88,8 +88,20 @@ pub(super) async fn open_tools_registry() -> Result<ToolsEnv, String> {
     // here either ignores embeddings (pure SQL/FTS) or treats
     // zero vectors as "no semantic signal" and returns FTS-only
     // results, so the offline mode stays correct.
-    let daemon_url = std::env::var("SOVEREIGN_DAEMON_URL")
-        .unwrap_or_else(|_| "http://127.0.0.1:9741".to_string());
+    // THE accessor (§10.6, TOPOLOGY §10 phase 6/10). This read its own
+    // `SOVEREIGN_DAEMON_URL` and had drifted from `daemon_base_url()` in two
+    // ways that both point at the WRONG DAEMON rather than at no daemon:
+    //
+    //   - it never consulted `SVRNMESH_DAEMON_URL`, which the boot bridge maps
+    //     the legacy name onto — so on a host configured only that way, every
+    //     other reader followed the operator's setting and this one silently
+    //     went to the default;
+    //   - its default was `127.0.0.1` where the shared one is `localhost`,
+    //     which are not the same address under IPv6-first resolution.
+    //
+    // An env read at point of use is invisible to go-to-definition, which is
+    // the whole reason the environment axis is a phase.
+    let daemon_url = sovereign_cli_shared::urls::daemon_base_url();
     let embed: EmbedFn = build_daemon_embed_fn_or_zero(&daemon_url).await;
     let notes_embed = build_daemon_notes_embed_fn_or_none(&daemon_url).await;
     let engine = Arc::new(CorpusEngine::new(data_dir.clone(), data_dir.clone(), embed));

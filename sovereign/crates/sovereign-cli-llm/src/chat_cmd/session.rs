@@ -1,24 +1,27 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
-//! `svrn chat session` — multi-turn interactive REPL.
+//! `svrn chat session` — multi-turn interactive REPL, asked of the daemon.
 //!
 //! Every iteration:
 //!   1. Read a line from stdin.
-//!   2. Stream the answer to stdout via `handle_message_stream`.
-//!   3. Render provenance footer.
+//!   2. Send it as a `TurnRequest` and stream the `TurnFrame::Token`s out.
+//!   3. Render the provenance footer from `TurnFrame::Complete`.
 //!   4. Loop.
 //!
-//! Holds one conversation id for the whole session so follow-up
-//! turns get the prior context the desktop relies on. `quit` / `exit`
-//! / Ctrl-D end the session; the Runtime's end-of-conversation hook
-//! fires on `quit` so any memory-extraction side effects match the
-//! desktop's "close the tab" behaviour.
+//! Holds one conversation id for the whole session so follow-up turns get the
+//! prior context the desktop relies on. `quit` / `exit` / Ctrl-D end the
+//! session; the conversation-end memory pass fires on `quit` so the
+//! side effects match the desktop's "close the tab" behaviour — it is a call
+//! to the daemon now (`POST /v1/conversations/{id}/end`) rather than a method
+//! on a `Runtime` this process owns.
+//!
+//! Phase 6 (TOPOLOGY §10): this file holds no `Runtime`, no store and no
+//! corpus engine. See `chat_cmd::ask` for the full argument.
 
-use sovereign_core::runtime::message_metadata;
 use std::io::{self, BufRead, Write};
 
-use futures::StreamExt;
+use sovereign_contracts::types::TurnMode;
+use sovereign_turn_client::{TurnClient, TurnObserver};
 
-use crate::chat_cmd::bootstrap::{build_session, ChatSession};
 use crate::chat_cmd::config::parse_globals;
 use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
@@ -79,15 +82,21 @@ pub async fn cmd_session(args: &[String]) -> i32 {
         i += 1;
     }
 
-    let session = match build_session(&globals).await {
-        Ok(s) => s,
-        Err(e) => {
-            eprintln!("bootstrap failed: {e}");
-            return 1;
-        }
-    };
+    let client = TurnClient::new(&globals.daemon_base);
 
-    let conversation_id = conversation_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    // The daemon mints the id and seeds the row in the same call — see
+    // `chat_cmd::ask` for why the client no longer invents one.
+    let conversation_id = match conversation_id {
+        Some(id) => id,
+        None => match client.create_conversation(None).await {
+            Ok(c) => c.id,
+            Err(e) => {
+                eprintln!("could not start a conversation on the daemon: {e}");
+                eprintln!("hint: is the daemon running? `svrn daemon start`");
+                return 1;
+            }
+        },
+    };
     eprintln!();
     eprintln!("conversation: {conversation_id}");
     eprintln!("Type `quit` to exit.");
@@ -111,11 +120,18 @@ pub async fn cmd_session(args: &[String]) -> i32 {
             continue;
         }
         if matches!(line, "quit" | "exit") {
-            let _ = session.runtime.end_conversation(&conversation_id).await;
+            // The conversation-end memory-extraction pass, now a lifecycle
+            // call on the daemon rather than a method on a Runtime this
+            // process owns. Still best-effort — quitting a REPL should not
+            // fail because a memory pass did — but a failure is now VISIBLE
+            // rather than dropped on the floor by a bare `let _ =`.
+            if let Err(e) = client.end_conversation(&conversation_id).await {
+                eprintln!("[note] conversation-end memory pass did not run: {e}");
+            }
             break;
         }
 
-        if let Err(code) = run_one(&session, line, &conversation_id, show_reasoning).await {
+        if let Err(code) = run_one(&client, line, &conversation_id, show_reasoning).await {
             return code;
         }
         let _ = stdout.flush();
@@ -128,61 +144,63 @@ pub async fn cmd_session(args: &[String]) -> i32 {
 /// should abort the REPL; soft errors (model parses failure, etc.)
 /// are printed to stderr and we keep looping.
 async fn run_one(
-    session: &ChatSession,
+    client: &TurnClient,
     question: &str,
     conversation_id: &str,
     show_reasoning: bool,
 ) -> std::result::Result<(), i32> {
-    let handle = match session
-        .runtime
-        .handle_message_stream(question, conversation_id)
-        .await
-    {
-        Ok(h) => h,
+    println!();
+    // Locked per write, not for the turn — see `chat_cmd::ask`.
+    let mut echo = |chunk: &str| {
+        let mut out = io::stdout();
+        let _ = out.write_all(chunk.as_bytes());
+        let _ = out.flush();
+    };
+    // The daemon narrates what it is doing while the answer is still being
+    // retrieved. The in-process REPL had no way to show this — the narration
+    // channel existed but nothing in this file subscribed to it.
+    let mut narrate = |_p: &sovereign_contracts::types::NarrationPhase,
+                       text: &str,
+                       elapsed_ms: u64| {
+        if !text.is_empty() {
+            eprintln!("· {text} ({:.1}s)", elapsed_ms as f64 / 1000.0);
+        }
+    };
+
+    let outcome = {
+        let mut observer = TurnObserver {
+            on_token: Some(&mut echo),
+            on_narration: Some(&mut narrate),
+            on_queue_position: None,
+        };
+        client
+            .run_turn(conversation_id, question, TurnMode::Grounded, None, &mut observer)
+            .await
+    };
+
+    let outcome = match outcome {
+        Ok(o) => o,
         Err(e) => {
+            println!();
             eprintln!("[turn failed] {e}");
+            // Soft failure: the REPL keeps looping, as it always did.
             return Ok(());
         }
     };
 
-    let message_id = handle.message_id.clone();
-    let mut stream = handle.stream;
-    let mut raw = String::new();
-    let mut stdout = io::stdout().lock();
-    let _ = writeln!(stdout);
+    println!();
+    println!();
 
-    while let Some(item) = stream.next().await {
-        match item {
-            Ok(chunk) => {
-                raw.push_str(&chunk);
-                let _ = stdout.write_all(chunk.as_bytes());
-                let _ = stdout.flush();
-            }
-            Err(e) => {
-                let _ = writeln!(stdout);
-                eprintln!("[stream error] {e}");
-                return Ok(());
-            }
-        }
-    }
-    let _ = writeln!(stdout);
-    let _ = writeln!(stdout);
-
-    // THE lookup (ARCH §10.6). This was hand-rolled here, in `session.rs`,
-    // and three times over in the desktop — five copies of "find the message
-    // the turn just wrote and read its metadata".
-    let metadata = message_metadata(session.store.as_ref(), conversation_id, &message_id).await;
-
-    let header = render::provenance_header(metadata.as_ref());
+    let header = render::provenance_header_typed(outcome.provenance.as_ref());
     if !header.is_empty() {
         eprintln!("  {header}");
     }
-    let (reasoning, _) = render::split_reasoning(&raw);
+    let (reasoning, _) = render::split_reasoning(&outcome.text);
     let reasoning_out = render::render_reasoning(&reasoning, show_reasoning);
     if !reasoning_out.is_empty() {
         eprintln!("  {reasoning_out}");
     }
-    let footer = render::retrieved_chunks_footer(metadata.as_ref());
+    let footer = render::citations_footer(&outcome.citations);
     if !footer.is_empty() {
         eprintln!();
         eprint!("{footer}");

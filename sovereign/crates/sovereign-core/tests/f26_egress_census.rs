@@ -142,6 +142,13 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // stops spawning the CLI to reach it — the classification did not
     // change with the crate.
     ("sovereign/crates/sovereign-core/src/deep_research/port.rs", Class::LocalDaemon, 1),
+    // sovereign-turn-client: the client half of the turn protocol, minted
+    // 2026-08-25 (TOPOLOGY §10 phase 6). One `reqwest::Client` for
+    // `POST /v1/conversations` + the conversation-end call; the turn itself
+    // is a WebSocket. Loopback to this host's own daemon — `turn_http` is
+    // loopback-only at both layers and refuses anything else — so the class
+    // is LocalDaemon, not egress. Nothing here leaves the machine.
+    ("sovereign/crates/sovereign-turn-client/src/lib.rs", Class::LocalDaemon, 1),
 
     // ---- sovereign-mesh: the estate's own transport (Mesh) ----
     // Peer-to-peer / daemon-mesh HTTP; own auth + custody class.

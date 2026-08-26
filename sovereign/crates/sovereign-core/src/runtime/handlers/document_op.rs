@@ -296,6 +296,9 @@ impl Runtime {
 
         // 4. Build response.
         let provenance = ResponseProvenance {
+            // Which classifiers were live behind this route; `None` from a router
+            // that does not report. `routed_by_none()` marks a DEGRADED host.
+            router: self.router.stamp(),
             intent: "DocumentOperation".to_string(),
             search_method: Some("document_operation".to_string()),
             sources: vec![SourceSummary {

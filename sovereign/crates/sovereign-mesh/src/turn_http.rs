@@ -77,6 +77,7 @@ pub fn turn_router(daemon: Arc<EmbeddedDaemon>) -> Router {
     Router::new()
         .route("/v1/conversations", post(create_conversation))
         .route("/v1/conversations/{id}/stream", get(ws_handler))
+        .route("/v1/conversations/{id}/end", post(end_conversation))
         .layer(axum::middleware::from_fn(
             crate::loopback_guard::loopback_only,
         ))
@@ -137,6 +138,40 @@ async fn create_conversation(
         created_at: now,
     })
     .into_response()
+}
+
+/// `POST /v1/conversations/{id}/end`
+///
+/// Runs the conversation-end memory-extraction pass. This is a lifecycle
+/// operation, not a turn, which is why it is a REST route beside `create`
+/// rather than a `TurnRequest` variant — `TurnRequest`'s own doc says it is
+/// "Client → host, for ONE turn", and a client that quits its REPL is not
+/// taking a turn.
+///
+/// It exists because `svrn chat session` called `Runtime::end_conversation`
+/// on `quit`, and phase 6 turns that host into a client. Without a wire form
+/// the conversion would have silently stopped extracting long-term memories
+/// on the one interactive CLI surface — a capability disappearing because the
+/// process that used to hold it stopped holding it, which is the failure mode
+/// phase 6 has to not have.
+async fn end_conversation(
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    Extension(daemon): Extension<Arc<EmbeddedDaemon>>,
+    Path(conversation_id): Path<String>,
+) -> Response {
+    if let Err(r) = enforce_localhost(&peer) {
+        return r;
+    }
+    let Some(runtime) = daemon.runtime() else {
+        return service_unavailable("this daemon serves no turns (mesh-admin)");
+    };
+    match runtime.end_conversation(&conversation_id).await {
+        Ok(()) => Json(serde_json::json!({ "ended": conversation_id })).into_response(),
+        // Reported, not swallowed: the extraction pass runs a model, and a
+        // caller told "ok" for a pass that never ran cannot tell the
+        // difference (ARCH §18.3).
+        Err(e) => service_unavailable(&format!("end conversation: {e}")),
+    }
 }
 
 /// `GET /v1/conversations/{id}/stream` — WebSocket upgrade.
@@ -240,7 +275,11 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
             }
         };
         match event {
-            TurnRequest::Message { content } => {
+            TurnRequest::Message {
+                content,
+                mode,
+                intent,
+            } => {
                 if in_flight.is_some() {
                     // Refused, not queued: a client that sent a second turn
                     // and heard nothing cannot tell "queued" from "lost".
@@ -262,6 +301,8 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
                         st.as_ref(),
                         &cid,
                         &content,
+                        mode,
+                        intent,
                         // See the module docs — the daemon has no narration
                         // broadcast yet, and a `None` here is that fact rather
                         // than a dropped channel.

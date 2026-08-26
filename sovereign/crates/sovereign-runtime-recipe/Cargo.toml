@@ -35,6 +35,10 @@ description = "The one recipe that commissions a Runtime: the router, the planne
 # — already the one implementation, and the precedent for this crate) and the
 # egress boundary that builds the web-search client. Runtime layer — down.
 sovereign-core = { workspace = true }
+# `ToolBundle` / `Withheld` / `install` — the seam a host declares its tool
+# families through, so this crate registers no tool by name (TOPOLOGY phase
+# 7b). Contract layer — down.
+sovereign-contracts = { workspace = true }
 # Every tool the turn registry registers, the atlas-context manager, and the
 # rerank config/dedup readers. Same layer (capabilities), like
 # sovereign-gliner -> sovereign-core one layer down.

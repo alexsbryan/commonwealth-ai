@@ -1606,6 +1606,10 @@ pub fn atlas_top_k_across(
                 chunk_id: None,
                 source_doc_id: None,
                 vector_distance: None,
+                // A virtual chunk built from an atlas entity description, not
+                // a row an index vouched for. It may orient retrieval and may
+                // not ground a claim (TOPOLOGY §10 rung 9.1, hazard 1).
+                provenance: crate::index::ChunkProvenance::manufactured("atlas_context_entity"),
             }
         })
         .collect()

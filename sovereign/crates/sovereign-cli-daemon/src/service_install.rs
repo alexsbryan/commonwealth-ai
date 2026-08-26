@@ -491,6 +491,88 @@ fn current_uid() -> u32 {
     0
 }
 
+/// Argv that asks the manager "why is this job not running?".
+///
+/// Platform-independent by construction, like [`lifecycle_argv`] — the two
+/// managers express the same question in different vocabularies.
+pub(crate) fn diagnose_argv(mgr: Manager, name: &str, uid: u32) -> Vec<String> {
+    match mgr {
+        // `is-active` reports the state; `--property=Result` names WHY a unit
+        // is not running (`start-limit-hit`, `exit-code`, …).
+        Manager::Systemd => vec![
+            "--user".into(),
+            "show".into(),
+            name.into(),
+            "--property=ActiveState,Result,ExecMainStatus,NeedDaemonReload".into(),
+        ],
+        Manager::Launchd => vec!["print".into(), format!("gui/{uid}/{name}")],
+    }
+}
+
+/// Argv that re-registers the job so the manager re-reads it from disk.
+///
+/// Returned as a SEQUENCE because both managers need two steps, and the first
+/// is allowed to fail: launchd's `bootout` is a no-op when the job is already
+/// unloaded, and systemd's `reset-failed` is a no-op when the unit is not in a
+/// failed state. Callers run them in order and judge only the last.
+pub(crate) fn reregister_argv(mgr: Manager, name: &str, uid: u32, unit_path: &str) -> Vec<Vec<String>> {
+    match mgr {
+        // `daemon-reload` picks up an edited unit file; `reset-failed` clears
+        // a start-limit lockout, which is systemd's version of "the manager
+        // will not spawn this no matter how many times you ask".
+        Manager::Systemd => vec![
+            vec!["--user".into(), "daemon-reload".into()],
+            vec!["--user".into(), "reset-failed".into(), name.into()],
+        ],
+        Manager::Launchd => vec![
+            vec!["bootout".into(), format!("gui/{uid}/{name}")],
+            vec!["bootstrap".into(), format!("gui/{uid}"), unit_path.into()],
+        ],
+    }
+}
+
+/// Does this diagnosis mean "the manager will not spawn this job as
+/// registered" — i.e. re-registering is the repair, not retrying?
+///
+/// # The failure class this names
+///
+/// Both managers can reach a state where they ACCEPT a start command and then
+/// never run the job, while every surface reports success: the start verb
+/// exits 0 because the manager took the request, the daemon log keeps an old
+/// timestamp because the process dies before opening it, and the caller waits
+/// out its whole readiness budget and blames slow model loading. Three
+/// green-looking signals over one dead service (ARCH §18.3).
+///
+/// - **launchd (macOS 13+)**: a registered job is pinned to the CODE IDENTITY
+///   of the binary it was bootstrapped with. Rebuilding that binary in place —
+///   which is what every `scripts/dev-build.sh` does, since
+///   `target/debug/sovereign-cli-daemon` IS the deployed daemon on a dev host —
+///   invalidates the Launch Constraints Registry entry. launchd then refuses
+///   to spawn and records `EX_CONFIG` (78). Observed 2026-08-26 with
+///   `runs = 1038`, `last exit code = 78: EX_CONFIG`, `needs LWCR update`.
+/// - **systemd**: a unit whose file changed on disk without a `daemon-reload`
+///   starts from the STALE definition, and a unit that has hit its start limit
+///   (`Result=start-limit-hit`) is refused outright until `reset-failed`.
+///
+/// Different mechanisms, one shape — and one repair: make the manager re-read
+/// the job.
+pub(crate) fn diagnosis_needs_reregister(mgr: Manager, text: &str) -> bool {
+    match mgr {
+        Manager::Systemd => {
+            text.contains("NeedDaemonReload=yes")
+                || text.contains("Result=start-limit-hit")
+                || (text.contains("ActiveState=failed") && text.contains("Result=exit-code"))
+        }
+        // No `pid = ` line means launchd is not running it right now; the LWCR
+        // note is the cause and the 78 is the symptom, and launchd does not
+        // always print both.
+        Manager::Launchd => {
+            !text.contains("pid = ")
+                && (text.contains("needs LWCR update") || text.contains("last exit code = 78"))
+        }
+    }
+}
+
 impl ManagingService {
     /// Restart in place, letting the manager re-apply the unit.
     pub fn restart(&self) -> Result<(), String> {
@@ -505,6 +587,85 @@ impl ManagingService {
     /// Start under the manager.
     pub fn start(&self) -> Result<(), String> {
         self.act("start")
+    }
+
+    /// Ask the manager why the job is not running, and decide whether
+    /// re-registering is the repair.
+    ///
+    /// `Some(reason)` means the manager will not spawn this job AS REGISTERED
+    /// and retrying the start verb cannot help — see
+    /// [`diagnosis_needs_reregister`] for the two mechanisms this covers.
+    pub fn needs_reregister(&self) -> Option<String> {
+        let argv = diagnose_argv(self.mgr, &self.name, current_uid());
+        let out = std::process::Command::new(self.mgr.program())
+            .args(&argv)
+            .output()
+            .ok()?;
+        // launchd prints to stdout, systemd `show` likewise; merge for safety.
+        let mut text = String::from_utf8_lossy(&out.stdout).to_string();
+        text.push_str(&String::from_utf8_lossy(&out.stderr));
+        if diagnosis_needs_reregister(self.mgr, &text) {
+            Some(match self.mgr {
+                Manager::Launchd => "launchd is refusing to spawn it (EX_CONFIG 78, \
+                    \"needs LWCR update\"): macOS pins a registered job to the code \
+                    identity of the binary it was registered with, and this binary has \
+                    been rebuilt since"
+                    .to_string(),
+                Manager::Systemd => "systemd is holding a stale or failed unit \
+                    (NeedDaemonReload / start-limit-hit): the unit on disk and the one \
+                    systemd will run are not the same"
+                    .to_string(),
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Make the manager re-read this job from disk.
+    ///
+    /// The repair for [`Self::needs_reregister`]. Runs the manager's sequence
+    /// from [`reregister_argv`] and judges only the LAST step — the first is
+    /// allowed to fail, because "already unloaded" and "not in a failed state"
+    /// are the states it exists to reach.
+    pub fn reregister(&self) -> Result<(), String> {
+        let unit_path = self.unit_path().unwrap_or_default();
+        let steps = reregister_argv(self.mgr, &self.name, current_uid(), &unit_path);
+        let mut last: Result<(), String> = Err("no re-register steps".into());
+        for argv in steps {
+            let label = format!("{} {}", self.mgr.program(), argv.join(" "));
+            let out = std::process::Command::new(self.mgr.program())
+                .args(&argv)
+                .output()
+                .map_err(|e| format!("{label}: {e}"))?;
+            last = if out.status.success() {
+                Ok(())
+            } else {
+                Err(format!(
+                    "{label} failed: {}",
+                    String::from_utf8_lossy(&out.stderr).trim()
+                ))
+            };
+        }
+        last
+    }
+
+    /// On-disk path of the unit/plist, when this platform needs one to
+    /// re-register. launchd's `bootstrap` takes the plist path; systemd's
+    /// `daemon-reload` finds the unit itself, so the value is unused there.
+    fn unit_path(&self) -> Option<String> {
+        match self.mgr {
+            Manager::Launchd => {
+                #[cfg(target_os = "macos")]
+                {
+                    launchd_plist_path().ok().map(|p| p.display().to_string())
+                }
+                #[cfg(not(target_os = "macos"))]
+                {
+                    None
+                }
+            }
+            Manager::Systemd => None,
+        }
     }
 
     /// Platform-independent by construction — see [`lifecycle_argv`].
@@ -583,7 +744,9 @@ pub(crate) fn probe_argv(mgr: Manager, name: &str) -> Vec<String> {
 /// leaves the manager's restart policy to notice — which is what every version
 /// before 2026-07-29 did.
 fn service_manager_is_addressed() -> bool {
-    if std::env::var("SOVEREIGN_STOP_SANDBOXED").ok().as_deref() == Some("1") {
+    // One reader, in `lifecycle` — see its docs. This site used to carry its
+    // own copy of the parse.
+    if crate::daemon_cmd::lifecycle::stop_sandboxed() {
         return false;
     }
     use crate::setup_config::{DaemonSection, SetupConfig};
@@ -788,5 +951,84 @@ mod service_ownership_tests {
             CANDIDATE_SERVICES,
             ["com.svrnmesh.daemon", "com.sovereign.daemon"]
         );
+    }
+}
+
+#[cfg(test)]
+mod reregister_decision_tests {
+    use super::*;
+
+    /// The exact `launchctl print` signature observed 2026-08-26 after ~10
+    /// rebuilds of the deployed debug binary in one session.
+    const LAUNCHD_WEDGED: &str = "\tstate = spawn scheduled\n\truns = 1038\n\t         last exit code = 78: EX_CONFIG\n\tproperties = runatload | needs LWCR update";
+
+    /// The same job after `bootout` + `bootstrap` — this is what healthy looks
+    /// like, and the detector must NOT fire on it.
+    const LAUNCHD_HEALTHY: &str =
+        "\tstate = running\n\tpid = 43984\n\truns = 1\n\tlast exit code = (never exited)";
+
+    #[test]
+    fn launchd_lwcr_wedge_is_detected() {
+        assert!(diagnosis_needs_reregister(Manager::Launchd, LAUNCHD_WEDGED));
+    }
+
+    #[test]
+    fn launchd_running_job_is_not_a_wedge() {
+        assert!(!diagnosis_needs_reregister(
+            Manager::Launchd,
+            LAUNCHD_HEALTHY
+        ));
+    }
+
+    /// A job that is running but happens to have exited 78 EARLIER is not
+    /// wedged — the `pid = ` line is what distinguishes "refused to spawn"
+    /// from "spawned fine, once had a bad run".
+    #[test]
+    fn launchd_running_after_a_past_78_is_not_a_wedge() {
+        let text = "\tpid = 5150\n\tlast exit code = 78: EX_CONFIG";
+        assert!(!diagnosis_needs_reregister(Manager::Launchd, text));
+    }
+
+    #[test]
+    fn systemd_stale_unit_needs_reload() {
+        let text = "ActiveState=inactive\nResult=success\nNeedDaemonReload=yes";
+        assert!(diagnosis_needs_reregister(Manager::Systemd, text));
+    }
+
+    #[test]
+    fn systemd_start_limit_needs_reset_failed() {
+        let text = "ActiveState=failed\nResult=start-limit-hit\nNeedDaemonReload=no";
+        assert!(diagnosis_needs_reregister(Manager::Systemd, text));
+    }
+
+    #[test]
+    fn systemd_healthy_unit_is_left_alone() {
+        let text = "ActiveState=active\nResult=success\nNeedDaemonReload=no";
+        assert!(!diagnosis_needs_reregister(Manager::Systemd, text));
+    }
+
+    /// A unit that is merely stopped is NOT a re-register case — that is the
+    /// ordinary "daemon is down, start it" path, and re-registering it would
+    /// be a heavier action than the situation calls for.
+    #[test]
+    fn systemd_cleanly_stopped_unit_is_not_a_wedge() {
+        let text = "ActiveState=inactive\nResult=success\nNeedDaemonReload=no";
+        assert!(!diagnosis_needs_reregister(Manager::Systemd, text));
+    }
+
+    #[test]
+    fn reregister_sequences_are_two_steps_per_manager() {
+        let launchd = reregister_argv(Manager::Launchd, "com.svrnmesh.daemon", 502, "/tmp/x.plist");
+        assert_eq!(launchd.len(), 2);
+        assert_eq!(launchd[0][0], "bootout");
+        assert_eq!(launchd[1][0], "bootstrap");
+        // bootstrap needs the domain AND the on-disk plist path.
+        assert_eq!(launchd[1][1], "gui/502");
+        assert_eq!(launchd[1][2], "/tmp/x.plist");
+
+        let systemd = reregister_argv(Manager::Systemd, "sovereign.service", 502, "");
+        assert_eq!(systemd.len(), 2);
+        assert!(systemd[0].contains(&"daemon-reload".to_string()));
+        assert!(systemd[1].contains(&"reset-failed".to_string()));
     }
 }

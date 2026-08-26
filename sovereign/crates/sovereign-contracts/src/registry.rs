@@ -54,6 +54,18 @@ impl ToolRegistry {
         self.tools.push(tool);
     }
 
+    /// Register and hand back the id that was registered.
+    ///
+    /// For [`crate::tool_bundle::ToolBundle`] implementors, which must report
+    /// what they contributed. Reading the id off the descriptor keeps the
+    /// report from becoming a second, drifting copy of the id list
+    /// (ARCH §10.6 — one decider, one name).
+    pub fn register_reporting(&mut self, tool: Box<dyn Tool>) -> String {
+        let id = tool.descriptor().id;
+        self.register(tool);
+        id
+    }
+
     /// Register every manifest in the catalog that declares a `delegate` — the
     /// tools that are pure data, with no Rust of their own.
     ///

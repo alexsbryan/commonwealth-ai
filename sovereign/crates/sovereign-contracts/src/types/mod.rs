@@ -148,6 +148,11 @@ pub use epistemic::{
 };
 mod custody;
 pub use custody::{join_custody, ChunkCustody, Custody, CUSTODY_META_KEY};
+/// Re-exported beside [`Custody`] for the same reason: both are kernel facts a
+/// product crate reads off a chunk, and a non-core crate taking a direct
+/// `kernel-types` dep to name one field is §8.3's smell. `MeshScoredChunk`
+/// carries both.
+pub use kernel_types::Grain;
 mod search_privacy;
 pub use search_privacy::SearchPrivacy;
 mod grounding_verdict;
@@ -176,7 +181,7 @@ pub mod projection;
 // 2026-08-25 (TOPOLOGY.md §10 phase 5b): a protocol private to a binary
 // crate is one no other process can speak.
 mod turn;
-pub use turn::{TurnFrame, TurnRequest};
+pub use turn::{TurnFrame, TurnMode, TurnRequest};
 
 // ─── Plan Types ────────────────────────────────────────────────
 
@@ -1274,7 +1279,7 @@ pub struct RuntimeMetrics {
 mod ui;
 pub use ui::{
     ActionPreview, CoverageNote, InsightNode, InsightPosition, InsightSinkState, InsightSource,
-    PositionStyle, ResponseProvenance, SourceSummary, ThinFolder,
+    PositionStyle, ResponseProvenance, RouterStamp, SourceSummary, ThinFolder,
 };
 mod document;
 pub use document::{

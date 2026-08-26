@@ -1780,7 +1780,7 @@ impl Runtime {
             .await;
             grounding_gate_meta = Some(outcome.meta);
             gate_claims = Some(outcome.claims);
-            outcome.text
+            outcome.answer.text().to_string()
         } else {
             completion.text.clone()
         };
@@ -1941,6 +1941,9 @@ impl Runtime {
             None,
         );
         let provenance = ResponseProvenance {
+            // Which classifiers were live behind this route; `None` from a router
+            // that does not report. `routed_by_none()` marks a DEGRADED host.
+            router: self.router.stamp(),
             // Actual routed intent, not a hardcoded label — this handler serves
             // both KnowledgeQuery and ComparisonQuery (see the streaming twin).
             intent: format!("{intent:?}"),

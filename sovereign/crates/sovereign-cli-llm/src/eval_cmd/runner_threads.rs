@@ -205,51 +205,33 @@ async fn run_one_turn(
     turn: &Turn,
 ) -> TurnResult {
     let t_wall = Instant::now();
-    let stream_result = session
-        .runtime
-        .handle_message_stream(&turn.question, conversation_id)
-        .await;
-
+    // ONE turn driver (TOPOLOGY §10 phase 6). Instrument-neutral — this drove
+    // `handle_message_stream` and `collect_turn` is the same `serve_turn`
+    // pipeline with a collecting sink. Removes the hand-rolled drain and a
+    // fallback that used to re-run `handle_message`, writing the question to
+    // the conversation twice.
     let (message_id, raw, stream_wall_ms, err): (String, String, u64, Option<String>) =
-        match stream_result {
-            Ok(handle) => {
-                let mid = handle.message_id.clone();
-                let mut stream = handle.stream;
-                let mut buf = String::new();
-                let mut e: Option<String> = None;
-                while let Some(item) = stream.next().await {
-                    match item {
-                        Ok(chunk) => buf.push_str(&chunk),
-                        Err(err) => {
-                            e = Some(format!("stream error: {err}"));
-                            break;
-                        }
-                    }
-                }
-                let wall = t_wall.elapsed().as_millis() as u64;
-                (mid, buf, wall, e)
-            }
-            Err(sovereign_core::error::Error::NotImplemented(_)) => match session
-                .runtime
-                .handle_message(&turn.question, conversation_id)
-                .await
-            {
-                Ok(resp) => {
-                    let wall = t_wall.elapsed().as_millis() as u64;
-                    (resp.message.id, resp.message.content, wall, None)
-                }
-                Err(e) => (
-                    String::new(),
-                    String::new(),
-                    t_wall.elapsed().as_millis() as u64,
-                    Some(format!("non-streaming fallback failed: {e}")),
-                ),
-            },
+        match sovereign_core::runtime::collect_turn(
+            &session.runtime,
+            session.store.as_ref(),
+            conversation_id,
+            &turn.question,
+            sovereign_contracts::types::TurnMode::Grounded,
+            None,
+        )
+        .await
+        {
+            Ok(t) => (
+                t.message_id,
+                t.text,
+                t_wall.elapsed().as_millis() as u64,
+                None,
+            ),
             Err(e) => (
                 String::new(),
                 String::new(),
                 t_wall.elapsed().as_millis() as u64,
-                Some(format!("stream start: {e}")),
+                Some(format!("turn: {e}")),
             ),
         };
 

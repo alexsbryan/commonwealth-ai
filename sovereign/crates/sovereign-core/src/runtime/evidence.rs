@@ -956,6 +956,8 @@ mod grounding_filter_tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1090,6 +1092,8 @@ mod evidence_shape_tests {
             chunk_id: None,
             source_doc_id: None,
             vector_distance: None,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         }
     }
 
@@ -1636,6 +1640,8 @@ mod output_budget_tests {
             chunk_id: Some(1),
             source_doc_id: None,
             vector_distance: dist,
+            // Fixture chunk: nothing acquired it (TOPOLOGY §10 rung 9.1).
+            provenance: corpus_engine::index::ChunkProvenance::manufactured("test_fixture"),
         };
         let chunks = vec![mk(Some(0.4)), mk(None), mk(Some(0.9))];
         let shape = compute_evidence_shape(&chunks, "alpha");

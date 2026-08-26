@@ -66,6 +66,7 @@ members = [
     # needs sovereign-tools + sovereign-gliner, and every crate that could
     # already see both was a host binary.
     "sovereign/crates/sovereign-runtime-recipe",
+    "sovereign/crates/sovereign-turn-client",
     "studio/crates/sovereign-tools-base",
     "studio/crates/sovereign-recipe-author",
     # Workflow substrate — Step · Artifact · Runner (a typed dataflow over
@@ -217,6 +218,7 @@ sovereign-tools = { path = "sovereign/crates/sovereign-tools" }
 sovereign-gliner = { path = "sovereign/crates/sovereign-gliner" }
 sovereign-enrichment-catalog = { path = "sovereign/crates/sovereign-enrichment-catalog" }
 sovereign-runtime-recipe = { path = "sovereign/crates/sovereign-runtime-recipe" }
+sovereign-turn-client = { path = "sovereign/crates/sovereign-turn-client" }
 sovereign-tools-base = { path = "studio/crates/sovereign-tools-base" }
 sovereign-recipe-author = { path = "studio/crates/sovereign-recipe-author" }
 sovereign-workflow = { path = "studio/crates/sovereign-workflow" }
