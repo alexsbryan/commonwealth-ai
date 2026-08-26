@@ -385,6 +385,24 @@ fn run_python_syntax_probe(content: &str) -> Result<std::process::Output, String
             c
         }
     };
+    // Ask for MACHINE-READABLE stderr rather than hoping the ambient
+    // environment is plain. CPython 3.13 colourises tracebacks, and `FORCE_COLOR`
+    // (set by several agent harnesses and CI runners) makes it do so even when
+    // stderr is a pipe. The parser below matches `kind.ends_with("Error")`, and
+    // a colourised line is `"\x1b[1;35mSyntaxError\x1b[0m"` — which ends with
+    // the reset escape, not with `Error`. The probe then reports a non-zero
+    // exit it cannot explain and FAILS OPEN, so a model's broken Python sails
+    // through the pre-write gate on exactly the machines most likely to be
+    // running an agent. Observed 2026-08-25 under `FORCE_COLOR=3`: all three
+    // `python_validator_rejects_*` tests failed while the probe itself was
+    // working perfectly.
+    //
+    // `NO_COLOR` as well as `PYTHON_COLORS`: the first is the cross-tool
+    // convention, the second is CPython's own, and `FORCE_COLOR` in the
+    // inherited environment beats `NO_COLOR` alone.
+    cmd.env("PYTHON_COLORS", "0")
+        .env("NO_COLOR", "1")
+        .env_remove("FORCE_COLOR");
     let mut child = cmd
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
