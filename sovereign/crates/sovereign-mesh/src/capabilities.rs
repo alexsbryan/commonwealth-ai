@@ -166,9 +166,9 @@ pub async fn build_local_capabilities(
         .then(|| AnchorProfile {
             can_anchor: true,
             vram_gb: hardware.gpus.iter().map(|g| g.vram_gb).sum(),
-        // One reading of the fleet, shared with the status surface and the
-        // inference provider — the three used to parse it independently and
-        // disagreed about whitespace (see `SharedModelFleet`).
+            // One reading of the fleet, shared with the status surface and the
+            // inference provider — the three used to parse it independently and
+            // disagreed about whitespace (see `SharedModelFleet`).
             model_resident: sovereign_contracts::launch::SharedModelFleet::from_env()
                 .model_id()
                 .map(str::to_string),

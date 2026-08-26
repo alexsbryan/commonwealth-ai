@@ -70,8 +70,7 @@ fn resolve_cache_dir(raw: Option<&str>, default: impl FnOnce() -> PathBuf) -> Op
     match raw {
         Some(v) => {
             let v = v.trim();
-            (!(v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0"))
-                .then(|| PathBuf::from(v))
+            (!(v.is_empty() || v.eq_ignore_ascii_case("off") || v == "0")).then(|| PathBuf::from(v))
         }
         None => Some(default()),
     }

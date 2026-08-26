@@ -248,10 +248,7 @@ mod tests {
 
         let _held = RunLock::acquire(&real).expect("claim the real root");
         assert!(
-            matches!(
-                RunLock::acquire(&alias),
-                Err(RunLockError::Held { .. })
-            ),
+            matches!(RunLock::acquire(&alias), Err(RunLockError::Held { .. })),
             "the alias resolves to the same inode and must be refused"
         );
     }

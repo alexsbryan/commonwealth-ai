@@ -133,9 +133,7 @@ async fn main() {
                 // not grown a per-slot key. `uniform` names that honestly
                 // rather than leaving it indistinguishable from a host that
                 // simply forgot to split its windows.
-                sovereign_inference::embedded::SlotWindows::uniform(
-                    config.inference.context_size,
-                ),
+                sovereign_inference::embedded::SlotWindows::uniform(config.inference.context_size),
                 None,
             ) {
                 Ok(p) => Arc::new(p),
@@ -168,9 +166,7 @@ async fn main() {
                             model,
                             bc.primary_model.as_deref(),
                             embed_model.as_deref(),
-                            sovereign_inference::embedded::SlotWindows::uniform(
-                                bc.context_size,
-                            ),
+                            sovereign_inference::embedded::SlotWindows::uniform(bc.context_size),
                             None,
                         ) {
                             Ok(p) => {
@@ -401,14 +397,14 @@ async fn main() {
     // and an availability risk. Omitted by `--no-default-features`.
     #[cfg(feature = "dev-routes")]
     tools.register(Box::new(ShellTool));
-    tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    ).declared()));
-    tools.register(Box::new(sovereign_tools::DocumentOperationTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::document::DocumentTool::new(Arc::clone(&store), Arc::clone(&inference))
+            .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::DocumentOperationTool::new(Arc::clone(&store), Arc::clone(&inference))
+            .declared(),
+    ));
     // Search over installed corpora. The `net-tools` build additionally
     // gives it a web fallback that fires whenever the top local score is
     // below SCORE_SUFFICIENT — POST html.duckduckgo.com, then
@@ -444,24 +440,25 @@ async fn main() {
     #[cfg(feature = "net-tools")]
     tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
     #[cfg(feature = "net-tools")]
-    tools.register(Box::new(sovereign_tools::WikipediaFetchTool::new(
-        Arc::clone(&corpus_engine),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::WikipediaFetchTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     tools.register(Box::new(sovereign_tools::compute::ComputeTool.declared()));
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
-        &corpus_engine,
-    )).declared()));
-    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
-        Arc::clone(&corpus_engine),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::ClaimSearchTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::EpistemicLandscapeTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     tools.register(Box::new(
         sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine))
-        .declared(),));
+            .declared(),
+    ));
     // Typed SEC-filing figures with basis + accession, or first-class
     // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
-    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
-        Arc::clone(&corpus_engine),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     // SCIP call graph database + tools (v2).
     //
     // The call-graph tools take `Arc<ArcSwap<ScipGraph>>` so the CLI's
@@ -485,24 +482,30 @@ async fn main() {
     tools.register(Box::new(
         sovereign_tools::SymbolLookupTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
             .with_health_checker(Arc::clone(&health_checker))
-        .declared(),));
+            .declared(),
+    ));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
             .with_inference(Arc::clone(&inference))
-        .declared(),));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-        Arc::clone(&corpus_engine),
-    ).declared()));
+            .declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::RecentChangesTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     tools.register(Box::new(
         sovereign_tools::FindCalleesTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
             .with_health_checker(Arc::clone(&health_checker))
-        .declared(),));
+            .declared(),
+    ));
     tools.register(Box::new(
         sovereign_tools::FindCallersTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
             .with_health_checker(Arc::clone(&health_checker))
-        .declared(),));
+            .declared(),
+    ));
     // Capability map — derived "what the codebase does" overview.
-    tools.register(Box::new(sovereign_tools::CapabilityMapTool::new().declared()));
+    tools.register(Box::new(
+        sovereign_tools::CapabilityMapTool::new().declared(),
+    ));
 
     // Working notes tools — persist across sessions, used for session attribution.
     let notes_db_path = home.join("notes.db");
@@ -510,15 +513,15 @@ async fn main() {
         match corpus_engine_notes::NoteStore::open(&notes_db_path) {
             Ok(store) => {
                 let store = Arc::new(store);
-                tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
-                    &store,
-                )).declared()));
-                tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
-                    &store,
-                )).declared()));
-                tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
-                    &store,
-                )).declared()));
+                tools.register(Box::new(
+                    sovereign_tools::WriteNoteTool::new(Arc::clone(&store)).declared(),
+                ));
+                tools.register(Box::new(
+                    sovereign_tools::ReadNotesTool::new(Arc::clone(&store)).declared(),
+                ));
+                tools.register(Box::new(
+                    sovereign_tools::DeleteNoteTool::new(Arc::clone(&store)).declared(),
+                ));
                 tracing::info!("Notes: tools registered ({})", notes_db_path.display());
                 Some(store)
             }
@@ -537,7 +540,11 @@ async fn main() {
     // generic chat is unaffected.
     {
         use sovereign_contracts::recipe::notes::RecipeNotes;
-        use sovereign_tools::recipe_author::{CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool};
+        use sovereign_tools::recipe_author::{
+            CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool,
+            RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool,
+            RegistryBrowseTool, ResearchFindingTool,
+        };
         use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
         use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
         tools.register(Box::new(RecipeReadTool::new()));
@@ -733,8 +740,11 @@ async fn main() {
                 embed_model_id,
             ),
         );
-        lane.atlas_context = Some(Arc::clone(&atlas_mgr)
-            as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
+        lane.atlas_context =
+            Some(Arc::clone(&atlas_mgr)
+                as Arc<
+                    dyn sovereign_core::atlas_context::AtlasContextProvider,
+                >);
         let _atlas_init = Arc::clone(&atlas_mgr).spawn_init();
         // Phase B2 — bump flusher writes adaptive triage priors to
         // disk every 30s so the next rebuild picks them up.

@@ -478,7 +478,7 @@ impl Runtime {
             let prompt = match &guidance {
                 Some(g) => format!("The user asked: \"{message}\"\n\n{g}"),
                 None => format!(
-                "The user asked: \"{message}\"\n\n\
+                    "The user asked: \"{message}\"\n\n\
                  A search of the installed sources ({corpora}) found nothing \
                  relevant, so you have no evidence from the user's own material. \
                  Your reply already opens by noting that — so continue straight \

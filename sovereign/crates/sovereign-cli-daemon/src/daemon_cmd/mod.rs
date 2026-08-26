@@ -974,15 +974,15 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             },
             headless: Some(sovereign_mesh::HeadlessExtras {
                 rails: sovereign_mesh::HeadlessRails {
-                // Rebuilds the provider when `models.*` changes on disk. Holds
-                // the same deferred handle, bound below.
-                provider_factory: Arc::new(provider::LlamaCppFactory {
-                    daemon: Arc::clone(&deferred_daemon),
-                }),
-                // The work atlas writes into THIS store, so its entries reach
-                // gossip's `all_entries_for_gossip` enumeration. Without it the
-                // daemon builds a private in-memory store and atlas data is
-                // invisible across the mesh.
+                    // Rebuilds the provider when `models.*` changes on disk. Holds
+                    // the same deferred handle, bound below.
+                    provider_factory: Arc::new(provider::LlamaCppFactory {
+                        daemon: Arc::clone(&deferred_daemon),
+                    }),
+                    // The work atlas writes into THIS store, so its entries reach
+                    // gossip's `all_entries_for_gossip` enumeration. Without it the
+                    // daemon builds a private in-memory store and atlas data is
+                    // invisible across the mesh.
                     mesh_store: Arc::clone(&work_atlas_mesh_store),
                     convergence_recorder: Arc::clone(&convergence_recorder),
                 },

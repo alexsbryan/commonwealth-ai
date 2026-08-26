@@ -54,7 +54,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{Error, Result};
 use crate::traits::Tool;
-use crate::types::{AuthorityClaim, Effect, Idempotency, Latency, Permission, RetryConfig, Scope, StepOutput, ToolContext, ToolDescriptor, ToolExample};
+use crate::types::{
+    AuthorityClaim, Effect, Idempotency, Latency, Permission, RetryConfig, Scope, StepOutput,
+    ToolContext, ToolDescriptor, ToolExample,
+};
 
 /// Code-intelligence manifests — every tool under `sovereign-tools/src/code/`.
 ///

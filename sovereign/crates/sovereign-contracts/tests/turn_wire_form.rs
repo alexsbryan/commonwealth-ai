@@ -21,8 +21,8 @@
 //! protocol changes these strings and says so in its commit; an edit that
 //! did not mean to fails here.
 
-use sovereign_contracts::types::NarrationPhase;
 use sovereign_contracts::types::projection::{Citation, Provenance, ProvenanceSource};
+use sovereign_contracts::types::NarrationPhase;
 use sovereign_contracts::types::{TurnFrame, TurnRequest};
 
 /// Serialise, compare against the bytes a client actually reads, then parse

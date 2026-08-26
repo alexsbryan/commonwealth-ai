@@ -245,8 +245,7 @@ async fn handle_ws(socket: WebSocket, daemon: Arc<EmbeddedDaemon>, conversation_
                     // Refused, not queued: a client that sent a second turn
                     // and heard nothing cannot tell "queued" from "lost".
                     let _ = out_tx.send(TurnFrame::StreamError {
-                        message: "a turn is already in flight on this socket"
-                            .to_string(),
+                        message: "a turn is already in flight on this socket".to_string(),
                         retry_after_secs: None,
                     });
                     continue;

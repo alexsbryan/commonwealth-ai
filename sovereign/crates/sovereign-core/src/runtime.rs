@@ -779,7 +779,6 @@ impl Runtime {
     // legitimately arrives after construction, and it is now a cell rather
     // than a second storage.
 
-
     /// Fetch the most recent witness-turn provenance for `conversation_id`,
     /// if any. Returns `None` when no provenance has been captured for
     /// that conversation in this Runtime's lifetime (e.g. a fresh
@@ -790,7 +789,6 @@ impl Runtime {
         guard.get(conversation_id).cloned()
     }
 
-
     /// Attach the cross-corpus meta-atlas AFTER construction. Lets the
     /// desktop fire `backend-ready` fast and warm the ~900MB index in the
     /// background, then install it into the already-shared `Arc<Runtime>`
@@ -800,10 +798,6 @@ impl Runtime {
     pub fn install_meta_atlas(&self, index: Arc<corpus_engine::meta_atlas::MetaAtlasIndex>) {
         self.lane_sources.meta_atlas.store(Some(index));
     }
-
-
-
-
 
     /// Spawn a background task that generates an auto-title for the
     /// conversation if one isn't already set. Non-blocking — failures are

@@ -40,7 +40,6 @@ const OBSIDIAN_DEFAULT_SWEEP_INTERVAL_SECS: u64 = 120;
 
 use corpus_engine::CorpusEngine;
 
-
 /// Handle to the spawned scheduler loop. The caller holds it for the
 /// daemon's lifetime; dropping it (or calling `cancel()`) signals the
 /// loop to exit at the next tick.

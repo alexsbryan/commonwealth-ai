@@ -224,11 +224,7 @@ impl ReadNotesTool {
     }
 
     /// The executable half of `notes`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params.get("query").and_then(|v| v.as_str());
         let symbols: Vec<String> = params
             .get("symbols")
@@ -469,7 +465,6 @@ impl ReadNotesTool {
     }
 
     async fn signal_now(&self) -> Option<String> {
-
         // Cap the query at 50 — we only need the count for the signal
         // and an order-of-magnitude is enough context. If there are
         // 50+ open todos the agent already knows there's a backlog.

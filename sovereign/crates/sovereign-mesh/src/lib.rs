@@ -78,7 +78,6 @@ pub mod projects;
 pub mod prompt_compactor;
 pub mod reading_formatters;
 pub mod reading_http;
-pub mod turn_http;
 #[cfg(feature = "treesitter")]
 pub mod reindexer;
 pub mod rpc_warm_http;
@@ -95,6 +94,7 @@ pub mod throughput_tracking;
 /// survives.
 pub mod tier;
 pub mod tool_profile;
+pub mod turn_http;
 pub mod types;
 pub mod watched_folder_runtime;
 pub mod watched_folder_setup;
@@ -121,13 +121,13 @@ pub mod pinned_transport;
 pub mod pinned_worker_source;
 
 pub use daemon::EmbeddedDaemon;
-pub use peer_inference::DeferredDaemon;
 pub use daemon_services::{
     assemble, AssemblyRefusal, DaemonServices, EmbedAdvertisement, HeadlessExtras, HeadlessRails,
-    HeadlessServices, LaunchParts, McpMount,
-    McpSurface, MeshAdminWitness, ServingCapability, ServingCore, ServingProfile,
+    HeadlessServices, LaunchParts, McpMount, McpSurface, MeshAdminWitness, ServingCapability,
+    ServingCore, ServingProfile,
 };
 pub use deep_link::{parse_deep_link, DeepLink};
+pub use peer_inference::DeferredDaemon;
 pub use state::MeshState;
 pub use types::*;
 pub use work_atlas_broadcaster::MeshBroadcaster;

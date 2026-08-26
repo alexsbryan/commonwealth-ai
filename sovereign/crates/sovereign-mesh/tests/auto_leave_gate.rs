@@ -37,15 +37,19 @@ use sovereign_mesh::deep_link;
 use sovereign_mesh::persist;
 
 mod common;
-use common::mesh_admin_services;
 use common::empty_capabilities;
+use common::mesh_admin_services;
 use sovereign_core::setup_config::SetupConfig;
 
 #[tokio::test]
 async fn join_mesh_against_populated_mesh_errors_and_preserves_on_disk_state() {
     let tmp = tempfile::tempdir().unwrap();
     let data_dir = tmp.path().to_path_buf();
-    let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), mesh_admin_services());
+    let daemon = EmbeddedDaemon::new(
+        data_dir.clone(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
 
     daemon
         .create_mesh("populated-mesh test", "founder")
@@ -203,7 +207,11 @@ async fn join_mesh_against_solo_mesh_passes_the_gate_and_attempts_handshake() {
     // getting an error type OTHER than AlreadyInPopulatedMesh
     // (Network, after the handshake attempt fails to reach any peer).
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), mesh_admin_services());
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
     daemon
         .create_mesh("solo-mesh test", "founder")
         .await
@@ -265,7 +273,11 @@ async fn join_mesh_against_solo_mesh_passes_the_gate_and_attempts_handshake() {
 #[tokio::test]
 async fn failed_join_rolls_back_to_running_solo_mesh() {
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), mesh_admin_services());
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
     daemon
         .create_mesh("solo-mesh test", "founder")
         .await

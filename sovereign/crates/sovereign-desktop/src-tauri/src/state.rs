@@ -606,16 +606,20 @@ pub async fn bootstrap_with_progress(
         tools.register(Box::new(ShellTool));
     }
     if enabled.iter().any(|t| t == "document") {
-        tools.register(Box::new(sovereign_tools::document::DocumentTool::new(
-            Arc::clone(&store),
-            Arc::clone(&inference),
-        ).declared()));
+        tools.register(Box::new(
+            sovereign_tools::document::DocumentTool::new(
+                Arc::clone(&store),
+                Arc::clone(&inference),
+            )
+            .declared(),
+        ));
         let approval_for_doc = Arc::clone(&state.approval);
         tools.register(Box::new(
             sovereign_tools::DocumentOperationTool::new(Arc::clone(&store), Arc::clone(&inference))
                 .with_progress(Arc::new(move |p| {
                     approval_for_doc.emit_event("document-progress", &p);
-                })).declared(),
+                }))
+                .declared(),
         ));
     }
     if enabled
@@ -629,7 +633,10 @@ pub async fn bootstrap_with_progress(
         // direct-enum dispatch never had. The legacy path stays
         // available via SearchTool::with_web for the seven other call
         // sites still using it.
-        use sovereign_tools::web::search::{BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry};
+        use sovereign_tools::web::search::{
+            BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
+            WebSearchBackend, WebSearchRegistry,
+        };
 
         let mut registry = WebSearchRegistry::new();
         // DuckDuckGo is always available (zero-config fallback).
@@ -706,7 +713,10 @@ pub async fn bootstrap_with_progress(
         // instance vs. sharing — kept duplicate for scope-locality
         // (the search-tool block above is its own gated branch).
         if config.auto_escalate_to_web {
-            use sovereign_tools::web::search::{BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl, WebSearchBackend, WebSearchRegistry};
+            use sovereign_tools::web::search::{
+                BraveBackendImpl, DuckDuckGoBackendImpl, SearchOrchestrator, TavilyBackendImpl,
+                WebSearchBackend, WebSearchRegistry,
+            };
             let mut registry = WebSearchRegistry::new();
             registry.register(Arc::new(DuckDuckGoBackendImpl::new()));
             let preferred: Box<dyn WebSearchBackend> =
@@ -1005,21 +1015,23 @@ pub async fn bootstrap_with_progress(
     // reported. Bootstrap hard-requires `ResolvedModelSlots::load()`, which is
     // `SetupConfig::load()`, so a config is on disk on EVERY path that reaches
     // here. Read it now rather than trusting the probe-time snapshot.
-    let local_daemon_wiring: Option<(Arc<sovereign_mesh::DeferredDaemon>, sovereign_core::setup_config::SetupConfig)> =
-        match (&state.bootstrap_mode, deferred_daemon.as_ref()) {
-            (crate::bootstrap::BootstrapMode::Local { source }, Some(handle)) => {
-                let cfg = match source {
-                    crate::bootstrap::ConfigSource::CliSetup(c) => c.clone(),
-                    // Probe-time snapshot predates the wizard's write; the
-                    // file exists by now or we would not have got this far.
-                    _ => sovereign_core::setup_config::SetupConfig::load().map_err(|e| {
-                        format!("Local mode reached bootstrap with no readable config.toml: {e}")
-                    })?,
-                };
-                Some((Arc::clone(handle), cfg))
-            }
-            _ => None,
-        };
+    let local_daemon_wiring: Option<(
+        Arc<sovereign_mesh::DeferredDaemon>,
+        sovereign_core::setup_config::SetupConfig,
+    )> = match (&state.bootstrap_mode, deferred_daemon.as_ref()) {
+        (crate::bootstrap::BootstrapMode::Local { source }, Some(handle)) => {
+            let cfg = match source {
+                crate::bootstrap::ConfigSource::CliSetup(c) => c.clone(),
+                // Probe-time snapshot predates the wizard's write; the
+                // file exists by now or we would not have got this far.
+                _ => sovereign_core::setup_config::SetupConfig::load().map_err(|e| {
+                    format!("Local mode reached bootstrap with no readable config.toml: {e}")
+                })?,
+            };
+            Some((Arc::clone(handle), cfg))
+        }
+        _ => None,
+    };
 
     // ── Single-instance guard for the IN-PROCESS daemon ────────────
     //
@@ -1156,45 +1168,49 @@ pub async fn bootstrap_with_progress(
                         Arc::clone(&corpus_engine),
                         Arc::clone(&graph_handle),
                     )
-                    .with_health_checker(Arc::clone(&hc)).declared(),
+                    .with_health_checker(Arc::clone(&hc))
+                    .declared(),
                 ));
-                mcp_tools.register(Box::new(sovereign_tools::CodeSearchTool::new(Arc::clone(
-                    &corpus_engine,
-                )).declared()));
-                mcp_tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-                    Arc::clone(&corpus_engine),
-                ).declared()));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine)).declared(),
+                ));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::RecentChangesTool::new(Arc::clone(&corpus_engine)).declared(),
+                ));
                 mcp_tools.register(Box::new(
                     sovereign_tools::FindCallersTool::new(
                         Arc::clone(&corpus_engine),
                         Arc::clone(&graph_handle),
                     )
-                    .with_health_checker(Arc::clone(&hc)).declared(),
+                    .with_health_checker(Arc::clone(&hc))
+                    .declared(),
                 ));
                 mcp_tools.register(Box::new(
                     sovereign_tools::FindCalleesTool::new(
                         Arc::clone(&corpus_engine),
                         Arc::clone(&graph_handle),
                     )
-                    .with_health_checker(Arc::clone(&hc)).declared(),
+                    .with_health_checker(Arc::clone(&hc))
+                    .declared(),
                 ));
                 mcp_tools.register(Box::new(
                     sovereign_tools::BlastRadiusTool::new(Arc::clone(&graph_handle))
-                        .with_health_checker(Arc::clone(&hc)).declared(),
+                        .with_health_checker(Arc::clone(&hc))
+                        .declared(),
                 ));
                 // Notes tools.
-                mcp_tools.register(Box::new(sovereign_tools::WriteNoteTool::new(Arc::clone(
-                    &notes,
-                )).declared()));
-                mcp_tools.register(Box::new(sovereign_tools::ReadNotesTool::new(Arc::clone(
-                    &notes,
-                )).declared()));
-                mcp_tools.register(Box::new(sovereign_tools::DeleteNoteTool::new(Arc::clone(
-                    &notes,
-                )).declared()));
-                mcp_tools.register(Box::new(sovereign_tools::SessionReflectionTool::new(
-                    Arc::clone(&notes),
-                ).declared()));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::WriteNoteTool::new(Arc::clone(&notes)).declared(),
+                ));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::ReadNotesTool::new(Arc::clone(&notes)).declared(),
+                ));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::DeleteNoteTool::new(Arc::clone(&notes)).declared(),
+                ));
+                mcp_tools.register(Box::new(
+                    sovereign_tools::SessionReflectionTool::new(Arc::clone(&notes)).declared(),
+                ));
                 let session_id = format!("desktop-{}", uuid::Uuid::new_v4());
                 tracing::info!(tools = mcp_tools.count(), "desktop daemon: wiring /mcp");
                 mcp_surface = sovereign_mesh::McpSurface::Mounted(sovereign_mesh::McpMount {
@@ -1364,12 +1380,12 @@ pub async fn bootstrap_with_progress(
     )
     .await;
 
-    tools.register(Box::new(sovereign_tools::ClaimSearchTool::new(Arc::clone(
-        &corpus_engine,
-    )).declared()));
-    tools.register(Box::new(sovereign_tools::EpistemicLandscapeTool::new(
-        Arc::clone(&corpus_engine),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::ClaimSearchTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
+    tools.register(Box::new(
+        sovereign_tools::EpistemicLandscapeTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     // Typed SEC-filing figures with basis + accession, or first-class refusals.
     //
     // UNCONDITIONAL, never gated on `config.enabled_tools`: this tool is what
@@ -1379,9 +1395,9 @@ pub async fn bootstrap_with_progress(
     // it is a FABRICATION surface, not a reduced one.
     // Pinned by `tests/authority_surface_census.rs`, which carries the
     // measured evidence.
-    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
-        Arc::clone(&corpus_engine),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
     // Code Intelligence tools. Build the merged SCIP handle first so
     // SymbolLookupTool can share it — exact-name lookup now reads
     // SCIP directly (Lance kept only embeddings/content/mtime).
@@ -1434,17 +1450,21 @@ pub async fn bootstrap_with_progress(
             );
         });
     }
-    tools.register(Box::new(sovereign_tools::SymbolLookupTool::new(
-        Arc::clone(&corpus_engine),
-        Arc::clone(&symbols_graph),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::SymbolLookupTool::new(
+            Arc::clone(&corpus_engine),
+            Arc::clone(&symbols_graph),
+        )
+        .declared(),
+    ));
     tools.register(Box::new(
         sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
-            .with_inference(Arc::clone(&inference)).declared(),
+            .with_inference(Arc::clone(&inference))
+            .declared(),
     ));
-    tools.register(Box::new(sovereign_tools::RecentChangesTool::new(
-        Arc::clone(&corpus_engine),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::RecentChangesTool::new(Arc::clone(&corpus_engine)).declared(),
+    ));
 
     // ── Recipe Author workspace tools ────────────────────────────
     //
@@ -1463,7 +1483,11 @@ pub async fn bootstrap_with_progress(
     // even when notes.db / features.db are unavailable.
     {
         use sovereign_contracts::recipe::notes::RecipeNotes;
-        use sovereign_tools::recipe_author::{maintainer_inbox_dir, CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool};
+        use sovereign_tools::recipe_author::{
+            maintainer_inbox_dir, CapabilityRequestTool, CheckpointTool, DecisionLogTool,
+            ProbeUrlTool, RecipeReadTool, RecipeTestTool, RecipeValidateTool,
+            RecipeWriteStructuredTool, RecipeWriteTool, RegistryBrowseTool, ResearchFindingTool,
+        };
         use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
         use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
         tools.register(Box::new(RegistryBrowseTool));
@@ -1639,9 +1663,11 @@ pub async fn bootstrap_with_progress(
     // "Commission" below) rather than at the top being mutated on the way
     // down. Boot ORDER is unchanged — only the point of construction moved.
     let mut lane = sovereign_core::runtime::lane::LaneSources::none();
-    lane.atlas_context = Some(
-        Arc::clone(&atlas_ctx_mgr) as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>
-    );
+    lane.atlas_context =
+        Some(Arc::clone(&atlas_ctx_mgr)
+            as Arc<
+                dyn sovereign_core::atlas_context::AtlasContextProvider,
+            >);
     // Cross-encoder reranker (T1 A2). Until 2026-08-03 the ONLY
     // surface that installed one was the `svrn chat` CLI — the desktop
     // had zero rerank references, so it shipped baseline fusion
@@ -1841,7 +1867,8 @@ pub async fn bootstrap_with_progress(
                         "knowledge_view: attach mode — landscape digest client wired \
                          to {digest_base}/v1/knowledge/landscape_digest"
                     );
-                    Some(Arc::new(client) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>)
+                    Some(Arc::new(client)
+                        as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>)
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -1969,32 +1996,32 @@ pub async fn bootstrap_with_progress(
                 // distinguished by a state store either.
                 headless: None,
                 serving: sovereign_mesh::ServingProfile {
-                core: sovereign_mesh::ServingCore {
-                    // The engine peers gossip-probe over
-                    // `/internal/knowledge/search`, and that `/v1/knowledge/
-                    // search` reads. Present BEFORE `try_resume`, so the
-                    // first gossip round already advertises real
-                    // `hosted_corpora`.
-                    corpus_engine: Arc::clone(&corpus_engine),
-                    // The RAW provider, not the mesh-wrapped one: a peer
-                    // POSTing `/v1/chat/completions` here must be served
-                    // from our local model, not re-entered into our own
-                    // routing wrapper and ping-ponged back out.
-                    inference_provider: Arc::clone(&raw_inference),
-                    // Resolves `conversation-history` chunks back to their
-                    // conversation for the reading surface; without it
-                    // citations render with no title. THE SAME handle this
-                    // process already opened — the desktop and its in-process
-                    // daemon are one writer of one `sovereign.db`, which is
-                    // the invariant `RunLock` keys on the data root to hold.
-                    state_store: Arc::clone(&store),
-                    // Phase 5c: THE SAME `Runtime` this process commissioned
-                    // above — not a second one for the in-process daemon.
-                    // One process, one thing that answers; the desktop's chat
-                    // commands and anything the daemon serves are the same
-                    // assembly by construction rather than by review.
-                    runtime: Arc::clone(&runtime_arc),
-                },
+                    core: sovereign_mesh::ServingCore {
+                        // The engine peers gossip-probe over
+                        // `/internal/knowledge/search`, and that `/v1/knowledge/
+                        // search` reads. Present BEFORE `try_resume`, so the
+                        // first gossip round already advertises real
+                        // `hosted_corpora`.
+                        corpus_engine: Arc::clone(&corpus_engine),
+                        // The RAW provider, not the mesh-wrapped one: a peer
+                        // POSTing `/v1/chat/completions` here must be served
+                        // from our local model, not re-entered into our own
+                        // routing wrapper and ping-ponged back out.
+                        inference_provider: Arc::clone(&raw_inference),
+                        // Resolves `conversation-history` chunks back to their
+                        // conversation for the reading surface; without it
+                        // citations render with no title. THE SAME handle this
+                        // process already opened — the desktop and its in-process
+                        // daemon are one writer of one `sovereign.db`, which is
+                        // the invariant `RunLock` keys on the data root to hold.
+                        state_store: Arc::clone(&store),
+                        // Phase 5c: THE SAME `Runtime` this process commissioned
+                        // above — not a second one for the in-process daemon.
+                        // One process, one thing that answers; the desktop's chat
+                        // commands and anything the daemon serves are the same
+                        // assembly by construction rather than by review.
+                        runtime: Arc::clone(&runtime_arc),
+                    },
                     capability,
                     advertise_embed,
                 },

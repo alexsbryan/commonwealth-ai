@@ -363,7 +363,9 @@ impl SharedModelFleet {
     pub fn from_env() -> Self {
         Self::resolve(
             std::env::var("SOVEREIGN_SHARED_MODEL_ID").ok().as_deref(),
-            std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS").ok().as_deref(),
+            std::env::var("SOVEREIGN_RPC_QUORUM_ANCHORS")
+                .ok()
+                .as_deref(),
         )
     }
 
@@ -514,9 +516,18 @@ mod tests {
     /// its own inference provider refused to join.
     #[test]
     fn a_whitespace_model_id_is_not_a_fleet() {
-        assert_eq!(SharedModelFleet::resolve(Some("  "), None), SharedModelFleet::Solo);
-        assert_eq!(SharedModelFleet::resolve(Some(""), None), SharedModelFleet::Solo);
-        assert_eq!(SharedModelFleet::resolve(None, Some("3")), SharedModelFleet::Solo);
+        assert_eq!(
+            SharedModelFleet::resolve(Some("  "), None),
+            SharedModelFleet::Solo
+        );
+        assert_eq!(
+            SharedModelFleet::resolve(Some(""), None),
+            SharedModelFleet::Solo
+        );
+        assert_eq!(
+            SharedModelFleet::resolve(None, Some("3")),
+            SharedModelFleet::Solo
+        );
     }
 
     /// A named id is trimmed once, here, so no downstream reader has to.
@@ -542,7 +553,10 @@ mod tests {
     #[test]
     fn solo_has_no_model_and_the_default_quorum() {
         assert_eq!(SharedModelFleet::Solo.model_id(), None);
-        assert_eq!(SharedModelFleet::Solo.quorum_anchors(), DEFAULT_QUORUM_ANCHORS);
+        assert_eq!(
+            SharedModelFleet::Solo.quorum_anchors(),
+            DEFAULT_QUORUM_ANCHORS
+        );
     }
 
     fn v(args: &[&str]) -> Vec<String> {
@@ -584,8 +598,14 @@ mod tests {
     /// process then falls through to the GUI or to usage.
     #[test]
     fn a_child_flag_is_found_at_any_position() {
-        assert_eq!(parse(&["--compute-child", "--slot", "0"]).as_str(), "compute-child");
-        assert_eq!(parse(&["--quiet", "--compute-child", "--slot", "0"]).as_str(), "compute-child");
+        assert_eq!(
+            parse(&["--compute-child", "--slot", "0"]).as_str(),
+            "compute-child"
+        );
+        assert_eq!(
+            parse(&["--quiet", "--compute-child", "--slot", "0"]).as_str(),
+            "compute-child"
+        );
         assert_eq!(parse(&["--quiet", "--daemon-child"]).as_str(), "daemon");
     }
 
@@ -601,7 +621,10 @@ mod tests {
     /// child spawned with a verb-shaped argument would boot a second daemon.
     #[test]
     fn a_child_re_exec_outranks_a_verb() {
-        assert_eq!(parse(&["daemon", "--compute-child"]).as_str(), "compute-child");
+        assert_eq!(
+            parse(&["daemon", "--compute-child"]).as_str(),
+            "compute-child"
+        );
     }
 
     #[test]

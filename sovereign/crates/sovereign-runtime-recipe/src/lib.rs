@@ -250,14 +250,8 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
     log_installed_corpora(&corpus_engine, progress).await;
 
     let tools = build_tools(&store, &inference, &corpus_engine, shell, progress).await;
-    let (router, planner) = build_router_and_planner(
-        &inference,
-        &store,
-        &skills,
-        Arc::clone(&tools),
-        progress,
-    )
-    .await;
+    let (router, planner) =
+        build_router_and_planner(&inference, &store, &skills, Arc::clone(&tools), progress).await;
     let (lane, atlas_context) = build_lane(
         conv_tiered,
         &corpus_engine,
@@ -370,11 +364,8 @@ async fn build_tools(
     // model can probe it harmlessly (sovereign decision 7693f16b: attached
     // docs as Tool, not parallel pipeline).
     tools.register(Box::new(
-        sovereign_tools::AttachedDocumentSearchTool::new(
-            Arc::clone(store),
-            Arc::clone(inference),
-        )
-        .declared(),
+        sovereign_tools::AttachedDocumentSearchTool::new(Arc::clone(store), Arc::clone(inference))
+            .declared(),
     ));
 
     // External MCP servers (the `[[mcp_servers]]` array of the canonical
@@ -384,7 +375,10 @@ async fn build_tools(
     let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
     for st in mcp.server_statuses().await {
         if st.connected {
-            progress.note(&format!("MCP:         {} ({} tools)", st.name, st.tool_count));
+            progress.note(&format!(
+                "MCP:         {} ({} tools)",
+                st.name, st.tool_count
+            ));
         } else if let Some(e) = &st.error {
             progress.note(&format!("MCP:         {} unavailable — {e}", st.name));
         }
@@ -477,8 +471,11 @@ async fn build_lane(
         Arc::clone(inference),
         embed_model.to_string(),
     ));
-    lane.atlas_context = Some(Arc::clone(&atlas_mgr)
-        as Arc<dyn sovereign_core::atlas_context::AtlasContextProvider>);
+    lane.atlas_context =
+        Some(Arc::clone(&atlas_mgr)
+            as Arc<
+                dyn sovereign_core::atlas_context::AtlasContextProvider,
+            >);
     atlas_mgr.init_from_cache().await;
     progress.note(&format!(
         "Atlas: {} corpus context(s) loaded from cache",

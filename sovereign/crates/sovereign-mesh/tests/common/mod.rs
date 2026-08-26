@@ -435,22 +435,22 @@ pub fn desktop_services_with_engine(
         sovereign_mesh::LaunchParts::Serving {
             headless: None,
             serving: sovereign_mesh::ServingProfile {
-        core: sovereign_mesh::ServingCore {
-            corpus_engine: engine,
-            inference_provider: Arc::new(TestProvider::new()),
-            state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
-            runtime: stub_runtime(Arc::new(TestProvider::new()), None),
-        },
-        capability: sovereign_mesh::ServingCapability {
-            mcp: sovereign_mesh::McpSurface::Unavailable {
-                reason: "test fixture: no tool registry".into(),
-            },
-            project_http: Router::new(),
-            corpus_watch_http: Router::new(),
-        },
-            advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
-                reason: "test fixture: no embed probe".into(),
-            },
+                core: sovereign_mesh::ServingCore {
+                    corpus_engine: engine,
+                    inference_provider: Arc::new(TestProvider::new()),
+                    state_store: Arc::new(sovereign_store::memory::InMemoryStateStore::new()),
+                    runtime: stub_runtime(Arc::new(TestProvider::new()), None),
+                },
+                capability: sovereign_mesh::ServingCapability {
+                    mcp: sovereign_mesh::McpSurface::Unavailable {
+                        reason: "test fixture: no tool registry".into(),
+                    },
+                    project_http: Router::new(),
+                    corpus_watch_http: Router::new(),
+                },
+                advertise_embed: sovereign_mesh::EmbedAdvertisement::Unavailable {
+                    reason: "test fixture: no embed probe".into(),
+                },
             },
         },
     )
@@ -470,8 +470,8 @@ pub fn stub_runtime(
     provider: Arc<dyn sovereign_core::traits::InferenceProvider>,
     store: Option<Arc<dyn sovereign_core::traits::StateStore>>,
 ) -> Arc<sovereign_core::runtime::Runtime> {
-    let store = store
-        .unwrap_or_else(|| Arc::new(sovereign_store::memory::InMemoryStateStore::new()));
+    let store =
+        store.unwrap_or_else(|| Arc::new(sovereign_store::memory::InMemoryStateStore::new()));
     Arc::new(sovereign_core::runtime::Runtime::new(
         sovereign_core::RuntimeParts::new(
             provider,

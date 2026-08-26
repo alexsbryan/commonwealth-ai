@@ -189,10 +189,7 @@ fn identity(p: &Path) -> PathBuf {
 }
 
 fn live_marker(root: &Path) -> Option<&'static str> {
-    LIVE_MARKERS
-        .iter()
-        .copied()
-        .find(|m| root.join(m).exists())
+    LIVE_MARKERS.iter().copied().find(|m| root.join(m).exists())
 }
 
 #[cfg(test)]
@@ -292,10 +289,7 @@ mod tests {
     #[test]
     fn the_candidate_list_names_all_four_historical_roots() {
         let roots = candidate_roots();
-        let names: Vec<String> = roots
-            .iter()
-            .map(|p| p.display().to_string())
-            .collect();
+        let names: Vec<String> = roots.iter().map(|p| p.display().to_string()).collect();
         for suffix in [".svrnmesh", ".sovereign"] {
             assert!(
                 names.iter().any(|n| n.ends_with(suffix)),

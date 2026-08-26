@@ -24,9 +24,6 @@ pub mod frame;
 pub mod health;
 pub mod intent_policy;
 pub mod launch;
-/// Which checkout this host's code tools operate on — one reading of the
-/// two configured sources (`TOPOLOGY.md` §10 phase 10).
-pub mod workspace;
 pub mod mcp_config;
 pub mod memory_config;
 pub mod observer;
@@ -41,6 +38,9 @@ pub mod tool_manifest;
 pub mod tool_result_cache;
 pub mod traits;
 pub mod types;
+/// Which checkout this host's code tools operate on — one reading of the
+/// two configured sources (`TOPOLOGY.md` §10 phase 10).
+pub mod workspace;
 
 // Root re-exports mirroring the ones `sovereign-core` exposed, so
 // `sovereign_contracts::{Error, Result, ToolRegistry, <Type>}` all resolve.

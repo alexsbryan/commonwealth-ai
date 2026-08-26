@@ -1461,7 +1461,7 @@ fn step_raptor_grounding_early<'a, 'ctx>(
                 st.enabled_corpora,
                 &st.lane,
             )
-                .await;
+            .await;
             StepOutcome::default()
         } else {
             StepOutcome {
@@ -1587,21 +1587,15 @@ fn step_ppr_spawn<'a, 'ctx>(rt: &'a Runtime, st: &'a mut PipelineState<'ctx>) ->
         // ledger. The lanes were always this expensive; the waste was
         // concealing them.
         let scope: Option<Vec<String>> = st.expansion_corpora().map(<[String]>::to_vec);
-        st.ppr_pending =
-            rt.spawn_ppr_lane(
-                &st.chunks,
-                st.message,
-                scope.as_deref(),
-                st.corpus_ceiling,
-                &st.lane,
-            );
+        st.ppr_pending = rt.spawn_ppr_lane(
+            &st.chunks,
+            st.message,
+            scope.as_deref(),
+            st.corpus_ceiling,
+            &st.lane,
+        );
         st.obligations_pending =
-            rt.spawn_entity_obligations(
-                st.message,
-                scope.as_deref(),
-                st.corpus_ceiling,
-                &st.lane,
-            );
+            rt.spawn_entity_obligations(st.message, scope.as_deref(), st.corpus_ceiling, &st.lane);
         let spawned = match (st.ppr_pending.is_some(), st.obligations_pending.is_some()) {
             (true, true) => Some("ppr + obligations spawned".to_string()),
             (true, false) => Some("ppr lane spawned".to_string()),

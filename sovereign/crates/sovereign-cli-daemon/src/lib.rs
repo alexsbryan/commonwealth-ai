@@ -31,8 +31,8 @@ mod watcher_supervisor;
 /// which a reimplementation in the test would silently paper over.
 pub use daemon_cmd::bootstrap::spawn_self_manifest_refresh;
 
-use sovereign_contracts::launch::Launch;
 use sovereign_cli_shared::tracing_init::init_tracing;
+use sovereign_contracts::launch::Launch;
 
 /// Default tracing allowlist for `sovereign-cli-daemon daemon run`.
 ///
@@ -239,18 +239,20 @@ async fn dispatch(launch: Launch, raw_args: &[String]) -> i32 {
         Launch::Daemon { ref args } | Launch::Worker { ref args } => {
             daemon_cmd::run(&launch, &args.clone()).await
         }
-        Launch::Verb { name, args } => match name.as_str() {
-            "model" => model_cmd::run(&args).await,
-            "setup" => setup_cmd::run_setup(&args).await,
-            "install-service" => install_service_cmd::run(&args).await,
-            "doctor" => doctor_cmd::run_doctor(&args).await,
-            // `ONE_SHOT_VERBS` is the closed set `Launch::parse` matches on;
-            // a name reaching here means that list and this one disagree.
-            other => {
-                eprintln!("sovereign-cli-daemon: verb '{other}' is declared in Launch but not wired here");
-                2
+        Launch::Verb { name, args } => {
+            match name.as_str() {
+                "model" => model_cmd::run(&args).await,
+                "setup" => setup_cmd::run_setup(&args).await,
+                "install-service" => install_service_cmd::run(&args).await,
+                "doctor" => doctor_cmd::run_doctor(&args).await,
+                // `ONE_SHOT_VERBS` is the closed set `Launch::parse` matches on;
+                // a name reaching here means that list and this one disagree.
+                other => {
+                    eprintln!("sovereign-cli-daemon: verb '{other}' is declared in Launch but not wired here");
+                    2
+                }
             }
-        },
+        }
         Launch::Bare => match raw_args.first() {
             None => {
                 eprintln!(

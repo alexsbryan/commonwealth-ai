@@ -32,9 +32,9 @@ use common::mesh_admin_services;
 
 use std::time::Duration;
 
+use sovereign_core::setup_config::SetupConfig;
 use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_mesh::persist;
-use sovereign_core::setup_config::SetupConfig;
 
 #[tokio::test]
 async fn join_key_persists_across_restart_and_current_invite_returns_same_key() {
@@ -43,7 +43,11 @@ async fn join_key_persists_across_restart_and_current_invite_returns_same_key() 
 
     // Round 1: create the mesh, snapshot the invite (key + link).
     let (key_before, link_before) = {
-        let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), mesh_admin_services());
+        let daemon = EmbeddedDaemon::new(
+            data_dir.clone(),
+            SetupConfig::unconfigured(),
+            mesh_admin_services(),
+        );
         let create = daemon
             .create_mesh("join-key restart test", "founder")
             .await
@@ -126,7 +130,11 @@ async fn leave_clears_join_key_secret_so_next_mesh_does_not_inherit_stale_invite
     let tmp = tempfile::tempdir().unwrap();
     let data_dir = tmp.path().to_path_buf();
 
-    let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), mesh_admin_services());
+    let daemon = EmbeddedDaemon::new(
+        data_dir.clone(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
     daemon
         .create_mesh("pre-leave mesh", "node-A")
         .await
@@ -171,7 +179,11 @@ async fn resume_with_missing_join_key_secret_is_non_fatal() {
     // join_key.secret file. Simulates a daemon restored from a
     // pre-feature backup.
     {
-        let daemon = EmbeddedDaemon::new(data_dir.clone(), SetupConfig::unconfigured(), mesh_admin_services());
+        let daemon = EmbeddedDaemon::new(
+            data_dir.clone(),
+            SetupConfig::unconfigured(),
+            mesh_admin_services(),
+        );
         daemon
             .create_mesh("pre-feature mesh", "founder")
             .await

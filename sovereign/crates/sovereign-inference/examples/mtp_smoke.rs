@@ -139,7 +139,13 @@ async fn main() {
     eprintln!("gpu_layers: {gpu_layers:?}");
 
     let t_load = Instant::now();
-    let provider = match EmbeddedLlamaCpp::load_full(&model, None, None, SlotWindows::uniform(ctx), gpu_layers) {
+    let provider = match EmbeddedLlamaCpp::load_full(
+        &model,
+        None,
+        None,
+        SlotWindows::uniform(ctx),
+        gpu_layers,
+    ) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("FAIL: model load: {e}");

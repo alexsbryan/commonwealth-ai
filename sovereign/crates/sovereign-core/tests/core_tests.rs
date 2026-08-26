@@ -2281,7 +2281,6 @@ async fn lessons_shape_the_synthesis_request() {
             // Phase 4b: enrichment is a required argument, not eight
             // forgettable builders.
             sovereign_core::runtime::lane::LaneSources::none(),
-    
         )
     });
 
@@ -2337,7 +2336,6 @@ async fn streaming_turn_applies_term_avoid_and_whispers_once() {
             // Phase 4b: enrichment is a required argument, not eight
             // forgettable builders.
             sovereign_core::runtime::lane::LaneSources::none(),
-    
         )
     });
 

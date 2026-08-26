@@ -152,7 +152,11 @@ fn production_source(src: &str) -> String {
     // caught rather than shipped as a silently narrow scan.
     let cut = src
         .match_indices("#[cfg(test)]")
-        .find(|(i, _)| src[*i..].split_once('\n').is_some_and(|(_, r)| r.contains("mod tests")))
+        .find(|(i, _)| {
+            src[*i..]
+                .split_once('\n')
+                .is_some_and(|(_, r)| r.contains("mod tests"))
+        })
         .map(|(i, _)| i);
     let code = match cut {
         Some(i) => &src[..i],
@@ -219,7 +223,10 @@ fn constructor_sites() -> Vec<String> {
 
 /// Files calling the shared recipe's `commission`.
 fn recipe_callers() -> Vec<String> {
-    files_containing(|prod| prod.matches("sovereign_runtime_recipe::commission(").count())
+    files_containing(|prod| {
+        prod.matches("sovereign_runtime_recipe::commission(")
+            .count()
+    })
 }
 
 /// Every process that commissions a `Runtime`, by either door.

@@ -43,15 +43,15 @@ use axum::response::Response;
 use axum::Router;
 use corpus_engine_scip::ScipGraph;
 
+use sovereign_core::setup_config::SetupConfig;
 use sovereign_mesh::admin_http::admin_router;
 use sovereign_mesh::corpus_watch_http::corpus_watch_router;
 use sovereign_mesh::daemon::EmbeddedDaemon;
 use sovereign_mesh::mesh_http::mesh_router;
 use sovereign_mesh::project_http::project_router;
 use sovereign_mesh::reading_http::reading_router;
-use sovereign_mesh::turn_http::turn_router;
 use sovereign_mesh::reindexer::Reindexer;
-use sovereign_core::setup_config::SetupConfig;
+use sovereign_mesh::turn_http::turn_router;
 
 /// Outer middleware that overrides `ConnectInfo<SocketAddr>` on the
 /// request to a *non-loopback* LAN address. Wraps a real router via
@@ -88,7 +88,11 @@ async fn spawn_with_spoof(router: Router) -> String {
 
 fn fresh_daemon() -> (tempfile::TempDir, Arc<EmbeddedDaemon>) {
     let tmp = tempfile::tempdir().unwrap();
-    let daemon = EmbeddedDaemon::new(tmp.path().to_path_buf(), SetupConfig::unconfigured(), mesh_admin_services());
+    let daemon = EmbeddedDaemon::new(
+        tmp.path().to_path_buf(),
+        SetupConfig::unconfigured(),
+        mesh_admin_services(),
+    );
     (tmp, daemon)
 }
 

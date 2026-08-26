@@ -75,7 +75,6 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         return 0;
     }
 
-
     match args[0].as_str() {
         "create" => cmd_create(&args[1..]).await,
         "join" => cmd_join(&args[1..]).await,

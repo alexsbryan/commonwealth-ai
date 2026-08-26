@@ -61,10 +61,8 @@ const ACQUISITION_DOORS: &[&str] = &[
 ];
 
 fn pipeline_source() -> String {
-    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("src/runtime/retrieval_pipeline.rs");
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/runtime/retrieval_pipeline.rs");
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
 /// The production half of the file, with comments stripped.

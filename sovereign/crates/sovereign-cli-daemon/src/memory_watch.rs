@@ -322,8 +322,9 @@ pub fn headroom_hard_mb() -> Option<u64> {
 fn headroom_hard_policy(raw: Option<&str>, total_ram_mb: Option<u64>) -> Option<u64> {
     match raw.map(str::trim) {
         None | Some("0") | Some("off") | Some("OFF") => None,
-        Some(v) if v.eq_ignore_ascii_case("auto") => total_ram_mb
-            .map(|ram| (ram * HEADROOM_SOFT_PCT / 200).max(HEADROOM_FLOOR_MB / 2)),
+        Some(v) if v.eq_ignore_ascii_case("auto") => {
+            total_ram_mb.map(|ram| (ram * HEADROOM_SOFT_PCT / 200).max(HEADROOM_FLOOR_MB / 2))
+        }
         Some(v) => v.parse::<u64>().ok().filter(|&n| n > 0),
     }
 }
@@ -722,7 +723,11 @@ mod tests {
                 None,
                 "{raw:?} must leave the floor disabled"
             );
-            assert_eq!(hard_limit_policy(raw, ram), None, "{raw:?} — RSS side agrees");
+            assert_eq!(
+                hard_limit_policy(raw, ram),
+                None,
+                "{raw:?} — RSS side agrees"
+            );
         }
         assert!(headroom_hard_policy(Some("auto"), ram).is_some());
         assert_eq!(headroom_hard_policy(Some("2048"), ram), Some(2048));
@@ -735,7 +740,10 @@ mod tests {
         let mut g = WarnGate::new();
         let t0 = Instant::now();
         assert!(!g.observe_below(20_000, 18_000, t0), "healthy — silent");
-        assert!(g.observe_below(17_000, 18_000, t0), "crossed down — warn once");
+        assert!(
+            g.observe_below(17_000, 18_000, t0),
+            "crossed down — warn once"
+        );
         assert!(!g.observe_below(16_000, 18_000, t0), "still low — no spam");
         assert!(!g.observe_below(19_000, 18_000, t0), "recovered — silent");
         assert!(

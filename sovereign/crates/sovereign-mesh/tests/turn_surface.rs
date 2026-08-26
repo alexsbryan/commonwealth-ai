@@ -50,19 +50,11 @@ fn engine(dir: &std::path::Path) -> Arc<corpus_engine::CorpusEngine> {
 /// the rows the turn wrote.
 fn serving_daemon(
     provider: TestProvider,
-) -> (
-    tempfile::TempDir,
-    Arc<EmbeddedDaemon>,
-    Arc<dyn StateStore>,
-) {
+) -> (tempfile::TempDir, Arc<EmbeddedDaemon>, Arc<dyn StateStore>) {
     let tmp = tempfile::tempdir().unwrap();
-    let store: Arc<dyn StateStore> =
-        Arc::new(sovereign_store::memory::InMemoryStateStore::new());
-    let services = desktop_services_with_store(
-        engine(tmp.path()),
-        Arc::clone(&store),
-        Arc::new(provider),
-    );
+    let store: Arc<dyn StateStore> = Arc::new(sovereign_store::memory::InMemoryStateStore::new());
+    let services =
+        desktop_services_with_store(engine(tmp.path()), Arc::clone(&store), Arc::new(provider));
     let daemon = EmbeddedDaemon::new(
         tmp.path().to_path_buf(),
         SetupConfig::unconfigured(),
@@ -105,11 +97,10 @@ async fn a_daemon_streams_a_turn_to_a_websocket_client() {
     let base = format!("http://{addr}");
     let conv = create_conversation(&base).await;
 
-    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
-        "ws://{addr}/v1/conversations/{conv}/stream"
-    ))
-    .await
-    .expect("the daemon accepts a WebSocket upgrade on the turn route");
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("ws://{addr}/v1/conversations/{conv}/stream"))
+            .await
+            .expect("the daemon accepts a WebSocket upgrade on the turn route");
 
     ws.send(tokio_tungstenite::tungstenite::Message::Text(
         serde_json::to_string(&TurnRequest::Message {
@@ -130,8 +121,8 @@ async fn a_daemon_streams_a_turn_to_a_websocket_client() {
             let tokio_tungstenite::tungstenite::Message::Text(t) = msg else {
                 continue;
             };
-            let frame: TurnFrame =
-                serde_json::from_str(&t).expect("every frame the daemon sends parses as a TurnFrame");
+            let frame: TurnFrame = serde_json::from_str(&t)
+                .expect("every frame the daemon sends parses as a TurnFrame");
             let terminal = matches!(
                 frame,
                 TurnFrame::Complete { .. } | TurnFrame::StreamError { .. }
@@ -219,11 +210,10 @@ async fn a_mid_turn_approval_is_refused_loudly() {
     let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
     let conv = create_conversation(&format!("http://{addr}")).await;
 
-    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
-        "ws://{addr}/v1/conversations/{conv}/stream"
-    ))
-    .await
-    .unwrap();
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("ws://{addr}/v1/conversations/{conv}/stream"))
+            .await
+            .unwrap();
     ws.send(tokio_tungstenite::tungstenite::Message::Text(
         serde_json::to_string(&TurnRequest::Approve {
             task_id: "t".to_string(),
@@ -283,11 +273,10 @@ async fn a_socket_still_reads_while_its_turn_is_running() {
     let addr = spawn_router(turn_router(Arc::clone(&daemon))).await;
     let conv = create_conversation(&format!("http://{addr}")).await;
 
-    let (mut ws, _) = tokio_tungstenite::connect_async(format!(
-        "ws://{addr}/v1/conversations/{conv}/stream"
-    ))
-    .await
-    .unwrap();
+    let (mut ws, _) =
+        tokio_tungstenite::connect_async(format!("ws://{addr}/v1/conversations/{conv}/stream"))
+            .await
+            .unwrap();
     let msg = |text: &str| {
         tokio_tungstenite::tungstenite::Message::Text(
             serde_json::to_string(&TurnRequest::Message {

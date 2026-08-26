@@ -518,12 +518,12 @@ impl EmbeddedDaemon {
                 .rails()
                 .map(|r| Arc::clone(&r.provider_factory))
                 .ok_or_else(|| {
-                format!(
-                    "models changed but the `{}` daemon profile carries no ProviderFactory — \
+                    format!(
+                        "models changed but the `{}` daemon profile carries no ProviderFactory — \
                      restart to apply model changes",
-                    self.services.label()
-                )
-            })?;
+                        self.services.label()
+                    )
+                })?;
             let new_provider = factory.build_provider(&fresh).await?;
             self.swap_inference_provider(new_provider).await;
             for f in &diff.models_changed {

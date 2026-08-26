@@ -123,9 +123,9 @@ pub(super) async fn build_tool_registry(
     ));
     // Typed SEC-filing figures with basis + accession, or first-class
     // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
-    tools.register(Box::new(sovereign_tools::sec_facts::SecFactsTool::new(
-        Arc::clone(&engine),
-    ).declared()));
+    tools.register(Box::new(
+        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(&engine)).declared(),
+    ));
 
     // ── Work atlas tools (Phase 2) ──────────────────────────────
     // Always registered so MCP clients see them even on a repo

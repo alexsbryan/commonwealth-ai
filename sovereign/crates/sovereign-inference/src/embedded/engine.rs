@@ -1429,8 +1429,14 @@ impl EmbeddedLlamaCpp {
             // The sibling pool is a LOCAL weight-sharing optimization (one
             // resident copy, N contexts) — incoherent with distribution, which
             // splits the weights across remote workers. Keep it local.
-            let primary_0 =
-                ModelSlot::load("primary", &backend, primary_path, context_size, n_gpu_layers, false)?;
+            let primary_0 = ModelSlot::load(
+                "primary",
+                &backend,
+                primary_path,
+                context_size,
+                n_gpu_layers,
+                false,
+            )?;
             let shared_model = Arc::clone(&primary_0.model);
             let shared_id = primary_0.model_id.clone();
             let shared_size = primary_0.size_bytes;
@@ -2659,7 +2665,14 @@ impl EmbeddedLlamaCpp {
             // enumeration includes the just-registered RPC worker(s).
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load("primary", &backend, &target_path, ctx_size, gpu_layers, distributable)?;
+            let s = ModelSlot::load(
+                "primary",
+                &backend,
+                &target_path,
+                ctx_size,
+                gpu_layers,
+                distributable,
+            )?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(
@@ -4013,7 +4026,14 @@ impl InferenceProvider for EmbeddedLlamaCpp {
             // path runs on hot-swap.
             *primary = None;
             let started = Instant::now();
-            let s = ModelSlot::load("primary", &backend, &target_path, ctx_size, gpu_layers, distributable)?;
+            let s = ModelSlot::load(
+                "primary",
+                &backend,
+                &target_path,
+                ctx_size,
+                gpu_layers,
+                distributable,
+            )?;
             *primary = Some(s);
             *loaded = Some(target_path.clone());
             tracing::info!(
