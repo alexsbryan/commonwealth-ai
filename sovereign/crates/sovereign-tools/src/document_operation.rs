@@ -335,6 +335,7 @@ impl DocumentOperationTool {
             let state = Arc::clone(&state);
             Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
         })
+        .with_family(sovereign_contracts::tool_bundle::ToolFamily::Document)
     }
 
     /// The executable half of `document_operation`.

@@ -831,6 +831,21 @@ pub trait Tool: Send + Sync {
     /// Run the tool. `params` should already have passed `validate`; `ctx` carries conversation-scoped context.
     async fn execute(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput>;
 
+    /// Which user-facing switch governs this tool, if any.
+    ///
+    /// `None` — the default and the common case — means NO switch governs it:
+    /// the tool is part of what the host always carries, and
+    /// [`ToolPermissions`](crate::tool_bundle::ToolPermissions) always permits
+    /// it. `Some(family)` means a surface with a settings panel may withhold
+    /// it, and `ToolRegistry::register_reporting` is where that is enforced.
+    ///
+    /// Deliberately NOT the same as "permitted but absent": a tool declaring
+    /// no family and a tool whose family is off are different facts, and
+    /// collapsing them would make every ungoverned tool look switched off.
+    fn family(&self) -> Option<crate::tool_bundle::ToolFamily> {
+        None
+    }
+
     /// Cheap pre-execution parameter check. Default accepts everything; override to reject malformed params before any side effect.
     fn validate(&self, params: &serde_json::Value) -> Result<()> {
         let _ = params;

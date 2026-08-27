@@ -27,7 +27,7 @@ use super::{
     atlas_tensions_classify, config::EnrichConfig, extract, paths, schema_review, seed_cmd,
 };
 use corpus_engine::enrichment::pipeline::{
-    BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
+    progress::wire, BuildStep, EnrichProgress, EnrichProgressFn, PipelineRegistry, SeedStrategy,
 };
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 use std::sync::Arc;
@@ -100,13 +100,25 @@ pub async fn cmd_build(args: &[String]) -> i32 {
         }
     };
 
-    // Emitter that prints each progress event as a CLI-style
-    // banner. Desktop callers pass their own emitter (Tauri
-    // channel) instead — the orchestration is identical either
-    // way.
-    let progress: EnrichProgressFn = Arc::new(|evt: EnrichProgress| {
-        print_cli_event(&evt);
-    });
+    // Two renderings of one event stream, and the parent picks.
+    //
+    // A human gets banners. A parent process that set
+    // `SOVEREIGN_ENRICH_PROGRESS=json` gets one `@progress {…}` line per
+    // event on stdout — the wire `corpus_engine::…::progress::wire` declares,
+    // which is what `sovereign_tools::enrich` reads. Before 2026-08-26 there
+    // was no second rendering and that runner regex-matched THESE banners, so
+    // rewording one silently changed what the desktop believed about a running
+    // enrichment (TOPOLOGY §9.3).
+    //
+    // The env var is read here, at the ONE place that decides how to render.
+    let machine = std::env::var(wire::REQUEST_ENV)
+        .map(|v| v == wire::REQUEST_VALUE)
+        .unwrap_or(false);
+    let progress: EnrichProgressFn = if machine {
+        Arc::new(|evt: EnrichProgress| println!("{}", wire::encode(&evt)))
+    } else {
+        Arc::new(|evt: EnrichProgress| print_cli_event(&evt))
+    };
     build_with_progress(&parsed, Some(progress)).await
 }
 

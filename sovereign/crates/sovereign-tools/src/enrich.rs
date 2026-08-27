@@ -36,7 +36,7 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use corpus_engine::enrichment::pipeline::{BuildStep, EnrichProgress};
+use corpus_engine::enrichment::pipeline::{progress::wire, BuildStep, EnrichProgress};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 
@@ -77,17 +77,41 @@ pub fn fire_cancellation(flag: &CancellationFlag) {
 pub struct EnrichBuildOutcome {
     pub corpus_id: String,
     pub exit_code: i32,
-    /// Non-banner lines the parser couldn't classify. Empty when
-    /// the CLI's output was well-formed. Exposed for debugging —
-    /// the UI surfaces these in the error panel when the exit
-    /// code is non-zero.
+    /// Lines that carried the progress prefix and would NOT decode. Empty on
+    /// a well-formed run, and a genuine wire fault when it is not — this is no
+    /// longer "every line a regex did not recognise", which under the banner
+    /// parser meant ordinary human output landed here. Surfaced in the error
+    /// panel when the exit code is non-zero.
     pub unrecognised_lines: Vec<String>,
+    /// Whether the child spoke the typed progress wire at all.
+    pub wire: ProgressWire,
     /// `true` when the subprocess was killed via the
     /// cancellation flag rather than exiting on its own. The
     /// desktop layer uses this to suppress a misleading
     /// `Aborted` event (cancellation already emits a dedicated
     /// terminal event).
     pub cancelled: bool,
+}
+
+/// Whether the spawned CLI spoke the typed progress wire.
+///
+/// A build with no progress and a build whose progress we could not HEAR look
+/// identical to a UI, and only one of them is a working build — so the
+/// difference is a value the caller receives rather than an absence it infers
+/// (ARCH §18.3).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProgressWire {
+    /// Events arrived as `@progress` lines, as asked.
+    Spoken {
+        /// How many decoded.
+        events: usize,
+    },
+    /// The child ran and emitted none. Almost always an older `sovereign-cli`
+    /// resolved from `$PATH` that predates
+    /// `SOVEREIGN_ENRICH_PROGRESS` — it printed banners to a reader that no
+    /// longer parses them, so the build itself is fine and the progress panel
+    /// will not move.
+    Silent,
 }
 
 /// Resolve the path to the `sovereign-cli` binary the runner should
@@ -225,6 +249,10 @@ pub async fn run_enrich_build(
         .arg("build")
         .arg(corpus_id)
         .args(&config.extra_args)
+        // Ask for typed events instead of banners. An older binary that does
+        // not know this name ignores it and prints banners, which this reader
+        // reports as `ProgressWire::Silent` rather than mis-parsing.
+        .env(wire::REQUEST_ENV, wire::REQUEST_VALUE)
         .stdout(Stdio::piped())
         .stderr(Stdio::inherit());
 
@@ -235,7 +263,7 @@ pub async fn run_enrich_build(
         .expect("stdout piped above — take() should succeed");
     let mut lines = BufReader::new(stdout).lines();
 
-    let mut state = ParserState::new(corpus_id);
+    let mut state = ParserState::new();
     let mut cancelled = false;
 
     // Main line-reader loop. When cancellation is requested, race
@@ -258,18 +286,17 @@ pub async fn run_enrich_build(
             }
         }
         match lines.next_line().await? {
-            Some(line) => {
-                // Forward the line to our stdout so a log tail still
-                // shows the banner text — otherwise the subprocess'
-                // output would be invisible to any operator reading
-                // logs.
-                println!("{line}");
-                if let Some(evt) = state.ingest(&line) {
+            Some(line) => match state.ingest(&line) {
+                Some(evt) => {
                     if let Some(cb) = progress.as_ref() {
                         cb(evt);
                     }
                 }
-            }
+                // Not an event: the child's human output. Forward it so a log
+                // tail still shows what the subprocess said — an event line
+                // would only be JSON noise beside the typed callback.
+                None => println!("{line}"),
+            },
             None => break, // stdout closed; subprocess has exited
         }
     }
@@ -307,250 +334,113 @@ pub async fn run_enrich_build(
         }
     }
 
+    let wire = if state.events == 0 {
+        tracing::warn!(
+            bin = %bin.display(),
+            "enrich build: the spawned CLI emitted no typed progress events — \
+             it predates `{}` and the progress panel will not advance. The \
+             build itself is unaffected; its exit code is the truth.",
+            wire::REQUEST_ENV,
+        );
+        ProgressWire::Silent
+    } else {
+        ProgressWire::Spoken {
+            events: state.events,
+        }
+    };
+
     Ok(EnrichBuildOutcome {
         corpus_id: corpus_id.to_string(),
         exit_code,
         unrecognised_lines: state.unrecognised,
         cancelled,
+        wire,
     })
 }
 
-/// Stateful parser for the CLI's build banners.
+/// Reads the child's typed progress wire.
 ///
-/// Separated from `run_enrich_build` so it can be unit-tested
-/// without spawning a subprocess — feed lines via `ingest`, inspect
-/// the event stream.
+/// # What this replaced, and why it is smaller
+///
+/// Until 2026-08-26 this was a nine-function REGEX PARSER over the CLI's human
+/// banners — `=== enrich build — <corpus> ===`, `─── [3/9] extract ───`,
+/// `[4/12] sec_0004… 7 q` — plus an `is_noise` allowlist of banner decorations
+/// and a `classify_reason` that keyword-matched free text back into a
+/// `failure_kind` the child had already computed as an enum and thrown away.
+///
+/// Every one of those was a promise about someone else's prose. TOPOLOGY §9.3
+/// names the failure: reword a banner for a human and the desktop's progress
+/// panel silently stops advancing, with no compiler and no test in between.
+/// The events were `Serialize` and tagged from the day they were written; only
+/// the rendering was missing. Now the child encodes and this decodes, through
+/// the one declaration in `corpus_engine::…::progress::wire`.
+///
+/// What remains is state the WIRE cannot carry because it is the reader's, not
+/// the writer's: which step is in flight when a cancel arrives, and whether a
+/// terminal event was already seen so a clean exit does not synthesise a
+/// second one.
 pub struct ParserState {
-    corpus_id: String,
-    /// Steps announced by `BuildStart`, captured so the parser can
-    /// synthesize `ordinal` + `total` for steps whose banner line
-    /// doesn't include them explicitly.
-    planned_steps: Vec<BuildStep>,
-    /// Tracks the step currently running. `None` at start and
-    /// between steps. Used to attribute `ChapterProgress` /
-    /// `ChapterFailed` / `Aborted` events to the right step.
+    /// Tracks the step currently running, so `Cancelled` and a synthesised
+    /// `Aborted` can name where the build was.
     current_step: Option<BuildStep>,
-    /// Set when a `Complete` event is emitted so the subprocess
-    /// wrapper doesn't re-emit `Aborted` on a clean exit.
+    /// Set when a terminal event arrives so the wrapper does not re-emit
+    /// `Aborted` on a clean exit.
     complete_emitted: bool,
-    /// Lines that didn't match any banner. Surfaced in the outcome
-    /// for debugging.
+    /// How many events decoded. Zero means the child never spoke the wire —
+    /// see [`ProgressWire`].
+    events: usize,
+    /// Lines that carried the progress prefix and would not decode. A real
+    /// wire fault, and empty on every well-formed run — unlike the banner
+    /// parser's version of this field, which collected ordinary human output.
     unrecognised: Vec<String>,
 }
 
 impl ParserState {
-    pub fn new(corpus_id: &str) -> Self {
+    /// A reader for one build.
+    ///
+    /// Takes no corpus id: every event carries its own, because the wire was
+    /// designed for a UI rendering several concurrent builds. The banner
+    /// parser had to hold one because a banner mentions the corpus once, at
+    /// the top, and every later line had to be attributed by memory.
+    pub fn new() -> Self {
         Self {
-            corpus_id: corpus_id.to_string(),
-            planned_steps: Vec::new(),
             current_step: None,
             complete_emitted: false,
+            events: 0,
             unrecognised: Vec::new(),
         }
     }
 
-    /// Consume one line of CLI stdout. Returns `Some(event)` when
-    /// the line is recognised, `None` otherwise.
+    /// Consume one line of child stdout. `Some(event)` when the line is one;
+    /// `None` for the child's human output, which the caller forwards to its
+    /// own stdout rather than discarding.
     pub fn ingest(&mut self, line: &str) -> Option<EnrichProgress> {
-        let trimmed = line.trim();
-
-        // === enrich build — <corpus> ===
-        if let Some(corpus) = parse_build_start(trimmed) {
-            self.corpus_id = corpus;
-            return None; // wait for the planned-steps lines
+        let evt = match wire::decode(line) {
+            Some(evt) => evt,
+            None => {
+                // Prefixed but undecodable is a fault; unprefixed is prose.
+                if line.trim_start().starts_with(wire::PREFIX) {
+                    self.unrecognised.push(line.trim().to_string());
+                }
+                return None;
+            }
+        };
+        self.events += 1;
+        match &evt {
+            EnrichProgress::StepStart { step, .. } => self.current_step = Some(*step),
+            EnrichProgress::Complete { .. }
+            | EnrichProgress::Aborted { .. }
+            | EnrichProgress::Cancelled { .. } => self.complete_emitted = true,
+            _ => {}
         }
-
-        // "  N step(s) planned" — total count
-        if trimmed.ends_with("step(s) planned") {
-            // Flush any BuildStart we'd accumulated — but we
-            // don't have the step list yet, it arrives on
-            // subsequent "  1. seed" lines. Mark that we're
-            // capturing.
-            self.planned_steps.clear();
-            return None;
-        }
-
-        // "    1. seed" / "    2. extract" etc.
-        if let Some(step) = parse_planned_step(trimmed) {
-            self.planned_steps.push(step);
-            // Emit BuildStart once we have at least one step —
-            // the UI can update the total as more arrive, though
-            // in practice all nine arrive before the first
-            // StepStart.
-            return Some(EnrichProgress::BuildStart {
-                corpus_id: self.corpus_id.clone(),
-                pipeline_id: String::new(), // CLI banner doesn't include pipeline id
-                steps: self.planned_steps.clone(),
-                auto_skipped: Vec::new(),
-            });
-        }
-
-        // ─── [ord/total] <step> ───
-        if let Some((step, ordinal, total)) = parse_step_banner(trimmed) {
-            self.current_step = Some(step);
-            return Some(EnrichProgress::StepStart {
-                corpus_id: self.corpus_id.clone(),
-                step,
-                ordinal,
-                total,
-            });
-        }
-
-        // [i/total] <chapter_id>… <n> q   (success)
-        if let Some((chapter_id, index, total, q_count)) = parse_chapter_done(trimmed) {
-            return Some(EnrichProgress::ChapterProgress {
-                corpus_id: self.corpus_id.clone(),
-                chapter_id,
-                index,
-                total,
-                question_count: Some(q_count),
-            });
-        }
-
-        // [i/total] <chapter_id>… FAILED: <reason>
-        if let Some((chapter_id, reason)) = parse_chapter_failed(trimmed) {
-            return Some(EnrichProgress::ChapterFailed {
-                corpus_id: self.corpus_id.clone(),
-                chapter_id,
-                failure_kind: classify_reason(&reason),
-                reason,
-            });
-        }
-
-        // === build complete — <corpus> ===
-        if parse_build_complete(trimmed) {
-            self.complete_emitted = true;
-            return Some(EnrichProgress::Complete {
-                corpus_id: self.corpus_id.clone(),
-                steps_completed: self.planned_steps.len(),
-            });
-        }
-
-        if !trimmed.is_empty() && !is_noise(trimmed) {
-            self.unrecognised.push(trimmed.to_string());
-        }
-        None
+        Some(evt)
     }
 }
 
-fn parse_build_start(line: &str) -> Option<String> {
-    // `=== enrich build — <corpus> ===`
-    let stripped = line.strip_prefix("=== enrich build — ")?;
-    let corpus = stripped.strip_suffix(" ===")?;
-    Some(corpus.to_string())
-}
-
-fn parse_build_complete(line: &str) -> bool {
-    // `=== build complete — <corpus> ===`
-    line.starts_with("=== build complete — ") && line.ends_with(" ===")
-}
-
-fn parse_planned_step(line: &str) -> Option<BuildStep> {
-    // "    1. seed" — loose match: digits, dot, space, step-id.
-    let mut chars = line.chars().peekable();
-    while matches!(chars.peek(), Some(c) if c.is_ascii_digit()) {
-        chars.next();
+impl Default for ParserState {
+    fn default() -> Self {
+        Self::new()
     }
-    if chars.peek() == Some(&'.') {
-        chars.next();
-        if chars.peek() == Some(&' ') {
-            chars.next();
-            let rest: String = chars.collect();
-            return build_step_from_id(rest.trim());
-        }
-    }
-    None
-}
-
-fn parse_step_banner(line: &str) -> Option<(BuildStep, usize, usize)> {
-    // "─── [3/7] extract ───"
-    let rest = line.strip_prefix("─── [")?;
-    let rest = rest.strip_suffix(" ───")?;
-    let (bracket, rest) = rest.split_once("] ")?;
-    let (ord_s, total_s) = bracket.split_once('/')?;
-    let ord: usize = ord_s.parse().ok()?;
-    let total: usize = total_s.parse().ok()?;
-    let step = build_step_from_id(rest)?;
-    Some((step, ord, total))
-}
-
-fn parse_chapter_done(line: &str) -> Option<(String, usize, usize, usize)> {
-    // "    [1/3] sec_0001… 2 q"
-    let body = line.trim_start();
-    let rest = body.strip_prefix('[')?;
-    let (bracket, rest) = rest.split_once("] ")?;
-    let (ix_s, total_s) = bracket.split_once('/')?;
-    let index: usize = ix_s.parse().ok()?;
-    let total: usize = total_s.parse().ok()?;
-    let (chapter_id, tail) = rest.split_once("… ")?;
-    // Must end with " q" — the success shape.
-    let count = tail.strip_suffix(" q")?;
-    let q_count: usize = count.trim().parse().ok()?;
-    Some((chapter_id.to_string(), index, total, q_count))
-}
-
-fn parse_chapter_failed(line: &str) -> Option<(String, String)> {
-    // "    [1/3] sec_0001… FAILED: parse error: …"
-    let body = line.trim_start();
-    let rest = body.strip_prefix('[')?;
-    let (_bracket, rest) = rest.split_once("] ")?;
-    let (chapter_id, tail) = rest.split_once("… FAILED: ")?;
-    Some((chapter_id.to_string(), tail.to_string()))
-}
-
-fn build_step_from_id(id: &str) -> Option<BuildStep> {
-    match id {
-        "seed" => Some(BuildStep::Seed),
-        "extract" => Some(BuildStep::Extract),
-        "cluster" => Some(BuildStep::Cluster),
-        "name" => Some(BuildStep::Name),
-        "resolve" => Some(BuildStep::Resolve),
-        "tensions" => Some(BuildStep::Tensions),
-        "gaps" => Some(BuildStep::Gaps),
-        "configure" => Some(BuildStep::Configure),
-        "report" => Some(BuildStep::Report),
-        _ => None,
-    }
-}
-
-/// Best-effort classification of a Phase 1 failure reason into a
-/// `PhaseFailureKind` snake_case id. The CLI already embeds the
-/// failure_kind in the run file but its stdout reason line is
-/// free-text — we keyword-match on known substrings.
-fn classify_reason(reason: &str) -> String {
-    let lower = reason.to_lowercase();
-    if lower.contains("think truncated") || lower.contains("<think>") {
-        "think_truncated".into()
-    } else if lower.contains("parse error") || lower.contains("parse:") {
-        "parse_drift".into()
-    } else if lower.contains("chat error") || lower.contains("chat:") {
-        "chat_error".into()
-    } else if lower.contains("empty") {
-        "empty_extraction".into()
-    } else if lower.contains("skipped") {
-        "skipped".into()
-    } else {
-        "other".into()
-    }
-}
-
-/// Noise lines — known banner decorations the parser doesn't turn
-/// into events but shouldn't record as "unrecognised" either.
-///
-/// The caller passes the already-trimmed line, so prefix checks
-/// run against the leading non-whitespace character.
-fn is_noise(line: &str) -> bool {
-    line.starts_with("pipeline `")
-        || line.starts_with("· ")
-        || line.starts_with("✓ ")
-        || line.starts_with("! ")
-        || line.starts_with("Next:")
-        || line.starts_with("running phase ")
-        || line.starts_with("loaded ")
-        // Per-step detail the orchestration prints on success
-        // (e.g. "12 entity atom(s)"). These are informational —
-        // the StepDone event covers the structured signal.
-        || (line.starts_with("✓") && line.contains("atom"))
 }
 
 #[cfg(test)]
@@ -563,154 +453,133 @@ mod tests {
 
     use super::*;
 
+    /// The wire round-trips every variant the reader acts on.
+    ///
+    /// Named failing input (ARCH §18.1): change the `#[serde(tag)]` name or a
+    /// field on `EnrichProgress` and this reds, because both halves read the
+    /// one declaration. Under the banner parser the equivalent input — someone
+    /// rewording `─── [3/9] extract ───` — reddened nothing at all.
     #[test]
-    fn parse_build_start_and_complete_match_cli_banners() {
-        assert_eq!(
-            parse_build_start("=== enrich build — bk ==="),
-            Some("bk".to_string())
-        );
-        assert!(parse_build_complete("=== build complete — bk ==="));
-        assert!(!parse_build_complete("=== foo bar ==="));
-    }
-
-    #[test]
-    fn parse_step_banner_extracts_step_and_position() {
-        let got = parse_step_banner("─── [3/7] extract ───").unwrap();
-        assert_eq!(got, (BuildStep::Extract, 3, 7));
-        let got = parse_step_banner("─── [9/9] report ───").unwrap();
-        assert_eq!(got, (BuildStep::Report, 9, 9));
-        assert!(parse_step_banner("─── [a/b] seed ───").is_none());
-    }
-
-    #[test]
-    fn parse_chapter_done_extracts_id_and_q_count() {
-        let got = parse_chapter_done("    [2/5] sec_0007… 3 q").unwrap();
-        assert_eq!(got, ("sec_0007".to_string(), 2, 5, 3));
-    }
-
-    #[test]
-    fn parse_chapter_failed_extracts_id_and_reason() {
-        let (id, reason) =
-            parse_chapter_failed("    [1/3] sec_0001… FAILED: parse error: EOF").unwrap();
-        assert_eq!(id, "sec_0001");
-        assert!(reason.starts_with("parse error"));
-    }
-
-    #[test]
-    fn parser_end_to_end_stream() {
-        // Drive the parser through a scripted sequence that
-        // mirrors real CLI output. Locks the event order the
-        // desktop relies on.
-        let mut p = ParserState::new("bk");
-        let script = [
-            "=== enrich build — bk ===",
-            "  9 step(s) planned",
-            "    1. seed",
-            "    2. extract",
-            "    3. cluster",
-            "    4. name",
-            "    5. resolve",
-            "    6. tensions",
-            "    7. gaps",
-            "    8. configure",
-            "    9. report",
-            "─── [1/9] seed ───",
-            "  running phase 1a",
-            "─── [2/9] extract ───",
-            "    [1/3] sec_0001… 2 q",
-            "    [2/3] sec_0002… FAILED: parse error: EOF",
-            "    [3/3] sec_0003… 1 q",
-            "=== build complete — bk ===",
+    fn every_event_survives_the_wire() {
+        let cases = vec![
+            EnrichProgress::BuildStart {
+                corpus_id: "bk".into(),
+                pipeline_id: "atlas".into(),
+                steps: vec![BuildStep::Seed, BuildStep::Extract, BuildStep::Report],
+                auto_skipped: vec![BuildStep::Configure],
+            },
+            EnrichProgress::StepStart {
+                corpus_id: "bk".into(),
+                step: BuildStep::Extract,
+                ordinal: 2,
+                total: 3,
+            },
+            EnrichProgress::ChapterProgress {
+                corpus_id: "bk".into(),
+                chapter_id: "sec_0007".into(),
+                index: 2,
+                total: 5,
+                question_count: Some(3),
+            },
+            EnrichProgress::ChapterFailed {
+                corpus_id: "bk".into(),
+                chapter_id: "sec_0001".into(),
+                failure_kind: "think_truncated".into(),
+                reason: "<think> truncated: parse error at EOF".into(),
+            },
+            EnrichProgress::Complete {
+                corpus_id: "bk".into(),
+                steps_completed: 3,
+            },
         ];
-        let mut events: Vec<EnrichProgress> = Vec::new();
-        for line in &script {
-            if let Some(e) = p.ingest(line) {
-                events.push(e);
-            }
+        for evt in &cases {
+            let line = wire::encode(evt);
+            assert!(line.starts_with(wire::PREFIX), "no prefix: {line}");
+            let back = wire::decode(&line).expect("decodes");
+            assert_eq!(
+                format!("{back:?}"),
+                format!("{evt:?}"),
+                "round-trip changed the event"
+            );
         }
-        // BuildStart gets re-emitted as each planned step is
-        // appended; desktop listeners treat the last one as
-        // canonical. The first StepStart is the seed step.
-        assert!(matches!(
-            events.first(),
-            Some(EnrichProgress::BuildStart { .. })
-        ));
-        let step_starts: Vec<&EnrichProgress> = events
-            .iter()
-            .filter(|e| matches!(e, EnrichProgress::StepStart { .. }))
-            .collect();
-        assert_eq!(step_starts.len(), 2);
-        let chapter_events: Vec<&EnrichProgress> = events
-            .iter()
-            .filter(|e| {
-                matches!(
-                    e,
-                    EnrichProgress::ChapterProgress { .. } | EnrichProgress::ChapterFailed { .. }
-                )
-            })
-            .collect();
-        assert_eq!(chapter_events.len(), 3);
-        // Final event is Complete.
-        assert!(matches!(
-            events.last(),
-            Some(EnrichProgress::Complete { .. })
-        ));
+    }
+
+    /// `failure_kind` arrives TYPED and is not re-derived from prose.
+    ///
+    /// The banner parser had a `classify_reason` that keyword-matched the
+    /// free-text reason back into a kind the child had already computed as an
+    /// enum and then discarded — so `<think> truncated: parse error at EOF`
+    /// was classified by which substring the `if` chain tested first. Deleted:
+    /// the kind now travels.
+    #[test]
+    fn failure_kind_travels_rather_than_being_guessed() {
+        let mut p = ParserState::new();
+        let line = wire::encode(&EnrichProgress::ChapterFailed {
+            corpus_id: "bk".into(),
+            chapter_id: "sec_0001".into(),
+            // Prose that the old keyword matcher would have called
+            // `think_truncated`; the child says `parse_drift` and the child is
+            // the one that knows.
+            failure_kind: "parse_drift".into(),
+            reason: "<think> truncated: parse error at EOF".into(),
+        });
+        match p.ingest(&line) {
+            Some(EnrichProgress::ChapterFailed { failure_kind, .. }) => {
+                assert_eq!(failure_kind, "parse_drift");
+            }
+            other => panic!("expected ChapterFailed, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn reader_tracks_the_step_in_flight_and_the_terminal_event() {
+        let mut p = ParserState::new();
+        assert!(p.current_step.is_none());
+
+        p.ingest(&wire::encode(&EnrichProgress::StepStart {
+            corpus_id: "bk".into(),
+            step: BuildStep::Extract,
+            ordinal: 2,
+            total: 3,
+        }));
+        assert_eq!(p.current_step, Some(BuildStep::Extract));
+        assert!(!p.complete_emitted);
+
+        p.ingest(&wire::encode(&EnrichProgress::Complete {
+            corpus_id: "bk".into(),
+            steps_completed: 3,
+        }));
         assert!(p.complete_emitted);
+        assert_eq!(p.events, 2);
     }
 
+    /// Human output is passed through, not collected as a parse failure.
+    ///
+    /// The banner parser kept an `is_noise` allowlist of decorations it had to
+    /// recognise in order NOT to report them — `pipeline \`…\``, `✓ `, `! `,
+    /// `Next:` — which meant a new decoration became a spurious "unrecognised
+    /// line" in an error panel. Only a line that claims to be an event and
+    /// then is not is a fault now.
     #[test]
-    fn parser_records_unrecognised_lines_but_skips_noise() {
-        let mut p = ParserState::new("bk");
-        // `ingest` trims leading whitespace first — test both
-        // pre-trimmed and raw forms so the noise filter is
-        // robust regardless of the CLI's indentation.
-        p.ingest("pipeline `literary_atlas` auto-skips: seed");
-        p.ingest("  ✓ 12 entity atom(s)");
-        p.ingest("  · promoted subset run → cache/questions.json");
-        p.ingest("some weird line the parser doesn't know");
-        // Banner decorations are noise; only the last line is
-        // unrecognised.
-        assert_eq!(
-            p.unrecognised.len(),
-            1,
-            "unrecognised lines: {:?}",
-            p.unrecognised
-        );
-        assert!(p.unrecognised[0].contains("weird line"));
+    fn prose_is_prose_and_only_a_broken_event_is_a_fault() {
+        let mut p = ParserState::new();
+        for prose in [
+            "pipeline `atlas` loaded",
+            "✓ 12 entity atom(s), 22 claim(s)",
+            "! 3 drop(s) — see /tmp/run.json",
+            "Next: svrn enrich report bk",
+            "",
+        ] {
+            assert!(p.ingest(prose).is_none(), "treated as an event: {prose}");
+        }
+        assert!(p.unrecognised.is_empty(), "{:?}", p.unrecognised);
+        assert_eq!(p.events, 0);
+
+        assert!(p.ingest("@progress {\"kind\":\"not_a_variant\"}").is_none());
+        assert_eq!(p.unrecognised.len(), 1);
     }
 
-    #[test]
-    fn classify_reason_picks_think_truncated_over_parse_drift() {
-        // When a line mentions both, think_truncated is more
-        // specific — the parse error is a downstream effect.
-        assert_eq!(
-            classify_reason("<think> truncated: parse error at EOF"),
-            "think_truncated"
-        );
-        assert_eq!(classify_reason("parse error: missing field"), "parse_drift");
-        assert_eq!(classify_reason("chat error: 502"), "chat_error");
-    }
 
-    // ── End-to-end subprocess tests ────────────────────────────
-    //
-    // The parser tests above feed scripted strings through
-    // `ParserState::ingest` directly — fast, pure, no subprocess.
-    // These tests spawn a real subprocess (a shell script stood up
-    // in a tempdir) and exercise the full `run_enrich_build`
-    // plumbing: tokio::process spawn, stdout streaming,
-    // cancellation flag poll, child kill, exit-code propagation.
-    //
-    // They're slower (~50ms each on the happy path, ~200ms on
-    // cancellation due to the sleep) but catch regressions that
-    // parser-only tests can't: SIGKILL handling, non-zero exit
-    // with no complete banner, ordering between the final
-    // stdout flush and the wait() reap.
-    //
-    // *nix-only — the fixture is a `#!/bin/sh` script. Gated
-    // behind `cfg(unix)` because Windows takes a different path
-    // (and our target platforms are macOS + Linux).
-
-    #[cfg(unix)]
     mod e2e {
         use super::*;
         use std::os::unix::fs::PermissionsExt;
@@ -783,19 +652,20 @@ mod tests {
         async fn e2e_happy_path_emits_build_start_and_complete() {
             let _guard = e2e_test_lock();
             // Minimal happy-path script: emit the start banner
-            // + planned step list + one step-start + the
-            // complete banner. Exit 0.
+            // + two step-starts + complete, on the typed wire, with human
+            // banners interleaved exactly as the real CLI would NOT emit them
+            // — they are here on purpose, to prove prose beside events is
+            // passed through and never mistaken for one.
             let tmp = tempfile::tempdir().unwrap();
             let cli = write_fake_cli(
                 tmp.path(),
                 r#"
 echo "=== enrich build — bk ==="
-echo "  2 step(s) planned"
-echo "    1. seed"
-echo "    2. report"
-echo "─── [1/2] seed ───"
-echo "─── [2/2] report ───"
-echo "=== build complete — bk ==="
+echo '@progress {"kind":"build_start","corpus_id":"bk","pipeline_id":"atlas","steps":["seed","report"],"auto_skipped":[]}'
+echo '@progress {"kind":"step_start","corpus_id":"bk","step":"seed","ordinal":1,"total":2}'
+echo "· seeding entities"
+echo '@progress {"kind":"step_start","corpus_id":"bk","step":"report","ordinal":2,"total":2}'
+echo '@progress {"kind":"complete","corpus_id":"bk","steps_completed":2}'
 exit 0
 "#,
             );
@@ -819,15 +689,20 @@ exit 0
                 "unrecognised lines on happy path: {:?}",
                 outcome.unrecognised_lines
             );
+            assert!(
+                matches!(outcome.wire, ProgressWire::Spoken { events: 4 }),
+                "expected 4 events on the wire, got {:?}",
+                outcome.wire
+            );
             let events = collected.lock().unwrap();
             let kinds = event_kinds(&events);
-            // BuildStart gets re-emitted as each planned-step
-            // line arrives (parser design); the last BuildStart
-            // carries the full step list. StepStart should fire
-            // twice; Complete once at the end.
-            assert!(
-                kinds.contains(&"build_start"),
-                "missing build_start: {kinds:?}"
+            // Exactly ONE build_start. The banner parser re-emitted it once
+            // per planned-step line because a banner cannot carry a list;
+            // the wire can, so the UI stops seeing a total that grows.
+            assert_eq!(
+                kinds.iter().filter(|k| **k == "build_start").count(),
+                1,
+                "expected exactly one build_start: {kinds:?}"
             );
             assert_eq!(
                 kinds.iter().filter(|k| **k == "step_start").count(),
@@ -848,12 +723,8 @@ exit 0
             let cli = write_fake_cli(
                 tmp.path(),
                 r#"
-echo "=== enrich build — bk ==="
-echo "  3 step(s) planned"
-echo "    1. seed"
-echo "    2. extract"
-echo "    3. report"
-echo "─── [1/3] seed ───"
+echo '@progress {"kind":"build_start","corpus_id":"bk","pipeline_id":"atlas","steps":["seed","extract","report"],"auto_skipped":[]}'
+echo '@progress {"kind":"step_start","corpus_id":"bk","step":"seed","ordinal":1,"total":3}'
 exit 1
 "#,
             );
@@ -905,17 +776,14 @@ exit 1
             let cli = write_fake_cli(
                 tmp.path(),
                 r#"
-echo "=== enrich build — bk ==="
-echo "  2 step(s) planned"
-echo "    1. seed"
-echo "    2. report"
-echo "─── [1/2] seed ───"
+echo '@progress {"kind":"build_start","corpus_id":"bk","pipeline_id":"atlas","steps":["seed","report"],"auto_skipped":[]}'
+echo '@progress {"kind":"step_start","corpus_id":"bk","step":"seed","ordinal":1,"total":2}'
 # Sleep long enough that the test has time to flip the
 # cancellation flag. `sleep 5` is well past the test's
 # expected runtime; if the kill doesn't land, the test hangs
 # until tokio's default test timeout.
 sleep 5
-echo "=== build complete — bk ==="
+echo '@progress {"kind":"complete","corpus_id":"bk","steps_completed":2}'
 exit 0
 "#,
             );
@@ -978,6 +846,55 @@ exit 0
             )
             .await;
             assert!(outcome.is_err(), "expected spawn error, got Ok");
+        }
+
+        /// An OLDER `sovereign-cli` — banners only, no wire — is reported, not
+        /// mistaken for a build with nothing to say.
+        ///
+        /// Named failing input (ARCH §18.1). `resolve_sovereign_cli` walks
+        /// four ladders and can land on a binary from `$PATH` that predates
+        /// `SOVEREIGN_ENRICH_PROGRESS`. That build still RUNS and still exits
+        /// 0; only its progress is inaudible. Collapsing that into "no events"
+        /// would leave a UI showing a stalled bar for a healthy build with no
+        /// way to tell which it was — the substitution ARCH §18.3 forbids.
+        #[tokio::test]
+        async fn e2e_a_cli_that_speaks_only_banners_is_reported_as_silent() {
+            let _guard = e2e_test_lock();
+            let tmp = tempfile::tempdir().unwrap();
+            let cli = write_fake_cli(
+                tmp.path(),
+                r#"
+echo "=== enrich build — bk ==="
+echo "─── [1/2] seed ───"
+echo "=== build complete — bk ==="
+exit 0
+"#,
+            );
+            let (cb, collected) = event_collector();
+            let outcome = run_enrich_build(
+                "bk",
+                EnrichBuildConfig {
+                    cli_path: Some(cli),
+                    extra_args: vec![],
+                    cancel: None,
+                },
+                Some(cb),
+            )
+            .await
+            .expect("an old CLI still runs");
+
+            // The build itself is fine — the exit code is the truth.
+            assert_eq!(outcome.exit_code, 0);
+            assert_eq!(outcome.wire, ProgressWire::Silent);
+            // Banners are prose, not faults.
+            assert!(
+                outcome.unrecognised_lines.is_empty(),
+                "banners recorded as wire faults: {:?}",
+                outcome.unrecognised_lines
+            );
+            // Exit 0 with no terminal event seen: nothing synthesised, because
+            // a clean exit is not an abort.
+            assert!(collected.lock().unwrap().is_empty());
         }
     }
 }

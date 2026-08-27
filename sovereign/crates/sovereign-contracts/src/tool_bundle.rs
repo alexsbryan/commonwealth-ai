@@ -65,6 +65,137 @@ pub trait ToolBundle: Send + Sync {
     async fn register_into(&self, registry: &mut ToolRegistry) -> BundleReport;
 }
 
+/// The user-facing tool families a surface lets someone switch on and off.
+///
+/// # Why this is an enum
+///
+/// It is a CLOSED set (ARCH §2), and until 2026-08-26 it was four hand-kept
+/// copies of the same five strings — `default_enabled_tools()`, the desktop
+/// setup flow, `SettingsPanel.svelte`'s option list, and a five-arm
+/// `enabled_tools.iter().any(|t| t == "…")` match in the desktop bootstrap.
+/// They had already drifted: the setup flow omitted `knowledge_lookup`, so a
+/// user who completed setup with an empty list silently lost the knowledge
+/// front door that `default_enabled_tools` documents as default-on. That is
+/// the §10.6 split-brain, in the config that gates the tools.
+///
+/// [`Self::ALL`] is now the ONE list; the defaults and the setup flow derive
+/// from it, and a census pins the TypeScript option ids against it.
+///
+/// # What it is NOT
+///
+/// Not a grouping of tools by implementation. That is
+/// [`ToolBundle`] — a bundle is built from the collaborators its tools need,
+/// so membership answers "what can this host physically provide". A family
+/// answers "what has this person permitted". They are orthogonal, and
+/// conflating them is what would force bundles to shatter into one tool each.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ToolFamily {
+    /// Run shell commands on this machine.
+    Shell,
+    /// Direct queries to a web search provider.
+    Search,
+    /// Read a specific URL.
+    WebFetch,
+    /// Read attached files and ingested documents.
+    Document,
+    /// One deliberate sweep across library, memory and notes.
+    KnowledgeLookup,
+}
+
+impl ToolFamily {
+    /// Every family. The ONE list — defaults, setup and the UI derive from it.
+    pub const ALL: &'static [ToolFamily] = &[
+        ToolFamily::Shell,
+        ToolFamily::Search,
+        ToolFamily::WebFetch,
+        ToolFamily::Document,
+        ToolFamily::KnowledgeLookup,
+    ];
+
+    /// The one spelling that reaches config files and the Tauri wire.
+    pub fn wire_id(self) -> &'static str {
+        match self {
+            ToolFamily::Shell => "shell",
+            ToolFamily::Search => "search",
+            ToolFamily::WebFetch => "web_fetch",
+            ToolFamily::Document => "document",
+            ToolFamily::KnowledgeLookup => "knowledge_lookup",
+        }
+    }
+
+    /// The one parser. `None` for a value no family claims — reported by
+    /// [`ToolPermissions::from_wire_ids`] rather than dropped (ARCH §18.3).
+    ///
+    /// `knowledge` and `web_search` are accepted because the desktop
+    /// bootstrap matched them as aliases for `search`. No UI has ever
+    /// offered either, so they cannot be in a config this program wrote —
+    /// they are honoured for a hand-edited file and named here rather than
+    /// left as an undocumented accident.
+    pub fn parse_wire(id: &str) -> Option<Self> {
+        match id {
+            "shell" => Some(ToolFamily::Shell),
+            "search" | "knowledge" | "web_search" => Some(ToolFamily::Search),
+            "web_fetch" => Some(ToolFamily::WebFetch),
+            "document" => Some(ToolFamily::Document),
+            "knowledge_lookup" => Some(ToolFamily::KnowledgeLookup),
+            _ => None,
+        }
+    }
+}
+
+/// Which families this registry may register — the user's answer, held in the
+/// ONE place that can act on it.
+///
+/// Absent (`ToolRegistry` with no permissions wired) means UNGATED, which is
+/// what every non-desktop host wants and is byte-identical to the behaviour
+/// before this type existed. A surface with a settings panel wires the user's
+/// set instead.
+#[derive(Debug, Clone, Default)]
+pub struct ToolPermissions {
+    permitted: std::collections::BTreeSet<ToolFamily>,
+}
+
+impl ToolPermissions {
+    /// Everything on. The daemon and the hub server, which have no per-user
+    /// tool switches, and which therefore never gate.
+    pub fn all() -> Self {
+        Self {
+            permitted: ToolFamily::ALL.iter().copied().collect(),
+        }
+    }
+
+    /// Read a config's `enabled_tools`. Returns the set AND every id no family
+    /// claimed, so a typo in a hand-edited config is reported rather than
+    /// silently disabling a tool (ARCH §18.3).
+    pub fn from_wire_ids<S: AsRef<str>>(ids: &[S]) -> (Self, Vec<String>) {
+        let mut permitted = std::collections::BTreeSet::new();
+        let mut unknown = Vec::new();
+        for id in ids {
+            match ToolFamily::parse_wire(id.as_ref()) {
+                Some(f) => {
+                    permitted.insert(f);
+                }
+                None => unknown.push(id.as_ref().to_string()),
+            }
+        }
+        (Self { permitted }, unknown)
+    }
+
+    /// May a tool declaring `family` be registered? A tool that declares NO
+    /// family is not governed by any switch and is always permitted.
+    pub fn permits(&self, family: Option<ToolFamily>) -> bool {
+        match family {
+            None => true,
+            Some(f) => self.permitted.contains(&f),
+        }
+    }
+
+    /// The permitted families, for a boot banner.
+    pub fn families(&self) -> impl Iterator<Item = ToolFamily> + '_ {
+        self.permitted.iter().copied()
+    }
+}
+
 /// What one bundle actually contributed.
 #[derive(Debug, Clone)]
 pub struct BundleReport {
@@ -91,6 +222,22 @@ impl BundleReport {
     pub fn registered(mut self, id: impl Into<String>) -> Self {
         self.registered.push(id.into());
         self
+    }
+
+    /// Record whatever `register_reporting` did — registered, or withheld by
+    /// the user's switch. The ONE place a gated tool becomes a `Withholding`,
+    /// so no bundle can report a tool it did not actually contribute.
+    pub fn record(self, outcome: crate::registry::Registration) -> Self {
+        match outcome {
+            crate::registry::Registration::Registered(id) => self.registered(id),
+            crate::registry::Registration::Gated { id, family } => self.withheld(
+                id,
+                format!(
+                    "the `{}` family is switched off for this surface",
+                    family.wire_id()
+                ),
+            ),
+        }
     }
 
     /// Record something this bundle could not or would not contribute.

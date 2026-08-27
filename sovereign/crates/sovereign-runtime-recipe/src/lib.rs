@@ -51,12 +51,14 @@ use std::sync::Arc;
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::runtime::lane::LaneSources;
 use sovereign_core::runtime::Runtime;
-use sovereign_core::traits::{ApprovalChannel, InferenceProvider, RoutingEventSink, StateStore};
+use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::InferenceConfig;
 use sovereign_core::{RuntimeParts, SkillRegistry, ToolRegistry};
 use sovereign_contracts::tool_bundle::{ToolBundle, Withheld};
 use sovereign_tools::atlas_context_manager::AtlasContextManager;
-use sovereign_tools::bundles::{CoreTurnTools, KnowledgeFrontDoor, WebReach, WebTools};
+use sovereign_tools::bundles::{
+    CoreTurnTools, KnowledgeFrontDoor, WebEscalation, WebReach, WebTools,
+};
 
 /// Where the recipe's progress lines go.
 ///
@@ -69,6 +71,52 @@ use sovereign_tools::bundles::{CoreTurnTools, KnowledgeFrontDoor, WebReach, WebT
 pub trait RecipeProgress: Send + Sync {
     /// One already-formatted line. Callers format; this only routes.
     fn note(&self, line: &str);
+
+    /// A named milestone, for a host that drives a progress UI off it.
+    ///
+    /// Separate from [`Self::note`] because a splash screen needs to know
+    /// WHICH stage began, and the only alternative — matching on the prose of
+    /// a `note` line — makes a reworded log message a UI regression. The
+    /// default routes the label through `note`, so a host that only traces
+    /// implements nothing.
+    fn phase(&self, phase: RecipePhase) {
+        self.note(phase.label());
+    }
+}
+
+/// The stages of commissioning a host may want to show someone.
+///
+/// A closed set (ARCH §2): these are the points where the recipe is about to
+/// spend enough time that a surface with a window owes the user a word about
+/// it. Adding a stage is a deliberate edit here, and an exhaustive `match` in
+/// the desktop's splash mapping is what makes forgetting one a build error.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecipePhase {
+    /// Folding the host's bundles, then connecting external MCP servers.
+    WiringTools,
+    /// Building the four embed-based router classifiers.
+    AssemblingRouter,
+    /// The router exemplar cache MISSED — re-embedding ~300 exemplars, which
+    /// is minutes on a CPU-only embed slot. The one stage whose whole reason
+    /// for existing is that a silent boot looks hung.
+    RebuildingRouterEmbeddings,
+    /// Gathering the enrichment lane: atlases, the wiki graph, GLiNER.
+    BuildingLane,
+}
+
+impl RecipePhase {
+    /// The line a host without a progress UI logs instead.
+    pub fn label(self) -> &'static str {
+        match self {
+            RecipePhase::WiringTools => "Tools:       wiring",
+            RecipePhase::AssemblingRouter => "Router:      assembling classifier stack",
+            RecipePhase::RebuildingRouterEmbeddings => {
+                "Router: exemplar embed cache cold — re-embedding exemplars \
+                 (can take minutes on a CPU-only embed slot)…"
+            }
+            RecipePhase::BuildingLane => "Lane:        gathering enrichment sources",
+        }
+    }
 }
 
 /// The default: every line at `info` on the `runtime_recipe` target.
@@ -188,6 +236,26 @@ pub struct RecipeInputs {
     /// here, which is why "adopt the shared recipe" read as "lose twenty
     /// tools" to `sovereign-server` and stalled the phase.
     pub tool_bundles: Vec<Box<dyn ToolBundle>>,
+    /// Whether a person's tool switches govern what actually registers.
+    ///
+    /// Orthogonal to `tool_bundles`, and composed with it rather than
+    /// conflated: a bundle says what this host CAN provide (it holds the
+    /// collaborators), a switch says what the user PERMITTED. Forcing the two
+    /// onto one axis would shatter every bundle into one tool each.
+    pub switches: ToolSwitches,
+    /// External MCP servers this host declares IN ADDITION to the canonical
+    /// `~/.svrnmesh/config.toml` `[[mcp_servers]]` array.
+    ///
+    /// The canonical array is always read — it is what `svrn mcp add` and the
+    /// desktop settings pane write, and reading it here is what makes a server
+    /// added on one surface callable on all of them. A deployment-scoped host
+    /// with a config file of its own adds to it rather than replacing it:
+    /// `sovereign-server` read ONLY its own `[mcp]` section until 2026-08-26,
+    /// so an operator who ran `svrn mcp add` on that box got the server on
+    /// every surface except the one serving their tenants (ARCH §10.6).
+    ///
+    /// Empty for a host with no config of its own.
+    pub mcp_extra: Vec<sovereign_tools::mcp::McpServerConfig>,
     /// Lane loading policy — see [`LaneWarmth`]. A field rather than a default
     /// because getting it wrong is invisible in opposite directions: an eager
     /// service looks hung, and a deferred one-shot silently answers its only
@@ -196,6 +264,21 @@ pub struct RecipeInputs {
     /// Rerank wiring — see [`RerankWiring`]. Getting it wrong loads the same
     /// GGUF twice in one process.
     pub rerank: RerankWiring,
+}
+
+/// Whether a person's tool switches govern this host's turn registry.
+///
+/// `Ungoverned` is not "everything on by mistake" — it is the honest state of
+/// a daemon or a hub server, which has no per-user settings panel and no
+/// user's answer to consult. Naming it keeps that distinguishable from a
+/// surface whose switches were forgotten (ARCH §18.3).
+pub enum ToolSwitches {
+    /// A surface with a settings panel. Only these families register; every
+    /// other one comes back as a withholding in its bundle's report.
+    Chosen(sovereign_contracts::tool_bundle::ToolPermissions),
+    /// No switches on this host: every family a composed bundle offers
+    /// registers, byte-identical to the behaviour before the gate existed.
+    Ungoverned,
 }
 
 /// What the shared recipe produced.
@@ -208,6 +291,14 @@ pub struct CommonParts {
     /// only loads atlases already cached on disk. Warming this handle is
     /// visible to the commissioned `Runtime` because they share it.
     pub atlas_context: Arc<AtlasContextManager>,
+    /// The external-MCP manager this recipe connected.
+    ///
+    /// The live transports belong to the tools now in the registry, so a host
+    /// that ignores this may drop it. A host with an MCP settings pane keeps
+    /// it: the per-server statuses that pane renders are readable from here
+    /// and nowhere else, and the desktop held its own `load_from_setup_config`
+    /// call for exactly that reason until 2026-08-26 (ARCH §10.6 — one door).
+    pub mcp: sovereign_tools::mcp::McpServerManager,
 }
 
 /// THE call that turns parts into a running [`Runtime`].
@@ -240,13 +331,15 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
         indexes_dir,
         embed_model,
         tool_bundles,
+        switches,
+        mcp_extra,
         warmth,
         rerank,
     } = inputs;
 
     log_installed_corpora(&corpus_engine, progress).await;
 
-    let tools = build_tools(&tool_bundles, progress).await;
+    let (tools, mcp) = build_tools(&tool_bundles, switches, mcp_extra, progress).await;
     let (router, planner) =
         build_router_and_planner(&inference, &store, &skills, Arc::clone(&tools), progress).await;
     let (lane, atlas_context) = build_lane(
@@ -280,6 +373,7 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
     CommonParts {
         parts,
         atlas_context,
+        mcp,
     }
 }
 
@@ -297,14 +391,23 @@ pub async fn common_parts(inputs: RecipeInputs, progress: &dyn RecipeProgress) -
 /// does not pushes [`Withheld`](sovereign_contracts::tool_bundle::Withheld)
 /// naming the reason, so the daemon's "no shell in a long-lived daemon" stays
 /// a written decision (TOPOLOGY §10 "Decisions taken" 1).
-pub fn baseline_bundles(
-    store: &Arc<dyn StateStore>,
-    inference: &Arc<dyn InferenceProvider>,
-    corpus_engine: &Arc<corpus_engine::CorpusEngine>,
-    web: WebReach,
-) -> Vec<Box<dyn ToolBundle>> {
+///
+/// `wikipedia_fetch` is absent for the same reason and by the same mechanism:
+/// a host that reads Wikipedia out of an INSTALLED corpus wants `web_fetch`
+/// without it, which is why the two split into
+/// [`WebTools`](sovereign_tools::bundles::WebTools) and
+/// [`WikipediaTools`](sovereign_tools::bundles::WikipediaTools) on 2026-08-26.
+pub fn baseline_bundles(deps: BaselineDeps<'_>) -> Vec<Box<dyn ToolBundle>> {
+    let BaselineDeps {
+        store,
+        inference,
+        corpus_engine,
+        note_store,
+        web,
+        escalation,
+    } = deps;
     let web_family: Box<dyn ToolBundle> = match &web {
-        WebReach::Granted(_) => Box::new(WebTools::new(Arc::clone(corpus_engine))),
+        WebReach::Granted(_) => Box::new(WebTools),
         WebReach::Withheld(why) => Box::new(Withheld::new("web", why)),
     };
     vec![
@@ -318,8 +421,33 @@ pub fn baseline_bundles(
         Box::new(KnowledgeFrontDoor::new(
             Arc::clone(store),
             Arc::clone(inference),
+            note_store.map(Arc::clone),
+            escalation,
         )),
     ]
+}
+
+/// What every baseline family is built from.
+///
+/// A struct rather than six positional arguments: `store`, `inference` and
+/// `corpus_engine` are three `Arc`s a call site can transpose silently, and
+/// the last three are host DECISIONS that have to read as decisions at the
+/// call site rather than as trailing arguments (ARCH §2.1).
+pub struct BaselineDeps<'a> {
+    /// The conversation store the knowledge and document tools read.
+    pub store: &'a Arc<dyn StateStore>,
+    /// The provider the search and lookup tools infer through.
+    pub inference: &'a Arc<dyn InferenceProvider>,
+    /// The corpus this host retrieves from.
+    pub corpus_engine: &'a Arc<corpus_engine::CorpusEngine>,
+    /// The open note store, when this host has one. Wires
+    /// `knowledge_lookup`'s third evidence channel; `None` is reported as a
+    /// withholding rather than passed over in silence.
+    pub note_store: Option<&'a Arc<corpus_engine_notes::NoteStore>>,
+    /// Whether this host may reach the open internet, and if not, why.
+    pub web: WebReach,
+    /// Whether thin local results may escalate to a web search on their own.
+    pub escalation: WebEscalation,
 }
 
 /// The turn's tool registry: fold the host's bundles, then connect MCP.
@@ -329,13 +457,32 @@ pub fn baseline_bundles(
 /// this recipe can no longer mean losing a capability (ARCH §19 open/closed).
 async fn build_tools(
     bundles: &[Box<dyn ToolBundle>],
+    switches: ToolSwitches,
+    mcp_extra: Vec<sovereign_tools::mcp::McpServerConfig>,
     progress: &dyn RecipeProgress,
-) -> Arc<ToolRegistry> {
+) -> (Arc<ToolRegistry>, sovereign_tools::mcp::McpServerManager) {
+    progress.phase(RecipePhase::WiringTools);
     // Tier 4 — shared tool-result cache. Per-conversation cache slices, 5-turn
     // TTL. Idempotent tools (knowledge_lookup, code-intel reads) hit the cache
     // when the model re-calls with the same args within the window.
     let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
     let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
+    match switches {
+        ToolSwitches::Chosen(permitted) => {
+            progress.note(&format!(
+                "Tools:       user-permitted families — {}",
+                permitted
+                    .families()
+                    .map(|f| f.wire_id())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+            tools = tools.with_permitted(permitted);
+        }
+        ToolSwitches::Ungoverned => {
+            progress.note("Tools:       no per-user switches on this host");
+        }
+    }
 
     for report in sovereign_contracts::tool_bundle::install(&mut tools, bundles).await {
         // Every family reports, present or absent, so the boot record answers
@@ -354,6 +501,14 @@ async fn build_tools(
     // is a change to the seam rather than a use of it — named here rather
     // than half-done (ARCH §18.3).
     let mcp = sovereign_tools::mcp::load_from_setup_config(&mut tools).await;
+    if !mcp_extra.is_empty() {
+        progress.note(&format!(
+            "MCP:         {} server(s) from this host's own config",
+            mcp_extra.len()
+        ));
+        let extra = sovereign_tools::mcp::McpServerManager::from_config(&mcp_extra, &mut tools).await;
+        mcp.absorb(extra).await;
+    }
     for st in mcp.server_statuses().await {
         if st.connected {
             progress.note(&format!(
@@ -366,7 +521,7 @@ async fn build_tools(
     }
 
     progress.note(&format!("Tools:       {} registered", tools.count()));
-    Arc::new(tools)
+    (Arc::new(tools), mcp)
 }
 
 // ─── Router + planner ─────────────────────────────────────────────────────
@@ -382,17 +537,13 @@ async fn build_router_and_planner(
     // the SAME classifiers (parity by construction). `from_env_and_repo` keeps
     // the `$SOVEREIGN_*` overlay + repo-relative exemplars for dev tuning; a
     // packaged build falls through to the baked set.
+    progress.phase(RecipePhase::AssemblingRouter);
     let (llm_router, router_report) = sovereign_core::router_bootstrap::build_llm_router(
         Arc::clone(inference),
         Arc::clone(store),
         Arc::clone(skills),
         &sovereign_core::router_bootstrap::ExemplarOverrides::from_env_and_repo(),
-        || {
-            progress.note(
-                "Router: exemplar embed cache cold — re-embedding exemplars \
-                 (can take minutes on a CPU-only embed slot)…",
-            )
-        },
+        || progress.phase(RecipePhase::RebuildingRouterEmbeddings),
     )
     .await;
     progress.note(&format!(
@@ -429,9 +580,10 @@ async fn build_lane(
     rerank: RerankWiring,
     progress: &dyn RecipeProgress,
 ) -> (LaneSources, Arc<AtlasContextManager>) {
+    progress.phase(RecipePhase::BuildingLane);
     let mut lane = LaneSources::none();
     lane.conv_tiered = conv_tiered;
-    lane.gliner = load_gliner();
+    lane.gliner = load_gliner(warmth);
 
     // Atlas Layer 0: the installed Wikipedia link graph, if one is built.
     if let Some(graph) = load_wikipedia_graph(corpus_engine, indexes_dir, progress).await {
@@ -551,9 +703,29 @@ fn load_meta_atlas(lane: &LaneSources, warmth: LaneWarmth, progress: &dyn Recipe
     }
 }
 
-/// GLiNER entity extractor for entity-aware retrieval-over-history. Probe
-/// first; a missing model soft-falls-through to pure cosine + MMR.
-fn load_gliner() -> Option<Arc<dyn sovereign_core::traits::EntityExtractor>> {
+/// GLiNER entity extractor for entity-aware retrieval-over-history, at the
+/// warmth this host asked for. Probe first; a missing model soft-falls-through
+/// to pure cosine + MMR.
+///
+/// # Why this takes `warmth`
+///
+/// `lane.gliner` is a lane member, so [`LaneWarmth`] governs it like every
+/// other one. It did not until 2026-08-26, and the gap was a §10.6 split-brain
+/// rather than a policy choice: `sovereign daemon run` declares
+/// [`LaneWarmth::Deferred`] and this one member read it as `Eager`, so a host
+/// that had explicitly asked to reach `listening` promptly still blocked ~950 ms
+/// on a model load. One declaration, two readings.
+///
+/// The deferred arm's degradation is not new and is already accepted in
+/// `LaneWarmth`'s own words: until the model is warm the extractor returns no
+/// entities, which is EXACTLY what a host with no GLiNER installed does —
+/// retrieval falls back to cosine + MMR, "a degradation in ranking and never a
+/// wrong answer". `LaneWarmth` says that about a ~1 GB JSON parse; this is a
+/// ~950 ms load that is warm within ~1 s, well before a first query.
+///
+/// This is also what lets the desktop stop hand-rolling its own bootstrap: its
+/// wiring WAS the deferred arm, written out by hand.
+fn load_gliner(warmth: LaneWarmth) -> Option<Arc<dyn sovereign_core::traits::EntityExtractor>> {
     let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
     if !sovereign_gliner::gliner_ner::probe_model_available(model_id) {
         tracing::debug!(
@@ -563,18 +735,33 @@ fn load_gliner() -> Option<Arc<dyn sovereign_core::traits::EntityExtractor>> {
         );
         return None;
     }
-    match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
-        Ok(g) => {
+    match warmth {
+        // Install now, warm behind. `new_default_deferred` cannot fail
+        // synchronously — the thread logs a load error and leaves the
+        // extractor permanently in the same fallback the `Eager` arm's `Err`
+        // branch produces, so absence is reported identically on both paths.
+        LaneWarmth::Deferred => {
             tracing::info!(
                 model = model_id,
-                "runtime_recipe: GLiNER entity extractor loaded"
+                "runtime_recipe: GLiNER entity extractor installed (background warm)"
             );
-            Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
+            Some(Arc::new(
+                sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred(),
+            ) as Arc<dyn sovereign_core::traits::EntityExtractor>)
         }
-        Err(e) => {
-            tracing::warn!(error = %e, "runtime_recipe: GLiNER probe ok but load failed; entity-aware retrieval disabled");
-            None
-        }
+        LaneWarmth::Eager => match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
+            Ok(g) => {
+                tracing::info!(
+                    model = model_id,
+                    "runtime_recipe: GLiNER entity extractor loaded"
+                );
+                Some(Arc::new(g) as Arc<dyn sovereign_core::traits::EntityExtractor>)
+            }
+            Err(e) => {
+                tracing::warn!(error = %e, "runtime_recipe: GLiNER probe ok but load failed; entity-aware retrieval disabled");
+                None
+            }
+        },
     }
 }
 
@@ -713,4 +900,61 @@ fn sorted_corpora(filter: Option<&std::collections::HashSet<String>>) -> Option<
         v.sort();
         v
     })
+}
+
+#[cfg(test)]
+mod warmth_census {
+    /// The state this makes unrepresentable: a lane member that ignores the
+    /// warmth its host declared.
+    ///
+    /// `LaneWarmth` is a required `RecipeInputs` field, so a host cannot forget
+    /// to STATE it — and until 2026-08-26 nothing made the recipe HONOUR it.
+    /// `load_gliner` took no argument at all, so `sovereign daemon run`
+    /// declared `Deferred` and still blocked ~950 ms on a model load. One
+    /// declaration, two readings (ARCH §10.6) — and the reason the desktop kept
+    /// a hand-rolled bootstrap, since its wiring WAS the deferred arm written
+    /// out by hand.
+    ///
+    /// The compiler does NOT hold this: dropping the parameter and its argument
+    /// together compiles clean and silently restores eager-always. Watched to
+    /// fail by reverting `load_gliner(warmth)` to `load_gliner()`.
+    #[test]
+    fn every_deferrable_lane_member_honours_the_declared_warmth() {
+        let src = include_str!("lib.rs");
+        // Code only — the module docs legitimately discuss warmth in prose.
+        let code: Vec<&str> = src
+            .lines()
+            .filter(|l| {
+                let t = l.trim_start();
+                !(t.starts_with("//") || t.starts_with('*'))
+            })
+            .collect();
+
+        for member in ["load_meta_atlas", "load_gliner"] {
+            let decl = code
+                .iter()
+                .find(|l| l.contains(&format!("fn {member}(")))
+                .unwrap_or_else(|| panic!("{member} is gone — drop it here or say what replaced it"));
+            assert!(
+                decl.contains("warmth: LaneWarmth"),
+                "{member} no longer takes the host's declared warmth, so a host \
+                 asking to reach `listening` promptly will block on it anyway:\n  {decl}"
+            );
+
+            let calls: Vec<&&str> = code
+                .iter()
+                .filter(|l| l.contains(&format!("{member}(")) && !l.contains("fn "))
+                .collect();
+            assert!(
+                !calls.is_empty(),
+                "{member} is declared but never called — this census would be vacuous"
+            );
+            for c in calls {
+                assert!(
+                    c.contains("warmth"),
+                    "a call to {member} drops the declared warmth:\n  {c}"
+                );
+            }
+        }
+    }
 }

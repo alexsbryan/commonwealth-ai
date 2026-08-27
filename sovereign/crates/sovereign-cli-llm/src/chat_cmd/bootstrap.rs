@@ -237,7 +237,9 @@ pub async fn build_session_with_skills(
             // impls `ConvTieredReader` (spec CONV_TIERED_PORT.md).
             conv_tiered: Some(Arc::clone(&store_concrete) as Arc<dyn ConvTieredReader>),
             corpus_engine: Arc::clone(&corpus_engine),
-            note_store,
+            // Cloned: `tool_bundles` below borrows the same handle for
+            // `knowledge_lookup`'s notes channel. One store, two readers.
+            note_store: note_store.clone(),
             skills: Arc::clone(&skills),
             // Chat turns don't trigger confirmations in the normal path; a
             // yes-only stub keeps a stray approval request from deadlocking a
@@ -252,17 +254,35 @@ pub async fn build_session_with_skills(
             // command they are watching.
             tool_bundles: {
                 let mut b = sovereign_runtime_recipe::baseline_bundles(
-                    &store,
-                    &inference,
-                    &corpus_engine,
-                    sovereign_tools::bundles::WebReach::Granted(
-                        sovereign_core::egress::search_client()
-                            .expect("egress boundary search client build"),
-                    ),
+                    sovereign_runtime_recipe::BaselineDeps {
+                        store: &store,
+                        inference: &inference,
+                        corpus_engine: &corpus_engine,
+                        // The same handle passed to `note_store` below — the
+                        // notes evidence channel and the tool-decision write
+                        // hook read one store, not two.
+                        note_store: note_store.as_ref(),
+                        web: sovereign_tools::bundles::WebReach::Granted(
+                            sovereign_core::egress::search_client()
+                                .expect("egress boundary search client build"),
+                        ),
+                        // `svrn chat` has no operator switch for it; the
+                        // user-in-loop escalation card is still there.
+                        escalation: sovereign_tools::bundles::WebEscalation::Disabled,
+                    },
                 );
+                b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
+                    Arc::clone(&corpus_engine),
+                )));
                 b.push(Box::new(sovereign_tools::bundles::ShellTools));
                 b
             },
+            // No settings panel on this host, so nothing to consult: every
+            // family composed above registers.
+            switches: sovereign_runtime_recipe::ToolSwitches::Ungoverned,
+            // No config file of its own: the canonical `[[mcp_servers]]` array
+            // is the whole declaration on this host.
+            mcp_extra: Vec::new(),
             // A one-shot answering one question would rather wait once than
             // answer it with less. Byte-identical to the behaviour this
             // function had when the recipe was inline.

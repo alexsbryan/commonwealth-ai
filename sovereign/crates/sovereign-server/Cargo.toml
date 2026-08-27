@@ -68,6 +68,10 @@ sovereign-core = { workspace = true }
 sovereign-inference = { workspace = true }
 sovereign-store = { workspace = true }
 sovereign-tools = { workspace = true, features = ["treesitter"] }
+# THE shared commissioning recipe. This hub composes its tool bundles and
+# hands its host inputs over rather than keeping a near-copy of the router,
+# registry and lane assembly (TOPOLOGY §10 phase 7).
+sovereign-runtime-recipe = { workspace = true }
 sovereign-gliner = { workspace = true }
 # Workflow-author tools (Inc0) — register them on the runtime alongside the
 # recipe-author tools so the agent loop can author workflows too.

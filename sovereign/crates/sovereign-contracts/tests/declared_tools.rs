@@ -268,3 +268,101 @@ fn a_coded_tool_is_not_shadowed_by_a_declaration() {
     .unwrap();
     assert!(matches!(out, StepOutput::Text(ref s) if s == "coded"));
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// The registry-side family gate (TOPOLOGY §10 phase 6, desktop adoption).
+//
+// A surface with a settings panel decides WHAT THE USER PERMITTED; a
+// `ToolBundle` decides WHAT THIS HOST CAN PROVIDE. Two axes, composed here
+// rather than conflated — conflating them would force every bundle to
+// shatter into one tool each, undoing phase 7b to adopt it.
+// ═══════════════════════════════════════════════════════════════════
+
+/// The wrapper forwards the family, and this is the test that says so.
+///
+/// NAMED FAILING INPUT: delete `fn family` from `impl Tool for DeclaredTool`
+/// and this goes red. Nothing else would notice — the wrapper would inherit
+/// `Tool::family`'s `None` default, every `.declared()` tool would report
+/// "no switch governs me", and the gate below would silently never fire for
+/// `document`, `document_operation` or `knowledge_lookup`. That is the
+/// defaulted-wrapper defect `sovereign-tools::bundles` records three shipped
+/// bugs from, and it is invisible to the compiler.
+#[test]
+fn a_declared_tool_forwards_its_family() {
+    use sovereign_contracts::tool_bundle::ToolFamily;
+
+    let bare = declared(DECLARED_ONLY, echo_handler());
+    assert_eq!(
+        bare.family(),
+        None,
+        "a tool that declares no family must not look switched off"
+    );
+
+    let governed = declared(DECLARED_ONLY, echo_handler()).with_family(ToolFamily::Document);
+    assert_eq!(
+        governed.family(),
+        Some(ToolFamily::Document),
+        "the family must survive the DeclaredTool wrapper — it is the wrapper \
+         that gets registered, so a family the wrapper drops is a gate that \
+         never fires"
+    );
+}
+
+/// The gate registers, withholds, and says which — never silently drops.
+#[test]
+fn the_registry_withholds_a_family_the_user_switched_off() {
+    use sovereign_contracts::registry::Registration;
+    use sovereign_contracts::tool_bundle::{ToolFamily, ToolPermissions};
+
+    let governed = || declared(DECLARED_ONLY, echo_handler()).with_family(ToolFamily::Document);
+
+    // Ungated is the DEFAULT, and it is what every host without a settings
+    // panel gets. Byte-identical to the behaviour before the gate existed.
+    let mut open = ToolRegistry::new();
+    assert!(
+        matches!(open.register_reporting(Box::new(governed())), Registration::Registered(_)),
+        "a registry with no permissions wired must gate nothing"
+    );
+
+    // Permitted: registered.
+    let (yes, _) = ToolPermissions::from_wire_ids(&["document"]);
+    let mut on = ToolRegistry::new().with_permitted(yes);
+    assert!(matches!(
+        on.register_reporting(Box::new(governed())),
+        Registration::Registered(_)
+    ));
+
+    // Not permitted: withheld, WITH the family named, so the report can say
+    // why instead of the tool simply being missing (ARCH §18.3).
+    let (no, _) = ToolPermissions::from_wire_ids(&["shell"]);
+    let mut off = ToolRegistry::new().with_permitted(no);
+    match off.register_reporting(Box::new(governed())) {
+        Registration::Gated { family, .. } => assert_eq!(family, ToolFamily::Document),
+        other => panic!("a switched-off family must be withheld, got {other:?}"),
+    }
+    assert!(
+        off.get("echo_declared").is_err(),
+        "a withheld tool must not be callable — reporting it is not enough"
+    );
+
+    // A tool governed by NO family is permitted even under a narrow set.
+    let (narrow, _) = ToolPermissions::from_wire_ids(&["shell"]);
+    let mut ungoverned = ToolRegistry::new().with_permitted(narrow);
+    assert!(matches!(
+        ungoverned.register_reporting(Box::new(declared(DECLARED_ONLY, echo_handler()))),
+        Registration::Registered(_)
+    ));
+}
+
+/// An id no family claims is REPORTED, not silently ignored — a typo in a
+/// hand-edited config must not read as "that tool is off".
+#[test]
+fn an_unknown_family_id_is_reported_not_dropped() {
+    use sovereign_contracts::tool_bundle::{ToolFamily, ToolPermissions};
+
+    let (set, unknown) = ToolPermissions::from_wire_ids(&["shell", "sherll", "web_search"]);
+    assert_eq!(unknown, vec!["sherll".to_string()]);
+    // `web_search` is a documented legacy alias for `search`, not an unknown.
+    let got: Vec<ToolFamily> = set.families().collect();
+    assert_eq!(got, vec![ToolFamily::Shell, ToolFamily::Search]);
+}

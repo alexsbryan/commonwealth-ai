@@ -98,6 +98,70 @@ impl BuildStep {
     }
 }
 
+/// The one line-protocol for streaming [`EnrichProgress`] between a process
+/// that runs a build and a process that watches one.
+///
+/// # Why this exists
+///
+/// `quality/TOPOLOGY.md` §9.3, hazard 7. `sovereign-tools`'s subprocess runner
+/// rebuilt this event stream by REGEX-MATCHING the CLI's human banners — nine
+/// `parse_*` functions against lines like `─── [3/9] extract ───`. The failure
+/// mode is the silent one ARCH §7.2 names: someone rewords a banner for a
+/// human, the desktop's progress panel quietly stops advancing, and there is
+/// no compiler and no test in between. The banners are PROSE and prose is not
+/// an interface.
+///
+/// This module's own header has claimed since it was written that "a future
+/// headless mode can filter on `serde_json::Value` without string-matching".
+/// The events were `Serialize` and `#[serde(tag = "kind")]` from the start —
+/// the wire was designed and simply never used. This is it, in one place, so
+/// the writer and the reader cannot drift (ARCH §10.6).
+///
+/// It does NOT close §9.3, which is that `enrich build` should be a CALL and
+/// not a subprocess at all. That needs the 14-module, ~9,100-line orchestrator
+/// subtree to move below `sovereign-tools`. What it closes is the reparsing
+/// hazard, which was the part with no gate in front of it.
+pub mod wire {
+    use super::EnrichProgress;
+
+    /// Prefix on every machine-readable line, so a line the child writes for a
+    /// human can never be mistaken for an event. Anything without it is
+    /// diagnostic output and is passed through untouched.
+    pub const PREFIX: &str = "@progress ";
+
+    /// The environment variable a parent sets to ask for this format.
+    ///
+    /// An environment variable rather than a CLI flag because the parent may
+    /// resolve an OLDER `sovereign-cli` from `$PATH` (see
+    /// `sovereign_tools::enrich::resolve_sovereign_cli`, which walks four
+    /// ladders). An unknown flag makes that binary exit 2 on a usage error —
+    /// a build that used to work now fails outright — whereas an unknown env
+    /// var is ignored and the parent sees zero events and says so.
+    pub const REQUEST_ENV: &str = "SOVEREIGN_ENRICH_PROGRESS";
+
+    /// The value of [`REQUEST_ENV`] that turns this on.
+    pub const REQUEST_VALUE: &str = "json";
+
+    /// Render one event as a single line. Never fails: an event that will not
+    /// serialise would be a bug in this crate, and dropping it silently is the
+    /// substitution the wire exists to prevent, so it degrades to a line the
+    /// reader reports as unrecognised rather than to nothing.
+    pub fn encode(evt: &EnrichProgress) -> String {
+        match serde_json::to_string(evt) {
+            Ok(json) => format!("{PREFIX}{json}"),
+            Err(e) => format!("{PREFIX}{{\"kind\":\"unencodable\",\"error\":\"{e}\"}}"),
+        }
+    }
+
+    /// Decode one line. `None` for any line that is not an event — a human
+    /// banner, a blank line, a warning — which the caller keeps rather than
+    /// discards.
+    pub fn decode(line: &str) -> Option<EnrichProgress> {
+        let json = line.trim_start().strip_prefix(PREFIX)?;
+        serde_json::from_str(json).ok()
+    }
+}
+
 /// One event in the `enrich build` progress stream.
 ///
 /// Tagged union on `kind` so a JSON observer can `switch` on one

@@ -15,8 +15,13 @@
 //!
 //! - [`CoreTurnTools`] — corpus-grounded answering. A host without these
 //!   cannot answer a question at all, so every host has them.
-//! - [`WebTools`] — reaches the open internet. A zero-egress deployment says
-//!   so by not composing it.
+//! - [`WebTools`] — fetches any url the model emits. A zero-egress deployment
+//!   says so by not composing it.
+//! - [`WikipediaTools`] — reaches en.wikipedia.org. Split out of `WebTools` on
+//!   2026-08-26 because a host can want one without the other: the desktop
+//!   fetches urls a user pastes and gets its Wikipedia from an INSTALLED
+//!   corpus, so it withholds this family rather than fetching articles over
+//!   the network.
 //! - [`ShellTools`] — runs commands as the invoking user. A privilege, and
 //!   §10 "Decisions taken" 1 keeps it out of a long-lived daemon.
 //! - [`KnowledgeFrontDoor`] — the unified `knowledge_lookup` envelope plus
@@ -45,6 +50,43 @@ use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::ToolRegistry;
 
 use async_trait::async_trait;
+
+/// The ONE web-search registry every surface resolves.
+///
+/// Reads the operator's `[search]` section from `SetupConfig`, with the older
+/// `SVRNMESH_TAVILY_API_KEY` as the fallback key so existing setups keep
+/// working. DuckDuckGo is always registered as the zero-config fallback; the
+/// operator's configured provider joins it when keyed.
+///
+/// This lived in `sovereign-desktop`'s `state.rs` until 2026-08-26 and was
+/// reachable only from there, so [`CoreTurnTools`] built `search` through the
+/// legacy `SearchBackend` enum instead. Two doors onto one fact, and the door
+/// the daemon and the CLI went through had none of the privacy, budget and
+/// fallback-chain invariants the orchestrator applies — an operator who
+/// configured Tavily got it in the desktop and DuckDuckGo everywhere else
+/// (ARCH §10.6).
+pub fn effective_search_registry() -> crate::web::search::WebSearchRegistry {
+    let search_cfg = sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.search)
+        .unwrap_or_default();
+    let env_key = sovereign_contracts::rebrand::svrnmesh_env("TAVILY_API_KEY")
+        .and_then(|v| v.into_string().ok());
+    let configured = crate::web::search::configured_search(&search_cfg, env_key.as_deref());
+    tracing::info!(
+        backend = %configured.preferred,
+        "web search: operator backend resolved (duckduckgo always available)"
+    );
+    configured.registry
+}
+
+/// A `SearchOrchestrator` over [`effective_search_registry`] — the one
+/// construction, so every surface that reaches the open web applies the same
+/// privacy, budget and fallback-chain rules.
+pub fn search_orchestrator() -> Arc<crate::web::search::SearchOrchestrator> {
+    Arc::new(crate::web::search::SearchOrchestrator::new(Arc::new(
+        effective_search_registry(),
+    )))
+}
 
 /// Whether this host's turn can reach the open internet, and if not, why.
 ///
@@ -101,45 +143,49 @@ impl ToolBundle for CoreTurnTools {
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         let mut r = BundleReport::new(self.name());
 
-        r = r.registered(reg.register_reporting(Box::new(
+        r = r.record(reg.register_reporting(Box::new(
             crate::document::DocumentTool::new(
                 Arc::clone(&self.store),
                 Arc::clone(&self.inference),
             )
             .declared(),
         )));
-        r = r.registered(reg.register_reporting(Box::new(
+        r = r.record(reg.register_reporting(Box::new(
             crate::ClaimSearchTool::new(Arc::clone(&self.corpus_engine)).declared(),
         )));
-        r = r.registered(reg.register_reporting(Box::new(
+        r = r.record(reg.register_reporting(Box::new(
             crate::EpistemicLandscapeTool::new(Arc::clone(&self.corpus_engine)).declared(),
         )));
         // Deterministic land-value-tax analytics over parcel corpora — pre-cited
         // figures the ComplexTask synthesizer quotes verbatim.
-        r = r.registered(reg.register_reporting(Box::new(
+        r = r.record(reg.register_reporting(Box::new(
             crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&self.corpus_engine))
                 .declared(),
         )));
         // Typed SEC-filing figures with basis + accession, or first-class
         // refusals (FINANCIAL_CORPORA §6).
-        r = r.registered(reg.register_reporting(Box::new(
+        r = r.record(reg.register_reporting(Box::new(
             crate::sec_facts::SecFactsTool::new(Arc::clone(&self.corpus_engine)).declared(),
         )));
 
         match &self.web {
             WebReach::Granted(client) => {
-                r = r.registered(reg.register_reporting(Box::new(
-                    crate::search::SearchTool::with_web(
+                // Through the orchestrator, which is what applies the privacy,
+                // budget and fallback-chain invariants. The legacy
+                // `with_web(.., SearchBackend::DuckDuckGo)` door stood here
+                // until 2026-08-26 and pinned every host but the desktop to
+                // DuckDuckGo regardless of what the operator had configured.
+                r = r.record(reg.register_reporting(Box::new(
+                    crate::search::SearchTool::with_orchestrator(
                         Arc::clone(&self.store),
                         Arc::clone(&self.inference),
                         client.clone(),
-                        // DuckDuckGo — free, no key required.
-                        crate::web::search::SearchBackend::DuckDuckGo,
+                        search_orchestrator(),
                     ),
                 )));
             }
             WebReach::Withheld(why) => {
-                r = r.registered(reg.register_reporting(Box::new(
+                r = r.record(reg.register_reporting(Box::new(
                     crate::search::SearchTool::new(
                         Arc::clone(&self.store),
                         Arc::clone(&self.inference),
@@ -153,23 +199,17 @@ impl ToolBundle for CoreTurnTools {
     }
 }
 
-/// Tools that reach the open internet.
+/// Fetching an arbitrary url the model emits (`web_fetch`).
 ///
-/// `web_fetch` retrieves ANY url the model emits — validation is scheme-only
-/// and there is no host allowlist — and `wikipedia_fetch` reaches
-/// en.wikipedia.org. A deployment that must not egress declares
-/// [`Withheld`](sovereign_contracts::tool_bundle::Withheld) in place of this.
-pub struct WebTools {
-    corpus_engine: Arc<corpus_engine::CorpusEngine>,
-}
-
-impl WebTools {
-    /// Build the family. The corpus engine backs `wikipedia_fetch`'s local
-    /// cache lookup before it reaches the network.
-    pub fn new(corpus_engine: Arc<corpus_engine::CorpusEngine>) -> Self {
-        Self { corpus_engine }
-    }
-}
+/// Validation is scheme-only and there is no host allowlist, so this is the
+/// family a deployment that must not egress declares
+/// [`Withheld`](sovereign_contracts::tool_bundle::Withheld) in place of.
+///
+/// Carries no collaborators: `web_fetch` needs nothing but the network. It
+/// held a `CorpusEngine` until 2026-08-26 only because `wikipedia_fetch` was
+/// registered beside it, which is what made "I want url fetching without
+/// article fetching" inexpressible — see [`WikipediaTools`].
+pub struct WebTools;
 
 #[async_trait]
 impl ToolBundle for WebTools {
@@ -179,10 +219,40 @@ impl ToolBundle for WebTools {
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         BundleReport::new(self.name())
-            .registered(reg.register_reporting(Box::new(crate::web::WebFetchTool::new())))
-            .registered(reg.register_reporting(Box::new(
-                crate::WikipediaFetchTool::new(Arc::clone(&self.corpus_engine)).declared(),
-            )))
+            .record(reg.register_reporting(Box::new(crate::web::WebFetchTool::new())))
+    }
+}
+
+/// Fetching en.wikipedia.org articles (`wikipedia_fetch`).
+///
+/// Its own family because the hosts that want it differ from the hosts that
+/// want [`WebTools`]: a surface whose users INSTALL the Wikipedia corpus reads
+/// articles out of that corpus and has no reason to fetch them over the
+/// network, while still wanting `web_fetch` for urls a user pastes.
+///
+/// The corpus engine backs the local cache lookup this makes before it reaches
+/// the network.
+pub struct WikipediaTools {
+    corpus_engine: Arc<corpus_engine::CorpusEngine>,
+}
+
+impl WikipediaTools {
+    /// Build the family.
+    pub fn new(corpus_engine: Arc<corpus_engine::CorpusEngine>) -> Self {
+        Self { corpus_engine }
+    }
+}
+
+#[async_trait]
+impl ToolBundle for WikipediaTools {
+    fn name(&self) -> &'static str {
+        "wikipedia"
+    }
+
+    async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
+        BundleReport::new(self.name()).record(reg.register_reporting(Box::new(
+            crate::WikipediaFetchTool::new(Arc::clone(&self.corpus_engine)).declared(),
+        )))
     }
 }
 
@@ -203,7 +273,7 @@ impl ToolBundle for ShellTools {
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         BundleReport::new(self.name())
-            .registered(reg.register_reporting(Box::new(crate::shell::ShellTool)))
+            .record(reg.register_reporting(Box::new(crate::shell::ShellTool)))
     }
 }
 
@@ -218,13 +288,42 @@ impl ToolBundle for ShellTools {
 pub struct KnowledgeFrontDoor {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
+    notes: Option<Arc<corpus_engine_notes::NoteStore>>,
+    escalation: WebEscalation,
 }
 
 impl KnowledgeFrontDoor {
-    /// Build the family.
-    pub fn new(store: Arc<dyn StateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
-        Self { store, inference }
+    /// Build the family. Total: both of the last two arguments are host
+    /// decisions with no defensible default, and both were hardcoded absent
+    /// here until 2026-08-26 — so the daemon and the CLI ran `knowledge_lookup`
+    /// with two of its three evidence channels dark while the desktop, which
+    /// wired them by hand, did not (ARCH §18.3, §10.6).
+    pub fn new(
+        store: Arc<dyn StateStore>,
+        inference: Arc<dyn InferenceProvider>,
+        notes: Option<Arc<corpus_engine_notes::NoteStore>>,
+        escalation: WebEscalation,
+    ) -> Self {
+        Self {
+            store,
+            inference,
+            notes,
+            escalation,
+        }
     }
+}
+
+/// Whether thin local results may fall back to a web search (Tier 3).
+///
+/// An operator setting, so it is a host input rather than a builder call a
+/// host can forget. `Disabled` is not "no web": the user-in-loop INFORMATION
+/// REQUEST card is still there. It is "do not escalate without being asked".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WebEscalation {
+    /// Thin local results trigger an internal web search.
+    Enabled,
+    /// Local channels only; escalation stays the user's move.
+    Disabled,
 }
 
 #[async_trait]
@@ -234,15 +333,28 @@ impl ToolBundle for KnowledgeFrontDoor {
     }
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        BundleReport::new(self.name())
-            .registered(reg.register_reporting(Box::new(
-                crate::KnowledgeLookupTool::new(
-                    Arc::clone(&self.store),
-                    Arc::clone(&self.inference),
-                )
-                .declared(),
-            )))
-            .registered(reg.register_reporting(Box::new(
+        let mut r = BundleReport::new(self.name());
+        let mut lookup =
+            crate::KnowledgeLookupTool::new(Arc::clone(&self.store), Arc::clone(&self.inference));
+        match &self.notes {
+            Some(ns) => lookup = lookup.with_notes(Arc::clone(ns)),
+            None => r = r.withheld("knowledge_lookup:notes-channel", "no note store on this host"),
+        }
+        match self.escalation {
+            WebEscalation::Enabled => {
+                lookup = lookup
+                    .with_web_orchestrator(search_orchestrator())
+                    .with_auto_escalate(true);
+            }
+            WebEscalation::Disabled => {
+                r = r.withheld(
+                    "knowledge_lookup:auto-escalate",
+                    "the operator has not opted in to automatic web escalation",
+                );
+            }
+        }
+        r.record(reg.register_reporting(Box::new(lookup.declared())))
+            .record(reg.register_reporting(Box::new(
                 crate::AttachedDocumentSearchTool::new(
                     Arc::clone(&self.store),
                     Arc::clone(&self.inference),
@@ -296,7 +408,7 @@ impl ToolBundle for CodeIntelTools {
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         let health = Arc::new(crate::IndexHealthChecker::new(Arc::clone(&self.scip_graph)));
         BundleReport::new(self.name())
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::SymbolLookupTool::new(
                     Arc::clone(&self.corpus_engine),
                     Arc::clone(&self.scip_graph),
@@ -304,15 +416,15 @@ impl ToolBundle for CodeIntelTools {
                 .with_health_checker(Arc::clone(&health))
                 .declared(),
             )))
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::CodeSearchTool::new(Arc::clone(&self.corpus_engine))
                     .with_inference(Arc::clone(&self.inference))
                     .declared(),
             )))
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::RecentChangesTool::new(Arc::clone(&self.corpus_engine)).declared(),
             )))
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::FindCalleesTool::new(
                     Arc::clone(&self.corpus_engine),
                     Arc::clone(&self.scip_graph),
@@ -320,7 +432,7 @@ impl ToolBundle for CodeIntelTools {
                 .with_health_checker(Arc::clone(&health))
                 .declared(),
             )))
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::FindCallersTool::new(
                     Arc::clone(&self.corpus_engine),
                     Arc::clone(&self.scip_graph),
@@ -328,7 +440,7 @@ impl ToolBundle for CodeIntelTools {
                 .with_health_checker(Arc::clone(&health))
                 .declared(),
             )))
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::CapabilityMapTool::new().declared(),
             )))
     }
@@ -360,13 +472,13 @@ impl ToolBundle for NotesTools {
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         BundleReport::new(self.name())
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::WriteNoteTool::new(Arc::clone(&self.notes)).declared(),
             )))
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::ReadNotesTool::new(Arc::clone(&self.notes)).declared(),
             )))
-            .registered(reg.register_reporting(Box::new(
+            .record(reg.register_reporting(Box::new(
                 crate::DeleteNoteTool::new(Arc::clone(&self.notes)).declared(),
             )))
     }
@@ -383,7 +495,7 @@ impl ToolBundle for ComputeTools {
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         BundleReport::new(self.name())
-            .registered(reg.register_reporting(Box::new(crate::compute::ComputeTool.declared())))
+            .record(reg.register_reporting(Box::new(crate::compute::ComputeTool.declared())))
     }
 }
 
@@ -391,13 +503,34 @@ impl ToolBundle for ComputeTools {
 pub struct DocumentOperations {
     store: Arc<dyn StateStore>,
     inference: Arc<dyn InferenceProvider>,
+    progress: DocumentProgress,
 }
 
 impl DocumentOperations {
     /// Build the family.
-    pub fn new(store: Arc<dyn StateStore>, inference: Arc<dyn InferenceProvider>) -> Self {
-        Self { store, inference }
+    pub fn new(
+        store: Arc<dyn StateStore>,
+        inference: Arc<dyn InferenceProvider>,
+        progress: DocumentProgress,
+    ) -> Self {
+        Self {
+            store,
+            inference,
+            progress,
+        }
     }
+}
+
+/// Where each phase of the document map-reduce reports to.
+///
+/// `document_operation` runs a multi-minute pipeline over a long document. A
+/// host with a window shows the phases; a host without one has nowhere to put
+/// them, and that is a fact about the host, not a setting.
+pub enum DocumentProgress {
+    /// Emit every phase to this sink — a desktop's event channel.
+    Streamed(crate::document_operation::DocOpCallback),
+    /// Nowhere to report: a daemon or a one-shot CLI.
+    Silent,
 }
 
 #[async_trait]
@@ -407,13 +540,21 @@ impl ToolBundle for DocumentOperations {
     }
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        BundleReport::new(self.name()).registered(reg.register_reporting(Box::new(
-            crate::DocumentOperationTool::new(
-                Arc::clone(&self.store),
-                Arc::clone(&self.inference),
-            )
-            .declared(),
-        )))
+        let mut tool = crate::DocumentOperationTool::new(
+            Arc::clone(&self.store),
+            Arc::clone(&self.inference),
+        );
+        let mut r = BundleReport::new(self.name());
+        match &self.progress {
+            DocumentProgress::Streamed(cb) => tool = tool.with_progress(Arc::clone(cb)),
+            DocumentProgress::Silent => {
+                r = r.withheld(
+                    "document_operation:progress",
+                    "this host has no surface to narrate pipeline phases to",
+                )
+            }
+        }
+        r.record(reg.register_reporting(Box::new(tool.declared())))
     }
 }
 
@@ -480,39 +621,52 @@ impl ToolBundle for RecipeAuthoringTools {
         use crate::recipe_tester_adapter::CorpusEngineRecipeTester;
 
         let mut r = BundleReport::new(self.name());
-        r = r.registered(reg.register_reporting(Box::new(RecipeReadTool::new())));
-        r = r.registered(reg.register_reporting(Box::new(RecipeWriteTool::new())));
-        r = r.registered(reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(
+        r = r.record(reg.register_reporting(Box::new(RecipeReadTool::new())));
+        r = r.record(reg.register_reporting(Box::new(RecipeWriteTool::new())));
+        r = r.record(reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(
             Arc::new(CorpusEngineRecipeTester::new()),
         ))));
-        r = r.registered(reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::new(
+        r = r.record(reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::new(
             CorpusEngineRecipeTester::new(),
         )))));
-        r = r.registered(reg.register_reporting(Box::new(RecipeTestTool::new(Arc::new(
+        r = r.record(reg.register_reporting(Box::new(RecipeTestTool::new(Arc::new(
             CorpusEngineRecipeTester::new(),
         )))));
-        r = r.registered(reg.register_reporting(Box::new(RegistryBrowseTool)));
-        r = r.registered(reg.register_reporting(Box::new(ProbeUrlTool::new())));
+        r = r.record(reg.register_reporting(Box::new(RegistryBrowseTool)));
+        r = r.record(reg.register_reporting(Box::new(ProbeUrlTool::new())));
 
         match &self.notes {
             Some(notes) => {
-                r = r.registered(reg.register_reporting(Box::new(DecisionLogTool::with_notes(
+                r = r.record(reg.register_reporting(Box::new(DecisionLogTool::with_notes(
                     Arc::clone(notes),
                 ))));
-                r = r.registered(reg.register_reporting(Box::new(
+                r = r.record(reg.register_reporting(Box::new(
                     ResearchFindingTool::with_notes(Arc::clone(notes)),
                 )));
                 match &self.features {
                     Some(features) => {
-                        r = r.registered(reg.register_reporting(Box::new(
+                        r = r.record(reg.register_reporting(Box::new(
                             CheckpointTool::with_stores(Arc::clone(notes), Arc::clone(features)),
                         )));
-                        r = r.registered(reg.register_reporting(Box::new(
-                            CapabilityRequestTool::with_stores(
-                                Arc::clone(notes),
-                                Arc::clone(features),
-                            ),
-                        )));
+                        // The inbox directory is derived from the sovereign
+                        // root, not supplied by the host — so wiring it here
+                        // is what makes a submitted capability request land
+                        // where `svrn maintainer inbox` reads it on EVERY
+                        // host. Only the desktop called this, so a request
+                        // submitted through the server or the daemon was
+                        // written and then unreadable (ARCH §10.6).
+                        let mut cap =
+                            CapabilityRequestTool::with_stores(Arc::clone(notes), Arc::clone(features));
+                        match crate::recipe_author::maintainer_inbox_dir() {
+                            Ok(dir) => cap = cap.with_inbox_dir(dir),
+                            Err(e) => {
+                                r = r.withheld(
+                                    "capability_request:inbox",
+                                    format!("maintainer inbox dir unresolved: {e}"),
+                                )
+                            }
+                        }
+                        r = r.record(reg.register_reporting(Box::new(cap)));
                     }
                     None => {
                         r = r.withheld(

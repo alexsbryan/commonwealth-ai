@@ -14,12 +14,30 @@
 //!
 //! Measured when this file was written (2026-08-25): **33 tools in the union,
 //! 7 common to all three, 26 divergent.** `svrn chat` registers 11, the
-//! desktop 21, the server 31. Two of the divergences read as defects rather
-//! than policy and are worth naming, because a number alone does not make
-//! anyone act:
+//! desktop 21, the server 31.
 //!
-//! - `KnowledgeLookupTool` — the "unified knowledge-lookup front door" — is on
-//!   the CLI and on NEITHER user-facing host.
+//! **CORRECTION, 2026-08-26 — THE DESKTOP NUMBER AND ONE OF THE TWO NAMED
+//! DEFECTS WERE THE INSTRUMENT, NOT THE HOSTS.** The scan skipped every
+//! registration whose argument was a variable, on the stated grounds that such
+//! a call is an MCP loop or a re-registered vec. That is true of those, and
+//! false of a tool assembled over several lines because its wiring is
+//! conditional — which is how the desktop registers `KnowledgeLookupTool` (and
+//! `CapabilityRequestTool`). So:
+//!
+//! - `KnowledgeLookupTool` **is** on the desktop and always was. The claim
+//!   below that it was on "NEITHER user-facing host" was never true, and it is
+//!   the shape of finding someone acts on — the fix would have been a second
+//!   registration for a tool already there.
+//! - The desktop registers **23**, not 21.
+//! - Divergence is unchanged at 26: both corrections move a tool from one
+//!   two-host pair to another.
+//!
+//! `resolve_binding` closes it, and anything the scan still cannot resolve is
+//! now returned rather than dropped (ARCH §18.4 — validate the instrument
+//! before the result).
+//!
+//! The other named divergence stands, and is worth acting on:
+//!
 //! - `AttachedDocumentSearchTool` is CLI-only. Its own comment says it is "the
 //!   lever the book-report bench exposed as missing"; the desktop is where a
 //!   user attaches a document.
@@ -62,7 +80,7 @@ use std::path::{Path, PathBuf};
 ///
 /// These are the same three sites `runtime_commission_census` tracks — a host
 /// that commissions a `Runtime` is exactly a host that must hand it tools.
-const TURN_REGISTRIES: &[(&str, &str)] = &[
+const TURN_REGISTRIES: &[(&str, &str, Extraction)] = &[
     // Was `sovereign-cli-llm/src/chat_cmd/bootstrap.rs` until 2026-08-25.
     // The registry moved into the shared recipe (TOPOLOGY §10 phase 5c), so
     // this row is no longer one host: it is what `svrn chat` AND
@@ -80,13 +98,46 @@ const TURN_REGISTRIES: &[(&str, &str)] = &[
     (
         "recipe",
         "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
+        Extraction::Bundles(&[
+            "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
+            "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
+        ]),
     ),
+    // Composed since 2026-08-26 (TOPOLOGY phase 7). Before that this row was
+    // 23 `tools.register` calls in a 1,659-line function; the span scanner
+    // that read them found NO span the moment the desktop adopted the recipe,
+    // which is the instrument guard doing its job rather than a regression.
     (
         "desktop",
         "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs",
+        Extraction::Bundles(&["sovereign/crates/sovereign-desktop/src-tauri/src/state.rs"]),
     ),
-    ("server", "sovereign/crates/sovereign-server/src/main.rs"),
+    // Composed since 2026-08-26 as well, which leaves NO host on the direct
+    // path. `Extraction::Direct` is kept because the next host to appear will
+    // arrive that way, and deleting the arm would make the census silently
+    // wrong about it rather than loudly.
+    (
+        "server",
+        "sovereign/crates/sovereign-server/src/main.rs",
+        Extraction::Bundles(&["sovereign/crates/sovereign-server/src/main.rs"]),
+    ),
 ];
+
+/// How a host's turn tools are read off its source.
+///
+/// Two mechanisms because the hosts are mid-migration, and the census has to
+/// keep measuring the ones that have not moved. A host that composes bundles
+/// registers no tool by name, so scanning its source for `tools.register`
+/// finds zero — reporting that as "this host carries nothing" would be the
+/// census inventing agreement it never measured (ARCH §18.2).
+enum Extraction {
+    /// The host composes `ToolBundle`s. Its set is the union of what those
+    /// bundles register, and these are the sources that declare which ones it
+    /// composes.
+    Bundles(&'static [&'static str]),
+    /// The host builds a registry and writes `tools.register(..)` into it.
+    Direct,
+}
 
 /// The divergence measured on 2026-08-25. May shrink freely; a growth is the
 /// failure this file exists to produce.
@@ -115,7 +166,27 @@ const TURN_REGISTRIES: &[(&str, &str)] = &[
 /// first bundle resolver missed `Box::new(sovereign_tools::bundles::ShellTools)`
 /// — a path-qualified unit struct — and reported a 27th divergence that had
 /// not happened.
-const DIVERGENT_BASELINE: usize = 26;
+/// RE-MEASURED 2026-08-26 after the desktop adopted the recipe (phase 7):
+/// **union 33, common 8, divergent 25.** One tool moved from divergent to
+/// common (`ParcelAnalyticsTool`, which the desktop gained by composing
+/// `CoreTurnTools` whole) and `AttachedDocumentSearchTool` moved from
+/// CLI-only to CLI-and-desktop, which is the gap this file's header named as
+/// worth acting on: the desktop is where a user attaches a document.
+/// RE-MEASURED 2026-08-26 after BOTH remaining hosts adopted the recipe
+/// (TOPOLOGY §10 phase 7): **union 33, common 10, divergent 23**, down from
+/// 26. Three tools crossed from divergent to common, and two of them are the
+/// gap this file's header named as worth acting on — `KnowledgeLookupTool`
+/// and `AttachedDocumentSearchTool` were CLI-only, and the server now carries
+/// both because composing `KnowledgeFrontDoor` whole is what adopting the
+/// baseline MEANS. `ParcelAnalyticsTool` is the third.
+///
+/// What is left is not drift. The recipe row is `svrn chat` + `sovereign
+/// daemon run`, and the twenty tools it lacks are code intel, notes,
+/// recipe-authoring and compute — families those two hosts do not offer and
+/// have never claimed to. Closing THAT is a decision about what a CLI turn
+/// may do, not a refactor, which is exactly the line this ratchet was built
+/// to keep visible.
+const DIVERGENT_BASELINE: usize = 23;
 
 /// Below this, the extractor found nothing and the run proves nothing.
 const MIN_TOOLS_PER_HOST: usize = 8;
@@ -163,7 +234,14 @@ fn registry_span(src: &str) -> Option<String> {
 /// The receiver is matched explicitly. `mcp_tools.register(...)` must NOT
 /// count — see the instrument note in the module docs.
 fn registered_tools(span: &str) -> BTreeSet<String> {
+    registered_tools_reporting(span).0
+}
+
+/// The tools this span registers, plus the variable names whose type the scan
+/// could NOT resolve. The second half is what keeps the first honest.
+fn registered_tools_reporting(span: &str) -> (BTreeSet<String>, BTreeSet<String>) {
     let mut out = BTreeSet::new();
+    let mut unresolved = BTreeSet::new();
     // Two registration verbs, and the receiver is checked for both. A host
     // writes `tools.register(Box::new(..))`; a `ToolBundle` writes
     // `reg.register_reporting(Box::new(..))`. Anything else — notably the
@@ -209,16 +287,72 @@ fn registered_tools(span: &str) -> BTreeSet<String> {
                 parts.pop();
             }
             let Some(name) = parts.last() else { continue };
-            // A lowercase head is a variable — the desktop registers
-            // MCP-discovered tools from a loop, and a bundle re-registers a
-            // `Vec<Box<dyn Tool>>` the same way. Neither is a named capability.
+            // A lowercase head is a VARIABLE, and until 2026-08-26 every one
+            // was skipped on the stated grounds that "neither is a named
+            // capability". That is true of the desktop's MCP loop and of a
+            // bundle re-registering a `Vec<Box<dyn Tool>>`. It is FALSE of a
+            // tool built up over several lines because its wiring is
+            // conditional, and the desktop has exactly that:
+            //
+            //     let mut tool = sovereign_tools::KnowledgeLookupTool::new(..);
+            //     if .. { tool = tool.with_notes(..) }
+            //     tools.register(Box::new(tool.declared()));
+            //
+            // The scan reported the desktop as LACKING `KnowledgeLookupTool`,
+            // this file's own header wrote that up as a named defect ("on the
+            // CLI and on NEITHER user-facing host"), and it was never true.
+            // A census that silently drops a true positive reports agreement
+            // it did not measure (ARCH §18.4 — validate the instrument first).
+            //
+            // So: resolve the binding when the span declares one, and hand
+            // back anything still unresolved instead of dropping it.
             if name.chars().next().is_some_and(char::is_lowercase) {
+                match resolve_binding(&span[..idx], name) {
+                    Some(bound) => {
+                        out.insert(bound);
+                    }
+                    None => {
+                        unresolved.insert((*name).to_string());
+                    }
+                }
                 continue;
             }
             out.insert((*name).to_string());
         }
     }
-    out
+    (out, unresolved)
+}
+
+/// The most recent `let [mut] <name> = <Path>::…` before the registration.
+///
+/// Deliberately narrow: it resolves the ONE shape a host uses when a tool's
+/// wiring is conditional. Anything else stays unresolved and is reported
+/// rather than guessed at — a wrong answer here is worse than no answer,
+/// because it would silently move a host's column in the matrix.
+fn resolve_binding(before: &str, var: &str) -> Option<String> {
+    let mut found = None;
+    for pat in [format!("let mut {var} ="), format!("let {var} =")] {
+        if let Some(at) = before.rfind(&pat) {
+            let rhs = before[at + pat.len()..].trim_start();
+            let path: String = rhs
+                .chars()
+                .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
+                .collect();
+            let mut parts: Vec<&str> = path.split("::").filter(|s| !s.is_empty()).collect();
+            while parts.len() > 1 && is_ctor(parts[parts.len() - 1]) {
+                parts.pop();
+            }
+            if let Some(name) = parts.last() {
+                if name.chars().next().is_some_and(char::is_uppercase) {
+                    // Prefer the binding nearest the registration.
+                    if found.as_ref().is_none_or(|_: &(usize, String)| true) {
+                        found = Some((at, (*name).to_string()));
+                    }
+                }
+            }
+        }
+    }
+    found.map(|(_, n)| n)
 }
 
 fn is_ctor(seg: &str) -> bool {
@@ -233,23 +367,63 @@ fn read(root: &Path, rel: &str) -> String {
     std::fs::read_to_string(root.join(rel)).unwrap_or_else(|e| panic!("read {rel}: {e}"))
 }
 
-/// Where a bundle-composing host declares its families, and where the
-/// families live. Both are scanned; a host that composes a bundle gets every
-/// tool that bundle registers.
-const BUNDLE_SOURCES: &[&str] = &[
-    "sovereign/crates/sovereign-runtime-recipe/src/lib.rs",
-    "sovereign/crates/sovereign-cli-llm/src/chat_cmd/bootstrap.rs",
+/// Where the bundle families are DEFINED. A host composing one gets every
+/// tool that bundle registers, wherever the bundle lives.
+///
+/// Two files since 2026-08-26: the workflow-authoring family is implemented
+/// beside the workflow host rather than in `sovereign-tools`, and a scan that
+/// knew only the first file would have reported the desktop as losing it.
+const BUNDLE_DEFINITIONS: &[&str] = &[
+    "sovereign/crates/sovereign-tools/src/bundles.rs",
+    "studio/crates/sovereign-workflow-host/src/author.rs",
 ];
-const BUNDLE_DEFINITIONS: &str = "sovereign/crates/sovereign-tools/src/bundles.rs";
 
-/// Bundle type names composed across `BUNDLE_SOURCES`.
+/// The `ToolBundle` impls across `BUNDLE_DEFINITIONS`, as one text.
+///
+/// The marker is `ToolBundle for `, not `impl ToolBundle for `: an impl
+/// written against the fully-qualified trait
+/// (`impl sovereign_contracts::tool_bundle::ToolBundle for X`) is the same
+/// declaration, and matching only the short form is how a family goes missing
+/// from a census that looks like it ran.
+fn bundle_defs(root: &Path) -> String {
+    BUNDLE_DEFINITIONS
+        .iter()
+        .map(|rel| strip_comments(&read(root, rel)))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Where `baseline_bundles` is defined — the families EVERY recipe host gets
+/// without naming one of them.
+const BASELINE_BUNDLES_SITE: &str = "sovereign/crates/sovereign-runtime-recipe/src/lib.rs";
+
+/// `sources`, plus the baseline site when any of them calls into it.
+///
+/// A host writes `baseline_bundles(..)` and then pushes its extras, so the
+/// families it carries are not all named in its own file. Scanning only the
+/// file reported the desktop as carrying its five extra bundles and NONE of
+/// the nine baseline tools it has always had — 32 divergent against a
+/// baseline of 26, entirely invented by the instrument. Follow the call
+/// (ARCH §18.4: validate the instrument before the result).
+fn effective_sources(root: &Path, sources: &[&str]) -> Vec<String> {
+    let mut out: Vec<String> = sources.iter().map(|s| (*s).to_string()).collect();
+    let follows = sources
+        .iter()
+        .any(|rel| strip_comments(&read(root, rel)).contains("baseline_bundles("));
+    if follows && !out.iter().any(|s| s == BASELINE_BUNDLES_SITE) {
+        out.push(BASELINE_BUNDLES_SITE.to_string());
+    }
+    out
+}
+
+/// Bundle type names composed across `sources`.
 ///
 /// Matches `<Name>::new(` and the unit-struct form `Box::new(<Name>)`, both of
 /// which appear in a host's bundle vec.
-fn composed_bundles(root: &Path) -> BTreeSet<String> {
-    let defs = strip_comments(&read(root, BUNDLE_DEFINITIONS));
+fn composed_bundles(root: &Path, sources: &[&str]) -> BTreeSet<String> {
+    let defs = bundle_defs(root);
     let known: BTreeSet<String> = defs
-        .match_indices("impl ToolBundle for ")
+        .match_indices("ToolBundle for ")
         .map(|(i, m)| {
             defs[i + m.len()..]
                 .chars()
@@ -260,13 +434,13 @@ fn composed_bundles(root: &Path) -> BTreeSet<String> {
         .collect();
     assert!(
         !known.is_empty(),
-        "no `impl ToolBundle for` in {BUNDLE_DEFINITIONS} — the bundle scan is broken, \
+        "no `ToolBundle for` impl in {BUNDLE_DEFINITIONS:?} — the bundle scan is broken, \
          not the hosts (ARCH §18.2)"
     );
 
     let mut out = BTreeSet::new();
-    for rel in BUNDLE_SOURCES {
-        let src = strip_comments(&read(root, rel));
+    for rel in effective_sources(root, sources) {
+        let src = strip_comments(&read(root, &rel));
         for name in &known {
             // Three spellings a host uses: a constructor call, a unit struct
             // boxed bare, and a unit struct boxed through its full path
@@ -284,12 +458,12 @@ fn composed_bundles(root: &Path) -> BTreeSet<String> {
     out
 }
 
-/// Tools carried by the bundles a recipe host composes.
-fn bundle_composed_tools(root: &Path) -> BTreeSet<String> {
-    let defs = strip_comments(&read(root, BUNDLE_DEFINITIONS));
+/// Tools carried by the bundles a host composes.
+fn bundle_composed_tools(root: &Path, sources: &[&str]) -> BTreeSet<String> {
+    let defs = bundle_defs(root);
     let mut out = BTreeSet::new();
-    for bundle in composed_bundles(root) {
-        let marker = format!("impl ToolBundle for {bundle} {{");
+    for bundle in composed_bundles(root, sources) {
+        let marker = format!("ToolBundle for {bundle} {{");
         let Some(start) = defs.find(&marker) else {
             continue;
         };
@@ -303,14 +477,14 @@ fn bundle_composed_tools(root: &Path) -> BTreeSet<String> {
 fn census(root: &Path) -> BTreeMap<&'static str, BTreeSet<String>> {
     TURN_REGISTRIES
         .iter()
-        .map(|(host, rel)| {
-            if *host == "recipe" {
-                return (*host, bundle_composed_tools(root));
+        .map(|(host, rel, how)| match how {
+            Extraction::Bundles(sources) => (*host, bundle_composed_tools(root, sources)),
+            Extraction::Direct => {
+                let src = strip_comments(&read(root, rel));
+                let span = registry_span(&src)
+                    .unwrap_or_else(|| panic!("{host}: no turn registry span in {rel}"));
+                (*host, registered_tools(&span))
             }
-            let src = strip_comments(&read(root, rel));
-            let span = registry_span(&src)
-                .unwrap_or_else(|| panic!("{host}: no turn registry span in {rel}"));
-            (*host, registered_tools(&span))
         })
         .collect()
 }

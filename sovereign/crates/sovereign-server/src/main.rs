@@ -33,18 +33,14 @@ use axum::routing::{delete, get, post};
 use axum::Extension;
 use tower_http::cors::CorsLayer;
 
-use sovereign_core::planner::LlmPlanner;
-use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::StateStore;
-use sovereign_core::{SkillRegistry, ToolRegistry};
+use sovereign_core::SkillRegistry;
 use sovereign_inference::embedded::EmbeddedLlamaCpp;
 use sovereign_inference::health::HealthTracker;
 use sovereign_inference::hybrid::HybridProvider;
 use sovereign_inference::remote::RemoteApiProvider;
 use sovereign_inference::selector::BackendEntry;
 use sovereign_store::sqlite::SqliteStateStore;
-#[cfg(feature = "dev-routes")]
-use sovereign_tools::shell::ShellTool;
 
 use crate::approval::ServerApprovalChannel;
 use crate::auth::AuthState;
@@ -245,38 +241,14 @@ async fn main() {
     }
     let skills = Arc::new(skills);
 
-    // Build components.
+    // Build components. The router classifier stack, the planner, the turn's
+    // tool registry and the whole enrichment lane are the shared recipe's
+    // (`sovereign_runtime_recipe::common_parts`, called below). This file held
+    // near-copies of all four until 2026-08-26, and the copies had drifted in
+    // both directions: the recipe carried `lane.bridge` and the cross-corpus
+    // bridge boost, this host did not; this host carried twenty tools the
+    // recipe had no way to express until the `ToolBundle` seam landed.
     //
-    // Router classifier stack — built through the shared `router_bootstrap`
-    // helper so the served daemon wires the SAME embed router + scope + effort
-    // + current-info classifiers as the CLI/bench and desktop (parity by
-    // construction; see sovereign-core/router_bootstrap.rs). Closes the gap
-    // where the daemon previously wired ONLY the current-info classifier and so
-    // never ran the deep-routing the benches validate.
-    let (llm_router, router_report) = sovereign_core::router_bootstrap::build_llm_router(
-        Arc::clone(&inference),
-        Arc::clone(&store),
-        Arc::clone(&skills),
-        &sovereign_core::router_bootstrap::ExemplarOverrides::from_env_and_repo(),
-        || tracing::info!(
-            target: "router.bootstrap",
-            "exemplar embed cache cold — re-embedding exemplars (minutes on a CPU-only embed slot)"
-        ),
-    )
-    .await;
-    tracing::info!(
-        embed = router_report.embed_router.is_some(),
-        scope = router_report.scope.is_some(),
-        effort = router_report.effort.is_some(),
-        current_info = router_report.current_info.is_some(),
-        all_wired = router_report.all_wired(),
-        "router classifier stack assembled"
-    );
-    // Boxed AFTER tool registration completes (below): the authority
-    // probe (FINANCIAL_CORPORA §7.3) needs the finished registry.
-
-    let planner = LlmPlanner::new(Arc::clone(&inference), Arc::clone(&skills));
-
     // Construct a shared CorpusEngine for the epistemic tools.
     let home = sovereign_contracts::rebrand::svrnmesh_root();
     let recipes_dir = home.join("recipes");
@@ -386,237 +358,147 @@ async fn main() {
         None
     };
 
-    // Register tools. Tier 4 — shared tool-result cache so the
-    // sovereign-server (standalone HTTP daemon) gets the same
-    // per-conversation cache the CLI / desktop bootstrap wire.
-    let tool_cache = Arc::new(sovereign_core::tool_result_cache::ToolResultCache::new());
-    let mut tools = ToolRegistry::new().with_cache(Arc::clone(&tool_cache));
-    // Shell is a developer capability. Its approval grant is cached
-    // store-wide (executor.rs) and a pending approval blocks a scheduler
-    // permit with no timeout, so on a shared box it is both a privilege
-    // and an availability risk. Omitted by `--no-default-features`.
-    #[cfg(feature = "dev-routes")]
-    tools.register(Box::new(ShellTool));
-    tools.register(Box::new(
-        sovereign_tools::document::DocumentTool::new(Arc::clone(&store), Arc::clone(&inference))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::DocumentOperationTool::new(Arc::clone(&store), Arc::clone(&inference))
-            .declared(),
-    ));
-    // Search over installed corpora. The `net-tools` build additionally
-    // gives it a web fallback that fires whenever the top local score is
-    // below SCORE_SUFFICIENT — POST html.duckduckgo.com, then
-    // www.google.com if that is bot-blocked, then lite.duckduckgo.com.
+    // ── The tool families this hub carries ───────────────────────────────
     //
-    // `--no-default-features` keeps the tool and drops the fallback:
-    // corpus search IS the product; reaching the open web is a separate
-    // capability that a zero-egress deployment cannot have.
-    #[cfg(feature = "net-tools")]
-    tools.register(Box::new(sovereign_tools::search::SearchTool::with_web(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-        // Client built by the egress boundary (order deep-research-t2a):
-        // tools-base is contract-only and must not construct an
-        // egress-capable HTTP client itself.
-        sovereign_core::egress::search_client().expect("egress boundary search client build"),
-        sovereign_tools::web::search::SearchBackend::DuckDuckGo,
-    )));
-    #[cfg(not(feature = "net-tools"))]
-    tools.register(Box::new(sovereign_tools::search::SearchTool::new(
-        Arc::clone(&store),
-        Arc::clone(&inference),
-    )));
-    // `web_fetch` retrieves ANY url the model emits — validation is
-    // scheme-only, there is no host allowlist, and it follows up to 5
-    // redirects. `wikipedia_fetch` reaches en.wikipedia.org.
+    // Composed, not registered. What stood here was 31 `tools.register` calls
+    // over 230 lines, and the reason it stayed that way is worth naming: the
+    // shared recipe used to OWN its tool list, so adopting it read as "lose
+    // twenty capabilities" and the phase stalled on a question that looked
+    // like policy and was structure (TOPOLOGY §10 phase 7b). A bundle inverts
+    // it — this host names the families it can provide, the recipe folds them,
+    // and neither has to hold the other's list.
     //
-    // Neither is gated by `Permission::Network` in practice: that check
-    // lives at exactly one call site, in the plan executor
-    // (`sovereign-core/src/executor.rs`), and the chat/agent path calls
-    // `tool.execute()` directly without consulting it. So the cargo
-    // feature is the only in-process switch these have.
-    #[cfg(feature = "net-tools")]
-    tools.register(Box::new(sovereign_tools::web::WebFetchTool::new()));
-    #[cfg(feature = "net-tools")]
-    tools.register(Box::new(
-        sovereign_tools::WikipediaFetchTool::new(Arc::clone(&corpus_engine)).declared(),
-    ));
-    tools.register(Box::new(sovereign_tools::compute::ComputeTool.declared()));
-    tools.register(Box::new(
-        sovereign_tools::ClaimSearchTool::new(Arc::clone(&corpus_engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::EpistemicLandscapeTool::new(Arc::clone(&corpus_engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&corpus_engine))
-            .declared(),
-    ));
-    // Typed SEC-filing figures with basis + accession, or first-class
-    // refusals; declares the opt-in bare-numeral audit (FINANCIAL_CORPORA §6).
-    tools.register(Box::new(
-        sovereign_tools::sec_facts::SecFactsTool::new(Arc::clone(&corpus_engine)).declared(),
-    ));
-    // SCIP call graph database + tools (v2).
-    //
-    // The call-graph tools take `Arc<ArcSwap<ScipGraph>>` so the CLI's
-    // `project serve` can hot-swap the graph when the on-disk DB changes.
-    // sovereign-server opens a single on-disk DB at a fixed path and doesn't
-    // swap, but the tool signature still requires the wrapper.
-    //
-    // Built before the code-intel tools below so `SymbolLookupTool`
-    // can share the handle (exact-name lookup reads SCIP directly
-    // since the SCIP-as-truth refactor).
+    // Two capabilities arrive with the baseline that this host did not have:
+    // `knowledge_lookup` (the unified corpus + memory + notes envelope) and
+    // `attached_document_search`. Both were measured as CLI-only by
+    // `sovereign-core/tests/turn_tool_census.rs` and are the divergence that
+    // census exists to close.
+
+    // SCIP call graph database. The call-graph tools take
+    // `Arc<ArcSwap<ScipGraph>>` so the CLI's `project serve` can hot-swap the
+    // graph when the on-disk DB changes; this server opens a single on-disk DB
+    // at a fixed path and does not swap, but the tool signature still requires
+    // the wrapper. Built here because `CodeIntelTools` cannot be constructed
+    // without it — the privilege is the handle, so this host can only offer
+    // code intel over an index it actually owns.
     let scip_db_path = home.join("indexes").join("_scip_graph.db");
     let scip_graph =
         corpus_engine_scip::ScipGraph::open(&scip_db_path, "default").expect("SCIP graph database");
     let scip_graph: sovereign_tools::ScipGraphHandle =
         Arc::new(arc_swap::ArcSwap::from_pointee(scip_graph));
-    let health_checker = Arc::new(sovereign_tools::IndexHealthChecker::new(Arc::clone(
-        &scip_graph,
-    )));
 
-    // Code Intelligence tools.
-    tools.register(Box::new(
-        sovereign_tools::SymbolLookupTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::CodeSearchTool::new(Arc::clone(&corpus_engine))
-            .with_inference(Arc::clone(&inference))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::RecentChangesTool::new(Arc::clone(&corpus_engine)).declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::FindCalleesTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    tools.register(Box::new(
-        sovereign_tools::FindCallersTool::new(Arc::clone(&corpus_engine), Arc::clone(&scip_graph))
-            .with_health_checker(Arc::clone(&health_checker))
-            .declared(),
-    ));
-    // Capability map — derived "what the codebase does" overview.
-    tools.register(Box::new(
-        sovereign_tools::CapabilityMapTool::new().declared(),
-    ));
-
-    // Working notes tools — persist across sessions, used for session attribution.
+    // Working notes — one open store, read by two families: the general note
+    // tools and `knowledge_lookup`'s third evidence channel.
     let notes_db_path = home.join("notes.db");
     let note_store_for_runtime: Option<Arc<corpus_engine_notes::NoteStore>> =
         match corpus_engine_notes::NoteStore::open(&notes_db_path) {
-            Ok(store) => {
-                let store = Arc::new(store);
-                tools.register(Box::new(
-                    sovereign_tools::WriteNoteTool::new(Arc::clone(&store)).declared(),
-                ));
-                tools.register(Box::new(
-                    sovereign_tools::ReadNotesTool::new(Arc::clone(&store)).declared(),
-                ));
-                tools.register(Box::new(
-                    sovereign_tools::DeleteNoteTool::new(Arc::clone(&store)).declared(),
-                ));
-                tracing::info!("Notes: tools registered ({})", notes_db_path.display());
-                Some(store)
-            }
+            Ok(store) => Some(Arc::new(store)),
             Err(e) => {
                 tracing::warn!(error = %e, "notes.db unavailable — note tools disabled");
                 None
             }
         };
-
-    // Recipe-author workspace tools. Registered so a conversation tagged
-    // `skill_id = "recipe-author"` (via `POST /v1/conversations
-    // {"skill_id":"recipe-author"}`) can drive the authoring agent loop over
-    // the conversation API — the headless equivalent of the desktop
-    // recipe-author workspace (`sovereign-desktop/.../state.rs`). The narrowed
-    // catalog only surfaces these when `active_mode == recipe-author`, so
-    // generic chat is unaffected.
-    {
-        use sovereign_contracts::recipe::notes::RecipeNotes;
-        use sovereign_tools::recipe_author::{
-            CapabilityRequestTool, CheckpointTool, DecisionLogTool, ProbeUrlTool, RecipeReadTool,
-            RecipeTestTool, RecipeValidateTool, RecipeWriteStructuredTool, RecipeWriteTool,
-            RegistryBrowseTool, ResearchFindingTool,
-        };
-        use sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes;
-        use sovereign_tools::recipe_tester_adapter::CorpusEngineRecipeTester;
-        tools.register(Box::new(RecipeReadTool::new()));
-        tools.register(Box::new(RecipeWriteTool::new()));
-        tools.register(Box::new(RecipeWriteStructuredTool::new(Arc::new(
-            CorpusEngineRecipeTester::new(),
-        ))));
-        tools.register(Box::new(RecipeValidateTool::new(Arc::new(
-            CorpusEngineRecipeTester::new(),
-        ))));
-        tools.register(Box::new(RecipeTestTool::new(Arc::new(
-            CorpusEngineRecipeTester::new(),
-        ))));
-        tools.register(Box::new(RegistryBrowseTool));
-        tools.register(Box::new(ProbeUrlTool::new()));
-        // Workflow-author tools (Inc0) — the umbrella authoring loop. Surfaced
-        // only when active_mode == workflow-author (the narrowed catalog), so
-        // generic chat + recipe-author are unaffected.
-        for t in sovereign_workflow_host::author_tools() {
-            tools.register(t);
-        }
-        if let Some(ref notes) = note_store_for_runtime {
-            // The recipe-author tools take the RecipeNotes contract, not the
-            // concrete NoteStore; wrap once in the seam adapter. (The general
-            // note tools above still hold the concrete Arc<NoteStore>.)
-            let recipe_notes: Arc<dyn RecipeNotes> =
-                Arc::new(NoteStoreRecipeNotes::new(Arc::clone(notes)));
-            tools.register(Box::new(DecisionLogTool::with_notes(Arc::clone(
-                &recipe_notes,
-            ))));
-            tools.register(Box::new(ResearchFindingTool::with_notes(Arc::clone(
-                &recipe_notes,
-            ))));
-            let features_db = home.join("features.db");
-            match sovereign_store::recipe_project_store::RecipeProjectStore::open(&features_db) {
-                Ok(features) => {
-                    let features = Arc::new(features);
-                    tools.register(Box::new(CheckpointTool::with_stores(
-                        Arc::clone(&recipe_notes),
-                        Arc::clone(&features),
-                    )));
-                    tools.register(Box::new(CapabilityRequestTool::with_stores(
-                        Arc::clone(&recipe_notes),
-                        Arc::clone(&features),
-                    )));
-                    tracing::info!("Recipe-author: tools registered (with feature store)");
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "features.db unavailable — recipe-author checkpoint/capability tools disabled");
-                }
+    let features_store = note_store_for_runtime.as_ref().and_then(|_| {
+        let features_db = home.join("features.db");
+        match sovereign_store::recipe_project_store::RecipeProjectStore::open(&features_db) {
+            Ok(f) => Some(Arc::new(f)),
+            Err(e) => {
+                tracing::warn!(error = %e, "features.db unavailable — recipe-author checkpoint/capability tools disabled");
+                None
             }
-        } else {
-            tracing::warn!(
-                "notes.db unavailable — recipe-author decision/research/checkpoint tools disabled"
-            );
         }
-    }
+    });
 
-    // Activity reporter — signals coding intensity to Commonwealth so
-    // the scheduler can route inference away from busy nodes.
-    if let Some(ref commonwealth_url) = config.commonwealth.url {
-        let reporter = Arc::new(activity::ActivityReporter::new(commonwealth_url.clone()));
-        reporter.start_decay_loop();
-        // TODO: pass reporter to WatcherCoordinator when watcher support is added
-        tracing::info!(url = %commonwealth_url, "Commonwealth activity reporter started");
-    }
+    let tool_bundles: Vec<Box<dyn sovereign_contracts::tool_bundle::ToolBundle>> = {
+        use sovereign_tools::bundles as fam;
+        // `--no-default-features` keeps corpus search and drops the open-web
+        // fallback: corpus search IS the product, and reaching the open web is
+        // a separate capability a zero-egress deployment cannot have. The
+        // refusal is a value that travels into the bundle report, not a
+        // missing line (ARCH §18.3).
+        #[cfg(feature = "net-tools")]
+        let web = fam::WebReach::Granted(
+            sovereign_core::egress::search_client().expect("egress boundary search client build"),
+        );
+        #[cfg(not(feature = "net-tools"))]
+        let web = fam::WebReach::Withheld("built without the `net-tools` feature");
 
-    // Connect MCP servers (stdio and HTTP+SSE).
-    let _mcp_manager =
-        sovereign_tools::mcp::McpServerManager::from_config(&config.mcp.servers, &mut tools).await;
+        let mut b = sovereign_runtime_recipe::baseline_bundles(
+            sovereign_runtime_recipe::BaselineDeps {
+                store: &store,
+                inference: &inference,
+                corpus_engine: &corpus_engine,
+                note_store: note_store_for_runtime.as_ref(),
+                web,
+                // A multi-tenant hub does not spend a tenant's turn on an
+                // un-asked-for web search. The user-in-loop escalation card
+                // stays available.
+                escalation: fam::WebEscalation::Disabled,
+            },
+        );
 
-    tracing::info!("Tools: {} registered", tools.count());
+        // `wikipedia_fetch` reaches en.wikipedia.org, so it follows the same
+        // feature switch as the rest of egress.
+        #[cfg(feature = "net-tools")]
+        b.push(Box::new(fam::WikipediaTools::new(Arc::clone(&corpus_engine))));
+        #[cfg(not(feature = "net-tools"))]
+        b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+            "wikipedia",
+            "built without the `net-tools` feature",
+        )));
+
+        // Shell is a developer capability. Its approval grant is cached
+        // store-wide (executor.rs) and a pending approval blocks a scheduler
+        // permit with no timeout, so on a shared box it is both a privilege
+        // and an availability risk.
+        #[cfg(feature = "dev-routes")]
+        b.push(Box::new(fam::ShellTools));
+        #[cfg(not(feature = "dev-routes"))]
+        b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+            "shell",
+            "a shared hub does not run commands as the invoking user; built \
+             without the `dev-routes` feature",
+        )));
+
+        b.push(Box::new(fam::ComputeTools));
+        b.push(Box::new(fam::DocumentOperations::new(
+            Arc::clone(&store),
+            Arc::clone(&inference),
+            // An HTTP hub has no window to narrate map-reduce phases to.
+            fam::DocumentProgress::Silent,
+        )));
+        b.push(Box::new(fam::CodeIntelTools::new(
+            Arc::clone(&corpus_engine),
+            Arc::clone(&inference),
+            Arc::clone(&scip_graph),
+        )));
+        match note_store_for_runtime.as_ref() {
+            Some(ns) => b.push(Box::new(fam::NotesTools::new(Arc::clone(ns)))),
+            None => b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
+                "notes",
+                "notes.db would not open on this host",
+            ))),
+        }
+        // Recipe- and workflow-authoring, driven over the conversation API by
+        // a conversation tagged `skill_id = "recipe-author"` /
+        // `"workflow-author"`. The narrowed catalog only surfaces these when
+        // `active_mode` matches, so generic chat is unaffected.
+        b.push(Box::new({
+            let mut ra = fam::RecipeAuthoringTools::new();
+            if let Some(ns) = note_store_for_runtime.as_ref() {
+                ra = ra.with_notes(Arc::new(
+                    sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(Arc::clone(ns)),
+                )
+                    as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
+            }
+            if let Some(fs) = features_store.as_ref() {
+                ra = ra.with_features(Arc::clone(fs));
+            }
+            ra
+        }));
+        b.push(Box::new(sovereign_workflow_host::WorkflowAuthoringTools));
+        b
+    };
 
     // Approval channel.
     let (approval_channel, _event_rx) = ServerApprovalChannel::new();
@@ -628,190 +510,106 @@ async fn main() {
     // The `Sender` is layered as an Extension for `ws::stream_turn`.
     let (narration_sink, narration_tx) = crate::narration::BroadcastRoutingEventSink::new();
 
-    // Authority probe (FINANCIAL_CORPORA §7.3): the router consults the
-    // registry's deterministic claims before intent classification.
-    let tools = Arc::new(tools);
-    let router: Box<dyn sovereign_core::traits::Router> =
-        Box::new(llm_router.with_authority_probe(Arc::clone(&tools)));
-
-    // ── The turn's enrichment stack, gathered BEFORE the Runtime ─────────
-    //
-    // daemon-convergence Phase 4b: `LaneSources` is a required argument, not
-    // six `with_*` calls this host could forget — and it DID forget them. The
-    // comment on the rerank block below is the record: until 2026-08-03 only
-    // `svrn chat` installed a reranker, so this server shipped baseline fusion
-    // ordering while the capability ledger reported the reranker available.
-    let mut lane = sovereign_core::runtime::lane::LaneSources::none();
-
-    // GLiNER entity extractor for retrieval-over-history. Probe the
-    // default model id; if installed, load it and wire it onto the
-    // Runtime. Failures soft-fall-through to pure cosine + MMR.
-    {
-        let model_id = sovereign_gliner::gliner_ner::DEFAULT_MODEL_ID;
-        if sovereign_gliner::gliner_ner::probe_model_available(model_id) {
-            match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
-                Ok(g) => {
-                    let arc: Arc<dyn sovereign_core::traits::EntityExtractor> = Arc::new(g);
-                    lane.gliner = Some(arc);
-                    tracing::info!(model = model_id, "server: GLiNER entity extractor loaded");
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, "server: GLiNER probe ok but load failed; entity-aware retrieval disabled");
-                }
-            }
-        } else {
-            tracing::debug!(
-                model = model_id,
-                "server: GLiNER model not installed; entity-aware retrieval disabled (falls back to cosine+MMR)"
-            );
-        }
-    }
-    // Cross-encoder reranker (T1 A2). Until 2026-08-03 the ONLY
-    // surface that installed one was the `svrn chat` CLI, so the hub
-    // server and the desktop shipped baseline fusion ordering while
-    // the ledger recorded the capability as available — and
-    // `SOVEREIGN_PPR_EXPAND` logged "lane dark" here because its
-    // admission gate needs the same `rerank_fn`. Opt-in via
-    // `SOVEREIGN_RERANK_MODEL_PATH`; soft-fails to baseline.
-    // Since 2026-08-25 this loader also runs the VRAM pre-flight (note
-    // `b57b0cd5`). The hub is the surface where it matters most: a rerank slot
-    // that does not fit is discovered by the OOM killer, and here that takes
-    // every tenant's in-flight turn with it.
-    match sovereign_inference::reranker_standalone::load_from_env() {
-        sovereign_inference::reranker_standalone::RerankLoad::Loaded(reranker) => {
-            lane.rerank.f = Some(sovereign_tools::corpus::inference_to_rerank_fn(reranker));
-            lane.rerank.config = sovereign_tools::corpus::rerank_config_from_env();
-        }
-        // All three absences run baseline fusion ordering; `load_from_env` has
-        // already logged which one.
-        sovereign_inference::reranker_standalone::RerankLoad::NotConfigured
-        | sovereign_inference::reranker_standalone::RerankLoad::Refused { .. }
-        | sovereign_inference::reranker_standalone::RerankLoad::Failed { .. } => {}
-    }
-    // Install the landscape-digest provider only when KnowledgeView
-    // is enabled. When disabled, the splice path stays a no-op —
-    // identical to pre-KnowledgeView behaviour.
-    // Captured here, applied at the commission below — `landscape_digests` is
-    // one of the five capabilities §3.5 has LEAVING the Runtime (a
-    // per-connection wire concern; the core holds no sink), so it is
-    // deliberately not folded into `LaneSources`.
+    // Install the landscape-digest provider only when KnowledgeView is
+    // enabled. When disabled the splice path stays a no-op — identical to
+    // pre-KnowledgeView behaviour. Captured here, applied at the commission
+    // below: `landscape_digests` is one of the five capabilities §3.5 has
+    // LEAVING the Runtime (a per-connection wire concern; the core holds no
+    // sink), so it is deliberately not a lane member.
     let landscape_digests: Option<Arc<dyn sovereign_core::traits::LandscapeDigestProvider>> =
         knowledge_view_manager
             .as_ref()
             .map(|mgr| Arc::clone(mgr) as Arc<dyn sovereign_core::traits::LandscapeDigestProvider>);
-    // Atlas Layer 0: load any installed Wikipedia link graph at
-    // `<indexes_dir>/<corpus>/wikipedia_graph.db`. Build via
-    // `sovereign atlas wikipedia build-graph <corpus-id>`. Absent =
-    // pre-Layer-0 behaviour preserved exactly.
-    if let Some(graph) = load_wikipedia_graph_for_server(&corpus_engine, &indexes_dir).await {
-        tracing::info!(
-            articles = graph.article_count().await,
-            edges = graph.edge_count().await,
-            "wikipedia link graph: loaded"
-        );
-        lane.wikipedia_graph = Some(graph);
-    }
 
-    // Atlas-grounded retrieval: scan installed corpora for `atlas/`
-    // dirs, pre-embed Entity descriptions, and stash them on the
-    // Runtime so `prepare_knowledge_query_plan` can fuse atlas
-    // matches into chunk hits as virtual ScoredChunks. Init runs in
-    // the background — daemon listener binds without waiting on the
-    // embed pass (cold first-run on a wiki-scale atlas can be
-    // ~minutes; subsequent boots replay the on-disk cache near
-    // instantly).
-    let embed_model_id = config
-        .inference
-        .model
-        .file_stem()
-        .and_then(|s| s.to_str())
-        .unwrap_or("")
-        .to_string();
-    if embed_model_id.is_empty() {
-        tracing::warn!(
-            "atlas-context: could not derive embed model id from config.inference.model; \
-             atlas grounding will be skipped"
-        );
-    } else {
-        let atlas_mgr = Arc::new(
-            sovereign_tools::atlas_context_manager::AtlasContextManager::new(
-                indexes_dir.clone(),
-                Arc::clone(&inference),
-                embed_model_id,
-            ),
-        );
-        lane.atlas_context =
-            Some(Arc::clone(&atlas_mgr)
-                as Arc<
-                    dyn sovereign_core::atlas_context::AtlasContextProvider,
-                >);
-        let _atlas_init = Arc::clone(&atlas_mgr).spawn_init();
-        // Phase B2 — bump flusher writes adaptive triage priors to
-        // disk every 30s so the next rebuild picks them up.
-        let _bump_flusher = Arc::clone(&atlas_mgr).spawn_bump_flusher(30);
-    }
+    // ── The hub commissions through THE shared recipe ────────────────────
+    //
+    // The router's authority probe, the MCP connections, the atlas manager and
+    // its bump flusher, the wiki graph, the reranker, GLiNER and the
+    // meta-atlas were all written out here, in this order, as a near-copy of
+    // the recipe's. Near-copies drift in both directions and both directions
+    // had already happened: this host never wired `lane.bridge` (so the
+    // cross-corpus bridge boost was dark on the surface with the most corpora)
+    // and never wired `conv_tiered` (so per-conversation RAPTOR signposts
+    // never reached a hub turn), while the recipe had no way to express the
+    // twenty tools above until the bundle seam landed.
+    let common = sovereign_runtime_recipe::common_parts(
+        sovereign_runtime_recipe::RecipeInputs {
+            inference: Arc::clone(&inference),
+            store: Arc::clone(&store),
+            // The same `SqliteStateStore` opened at boot also impls
+            // `ConvTieredReader` (spec CONV_TIERED_PORT.md).
+            conv_tiered: Some(Arc::clone(&store_concrete)
+                as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
+            corpus_engine: Arc::clone(&corpus_engine),
+            // Commitment persistence for the CommissiveQuery handler, and
+            // `knowledge_lookup`'s notes channel — one store, both readers.
+            note_store: note_store_for_runtime.clone(),
+            skills: Arc::clone(&skills),
+            approval: approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
+            // Honour the configured response-length budget ([inference]
+            // max_tokens) instead of the 2048 default — the server-side
+            // equivalent of the desktop "Response length" setting. All other
+            // knobs keep their core defaults.
+            inference_config: sovereign_core::types::InferenceConfig {
+                max_tokens: config.inference.max_tokens,
+                ..sovereign_core::types::InferenceConfig::default()
+            },
+            indexes_dir: indexes_dir.clone(),
+            embed_model: config
+                .inference
+                .model
+                .file_stem()
+                .and_then(|s| s.to_str())
+                .unwrap_or_default()
+                .to_string(),
+            tool_bundles,
+            // No per-user tool switches on a hub: what a tenant may call is
+            // decided by the narrowed catalog and the tenancy resolver, not by
+            // a settings panel this process does not have.
+            switches: sovereign_runtime_recipe::ToolSwitches::Ungoverned,
+            // This host HAS a config file of its own, and its `[mcp]` section
+            // was the only one it read until 2026-08-26.
+            mcp_extra: config.mcp.servers.clone(),
+            // A service must reach `listening` promptly, and on a shared hub a
+            // boot that blocks on a ~1 GB parse holds up every tenant. This
+            // host loaded the meta-atlas EAGERLY until 2026-08-26 — the one
+            // place the desktop's 2026-06 conclusion had not reached.
+            warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
+            // The provider here does not own a rerank slot, so a standalone
+            // cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH` is the only way
+            // this surface gets one. The VRAM pre-flight inside that loader
+            // matters most here: a slot that does not fit is discovered by the
+            // OOM killer, and on a hub that takes every tenant's in-flight
+            // turn with it (note `b57b0cd5`).
+            rerank: sovereign_runtime_recipe::RerankWiring::Standalone,
+        },
+        &sovereign_runtime_recipe::TracingProgress,
+    )
+    .await;
+    let tools = Arc::clone(&common.parts.tools);
+    let _mcp_manager = common.mcp;
 
-    // Cross-corpus meta-atlas (Move 5). Loads the persisted
-    // `canonical_atoms.json` produced by `sovereign meta-atlas build`.
-    let meta_atlas_path = corpus_engine::meta_atlas::default_meta_atlas_path();
-    match corpus_engine::meta_atlas::MetaAtlasIndex::load(meta_atlas_path.as_deref()) {
-        Ok(idx) => {
-            tracing::info!(
-                atoms = idx.len(),
-                corpora = idx.corpus_count(),
-                "meta-atlas loaded"
-            );
-            lane.meta_atlas.store(Some(Arc::new(idx)));
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "meta-atlas load failed; boost disabled");
-        }
-    }
 
     // ── Commission ───────────────────────────────────────────────────────
     // The enrichment stack above is complete, so the Runtime is built once,
     // total. This call used to sit ~140 lines higher and be mutated on the
     // way down.
-    let runtime = Arc::new(Runtime::new(sovereign_core::RuntimeParts {
-        corpus_engine: Some(Arc::clone(&corpus_engine)),
+    // Three slots, and only three. Everything else came back from the recipe
+    // already filled, so what is written here is exactly what makes this host
+    // a multi-tenant hub rather than a desktop or a daemon.
+    let runtime = sovereign_runtime_recipe::commission(sovereign_core::RuntimeParts {
         routing_events: std::sync::Arc::new(narration_sink),
         // Scope corpus retrieval per tenant (multi-user hub isolation): the
         // resolver maps a `"{tenant}:{conv}"` conversation id to its owning
         // principal, and `build_context` then hides other principals' Private
         // corpora from this turn's evidence. The server is the ONLY host that
-        // resolves a principal, which is now legible at a glance instead of
-        // being one builder call in a chain of five.
+        // resolves a principal.
         corpus_principal: Some(std::sync::Arc::new(tenant::TenantPrincipalResolver)),
-        // Note store for commitment persistence (CommissiveQuery handler).
-        note_store: note_store_for_runtime,
         landscape_digests,
         // Named absences: no compaction worker, no mesh-knowledge source (the
         // server IS the shared hub), no sensitivity oracle, no folder metadata.
-        ..sovereign_core::RuntimeParts::new(
-            Arc::clone(&inference),
-            router,
-            Box::new(planner),
-            Arc::clone(&tools),
-            // Cloned, not moved: the same handle is layered as its own
-            // Extension below so the non-chat routes (conversations,
-            // documents, search, corpus upload) read the database directly
-            // instead of through `Runtime.store` — daemon-convergence Phase 0.
-            Arc::clone(&store),
-            skills,
-            approval.clone() as Arc<dyn sovereign_core::traits::ApprovalChannel>,
-            // Honour the configured response-length budget ([inference]
-            // max_tokens) instead of hardcoding the 2048 default — the
-            // server-side equivalent of the desktop "Response length"
-            // setting. All other knobs keep their core defaults.
-            sovereign_core::types::InferenceConfig {
-                max_tokens: config.inference.max_tokens,
-                ..sovereign_core::types::InferenceConfig::default()
-            },
-            // Everything this host enriches with, in ONE value. Required, so a
-            // provider the server means to wire cannot be silently skipped.
-            lane,
-        )
-    }));
+        ..common.parts
+    });
 
     // Auth state (`auth_enabled` was decided at startup, next to the
     // exposure check that depends on it).
@@ -1029,22 +827,3 @@ fn resolve_embed_model(inf: &config::InferenceSection) -> Option<PathBuf> {
     default.exists().then_some(default)
 }
 
-/// Probe `<indexes_dir>/<corpus_id>/wikipedia_graph.db` for each
-/// installed corpus and return the first WikipediaGraph that opens
-/// cleanly. Mirrors `chat_cmd::bootstrap::load_wikipedia_graph` —
-/// duplicated here so the server doesn't take a dep on the CLI
-/// binary's internal modules.
-async fn load_wikipedia_graph_for_server(
-    engine: &corpus_engine::CorpusEngine,
-    indexes_dir: &std::path::Path,
-) -> Option<Arc<dyn corpus_engine::WikipediaGraphApi>> {
-    // WIKIPEDIA_ATLAS_V2 W3: prefer the columnar store over SQLite via the shared
-    // `corpus_engine::open_wikipedia_graph` gate (backend-agnostic).
-    let infos = engine.installed_indexes().await.ok()?;
-    for info in infos {
-        if let Some(g) = corpus_engine::open_wikipedia_graph(indexes_dir, &info.corpus_id).await {
-            return Some(g);
-        }
-    }
-    None
-}

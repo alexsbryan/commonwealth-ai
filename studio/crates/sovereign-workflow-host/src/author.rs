@@ -792,7 +792,7 @@ impl sovereign_contracts::tool_bundle::ToolBundle for WorkflowAuthoringTools {
     ) -> sovereign_contracts::tool_bundle::BundleReport {
         let mut r = sovereign_contracts::tool_bundle::BundleReport::new(self.name());
         for tool in author_tools() {
-            r = r.registered(reg.register_reporting(tool));
+            r = r.record(reg.register_reporting(tool));
         }
         r
     }
