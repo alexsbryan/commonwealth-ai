@@ -425,6 +425,91 @@ fn research_notes_enabled() -> bool {
         .unwrap_or(false)
 }
 
+/// drb1-r7: the section writer sees GRADED evidence and is told how to use the
+/// grade, instead of a flat list it must weigh by itself.
+///
+/// On-form: `SOVEREIGN_DR_WRITER_CONTRACT_V2=1` (also `true`,
+/// case-insensitive); every other value, including unset, keeps the flat
+/// evidence block and the v1 contract. Row and reversal condition in
+/// `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// Why it exists: AIQ's writer prompt steers synthesis by a per-note
+/// `evidence_judgment` — high-scoring notes are anchors, medium ones support
+/// and nuance, low ones are for gaps and caveats
+/// (`deep_researcher/prompts/writer.j2`, "Synthesis Contract"). We already
+/// COMPUTE that grade on both evidence paths and then discard it: `Finding`
+/// carries `usefulness` (0-100) and `notes::findings_block` sorts by it before
+/// dropping it, and `synthesize::rank_passages` returns passages in descending
+/// cosine order which the evidence block then flattens. The writer is handed an
+/// ordered list with the ordering unexplained. This surfaces the grade it
+/// already earned and states the obligation that goes with it.
+fn writer_contract_v2_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_WRITER_CONTRACT_V2")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// drb1-r8: the deliverable carries the ARCHITECTURE of a report rather than
+/// the shape of the pipeline that produced it. Default OFF. Requires
+/// `SOVEREIGN_DR_COMPOSED_REPORT=1`; composes with `SOVEREIGN_DR_REPORT_OUTLINE`
+/// (that flag decides WHICH sections exist, this one decides what surrounds
+/// them). Row and reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// Diagnosed, not guessed: across 25 scored task-69 judge records the RACE
+/// criteria we lose most are `Breadth and Depth of MCP Protocol Description`
+/// (ours 6.12 vs the reference's 9.36, in 25 of 25 draws), `Logical Structure
+/// and Coherent Flow of Argumentation` (6.60 vs 9.50) and `Formatting, Layout,
+/// and Typographical Consistency` (6.98 vs 9.48). The deliverable's H1 was the
+/// user's raw prompt sentence, it opened with no summary, closed on internal
+/// furniture, and capped at 8 sections — so a question naming two subjects
+/// could not afford a section for the second one.
+/// drb1-r9: how much of the evidence window one section's writer may see.
+/// Default OFF. Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`. Independent of
+/// `SOVEREIGN_DR_REPORT_ARCHITECTURE` on purpose — that one decides the
+/// deliverable's SHAPE, this one decides how much evidence is behind each
+/// part of it, and they must be separable in a measurement.
+///
+/// Measured on the task-69 control flight `dr-1787742429`: a 1,060,308-char
+/// evidence window, of which one section's writer saw 11,200 chars (1.06%)
+/// and the whole eight-section report saw 8.5%. MCP material sits in 40 of
+/// the window's 46 chunks and the deliverable still has no MCP section.
+/// Row and reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+fn report_section_evidence_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_REPORT_SECTION_EVIDENCE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn report_architecture_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_REPORT_ARCHITECTURE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Whether each section's writer is shown the report's outline and its own
+/// place in it.
+///
+/// Deliberately SEPARATE from `SOVEREIGN_DR_REPORT_ARCHITECTURE`: that flag
+/// decides the deliverable's SHAPE (title, executive summary, closing), this
+/// one decides whether a section knows it is part of one. An arm that moves
+/// both cannot tell them apart.
+///
+/// Why it exists, measured rather than reasoned (2026-08-27, bed
+/// `dr-1787807617`): readability is the only RACE dimension still behind the
+/// reference, and the judge's objection is that the report "reads like a
+/// collection of research findings rather than a single narrative arc". The
+/// obvious cause — too many sections — was flown and REFUTED: cutting the
+/// outline from 20 sections to 10 left Logical Structure at exactly 8.5 and
+/// cost 0.61 overall. The remaining candidate is in the prompt: a section
+/// writer is handed the question, its own sub-question, and its evidence, and
+/// NOTHING about the sections around it, so every section is composed in
+/// isolation no matter how many there are.
+fn section_context_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_SECTION_CONTEXT")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 fn aborted(flag: &AtomicBool) -> bool {
     flag.load(Ordering::Relaxed)
 }
@@ -2435,6 +2520,30 @@ impl Controller {
         } else {
             self.frontier.clone()
         };
+
+        // FREEZE THE WRITER'S INPUTS. Written at the boundary, before the
+        // call, so `tests/compose_replay.rs` can re-run the production
+        // `compose_report` against identical evidence in ~12 minutes instead
+        // of paying the ~96-minute flight that surrounds it. Sibling to
+        // `arms/bed-binder/bed.json`, which does the same for the audit.
+        // Unconditional: a run that cannot be replayed is a measurement we
+        // can only repeat by rebuying its acquisition and its audit.
+        if composed_report_enabled() {
+            let (want, cap) = synthesize::section_evidence_budget();
+            let compose_input = icd::ComposeInput {
+                icd: "compose_input".to_string(),
+                version: icd::ICD_VERSION,
+                run_id: self.config.run_id.clone(),
+                charter_hash: self.charter_hash.clone(),
+                question: self.question.clone(),
+                window: window.clone(),
+                sections: sections.clone(),
+                notes: notes.clone(),
+                section_passages: want,
+                per_source_cap: cap,
+            };
+            self.write_artifact("compose-input.json", &compose_input)?;
+        }
 
         let composed = if composed_report_enabled() {
             match synthesize::compose_report(

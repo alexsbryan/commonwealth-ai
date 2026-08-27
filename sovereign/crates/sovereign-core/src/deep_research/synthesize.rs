@@ -1086,6 +1086,36 @@ pub(crate) fn parse_outline(raw: &str, max: usize) -> Result<Vec<String>, String
 /// The composed deliverable: one section per sub-question plus a closing
 /// synthesis, with a `## Sources` list whose numbers the section text
 /// cites. Returns the markdown and the ordered source list.
+/// The ordered section list a section writer is shown, with an arrow on its
+/// own entry — the body of `SOVEREIGN_DR_SECTION_CONTEXT`.
+///
+/// `kept` indexes `subs` and carries the ORDER the sections are written in;
+/// `si` is the writer's own index INTO `subs`, not into `kept`. Getting that
+/// wrong points the arrow at the wrong section and every section is then told
+/// it is a different one — which reads as fluent, correct prose about the
+/// wrong place in the report, so it would not surface as a failure anywhere.
+/// That is the whole reason this is a function with a test rather than an
+/// inline `format!`.
+fn section_arc(subs: &[String], kept: &[usize], si: usize) -> String {
+    let mut a = String::from("THIS REPORT'S SECTIONS, IN ORDER:\n");
+    for (pos, &ki) in kept.iter().enumerate() {
+        a.push_str(&format!(
+            "{} {}. {}\n",
+            if ki == si { "->" } else { "  " },
+            pos + 1,
+            subs[ki]
+        ));
+    }
+    a.push_str(
+        "\nThe arrow marks the section you are writing. Write it as part of that \
+         arc: assume the reader has read the sections above it and will read the \
+         ones below. Do not re-establish what an earlier section establishes, and \
+         do not cover a later section's subject in depth. Never refer to a section \
+         by number, and never announce what the report will do next.\n\n",
+    );
+    a
+}
+
 pub async fn compose_report(
     port: &dyn ResearchPort,
     question: &str,
@@ -1285,12 +1315,27 @@ pub async fn compose_report(
         if ev.trim().is_empty() {
             continue;
         }
+        // WHERE THIS SECTION SITS. Without it a section writer knows the
+        // question, its own sub-question and its evidence, and nothing about
+        // its neighbours — so every section is composed in isolation and the
+        // report reads, in the judge's words, "like a collection of research
+        // findings rather than a single narrative arc". Section COUNT is not
+        // the cause: cutting the outline 20 -> 10 left Logical Structure at
+        // exactly 8.5 and cost 0.61 overall (2026-08-27, bed dr-1787807617).
+        //
+        // Empty string when off, so the prompt is byte-identical to the one
+        // the curve was measured on.
+        let arc = if super::section_context_enabled() {
+            section_arc(&subs, &kept, si)
+        } else {
+            String::new()
+        };
         // Derived from the plan's own size so length does not ride on structure.
         let words = section_word_budget(kept.len());
         let (lo, hi) = (words * 9 / 10, words * 11 / 10);
         let prompt = format!(
             "You are writing ONE section of an analytical research report that answers:\n{question}\n\n\
-             THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n{contract}\n\n\
+             {arc}THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n{contract}\n\n\
              Write {lo}-{hi} words. Start with a '## ' heading that is a short noun phrase, \
              never the sub-question verbatim; use '### ' sub-headings where the material \
              has natural parts. No preamble and no commentary about the evidence itself."
@@ -2220,6 +2265,43 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
             "it is NOT renumbered onto a real source: {out}"
         );
         assert!(srcs.is_empty(), "and it contributes no source row");
+    }
+
+    #[test]
+    fn the_section_arc_points_at_the_writers_own_section() {
+        // `kept` indexes `subs` and carries WRITE ORDER; `si` indexes `subs`.
+        // Here section 2 of `subs` was deduped away, so write-order position 3
+        // is `subs[3]` — the arrow must follow `si`, not the position.
+        let subs: Vec<String> = ["Alpha", "Beta", "Gamma", "Delta"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let kept = vec![0, 1, 3];
+        let arc = section_arc(&subs, &kept, 3);
+
+        assert!(arc.contains("-> 3. Delta"), "the arrow is on Delta: {arc}");
+        assert!(
+            arc.contains("   1. Alpha"),
+            "Alpha is listed unmarked: {arc}"
+        );
+        assert!(arc.contains("   2. Beta"), "Beta is listed unmarked: {arc}");
+        assert_eq!(arc.matches("->").count(), 1, "exactly one arrow: {arc}");
+        assert!(
+            !arc.contains("Gamma"),
+            "a deduped sub-question is NOT in the arc — the writer would be \
+             told to defer to a section that will never exist: {arc}"
+        );
+    }
+
+    #[test]
+    fn the_section_arc_numbers_by_write_order_not_by_sub_index() {
+        // Watch-it-fail: number by `ki` instead of `pos` and the reader is
+        // handed "1, 2, 4" for a three-section report.
+        let subs: Vec<String> = ["A", "B", "C", "D"].iter().map(|s| s.to_string()).collect();
+        let arc = section_arc(&subs, &[0, 2, 3], 0);
+        assert!(arc.contains("2. C"), "C is section TWO of three: {arc}");
+        assert!(arc.contains("3. D"), "D is section THREE of three: {arc}");
+        assert!(!arc.contains("4."), "no gap in the numbering: {arc}");
     }
 
     #[test]

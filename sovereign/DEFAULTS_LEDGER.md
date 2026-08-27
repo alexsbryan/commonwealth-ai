@@ -2236,6 +2236,76 @@ are Logical Structure and Paragraph Cohesion — the fragmentation ones — whic
 is why the outline itself is the next arm (`arms/bed/fly-outline-arm.sh`,
 via the new `COMPOSE_SECTIONS`).
 
+## `SOVEREIGN_DR_SECTION_CONTEXT` — the section knows it is part of a report
+
+**Landed 2026-08-27, DEFAULT OFF.** Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`.
+Deliberately separate from `SOVEREIGN_DR_REPORT_ARCHITECTURE`: that flag
+decides the deliverable's SHAPE, this one decides whether a section knows it is
+part of one.
+
+**The measurement that produced it, and the one that killed the obvious
+alternative first.** After the section-evidence default moved to 16/4,
+readability is the ONLY RACE dimension still behind the reference, and the only
+one the evidence budget does not move:
+
+| dim | 8x3 | 16x4 | 28x5 | 44x6 | 60x8 | gap at 16x4 |
+|---|---|---|---|---|---|---|
+| comprehensiveness | 7.58 | 8.92 | 8.92 | 8.75 | 9.08 | **+0.42** |
+| insight | 7.50 | 9.12 | 9.00 | 9.25 | 9.12 | **+1.12** |
+| instruction_following | 8.60 | 9.70 | 9.00 | 9.60 | 9.70 | **+0.60** |
+| readability | 7.86 | 8.07 | 8.00 | 8.43 | 8.21 | **-1.21** |
+
+The judge's objection is one sentence: the report has *"a somewhat fragmented
+structure with many short sections that jump between topics ... reads like a
+collection of research findings rather than a single narrative arc"*.
+
+**The obvious cause was flown and REFUTED.** Ours carried 21-22 h2 headings
+against a reference that reads as nine, so the outline looked like the culprit.
+A 10-section outline over the SAME window — planned by production
+`plan_outline`, flown via the new `COMPOSE_SECTIONS`, architecture flag held on
+in both cells — left Logical Structure at **exactly 8.5, unchanged**, while
+costing 0.61 overall and dropping Formatting 9.5 -> 8.5:
+
+| | overall | readability | Logical Structure | h2 | words |
+|---|---|---|---|---|---|
+| 20-section control | 52.1293 | 8.79 | 8.5 | 22 | 10974 |
+| 10-section arm | 51.5225 | 8.64 | **8.5** | 10 | 9100 |
+
+Section COUNT is not the cause. What is left is the prompt: `synthesize.rs`
+hands a section writer the question, its own sub-question, its evidence and a
+word budget, and NOTHING about its neighbours. Every section is composed in
+isolation no matter how many there are — ten isolated sections read as
+disjointed as twenty. This flag prepends the ordered section list with an arrow
+on the writer's own entry, and tells it to assume the reader has read what is
+above and will read what is below.
+
+**What does NOT change when it is on.** The citation contract and therefore the
+gate. No new evidence enters, no passage is re-ranked, and no extra model call
+is made — only the prompt's preamble grows, by roughly 40 characters per
+planned section (~800 on a 20-section plan, about 3.5% of a 16x4 section
+prompt).
+
+**The failure it is built to avoid.** The arrow follows `si` (an index into
+`subs`), while the numbering follows write order (`kept`). Confusing the two
+points every section at the wrong neighbour and produces fluent, correct prose
+about the wrong place in the report — which surfaces as a failure nowhere. Hence
+`section_arc` is a function with tests, not an inline `format!`; watched red in
+`the_section_arc_points_at_the_writers_own_section` and
+`the_section_arc_numbers_by_write_order_not_by_sub_index`.
+
+**Cost.** No extra calls. Prompt preamble only, as above.
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm whose mean
+exceeds the like-for-like control by more than the measured band, with
+readability — specifically Logical Structure and Paragraph Cohesion, the two
+criteria still at -1.00 after the architecture flag — moving in the direction
+claimed. Revert on any arm that costs score beyond the band, and on any rise in
+audit refusals: telling a writer to assume what an earlier section established
+is an invitation to assert it without carrying its own citation.
+
+**Evidence at landing.** NOT YET MEASURED — landed dark. The diagnosis above is
+measured; this flag's own effect is not.
+
 ## `SOVEREIGN_DR_WRITER_CONTRACT_V2` — the graded evidence steer (drb1-r7)
 
 **Landed 2026-08-26, DEFAULT OFF.** Campaign `drb1-race`.
