@@ -11,6 +11,18 @@ guessed at.
     python3 criterion_gaps.py <run-dir> [arm-to-highlight]
 
 article_1 is OURS, article_2 is the reference the judge was shown.
+
+THE REFERENCE IS RE-SCORED IN EVERY CALL. RACE judges both articles in ONE
+prompt, so the reference's absolute scores drift with whatever it was paired
+against — measured spread across six arms on task 69: comprehensiveness 0.67,
+insight 1.25, instruction_following 0.70, readability 0.21. Every gap is
+therefore computed against THAT ARM'S OWN paired reference, never against a
+single arm's copy of it. Using one arm's reference as a fixed yardstick (this
+script's first version did) silently rewrites the other arms' gaps by up to
+1.25 points, in the direction of whichever arm was chosen.
+
+This is also why `overall = t/(t+r)` is the trustworthy number: it is a ratio
+against the reference scored in the same call, so the drift cancels.
 """
 import json, re, sys, os
 
@@ -42,7 +54,8 @@ def main():
         sys.exit("REFUSED: arm %s not in sidecar (have %s)" % (focus, ", ".join(arms)))
 
     head = "  ".join("%-6s" % a for a in arms)
-    print("ours (article_1) vs reference (article_2); gap = ours - ref at %s\n" % focus)
+    print("ours (article_1) vs reference (article_2); gap = ours - ref at %s" % focus)
+    print("ref/gap use %s's OWN paired reference — it is re-scored every call\n" % focus)
     for dim in DIMS:
         if dim not in rows[arms[0]]:
             continue
@@ -56,14 +69,14 @@ def main():
                     return "%-6.1f" % rows[a][dim][i]["article_1_score"]
                 except (IndexError, KeyError):
                     return "%-6s" % "--"
-            ref = rows[arms[0]][dim][i]["article_2_score"]
             try:
+                ref = rows[focus][dim][i]["article_2_score"]
                 gap = rows[focus][dim][i]["article_1_score"] - ref
-                gaps = "%+5.2f" % gap
+                refs, gaps = "%4.1f" % ref, "%+5.2f" % gap
             except (IndexError, KeyError):
-                gaps = "   --"
-            print("   %-58s %s  %4.1f  %s"
-                  % (c["criterion"][:58], "  ".join(sc(a) for a in arms), ref, gaps))
+                refs, gaps = "  --", "   --"
+            print("   %-58s %s  %s  %s"
+                  % (c["criterion"][:58], "  ".join(sc(a) for a in arms), refs, gaps))
         print()
 
     print("== DIMENSION MEANS ==")
@@ -73,7 +86,8 @@ def main():
         if dim not in rows[arms[0]]:
             continue
         mean = lambda a: sum(c["article_1_score"] for c in rows[a][dim]) / len(rows[a][dim])
-        ref = sum(c["article_2_score"] for c in rows[arms[0]][dim]) / len(rows[arms[0]][dim])
+        # THIS ARM'S OWN paired reference — see the module docstring.
+        ref = sum(c["article_2_score"] for c in rows[focus][dim]) / len(rows[focus][dim])
         gap = mean(focus) - ref
         print("   %-22s %s  %4.2f  %+5.2f"
               % (dim, "  ".join("%-6.2f" % mean(a) for a in arms), ref, gap))
