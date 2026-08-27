@@ -2093,6 +2093,44 @@ audit refusals or could-not-judge verdicts: three times the evidence in front
 of a writer is three times the opportunity to assert something the section's
 own citations do not carry.
 
+**THE ARM REPORTED — 2026-08-27. The flag stays OFF, and the DEFAULT moved
+instead.** The reversal condition above asks for a pre-registered arm beating
+the like-for-like control. The sweep flew five points on bed `dr-1787807617`
+(task 69), one judge (`Qwen3.8-27B-UD-Q6_K_XL`), scored on the same ruler as
+the flights. The compose replay is a zero-noise instrument — writer re-fly
+byte-identical across a daemon restart (sha `517f692874b5d496`), judge
+identical to the last digit — so these are exact for this bed, not one draw:
+
+| arm | RACE overall | delta | words | min |
+|---|---|---|---|---|
+| 8x3 (the then-default) | 45.9166 | +0.00 | 10829 | 10.6 |
+| **16x4** | **51.3347** | **+5.42** | 10707 | 11.2 |
+| 28x5 (THIS FLAG) | 50.9864 | +5.07 | 10200 | 12.3 |
+| 44x6 | 50.9510 | +5.03 | 10178 | 14.1 |
+| 60x8 | 51.9689 | +6.05 | 10064 | 16.2 |
+
+The lever is real and this row's diagnosis was right: the writer was starved,
+and showing it more evidence is worth ~5 points. But **28/5 is not where the
+gain lives.** The whole effect is the first step, 8→16; 16/28/44 then sit
+inside 0.4 of each other while cost climbs monotonically. So the action is to
+move the SHIPPED DEFAULT to 16/4 (`synthesize::SECTION_PASSAGES` /
+`PER_SOURCE_CAP`, pinned by test) rather than to flip this flag on — the flag
+would buy 0.35 points LESS than the new default for +1.1 min and 2.5× the
+per-section prefill.
+
+Read the 60x8 row carefully: it is nominally the highest, by +0.63 over 16x4,
+and it is NOT evidence for going wider. The middle of the curve is
+non-monotone (44x6 is the lowest of the top four), which is the signature of a
+plateau with task-level jitter. Treating +0.63 as a trend across a
+non-monotone plateau is the single-run delta §18.5 forbids, and it would cost
++5.0 min and ~19.9 GB of unreclaimable host memory per flight (the writer's
+output buffer is `n_vocab * prompt_tokens * 4`; see
+`research/deep-research/arms/mem-forensics/PREREG-buffer-threshold.md`).
+
+**n=1 ACROSS TASKS.** One bed, one question. The curve's SHAPE is what moved
+the default; its third digit is not load-bearing. The flag is kept as-is, now
+as a dominated widening rather than a configuration to restore.
+
 **Evidence at landing.** NOT YET MEASURED — landed dark. No claim about its
 effect may be made until a pre-registered arm exists.
 

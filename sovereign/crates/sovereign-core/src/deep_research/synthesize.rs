@@ -309,6 +309,31 @@ pub(crate) const ROUND_EVIDENCE_TOKENS: usize = 24_000;
 /// a 7-section and a 20-section plan produce comparable deliverables and an
 /// A/B over structure is an A/B over structure.
 pub(crate) const TARGET_REPORT_WORDS: usize = 9_000;
+
+/// The deliverable's target total, with `SOVEREIGN_DR_TARGET_WORDS` as an
+/// A/B override. Why it exists: the first matched-length outline arm landed
+/// 11,375-11,837 words against a 9,000 ask (a ~26% writer overshoot), and
+/// the shorter pre-fix control at 9,219 words scored 47.52 against that
+/// arm's 42.10 — a 5.42-point separation with every shorter run beating
+/// every longer one. Testing that needs BOTH lengths under ONE binary in
+/// one session; a const edit between arms reintroduces exactly the
+/// cross-binary confound being measured. Unset, empty, unparseable or zero
+/// all keep [`TARGET_REPORT_WORDS`] — a bad value is never a silent zero,
+/// which would collapse every section to `SECTION_WORDS_MIN`.
+fn target_report_words() -> usize {
+    target_words_policy(std::env::var("SOVEREIGN_DR_TARGET_WORDS").ok().as_deref())
+}
+
+/// Pure policy for the target override so the precedence (unset > empty >
+/// unparseable > zero > explicit) is unit-testable without touching process
+/// env — the same split `memory_watch::hard_limit_policy` uses, and for the
+/// same reason: an env-var read is not testable in a parallel suite, so the
+/// DECISION is separated from the READ.
+fn target_words_policy(raw: Option<&str>) -> usize {
+    raw.and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|&n| n > 0)
+        .unwrap_or(TARGET_REPORT_WORDS)
+}
 /// Band for one section. The floor keeps a many-sectioned plan from writing
 /// stubs; the cap keeps a three-section plan from being asked for an essay
 /// the evidence window cannot support.
@@ -317,7 +342,7 @@ pub(crate) const SECTION_WORDS_MAX: usize = 1_400;
 
 /// Words to ask of one section, given how many the plan has.
 pub(crate) fn section_word_budget(sections: usize) -> usize {
-    (TARGET_REPORT_WORDS / sections.max(1)).clamp(SECTION_WORDS_MIN, SECTION_WORDS_MAX)
+    (target_report_words() / sections.max(1)).clamp(SECTION_WORDS_MIN, SECTION_WORDS_MAX)
 }
 
 /// The outline's own evidence slice — enough to know what the evidence
@@ -328,16 +353,170 @@ pub(crate) const OUTLINE_EVIDENCE_TOKENS: usize = 6_000;
 /// returns to the fragmentation this replaces.
 pub(crate) const OUTLINE_MIN: usize = 5;
 pub(crate) const OUTLINE_MAX: usize = 8;
+/// The cap when the report architecture is on. A question that names two
+/// subjects needs a section for each BEFORE the sections that compare them,
+/// and at 8 the second subject is what gets squeezed out — measured as our
+/// single worst RACE criterion, `Breadth and Depth of MCP Protocol
+/// Description`, in 25 of 25 task-69 draws.
+pub(crate) const OUTLINE_MAX_ARCHITECTED: usize = 12;
+
+/// ONE decider for how many sections the plan may hold, so the prompt that
+/// ASKS for n and the parser that ADMITS n can never disagree (§10.6).
+pub(crate) fn outline_max() -> usize {
+    if super::report_architecture_enabled() {
+        OUTLINE_MAX_ARCHITECTED
+    } else {
+        OUTLINE_MAX
+    }
+}
 /// Below this a line is scaffolding, not a planned section.
 const OUTLINE_MIN_CHARS: usize = 25;
+const TITLE_MIN_CHARS: usize = 20;
+const TITLE_MAX_CHARS: usize = 160;
 
 const PASSAGE_CHARS: usize = 1400;
 const PASSAGE_OVERLAP: usize = 200;
 /// Passages handed to one section's writer.
-const SECTION_PASSAGES: usize = 8;
+///
+/// 16, NOT 8 — THE KNEE OF A MEASURED FIVE-POINT CURVE, 2026-08-27. The
+/// compose replay is a zero-noise instrument (both halves byte-identical
+/// across a daemon restart, note 680940ce), so these are exact for the
+/// task-69 bed rather than a sample of one draw. RACE overall, same judge
+/// (`Qwen3.8-27B-UD-Q6_K_XL`), same bed `dr-1787807617`:
+///
+/// ```text
+///   arm     overall   delta   words    min
+///   8x3     45.9166   +0.00   10829   10.6   <- the shipped default until now
+///   16x4    51.3347   +5.42   10707   11.2   <- this
+///   28x5    50.9864   +5.07   10200   12.3   <- the _WIDE flag below
+///   44x6    50.9510   +5.03   10178   14.1
+///   60x8    51.9689   +6.05   10064   16.2
+/// ```
+///
+/// The whole effect is the first step. 16/28/44 sit inside 0.4 of each other
+/// across a 2.75x increase in evidence, and the middle is NOT monotone (44x6
+/// is the lowest of those four) — that is a plateau with task-level jitter,
+/// so reading 60x8's nominal +0.63 over 16x4 as a trend would be exactly the
+/// single-run delta §18.5 forbids. What the curve supports is narrower and
+/// firmer: evidence buys quality up to ~16 passages and nothing measurable
+/// after.
+///
+/// 16x4 is therefore the knee on every axis at once — best measured score,
+/// second-lowest wall-clock, second-smallest prompts. Prompt size matters for
+/// more than cost: the writer's output buffer is
+/// `n_vocab * prompt_tokens * 4` bytes and it strands unreclaimable host
+/// memory past ~3,650 tokens on this device (see
+/// `research/deep-research/arms/mem-forensics/PREREG-buffer-threshold.md`),
+/// so the wider arms buy nothing and pay in GiB.
+///
+/// n=1 ACROSS TASKS. This is one bed, one question. The curve's SHAPE is what
+/// is being relied on, not its third digit.
+const SECTION_PASSAGES: usize = 16;
 /// At most this many passages from any ONE source per section, so a
 /// single long page cannot crowd out the rest of the window.
-const PER_SOURCE_CAP: usize = 3;
+///
+/// Moves with `SECTION_PASSAGES` (4 at 16). Widening `want` while leaving the
+/// cap narrow fills the new room from new SOURCES only — the opposite of what
+/// a section needing depth on one subject requires — which is why the curve
+/// swept them together as `8:3, 16:4, 28:5, 44:6, 60:8` rather than
+/// independently.
+const PER_SOURCE_CAP: usize = 4;
+
+/// drb1-r9: what one section's writer may see when
+/// `SOVEREIGN_DR_REPORT_SECTION_EVIDENCE` is on.
+///
+/// MEASURED, on the task-69 control flight `dr-1787742429`. Its evidence
+/// window held 46 chunks and **1,060,308 characters** — the material for a
+/// proper MCP section is in 40 of those 46 chunks, and the primitives
+/// (Tools/Resources/Prompts/Roots/Sampling) appear in 41. Acquisition is not
+/// the constraint. But at the THEN-shipped `SECTION_PASSAGES = 8` × `PASSAGE_CHARS = 1400`, one
+/// section's writer sees **11,200 chars — 1.06% of the window** — and eight
+/// sections see 8.5% between them. The 11,345-word deliverable that came out
+/// cites 22 distinct sources of the 46 available, and has no section
+/// describing MCP at all.
+///
+/// So the writer is not failing to use the evidence; it is not being shown
+/// it. This is a strictly larger lever than the deliverable's architecture
+/// (drb1-r8) and is flagged separately so the two can be told apart.
+///
+/// It is also a REGRESSION rather than a limit anyone chose — see the port
+/// provenance on the constants below.
+///
+/// THE VALUES ARE NOT A GUESS — THEY RESTORE THE CONFIGURATION THE COMPOSED
+/// REPORT'S OWN QUALITY NUMBER WAS MEASURED AT. `compose_report` was ported to
+/// Rust in `a50d2fdf3` (2026-08-23) from the Python prototype
+/// `research/deep-research/arms/lab/compose2.py`, whose own commit message
+/// records that "the 44.40 composite that stood in for its quality was measured
+/// by `arms/lab/compose2.py`". That prototype chunks passages IDENTICALLY —
+/// `passages(chunks, size=1400, overlap=200)` vs our `PASSAGE_CHARS`/
+/// `PASSAGE_OVERLAP` — ranks by the same cosine, and applies the same
+/// per-source cap. Its budget: `k=28, repeat_cap=5`, and it recorded the
+/// consequence in its own manifest as `evidence_chars_per_section: k * 1400`
+/// = 39,200.
+///
+/// The port shipped 8 and 3 — **11,200 chars, a 3.5× cut** — and no commit,
+/// note or ledger row records that as a decision. `14ddccf49` later OBSERVED
+/// the consequence ("ours showed each section eight passages by cosine, so on
+/// the logged task-69 flight a 38-chunk window reached the writer eight chunks
+/// at a time") and responded with the research-notes flag rather than by
+/// restoring the number. So the shipped Rust path had never run at the
+/// configuration whose measured quality justified building it.
+///
+/// SUPERSEDED IN PART, 2026-08-27 — THE SWEEP HAPPENED AND 28/5 LOST. The
+/// argument above is that 28/5 should be restored because it is the only
+/// configuration whose quality was ever measured. That premise expired the
+/// moment the curve was flown: 28/5 scores 50.9864 and 16/4 scores 51.3347,
+/// and 16/4 gets there in 11.2 min against 12.3 with smaller prompts. So the
+/// default moved to 16/4 (see `SECTION_PASSAGES`), NOT to this flag's 28/5.
+///
+/// The flag is kept, unchanged, because it is still a real widening and the
+/// curve is n=1 across tasks — but it is now a DOMINATED point, not a target
+/// to restore. Anyone reaching for it should re-read the curve first.
+const SECTION_PASSAGES_WIDE: usize = 28;
+const PER_SOURCE_CAP_WIDE: usize = 5;
+
+/// ONE decider for the section evidence budget, so the ranker that PICKS
+/// passages and the per-source cap that shapes the pick can never be set from
+/// different rules (§10.6).
+pub(crate) fn section_evidence_budget() -> (usize, usize) {
+    // NUMERIC OVERRIDES — the curve, not another decider. 28/5 is ONE POINT:
+    // 28 × 1400 is still only ~2.8% of a ~995-passage window, so "wide" is a
+    // restored measurement, not an argued optimum. Finding the optimum needs
+    // the knobs swept, and a boolean flag cannot sweep. Both still resolve
+    // HERE and nowhere else (§10.6) — the ranker that picks passages and the
+    // cap that shapes the pick can still never be set from different rules.
+    //
+    // Precedence: explicit number > the wide flag > the shipped default. A
+    // value that does not parse, or is zero, is IGNORED rather than treated
+    // as a budget of nothing — a silent zero would collapse every section to
+    // no evidence and still produce a plausible report, which is the failure
+    // this file exists to prevent (§18.3). `cap` may be set alone, but
+    // widening `want` while leaving the cap narrow fills the new room from
+    // new SOURCES only, which is the opposite of what a section needing depth
+    // on one subject requires — so raising `want` alone is a real
+    // configuration and the caller owns that choice knowingly.
+    let (mut want, mut cap) = if super::report_section_evidence_enabled() {
+        (SECTION_PASSAGES_WIDE, PER_SOURCE_CAP_WIDE)
+    } else {
+        (SECTION_PASSAGES, PER_SOURCE_CAP)
+    };
+    if let Some(n) = positive_env("SOVEREIGN_DR_SECTION_PASSAGES") {
+        want = n;
+    }
+    if let Some(n) = positive_env("SOVEREIGN_DR_SECTION_SOURCE_CAP") {
+        cap = n;
+    }
+    (want, cap)
+}
+
+/// A positive integer from the environment, or `None`. Unset, empty,
+/// unparseable and zero all read as "not set" — never as a budget of zero.
+fn positive_env(key: &str) -> Option<usize> {
+    std::env::var(key)
+        .ok()
+        .and_then(|v| v.trim().parse::<usize>().ok())
+        .filter(|n| *n > 0)
+}
 
 /// The section writer's obligations (AIQ §6.3, items 3-6). Stated once,
 /// used by every section — one decider, one name (§10.6).
@@ -360,6 +539,106 @@ or dates. Cite EVERY material claim as [Source: ev-N], naming the evidence \
 chunk the claim rests on — the same handle the evidence block labels it with.\n\
 - If the evidence genuinely does not cover part of this sub-question, say so \
 in ONE short sentence and move on.";
+
+/// The v2 obligations, appended to [`WRITER_CONTRACT`] when
+/// `SOVEREIGN_DR_WRITER_CONTRACT_V2` is on. These are the items AIQ's writer
+/// prompt (`deep_researcher/prompts/writer.j2`) carries that v1 does not —
+/// checked line by line against that file, not recalled (§11.1). v1 already
+/// holds cross-synthesis, evaluate-don't-report, conflict surfacing, developed
+/// paragraphs, detail retention and err-toward-more; those are NOT repeated
+/// here, because saying an obligation twice in one prompt is how a contract
+/// starts contradicting itself.
+///
+/// Four additions, each aimed at a dimension we measurably lack (insight
+/// -15.20, readability -11.93; note bdf94683):
+///
+/// 1. HOW TO USE THE GRADE. AIQ: "high-score/high-confidence notes are
+///    synthesis anchors, medium notes are support or nuance, and low-score or
+///    low-confidence notes are mainly for gaps, caveats, conflicts, or clearly
+///    labeled weak evidence." Ours had no analog because the writer never saw
+///    a grade.
+/// 2. CONSENSUS AND COMPLEMENTARITY. AIQ asks the writer to find "repeated
+///    findings that show consensus across notes or sources" and "complementary
+///    findings that only become useful when combined". v1 asks for
+///    cross-synthesis but never names these two shapes.
+/// 3. LICENSED, MARKED INFERENCE. AIQ: "Distinguish cited facts from your
+///    synthesis or inference. Inferences are allowed, but they must be
+///    grounded in cited evidence and phrased with the right level of
+///    confidence." v1 says only "Assert ONLY what the evidence supports",
+///    which is stricter and may suppress the analytical move the Insight
+///    dimension actually rewards. The honesty floor is unchanged: an inference
+///    must still rest on cited evidence and must be visibly an inference.
+/// 4. WHEN A TABLE EARNS ITS PLACE. AIQ names the trigger (comparable
+///    entities, metrics, timelines, choices, categories), demands units and
+///    dates, and rejects "shallow tables that merely restate prose". v1 says
+///    only that a table is "welcome where the content is genuinely tabular",
+///    which tells the writer nothing about when.
+const WRITER_CONTRACT_V2_EXTRA: &str = "\
+- The evidence above is GRADED. [ANCHOR] passages carry this section; build \
+the argument on them. [SUPPORT] passages add nuance, qualification and \
+detail. [WEAK] passages are for caveats, conflicts and naming what is thin — \
+never build a load-bearing claim on one, and never silently drop one that \
+contradicts an anchor.\n\
+- Name CONSENSUS explicitly where two or more independent sources agree, and \
+say so. Combine COMPLEMENTARY evidence: where two sources are each partial \
+and only together answer the question, make that combination the point.\n\
+- Inference is allowed and wanted. Mark it: an inference must rest on cited \
+evidence, read visibly as your reasoning rather than as a sourced fact, and \
+carry the confidence the evidence actually supports.\n\
+- Use a markdown table when the evidence holds comparable entities, metrics, \
+timelines, choices or categories, and carry units, dates and ranges into it. \
+Do not build a table that merely restates the prose beside it.";
+
+/// The section writer's obligations for this run — v1, or v1 plus the ported
+/// AIQ additions. ONE decider, so a section cannot be written under one
+/// contract while a test asserts the other (§10.6).
+fn writer_contract() -> String {
+    if super::writer_contract_v2_enabled() {
+        format!("{WRITER_CONTRACT}\n{WRITER_CONTRACT_V2_EXTRA}")
+    } else {
+        WRITER_CONTRACT.to_string()
+    }
+}
+
+/// Usefulness at or above this is an ANCHOR; below [`GRADE_WEAK_BELOW`] is
+/// WEAK; between them is SUPPORT. The band straddles `DEFAULT_USEFULNESS`
+/// (50) deliberately: a finding whose worker declined to score it lands in
+/// SUPPORT, never in ANCHOR and never in WEAK — an absent score must not be
+/// read as a judgement in either direction (§18.3).
+const GRADE_ANCHOR_AT: u8 = 70;
+const GRADE_WEAK_BELOW: u8 = 40;
+
+/// Grade for a 0-100 usefulness score.
+pub(crate) fn grade_for_usefulness(u: u8) -> &'static str {
+    if u >= GRADE_ANCHOR_AT {
+        "ANCHOR"
+    } else if u < GRADE_WEAK_BELOW {
+        "WEAK"
+    } else {
+        "SUPPORT"
+    }
+}
+
+/// Grade for a passage at rank `i` of `n`, best-first.
+///
+/// `rank_passages` returns descending cosine, so position IS the grade and it
+/// costs nothing to read. Top third anchors, bottom third weak, middle
+/// supports. With fewer than 3 passages every one is an ANCHOR: a floor of
+/// one-third would otherwise mark the only evidence a section has as WEAK and
+/// instruct the writer not to build on it.
+fn grade_for_rank(i: usize, n: usize) -> &'static str {
+    if n < 3 {
+        return "ANCHOR";
+    }
+    let third = n / 3;
+    if i < third.max(1) {
+        "ANCHOR"
+    } else if i >= n - third.max(1) {
+        "WEAK"
+    } else {
+        "SUPPORT"
+    }
+}
 
 /// One retrieval passage: a span of a window chunk, tagged with the
 /// chunk it came from so the citation maps to a real fetched source.
@@ -609,17 +888,18 @@ fn rank_passages(sub_vec: &[f32], passage_vecs: &[Vec<f32>], passages: &[Passage
         .map(|(i, v)| (super::cosine(sub_vec, v), i))
         .collect();
     scored.sort_by(|a, b| b.0.total_cmp(&a.0));
+    let (want, per_source_cap) = section_evidence_budget();
     let mut picked = Vec::new();
     let mut per_source: std::collections::HashMap<&str, usize> = std::collections::HashMap::new();
     for (_, i) in scored {
         let p = &passages[i];
         let n = per_source.entry(p.url.as_str()).or_insert(0);
-        if *n >= PER_SOURCE_CAP {
+        if *n >= per_source_cap {
             continue;
         }
         *n += 1;
         picked.push(p.clone());
-        if picked.len() >= SECTION_PASSAGES {
+        if picked.len() >= want {
             break;
         }
     }
@@ -694,12 +974,13 @@ pub async fn plan_outline(
         false,
         OUTLINE_EVIDENCE_TOKENS * CHARS_PER_TOKEN,
     );
+    let max = outline_max();
     let prompt = format!(
         "Plan the sections of a report that answers this question, using the evidence below.\n\n         Give each distinct subject the question names its own section wherever it needs \
          explaining on its own terms before it can be compared. Then the sections that relate \
          those subjects to each other. Then what follows from that for someone acting on it. \
          Plan only sections the evidence can support.\n\n         One section per line: a short noun-phrase title, then ' — ', then one sentence naming \
-         what that section must establish. Between {OUTLINE_MIN} and {OUTLINE_MAX} sections. \
+         what that section must establish. Between {OUTLINE_MIN} and {max} sections. \
          No numbering, no commentary.\n\n         Question: {question}\n\nEvidence:\n{}",
         bounded.text
     );
@@ -707,12 +988,66 @@ pub async fn plan_outline(
         .draft(DraftLeg::Outline, &prompt, None, &[])
         .await
         .map_err(|e| format!("outline draft: {e}"))?;
-    parse_outline(&raw)
+    parse_outline(&raw, max)
+}
+
+/// The report's own title. The default deliverable's H1 is the user's raw
+/// prompt sentence — which reads as a machine artifact, not a report, and is
+/// scored as one under `Formatting, Layout, and Typographical Consistency`.
+/// A refused or unusable title falls back to the question and SAYS so; it is
+/// never silently substituted (§18.3).
+pub async fn plan_title(
+    port: &dyn ResearchPort,
+    question: &str,
+    sections: &[String],
+) -> Result<String, String> {
+    let plan = sections
+        .iter()
+        .map(|s| s.chars().take(160).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let prompt = format!(
+        "Give this report its title.\n\nQuestion it answers: {question}\n\n\
+         Sections:\n{plan}\n\n\
+         One line. A specific noun phrase naming the subjects and what the report \
+         establishes about them — the title a published report would carry, not the \
+         question restated and not a generic label. No quotes, no markdown, no commentary."
+    );
+    let raw = port
+        .draft(DraftLeg::Outline, &prompt, None, &[])
+        .await
+        .map_err(|e| format!("title draft: {e}"))?;
+    parse_title(&raw)
+}
+
+/// PURE, for the same reason `parse_outline` is: every rule that admits or
+/// refuses a title is decidable with a failing input you can name (§18.1).
+pub(crate) fn parse_title(raw: &str) -> Result<String, String> {
+    let line = raw
+        .lines()
+        .map(|l| {
+            l.trim()
+                .trim_start_matches(['#', '-', '*', '•', ' '])
+                .trim()
+                .trim_matches(['"', '\'', '“', '”'])
+                .trim()
+        })
+        .find(|l| !l.is_empty() && !l.starts_with('<'))
+        .unwrap_or("");
+    // A title that runs to a paragraph is the model answering instead of
+    // naming; a two-word one names nothing. Both fall back, loudly.
+    let n = line.chars().count();
+    if !(TITLE_MIN_CHARS..=TITLE_MAX_CHARS).contains(&n) {
+        return Err(format!(
+            "title unusable — {n} chars, outside {TITLE_MIN_CHARS}-{TITLE_MAX_CHARS}"
+        ));
+    }
+    Ok(line.to_string())
 }
 
 /// The outline parser — PURE, so every admission rule is decidable without a
 /// model in the loop (§18.1: a check with a failing input you can name).
-pub(crate) fn parse_outline(raw: &str) -> Result<Vec<String>, String> {
+pub(crate) fn parse_outline(raw: &str, max: usize) -> Result<Vec<String>, String> {
     let mut out: Vec<String> = Vec::new();
     for line in raw.lines() {
         let line = line
@@ -732,7 +1067,7 @@ pub(crate) fn parse_outline(raw: &str) -> Result<Vec<String>, String> {
             continue;
         }
         out.push(line.to_string());
-        if out.len() >= OUTLINE_MAX {
+        if out.len() >= max {
             break;
         }
     }
@@ -771,6 +1106,21 @@ pub async fn compose_report(
     // One embed pass for the passages, one for the sub-questions — the
     // question rides along as the LAST row of the sub-question call, so
     // the relevance gate below costs no extra round-trip.
+    // Glassbox (§9.1): the section evidence budget is a DECISION and an arm
+    // that cannot prove its own lever fired is not a measurement (§18.1).
+    // Emitted at info so a flight log carries it without RUST_LOG surgery.
+    {
+        let (want, cap) = section_evidence_budget();
+        tracing::info!(
+            target: "deep_research",
+            passages_per_section = want,
+            per_source_cap = cap,
+            window_chunks = window.chunks.len(),
+            wide = super::report_section_evidence_enabled(),
+            "section evidence budget decided — this is how much of the window \
+             one section's writer will see"
+        );
+    }
     let passage_texts: Vec<String> = passages.iter().map(|p| p.text.clone()).collect();
     let pv = port.embed(&passage_texts).await;
     let mut sub_inputs = subs.clone();
@@ -832,6 +1182,26 @@ pub async fn compose_report(
                   report. Write from the evidence given and nothing else.";
     let mut sections: Vec<String> = Vec::new();
 
+    tracing::info!(
+        target: "deep_research",
+        target_words = target_report_words(),
+        default_words = TARGET_REPORT_WORDS,
+        sections = kept.len(),
+        section_words = section_word_budget(kept.len()),
+        "compose_report: deliverable length is a decision — target total and \
+         the per-section budget derived from it"
+    );
+    // Read the flag ONCE for the whole compose, not per section: a run must
+    // not write section 1 under v1 and section 2 under v2 if the environment
+    // changes mid-flight.
+    let graded = super::writer_contract_v2_enabled();
+    let contract = writer_contract();
+    tracing::debug!(
+        target: "deep_research",
+        graded_evidence = graded,
+        contract_chars = contract.len(),
+        "compose_report: writer contract selected"
+    );
     for &si in kept.iter() {
         let sub = &subs[si];
         let picked = if embedded {
@@ -842,12 +1212,13 @@ pub async fn compose_report(
             // section the SAME passages — identical inputs would make
             // identical sections and the report would say one thing
             // eight times.
-            let start = (si * SECTION_PASSAGES) % passages.len().max(1);
+            let (want, _) = section_evidence_budget();
+            let start = (si * want) % passages.len().max(1);
             passages
                 .iter()
                 .cycle()
                 .skip(start)
-                .take(SECTION_PASSAGES.min(passages.len()))
+                .take(want.min(passages.len()))
                 .cloned()
                 .collect()
         };
@@ -870,7 +1241,11 @@ pub async fn compose_report(
                     passages_seen = n.passages_seen,
                     "compose_report: section written from distilled findings"
                 );
-                super::notes::findings_block(n)
+                if graded {
+                    super::notes::findings_block_graded(n)
+                } else {
+                    super::notes::findings_block(n)
+                }
             }
             None => {
                 if picked.is_empty() {
@@ -885,8 +1260,24 @@ pub async fn compose_report(
                     );
                 }
                 let mut ev = String::new();
-                for p in picked.iter() {
-                    ev.push_str(&format!("[{}] ({})\n{}\n\n", p.chunk_id, p.url, p.text));
+                let n = picked.len();
+                for (i, p) in picked.iter().enumerate() {
+                    // drb1-r7: rank_passages already returned these in
+                    // descending cosine order and the block then flattened
+                    // that away. Surface it — the grade is free and the
+                    // writer was being asked to weigh an ordering nobody
+                    // told it about.
+                    if graded {
+                        ev.push_str(&format!(
+                            "[{}] ({}) [{}]\n{}\n\n",
+                            p.chunk_id,
+                            p.url,
+                            grade_for_rank(i, n),
+                            p.text
+                        ));
+                    } else {
+                        ev.push_str(&format!("[{}] ({})\n{}\n\n", p.chunk_id, p.url, p.text));
+                    }
                 }
                 ev
             }
@@ -899,7 +1290,7 @@ pub async fn compose_report(
         let (lo, hi) = (words * 9 / 10, words * 11 / 10);
         let prompt = format!(
             "You are writing ONE section of an analytical research report that answers:\n{question}\n\n\
-             THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n{WRITER_CONTRACT}\n\n\
+             THIS SECTION: {sub}\n\nEVIDENCE:\n{ev}\n{contract}\n\n\
              Write {lo}-{hi} words. Start with a '## ' heading that is a short noun phrase, \
              never the sub-question verbatim; use '### ' sub-headings where the material \
              has natural parts. No preamble and no commentary about the evidence itself."
@@ -924,10 +1315,19 @@ pub async fn compose_report(
         .map(|s| s.chars().take(1500).collect::<String>())
         .collect::<Vec<_>>()
         .join("\n\n");
+    let architected = super::report_architecture_enabled();
+    // A report closes on a Conclusion. "Synthesis and Assessment" names the
+    // pipeline's own step, and a deliverable that ends on its producer's
+    // vocabulary reads as an internal artifact.
+    let closing_heading = if architected {
+        "## Conclusion"
+    } else {
+        "## Synthesis and Assessment"
+    };
     let synth_prompt = format!(
         "You are writing the closing synthesis of a research report answering:\n{question}\n\n\
          THE REPORT SO FAR:\n{digest}\n\n\
-         Write a '## Synthesis and Assessment' section of 280-340 words that draws the \
+         Write a '{closing_heading}' section of 280-340 words that draws the \
          threads into 3-5 justified conclusions, each saying WHY it follows from what the \
          report established; weighs which rest on strong evidence and which are tentative; \
          names the genuine open questions and what would resolve them; and gives the \
@@ -951,7 +1351,61 @@ pub async fn compose_report(
     // window, and rewriting the handles into reader-facing numbers
     // before the audit would blind it. `number_citations` does that
     // rewrite at RENDER time, after the verdicts exist.
-    Ok(format!("# {question}\n\n{}", sections.join("\n\n")))
+    if !architected {
+        return Ok(format!("# {question}\n\n{}", sections.join("\n\n")));
+    }
+
+    // The report's own title. A refusal is NAMED and falls back to the
+    // question — the deliverable still lands (§18.3).
+    let title = match plan_title(port, question, &subs).await {
+        Ok(t) => {
+            tracing::info!(
+                target: "deep_research", title = %t,
+                "report title planned — the H1 is the report's, not the prompt's"
+            );
+            t
+        }
+        Err(e) => {
+            tracing::warn!(
+                target: "deep_research", error = %e,
+                "title unavailable — the H1 falls back to the question (named, never silent)"
+            );
+            question.to_string()
+        }
+    };
+
+    // The executive summary is written LAST and read FIRST: it can only
+    // summarise a report that already exists, and a reader who stops after it
+    // must still have the answer.
+    let body = sections.join("\n\n");
+    let digest_for_summary: String = sections
+        .iter()
+        .map(|s| s.chars().take(1800).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    let summary_prompt = format!(
+        "You are writing the executive summary of a research report answering:\n{question}\n\n\
+         THE REPORT:\n{digest_for_summary}\n\n\
+         Write a '## Executive Summary' section of 200-260 words that ANSWERS the question \
+         directly in its first two sentences, then gives the findings that answer carries and \
+         the one or two caveats a reader must hold. Reuse the [Source: ev-N] handles already \
+         used below where a claim needs one. Developed paragraphs, no checklist, and nothing \
+         the report does not already establish."
+    );
+    let head = match port
+        .draft(DraftLeg::Synthesis, &summary_prompt, Some(system), &allowed)
+        .await
+    {
+        Ok(t) => format!("{t}\n\n"),
+        Err(e) => {
+            tracing::warn!(
+                target: "deep_research", error = %e,
+                "executive summary failed — the report lands without it, named"
+            );
+            String::new()
+        }
+    };
+    Ok(format!("# {title}\n\n{head}{body}"))
 }
 
 /// Render-time rewrite: `[Source: ev-3]` → `[2]`, with the ordered
@@ -1770,6 +2224,34 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
     }
 
     #[test]
+    fn a_bad_target_override_is_never_a_silent_zero() {
+        // Watch-it-fail: drop the `.filter(|&n| n > 0)` and "0" returns 0,
+        // so section_word_budget clamps EVERY section to SECTION_WORDS_MIN
+        // and the run ships a stub that still looks like a deliverable.
+        assert_eq!(target_words_policy(None), TARGET_REPORT_WORDS, "unset");
+        assert_eq!(target_words_policy(Some("")), TARGET_REPORT_WORDS, "empty");
+        assert_eq!(
+            target_words_policy(Some("   ")),
+            TARGET_REPORT_WORDS,
+            "blank"
+        );
+        assert_eq!(
+            target_words_policy(Some("banana")),
+            TARGET_REPORT_WORDS,
+            "unparseable"
+        );
+        assert_eq!(target_words_policy(Some("0")), TARGET_REPORT_WORDS, "zero");
+        assert_eq!(
+            target_words_policy(Some("-1")),
+            TARGET_REPORT_WORDS,
+            "negative"
+        );
+        // An explicit positive value is honoured, whitespace and all.
+        assert_eq!(target_words_policy(Some("7000")), 7_000);
+        assert_eq!(target_words_policy(Some(" 7000 ")), 7_000);
+    }
+
+    #[test]
     fn the_section_budget_stays_inside_its_band() {
         assert_eq!(
             section_word_budget(1),
@@ -1803,7 +2285,7 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
              Name and release date of the A2A protocol announced by Google\n\
              Number of documented failure modes unique to asynchronous channels\n\
              Percentage increase in developer adoption metrics for MCP\n";
-        let got = parse_outline(frontier);
+        let got = parse_outline(frontier, OUTLINE_MAX);
         assert!(
             got.is_err(),
             "a frontier-shaped list must not pass as an outline: {got:?}"
@@ -1818,7 +2300,7 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
             - The A2A Protocol — establish its task lifecycle and agent discovery model.\n\
             3. Interplay and Overlap — relate the two and name where they compete.\n\
             * What Follows for Adopters — say what a team should do with the distinction.\n";
-        let out = parse_outline(raw).expect("a briefed outline parses");
+        let out = parse_outline(raw, OUTLINE_MAX).expect("a briefed outline parses");
         assert_eq!(out.len(), 4, "got {out:?}");
         assert!(out[0].starts_with("The MCP Protocol"), "{:?}", out[0]);
         assert!(
@@ -1842,7 +2324,7 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
                 ));
             }
         }
-        let out = parse_outline(&raw).expect("parses");
+        let out = parse_outline(&raw, OUTLINE_MAX).expect("parses");
         assert!(
             out.len() <= OUTLINE_MAX,
             "capped at {OUTLINE_MAX}: {}",
@@ -1852,6 +2334,171 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
         uniq.sort();
         uniq.dedup();
         assert_eq!(uniq.len(), out.len(), "no repeated section: {out:?}");
+    }
+
+    /// Serialises the tests that move `SOVEREIGN_DR_REPORT_ARCHITECTURE`.
+    /// Same reason as `audit.rs::budget_guard`: different tests set this var
+    /// to DIFFERENT values, so under a threaded runner one test's `on` is
+    /// another's `off` and the pair passes only under `--test-threads=1`.
+    fn architecture_guard(value: &str) -> std::sync::MutexGuard<'static, ()> {
+        static ARCH_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let g = ARCH_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("SOVEREIGN_DR_REPORT_ARCHITECTURE", value);
+        g
+    }
+
+    #[test]
+    fn the_section_cap_is_one_decider_for_the_prompt_and_the_parser() {
+        // §10.6. The cap is asked for in `plan_outline`'s prompt and enforced
+        // in `parse_outline`. Two literals would let the writer be asked for
+        // 12 sections and admitted for 8 — a silent truncation that reads as
+        // "the model planned 8".
+        //
+        // Watch-it-fail: hard-code OUTLINE_MAX back into parse_outline's break
+        // and the architected case admits 8 where the prompt asked for 12.
+        let mut raw = String::new();
+        for i in 0..20 {
+            raw.push_str(&format!(
+                "Section {i} — establish the thing numbered {i}.\n"
+            ));
+        }
+        {
+            let _g = architecture_guard("0");
+            assert_eq!(outline_max(), OUTLINE_MAX);
+            assert_eq!(
+                parse_outline(&raw, outline_max()).unwrap().len(),
+                OUTLINE_MAX
+            );
+        }
+        {
+            let _g = architecture_guard("1");
+            assert_eq!(outline_max(), OUTLINE_MAX_ARCHITECTED);
+            assert_eq!(
+                parse_outline(&raw, outline_max()).unwrap().len(),
+                OUTLINE_MAX_ARCHITECTED
+            );
+        }
+        let _g = architecture_guard("0");
+        assert!(
+            OUTLINE_MAX_ARCHITECTED > OUTLINE_MAX,
+            "the architected cap must leave room for a section per named subject"
+        );
+    }
+
+    fn section_evidence_guard(value: &str) -> std::sync::MutexGuard<'static, ()> {
+        static SEC_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let g = SEC_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        std::env::set_var("SOVEREIGN_DR_REPORT_SECTION_EVIDENCE", value);
+        g
+    }
+
+    #[test]
+    fn the_section_evidence_budget_widens_both_knobs_together() {
+        // §10.6, and the reason the per-source cap is IN the decider rather
+        // than beside it: widening the passage count while holding the cap at
+        // 3 fills the new room from new SOURCES only, which is the opposite of
+        // what a section needing depth on one protocol wants — a spec page
+        // carries its detail across consecutive passages.
+        //
+        // Watch-it-fail: return (SECTION_PASSAGES_WIDE, PER_SOURCE_CAP) and a
+        // 24-passage section can still take only 3 from the one page that
+        // actually documents the subject.
+        {
+            let _g = section_evidence_guard("0");
+            assert_eq!(
+                section_evidence_budget(),
+                (SECTION_PASSAGES, PER_SOURCE_CAP)
+            );
+            // THE SHIPPED DEFAULT IS PINNED BECAUSE IT IS NOW MEASURED.
+            // It was pinned at 8/3 as a KNOWN PORT REGRESSION (a50d2fdf3 wrote
+            // 8/3 fresh where the prototype used 28/5), explicitly "until the
+            // flag's arm reports". The arm reported on 2026-08-27: a five-point
+            // curve on bed `dr-1787807617`, one judge, zero-noise replay —
+            //
+            //   8x3 45.9166 | 16x4 51.3347 | 28x5 50.9864 | 44x6 50.9510 | 60x8 51.9689
+            //
+            // — and 16/4 is the knee. So this pin no longer guards a regression
+            // we tolerated; it guards a number we bought. The obligation is
+            // unchanged and runs in BOTH directions: moving it again means
+            // flying the arm again, not arguing from the shape of the curve.
+            //
+            // Watch-it-fail: set SECTION_PASSAGES back to 8 and this fails with
+            // the delta the revert would cost.
+            assert_eq!(
+                (SECTION_PASSAGES, PER_SOURCE_CAP),
+                (16, 4),
+                "the shipped default moved. 16/4 is the MEASURED knee \
+                 (+5.42 RACE overall over the old 8/3, bed dr-1787807617, \
+                 2026-08-27) — re-fly the curve before changing it, and see \
+                 `sovereign/DEFAULTS_LEDGER.md` \
+                 §SOVEREIGN_DR_REPORT_SECTION_EVIDENCE."
+            );
+        }
+        {
+            let _g = section_evidence_guard("1");
+            let (want, cap) = section_evidence_budget();
+            assert_eq!((want, cap), (SECTION_PASSAGES_WIDE, PER_SOURCE_CAP_WIDE));
+            assert!(want > SECTION_PASSAGES, "the budget must widen");
+            assert!(
+                cap > PER_SOURCE_CAP,
+                "the per-source cap must widen with it"
+            );
+            assert!(
+                want >= cap * 2,
+                "no single source may fill the section on its own: {want} vs {cap}"
+            );
+            // The wide budget restores the Python prototype the Rust port was
+            // written from (arms/lab/compose2.py: k=28, repeat_cap=5, same
+            // 1400/200 passage chunking). It is pinned to the prototype so the
+            // flag keeps testing a configuration a measurement stood behind.
+            //
+            // It is NO LONGER the target the default should converge on: the
+            // 2026-08-27 curve scored 28/5 at 50.9864 against 16/4's 51.3347,
+            // for +1.1 min and larger prompts. The default moved to 16/4; this
+            // stayed 28/5 because it is a different question (how wide can a
+            // section go), not because it won.
+            assert_eq!((want, cap), (28, 5), "the prototype's measured budget");
+            assert_eq!(
+                want * PASSAGE_CHARS,
+                39_200,
+                "compose2.py recorded evidence_chars_per_section = k * 1400"
+            );
+        }
+        let _g = section_evidence_guard("0");
+    }
+
+    #[test]
+    fn the_title_parser_refuses_what_is_not_a_title() {
+        // Named failing inputs (§18.1). A title that runs to a paragraph is
+        // the model answering the question instead of naming the report; a
+        // two-word one names nothing. Both must fall back to the question
+        // rather than land as the H1.
+        let paragraph = "a".repeat(TITLE_MAX_CHARS + 1);
+        assert!(
+            parse_title(&paragraph).is_err(),
+            "a paragraph is not a title"
+        );
+        assert!(parse_title("Protocols").is_err(), "a stub is not a title");
+        assert!(parse_title("   \n\n  ").is_err(), "empty is not a title");
+        assert!(
+            parse_title(&paragraph).unwrap_err().contains("unusable"),
+            "the refusal names itself"
+        );
+    }
+
+    #[test]
+    fn the_title_parser_takes_the_first_real_line_and_strips_its_decoration() {
+        let raw = "# \"A2A vs MCP: Differences, Connections, and What A2A Solves\"\n\n                   Some commentary the model added after.";
+        assert_eq!(
+            parse_title(raw).unwrap(),
+            "A2A vs MCP: Differences, Connections, and What A2A Solves"
+        );
+        // A leading list marker is decoration too, and a think-tag opener is
+        // not the title — the parser skips it rather than adopting it.
+        assert_eq!(
+            parse_title("<think>\n- The Elderly Consumption Outlook for Japan, 2020-2050").unwrap(),
+            "The Elderly Consumption Outlook for Japan, 2020-2050"
+        );
     }
 
     #[test]
@@ -1989,6 +2636,82 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
         assert!(
             ps.iter().all(|p| p.text.chars().count() <= PASSAGE_CHARS),
             "no passage exceeds the span budget"
+        );
+    }
+
+    /// drb1-r7: the ported AIQ additions are present, and are the ones v1
+    /// does NOT already carry. A duplicate obligation is a contract arguing
+    /// with itself, so this asserts both directions.
+    #[test]
+    fn the_v2_extra_ports_what_v1_lacks_and_does_not_repeat_it() {
+        for needle in [
+            "[ANCHOR]",
+            "[SUPPORT]",
+            "[WEAK]",
+            "CONSENSUS",
+            "COMPLEMENTARY",
+            "Inference is allowed",
+            "units, dates and ranges",
+        ] {
+            assert!(
+                WRITER_CONTRACT_V2_EXTRA.contains(needle),
+                "the ported contract must carry {needle:?}"
+            );
+        }
+        // v1 already holds these; repeating them in v2 would double-state the
+        // obligation in one prompt.
+        for dup in ["Cross-synthesize", "Developed paragraphs", "Do NOT"] {
+            assert!(
+                !WRITER_CONTRACT_V2_EXTRA.contains(dup),
+                "{dup:?} is already in v1 — v2 must not repeat it"
+            );
+        }
+    }
+
+    /// The grade bands straddle DEFAULT_USEFULNESS (50): a worker that
+    /// declined to score its finding must land in SUPPORT, never be read as
+    /// having judged the finding an anchor OR weak (§18.3 — an absent value
+    /// is not a verdict).
+    #[test]
+    fn an_unscored_finding_is_support_never_anchor_or_weak() {
+        assert_eq!(grade_for_usefulness(50), "SUPPORT");
+        assert_eq!(grade_for_usefulness(70), "ANCHOR");
+        assert_eq!(grade_for_usefulness(69), "SUPPORT");
+        assert_eq!(grade_for_usefulness(40), "SUPPORT");
+        assert_eq!(grade_for_usefulness(39), "WEAK");
+        assert_eq!(grade_for_usefulness(0), "WEAK");
+        assert_eq!(grade_for_usefulness(100), "ANCHOR");
+    }
+
+    /// A section with one or two passages must not have its only evidence
+    /// marked WEAK — the contract tells the writer not to build on WEAK, so a
+    /// naive top-third rule would instruct it to build on nothing.
+    #[test]
+    fn a_thin_section_never_grades_its_only_evidence_weak() {
+        for n in 1..=2 {
+            for i in 0..n {
+                assert_eq!(
+                    grade_for_rank(i, n),
+                    "ANCHOR",
+                    "with n={n} every passage must anchor"
+                );
+            }
+        }
+        // At the real section width every band is populated and best-first
+        // order is respected.
+        let g: Vec<&str> = (0..8).map(|i| grade_for_rank(i, 8)).collect();
+        assert_eq!(g[0], "ANCHOR", "the top-ranked passage anchors");
+        assert_eq!(g[7], "WEAK", "the worst-ranked passage is weak");
+        assert!(
+            g.contains(&"SUPPORT"),
+            "the middle band is populated: {g:?}"
+        );
+        // No WEAK may outrank an ANCHOR.
+        let first_weak = g.iter().position(|x| *x == "WEAK").unwrap();
+        let last_anchor = g.iter().rposition(|x| *x == "ANCHOR").unwrap();
+        assert!(
+            last_anchor < first_weak,
+            "grades must be monotone in rank: {g:?}"
         );
     }
 
