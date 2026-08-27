@@ -66,48 +66,125 @@ pub async fn cmd_schema_report(args: &[String]) -> i32 {
             return 2;
         }
     };
-    let cfg = match EnrichConfig::require(&parsed.corpus_id) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: loading enrichment config: {e}");
+    let outcome = match run(&parsed) {
+        Ok(r) => r,
+        Err(msg) => {
+            eprintln!("error: {msg}");
             return 1;
         }
     };
-
-    let report = match compute_report(&cfg.corpus_id) {
-        Ok(r) => r,
-        Err(code) => return code,
-    };
-
-    // Write the JSON file alongside the other atlas artifacts so
-    // downstream consumers (CI, dashboards) can pick it up.
-    let atlas_dir = atlas_dir_for(&cfg.corpus_id);
-    let out_path = atlas_dir.join("schema_validation.json");
-    if let Err(e) = write_atomic(&out_path, &report) {
-        eprintln!("warning: writing {}: {e}", out_path.display());
-        // Non-fatal — the table still prints.
-    }
-
-    if parsed.as_json {
-        match serde_json::to_string_pretty(&report) {
-            Ok(s) => println!("{s}"),
-            Err(e) => {
-                eprintln!("error: serialising report: {e}");
-                return 1;
-            }
+    match render(&parsed, &outcome) {
+        Ok(()) => 0,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            1
         }
-    } else {
-        print_human_report(&report);
-        println!();
-        println!("  ✓ wrote {}", out_path.display());
     }
-    0
 }
 
-#[derive(Debug)]
-struct ParsedReport {
-    corpus_id: String,
-    as_json: bool,
+/// A parsed `schema-report` invocation. Public so the `enrich build`
+/// orchestrator constructs one directly instead of round-tripping
+/// through argv.
+#[derive(Debug, Clone)]
+pub struct ParsedReport {
+    pub corpus_id: String,
+    pub as_json: bool,
+}
+
+/// Where the JSON artifact landed — or why it did not.
+///
+/// The write is non-fatal (the table still prints), but "wrote it" and
+/// "could not write it" are different outcomes. Until 2026-08-26 the
+/// failure went to stderr as a `warning:` and the step still reported
+/// plain success, so no caller could tell the two apart (ARCH §18.3).
+#[derive(Debug, Clone)]
+pub enum ReportArtifact {
+    Wrote(PathBuf),
+    Failed { path: PathBuf, error: String },
+}
+
+/// What `schema-report` produced.
+#[derive(Debug, Clone)]
+pub struct ReportRun {
+    pub report: SchemaValidationReport,
+    pub artifact: ReportArtifact,
+}
+
+/// Format the step's one-line summary from what the run found.
+///
+/// A free function rather than a method so it is exercisable on its own:
+/// `SchemaValidationReport`'s nine sub-structs have no `Default` (by
+/// design — an all-zero report is not a real outcome), so a test that
+/// had to build one to check a sentence would be pressure to add one.
+fn summary_line(
+    total_atoms: usize,
+    section_count: usize,
+    gap_signatures: usize,
+    artifact: &ReportArtifact,
+) -> String {
+    let base = format!(
+        "{total_atoms} atom(s) over {section_count} section(s); \
+         {gap_signatures} schema gap signature(s)"
+    );
+    match artifact {
+        ReportArtifact::Wrote(_) => base,
+        ReportArtifact::Failed { path, error } => {
+            format!("{base} — could not write {}: {error}", path.display())
+        }
+    }
+}
+
+impl ReportRun {
+    /// One line naming what this step found, for the build
+    /// orchestrator's `StepDone` event.
+    pub fn summary(&self) -> String {
+        summary_line(
+            self.report.extraction.total_atoms,
+            self.report.section_count,
+            self.report.gap_signatures().len(),
+            &self.artifact,
+        )
+    }
+}
+
+/// Compute the §12 report and write the JSON artifact. Pure of stdout:
+/// the table comes from [`render`].
+pub fn run(parsed: &ParsedReport) -> Result<ReportRun, String> {
+    let cfg = EnrichConfig::require(&parsed.corpus_id)
+        .map_err(|e| format!("loading enrichment config: {e}"))?;
+    let report = compute_report(&cfg.corpus_id)?;
+
+    // Written alongside the other atlas artifacts so downstream
+    // consumers (CI, dashboards) can pick it up.
+    let out_path = atlas_dir_for(&cfg.corpus_id).join("schema_validation.json");
+    let artifact = match write_atomic(&out_path, &report) {
+        Ok(()) => ReportArtifact::Wrote(out_path),
+        Err(e) => ReportArtifact::Failed {
+            path: out_path,
+            error: e.to_string(),
+        },
+    };
+
+    Ok(ReportRun { report, artifact })
+}
+
+/// Print the report the way `svrn enrich schema-report` always has.
+pub fn render(parsed: &ParsedReport, run: &ReportRun) -> Result<(), String> {
+    if let ReportArtifact::Failed { path, error } = &run.artifact {
+        eprintln!("warning: writing {}: {error}", path.display());
+    }
+    if parsed.as_json {
+        let s = serde_json::to_string_pretty(&run.report)
+            .map_err(|e| format!("serialising report: {e}"))?;
+        println!("{s}");
+    } else {
+        print_human_report(&run.report);
+        if let ReportArtifact::Wrote(path) = &run.artifact {
+            println!();
+            println!("  ✓ wrote {}", path.display());
+        }
+    }
+    Ok(())
 }
 
 fn parse_report_args(args: &[String]) -> Result<ParsedReport, String> {
@@ -176,7 +253,10 @@ pub async fn cmd_schema_review(args: &[String]) -> i32 {
         };
         let report = match compute_report(&cfg.corpus_id) {
             Ok(r) => r,
-            Err(code) => return code,
+            Err(msg) => {
+                eprintln!("error: {msg}");
+                return 1;
+            }
         };
         reports.push(report);
     }
@@ -248,30 +328,22 @@ fn parse_review_args(args: &[String]) -> Result<ParsedReview, String> {
 
 /// Load the atlas + compute the report. Returns the exit code
 /// to propagate if anything fails.
-fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, i32> {
+fn compute_report(corpus_id: &str) -> Result<SchemaValidationReport, String> {
     let atlas_dir = atlas_dir_for(corpus_id);
-    let atoms = match read_atlas_atoms(&atlas_dir) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!(
-                "error: reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
-                 {corpus_id} --phase all` first.",
-                atlas_dir.display()
-            );
-            return Err(1);
-        }
-    };
-    let edges = match read_atlas_edges(&atlas_dir) {
-        Ok(e) => e,
-        Err(err) => {
-            eprintln!(
-                "error: reading {}/edges.json: {err}. Run `svrn enrich atlas-resolve \
-                 {corpus_id} --phase all` first.",
-                atlas_dir.display()
-            );
-            return Err(1);
-        }
-    };
+    let atoms = read_atlas_atoms(&atlas_dir).map_err(|e| {
+        format!(
+            "reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
+             {corpus_id} --phase all` first.",
+            atlas_dir.display()
+        )
+    })?;
+    let edges = read_atlas_edges(&atlas_dir).map_err(|err| {
+        format!(
+            "reading {}/edges.json: {err}. Run `svrn enrich atlas-resolve \
+             {corpus_id} --phase all` first.",
+            atlas_dir.display()
+        )
+    })?;
     // Cross-corpus is optional — missing is "not run" rather than "error".
     let cross_corpus = read_atlas_cross_corpus_edges(&atlas_dir).ok();
 
@@ -470,6 +542,50 @@ fn print_human_report(r: &SchemaValidationReport) {
         for s in sigs {
             println!("        · {s}");
         }
+    }
+}
+
+#[cfg(test)]
+mod artifact_tests {
+    use super::*;
+
+    /// A failed artifact write used to print `warning:` to stderr and let
+    /// the step report plain success — so no caller (the desktop's
+    /// progress panel included) could tell "wrote schema_validation.json"
+    /// from "could not write it" (ARCH §18.3).
+    ///
+    /// Falsifier: collapse `ReportArtifact` back to a bare path, or drop
+    /// the `Failed` arm from `summary_line`, and the two lines become
+    /// equal.
+    #[test]
+    fn a_failed_artifact_write_is_visible_in_the_summary() {
+        let path = PathBuf::from("/x/schema_validation.json");
+        let wrote = summary_line(120, 9, 2, &ReportArtifact::Wrote(path.clone()));
+        let failed = summary_line(
+            120,
+            9,
+            2,
+            &ReportArtifact::Failed {
+                path,
+                error: "permission denied".into(),
+            },
+        );
+        assert_ne!(wrote, failed);
+        assert!(failed.contains("permission denied"), "{failed}");
+    }
+
+    /// The summary must vary with what the report FOUND, not with the
+    /// step's name. Two runs over different-sized corpora are different
+    /// outcomes and must read differently.
+    #[test]
+    fn the_summary_varies_with_what_the_report_found() {
+        let ok = ReportArtifact::Wrote(PathBuf::from("/x.json"));
+        let small = summary_line(3, 1, 0, &ok);
+        let large = summary_line(4021, 312, 17, &ok);
+        assert_ne!(small, large);
+        assert!(large.contains("4021"), "{large}");
+        assert!(large.contains("312"), "{large}");
+        assert!(large.contains("17"), "{large}");
     }
 }
 

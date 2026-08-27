@@ -58,43 +58,68 @@ const HELP: Help = Help {
     ],
 };
 
-pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
-    if help::wants_help(args) {
-        help::print(&HELP);
-        return 0;
+/// What the deterministic candidate pass produced.
+#[derive(Debug, Clone)]
+pub struct TensionCandidatesReport {
+    pub claims: usize,
+    pub states: usize,
+    pub entities: usize,
+    pub strategy: TensionStrategy,
+    /// True when the pipeline could not be resolved and the Graph
+    /// strategy was substituted for it. "The pipeline asked for graph"
+    /// and "we could not tell what the pipeline asked for" produce the
+    /// same candidates and are not the same fact (ARCH §18.3) — before
+    /// 2026-08-26 an `unwrap_or_default()` made them indistinguishable.
+    pub strategy_defaulted: bool,
+    pub same_speaker_dropped: usize,
+    pub candidates: usize,
+    pub written_to: PathBuf,
+}
+
+impl TensionCandidatesReport {
+    /// One line naming what this pass produced, for the build
+    /// orchestrator's `StepDone` event.
+    pub fn summary(&self) -> String {
+        let strategy = match self.strategy {
+            TensionStrategy::Graph => "graph".to_string(),
+            TensionStrategy::EmbeddingTopK { k, floor } => {
+                format!("embedding top-{k} (floor {floor})")
+            }
+        };
+        let mut s = format!(
+            "{} candidate pair(s) via {strategy} over {} claim(s) + {} state(s) + {} entity atom(s)",
+            self.candidates, self.claims, self.states, self.entities
+        );
+        if self.strategy_defaulted {
+            s.push_str(" (strategy defaulted — pipeline did not resolve)");
+        }
+        if self.same_speaker_dropped > 0 {
+            s.push_str(&format!(
+                "; {} same-speaker pair(s) dropped",
+                self.same_speaker_dropped
+            ));
+        }
+        s
     }
+}
 
-    let parsed = match parse_args(args) {
-        Ok(p) => p,
-        Err(msg) => {
-            eprintln!("error: {msg}");
-            eprintln!();
-            help::print(&HELP);
-            return 2;
-        }
-    };
-
-    let cfg = match EnrichConfig::require(&parsed.corpus_id) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: loading enrichment config: {e}");
-            return 1;
-        }
-    };
+/// Select tension candidates and write `tension_candidates.json`.
+///
+/// Keeps its progress printing: the embedding strategy embeds every
+/// claim through the daemon and the per-strategy lines are the
+/// operator's view of a slow pass.
+pub async fn run(parsed: &ParsedTensions) -> Result<TensionCandidatesReport, String> {
+    let cfg = EnrichConfig::require(&parsed.corpus_id)
+        .map_err(|e| format!("loading enrichment config: {e}"))?;
 
     let atlas_dir = atlas_dir_for(&cfg.corpus_id);
-    let atoms = match read_atlas_atoms(&atlas_dir) {
-        Ok(a) => a,
-        Err(e) => {
-            eprintln!(
-                "error: reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve \
-                 {} --phase all` first.",
-                atlas_dir.display(),
-                cfg.corpus_id
-            );
-            return 1;
-        }
-    };
+    let atoms = read_atlas_atoms(&atlas_dir).map_err(|e| {
+        format!(
+            "reading {}/atoms.json: {e}. Run `svrn enrich atlas-resolve {} --phase all` first.",
+            atlas_dir.display(),
+            cfg.corpus_id
+        )
+    })?;
 
     // Partition atoms by kind. Claim + State drive entity-overlap
     // candidates; entities feed the cross-position concept-overlap
@@ -125,9 +150,19 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
     // embedding top-K net (see `TensionStrategy`). Resolve the pipeline
     // to read its strategy; fall back to the graph default if the
     // pipeline can't be resolved (preserves legacy behaviour).
-    let strategy = super::pipeline_resolve::resolve_pipeline(&cfg)
-        .map(|p| p.tension_strategy())
-        .unwrap_or_default();
+    // An unresolvable pipeline still gets the Graph strategy — that is
+    // the legacy behaviour and it is correct — but the SUBSTITUTION is
+    // now recorded rather than erased by `unwrap_or_default()`.
+    let (strategy, strategy_defaulted) = match super::pipeline_resolve::resolve_pipeline(&cfg) {
+        Some(p) => (p.tension_strategy(), false),
+        None => (TensionStrategy::Graph, true),
+    };
+    if strategy_defaulted {
+        tracing::warn!(
+            pipeline_id = %cfg.pipeline_id,
+            "tension candidates: pipeline did not resolve; substituting the Graph strategy"
+        );
+    }
 
     let mut candidates = match strategy {
         TensionStrategy::Graph => {
@@ -147,22 +182,14 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
             // by cosine. The graph path needs no model; this path does —
             // but a custom-ontology build already has the daemon up for
             // the classifier that follows.
-            let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
-                Ok(c) => c,
-                Err(e) => {
-                    eprintln!("error: building inference client for embeddings: {e}");
-                    return 1;
-                }
-            };
+            let client = DaemonInferenceClient::from_enrich_config(&cfg)
+                .map_err(|e| format!("building inference client for embeddings: {e}"))?;
             let (embed, _chat) = client.into_closures();
             let mut embeddings = Vec::with_capacity(claims.len());
             for (i, c) in claims.iter().enumerate() {
                 match embed(&c.content).await {
                     Ok(v) => embeddings.push(v),
-                    Err(e) => {
-                        eprintln!("error: embedding claim {i} ({}): {e}", c.id.as_str());
-                        return 1;
-                    }
+                    Err(e) => return Err(format!("embedding claim {i} ({}): {e}", c.id.as_str())),
                 }
             }
             println!(
@@ -180,6 +207,7 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
     // see `drop_same_named_speaker_pairs`.)
     let before = candidates.len();
     drop_same_named_speaker_pairs(&mut candidates, &claims, &entities);
+    let same_speaker_dropped = before - candidates.len();
     if candidates.len() < before {
         println!(
             "  · same-speaker filter: {} -> {} candidates (dropped {} same-speaker pair(s))",
@@ -198,14 +226,50 @@ pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
 
     let out = TensionCandidatesOutput::new(candidates);
     let count = out.candidates.len();
-    match write_tension_candidates(&atlas_dir, &out) {
-        Ok(path) => {
-            println!("  ✓ {count} candidate pair(s)");
-            println!("  ✓ wrote {}", path.display());
+    let written_to = write_tension_candidates(&atlas_dir, &out)
+        .map_err(|e| format!("writing tension_candidates.json: {e}"))?;
+
+    Ok(TensionCandidatesReport {
+        claims: claims.len(),
+        states: states.len(),
+        entities: entities.len(),
+        strategy,
+        strategy_defaulted,
+        same_speaker_dropped,
+        candidates: count,
+        written_to,
+    })
+}
+
+/// Print the closing lines the way `svrn enrich atlas-tensions` always has.
+pub fn render(report: &TensionCandidatesReport) {
+    println!("  ✓ {} candidate pair(s)", report.candidates);
+    println!("  ✓ wrote {}", report.written_to.display());
+}
+
+pub async fn cmd_atlas_tensions(args: &[String]) -> i32 {
+    if help::wants_help(args) {
+        help::print(&HELP);
+        return 0;
+    }
+
+    let parsed = match parse_args(args) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            eprintln!();
+            help::print(&HELP);
+            return 2;
+        }
+    };
+
+    match run(&parsed).await {
+        Ok(report) => {
+            render(&report);
             0
         }
-        Err(e) => {
-            eprintln!("error: writing tension_candidates.json: {e}");
+        Err(msg) => {
+            eprintln!("error: {msg}");
             1
         }
     }
@@ -215,9 +279,12 @@ fn atlas_dir_for(corpus_id: &str) -> PathBuf {
     paths::index_root(corpus_id).join(ATLAS_DIRNAME)
 }
 
-#[derive(Debug)]
-struct ParsedTensions {
-    corpus_id: String,
+/// A parsed `atlas-tensions` invocation. Public so the `enrich build`
+/// orchestrator constructs one directly instead of round-tripping
+/// through argv.
+#[derive(Debug, Clone)]
+pub struct ParsedTensions {
+    pub corpus_id: String,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedTensions, String> {

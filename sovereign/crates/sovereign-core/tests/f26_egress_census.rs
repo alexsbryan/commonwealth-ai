@@ -234,7 +234,12 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-llm/src/bench_cmd/atlas.rs", Class::LocalDaemon, 1),
     ("sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs", Class::LocalDaemon, 1),
 
-    // ---- sovereign-cli-dev (LocalDaemon; doc_fetcher is InboundOnly) ----
+    // ---- sovereign-cli-dev (all LocalDaemon) ----
+    // `doc_fetcher.rs` held this family's only InboundOnly row until
+    // 2026-08-26, when it was deleted with `honesty.rs` as a closed pair
+    // that had been unreachable since `de34eb36` (commit 2bbcb480). The
+    // row outlived the file by one commit and the census caught it as a
+    // STALE ROW — which is the census working.
     // code_cmd 4 -> 3 (2026-08-20): the fourth site was
     // `build_daemon_embed_fn`'s /v1/models probe, which left with the rest of
     // `svrn code index` for sovereign-cli-shared::code_index. The three that
@@ -250,7 +255,6 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-cli-dev/src/code_map.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/atos_cmd/doctor.rs", Class::LocalDaemon, 2),
     ("sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs", Class::LocalDaemon, 1),
-    ("sovereign/crates/sovereign-cli-dev/src/doc_fetcher.rs", Class::InboundOnly, 1),
     // refactor_cmd/label_model: the name-group adjudication pass. One client,
     // pinned to the local daemon — it posts Rust source snippets and the
     // code-intel descriptions of the types under judgement, which are estate

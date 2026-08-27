@@ -354,10 +354,10 @@ impl AtlasWriteConfigurationsTool {
                 "atlas_write_configurations: `items` is not [Phase8ParseItem]: {e}"
             ))
         })?;
-        let count = finalize_configurations(&corpus, items)
+        let configurations = finalize_configurations(&corpus, items)
             .map_err(|e| Error::Execution(format!("atlas_write_configurations: {e}")))?;
         Ok(StepOutput::Json(
-            serde_json::json!({ "configurations": count }),
+            serde_json::json!({ "configurations": configurations.len() }),
         ))
     }
 }
