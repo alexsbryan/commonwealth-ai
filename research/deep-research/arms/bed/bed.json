@@ -1,0 +1,8 @@
+{
+  "_why": "The multi-task replay bed. ONE task is not a bed: iterating on task 69 alone overfits to one A2A/MCP question, and the 100-task DRB-I bar cannot be approximated by it. Each entry pins a task to the cached estate that holds its acquired evidence, so an arm replays at ZERO Tavily and acquisition variance is held constant across arms.",
+  "_adding_a_task": "Fly it once against the live web (this BILLS Tavily searches; fetches are free), then read the run id from the run dir and register dr-estate-dr-<run_id> here. An estate that no longer exists on disk must be REMOVED from this file rather than left to fail at run time - task 58 (dr-1787634076) was deleted and is why this file exists.",
+  "tasks": [
+    { "id": 69, "estate": "dr-estate-dr-1787620475", "note": "A2A vs MCP protocols. 98 sources / 2.18M chars. The task every 2026-08-24/25 measurement used." },
+    { "id": 56, "estate": "dr-estate-dr-1787633206", "note": "First-price sealed-bid auction method. From runs-web-composite/drb-56." }
+  ]
+}
