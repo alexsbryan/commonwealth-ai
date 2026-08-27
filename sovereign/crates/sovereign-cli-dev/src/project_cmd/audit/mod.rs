@@ -112,7 +112,7 @@ async fn build_audit_report(
     let drift_line = if charter_path.exists() && !project_toml.lifecycle.charter_hash.is_empty() {
         match std::fs::read_to_string(&charter_path) {
             Ok(text) => {
-                let current = crate::found::hash_charter(&text);
+                let current = crate::project_cmd::charter_amend::hash_charter(&text);
                 if current == project_toml.lifecycle.charter_hash {
                     "- **Charter drift:** none (on-disk CHARTER.md matches recorded hash)".into()
                 } else {

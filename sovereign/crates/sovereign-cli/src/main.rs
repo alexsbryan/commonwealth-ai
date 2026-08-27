@@ -11,9 +11,11 @@
 //
 // Slice 1 → sovereign-cli-dev: atos_cmd, atos_plugin.
 // Slice 2 → sovereign-cli-dev: project_cmd, code_cmd, amend, phases,
-//   honesty, observation, project_toml, found, doc_fetcher,
-//   plan_composer, plan_enricher, design_session, design_onboarding,
-//   audit_extract, audit_recover, drift_cmd_orchestrator.
+//   observation, project_toml, plan_composer, plan_enricher,
+//   design_session, design_onboarding, audit_extract, audit_recover,
+//   drift_cmd_orchestrator. (`honesty`, `doc_fetcher` and `found` also
+//   moved in this slice and were deleted on 2026-08-26 — the first two
+//   unreachable since `de34eb36`, `found` retired to `announce_retired`.)
 // Slice 3 → sovereign-cli-dev: tools_cmd.
 // Slice 4 → sovereign-cli-dev: daemon_cmd, doctor_cmd,
 //   install_service_cmd, service_install, setup_cmd, setup_config.
@@ -1333,7 +1335,10 @@ mod tests {
         assert_eq!(g.rest, ["mesh", "status", "--json", "-n", "5"]);
 
         // The hidden introspection verbs route on `rest[0]` too.
-        assert_eq!(globals(&["__dump-commands"]).unwrap().rest, ["__dump-commands"]);
+        assert_eq!(
+            globals(&["__dump-commands"]).unwrap().rest,
+            ["__dump-commands"]
+        );
     }
 
     /// The globals themselves, and the split that decides whether help is the

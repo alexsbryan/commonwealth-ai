@@ -38,6 +38,92 @@ const CLUSTER_HELP: Help = Help {
     ],
 };
 
+/// A parsed `cluster-atlas` invocation. Public so the `enrich build`
+/// orchestrator constructs one directly instead of round-tripping
+/// through argv.
+#[derive(Debug, Clone)]
+pub struct ParsedCluster {
+    pub corpus_id: String,
+}
+
+/// What Phase 2 produced.
+#[derive(Debug, Clone)]
+pub struct ClusterReport {
+    /// Cluster counts by facet, in `Facet::ALL` order. Only facets that
+    /// produced at least one cluster appear.
+    pub by_facet: Vec<(&'static str, usize)>,
+    /// Sketches the clusterer could not place.
+    pub noise: usize,
+    pub run_path: std::path::PathBuf,
+    pub cache_updated: bool,
+}
+
+impl ClusterReport {
+    /// One line naming what this step produced, for the build
+    /// orchestrator's `StepDone` event.
+    pub fn summary(&self) -> String {
+        let total: usize = self.by_facet.iter().map(|(_, n)| n).sum();
+        if total == 0 {
+            return format!("no clusters formed ({} sketch(es) noise)", self.noise);
+        }
+        let facets = self
+            .by_facet
+            .iter()
+            .map(|(f, n)| format!("{n} {f}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("{total} cluster(s): {facets}; {} noise", self.noise)
+    }
+}
+
+/// Run Phase 2 clustering. Pure of stdout: the operator's view is
+/// [`render_cluster`]'s.
+pub async fn run_cluster(parsed: &ParsedCluster) -> Result<ClusterReport, String> {
+    let cfg = EnrichConfig::require(&parsed.corpus_id)
+        .map_err(|e| format!("loading enrichment config: {e}"))?;
+    let runner = build_runner(&cfg)?;
+
+    let result = runner
+        .phase_2_cluster_atlas()
+        .await
+        .map_err(|e| format!("phase 2 (atlas) failed: {e}"))?;
+
+    let by_facet = Facet::ALL
+        .iter()
+        .filter_map(|&facet| {
+            let count = result
+                .output
+                .clusters
+                .iter()
+                .filter(|c| c.facet == facet)
+                .count();
+            (count > 0).then_some((facet.as_str(), count))
+        })
+        .collect();
+
+    Ok(ClusterReport {
+        by_facet,
+        noise: result.output.unclustered.len(),
+        run_path: result.run_path,
+        cache_updated: result.cache_updated,
+    })
+}
+
+/// Print the per-facet coverage the way `svrn enrich cluster-atlas` always has.
+pub fn render_cluster(corpus_id: &str, report: &ClusterReport) {
+    println!("  running phase 2 (atlas) for {corpus_id}");
+    for (facet, count) in &report.by_facet {
+        println!("    · {count} cluster(s): {facet}");
+    }
+    if report.noise > 0 {
+        println!("    · {} sketch(es) classified as noise", report.noise);
+    }
+    println!("  ✓ wrote {}", report.run_path.display());
+    if report.cache_updated {
+        println!("  ✓ cache updated");
+    }
+}
+
 pub async fn cmd_cluster_atlas(args: &[String]) -> i32 {
     if help::wants_help(args) {
         help::print(&CLUSTER_HELP);
@@ -50,50 +136,17 @@ pub async fn cmd_cluster_atlas(args: &[String]) -> i32 {
         return 2;
     };
 
-    let cfg = match EnrichConfig::require(&corpus_id) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: loading enrichment config: {e}");
-            return 1;
+    let parsed = ParsedCluster { corpus_id };
+    match run_cluster(&parsed).await {
+        Ok(report) => {
+            render_cluster(&parsed.corpus_id, &report);
+            0
         }
-    };
-
-    let runner = match build_runner(&cfg) {
-        Ok(r) => r,
-        Err(rc) => return rc,
-    };
-
-    println!("  running phase 2 (atlas) for {}", corpus_id);
-    let result = match runner.phase_2_cluster_atlas().await {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("error: phase 2 (atlas) failed: {e}");
-            return 1;
-        }
-    };
-
-    // Summarise per-facet counts so the operator sees coverage at
-    // a glance.
-    for &facet in Facet::ALL {
-        let count = result
-            .output
-            .clusters
-            .iter()
-            .filter(|c| c.facet == facet)
-            .count();
-        if count > 0 {
-            println!("    · {} cluster(s): {}", count, facet.as_str());
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            1
         }
     }
-    let noise: usize = result.output.unclustered.len();
-    if noise > 0 {
-        println!("    · {} sketch(es) classified as noise", noise);
-    }
-    println!("  ✓ wrote {}", result.run_path.display());
-    if result.cache_updated {
-        println!("  ✓ cache updated");
-    }
-    0
 }
 
 // ── name-atlas-clusters ─────────────────────────────────────
@@ -114,30 +167,98 @@ const NAME_HELP: Help = Help {
     ],
 };
 
-pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
-    if help::wants_help(args) {
-        help::print(&NAME_HELP);
-        return 0;
+/// A parsed `name-atlas-clusters` invocation. Public so the `enrich
+/// build` orchestrator constructs one directly instead of round-tripping
+/// through argv.
+#[derive(Debug, Clone)]
+pub struct ParsedName {
+    pub corpus_id: String,
+}
+
+/// Clusters that were named WITHOUT few-shot exemplars, and why.
+///
+/// The exemplar lookup used to be `(embed)(..).await.unwrap_or_default()`
+/// followed by `if q.is_empty() { Vec::new() }` — so an embed ERROR and a
+/// legitimately-empty vector both became "no exemplars", per cluster,
+/// silently. The naming prompt then went out with no few-shot examples
+/// and the run still reported success. That is the shape of note
+/// `f4972e1b` (a dead embed slot degrades the stack while every surface
+/// above it keeps answering), and ARCH §18.3 says absence is reported,
+/// never defaulted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExemplarGap {
+    /// The exemplar bank itself was empty — expected on a corpus with no
+    /// banked exemplars, and NOT a fault.
+    pub bank_empty: bool,
+    /// The bank existed but could not be loaded; the run continued
+    /// against an empty one. This IS a fault.
+    pub bank_load_failed: bool,
+    /// The embed call returned an error for this many clusters.
+    pub embed_failed: usize,
+    /// The embed call succeeded but returned an empty vector.
+    pub embed_empty: usize,
+}
+
+impl ExemplarGap {
+    /// Clusters named with no exemplars for a reason that is a fault.
+    pub fn faulted(&self) -> usize {
+        self.embed_failed + self.embed_empty
     }
-    let Some(corpus_id) = args.first().cloned() else {
-        eprintln!("error: missing <corpus-id>");
-        eprintln!();
-        help::print(&NAME_HELP);
-        return 2;
-    };
+}
 
-    let cfg = match EnrichConfig::require(&corpus_id) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: loading enrichment config: {e}");
-            return 1;
+/// What Phase 3 produced.
+#[derive(Debug, Clone)]
+pub struct NameReport {
+    pub named: usize,
+    pub total: usize,
+    pub failures: Vec<PhaseFailure>,
+    pub exemplars: ExemplarGap,
+    pub run_path: std::path::PathBuf,
+}
+
+impl NameReport {
+    /// One line naming what this step did, for the build orchestrator's
+    /// `StepDone` event.
+    pub fn summary(&self) -> String {
+        let mut s = format!("{}/{} cluster(s) named", self.named, self.total);
+        if !self.failures.is_empty() {
+            let mut kinds: Vec<String> = self
+                .failures
+                .iter()
+                .map(|f| format!("{:?}", f.kind))
+                .collect();
+            kinds.sort();
+            kinds.dedup();
+            s.push_str(&format!(
+                ", {} failed ({})",
+                self.failures.len(),
+                kinds.join("/")
+            ));
         }
-    };
+        if self.exemplars.bank_load_failed {
+            s.push_str("; exemplar bank failed to load — named without exemplars");
+        } else if self.exemplars.bank_empty {
+            s.push_str("; no exemplar bank");
+        } else if self.exemplars.faulted() > 0 {
+            s.push_str(&format!(
+                "; {} named without exemplars ({} embed error(s), {} empty)",
+                self.exemplars.faulted(),
+                self.exemplars.embed_failed,
+                self.exemplars.embed_empty
+            ));
+        }
+        s
+    }
+}
 
-    let runner = match build_runner(&cfg) {
-        Ok(r) => r,
-        Err(rc) => return rc,
-    };
+/// Name every atlas cluster. Keeps its per-cluster progress printing —
+/// each cluster is an LLM call and the line is the operator's only sign
+/// the run is alive. The RESULT line is [`render_name`]'s.
+pub async fn run_name(parsed: &ParsedName) -> Result<NameReport, String> {
+    let corpus_id = parsed.corpus_id.clone();
+    let cfg =
+        EnrichConfig::require(&corpus_id).map_err(|e| format!("loading enrichment config: {e}"))?;
+    let runner = build_runner(&cfg)?;
 
     // Read the Phase 1 + Phase 2 caches. Phase 1 gives us per-
     // section sketches to render into excerpts; Phase 2 gives the
@@ -145,31 +266,20 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
     let phase1: Phase1Output = match runner.cache().read(PipelinePhase::Questions) {
         Ok(Some(p)) => p,
         Ok(None) => {
-            eprintln!(
-                "error: no Phase 1 cache — run `svrn enrich extract {} --full` first",
-                corpus_id
-            );
-            return 1;
+            return Err(format!(
+                "no Phase 1 cache — run `svrn enrich extract {corpus_id} --full` first"
+            ))
         }
-        Err(e) => {
-            eprintln!("error: reading Phase 1 cache: {e}");
-            return 1;
-        }
+        Err(e) => return Err(format!("reading Phase 1 cache: {e}")),
     };
     let phase2: Phase2AtlasOutput = match runner.cache().read(PipelinePhase::AtlasClusters) {
         Ok(Some(p)) => p,
         Ok(None) => {
-            eprintln!(
-                "error: no Phase 2 (atlas) cache — run `svrn enrich cluster-atlas \
-                 {}` first",
-                corpus_id
-            );
-            return 1;
+            return Err(format!(
+                "no Phase 2 (atlas) cache — run `svrn enrich cluster-atlas {corpus_id}` first"
+            ))
         }
-        Err(e) => {
-            eprintln!("error: reading Phase 2 (atlas) cache: {e}");
-            return 1;
-        }
+        Err(e) => return Err(format!("reading Phase 2 (atlas) cache: {e}")),
     };
 
     // Index sections by id so excerpt rendering is O(1) per ref.
@@ -182,25 +292,25 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
     // Build daemon closures ourselves — the runner's private chat
     // closure is the v2 chat; name-atlas-clusters drives it
     // directly without re-entering phase_*_compose_phase3.
-    let (_, chat) = match DaemonInferenceClient::from_enrich_config(&cfg) {
-        Ok(c) => c.into_closures(),
-        Err(e) => {
-            eprintln!("error: building daemon client: {e}");
-            return 1;
-        }
-    };
+    let (_, chat) = DaemonInferenceClient::from_enrich_config(&cfg)
+        .map_err(|e| format!("building daemon client: {e}"))?
+        .into_closures();
 
     // Load the exemplar bank for the naming phase. Empty is fine
     // — the prompt stands alone; exemplars steer but don't gate.
     let exemplar_path = paths::exemplars_dir(&cfg.corpus_id)
         .join(format!("{}.json", PipelinePhase::AtlasNamedClusters.id()));
-    let (embed, _) = match DaemonInferenceClient::from_enrich_config(&cfg) {
-        Ok(c) => c.into_closures(),
-        Err(e) => {
-            eprintln!("error: building embed client: {e}");
-            return 1;
-        }
-    };
+    let (embed, _) = DaemonInferenceClient::from_enrich_config(&cfg)
+        .map_err(|e| format!("building embed client: {e}"))?
+        .into_closures();
+    // A bank that fails to load is NOT the same as a corpus with no
+    // banked exemplars, even though both leave the naming prompts
+    // without few-shot examples. Recorded separately so the step's
+    // summary can say which happened — until 2026-08-26 the failure was
+    // a `warning:` on stderr and the run reported plain success. The
+    // fallback also used to be `ExemplarBank::open(..).unwrap()`, which
+    // turned a second failure into a panic.
+    let mut bank_load_failed = false;
     let bank = match ExemplarBank::load_embedded(
         &exemplar_path,
         PipelinePhase::AtlasNamedClusters,
@@ -210,12 +320,21 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
     {
         Ok(b) => b,
         Err(e) => {
+            bank_load_failed = true;
             eprintln!(
                 "  · warning: could not load exemplar bank at {}: {} — continuing without",
                 exemplar_path.display(),
                 e
             );
-            ExemplarBank::open(&exemplar_path, PipelinePhase::AtlasNamedClusters).unwrap()
+            ExemplarBank::open(&exemplar_path, PipelinePhase::AtlasNamedClusters).map_err(
+                |open_err| {
+                    format!(
+                        "exemplar bank at {} could not be loaded ({e}) and could not be \
+                         opened empty either ({open_err})",
+                        exemplar_path.display()
+                    )
+                },
+            )?
         }
     };
 
@@ -229,6 +348,9 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
     );
 
     let pipeline = runner.pipeline().clone();
+    // Clusters named with no exemplars, split by cause — see `ExemplarGap`.
+    let mut embed_failed: usize = 0;
+    let mut embed_empty: usize = 0;
     let mut named: Vec<NamedCluster> = Vec::with_capacity(phase2.clusters.len());
     // Per-cluster failures land here rather than either returning
     // early (stop the world on one bad cluster) or swallowing via
@@ -285,23 +407,42 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
         let picked: Vec<&_> = if bank.is_empty() {
             Vec::new()
         } else {
-            let q: Vec<f32> = (embed)(&query_text).await.unwrap_or_default();
-            if q.is_empty() {
-                Vec::new()
-            } else {
-                bank.select_top_k_facet(&q, 5, Some(cluster.facet.as_str()))
+            match (embed)(&query_text).await {
+                Ok(q) if !q.is_empty() => {
+                    bank.select_top_k_facet(&q, 5, Some(cluster.facet.as_str()))
+                }
+                Ok(_) => {
+                    // A successful call that returned nothing. Distinct from
+                    // an error, and counted so the summary can say so.
+                    embed_empty += 1;
+                    tracing::warn!(
+                        cluster = %cluster.id,
+                        "phase 3 naming: embed returned an empty vector; this cluster is \
+                         named without few-shot exemplars"
+                    );
+                    Vec::new()
+                }
+                Err(e) => {
+                    embed_failed += 1;
+                    tracing::warn!(
+                        cluster = %cluster.id,
+                        error = %e,
+                        "phase 3 naming: embed failed; this cluster is named without \
+                         few-shot exemplars"
+                    );
+                    Vec::new()
+                }
             }
         };
 
         let Some(prompt) =
             pipeline.compose_phase3_facet(cluster, cluster.facet, &excerpts, &picked)
         else {
-            eprintln!(
-                "FAILED: pipeline `{}` does not implement compose_phase3_facet — use \
-                 a *_atlas pipeline (e.g. literary_atlas)",
+            return Err(format!(
+                "pipeline `{}` does not implement compose_phase3_facet — use a *_atlas \
+                 pipeline (e.g. literary_atlas)",
                 pipeline.id()
-            );
-            return 1;
+            ));
         };
         let subject = format!("cluster:{}:{}", cluster.facet.as_str(), cluster.id);
         let response = match (chat)(&prompt).await {
@@ -373,51 +514,76 @@ pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
         failures,
         written_at: chrono::Utc::now().to_rfc3339(),
     };
-    let run_path = match runner
+    let run_path = runner
         .runs()
         .write(PipelinePhase::AtlasNamedClusters, "full", &output)
-    {
-        Ok(p) => p,
-        Err(e) => {
-            eprintln!("error: writing run file: {e}");
-            return 1;
-        }
-    };
-    if let Err(e) = runner
+        .map_err(|e| format!("writing run file: {e}"))?;
+    runner
         .cache()
         .write(PipelinePhase::AtlasNamedClusters, &output)
-    {
-        eprintln!("error: writing cache: {e}");
-        return 1;
-    }
+        .map_err(|e| format!("writing cache: {e}"))?;
+
+    Ok(NameReport {
+        named: output.named_clusters.len(),
+        total,
+        failures: output.failures,
+        exemplars: ExemplarGap {
+            bank_empty: bank.is_empty(),
+            bank_load_failed,
+            embed_failed,
+            embed_empty,
+        },
+        run_path,
+    })
+}
+
+/// Print the closing line the way `svrn enrich name-atlas-clusters` always has.
+pub fn render_name(report: &NameReport) {
     println!(
         "  ✓ {} named cluster(s) — {}",
-        output.named_clusters.len(),
-        run_path.display()
+        report.named,
+        report.run_path.display()
     );
-    0
+}
+
+pub async fn cmd_name_atlas_clusters(args: &[String]) -> i32 {
+    if help::wants_help(args) {
+        help::print(&NAME_HELP);
+        return 0;
+    }
+    let Some(corpus_id) = args.first().cloned() else {
+        eprintln!("error: missing <corpus-id>");
+        eprintln!();
+        help::print(&NAME_HELP);
+        return 2;
+    };
+
+    match run_name(&ParsedName { corpus_id }).await {
+        Ok(report) => {
+            render_name(&report);
+            0
+        }
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            1
+        }
+    }
 }
 
 // ── helpers ─────────────────────────────────────────────────
 
-fn build_runner(cfg: &EnrichConfig) -> Result<PhaseRunner, i32> {
+fn build_runner(cfg: &EnrichConfig) -> Result<PhaseRunner, String> {
     let registry = PipelineRegistry::builtin();
     let Some(pipeline) = super::pipeline_resolve::resolve_pipeline(cfg) else {
-        eprintln!(
-            "error: unknown pipeline `{}`; known ids: {:?}",
+        return Err(format!(
+            "unknown pipeline `{}`; known ids: {:?}",
             cfg.pipeline_id,
             registry.pipeline_ids()
-        );
-        return Err(1);
+        ));
     };
 
-    let client = match DaemonInferenceClient::from_enrich_config(cfg) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: building daemon client: {e}");
-            return Err(1);
-        }
-    };
+    let client = DaemonInferenceClient::from_enrich_config(cfg)
+        .map_err(|e| format!("building daemon client: {e}"))?;
     let (embed, chat) = client.into_closures();
 
     let cache = cfg.phase_cache();
@@ -572,30 +738,22 @@ impl AtlasClusterTool {
             .and_then(|v| v.as_str())
             .ok_or_else(|| Error::Execution("atlas_cluster: missing required `corpus`".into()))?;
 
-        let cfg = EnrichConfig::require(corpus).map_err(|e| {
-            Error::Execution(format!(
-                "atlas_cluster: enrichment config for `{corpus}`: {e} — run `enrich init` first"
-            ))
-        })?;
-        // `build_runner` wires the daemon embed closure + caches; it prints the
-        // specific cause to stderr and returns an exit code, which we surface as
-        // a generic error (the common cause — missing config — is already caught
-        // above with a clear message).
-        let runner = build_runner(&cfg).map_err(|rc| {
-            Error::Execution(format!(
-                "atlas_cluster: could not build the phase runner (exit {rc}) — is the daemon up?"
-            ))
-        })?;
-        let result = runner
-            .phase_2_cluster_atlas()
-            .await
-            .map_err(|e| Error::Execution(format!("atlas_cluster: phase 2 failed: {e}")))?;
+        // Calls the same `run_cluster` the CLI verb calls. This block used
+        // to re-derive it — same config load, same `build_runner`, same
+        // `phase_2_cluster_atlas` — because a `cmd_*` taking argv and
+        // returning an exit code was not callable from here. It also had
+        // to guess at failures ("exit 1 — is the daemon up?") because the
+        // real cause went to stderr.
+        let report = run_cluster(&ParsedCluster {
+            corpus_id: corpus.to_string(),
+        })
+        .await
+        .map_err(|e| Error::Execution(format!("atlas_cluster: {e}")))?;
 
-        let clusters = result.output.clusters.len();
-        let noise = result.output.unclustered.len();
         Ok(StepOutput::Text(format!(
-            "atlas_cluster: {clusters} facet cluster(s), {noise} noise sketch(es) → {}",
-            result.run_path.display()
+            "atlas_cluster: {} → {}",
+            report.summary(),
+            report.run_path.display()
         )))
     }
 }
