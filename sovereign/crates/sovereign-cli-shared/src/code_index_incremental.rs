@@ -413,8 +413,16 @@ pub fn source_files_with_mtime(repo_root: &Path) -> Option<Vec<(String, u64)>> {
 }
 
 /// `last_updated` out of the corpus's own metadata sidecar.
+///
+/// Gated with the rest of the `code-index` verb because it reaches
+/// `corpus_engine::Corpus` for the sidecar's name rather than retyping the
+/// literal (layout-gate: one decider for the on-disk layout), and
+/// `corpus-engine` is an OPTIONAL dep here — every sibling binary that does not
+/// serve `svrn code index` skips it. The one caller, `code_index::…`, carries
+/// the same gate.
+#[cfg(feature = "code-index")]
 pub fn corpus_last_updated(index_dir: &Path) -> Option<u64> {
-    let raw = std::fs::read_to_string(index_dir.join("_corpus_meta.json")).ok()?;
+    let raw = std::fs::read_to_string(corpus_engine::Corpus::meta_in(index_dir)).ok()?;
     let v: serde_json::Value = serde_json::from_str(&raw).ok()?;
     v.get("last_updated").and_then(|x| x.as_u64())
 }

@@ -1219,6 +1219,22 @@ default = "unset (derived from cores + free memory)"
 status = "guard"
 purpose = "Caps the cargo job fan for scripts/sovereign-test.sh — build+link+run, the heaviest fan in the repo. Twin of SOVEREIGN_LINT_JOBS on the same lib/cargo-jobs.sh budget; --jobs overrides it per run. The resolved value is what the banner's `jobs:` line reports, so a run that self-throttled on low free memory says so instead of just being slow."
 
+# ── dev-gates: which host tool the gate reaches for ─────────────────
+
+[[flag]]
+name = "SOVEREIGN_PYTHON"
+cluster = "dev-gates"
+default = "unset (first of python3.13, python3.12, python3.11, python3 on PATH)"
+status = "guard"
+purpose = "Names the interpreter scripts/co-review.sh and scripts/co-sweep.sh run their python passes under. Unset walks a fixed candidate list; when NOTHING on it resolves, both scripts SAY SO and exit rather than skipping the pass — an audit that did not run is reported, never defaulted to green (ARCH §18.3). This is the per-machine escape hatch for a host whose python lives off PATH or under a name the list does not carry."
+
+[[flag]]
+name = "SOVEREIGN_TOOLBOX"
+cluster = "dev-gates"
+default = "sovereign-vulkan"
+status = "guard"
+purpose = "The toolbox container scripts/lib/release-host.sh runs native build legs inside. The default matches the container this repo's native deps (cmake, clang, vulkan) are installed in; the knob exists because the container name is a property of the HOST, not of the release. Resolution is guarded, not assumed: the driver uses `toolbox run -c $SOVEREIGN_TOOLBOX` only when the `toolbox` binary exists AND `toolbox list --containers` actually names it, so a missing or renamed container degrades loudly instead of producing a leg that silently built on the host."
+
 [[flag]]
 name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"
 cluster = "inference"

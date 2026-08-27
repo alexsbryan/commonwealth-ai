@@ -87,15 +87,28 @@ pub fn run(args: &[String]) -> i32 {
     let n = body.get("duplicated_names").and_then(|v| v.as_u64());
     let prior = body.get("baseline").and_then(|v| v.as_u64());
     let delta = body.get("delta").and_then(|v| v.as_i64());
-    // A response with no `freshness` field comes from a sibling built before
-    // the graph-lag reporting landed. It is a NUMBER WITHOUT A COMMIT, and
+    // A response with no graph-lag field is a NUMBER WITHOUT A COMMIT, and
     // rendering PASS on it is the silent substitution this gate exists to
     // prevent (§18.3) — observed live 2026-08-20, which is why this arm exists.
-    let Some(freshness) = body.get("freshness").and_then(|v| v.as_str()) else {
+    //
+    // THE KEY IS `graph_lag`, and this arm read `freshness` from the day it
+    // was written until 2026-08-27. `converge status --json` has always
+    // published `graph_lag` (converge_cmd.rs, where the JSON key mirrors the
+    // Rust field); `freshness` is what the SIBLING `redirect` command spells
+    // the same `lag.verdict_word()` as, and the arm was written against that
+    // spelling. So the gate could never reach a verdict on any sibling, ever,
+    // and its own error text sent every reader to a two-minute rebuild that
+    // could not possibly fix it. Watched failing, then watched passing, before
+    // this line changed (§18.1: a gate you have not watched fail is not a
+    // gate). The two spellings for one concept are ARCH §10.6's own smell and
+    // are why `freshness` is NOT accepted here as a fallback — one decider,
+    // one name, and the name is the one the relayed command publishes.
+    let Some(freshness) = body.get("graph_lag").and_then(|v| v.as_str()) else {
         eprintln!(
-            "COULD-NOT-JUDGE — {} reported a count with no freshness field, so which commit\n\
-             the number is about is unknown. That sibling predates the graph-lag reporting;\n\
-             rebuild it (DEBUG):\n  {BUILD_CMD}",
+            "COULD-NOT-JUDGE — {} reported a count with no `graph_lag` field, so which\n\
+             commit the number is about is unknown. Either the sibling predates graph-lag\n\
+             reporting, or it renamed the key out from under this relay — check\n\
+             `converge status --json` by hand before rebuilding:\n  {BUILD_CMD}",
             cli.display()
         );
         return CANNOT_JUDGE;

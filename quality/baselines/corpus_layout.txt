@@ -19,9 +19,8 @@
 2	corpus-engine/tests/snapshot_restore_e2e.rs
 6	corpus-engine/xtask/src/layout_gate.rs
 1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd.rs
-2	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
+1	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_fieldglass/assemble.rs
-1	sovereign/crates/sovereign-cli-dev/src/code_index_incremental.rs
 7	sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs
 7	sovereign/crates/sovereign-cli-dev/src/project_cmd/refresh.rs
 1	sovereign/crates/sovereign-cli-llm/src/alignment_cmd.rs
@@ -34,10 +33,7 @@
 2	sovereign/crates/sovereign-cli-llm/src/corpus_resolve.rs
 1	sovereign/crates/sovereign-cli-llm/src/corpus_snapshot_cmd.rs
 1	sovereign/crates/sovereign-cli-llm/src/enrich_cmd/capability_reconcile.rs
-1	sovereign/crates/sovereign-cli/src/code_index_cmd.rs
-1	sovereign/crates/sovereign-cli/src/code_index_incremental.rs
 5	sovereign/crates/sovereign-cli/src/code_refresh.rs
-2	sovereign/crates/sovereign-cli/src/deep_research_cmd.rs
 6	sovereign/crates/sovereign-cli/src/git_archaeology_cmd.rs
 3	sovereign/crates/sovereign-cli/src/rough_edges_cmd.rs
 2	sovereign/crates/sovereign-desktop/src-tauri/src/commands/corpus_install.rs
