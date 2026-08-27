@@ -2312,6 +2312,46 @@ management, sibling pool, decode paths, MTP, OICP scoring, harness
 adapters, cutoff legibility, conversation-history compaction — in
 [`docs/inference.md`](./docs/inference.md).
 
+**Serving a model bigger than the GPU can hold — `qwen4exp` / Qwen3.8-Flash-Next
+(2026-08-27).** 176B total / ~6B active: a 125B transformer plus a **51.2B n-gram
+engram**, 103.7 GiB across four GGUF parts, on a 128 GB unified-memory box. Three
+facts make it work and each is easy to break.
+
+- **The arch is vendored ahead of upstream.** `LLM_ARCH_QWEN4EXP` comes from
+  ggml-org/llama.cpp#27742, pinned in `vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`.
+  A build whose bundled llama.cpp predates it cannot load the model at all.
+- **26.8 GiB of it never reaches the GPU, and that is the only reason it fits.**
+  `per_layer_token_embd` — one IQ4_NL tensor, `[160, 320001536]` — stays in the
+  mmap on plain pageable CPU. Measured resident split: 81.9 GiB GTT + 27.0 GiB
+  RSS. It is gathered 16 rows (1,440 B) per token at **one** layer of 48
+  (`ple.layers = [1]`), which prices at ≲0.2% of a decode step even stone cold —
+  so the placement costs throughput nothing and buys the whole fit.
+  **CAUTION: that placement is an accident, not a declaration.** IQ4_NL is simply
+  unsupported by `Vulkan_Host` and falls back. `SOVEREIGN_TENSOR_BUFT_OVERRIDE`
+  is the lever that would make it structural; it ships unset, with the detector
+  and the flip condition in `DEFAULTS_LEDGER.md`.
+- **The local-fit gate must not charge for those bytes.** It refused this model
+  at ~108,982 MiB against ~92,122 usable because `need_bytes` counted every
+  model byte. `rpc_distribution::projected_overheads` now reports
+  `model_host_bytes` (the weights llama.cpp projects onto the host CPU buffer)
+  and the gate discounts them — **only under `no_host`**, because otherwise
+  `entries.last()` is the device's *pinned* host buffer and discounting it would
+  under-charge by exactly the bytes that starve the host.
+
+Prefill on this model is bounded by a **per-token constant**, not by batching: 36
+of 48 layers are recurrent (`full_attention_interval = 4`) and a recurrent scan is
+sequential in the token dimension. Two pre-registered sweeps in `research/engram/`
+establish it — 1.16× across an 8× `n_ubatch` range (NO-GO, no flag shipped) and
+flat-with-a-15%-droop across a 16× prompt-length range. The engram is **not** the
+bottleneck on either axis; do not spend effort there expecting throughput.
+
+Full-context state save/restore **is** usable here despite `ple_hist` (the
+per-sequence n-gram history) living on the model rather than the context and
+therefore not being serialized: measured 32/32 greedy-identical, restore 28 ms
+against a 5,302 ms prefill (189×). The reset it triggers is real but lands ~18
+positions upstream of the sampled token. Note `b588ba8b` carries the limits of
+that claim — it is not a bit-faithfulness proof.
+
 **Compute-slot process boundary (`sovereign-compute`, P1).** Optional
 (`[compute] enabled`, default OFF): the daemon runs a slot's compute in a
 supervised **child process** so a ggml `SIGABRT` kills only the child — the
@@ -4884,7 +4924,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | `project_cmd.rs` split — **DONE 2026-07-13** | `sovereign-cli-dev/src/project_cmd/` (dispatcher `mod.rs` 645 lines, was 7,102) | Split into a directory module — `audit/`, `serve.rs`, `refresh.rs`, `charter_amend.rs`, `registry_watch.rs`, `hooks.rs`, `phase.rs`, `design_plan.rs` — every file under the ARCH §3.1 1,200-line ceiling. `mod.rs` keeps `run_project` dispatch + the shared daemon/git/date plumbing; each command family is one findable file. (`sovereign-cli-dev` remains feature-gated out of the public build behind `--features dev-tools` — the rationale the `atos_cmd/run.rs` row still references.) **`init/` and `scaffold.rs` left this tree 2026-08-07** for `sovereign-cli/src/project_init/`; `registry_watch.rs`'s four verbs were mirrored into `sovereign-cli/src/project_registry.rs` on 2026-08-06, and **`registry_watch.rs` itself was DELETED 2026-08-21 (nc-27)** — the mirror made the cli-dev copies unreachable (`project_registry::try_run` is consulted first and never returns `None` for those verbs), so the file was a dead fork; its one live function, `daemon_get`, moved into `mod.rs` beside `daemon_post`. |
-| `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~3,475 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
+| `model_slot.rs` residual (was the `embedded.rs` split) | `sovereign-inference/src/embedded/model_slot.rs` (~5,860 lines) | The residual of the `embedded.rs` decomposition ([HISTORY](./HISTORY.md#embeddedrs--embedded-pr5b--2026-06-10)): the slot state machine + decode loops + MTP — one tight, unsafe-heavy (44 blocks) FFI concern whose remaining seam is an alternate inference backend at the `InferenceProvider` boundary, not a file split. |
 | `streaming.rs` refusal-retry duplication | `sovereign-core/src/runtime/streaming.rs` (~2,900 lines) | The 2026-06-10 runtime.rs decomposition moved the streaming dispatch here intact. Its KQ and Deep/Simple synthesis loops carry two NEAR-duplicate refusal-retry state machines that genuinely differ (error-frame + finish-reason handling) — unifying them is a measured behavior change, not a move. Same deferral class for the streaming-vs-non-streaming setup duplication (turn.rs). |
 | `state.rs` decomposition (desktop) | `sovereign-desktop/src-tauri/src/state.rs` (~1,730 lines, was 2,347) | Contiguous phases are extracted ([HISTORY](./HISTORY.md#staters-desktop--extraction-of-the-contiguous-phases-2026-06-09)). The `tools` registry stays inline *by necessity, not omission*: it is **interleaved** across the whole bootstrap (tools registered before AND after `corpus_engine`), so it cannot be a pure-relocation builder without reordering a GGUF-gated startup path. The `EmbeddedDaemon` wiring no longer is: daemon-convergence Phase 2 (2026-08-24) replaced the four `mesh.set_*` sites with ONE commissioning site just before `try_resume`, and the daemon's services arrive as a single `sovereign_mesh::DaemonServices::Desktop` value assembled from what bootstrap already built. Keep `AppState` fields flat (~295 call sites borrow `state.<field>`). |
 | `DesktopError` burn-down (desktop) | `sovereign-desktop/src-tauri/src/error.rs` + `src/lib/errors.ts` | The structured error + frontend mirror + zero-per-caller-edit migration enabler are in place ([HISTORY](./HISTORY.md#desktoperror--first-pr--the-burn-down-enabler-2026-06-09)). **Remaining (incremental, ~140 command modules):** flip each handler's `-> Result<_, String>` → `DesktopError` (the `?`-sites auto-convert via `From<String>`; explicit `return Err` / tail `map_err` take `.into()` or a semantic `DesktopError::upstream`/`invalid_request`) + repoint its api.ts wrapper at `invokeChecked`. `AppState::store()` landed 2026-08-24 with daemon-convergence Phase 0 (see the `Runtime` surface row below); `corpus_engine()` and the `require_runtime!` retirement still wait on the first chat-path module that needs them (deferred — chat is the live, higher-traffic path). |
@@ -4928,7 +4968,7 @@ stabilises, same contract as every other row in this section.
 | Item | Location | Why deferred |
 |------|----------|--------------|
 | Mesh measurement + allocation arc | `sovereign-cli-llm/src/mesh_cmd.rs` (4,730 — grew +3,419), `sovereign-cli-llm/src/mesh_bench.rs` (2,275) + `mesh_bench/tests.rs` (1,583), `sovereign-core/src/mesh_measurements.rs` (2,925), `sovereign-mesh/src/decision_log.rs` (1,348), `sovereign-mesh/src/mesh_http.rs` (1,623), `sovereign-mesh/src/mesh_sim/mod.rs` (2,380), `sovereign-mesh/tests/mesh_sim_scoreboard.rs` (2,750), `sovereign-mesh/src/scheduler_core.rs` (1,215), `sovereign-mesh/tests/chat_completion_e2e.rs` (1,511) | The allocation/measurement/plan surface is the hottest current iteration (RunConditions, median-run headlines, gossip-travel measurements — commits through `df88e073`). Splitting mid-arc obscures blame on an algorithm still settling; `mesh_cmd.rs` splits along its verb families (plan/measure/bench) once the measurement schema freezes. |
-| 122B distributed inference | `sovereign-inference/src/embedded/rpc_warm_cache.rs` (1,606), `sovereign-mesh/src/rpc_warm_http.rs` (1,236) | RPC warm-cache + its HTTP surface; ggml-RPC-over-iroh is still an open workstream (`docs/QWEN122B_DISTRIBUTED_HANDOFF.md`) — the seam moves with it. |
+| 122B distributed inference | `sovereign-inference/src/embedded/rpc_warm_cache.rs` (1,927), `sovereign-mesh/src/rpc_warm_http.rs` (1,236) | RPC warm-cache + its HTTP surface; ggml-RPC-over-iroh is still an open workstream (`docs/QWEN122B_DISTRIBUTED_HANDOFF.md`) — the seam moves with it. |
 | Session continuity + context-spend arc | `sovereign-cli/src/session_cmd.rs` (3,215), `sovereign-tools/src/code/session_state.rs` (1,421), `sovereign-cli/src/cache_audit_cmd.rs` (2,312) | Frame lineage/objective machinery and the cache auditor grew together with `docs/specs/SESSION_CONTINUITY.md` §2; `session_cmd.rs` splits per verb (frames/attach/distill) once the frame contract stops moving. |
 | CLI-contract machinery | `sovereign-cli-shared/src/cli_contract.rs` (1,390), `sovereign-cli/src/main.rs` (1,202) | Contract model + dispatcher; `main.rs` sits 2 lines over the ceiling and shrinks when the next verb family moves out-of-process. |
 | Compute-child process boundary | `sovereign-compute/src/manager.rs` (1,585), `sovereign-compute/src/supervisor.rs` (1,532) | New crate (P1, 2026-07); manager/supervisor cohere as one lifecycle state machine until a second child type exists to force the seam. |

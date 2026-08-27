@@ -69,6 +69,89 @@ withering this ledger exists to stop.
 
 
 
+### `SOVEREIGN_TENSOR_BUFT_OVERRIDE` — declaring where one tensor lives, shipped UNSET (2026-08-27)
+
+**What is dark.** The ability to say, in configuration, which buffer type a
+tensor must land in — llama.cpp's own `<regex>=<buffer-type>` syntax, with `CPU`
+resolving to `ggml_backend_cpu_buffer_type()`: plain *pageable* CPU, deliberately
+not the device HOST buffer, which is pinned and is the opposite of what a large
+evictable table wants.
+
+**Why it ships unset: it is currently a NO-OP, and that is the whole problem.**
+Qwen3.8-Flash-Next's 26.8 GiB `per_layer_token_embd` engram already lands on
+plain CPU without it — but only because IQ4_NL is unsupported by `Vulkan_Host`
+and *falls back*. The load says so in as many words: `tensor
+'per_layer_token_embd.weight' (iq4_nl) … cannot be used with preferred buffer
+type Vulkan_Host, using CPU instead`. Measured flat either way (22.42 vs 22.45
+tok/s; `research/engram/RESULTS.md` §6, and §6.1 measures the override itself as
+a no-op on this model). Shipping it default-on today would be complexity that
+moves no metric.
+
+**Why it exists anyway.** That placement is **load-bearing and accidental at the
+same time** — the two properties that should never coexist. Flash-Next is 103.7
+GiB and fits a 128 GB box *only* because 26.8 GiB of it stays out of GTT
+(measured: 81.9 GiB peak GTT + 27.0 GiB RSS, `research/engram/spike-flashnext.log`).
+Nothing declares that; a quant-support gap in one backend is holding up the whole
+serving story (`RESULTS.md` §6.3). This flag is the declaration that would make
+it structural (ARCH §7, §10).
+
+**Flip condition (falsifiable, and it is a detector, not a date).** Flip to
+default-on for `qwen4exp` the first time a load is observed in which
+`per_layer_token_embd` does **not** land on plain CPU — concretely, when the
+`using CPU instead` line for that tensor disappears from the load log, or when
+`projected_overheads`' `model_host_bytes` for Flash-Next drops materially below
+~26 GiB. Either means the accident has stopped holding and the model is about to
+stop fitting.
+
+**The event that could trigger it is known:** the next move of the vendored
+llama.cpp pin (`vendor/llama-cpp-sys-4/LLAMA_CPP_COMMIT`). Check the detector
+above as part of that move — that is cheaper and more reliable than a calendar.
+
+**Review by 2026-10-27**, or the next vendor pin move, whichever comes first.
+Owner: whoever moves the pin. Notes `dccee8ed`, `b588ba8b`;
+`research/engram/RESULTS.md` §6.1–6.3.
+
+---
+
+### `SOVEREIGN_TENSOR_NO_HOST` — llama.cpp `--no-host`, shipped OFF and MEASURED HARMFUL (2026-08-27)
+
+**What is dark.** Bypassing the device HOST buffer type on a local load — and,
+through patch `0008-no-prefetch-when-host-buffer-bypassed.patch`, the load-time
+prefetch along with it.
+
+**This row is not "promising, awaiting evidence". The evidence is in and it is
+negative for the case the flag was written for.** On Flash-Next, turning it on
+converted the mmap-resident engram into an *anonymous* copy — RssAnon 8.85 →
+21.47 GiB, RssFile 0.29 → 0.06 GiB — and the load OOM'd. Anonymous pages cannot
+be reclaimed; file-backed ones can. Default OFF is the measured answer, not a
+holding position.
+
+**Why it is kept rather than deleted.** On a backend whose host buffer *does*
+accept the tensor's quant, CPU-placed weights really do land in pinned memory and
+this is the lever that moves them. The flag is right for a machine we do not have;
+it is wrong for this one. Measure the RssAnon/RssFile split before turning it on.
+
+**THE REAL DEBT THIS ROW RECORDS — a useful capability is welded to a harmful
+one.** Patch 0008 gates `ml.init_mappings(!params.no_host, …)`. So "do not
+MAP_POPULATE 26.8 GiB of engram before a single row has been gathered" is
+reachable *only* through the flag above, which OOMs here. As shipped, the good
+half is unreachable in the configuration we actually run. That is one flag
+deciding two independent things (ARCH §10.6).
+
+**Flip condition — and it is NOT "turn this on".** This row retires when prefetch
+is **decoupled** from `no_host` (its own gate, or keyed to the buft override), and
+a paired load with `no_host` OFF measures prefetch-off as neutral-or-better on:
+major faults during load, the RssAnon/RssFile split, peak `MemAvailable`, and
+load wall-clock. `research/engram/spike-run.sh` is the harness — it already
+samples avail/GTT/RSS every 2s across a real load, so the A/B is two runs and no
+new instrument. If prefetch-off measures worse or neutral, say so and close the
+row REJECTED; an unmeasured "should help" is what this ledger exists to stop.
+
+**Review by 2026-10-27.** Notes `dccee8ed`, `401428eb`, `b588ba8b`;
+`research/engram/RESULTS.md` §6.4, §7.
+
+---
+
 ### `sec-filings-company` install-by-ticker — `catalog_status = "featured"` since 2026-08-18 (was **preview**)
 
 **FLIPPED 2026-08-18 BY OPERATOR DECISION, over an unmet condition.** The
@@ -1691,6 +1774,185 @@ it is an experiment (then it should not be default-on). Resolve it with the
 - Default **on**, status shipped (`env-flags.toml`). Summary nodes as
   virtual chunks earned the default.
 
+## `SOVEREIGN_DR_AUDIT_BATCH_LOCATE` — the audit's location loop, batched
+
+**Landed 2026-08-26 default ON. TURNED OFF THE SAME DAY BY ITS OWN FLIP
+CONDITION.** Now DEFAULT OFF. Paired measurement mode:
+`SOVEREIGN_DR_AUDIT_LOCATE_SHADOW`; bed: `sovereign-core/tests/binder_replay.rs`.
+
+**Read this row for the pattern, not just the flag.** The argument for shipping
+it on was structural and, as far as it went, correct: the triage can only cost
+support, never manufacture it, because the calibrated register still decides
+every chunk that binds. That argument is about DIRECTION. The ledger asked for
+a MAGNITUDE — `shadow_lost = 0` — and the magnitude is what failed. A
+direction argument is not a measurement, and shipping on the strength of one is
+the thing this row now exists to discourage.
+
+**What it changes.** `audit::assess_claim` located a claim's origins with one
+calibrated model call per candidate chunk. With the flag on, the model-free
+stages run for every chunk first, ONE triage generation over the pinned
+evidence window shortlists the candidates, and the calibrated per-span judge
+runs only for those it admits or cannot parse a verdict for.
+
+**Why.** Measured on the pin-validate flight
+(`research/deep-research/arms/runs-pin-validate/pinned-1.log`, 328 claim
+audits, 102.5 minutes):
+
+| claims | share | wall-clock | share of audit |
+|---|---|---|---|
+| reached the location loop | 35 (11%) | 90.6 min (~130s each) | **88%** |
+| short-circuited before it | 285 (87%) | 8.6 min (1.85s each) | 8% |
+| everything else | 7 (2%) | 3.3 min | 3% |
+
+130s is 52-57 calibrated calls against a 54-chunk window, binding 0–2. Three
+hours per question is not shippable (operator, 2026-08-25). Note that the
+batched STAGE-1 pre-pass named in the session frame would have attacked the 285
+fast claims — at most 8.6 minutes of the 102.
+
+**What the bed measured (2026-08-26, claim 1 of the binder bed, 54 chunks).**
+
+| arm | wall-clock | verdict | bound |
+|---|---|---|---|
+| per-span | 343.4s | **Passed**, 2 origins | `ev-25`, `ev-30` |
+| batched (first cut) | 144.4s | **CouldNotJudge**, 0 origins | — |
+
+A verdict change, in the abstention direction, on the first claim that had
+support to lose. Stage split for the batched arm: locate 62.3s (model-free
+embedding, unchanged by this flag), **triage 72.1s**, calibrated 7.9s (3 calls).
+
+**Two causes, both fixed, NEITHER YET RE-MEASURED.**
+
+1. *The prompt asked the wrong question.* It asked whether a passage supported
+   the claim "ON ITS OWN" — a stricter bar than the calibrated judge's — where
+   a triage owes RECALL. It voted B on 49 of 52. The wording now tracks
+   `claim_prompt`'s exactly and states the asymmetry outright: a wrong admit
+   costs one ~2.5s call, a wrong reject loses the evidence permanently, so when
+   in doubt answer A.
+2. *The window shared a prefix with nothing.* It was built from
+   claim-conditioned best-spans, so every claim paid a fresh 12k-token prefill:
+   71,947ms at this host's ~160 tok/s, against the 1,613ms the same claim's
+   whole-window judge paid on a warm prefix. The triage now runs over the
+   PINNED window — the identical slice the whole-window judge was handed — so
+   `EvidenceFamily` renders the same prefix bytes and the daemon restores it.
+
+**What does NOT change when it is on.** Every chunk that binds has cleared
+`SUPPORT_FLOOR` on the same calibrated forced-choice register. Also untouched:
+the verbatim-figure precheck, the `MIN_LOCATE_SIM` locate floor, the
+corroboration floor, the custody veto, the containment witness, and the chunk
+order `supporting_chunk_ids` is recorded in.
+
+**Reversal condition.** Flips back ON only when a binder-bed run over all 6
+loop-reaching claims shows `per_span_only` EMPTY for every claim — the batched
+arm binds everything the per-span arm bound — at a wall-clock that is
+materially better, and a subsequent flight run with
+`SOVEREIGN_DR_AUDIT_LOCATE_SHADOW=1` reports `shadow_lost = 0` across the bank.
+Anything short of that is a latency win bought with comprehensiveness, which is
+one of the two dimensions we are furthest behind AIQ on (note bdf94683: insight
+−18.06, comprehensiveness −16.67). **Re-measurement in flight.** Review by
+2026-09-09.
+
+## `SOVEREIGN_DR_AUDIT_LOCATE_BUDGET` — a declared bound on the search
+
+**Landed 2026-08-26, DEFAULT 0 (unbounded).** Composes with, and depends for
+its legitimacy on, `SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT`.
+
+**Why this is the lever and the other two are not.** A calibrated per-span call
+costs ~2.4s, and that cost is a ~360-token prefill which **cannot be shared**:
+the register exists to judge one passage in isolation, so there is no prefix
+family to put it in (its calls log `stable_prefix_bytes=None` by design, and
+that is correct). Batching the triage cut a claim from 52 calls to 27 — 1.2–1.7×
+measured across three bed claims, which is real and is not an answer to three
+hours per question. The only remaining way to spend less is to make fewer
+calls.
+
+**What the spend buys today.** Bed claims 2 and 3 spent 50 and 14 calibrated
+calls to reach could-not-judge. On the source flight 1 of 6 loop-reaching
+claims passed. Most of this loop's cost purchases an abstention.
+
+**Why a bound is defensible here.** Only because the candidates are judged
+best-first by the cosine stage 2 already computes. A claim whose origins exist
+is expected to find them early; a bound on an unordered sweep would be a
+coin-flip and should not ship.
+
+**It is not a silent truncation.** A claim that exhausts its budget without
+reaching the corroboration floor carries `SEARCH BOUNDED: stopped after N
+calibrated call(s) of M candidate(s)` in its own reason. The record keeps "we
+looked at everything this claim could rest on" apart from "we stopped after N"
+(§18.3). Watched red by
+`the_call_budget_bounds_the_loop_and_names_itself_in_the_record`, which asserts
+BOTH halves — the call count and the disclosure — because a bound that shrank
+the count while reporting a plain floor miss would be the silent truncation
+wearing a finding's clothes.
+
+**The risk, stated plainly.** A claim whose two binding origins rank below the
+budget in cosine order loses a `Passed` verdict it would otherwise have earned.
+That is comprehensiveness traded for latency, against a bar where
+comprehensiveness is already −16.67 (note bdf94683).
+
+**Reversal condition.** Ships on only if the bed's `fast` arm reproduces the
+`per-span` arm's VERDICT on every claim that passes, at a materially better
+wall-clock — and the budget is then set from the measured rank distribution of
+binding origins, not guessed. If binding origins routinely rank deep, this
+stays off and the loop stays expensive. **Measurement in flight.** Review by
+2026-09-09.
+
+## `SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT` — stop at the floor, best first
+
+**Landed 2026-08-26, DEFAULT OFF.** Composes with, and is measured separately
+from, `SOVEREIGN_DR_AUDIT_BATCH_LOCATE`.
+
+**What it turns on.** The location loop judges candidates in descending cosine
+order and stops once the claim has two distinct origins.
+
+**Why.** The batched triage got a passing claim from 52 calibrated calls to 27
+— about 1.55× on the warm per-claim term (127s → 82s), which is real and is not
+an answer to "three hours per question". On the bed's claim 1 the two binding
+origins were `ev-25` and `ev-30`, found part-way through a sweep ordered by
+nothing. Best-first with an exit at the floor stops when it has what the floor
+needs.
+
+**Verdict-identical by construction.** The exit fires only when the claim has
+ALREADY cleared the floor, which is the condition under which it passes. A
+claim that never reaches the floor visits every candidate exactly as before —
+which is most claims, and is why this is a lever on passing claims specifically.
+
+**What it does change.** `supporting_chunk_ids` and
+`corroboration.support_chunks` shrink: the record carries the origins that
+settled the claim, not every chunk that would have bound. Fewer citations per
+claim is a product change, not just a latency one, and it is not obviously good
+— which is exactly why this is its own flag with its own arm in the bed rather
+than shipped inside the batch.
+
+**Reversal condition.** Flips on only if the bed's `early` arm reproduces the
+`per-span` arm's VERDICT on all 6 claims at a materially better wall-clock, AND
+the shrunken citation sets are judged acceptable against the AIQ criteria that
+reward substantiation. If per-claim citation count turns out to carry score,
+this stays off regardless of what it saves. **Not yet measured.** Review by
+2026-09-09.
+
+## `SOVEREIGN_DR_AUDIT_LOCATE_SHADOW` — pricing the triage
+
+**Landed 2026-08-26, DEFAULT OFF.** Measurement mode, never a product one.
+
+**What it turns on.** The calibrated per-span judge runs for the spans the
+triage REJECTED as well, and `shadow_lost` counts how many of them the
+calibrated register would have bound (INFO on the `t5 binder` event, WARN
+whenever non-zero).
+
+**Why.** With the triage on and this off, a rejected span is never judged and
+its lost support is unobservable BY CONSTRUCTION — the same blindness that
+made the grounding ladder's safety argument unmeasurable until
+`SOVEREIGN_GATE_CLAIM_SEARCH_SHADOW` existed. This is the only configuration
+in which `SOVEREIGN_DR_AUDIT_BATCH_LOCATE`'s cost can be priced rather than
+assumed.
+
+**Cost.** The full pre-batch call count PLUS the triage generation, so a
+shadow run is slower than the loop it replaced. That is the point.
+
+**Reversal condition.** Graduates (stays off, permanently available) once the
+batch flag's condition above is settled. It is an instrument, not a
+capability, so it is never expected to flip on by default.
+
 ## `SOVEREIGN_DR_REPORT_OUTLINE` — the report outline is not the search frontier (drb1-r5)
 
 **Landed 2026-08-24, DEFAULT OFF.** Campaign `drb1-race`. Requires
@@ -1742,6 +2004,221 @@ estate (acquisition held constant, so writer variance is the only noise), the
 outline arm beats the frontier arm on RACE overall with the honesty floor
 intact — and the comprehensiveness and insight dimensions move, since those
 are what the diagnosis predicts. **Not yet measured.**
+
+## `SOVEREIGN_DR_REPORT_SECTION_EVIDENCE` — show the writer the evidence (drb1-r9)
+
+**Landed 2026-08-26, DEFAULT OFF.** Campaign `drb1-race`. Requires
+`SOVEREIGN_DR_COMPOSED_REPORT=1`. Deliberately separate from
+`SOVEREIGN_DR_REPORT_ARCHITECTURE`: that flag decides the deliverable's shape,
+this one decides how much evidence stands behind each part of it.
+
+**The measurement that produced it** — task-69 control flight `dr-1787742429`,
+counted off its own `evidence-window-1.json`, not reasoned about:
+
+| | |
+|---|---|
+| evidence window | 46 chunks, **1,060,308 chars** |
+| chunks mentioning MCP | **40 / 46** |
+| chunks carrying MCP primitives (Tools/Resources/Prompts/Roots/Sampling) | **41 / 46** |
+| what ONE section's writer sees | 8 passages × 1400 chars = **11,200 chars — 1.06%** |
+| what the whole 8-section report sees | **8.5%** |
+| distinct sources the 11,345-word deliverable cites | **22 / 46** |
+| sections describing MCP | **0** |
+
+**Acquisition is not the constraint, and this is the sentence that matters:
+the writer is not failing to use the evidence, it is not being shown it.** The
+material for the MCP section we lose 3.24 points on — in 25 of 25 draws — is
+sitting in 40 of the 46 chunks that were retrieved for it.
+
+This supersedes, for this bed, the older reading at the foot of the
+`SOVEREIGN_DR_COMPOSED_REPORT` row ("the deliverable SHAPE is no longer the
+binding constraint on this score; acquisition is"). That was measured on a run
+whose entire window was 4 chunks and 1,866 chars. On a window three orders of
+magnitude larger the binding constraint moved, and it is now the budget between
+the window and the writer.
+
+**What it turns on — and these are not free parameters.** 28 passages per
+section at a 5-per-source cap, from 8 and 3. That **restores the configuration
+the composed report's own quality number was measured at.**
+
+`compose_report` was ported to Rust in `a50d2fdf3` (2026-08-23) from the Python
+prototype `research/deep-research/arms/lab/compose2.py`. That commit's own
+message says: *"The 44.40 composite that stood in for its quality was measured
+by `arms/lab/compose2.py` — a Python reimplementation."* The prototype chunks
+passages identically (`passages(chunks, size=1400, overlap=200)` against our
+`PASSAGE_CHARS`/`PASSAGE_OVERLAP`), ranks by the same cosine, applies the same
+per-source cap mechanism — and ran at `k=28, repeat_cap=5`, recording the
+consequence in its own manifest as `evidence_chars_per_section: k * 1400` =
+**39,200**.
+
+**The port shipped 8 and 3 — 11,200 chars, a 3.5× cut — and no commit, note or
+ledger row records that as a decision.** It is a port artifact, not a tuned
+bound. Commit `14ddccf49` later OBSERVED the consequence — its own registry
+text reads *"ours showed each section eight passages by cosine, so on the
+logged task-69 flight a 38-chunk window reached the writer eight chunks at a
+time"* — and responded by adding the research-notes flag rather than by
+restoring the number. **So the shipped Rust path has never been run at the
+configuration whose measured quality justified building it.**
+
+Both knobs move through ONE decider (`synthesize::section_evidence_budget`)
+because widening the count while holding the cap at 3 fills the new room from
+new SOURCES only — the opposite of what a section needing depth on one protocol
+requires. The test pins the pair to the prototype's values and to the 39,200
+figure, so a later edit away from them fails rather than quietly testing
+something no measurement stood behind.
+
+**What does NOT change when it is on.** The citation contract, and therefore
+the gate. The same passages, from the same window, ranked by the same cosine,
+carrying the same `ev-N` handles — only how many of them the writer sees
+changes. No new evidence enters, nothing is re-chunked, the audit locates spans
+exactly as before.
+
+**Cost.** ~3.5× the section-writer prefill (11.2k → 39.2k chars per section).
+No extra calls. On a bed where the audit already dominates wall-clock this is
+not the expensive part, but it is not free and the arm must report it.
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm whose mean
+exceeds the like-for-like control by more than the measured band, with
+comprehensiveness moving in the direction claimed. Revert on any arm that costs
+score beyond the band, and — the specific risk of this lever — on any rise in
+audit refusals or could-not-judge verdicts: three times the evidence in front
+of a writer is three times the opportunity to assert something the section's
+own citations do not carry.
+
+**Evidence at landing.** NOT YET MEASURED — landed dark. No claim about its
+effect may be made until a pre-registered arm exists.
+
+## `SOVEREIGN_DR_REPORT_ARCHITECTURE` — the deliverable is a report (drb1-r8)
+
+**Landed 2026-08-26, DEFAULT OFF.** Campaign `drb1-race`. Requires
+`SOVEREIGN_DR_COMPOSED_REPORT=1`. Composes with `SOVEREIGN_DR_REPORT_OUTLINE`:
+that flag decides WHICH sections exist, this one decides what surrounds them.
+
+**What it turns on.** Three things, together, because they are one property —
+the deliverable is shaped like a report rather than like the pipeline that
+produced it. (1) The report gets its OWN title; the default H1 is the user's
+raw prompt sentence. (2) An `## Executive Summary`, written last and read
+first, answers the question in its opening two sentences; the closing section
+is titled `## Conclusion` rather than `## Synthesis and Assessment`. (3) The
+section cap rises from 8 to 12.
+
+**Why it exists — diagnosed from the judge's own per-criterion scores, not
+guessed.** Across the 25 scored task-69 judge records on disk, ranked by our
+deficit against the reference article:
+
+| Δ | ours | ref | k | criterion |
+|---|---|---|---|---|
+| −3.24 | 6.12 | 9.36 | 25/25 | comprehensiveness / Breadth and Depth of MCP Protocol Description |
+| −2.90 | 6.60 | 9.50 | 25/25 | readability / Logical Structure and Coherent Flow of Argumentation |
+| −2.50 | 6.98 | 9.48 | 25/25 | readability / Formatting, Layout, and Typographical Consistency |
+| −2.22 | 6.80 | 9.02 | 25/25 | readability / Paragraph Cohesion, Sentence Fluency, and Conciseness |
+
+Six of our seven worst criteria are readability — a property of how the
+article is WRITTEN, not of what was retrieved. The worst single criterion is
+the *second* subject the question names: task 69 asks about A2A **and** MCP,
+and our outlines spend their 8 sections before MCP gets one of its own, while
+the reference article gives it a dedicated section. AIQ's own published
+task-69 article (`inputs/aiq-subset-articles.jsonl`, read directly rather than
+inferred) carries an executive summary, a numbered section per subject, a
+consolidated comparison table, a section mapping innovations to the problems
+they address, and a conclusion. Ours carried 48 headings, every one of them a
+retrieved statistic — "Search Visibility Surge Following A2A Announcement",
+"Payload Efficiency in Agent Handshakes" — and no section describing MCP.
+
+**What does NOT change when it is on.** The citation contract, and therefore
+the gate. The title and summary introduce no claims of their own: the summary
+is instructed to assert nothing the report does not already establish and to
+reuse the `[Source: ev-N]` handles already used below it, and both are composed
+BEFORE the audit pass, so every sentence they carry faces the same gate as the
+sections. Nothing about the window, the handles, the corroboration floor, the
+custody veto or the containment witness moves.
+
+**One decider for the cap.** `synthesize::outline_max()` is read both by the
+prompt that ASKS for n sections and by the parser that ADMITS them, so the
+writer can never be asked for 12 and admitted at 8 — a silent truncation that
+would read as "the model planned 8". Watched red in
+`the_section_cap_is_one_decider_for_the_prompt_and_the_parser`.
+
+**Two refusals, both named, never silent (§18.3).** A title outside 20–160
+chars is refused — a paragraph is the model answering instead of naming, a
+stub names nothing — and the H1 falls back to the question with the fallback
+in the trace. A failed summary lands the report without one, also traced.
+Watched red in `the_title_parser_refuses_what_is_not_a_title`.
+
+**Cost.** Two extra draft calls per run (title, summary).
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm whose mean
+exceeds the like-for-like control by more than the measured band, with
+readability moving in the direction claimed. Revert on any arm that costs score
+beyond the band, or on any rise in audit refusals — an executive summary must
+never become a place to assert what the sections could not. Per-draw sd is 2.97
+and the judge contributes **zero** of it (note `403a218a`), so n is the only
+lever on resolution.
+
+**Evidence at landing.** NOT YET MEASURED — landed dark. No claim about its
+effect may be made until a pre-registered arm exists.
+
+## `SOVEREIGN_DR_WRITER_CONTRACT_V2` — the graded evidence steer (drb1-r7)
+
+**Landed 2026-08-26, DEFAULT OFF.** Campaign `drb1-race`.
+
+**What it turns on.** Two things, together, because either alone is
+incoherent. (1) The evidence block handed to each section writer is GRADED:
+findings carry `[ANCHOR]`/`[SUPPORT]`/`[WEAK]` from their existing 0-100
+`usefulness`, and passages carry the same three tiers from their existing
+descending-cosine rank. (2) `WRITER_CONTRACT` gains four obligations ported
+from AIQ's `writer.j2` — how to use the grade, name consensus and combine
+complementary evidence, inference that is licensed but marked and
+confidence-weighted, and when a table earns its place. Showing a grade without
+stating its obligation would be decoration; stating the obligation with no
+grade to apply it to would be noise.
+
+**Why.** The grade is not new information — **we already computed it on both
+paths and threw it away.** `notes::findings_block` has always sorted findings
+by `usefulness` and then dropped the number; `synthesize::rank_passages` has
+always returned passages best-first and the evidence block has always
+flattened that ordering. The writer received an ordered list and was never
+told the ordering meant anything. AIQ steers synthesis by exactly this signal
+(`evidence_judgment`: anchors carry, medium supports, low is for gaps and
+caveats). This is the cheapest structural item in their writer we lacked, and
+it costs **zero extra inference calls**.
+
+It is the next lever because the alternative was measured and failed. Note
+`403a218a`: `SOVEREIGN_DR_ALL_LEGS_SLOW` moved the writer from the 4B to the
+27B on every drafting leg, routing witnessed in both directions, and produced
+Δ = −0.46 against a like-for-like control. The model rung available on this
+host does not pay, so the gap must be attacked through the prompt contract.
+Targets insight (−15.20) and readability (−11.93), note `bdf94683`.
+
+**What does NOT change when it is on.** The citation contract, and therefore
+the gate. Grades are advisory prose inside the prompt. They do not alter which
+chunks are in the window, which `ev-N` handles exist, what the audit locates,
+the corroboration floor, the custody veto or the containment witness. The
+honesty floor is likewise untouched: the ported inference clause still
+requires an inference to rest on cited evidence and to read visibly as
+reasoning rather than as a sourced fact.
+
+**Two floors that keep the grade from lying.** The bands straddle
+`DEFAULT_USEFULNESS` (50), so a finding whose worker declined to score it
+lands in `SUPPORT` and is never read as a judgement in either direction
+(§18.3 — an absent value is not a verdict). And a section holding fewer than
+three passages grades every one `ANCHOR`, because a naive top-third rule would
+mark a thin section's only evidence `WEAK` and the contract would then
+instruct the writer not to build on anything it has. Both are watched red in
+`synthesize::tests`.
+
+**Reversal condition.** Flip default-ON only on a pre-registered arm of n ≥ 5
+per side on the task-69 bed whose mean exceeds the like-for-like control by
+more than the measured band, with insight or readability moving in the
+direction claimed. Revert on any arm that costs score beyond the band, or on
+any observed rise in audit refusals — the grade must never become a licence to
+assert. Per-draw sd is 2.97 and the judge contributes **zero** of it (note
+`403a218a`), so n is the only lever on resolution: n=5 resolves ~2.7 points.
+
+**Evidence at landing.** Compile + `deep_research::` 217/217 green, parallel,
+three consecutive runs. No flight has been run with this flag on — it is
+landed dark and UNMEASURED, and no claim about its effect may be made until
+that arm exists.
 
 ## `SOVEREIGN_DR_RESEARCH_NOTES` — the researcher worker (drb1-r4)
 
