@@ -34,6 +34,7 @@ commonwealth-ai/
 ├── corpus-engine-atos/        # ATOS feature store + plan items + design signals (carved out) — opt-in behind `--features atos`
 ├── corpus-engine-archaeology/ # Git archaeology + rough-edges + atom-provenance (carved out)
 ├── corpus-engine-yield/       # YieldHook cooperative-yield contract (Tier-0 leaf shared by the data plane + watchers)
+├── corpus-engine-sections/    # Section detectors — corpus-engine's segmentation vocabulary as a regex-only leaf
 ├── corpus-engine-watchers/    # Lint/test/project-index watchers + result stores (carved out of corpus-engine)
 ├── sovereign-recipes/         # Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build)
 ├── sovereign/                 # Local AI assistant (CLI / desktop / server)
@@ -61,6 +62,7 @@ weights (created by `svrn setup`, gitignored).
 | `corpus-engine-atos` | ATOS feature store + plan items + DESIGN.md design signals (carved out). **ATOS is an opt-in experiment** behind the `atos` Cargo feature — the recipe-author workspace uses `sovereign-store::RecipeProjectStore` instead, and default product builds (server/desktop/daemon/cli) carry zero ATOS | `rusqlite` |
 | `corpus-engine-archaeology` | Git history mining + rough-edge surfacing + atom-provenance eval (carved out) | — |
 | `corpus-engine-yield` | `YieldHook` cooperative foreground-yield contract — a Tier-0 leaf (one trait, zero deps) shared by the data plane and the watchers so the daemon's `Arc<dyn YieldHook>` has one trait identity on both. Also carries the seam's **liveness bound**: `MAX_FOREGROUND_DEFERRAL` (300 s) + `DeferralBudget`, because `should_yield()` is a level predicate that any request cadence shorter than the yield window pins true forever — see "Foreground yield is bounded" below | — |
+| `corpus-engine-sections` | Section detectors (`SectionDetector`, `DetectedSection`, `ChapterRegexDetector`, `TocAnchoredDetector`) — corpus-engine's own segmentation vocabulary, carved into a `regex`-only leaf so the studio `SectionTool` shares the ONE implementation by reaching DOWN, instead of corpus-engine reaching UP into `sovereign-contracts` (noun-convergence rung 2) | `regex` |
 | `corpus-engine-watchers` | Lint/test/project-index watchers + their SQLite result stores + coordinator (carved out of corpus-engine, R4 Step 1 — cuts the watcher-edit rebuild set 22→12 crates, measured). Compiles unconditionally; the SCIP `CodeWatcher` stays in corpus-engine | `corpus-engine-notes`, `corpus-engine-yield`, `rusqlite`, `notify` |
 | `sovereign-recipes`  | Canonical recipe TOMLs + catalog + data lists (vendored into corpus-engine at build) | —                                       |
 | `sovereign`          | Local agent runtime                           | `corpus-engine`, `corpus-engine-scip`, `oicp-types`, `kernel-types` |
@@ -537,7 +539,7 @@ See `sovereign-recipes/sf-assessor-roll/`.
 The SEC filings corpora reuse that same guarantee contract
 (`FINANCIAL_CORPORA.md` §6): the read-only `sec_facts` tool
 (`sovereign-tools/src/sec_facts.rs`, pure lookup/derivation lib in
-`enrichment/atlas/analysis/sec_facts.rs`) answers from the typed
+`enrichment/atlas/analysis/sec_facts/`) answers from the typed
 `sec_facts.json` sidecar written by the one decider
 (`sovereign-tools/src/sec_facts_render.rs`) with `cited_figures` + `derivation` +
 `reproduce`, computes ratios and year-over-year changes in Rust, and
@@ -660,7 +662,7 @@ unchanged. Glassbox target: `authority_guard`.
 
 Which corpora the tool is authoritative FOR has exactly one
 implementation: `discover_authoritative_stores` /
-`authoritative_store` in `enrichment/atlas/analysis/sec_facts.rs`, keyed
+`authoritative_store` in `enrichment/atlas/analysis/sec_facts/`, keyed
 on the recipe's `[authority] tool` declaration plus sidecar presence and
 never on the corpus id's spelling (a name prefix is an address, not an
 essence — ARCH §7.5). The tool's claim index and the desktop coverage
@@ -4757,9 +4759,44 @@ corpora / recipes / logs trees, `workspace`, `daemon.pid`,
 `worker_owner_key.bin`, and the `active_notes_db` pointer.
 
 **Platform data dir** — `~/.local/share/svrnmesh` (legacy `sovereign` name
-still common on migrated hosts; resolve via `rebrand::mesh_data_dir`):
-`mesh.json`, `node_id`, `join_key.secret` — the mesh identity, deliberately
-platform-native so the desktop app and CLI share it.
+still common on migrated hosts; resolve via `rebrand::mesh_data_dir`) — the
+mesh identity, deliberately platform-native so the desktop app and CLI share it:
+
+- `node_id`, `node_key` — this machine's identity. Mesh-independent by
+  design: both survive `leave` and every switch, so a node is the same node
+  in every mesh it belongs to.
+- `active` — hex `MeshId` of the mesh currently live. Absent = no mesh.
+- `meshes/<mesh-id-hex>/` — one directory per membership, holding that mesh's
+  `mesh.json` and its own invite key. A node can belong
+  to many meshes and is active in exactly one; the parked ones keep their full
+  roster and their `mesh_secret`, which is why switching back to one is a
+  *resume* (no handshake, no invite redeemed) rather than a join.
+- `client-exposed` stays at the ROOT, not per-mesh: "this node serves remote
+  callers" is a property of the machine, and `expose_client_api` runs before
+  any mesh exists. The per-mesh half of the bind decision is
+  `mesh.require_encryption`, re-read by `start_daemon` on every resume/switch.
+- `mesh.json` + `join_key.secret` at the root are the **legacy single-mesh
+  layout**. `persist::migrate_legacy_layout` moves them into `meshes/<id>/` on
+  first boot and derives that mesh's `mesh_secret`; it is idempotent.
+
+`Mesh` carries two credentials, and the split is load-bearing:
+`mesh_secret` authorizes gossip (`Mesh::gossip_authorized`) and never rotates;
+`invite_key_hash` admits joiners (`membership::accept_join_with_identity`) and
+rotates freely. They were one field until 2026-08-26, which is why rotating an
+invite used to partition the rotator — re-keying admission re-keyed gossip.
+`invite_expires_at` moved onto the mesh at the same time, from per-node RAM
+where it died on restart and was never armed on any member that had not
+personally minted the invite.
+
+Mesh HTTP surface (`mesh_http.rs`, loopback-only): `GET /v1/mesh/status`,
+`POST /v1/mesh/{create,join,rotate,switch,leave}`,
+`GET /v1/mesh/relay-candidates`, `POST`/`GET /v1/mesh/measurements`.
+`switch` answers `202` and detaches, like `leave` — it is served by the
+listener it drops.
+
+CLI: `svrn mesh {create,join,list,switch,forget,rotate,status,transport,
+balance,leave,logs,fetch-model,warm-cache,plan,bench,check-invariants,
+soak-gate}`.
 
 ---
 
@@ -4896,7 +4933,7 @@ now) and the row is dropped — or trimmed to the still-open residual.
 | `auto_ingest.rs` split | `sovereign-mesh/src/auto_ingest.rs` (~1200 lines) | Auto-collaborate orchestration — `Planning → Handoff → Active → Complete` state machine. Splitting before the cloud-peer flavour settles would re-merge. |
 | `sqlite/conv_tiered.rs` residual (was the `sqlite.rs` split) | `sovereign-store/src/sqlite/conv_tiered.rs` (~1,100 lines) | The 2026-07-12 split landed `sqlite.rs` (4,097 lines) as a 582-line parent + 14 per-concern modules; the largest child holds the ConvTieredReader + skeleton/RAPTOR/motif methods. Next growth splits the chunk-entity methods out. |
 | `scoring.rs` residual (was the `oicp-types` lib split) | `oicp-types/src/scoring.rs` (~1,260 lines) | The residual of the 2026-07-11 quality-program R2 split (lib.rs 3,005 → 68 + 9 family modules): the §6/§7 reference-scoring implementation — 15 tuning constants, the scorer chain, `NodeObservations` — coheres as one auditable algorithm today. Next seam if it grows: node-observation/locality signals vs the scorer itself. |
-| `document_asset.rs` split | `sovereign-tools/src/document_asset.rs` (~3617 lines) | DocumentAssetManager — tiered (T1/T2/T3) ingest orchestration + skeleton/RAPTOR persistence. Splits along the tier boundary once the tiered surface stops evolving. |
+| ~~`document_asset.rs` split~~ **DONE 2026-08-27** | `sovereign-tools/src/document_asset/` (9 files, largest 828) | DocumentAssetManager — split along the three phases its own module doc declares: `manager` (ingest) + `routing` + `execution`, with `skeleton` / `artifacts` / `motifs` / `atoms` / `self_reference` carved off the free functions. Routing and execution are separate `impl DocumentAssetManager` blocks — inherent impls may span modules within a crate, so a phase gets a file without the type moving. NOT the tier boundary this row predicted: the tiers are interleaved through `run_ingest`, and the phases are what the file was actually organised by. |
 | `found.rs` split | `sovereign-cli-dev/src/found.rs` (~2750 lines) | `svrn project found` four-stage founding conversation. Splits one-file-per-stage when the founding flow stabilises. |
 | `MemberRecord.client_port` wire field | `commonwealth-core/src/mesh.rs` + `commonwealth-discovery/src/membership.rs` + `sovereign-mesh/src/daemon.rs::peer_inference_endpoints` + `sovereign-mesh/src/auto_ingest.rs` | Local-side port plumbing landed; **peer-uniformity assumption** remains: `peer_inference_endpoints` rewrites every peer URL with this daemon's client_port, and `auto_ingest` pins port `9742`. Mixed-port mesh deployments need a `client_port` field on `MemberRecord` and a matching slot in the join handshake. Until then, operators who set a non-default `client_port` should configure every peer the same. |
 | Atlas inspector Phase 2 — curation overlay | `sovereign-tools/src/atlas_view/` | Phase 1 ships read-only inspection. Phase 2 adds an `atlas/overlay.sqlite` keyed by `StableAtomKey` (content-hash) so user edits and approval state survive re-extraction. Forward-compat fields (`curation_status`, `overlay_supports`) already on every DTO. |

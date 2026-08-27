@@ -18,7 +18,6 @@
 1	corpus-engine/tests/sharding_round_trip_e2e.rs
 2	corpus-engine/tests/snapshot_restore_e2e.rs
 6	corpus-engine/xtask/src/layout_gate.rs
-1	sovereign/crates/sovereign-cli-daemon/src/doctor_cmd.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_cmd.rs
 1	sovereign/crates/sovereign-cli-dev/src/code_fieldglass/assemble.rs
 7	sovereign/crates/sovereign-cli-dev/src/drift_cmd_orchestrator.rs

@@ -345,7 +345,7 @@ pub(super) fn orphaned_indexes() -> Vec<(String, Option<String>)> {
         .filter(|e| e.path().join("scip_graph.db").exists())
         .filter_map(|e| {
             let id = e.file_name().to_str()?.to_string();
-            let root = std::fs::read_to_string(e.path().join("_corpus_meta.json"))
+            let root = std::fs::read_to_string(corpus_engine::Corpus::meta_in(e.path()))
                 .ok()
                 .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
                 .and_then(|v| v.get("source_path")?.as_str().map(str::to_string));
