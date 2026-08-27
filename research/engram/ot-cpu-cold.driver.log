@@ -1,0 +1,5 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+=== config: -ngl 99  -ot 'per_layer_token_embd=CPU'  -n 128 ===
+llama exit rc=0
+--- peak gtt / final faults ---
+peak_gtt=79.62 GiB  final_majflt=90  peak_rss=0.16 GiB

@@ -1,0 +1,42 @@
+[09:12:44] === prompt-length discriminator start ===
+[09:12:44] pre-run: GTT 4003 MiB, MemAvailable 118514 MiB
+[09:12:44] running sweep: -b 4096 -ub 2048 -p 512,1024,2048,4096,8192,16384 -n 128 -r 3 (no -ngl, see frame dead-end)
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = AMD Radeon 8060S Graphics (RADV GFX1151) (radv) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 65536 | int dot: 1 | matrix cores: KHR_coopmat
+llama-bench: benchmark 1/7: starting
+llama-bench: benchmark 1/7: warmup prompt run
+llama-bench: benchmark 1/7: prompt run 1/3
+llama-bench: benchmark 1/7: prompt run 2/3
+llama-bench: benchmark 1/7: prompt run 3/3
+llama-bench: benchmark 2/7: starting
+llama-bench: benchmark 2/7: warmup prompt run
+llama-bench: benchmark 2/7: prompt run 1/3
+llama-bench: benchmark 2/7: prompt run 2/3
+llama-bench: benchmark 2/7: prompt run 3/3
+llama-bench: benchmark 3/7: starting
+llama-bench: benchmark 3/7: warmup prompt run
+llama-bench: benchmark 3/7: prompt run 1/3
+llama-bench: benchmark 3/7: prompt run 2/3
+llama-bench: benchmark 3/7: prompt run 3/3
+llama-bench: benchmark 4/7: starting
+llama-bench: benchmark 4/7: warmup prompt run
+llama-bench: benchmark 4/7: prompt run 1/3
+llama-bench: benchmark 4/7: prompt run 2/3
+llama-bench: benchmark 4/7: prompt run 3/3
+llama-bench: benchmark 5/7: starting
+llama-bench: benchmark 5/7: warmup prompt run
+llama-bench: benchmark 5/7: prompt run 1/3
+llama-bench: benchmark 5/7: prompt run 2/3
+llama-bench: benchmark 5/7: prompt run 3/3
+llama-bench: benchmark 6/7: starting
+llama-bench: benchmark 6/7: warmup prompt run
+llama-bench: benchmark 6/7: prompt run 1/3
+llama-bench: benchmark 6/7: prompt run 2/3
+llama-bench: benchmark 6/7: prompt run 3/3
+llama-bench: benchmark 7/7: starting
+llama-bench: benchmark 7/7: warmup generation run
+llama-bench: benchmark 7/7: generation run 1/3
+llama-bench: benchmark 7/7: generation run 2/3
+llama-bench: benchmark 7/7: generation run 3/3
+[09:20:29] llama-bench rc=0   peak GTT 86073 MiB   min avail 9338 MiB
+[09:20:29] === sweep done, restoring daemon ===

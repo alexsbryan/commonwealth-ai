@@ -1,0 +1,5 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+=== config: -ngl 99  -n 128  override=NONE ===
+llama exit rc=0
+--- peak gtt / final faults ---
+peak_gtt=79.68 GiB  final_majflt=30  peak_rss=10.56 GiB

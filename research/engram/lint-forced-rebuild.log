@@ -1,0 +1,16 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+
+═══════════════════════════════════════════════════════════════
+ sovereign-lint — cargo check
+═══════════════════════════════════════════════════════════════
+ scope:        WORKSPACE (all crates)
+ features:     corpus-engine/treesitter,sovereign-cli/dev-tools,sovereign-cli/code-intel,sovereign-mesh/mesh-sim
+ targets:      lib + bin + test + bench (--all-targets)
+ jobs:         16 — half of 32 cores (96GB available)
+ errors:       0
+ warnings:     494
+ elapsed:      152851ms
+ cargo exit:   0
+
+ ✓ Workspace checks clean.
+
