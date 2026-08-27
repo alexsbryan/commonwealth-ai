@@ -380,6 +380,9 @@ pub fn fit_params(
             tensor_buft_overrides.as_mut_ptr(),
             margins.as_mut_ptr(),
             options.n_ctx_min,
+            // Upstream added `extra: *const common_fit_extra_model` here. We do
+            // not model extra-model fitting; null is upstream's own no-extra case.
+            std::ptr::null(),
             options.log_level,
         )
     };

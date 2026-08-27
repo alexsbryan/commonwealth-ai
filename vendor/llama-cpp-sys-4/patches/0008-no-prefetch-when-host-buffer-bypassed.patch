@@ -1,0 +1,29 @@
+--- a/src/llama-model.cpp
++++ b/src/llama-model.cpp
+@@ -1664,7 +1664,25 @@
+         }
+     }
+ 
+-    ml.init_mappings(true, use_mlock ? &pimpl->mlock_mmaps : nullptr);
++    // SOVEREIGN: do not FORCE-POPULATE the mapping when this load has bypassed
++    // the device host buffer.
++    //
++    // Upstream always prefetches, which sets MAP_POPULATE + MADV_WILLNEED and
++    // makes EVERY weight byte resident the moment the model loads. For a hybrid
++    // whose large embedding table is deliberately left on the CPU, that defeats
++    // the point: the table is resident and charged against system memory though
++    // nothing has gathered a single row from it. Measured on
++    // Qwen3.8-Flash-Next (2026-08-26): 7.08M minor faults at load == exactly the
++    // 26.8 GiB engram, then ~18k faults across 127 generated tokens. Paid for in
++    // full; used a rounding error at a time.
++    //
++    // `no_host` is the right condition: it already means "CPU-placed weights
++    // must be genuinely pageable", the local-fit gate discounts those bytes on
++    // exactly that promise, and MAP_POPULATE breaks it. Weights that ARE
++    // streamed into device buffers keep their readahead — the fd still carries
++    // POSIX_FADV_SEQUENTIAL and llama_mmap's whole-file MADV_RANDOM is gated on
++    // `numa`, not on prefetch.
++    ml.init_mappings(!params.no_host, use_mlock ? &pimpl->mlock_mmaps : nullptr);
+     pimpl->mappings.reserve(ml.mappings.size());
+ 
+     // create the backend buffers

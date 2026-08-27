@@ -755,6 +755,79 @@ pub(crate) use sovereign_core::time::unix_millis as now_millis;
 /// (~60-160s observed worst-case under heavy grammar) finishes
 /// with margin, short enough that a runaway mask-state is killed
 /// before it pins the daemon for ~30 min and starves the mesh.
+/// Parse `SOVEREIGN_TENSOR_BUFT_OVERRIDE` into llama.cpp `-ot` overrides.
+///
+/// Syntax is llama.cpp's own: `<regex>=<buffer-type>[,<regex>=<buffer-type>...]`.
+/// `CPU` is the only buffer type resolved here, because it is the one that
+/// changes RESIDENCY: a tensor assigned to the CPU buffer type is left pointing
+/// into the mmap'd GGUF instead of being copied into a device buffer
+/// (`llama-model-loader.cpp` -> `ggml_backend_tensor_alloc(buf_mmap, cur, data)`).
+/// It is then demand-paged from disk and, the actual point, EVICTABLE under
+/// memory pressure rather than pinned — so pressure costs a page fault instead
+/// of an OOM kill on a host where the daemon is the designated victim.
+///
+/// Motivating case: Qwen3.8-Flash-Next's `per_layer_token_embd`, a single
+/// 26.8 GiB IQ4_NL n-gram table read 16 rows (1440 B) per token. Measured NVMe
+/// marginal cost on this host is ~92 us against a ~25.6 ms token budget, so the
+/// gather is ~0.4% of a decode step even stone cold.
+///
+/// A malformed entry or an unresolvable buffer type REFUSES the whole variable
+/// (warn + return empty) rather than applying the half it understood. A
+/// placement rule that silently half-applies is indistinguishable from one that
+/// worked, which is the failure ARCH_PRINCIPLES §18.3 exists to prevent.
+fn env_tensor_buft_overrides() -> Vec<(
+    std::ffi::CString,
+    crate::llama::sys::ggml_backend_buffer_type_t,
+)> {
+    let Ok(spec) = std::env::var("SOVEREIGN_TENSOR_BUFT_OVERRIDE") else {
+        return Vec::new();
+    };
+    if spec.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for entry in spec.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+        let Some((pattern, buft_name)) = entry.rsplit_once('=') else {
+            tracing::warn!(
+                %entry,
+                "SOVEREIGN_TENSOR_BUFT_OVERRIDE: entry is not `<regex>=<buffer-type>` — \
+                 refusing the whole variable, no tensor placement applied"
+            );
+            return Vec::new();
+        };
+        let buft = match buft_name.trim().to_ascii_uppercase().as_str() {
+            "CPU" => unsafe { crate::llama::sys::ggml_backend_cpu_buffer_type() },
+            other => {
+                tracing::warn!(
+                    buffer_type = %other,
+                    "SOVEREIGN_TENSOR_BUFT_OVERRIDE: only CPU is resolvable here — \
+                     refusing the whole variable, no tensor placement applied"
+                );
+                return Vec::new();
+            }
+        };
+        if buft.is_null() {
+            tracing::warn!(
+                "SOVEREIGN_TENSOR_BUFT_OVERRIDE: ggml returned a null CPU buffer type — \
+                 refusing the whole variable"
+            );
+            return Vec::new();
+        }
+        match std::ffi::CString::new(pattern.trim()) {
+            Ok(c) => out.push((c, buft)),
+            Err(_) => {
+                tracing::warn!(
+                    %pattern,
+                    "SOVEREIGN_TENSOR_BUFT_OVERRIDE: pattern contains an interior NUL — \
+                     refusing the whole variable"
+                );
+                return Vec::new();
+            }
+        }
+    }
+    out
+}
+
 fn inference_deadline_secs() -> u64 {
     use std::sync::OnceLock;
     static DEADLINE: OnceLock<u64> = OnceLock::new();
@@ -1432,11 +1505,39 @@ impl ModelSlot {
         let mtp_disabled_at_load = std::env::var("SOVEREIGN_MTP_DISABLE")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
+        // Bypass the device HOST buffer type on the same population the fit gate
+        // discounts mmap-resident weights for. These MUST agree: the gate only
+        // subtracts those bytes because this flag makes them pageable, so a load
+        // that forgot it would be admitted on a promise it did not keep.
+        // ONE decider for both — `wants_no_host`.
+        let no_host = super::rpc_distribution::wants_no_host(model_path, model_bytes, context_size);
         let mut model_params = LlamaModelParams::default()
+            .with_no_host(no_host)
             .with_n_gpu_layers(effective_gpu_layers)
             .with_load_mtp(!mtp_disabled_at_load);
         match &placement {
             LoadPlacement::LocalOnly => {
+                // Ask for mmap EXPLICITLY rather than leaving it to AUTO.
+                //
+                // Under AUTO, llama.cpp walks every registered device and turns
+                // mmap off for the WHOLE model the moment one of them lacks
+                // `caps.mmap_support` (llama-model.cpp:1388). This daemon
+                // registers RPC devices for distributed inference, and a remote
+                // device cannot mmap — so a purely LOCAL load silently lost its
+                // mapping and every weight was COPIED into anonymous memory.
+                //
+                // Measured on RuggedFox 2026-08-26, same model, same binary:
+                //   standalone (no RPC devices):  loads, 79.3 GiB GTT
+                //   daemon (RPC devices present): RssAnon -> 18.5 GiB,
+                //                                 RssFile flat at 0.29 GiB, OOM
+                //
+                // Anonymous pages are unreclaimable, so this also invalidated
+                // the local-fit gate's whole premise that mmap-resident weights
+                // are evictable. Explicit MMAP skips the device-caps loop; the
+                // distributed arms below keep AUTO, where the check is correct
+                // because those loads really do span a device that cannot map.
+                model_params = model_params
+                    .with_load_mode(crate::llama::cpp::model::params::LlamaLoadMode::Mmap);
                 // Load on the local GPU only, excluding any RPC device a prior
                 // (smaller) load left in ggml's global registry.
                 let local = local_gpu_device_list();
@@ -1524,6 +1625,41 @@ impl ModelSlot {
                     model_path.display(),
                     overflow.refusal()
                 )));
+            }
+        }
+
+        // Operator-declared per-tensor placement, applied only where nothing
+        // else already owns placement. `OwnedOverrides` derives its `-ot` set
+        // from the distribution plan; merging a second source would let the two
+        // disagree with no way to tell which won, so we refuse and SAY SO
+        // rather than silently merging.
+        let env_overrides = env_tensor_buft_overrides();
+        if !env_overrides.is_empty() {
+            match &placement {
+                LoadPlacement::OwnedOverrides(_) => {
+                    tracing::warn!(
+                        count = env_overrides.len(),
+                        "SOVEREIGN_TENSOR_BUFT_OVERRIDE is set, but this slot loads with \
+                         distributed -ot overrides that own placement — the env overrides \
+                         are NOT applied"
+                    );
+                }
+                _ => {
+                    for (pattern, _) in &env_overrides {
+                        tracing::info!(
+                            pattern = %pattern.to_string_lossy(),
+                            no_host,
+                            "tensor placement overridden via SOVEREIGN_TENSOR_BUFT_OVERRIDE. \
+                             NOTE: `=CPU` resolves through the CPU buft LIST, whose first \
+                             entry is the device's PINNED host buffer (Vulkan_Host) — it is \
+                             plain pageable CPU only when this load sets no_host, or when \
+                             the tensor's quant is unsupported there. Weights are also \
+                             PREFETCHED, not demand-paged: llama.cpp mmaps with MAP_POPULATE \
+                             + MADV_WILLNEED (llama-mmap.cpp:455/463)"
+                        );
+                    }
+                    model_params = model_params.with_tensor_buft_overrides(&env_overrides);
+                }
             }
         }
 

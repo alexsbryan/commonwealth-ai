@@ -221,6 +221,39 @@ impl LlamaModelParams {
         self
     }
 
+    /// Bypass the device HOST buffer type when choosing where CPU-placed
+    /// weights live (`llama.h`'s `no_host`, exposed as `--no-host`).
+    ///
+    /// Why this matters and is not cosmetic: `make_cpu_buft_list` puts the
+    /// device host buffer type FIRST, ahead of plain CPU. So a tensor that
+    /// "goes to CPU" actually lands in PINNED host memory (`Vulkan_Host`)
+    /// whenever its quant is supported there. Pinned pages are not
+    /// reclaimable, which is the opposite of what a demand-side memory gate
+    /// assumes about mmap-resident weights. Setting this makes CPU-placed
+    /// weights genuinely pageable, file-backed, and evictable.
+    ///
+    /// Metal never offers a host buffer type (`get_host_buffer_type` is NULL),
+    /// so this is a no-op there and a real lever on Vulkan/CUDA.
+    ///
+    /// ```
+    /// # use llama_cpp_4::model::params::LlamaModelParams;
+    /// let params = LlamaModelParams::default();
+    /// let params = params.with_no_host(true);
+    /// assert!(params.no_host());
+    /// ```
+    #[must_use]
+    pub fn with_no_host(mut self, no_host: bool) -> Self {
+        self.params.no_host = no_host;
+        self
+    }
+
+    /// Whether the device host buffer type is bypassed. See
+    /// [`Self::with_no_host`].
+    #[must_use]
+    pub fn no_host(&self) -> bool {
+        self.params.no_host
+    }
+
     /// sets the main GPU
     #[must_use]
     pub fn with_main_gpu(mut self, main_gpu: i32) -> Self {
@@ -280,7 +313,10 @@ impl LlamaModelParams {
     #[must_use]
     pub fn with_tensor_buft_overrides(
         mut self,
-        overrides: &[(std::ffi::CString, llama_cpp_sys_4::ggml_backend_buffer_type_t)],
+        overrides: &[(
+            std::ffi::CString,
+            llama_cpp_sys_4::ggml_backend_buffer_type_t,
+        )],
     ) -> Self {
         if overrides.is_empty() {
             self.buft_overrides = Vec::new();

@@ -1,0 +1,18 @@
+--- a/tools/mtmd/mtmd-helper.h	2026-08-26 10:43:30.699224784 -0700
++++ b/tools/mtmd/mtmd-helper.h	2026-08-26 10:43:30.710339665 -0700
+@@ -233,7 +233,14 @@
+ } // extern "C"
+ #endif
+ 
+-#ifdef __cplusplus
++// SOVEREIGN: the C++ convenience wrappers below live in `namespace mtmd_helper`,
++// and bindgen (run with -xc++, cxx-namespaces OFF) flattens
++// `mtmd_helper::gen_audio` to `mtmd_helper_gen_audio` -- the exact name of the
++// C opaque type declared earlier in this header. That is a hard E0428 duplicate
++// definition in the generated bindings. Nothing on the Rust side consumes these
++// wrappers, so bindgen defines MTMD_HELPER_NO_CXX_WRAPPERS to skip them; the
++// real C++ build never defines it and is unaffected.
++#if defined(__cplusplus) && !defined(MTMD_HELPER_NO_CXX_WRAPPERS)
+ #include <set>
+ #include <memory>
+ 
