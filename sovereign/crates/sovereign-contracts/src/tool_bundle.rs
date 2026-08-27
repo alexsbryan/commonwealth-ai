@@ -363,24 +363,24 @@ mod tests {
     #[test]
     fn withheld_reports_the_reason_rather_than_registering_nothing_silently() {
         futures::executor::block_on(async {
-        let mut registry = ToolRegistry::new();
-        let bundles: Vec<Box<dyn ToolBundle>> = vec![
-            Box::new(Two),
-            Box::new(Withheld::new("shell", "no shell in a long-lived daemon")),
-        ];
+            let mut registry = ToolRegistry::new();
+            let bundles: Vec<Box<dyn ToolBundle>> = vec![
+                Box::new(Two),
+                Box::new(Withheld::new("shell", "no shell in a long-lived daemon")),
+            ];
 
-        let reports = install(&mut registry, &bundles).await;
+            let reports = install(&mut registry, &bundles).await;
 
-        assert_eq!(reports.len(), 2);
-        assert_eq!(reports[0].registered.len(), 2);
-        assert!(reports[0].withheld.is_empty());
-        // The absent family is present in the OUTPUT, which is the property:
-        // a reader can tell "decided against" from "never wired".
-        assert!(reports[1].registered.is_empty());
-        assert_eq!(reports[1].withheld.len(), 1);
-        assert_eq!(reports[1].withheld[0].what, "shell");
-        assert!(reports[1].withheld[0].why.contains("long-lived daemon"));
-        assert!(reports[1].summary().contains("withheld"));
+            assert_eq!(reports.len(), 2);
+            assert_eq!(reports[0].registered.len(), 2);
+            assert!(reports[0].withheld.is_empty());
+            // The absent family is present in the OUTPUT, which is the property:
+            // a reader can tell "decided against" from "never wired".
+            assert!(reports[1].registered.is_empty());
+            assert_eq!(reports[1].withheld.len(), 1);
+            assert_eq!(reports[1].withheld[0].what, "shell");
+            assert!(reports[1].withheld[0].why.contains("long-lived daemon"));
+            assert!(reports[1].summary().contains("withheld"));
         });
     }
 }

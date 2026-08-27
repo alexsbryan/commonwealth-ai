@@ -579,7 +579,6 @@ mod tests {
         assert_eq!(p.unrecognised.len(), 1);
     }
 
-
     mod e2e {
         use super::*;
         use std::os::unix::fs::PermissionsExt;

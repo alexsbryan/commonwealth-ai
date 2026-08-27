@@ -320,7 +320,10 @@ fn the_registry_withholds_a_family_the_user_switched_off() {
     // panel gets. Byte-identical to the behaviour before the gate existed.
     let mut open = ToolRegistry::new();
     assert!(
-        matches!(open.register_reporting(Box::new(governed())), Registration::Registered(_)),
+        matches!(
+            open.register_reporting(Box::new(governed())),
+            Registration::Registered(_)
+        ),
         "a registry with no permissions wired must gate nothing"
     );
 

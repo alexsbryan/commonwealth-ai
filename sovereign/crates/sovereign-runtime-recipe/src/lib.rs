@@ -48,13 +48,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
+use sovereign_contracts::tool_bundle::{ToolBundle, Withheld};
 use sovereign_core::planner::LlmPlanner;
 use sovereign_core::runtime::lane::LaneSources;
 use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::InferenceConfig;
 use sovereign_core::{RuntimeParts, SkillRegistry, ToolRegistry};
-use sovereign_contracts::tool_bundle::{ToolBundle, Withheld};
 use sovereign_tools::atlas_context_manager::AtlasContextManager;
 use sovereign_tools::bundles::{
     CoreTurnTools, KnowledgeFrontDoor, WebEscalation, WebReach, WebTools,
@@ -506,7 +506,8 @@ async fn build_tools(
             "MCP:         {} server(s) from this host's own config",
             mcp_extra.len()
         ));
-        let extra = sovereign_tools::mcp::McpServerManager::from_config(&mcp_extra, &mut tools).await;
+        let extra =
+            sovereign_tools::mcp::McpServerManager::from_config(&mcp_extra, &mut tools).await;
         mcp.absorb(extra).await;
     }
     for st in mcp.server_statuses().await {
@@ -745,9 +746,10 @@ fn load_gliner(warmth: LaneWarmth) -> Option<Arc<dyn sovereign_core::traits::Ent
                 model = model_id,
                 "runtime_recipe: GLiNER entity extractor installed (background warm)"
             );
-            Some(Arc::new(
-                sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred(),
-            ) as Arc<dyn sovereign_core::traits::EntityExtractor>)
+            Some(
+                Arc::new(sovereign_gliner::gliner_ner::LazyGlinerExtractor::new_default_deferred())
+                    as Arc<dyn sovereign_core::traits::EntityExtractor>,
+            )
         }
         LaneWarmth::Eager => match sovereign_gliner::gliner_ner::GlinerExtractor::new_default() {
             Ok(g) => {
@@ -934,7 +936,9 @@ mod warmth_census {
             let decl = code
                 .iter()
                 .find(|l| l.contains(&format!("fn {member}(")))
-                .unwrap_or_else(|| panic!("{member} is gone — drop it here or say what replaced it"));
+                .unwrap_or_else(|| {
+                    panic!("{member} is gone — drop it here or say what replaced it")
+                });
             assert!(
                 decl.contains("warmth: LaneWarmth"),
                 "{member} no longer takes the host's declared warmth, so a host \

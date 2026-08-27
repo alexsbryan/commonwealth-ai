@@ -423,8 +423,8 @@ async fn main() {
         #[cfg(not(feature = "net-tools"))]
         let web = fam::WebReach::Withheld("built without the `net-tools` feature");
 
-        let mut b = sovereign_runtime_recipe::baseline_bundles(
-            sovereign_runtime_recipe::BaselineDeps {
+        let mut b =
+            sovereign_runtime_recipe::baseline_bundles(sovereign_runtime_recipe::BaselineDeps {
                 store: &store,
                 inference: &inference,
                 corpus_engine: &corpus_engine,
@@ -434,13 +434,14 @@ async fn main() {
                 // un-asked-for web search. The user-in-loop escalation card
                 // stays available.
                 escalation: fam::WebEscalation::Disabled,
-            },
-        );
+            });
 
         // `wikipedia_fetch` reaches en.wikipedia.org, so it follows the same
         // feature switch as the rest of egress.
         #[cfg(feature = "net-tools")]
-        b.push(Box::new(fam::WikipediaTools::new(Arc::clone(&corpus_engine))));
+        b.push(Box::new(fam::WikipediaTools::new(Arc::clone(
+            &corpus_engine,
+        ))));
         #[cfg(not(feature = "net-tools"))]
         b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
             "wikipedia",
@@ -487,7 +488,9 @@ async fn main() {
             let mut ra = fam::RecipeAuthoringTools::new();
             if let Some(ns) = note_store_for_runtime.as_ref() {
                 ra = ra.with_notes(Arc::new(
-                    sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(Arc::clone(ns)),
+                    sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(Arc::clone(
+                        ns,
+                    )),
                 )
                     as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
             }
@@ -588,7 +591,6 @@ async fn main() {
     .await;
     let tools = Arc::clone(&common.parts.tools);
     let _mcp_manager = common.mcp;
-
 
     // ── Commission ───────────────────────────────────────────────────────
     // The enrichment stack above is complete, so the Runtime is built once,
@@ -826,4 +828,3 @@ fn resolve_embed_model(inf: &config::InferenceSection) -> Option<PathBuf> {
     let default = inf.model.parent()?.join("qwen-embedding-0.6b.gguf");
     default.exists().then_some(default)
 }
-

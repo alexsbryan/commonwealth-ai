@@ -28,9 +28,9 @@ use corpus_engine_notes::NoteStore;
 
 use sovereign_core::error::{Error, Result};
 use sovereign_core::memory;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::traits::{InferenceProvider, MemoryScope, StateStore};
 use sovereign_core::types::{StepOutput, ToolContext};
-use sovereign_core::tool_manifest::DeclaredTool;
 
 // ─── Public types ──────────────────────────────────────────────
 
@@ -408,11 +408,7 @@ impl KnowledgeLookupTool {
     }
 
     /// The executable half of `knowledge_lookup`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -549,7 +545,6 @@ impl KnowledgeLookupTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let query = params.get("query").and_then(|v| v.as_str());
         let Some(query) = query else {
             return Err(Error::InvalidInput(
@@ -600,7 +595,9 @@ mod tests {
     use std::pin::Pin;
 
     use futures::Stream;
-    use sovereign_core::types::{CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed};
+    use sovereign_core::types::{
+        CompletionRequest, CompletionResponse, Depth, ProviderCapabilities, Speed,
+    };
 
     /// Bare-minimum InferenceProvider for the unit tests. Embeds
     /// return an empty vector — `corpus_evidence` interprets that

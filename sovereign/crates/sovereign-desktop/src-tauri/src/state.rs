@@ -1322,8 +1322,8 @@ pub async fn bootstrap_with_progress(
     let features_store = state.features.read().await.as_ref().map(Arc::clone);
     let tool_bundles: Vec<Box<dyn sovereign_contracts::tool_bundle::ToolBundle>> = {
         use sovereign_tools::bundles as fam;
-        let mut b = sovereign_runtime_recipe::baseline_bundles(
-            sovereign_runtime_recipe::BaselineDeps {
+        let mut b =
+            sovereign_runtime_recipe::baseline_bundles(sovereign_runtime_recipe::BaselineDeps {
                 store: &store,
                 inference: &inference,
                 corpus_engine: &corpus_engine,
@@ -1340,8 +1340,7 @@ pub async fn bootstrap_with_progress(
                 } else {
                     fam::WebEscalation::Disabled
                 },
-            },
-        );
+            });
         // A family this surface deliberately does not carry, named so the
         // decision is a value rather than a line missing from this list
         // (ARCH §18.3). Composing it would ADD a tool the desktop has never
@@ -1384,7 +1383,9 @@ pub async fn bootstrap_with_progress(
             let mut ra = fam::RecipeAuthoringTools::new();
             if let Some(ns) = notes_store.as_ref() {
                 ra = ra.with_notes(Arc::new(
-                    sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(Arc::clone(ns)),
+                    sovereign_tools::recipe_notes_adapter::NoteStoreRecipeNotes::new(Arc::clone(
+                        ns,
+                    )),
                 )
                     as Arc<dyn sovereign_contracts::recipe::notes::RecipeNotes>);
             }
@@ -1485,50 +1486,48 @@ pub async fn bootstrap_with_progress(
     // switches, a document-progress channel, a compaction worker, an
     // attach-mode digest client, a watched-folder oracle and a Tauri event
     // sink. Each is a value below, not a builder call.
-    let common = sovereign_runtime_recipe::common_parts(
-        sovereign_runtime_recipe::RecipeInputs {
-            inference: Arc::clone(&inference),
-            store: Arc::clone(&store),
-            // The concrete `SqliteStateStore` stashed at bootstrap also impls
-            // `ConvTieredReader` (spec CONV_TIERED_PORT.md); the same handle,
-            // so per-conversation RAPTOR signposts sit beside raw chunks.
-            conv_tiered: state
-                .sqlite_store
-                .read()
-                .await
-                .as_ref()
-                .map(|ss| Arc::clone(ss) as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>),
-            corpus_engine: Arc::clone(&corpus_engine),
-            // Tool-Mastery Layer 3 — drives the per-conversation
-            // `tool_decision` write hook and the Layer-2 dossier read at the
-            // top of the next turn. The already-opened store, not a second
-            // handle: one sqlite writer per data root.
-            note_store: notes_store.clone(),
-            skills: Arc::clone(&skills),
-            approval,
-            inference_config,
-            indexes_dir: sovereign_root.join("indexes"),
-            embed_model: embed_model_name.clone(),
-            tool_bundles,
-            switches: sovereign_runtime_recipe::ToolSwitches::Chosen(permitted),
-            // The desktop's MCP servers ARE the canonical array — the settings
-            // pane writes it — so there is nothing extra to add here.
-            mcp_extra: Vec::new(),
-            // A window the user is looking at must become interactive; the
-            // meta-atlas is a ~1 GB parse. This surface reached that
-            // conclusion in 2026-06 and the recipe now carries it for
-            // everyone, including GLiNER's ~950 ms load.
-            warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
-            // The desktop's embedded engine has no rerank slot of its own, so
-            // a standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH` is
-            // the only way this surface gets one. The VRAM pre-flight inside
-            // that loader is what keeps it from landing beside a resident
-            // primary that does not leave room for it (note `b57b0cd5`).
-            rerank: sovereign_runtime_recipe::RerankWiring::Standalone,
-        },
-        &SplashProgress(&emit),
-    )
-    .await;
+    let common =
+        sovereign_runtime_recipe::common_parts(
+            sovereign_runtime_recipe::RecipeInputs {
+                inference: Arc::clone(&inference),
+                store: Arc::clone(&store),
+                // The concrete `SqliteStateStore` stashed at bootstrap also impls
+                // `ConvTieredReader` (spec CONV_TIERED_PORT.md); the same handle,
+                // so per-conversation RAPTOR signposts sit beside raw chunks.
+                conv_tiered: state.sqlite_store.read().await.as_ref().map(|ss| {
+                    Arc::clone(ss) as Arc<dyn sovereign_core::conv_tiered::ConvTieredReader>
+                }),
+                corpus_engine: Arc::clone(&corpus_engine),
+                // Tool-Mastery Layer 3 — drives the per-conversation
+                // `tool_decision` write hook and the Layer-2 dossier read at the
+                // top of the next turn. The already-opened store, not a second
+                // handle: one sqlite writer per data root.
+                note_store: notes_store.clone(),
+                skills: Arc::clone(&skills),
+                approval,
+                inference_config,
+                indexes_dir: sovereign_root.join("indexes"),
+                embed_model: embed_model_name.clone(),
+                tool_bundles,
+                switches: sovereign_runtime_recipe::ToolSwitches::Chosen(permitted),
+                // The desktop's MCP servers ARE the canonical array — the settings
+                // pane writes it — so there is nothing extra to add here.
+                mcp_extra: Vec::new(),
+                // A window the user is looking at must become interactive; the
+                // meta-atlas is a ~1 GB parse. This surface reached that
+                // conclusion in 2026-06 and the recipe now carries it for
+                // everyone, including GLiNER's ~950 ms load.
+                warmth: sovereign_runtime_recipe::LaneWarmth::Deferred,
+                // The desktop's embedded engine has no rerank slot of its own, so
+                // a standalone cross-encoder from `SOVEREIGN_RERANK_MODEL_PATH` is
+                // the only way this surface gets one. The VRAM pre-flight inside
+                // that loader is what keeps it from landing beside a resident
+                // primary that does not leave room for it (note `b57b0cd5`).
+                rerank: sovereign_runtime_recipe::RerankWiring::Standalone,
+            },
+            &SplashProgress(&emit),
+        )
+        .await;
 
     // The Settings → MCP pane reads per-server status off this manager. The
     // live transports belong to the tools now in the registry.

@@ -247,10 +247,7 @@ fn registered_tools_reporting(span: &str) -> (BTreeSet<String>, BTreeSet<String>
     // `reg.register_reporting(Box::new(..))`. Anything else — notably the
     // desktop's `mcp_tools.register(..)`, which sits inside the turn
     // registry's span and would inflate that host 21 -> 30 — is skipped.
-    const VERBS: &[(&str, &str)] = &[
-        (".register(", "tools"),
-        (".register_reporting(", "reg"),
-    ];
+    const VERBS: &[(&str, &str)] = &[(".register(", "tools"), (".register_reporting(", "reg")];
     for (verb, receiver) in VERBS {
         let mut at = 0usize;
         while let Some(rel) = span[at..].find(verb) {

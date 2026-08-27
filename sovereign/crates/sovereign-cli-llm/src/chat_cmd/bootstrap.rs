@@ -33,9 +33,7 @@ use sovereign_core::runtime::Runtime;
 use sovereign_core::traits::{ApprovalChannel, InferenceProvider, StateStore};
 use sovereign_core::types::*;
 use sovereign_core::SkillRegistry;
-use sovereign_runtime_recipe::{
-    LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring,
-};
+use sovereign_runtime_recipe::{LaneWarmth, RecipeInputs, RecipeProgress, RerankWiring};
 // Re-exported (not just `use`d) so the other CLI modules that referenced the
 // formerly-local `chat_cmd::bootstrap::SplitInferenceProvider` (raptor,
 // recipe_cmd) keep resolving after it was promoted to sovereign-inference.

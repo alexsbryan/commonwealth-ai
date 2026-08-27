@@ -26,19 +26,19 @@ use sovereign_contracts::tool_bundle::ToolFamily;
 fn ui_offered_ids() -> Vec<String> {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../src/lib/components/SettingsPanel.svelte");
-    let src = std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let src =
+        std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
 
-    let start = src
-        .find("const TOOL_OPTS = [")
-        .expect("SettingsPanel.svelte no longer declares TOOL_OPTS — if the tool \
+    let start = src.find("const TOOL_OPTS = [").expect(
+        "SettingsPanel.svelte no longer declares TOOL_OPTS — if the tool \
                  checkboxes moved, point this census at their new home rather than \
-                 deleting it");
+                 deleting it",
+    );
     let rest = &src[start..];
-    let end = rest
-        .find("] as const;")
-        .expect("TOOL_OPTS is not terminated by `] as const;` — the scan would \
-                 otherwise run past it and pick up unrelated `id:` fields");
+    let end = rest.find("] as const;").expect(
+        "TOOL_OPTS is not terminated by `] as const;` — the scan would \
+                 otherwise run past it and pick up unrelated `id:` fields",
+    );
 
     let mut ids = Vec::new();
     for line in rest[..end].lines() {

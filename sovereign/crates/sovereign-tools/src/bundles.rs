@@ -143,13 +143,15 @@ impl ToolBundle for CoreTurnTools {
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         let mut r = BundleReport::new(self.name());
 
-        r = r.record(reg.register_reporting(Box::new(
-            crate::document::DocumentTool::new(
-                Arc::clone(&self.store),
-                Arc::clone(&self.inference),
-            )
-            .declared(),
-        )));
+        r = r.record(
+            reg.register_reporting(Box::new(
+                crate::document::DocumentTool::new(
+                    Arc::clone(&self.store),
+                    Arc::clone(&self.inference),
+                )
+                .declared(),
+            )),
+        );
         r = r.record(reg.register_reporting(Box::new(
             crate::ClaimSearchTool::new(Arc::clone(&self.corpus_engine)).declared(),
         )));
@@ -158,10 +160,12 @@ impl ToolBundle for CoreTurnTools {
         )));
         // Deterministic land-value-tax analytics over parcel corpora — pre-cited
         // figures the ComplexTask synthesizer quotes verbatim.
-        r = r.record(reg.register_reporting(Box::new(
-            crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&self.corpus_engine))
-                .declared(),
-        )));
+        r = r.record(
+            reg.register_reporting(Box::new(
+                crate::parcel_analytics::ParcelAnalyticsTool::new(Arc::clone(&self.corpus_engine))
+                    .declared(),
+            )),
+        );
         // Typed SEC-filing figures with basis + accession, or first-class
         // refusals (FINANCIAL_CORPORA §6).
         r = r.record(reg.register_reporting(Box::new(
@@ -185,12 +189,12 @@ impl ToolBundle for CoreTurnTools {
                 )));
             }
             WebReach::Withheld(why) => {
-                r = r.record(reg.register_reporting(Box::new(
-                    crate::search::SearchTool::new(
+                r = r.record(
+                    reg.register_reporting(Box::new(crate::search::SearchTool::new(
                         Arc::clone(&self.store),
                         Arc::clone(&self.inference),
-                    ),
-                )));
+                    ))),
+                );
                 r = r.withheld("search:web-fallback", *why);
             }
         }
@@ -338,7 +342,12 @@ impl ToolBundle for KnowledgeFrontDoor {
             crate::KnowledgeLookupTool::new(Arc::clone(&self.store), Arc::clone(&self.inference));
         match &self.notes {
             Some(ns) => lookup = lookup.with_notes(Arc::clone(ns)),
-            None => r = r.withheld("knowledge_lookup:notes-channel", "no note store on this host"),
+            None => {
+                r = r.withheld(
+                    "knowledge_lookup:notes-channel",
+                    "no note store on this host",
+                )
+            }
         }
         match self.escalation {
             WebEscalation::Enabled => {
@@ -354,13 +363,15 @@ impl ToolBundle for KnowledgeFrontDoor {
             }
         }
         r.record(reg.register_reporting(Box::new(lookup.declared())))
-            .record(reg.register_reporting(Box::new(
-                crate::AttachedDocumentSearchTool::new(
-                    Arc::clone(&self.store),
-                    Arc::clone(&self.inference),
-                )
-                .declared(),
-            )))
+            .record(
+                reg.register_reporting(Box::new(
+                    crate::AttachedDocumentSearchTool::new(
+                        Arc::clone(&self.store),
+                        Arc::clone(&self.inference),
+                    )
+                    .declared(),
+                )),
+            )
     }
 }
 
@@ -408,41 +419,47 @@ impl ToolBundle for CodeIntelTools {
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
         let health = Arc::new(crate::IndexHealthChecker::new(Arc::clone(&self.scip_graph)));
         BundleReport::new(self.name())
-            .record(reg.register_reporting(Box::new(
-                crate::SymbolLookupTool::new(
-                    Arc::clone(&self.corpus_engine),
-                    Arc::clone(&self.scip_graph),
-                )
-                .with_health_checker(Arc::clone(&health))
-                .declared(),
-            )))
-            .record(reg.register_reporting(Box::new(
-                crate::CodeSearchTool::new(Arc::clone(&self.corpus_engine))
-                    .with_inference(Arc::clone(&self.inference))
+            .record(
+                reg.register_reporting(Box::new(
+                    crate::SymbolLookupTool::new(
+                        Arc::clone(&self.corpus_engine),
+                        Arc::clone(&self.scip_graph),
+                    )
+                    .with_health_checker(Arc::clone(&health))
                     .declared(),
-            )))
+                )),
+            )
+            .record(
+                reg.register_reporting(Box::new(
+                    crate::CodeSearchTool::new(Arc::clone(&self.corpus_engine))
+                        .with_inference(Arc::clone(&self.inference))
+                        .declared(),
+                )),
+            )
             .record(reg.register_reporting(Box::new(
                 crate::RecentChangesTool::new(Arc::clone(&self.corpus_engine)).declared(),
             )))
-            .record(reg.register_reporting(Box::new(
-                crate::FindCalleesTool::new(
-                    Arc::clone(&self.corpus_engine),
-                    Arc::clone(&self.scip_graph),
-                )
-                .with_health_checker(Arc::clone(&health))
-                .declared(),
-            )))
-            .record(reg.register_reporting(Box::new(
-                crate::FindCallersTool::new(
-                    Arc::clone(&self.corpus_engine),
-                    Arc::clone(&self.scip_graph),
-                )
-                .with_health_checker(Arc::clone(&health))
-                .declared(),
-            )))
-            .record(reg.register_reporting(Box::new(
-                crate::CapabilityMapTool::new().declared(),
-            )))
+            .record(
+                reg.register_reporting(Box::new(
+                    crate::FindCalleesTool::new(
+                        Arc::clone(&self.corpus_engine),
+                        Arc::clone(&self.scip_graph),
+                    )
+                    .with_health_checker(Arc::clone(&health))
+                    .declared(),
+                )),
+            )
+            .record(
+                reg.register_reporting(Box::new(
+                    crate::FindCallersTool::new(
+                        Arc::clone(&self.corpus_engine),
+                        Arc::clone(&self.scip_graph),
+                    )
+                    .with_health_checker(Arc::clone(&health))
+                    .declared(),
+                )),
+            )
+            .record(reg.register_reporting(Box::new(crate::CapabilityMapTool::new().declared())))
     }
 }
 
@@ -540,10 +557,8 @@ impl ToolBundle for DocumentOperations {
     }
 
     async fn register_into(&self, reg: &mut ToolRegistry) -> BundleReport {
-        let mut tool = crate::DocumentOperationTool::new(
-            Arc::clone(&self.store),
-            Arc::clone(&self.inference),
-        );
+        let mut tool =
+            crate::DocumentOperationTool::new(Arc::clone(&self.store), Arc::clone(&self.inference));
         let mut r = BundleReport::new(self.name());
         match &self.progress {
             DocumentProgress::Streamed(cb) => tool = tool.with_progress(Arc::clone(cb)),
@@ -600,7 +615,10 @@ impl RecipeAuthoringTools {
 
     /// Add the feature-store-backed tools. Requires notes as well — both
     /// `CheckpointTool` and `CapabilityRequestTool` take the pair.
-    pub fn with_features(mut self, features: Arc<sovereign_recipe_author::recipe_project_store::RecipeProjectStore>) -> Self {
+    pub fn with_features(
+        mut self,
+        features: Arc<sovereign_recipe_author::recipe_project_store::RecipeProjectStore>,
+    ) -> Self {
         self.features = Some(features);
         self
     }
@@ -623,26 +641,35 @@ impl ToolBundle for RecipeAuthoringTools {
         let mut r = BundleReport::new(self.name());
         r = r.record(reg.register_reporting(Box::new(RecipeReadTool::new())));
         r = r.record(reg.register_reporting(Box::new(RecipeWriteTool::new())));
-        r = r.record(reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(
-            Arc::new(CorpusEngineRecipeTester::new()),
-        ))));
-        r = r.record(reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::new(
-            CorpusEngineRecipeTester::new(),
-        )))));
-        r = r.record(reg.register_reporting(Box::new(RecipeTestTool::new(Arc::new(
-            CorpusEngineRecipeTester::new(),
-        )))));
+        r = r.record(
+            reg.register_reporting(Box::new(RecipeWriteStructuredTool::new(Arc::new(
+                CorpusEngineRecipeTester::new(),
+            )))),
+        );
+        r = r.record(
+            reg.register_reporting(Box::new(RecipeValidateTool::new(Arc::new(
+                CorpusEngineRecipeTester::new(),
+            )))),
+        );
+        r = r.record(
+            reg.register_reporting(Box::new(RecipeTestTool::new(Arc::new(
+                CorpusEngineRecipeTester::new(),
+            )))),
+        );
         r = r.record(reg.register_reporting(Box::new(RegistryBrowseTool)));
         r = r.record(reg.register_reporting(Box::new(ProbeUrlTool::new())));
 
         match &self.notes {
             Some(notes) => {
-                r = r.record(reg.register_reporting(Box::new(DecisionLogTool::with_notes(
-                    Arc::clone(notes),
-                ))));
-                r = r.record(reg.register_reporting(Box::new(
-                    ResearchFindingTool::with_notes(Arc::clone(notes)),
-                )));
+                r =
+                    r.record(reg.register_reporting(Box::new(DecisionLogTool::with_notes(
+                        Arc::clone(notes),
+                    ))));
+                r = r.record(
+                    reg.register_reporting(Box::new(ResearchFindingTool::with_notes(Arc::clone(
+                        notes,
+                    )))),
+                );
                 match &self.features {
                     Some(features) => {
                         r = r.record(reg.register_reporting(Box::new(
@@ -655,8 +682,10 @@ impl ToolBundle for RecipeAuthoringTools {
                         // host. Only the desktop called this, so a request
                         // submitted through the server or the daemon was
                         // written and then unreadable (ARCH §10.6).
-                        let mut cap =
-                            CapabilityRequestTool::with_stores(Arc::clone(notes), Arc::clone(features));
+                        let mut cap = CapabilityRequestTool::with_stores(
+                            Arc::clone(notes),
+                            Arc::clone(features),
+                        );
                         match crate::recipe_author::maintainer_inbox_dir() {
                             Ok(dir) => cap = cap.with_inbox_dir(dir),
                             Err(e) => {
