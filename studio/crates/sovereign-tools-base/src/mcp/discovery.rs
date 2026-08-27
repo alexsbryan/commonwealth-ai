@@ -104,6 +104,18 @@ impl McpServerManager {
     pub async fn server_statuses(&self) -> Vec<McpServerStatus> {
         self.statuses.read().await.clone()
     }
+
+    /// Fold another manager's connection results into this one.
+    ///
+    /// A host may declare MCP servers in two places — the canonical
+    /// `~/.svrnmesh/config.toml` that `svrn mcp add` writes, and its own
+    /// deployment config — and both connect into the same registry. Returning
+    /// two managers would leave a settings pane showing one of them, which is
+    /// worse than showing neither because it looks complete (ARCH §18.3).
+    pub async fn absorb(&self, other: Self) {
+        let mut mine = self.statuses.write().await;
+        mine.extend(other.statuses.into_inner());
+    }
 }
 
 /// Connect to a single server and discover its tools.

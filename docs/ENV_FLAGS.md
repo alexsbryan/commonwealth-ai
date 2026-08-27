@@ -80,6 +80,7 @@ dead-codepath survey lives in `docs/ENV_VAR_AUDIT.md`.
 
 | flag | default | status | purpose |
 |---|---|---|---|
+| `SOVEREIGN_ENRICH_PROGRESS` | off (human banners) | shipped | Set to `json` and `svrn enrich build` emits one `@progress {…}` line per typed EnrichProgress event on stdout instead of human banners. Set by the PARENT process, not by an operator: sovereign_tools::enrich spawns the CLI and used to rebuild the event stream by regex-matching the banners, so rewording one for a human silently froze the desktop's progress panel (TOPOLOGY §9.3). An env var rather than a flag because the parent may resolve an OLDER sovereign-cli from $PATH — an unknown flag makes that binary exit 2, while an unknown env var is ignored and the reader reports ProgressWire::Silent. One writer (enrich_cmd/build.rs), one reader (sovereign-tools/src/enrich.rs), one wire (corpus_engine::enrichment::pipeline::progress::wire). |
 | `SOVEREIGN_GLINER_MODEL_ID` | gliner_small-v2.1 | experiment | WHICH GLiNER model the ingest path loads; the generation (v1 gline-rs vs GLiNER2 bare-ort) is derived from it via KNOWN_MODELS. gliner2-base-v1-onnx routes ingest through GLiNER2 — MEASURED AND REJECTED for the vault path 2026-08-03 (no speedup on vault-length chunks, worse per-mention typing; DEFAULTS_LEDGER.md REJECTED). The knob stays because it is how that is re-tested. Sibling of SOVEREIGN_GLINER_MODEL_DIR, which says WHERE models live. |
 
 ## grounding

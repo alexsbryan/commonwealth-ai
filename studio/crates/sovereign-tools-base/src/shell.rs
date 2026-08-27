@@ -14,6 +14,11 @@ pub struct ShellTool;
 
 #[async_trait]
 impl Tool for ShellTool {
+    /// Governed by the `shell` switch — the operator approves each command, so a surface that lets someone switch it off must be obeyed.
+    fn family(&self) -> Option<sovereign_contracts::tool_bundle::ToolFamily> {
+        Some(sovereign_contracts::tool_bundle::ToolFamily::Shell)
+    }
+
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
             id: "shell".to_string(),

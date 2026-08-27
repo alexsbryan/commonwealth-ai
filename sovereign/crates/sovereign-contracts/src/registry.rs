@@ -22,6 +22,31 @@ pub struct ToolRegistry {
     /// Constructor leaves it `None`; daemons set it via
     /// [`Self::with_cache`].
     cache: Option<Arc<ToolResultCache>>,
+    /// Which user-facing tool families this host may register.
+    ///
+    /// `None` is UNGATED and is the default, so a host that has no per-user
+    /// tool switches — the daemon, the hub server — behaves exactly as it did
+    /// before this field existed. A surface with a settings panel wires the
+    /// user's set with [`Self::with_permitted`].
+    permitted: Option<crate::tool_bundle::ToolPermissions>,
+}
+
+/// What [`ToolRegistry::register_reporting`] did, so the caller's
+/// [`BundleReport`](crate::tool_bundle::BundleReport) can say so.
+///
+/// A bare id would make a withheld tool indistinguishable from a registered
+/// one in the report, which is the substitution ARCH §18.3 forbids.
+#[derive(Debug, Clone)]
+pub enum Registration {
+    /// Registered and callable.
+    Registered(String),
+    /// Not registered: the user has this family switched off.
+    Gated {
+        /// The tool id that would have been registered.
+        id: String,
+        /// The family whose switch withheld it.
+        family: crate::tool_bundle::ToolFamily,
+    },
 }
 
 impl ToolRegistry {
@@ -31,7 +56,19 @@ impl ToolRegistry {
             tools: Vec::new(),
             call_counts: Mutex::new(HashMap::new()),
             cache: None,
+            permitted: None,
         }
+    }
+
+    /// Gate registration on the user's permitted families.
+    ///
+    /// Only [`Self::register_reporting`] consults this — the bundle path,
+    /// which has a report to carry the withholding. [`Self::register`] stays
+    /// the ungated primitive on purpose: dropping a tool with no way to say so
+    /// is the silent substitution this gate exists to avoid.
+    pub fn with_permitted(mut self, permitted: crate::tool_bundle::ToolPermissions) -> Self {
+        self.permitted = Some(permitted);
+        self
     }
 
     /// Wire a shared `ToolResultCache` (Tier 4). Callers that
@@ -60,10 +97,16 @@ impl ToolRegistry {
     /// what they contributed. Reading the id off the descriptor keeps the
     /// report from becoming a second, drifting copy of the id list
     /// (ARCH §10.6 — one decider, one name).
-    pub fn register_reporting(&mut self, tool: Box<dyn Tool>) -> String {
+    pub fn register_reporting(&mut self, tool: Box<dyn Tool>) -> Registration {
         let id = tool.descriptor().id;
+        let family = tool.family();
+        if let (Some(p), Some(f)) = (self.permitted.as_ref(), family) {
+            if !p.permits(Some(f)) {
+                return Registration::Gated { id, family: f };
+            }
+        }
         self.register(tool);
-        id
+        Registration::Registered(id)
     }
 
     /// Register every manifest in the catalog that declares a `delegate` — the

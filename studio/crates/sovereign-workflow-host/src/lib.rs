@@ -41,7 +41,8 @@ pub use sovereign_workflow::{StepObserver, WorkflowProgress};
 
 pub mod author;
 pub use author::{
-    author_tools, WorkflowValidateTool, WorkflowWriteStructuredTool, WorkflowWriteTool,
+    author_tools, WorkflowAuthoringTools, WorkflowValidateTool, WorkflowWriteStructuredTool,
+    WorkflowWriteTool,
 };
 
 pub mod author_schema;

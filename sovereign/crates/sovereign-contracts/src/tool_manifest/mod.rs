@@ -400,6 +400,8 @@ pub struct DeclaredTool {
     signal: Option<SignalFn>,
     claims: Option<ClaimsFn>,
     authority_domains: Option<AuthorityDomainsFn>,
+    /// Forwarded by the `Tool` impl below — see [`Self::with_family`].
+    family: Option<crate::tool_bundle::ToolFamily>,
 }
 
 impl DeclaredTool {
@@ -424,6 +426,7 @@ impl DeclaredTool {
             signal: None,
             claims: None,
             authority_domains: None,
+            family: None,
         }
     }
 
@@ -451,6 +454,21 @@ impl DeclaredTool {
         self
     }
 
+    /// Declare which user-facing switch governs this tool — see
+    /// [`Tool::family`].
+    ///
+    /// THIS WRAPPER IS WHY THE METHOD EXISTS HERE. `DeclaredTool` is what
+    /// actually gets registered, so a family declared only on the inner type
+    /// would never be seen: the wrapper would inherit `Tool::family`'s `None`
+    /// default and the registry gate would silently never fire for any
+    /// `.declared()` tool. That is the same defaulted-wrapper defect
+    /// `bundles.rs` records three shipped bugs from, and
+    /// `a_declared_tool_forwards_its_family` is the falsifier.
+    pub fn with_family(mut self, family: crate::tool_bundle::ToolFamily) -> Self {
+        self.family = Some(family);
+        self
+    }
+
     /// The manifest this tool was declared from.
     pub fn manifest(&self) -> &ToolManifest {
         &self.manifest
@@ -465,6 +483,10 @@ impl Tool for DeclaredTool {
 
     fn required_permissions(&self) -> Vec<Permission> {
         self.manifest.permissions.clone()
+    }
+
+    fn family(&self) -> Option<crate::tool_bundle::ToolFamily> {
+        self.family
     }
 
     /// Schema first, ALWAYS — a bespoke check adds to the declaration, it

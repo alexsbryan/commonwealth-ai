@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::sync::Arc;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::*;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 const CHUNKS_PER_BATCH: usize = 4;
 const MAX_REDUCE_INPUT_CHARS: usize = 8192;
@@ -168,14 +167,11 @@ impl DocumentTool {
             let state = Arc::clone(&state);
             Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
         })
+        .with_family(sovereign_contracts::tool_bundle::ToolFamily::Document)
     }
 
     /// The executable half of `document`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let source = params
             .get("source")
             .and_then(|v| v.as_str())
@@ -226,7 +222,6 @@ impl DocumentTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if params.get("source").and_then(|v| v.as_str()).is_none() {
             return Err(Error::InvalidInput(
                 "Document tool requires a 'source' parameter".to_string(),

@@ -924,14 +924,27 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
             // ARCH §18.3).
             tool_bundles: {
                 let mut b = sovereign_runtime_recipe::baseline_bundles(
-                    &state_store,
-                    &routed_provider,
-                    &engine,
-                    sovereign_tools::bundles::WebReach::Granted(
-                        sovereign_core::egress::search_client()
-                            .expect("egress boundary search client build"),
-                    ),
+                    sovereign_runtime_recipe::BaselineDeps {
+                        store: &state_store,
+                        inference: &routed_provider,
+                        corpus_engine: &engine,
+                        // The daemon opened this above; wiring it here is what
+                        // gives `knowledge_lookup` its notes channel. It ran
+                        // with that channel dark until 2026-08-26 while the
+                        // desktop, which wired it by hand, did not.
+                        note_store: Some(&notes_store),
+                        web: sovereign_tools::bundles::WebReach::Granted(
+                            sovereign_core::egress::search_client()
+                                .expect("egress boundary search client build"),
+                        ),
+                        // No operator switch on a daemon, and escalating to the
+                        // open web without one is a decision nobody made.
+                        escalation: sovereign_tools::bundles::WebEscalation::Disabled,
+                    },
                 );
+                b.push(Box::new(sovereign_tools::bundles::WikipediaTools::new(
+                    Arc::clone(&engine),
+                )));
                 b.push(Box::new(sovereign_contracts::tool_bundle::Withheld::new(
                     "shell",
                     "no shell in a long-lived daemon running as a different user \
@@ -939,6 +952,12 @@ async fn run_daemon(launch: &Launch, args: &[String]) -> i32 {
                 )));
                 b
             },
+            // No settings panel on this host, so nothing to consult: every
+            // family composed above registers.
+            switches: sovereign_runtime_recipe::ToolSwitches::Ungoverned,
+            // No config file of its own: the canonical `[[mcp_servers]]` array
+            // is the whole declaration on this host.
+            mcp_extra: Vec::new(),
             // A service must reach `listening` promptly. The meta-atlas is a
             // ~1 GB JSON parse (981 MB on the authoring host) and blocking
             // boot on it is a daemon that looks hung to `svrn daemon start`;

@@ -323,19 +323,20 @@ fn default_skills_dir() -> PathBuf {
     sovereign_contracts::rebrand::data_dir().join("skills")
 }
 
+/// Every family, derived from the ONE list.
+///
+/// This used to be a hand-written vec, and it was one of FOUR copies of the
+/// same five strings — here, the setup flow, `SettingsPanel.svelte`, and a
+/// five-arm match in the bootstrap. They had drifted: the setup flow omitted
+/// `knowledge_lookup`, so a user who completed setup with an empty list lost
+/// the knowledge front door this function documents as default-on. Deriving
+/// from `ToolFamily::ALL` is what makes that unrepresentable rather than
+/// merely fixed (ARCH §2, §10.6).
 fn default_enabled_tools() -> Vec<String> {
-    vec![
-        "shell".to_string(),
-        "search".to_string(),
-        "web_fetch".to_string(),
-        "document".to_string(),
-        // Tool-Mastery Phase 5 — unified knowledge front door
-        // (corpus + memory + notes). Default-on so the desktop's
-        // skill-narrowed catalogs (codebase-navigator, research-
-        // analyst, etc.) actually expose it; skills' ToolPreferences
-        // can drop it explicitly when not needed.
-        "knowledge_lookup".to_string(),
-    ]
+    sovereign_contracts::tool_bundle::ToolFamily::ALL
+        .iter()
+        .map(|f| f.wire_id().to_string())
+        .collect()
 }
 
 fn default_temperature() -> f32 {

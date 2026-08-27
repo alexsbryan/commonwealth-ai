@@ -436,6 +436,11 @@ impl Default for WebFetchTool {
 
 #[async_trait]
 impl Tool for WebFetchTool {
+    /// Governed by the `webfetch` switch — reads an arbitrary URL the model chose, so it is gated separately from search.
+    fn family(&self) -> Option<sovereign_contracts::tool_bundle::ToolFamily> {
+        Some(sovereign_contracts::tool_bundle::ToolFamily::WebFetch)
+    }
+
     fn descriptor(&self) -> ToolDescriptor {
         ToolDescriptor {
             id: "web_fetch".to_string(),

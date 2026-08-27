@@ -12,7 +12,6 @@
 
 use std::sync::Arc;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::slot_policy::Workload;
 use sovereign_core::traits::{InferenceProvider, StateStore};
@@ -335,14 +334,11 @@ impl DocumentOperationTool {
             let state = Arc::clone(&state);
             Arc::new(move |p: &serde_json::Value| state.validate_extra(p))
         })
+        .with_family(sovereign_contracts::tool_bundle::ToolFamily::Document)
     }
 
     /// The executable half of `document_operation`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let source = params["source"].as_str().unwrap();
         let operation = params["operation"].as_str().unwrap();
         let map_prompt = params["map_prompt"].as_str().unwrap();
@@ -440,7 +436,6 @@ impl DocumentOperationTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         for field in &["source", "operation", "map_prompt", "reduce_prompt"] {
             if params.get(*field).and_then(|v| v.as_str()).is_none() {
                 return Err(Error::InvalidInput(format!(

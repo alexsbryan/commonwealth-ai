@@ -1185,6 +1185,15 @@ status = "deprecated"
 alias_of = "SOVEREIGN_HARNESS"
 purpose = "Backwards-compat alias for SOVEREIGN_HARNESS (tested + documented; the one legacy duplicate the 2026-07-13 audit named)."
 
+# ── enrichment: the build's progress wire ───────────────────────────
+
+[[flag]]
+name = "SOVEREIGN_ENRICH_PROGRESS"
+cluster = "enrichment"
+default = "off (human banners)"
+status = "shipped"
+purpose = "Set to `json` and `svrn enrich build` emits one `@progress {…}` line per typed EnrichProgress event on stdout instead of human banners. Set by the PARENT process, not by an operator: sovereign_tools::enrich spawns the CLI and used to rebuild the event stream by regex-matching the banners, so rewording one for a human silently froze the desktop's progress panel (TOPOLOGY §9.3). An env var rather than a flag because the parent may resolve an OLDER sovereign-cli from $PATH — an unknown flag makes that binary exit 2, while an unknown env var is ignored and the reader reports ProgressWire::Silent. One writer (enrich_cmd/build.rs), one reader (sovereign-tools/src/enrich.rs), one wire (corpus_engine::enrichment::pipeline::progress::wire)."
+
 # ── enrichment: ingest-time entity extraction ───────────────────────
 
 [[flag]]

@@ -96,25 +96,25 @@ const CANONICAL_CONSTRUCTOR: &str = "sovereign/crates/sovereign-runtime-recipe/s
 ///
 /// Per-host wiring, not tools. Each remaining entry names its own.
 const UNSHARED_RECIPES: &[&str] = &[
-    // The desktop, in `bootstrap_with_progress`. Blocked on GLiNER, and on
-    // nothing else structural: the recipe loads the extractor EAGERLY and the
-    // desktop lazily (`LazyGlinerExtractor`, a ~950ms load moved to a
-    // background thread and shared with document ingest). The desktop's is
-    // better, and folding it in changes when the extractor is warm for the
-    // other two hosts — a retrieval-timing change, so a bench question and not
-    // a build (ARCH §18.4). Its own slots (compaction, landscape digests,
-    // folder metadata, the sensitivity oracle) are struct-update overrides on
-    // `CommonParts::parts`, which is what that field is for.
-    "sovereign/crates/sovereign-desktop/src-tauri/src/state.rs",
-    // `sovereign-server`. Mechanical since the tool-bundle seam landed
-    // (2026-08-26): its 31 tools are now expressible as bundles it composes
-    // — `CodeIntelTools` over the SCIP handle it opens, `NotesTools` over its
-    // `notes.db`, `RecipeAuthoringTools`, `WorkflowAuthoringTools`,
-    // `ComputeTools`, `DocumentOperations` — so adoption no longer costs it a
-    // capability. Its extra Runtime slot is `corpus_principal` (tenancy), a
-    // struct-update override; its lane construction is already a near-copy of
-    // the recipe's, which is the drift this list exists to end.
-    "sovereign/crates/sovereign-server/src/main.rs",
+    // The desktop ADOPTED on 2026-08-26 and is no longer on this list. What
+    // unblocked it was `LaneWarmth` reaching `lane.gliner`: the recipe loaded
+    // the extractor eagerly while the desktop loaded it lazily, and the fix
+    // was not to pick a winner but to notice that ONE declaration was being
+    // read two ways — `sovereign daemon run` already said `Deferred` and this
+    // one lane member ignored it (`load_gliner`, and its `warmth_census`
+    // falsifier). The desktop's own slots — compaction, landscape digests,
+    // folder metadata, the sensitivity oracle, the Tauri routing sink — are
+    // struct-update overrides on `CommonParts::parts`, which is what that
+    // field is for, and there are six of them in a 1,659-line function that
+    // used to hold the whole recipe.
+    // `sovereign-server` ADOPTED on 2026-08-26, the same day, and this list is
+    // now EMPTY. Its 31 tools became the bundles it composes — `CodeIntelTools`
+    // over the SCIP handle it opens, `NotesTools` over its `notes.db`,
+    // `RecipeAuthoringTools`, `WorkflowAuthoringTools`, `ComputeTools`,
+    // `DocumentOperations` — so adoption stopped costing it a capability, which
+    // is the whole reason the seam was built. Its extra Runtime slots are
+    // `corpus_principal` (tenancy), `landscape_digests` and the narration sink,
+    // all struct-update overrides.
 ];
 
 /// Every process that commissions a `Runtime`, by either door.
