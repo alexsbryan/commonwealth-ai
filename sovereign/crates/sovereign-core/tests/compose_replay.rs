@@ -336,3 +336,82 @@ async fn compose_replay() {
         report.arms.iter().find_map(|a| a.error.clone())
     );
 }
+
+/// Plan an outline over the bed's window with the PRODUCTION planner, and dump
+/// it as the JSON array `COMPOSE_SECTIONS` reads.
+///
+/// Why this exists rather than a hand-written outline: the readability deficit
+/// is structural (-1.21 at 16x4, the only dimension still behind, and the one
+/// evidence does not move), and the judge names the cause — "a somewhat
+/// fragmented structure with many short sections that jump between topics ...
+/// rather than a single narrative arc". Testing that means composing the SAME
+/// window against a SHORTER outline. But an outline I author myself is a second
+/// decider (§10.6) and measures my prose, not the system's planning. So the
+/// system plans it, through `plan_outline` — the same call a real flight makes,
+/// honouring `outline_max()` and therefore `SOVEREIGN_DR_REPORT_ARCHITECTURE`.
+///
+///     COMPOSE_SECTIONS_OUT=/tmp/outline-12.json \
+///     SOVEREIGN_DR_REPORT_ARCHITECTURE=1 \
+///     cargo test -p sovereign-core --test compose_replay \
+///       -- --ignored --nocapture plan_outline_dump
+///
+/// then fly it: `COMPOSE_SECTIONS=/tmp/outline-12.json ... sweep-compose.sh`
+/// with its OWN `OUT` dir, because an arm is keyed by its `NxM` filename alone.
+#[tokio::test]
+#[ignore = "live daemon + one planning call; run explicitly"]
+async fn plan_outline_dump() {
+    let _ = tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "deep_research=info".into()),
+        )
+        .with_test_writer()
+        .try_init();
+
+    let out = std::env::var("COMPOSE_SECTIONS_OUT")
+        .expect("COMPOSE_SECTIONS_OUT=<path.json> — where to write the planned outline");
+    let path = input_path();
+    let raw = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("compose input {} unreadable ({e})", path.display()));
+    let input: ComposeInput = serde_json::from_str(&raw).expect("compose-input.json parses");
+
+    // Same pin as the arms: an unpinned planner is not the planner the arms
+    // will then compose against.
+    std::env::set_var("SOVEREIGN_DR_PIN_SAMPLING", "1");
+    std::env::set_var("SOVEREIGN_DR_COMPOSED_REPORT", "1");
+
+    let provider: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
+        ENDPOINT,
+        None,
+        MODEL_ID,
+        PROVIDER_CTX,
+    ));
+    let (port, _backend) = build_port("auto", None, SearchSource::Corpus, &[], provider, None)
+        .await
+        .expect("build live research port");
+
+    let planned = synthesize::plan_outline(&*port, &input.question, &input.window)
+        .await
+        .expect("plan_outline");
+
+    // A planner that returned nothing is a REFUSAL, not an outline. Writing it
+    // would hand `COMPOSE_SECTIONS` an empty array, which composes a plausible
+    // report against no sections at all (§18.3) — the arm would look flown.
+    assert!(
+        !planned.is_empty(),
+        "plan_outline returned an EMPTY outline"
+    );
+
+    eprintln!(
+        "planned {} sections (bed pinned {}); architecture flag = {:?}",
+        planned.len(),
+        input.sections.len(),
+        std::env::var("SOVEREIGN_DR_REPORT_ARCHITECTURE").ok()
+    );
+    for (i, s) in planned.iter().enumerate() {
+        eprintln!("  {:2}. {}", i + 1, s);
+    }
+    std::fs::write(&out, serde_json::to_string_pretty(&planned).unwrap())
+        .unwrap_or_else(|e| panic!("write {out}: {e}"));
+    eprintln!("wrote {out}");
+}
