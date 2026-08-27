@@ -103,7 +103,7 @@
 //! Decision logic is pure and unit-tested weight-free below; all file
 //! and context IO stays in `model_slot.rs` where the decode paths live.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 
@@ -163,6 +163,13 @@ pub(crate) struct PrefixStateCache {
     /// First sighting per family, awaiting a second to learn the
     /// boundary from. Bounded alongside `entries`.
     last_seen: HashMap<u64, Vec<LlamaToken>>,
+    /// Keys whose pin is a COMPROMISE between two request shapes that
+    /// share a family fingerprint but diverge before either one's
+    /// declared boundary. Such a pin is deliberately shorter than what
+    /// the longer shape declares, and must NOT be upgraded to that
+    /// declaration — doing so orphans the shorter shape, which then
+    /// re-learns the pin back down, forever. See `plan_directed`.
+    shared_pins: HashSet<u64>,
 }
 
 /// Default **ON** since 2026-08-03; opt OUT with
@@ -276,6 +283,7 @@ impl PrefixStateCache {
             entries: HashMap::new(),
             lru: VecDeque::new(),
             last_seen: HashMap::new(),
+            shared_pins: HashSet::new(),
         }
     }
 
@@ -289,6 +297,7 @@ impl PrefixStateCache {
             entries: HashMap::new(),
             lru: VecDeque::new(),
             last_seen: HashMap::new(),
+            shared_pins: HashSet::new(),
         }
     }
 
@@ -388,9 +397,15 @@ impl PrefixStateCache {
             return self.plan(tokens);
         }
         let key = Self::key(tokens);
-        if let Some(entry) = self.entries.get(&key) {
+        // Read what we need about any existing entry and DROP the borrow, so
+        // the anti-thrash bookkeeping below can mutate `self`.
+        let existing = self.entries.get(&key).map(|entry| {
             let entry_len = entry.tokens.len();
-            if tokens.len() > entry_len && tokens[..entry_len] == entry.tokens[..] {
+            let usable = tokens.len() > entry_len && tokens[..entry_len] == entry.tokens[..];
+            (entry_len, usable, lcp_len(&entry.tokens, tokens))
+        });
+        if let Some((entry_len, usable, lcp)) = existing {
+            if usable {
                 // A matching entry SHORTER than the caller's declaration by
                 // more than a pin's worth is re-learned, not restored.
                 //
@@ -415,7 +430,15 @@ impl PrefixStateCache {
                 // and every later sibling restores the whole declared
                 // prefix. The `min_pin` margin keeps a trivial difference
                 // from churning the pin.
-                if directed_pin > entry_len.saturating_add(self.min_pin) {
+                //
+                // EXCEPT when the pin is a shared compromise (see the branch
+                // below): it is short ON PURPOSE, because a sibling shape
+                // diverges before the declaration. Upgrading it there orphans
+                // that sibling, which re-pins it back down — the thrash this
+                // guard exists to stop.
+                if !self.shared_pins.contains(&key)
+                    && directed_pin > entry_len.saturating_add(self.min_pin)
+                {
                     tracing::info!(
                         target: "prefix_state",
                         key = format_args!("{key:016x}"),
@@ -436,10 +459,41 @@ impl PrefixStateCache {
                     prefix_len: entry_len,
                 };
             }
+            // The entry exists but THIS request cannot use it: the two share a
+            // 48-token family fingerprint yet diverge before the entry's end.
+            //
+            // Overwriting it at our own declared boundary — what this fell
+            // through to before 2026-08-27 — makes the two shapes evict each
+            // other forever, and every eviction costs a FULL prefill. Measured
+            // on the Flash-Next synth run (2026-08-26): five of six keys
+            // oscillated between exactly two pin sizes
+            // (e.g. [3998, 4612, 3998, 4612]), 12 of 19 LEARNs were this
+            // thrash, ~240s of that run's 566s of cold prefill.
+            //
+            // Pin at the longest prefix BOTH shapes share instead. It is
+            // shorter than either declaration, so the longer shape re-prefills
+            // its own tail on every call — far cheaper than a re-learn — and
+            // `shared_pins` stops the upgrade rule above from undoing it.
+            // A genuinely drifted family (new evidence) shares almost nothing,
+            // so `lcp` falls under `min_pin` and we take the replace path below.
+            if lcp >= self.min_pin && lcp < tokens.len() {
+                tracing::info!(
+                    target: "prefix_state",
+                    key = format_args!("{key:016x}"),
+                    pinned_tokens = entry_len,
+                    directed_tokens = directed_pin,
+                    shared_prefix = lcp,
+                    "prefix_state: two shapes share this family — pinning at their common prefix"
+                );
+                self.shared_pins.insert(key);
+                self.last_seen.remove(&key);
+                return PrefixPlan::Learn { key, pin_len: lcp };
+            }
         }
         // No usable entry (first sighting of this evidence, or the
         // family drifted to new evidence): learn NOW at the directed
         // boundary. `commit` replaces any stale entry under this key.
+        self.shared_pins.remove(&key);
         self.last_seen.remove(&key);
         PrefixPlan::Learn {
             key,
@@ -533,6 +587,7 @@ impl PrefixStateCache {
             let _ = std::fs::remove_file(&e.path);
         }
         self.lru.retain(|k| *k != key);
+        self.shared_pins.remove(&key);
     }
 
     fn touch(&mut self, key: u64) {
@@ -553,6 +608,103 @@ mod tests {
             .collect();
         v.extend(body.iter().map(|&t| LlamaToken(t)));
         v
+    }
+
+    /// Two request shapes that share a family fingerprint AND a common
+    /// core, then diverge — the shape that thrashed on Flash-Next
+    /// (2026-08-26). `own_len` is stable text only THIS shape declares.
+    fn shape(shared_core: usize, own: i32, own_len: usize, tail_len: usize) -> Vec<LlamaToken> {
+        let core: Vec<i32> = (0..shared_core as i32).collect();
+        let mut v = toks(1, &core);
+        v.extend((0..own_len as i32).map(|i| LlamaToken(500_000 + own * 10_000 + i)));
+        v.extend((0..tail_len as i32).map(|i| LlamaToken(900_000 + own * 1_000 + i)));
+        v
+    }
+
+    /// Two shapes sharing a fingerprint must not evict each other forever.
+    ///
+    /// Before the 2026-08-27 fix `plan_directed` fell through to "learn at MY
+    /// declared boundary" whenever the stored entry was not a strict prefix of
+    /// this request — so shape A overwrote B's pin, B's upgrade rule overwrote
+    /// A's, and each overwrite cost a FULL prefill. Observed on the Flash-Next
+    /// synth run: pin sequences like [3998, 4612, 3998, 4612] on five of six
+    /// keys, 12 of 19 LEARNs, ~240s of 566s of cold prefill.
+    #[test]
+    fn two_shapes_sharing_a_family_converge_instead_of_thrashing() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let a = shape(200, 1, 0, 40); // declares the shared core only
+        let b = shape(200, 2, 100, 40); // declares 100 tokens further
+        let pin_a = PROBE_TOKENS + 200;
+        let pin_b = PROBE_TOKENS + 200 + 100;
+
+        // 1. A learns at its boundary.
+        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&a, pin_a) else {
+            panic!("A should learn first")
+        };
+        assert_eq!(pin_len, pin_a);
+        cache.commit(key, a[..pin_len].to_vec(), cache.state_path(key));
+
+        // 2. B upgrades — legitimate, its declared prefix really is longer.
+        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&b, pin_b) else {
+            panic!("B should upgrade")
+        };
+        assert_eq!(pin_len, pin_b);
+        cache.commit(key, b[..pin_len].to_vec(), cache.state_path(key));
+
+        // 3. A cannot use B's pin. It must re-pin at what they SHARE, not at
+        //    its own boundary, and mark the pin shared.
+        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&a, pin_a) else {
+            panic!("A should re-pin at the shared prefix")
+        };
+        assert_eq!(pin_len, pin_a, "pins at the common prefix");
+        cache.commit(key, a[..pin_len].to_vec(), cache.state_path(key));
+
+        // 4+. Converged: BOTH restore, forever. No further Learn.
+        for round in 0..4 {
+            assert_eq!(
+                cache.plan_directed(&b, pin_b),
+                PrefixPlan::Restore {
+                    key,
+                    prefix_len: pin_a
+                },
+                "round {round}: B must restore the shared pin, not upgrade it"
+            );
+            assert_eq!(
+                cache.plan_directed(&a, pin_a),
+                PrefixPlan::Restore {
+                    key,
+                    prefix_len: pin_a
+                },
+                "round {round}: A must restore"
+            );
+        }
+    }
+
+    /// The anti-thrash path must not freeze a pin onto stale evidence: a
+    /// family that genuinely drifts shares only the fingerprint, so the
+    /// common prefix falls under `min_pin` and the entry is replaced.
+    #[test]
+    fn a_drifted_family_still_replaces_its_pin() {
+        let mut cache = PrefixStateCache::new_for_test(64);
+        let old = shape(200, 1, 0, 40);
+        let pin_old = PROBE_TOKENS + 200;
+        let PrefixPlan::Learn { key, pin_len } = cache.plan_directed(&old, pin_old) else {
+            panic!("first sighting learns")
+        };
+        cache.commit(key, old[..pin_len].to_vec(), cache.state_path(key));
+
+        // New evidence: same 48-token opening, different body from token 48 on.
+        let mut fresh = toks(1, &[]);
+        fresh.extend((0..300i32).map(|i| LlamaToken(770_000 + i)));
+        let pin_fresh = PROBE_TOKENS + 200;
+        assert_eq!(
+            cache.plan_directed(&fresh, pin_fresh),
+            PrefixPlan::Learn {
+                key,
+                pin_len: pin_fresh
+            },
+            "drifted evidence replaces the pin at the declared boundary"
+        );
     }
 
     /// A family: shared stable core of `core_len` tokens, then a
