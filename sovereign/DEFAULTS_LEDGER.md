@@ -138,6 +138,14 @@ reachable *only* through the flag above, which OOMs here. As shipped, the good
 half is unreachable in the configuration we actually run. That is one flag
 deciding two independent things (ARCH §10.6).
 
+**What this row does NOT gate, contrary to an earlier reading of the code.** The
+local-fit gate's discount of `model_host_bytes` is **unconditional** — it does not
+require `no_host`, and `wants_no_host` returns false on a default load. A stale
+comment paragraph in `rpc_distribution.rs` claimed the opposite directly above the
+correction that reversed it; it is deleted, and the log line that said "no_host
+load" is corrected. Flash-Next therefore passes the gate on a stock load. If it
+did not, this row would be a shipping blocker rather than a debt.
+
 **Flip condition — and it is NOT "turn this on".** This row retires when prefetch
 is **decoupled** from `no_host` (its own gate, or keyed to the buft override), and
 a paired load with `no_host` OFF measures prefetch-off as neutral-or-better on:

@@ -1744,10 +1744,6 @@ fn gate_local(model_path: &Path, model_bytes: u64, cpu_only: bool, n_ctx: u32) -
     // on the GPU sits between those two cases and was previously charged as if
     // every byte were pinned.
     //
-    // Gated on `no_host` because that is what MAKES the claim true: without it
-    // the host entry is the device's pinned host buffer, and discounting those
-    // bytes would under-charge the gate by exactly the amount that starves the
-    // host. Never discount what we did not force to be pageable.
     // Not gated on `no_host` — that pairing was WRONG and the measurement said
     // so. The worry was that these bytes might be the device's pinned host
     // buffer. They are not: llama.cpp reports them on the CPU device entry, and
@@ -1769,8 +1765,10 @@ fn gate_local(model_path: &Path, model_bytes: u64, cpu_only: bool, n_ctx: u32) -
             model_mb = model_bytes / (1024 * 1024),
             host_resident_mb = host_resident / (1024 * 1024),
             chargeable_mb = chargeable / (1024 * 1024),
-            "local-fit gate: discounting mmap-resident weights (no_host load — \
-             pageable, file-backed, reclaimable) from the demand estimate"
+            no_host,
+            "local-fit gate: discounting mmap-resident weights (llama.cpp reports \
+             them on the CPU device entry — file-backed, reclaimable) from the \
+             demand estimate. NOT conditioned on no_host; see the comment above."
         );
     }
 

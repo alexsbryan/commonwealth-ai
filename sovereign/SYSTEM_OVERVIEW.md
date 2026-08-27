@@ -2334,9 +2334,12 @@ facts make it work and each is easy to break.
   at ~108,982 MiB against ~92,122 usable because `need_bytes` counted every
   model byte. `rpc_distribution::projected_overheads` now reports
   `model_host_bytes` (the weights llama.cpp projects onto the host CPU buffer)
-  and the gate discounts them — **only under `no_host`**, because otherwise
-  `entries.last()` is the device's *pinned* host buffer and discounting it would
-  under-charge by exactly the bytes that starve the host.
+  and the gate discounts them. **The discount is NOT conditioned on `no_host`** —
+  that pairing was tried, measured, and is wrong: llama.cpp reports these bytes on
+  the CPU *device* entry (`model_host_mb=28110` matching the tensor's 27.5 GiB),
+  while bytes that really do land in the pinned host buffer are charged under the
+  accelerator entry where they belong. Forcing `no_host` to "license" the discount
+  made it false — it turned the mapping into an anonymous copy and OOM'd.
 
 Prefill on this model is bounded by a **per-token constant**, not by batching: 36
 of 48 layers are recurrent (`full_attention_interval = 4`) and a recurrent scan is
