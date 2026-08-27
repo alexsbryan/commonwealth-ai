@@ -2201,8 +2201,40 @@ never become a place to assert what the sections could not. Per-draw sd is 2.97
 and the judge contributes **zero** of it (note `403a218a`), so n is the only
 lever on resolution.
 
-**Evidence at landing.** NOT YET MEASURED — landed dark. No claim about its
-effect may be made until a pre-registered arm exists.
+**Evidence at landing.** NOT YET MEASURED — landed dark.
+
+**FIRST MEASUREMENT 2026-08-27 — EXPLORATORY, NOT THE PRE-REGISTERED ARM. The
+default does NOT flip on this.** A like-for-like A/B on the compose-replay bed
+`dr-1787807617` (task 69), both arms at the new 16/4 default, one judge, the
+only difference being this flag:
+
+| | overall | readability (ours) | h2 |
+|---|---|---|---|
+| control | 51.3347 | 8.07 | 21 |
+| **this flag on** | **52.1293** | **8.79** | 22 |
+
++0.79 overall, and readability — the criterion this row claims — moves +0.72,
+closing 59% of the gap to the reference. The replay is a zero-noise instrument
+(note `680940ce`: writer re-fly byte-identical, judge identical to the last
+digit), so on THIS bed the band is 0 and the delta is exact. Per-criterion, two
+close outright: Comparative Presentation -1.50 -> 0.00 and Formatting
+-1.00 -> 0.00. Technical Language slips 9.5 -> 9.0, the one regression.
+
+Why this is NOT the arm the reversal condition asks for, stated plainly so
+nobody mistakes it later: it was exploratory rather than pre-registered, it is
+n=1 across TASKS (one bed, one question), and the per-draw sd of 2.97 quoted
+above is a FLIGHT figure — the replay pins the window, so its zero band does
+not transfer to the flight the condition governs.
+
+What it does establish is the mechanism, and it is not the one this row
+assumes. The flag did NOT reduce fragmentation: 22 h2 headings against the
+control's 21, because `outline_max()` is read by `plan_outline`, which
+`compose_report` never calls — the bed replays a pinned 20-section outline, so
+the 12-section cap is inert on this path. The gain came from the report title
+and the Executive Summary alone. The two readability criteria still at -1.00
+are Logical Structure and Paragraph Cohesion — the fragmentation ones — which
+is why the outline itself is the next arm (`arms/bed/fly-outline-arm.sh`,
+via the new `COMPOSE_SECTIONS`).
 
 ## `SOVEREIGN_DR_WRITER_CONTRACT_V2` — the graded evidence steer (drb1-r7)
 
