@@ -15,7 +15,10 @@
 set -u
 cd /home/alexbryan/dev/commonwealth-ai
 
-OUTLINE=${OUTLINE:-research/deep-research/arms/bed-compose/outline-planned.json}
+# ABSOLUTE: `cargo test` runs with CWD at the PACKAGE root, so a repo-relative
+# path is written somewhere that does not exist — and the test only finds out
+# AFTER paying for the ~60s planning call. The test now asserts this up front.
+OUTLINE=${OUTLINE:-/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/bed-compose/outline-planned.json}
 ARM=${ARM:-16:4}
 OUT=${OUT:-/home/alexbryan/dev/commonwealth-ai/research/deep-research/arms/runs-compose/outline1}
 PRE=""

@@ -370,6 +370,18 @@ async fn plan_outline_dump() {
 
     let out = std::env::var("COMPOSE_SECTIONS_OUT")
         .expect("COMPOSE_SECTIONS_OUT=<path.json> — where to write the planned outline");
+    // ABSOLUTE, CHECKED BEFORE THE PLANNING CALL. `cargo test` runs with CWD at
+    // the PACKAGE root, not the repo root, so a repo-relative path resolves
+    // somewhere that does not exist — and the failure lands AFTER a ~60s
+    // planning call, throwing the work away. Measured 2026-08-27: exactly that,
+    // on the first run of this test.
+    assert!(
+        std::path::Path::new(&out).is_absolute(),
+        "COMPOSE_SECTIONS_OUT must be ABSOLUTE ({out} is not): `cargo test` runs \
+         with CWD at the package root, so a repo-relative path is written \
+         somewhere that does not exist — and you would not find out until after \
+         the planning call had already been paid for"
+    );
     let path = input_path();
     let raw = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("compose input {} unreadable ({e})", path.display()));

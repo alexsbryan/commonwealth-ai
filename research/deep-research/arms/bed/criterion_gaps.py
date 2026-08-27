@@ -37,7 +37,12 @@ def load(run_dir):
     rows = {}
     for line in open(side):
         d = json.loads(line)
-        m = re.search(r"arm-([0-9x]+)\.md", d.get("article_path", ""))
+        # `.rendered` is part of the arm identity, not noise: it is the SAME
+        # draft with production's citation numbering applied, and the pair is
+        # the whole point (how much of the readability gap is render clutter).
+        # A regex of `[0-9x]+\.md` silently drops it — skipping exactly the row
+        # the comparison exists for.
+        m = re.search(r"arm-([0-9x]+(?:\.rendered)?)\.md", d.get("article_path", ""))
         if m:
             rows[m.group(1)] = d["judge_output"]
     if not rows:
@@ -48,7 +53,15 @@ def load(run_dir):
 def main():
     run_dir = sys.argv[1] if len(sys.argv) > 1 else sys.exit(__doc__)
     rows = load(run_dir)
-    arms = [a for a in ARM_ORDER if a in rows] + sorted(set(rows) - set(ARM_ORDER))
+    known = [a for a in ARM_ORDER if a in rows]
+    # A rendered variant sorts immediately after its own draft, so the pair
+    # reads as a pair rather than at opposite ends of the table.
+    arms = []
+    for a in known:
+        arms.append(a)
+        if a + ".rendered" in rows:
+            arms.append(a + ".rendered")
+    arms += sorted(set(rows) - set(arms))
     focus = sys.argv[2] if len(sys.argv) > 2 else ("16x4" if "16x4" in rows else arms[-1])
     if focus not in rows:
         sys.exit("REFUSED: arm %s not in sidecar (have %s)" % (focus, ", ".join(arms)))
