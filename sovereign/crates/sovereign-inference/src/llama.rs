@@ -376,9 +376,32 @@ pub fn describe_model_load_failure(
         "failed to load {role} model {}: {err}",
         model_path.display()
     );
-    let size_gb = std::fs::metadata(model_path)
-        .ok()
-        .map(|m| m.len() as f64 / 1_000_000_000.0);
+    // A MISSING SHARD IS NOT A GUESS — say it first and stop guessing.
+    // Pointing `[models].primary` at shard `00001` of a split is the supported
+    // gesture, and the common way it goes wrong is that not every sibling made
+    // it onto disk. Shard `00001` is often ~10 MB of header, so the generic
+    // advice below ("didn't fit", "pick a smaller quant") is actively wrong
+    // here and sends the reader to the one place the problem is not.
+    let missing = crate::embedded::missing_shards(model_path);
+    if !missing.is_empty() {
+        s.push_str(&format!(
+            "\n  THIS IS ONE SHARD OF A SPLIT GGUF AND {} SIBLING(S) ARE MISSING FROM {}:\n    {}\
+             \n  A split model needs every shard in the same directory; llama.cpp is pointed at \
+             shard 00001 and opens the rest itself. Download the missing file(s) into that \
+             directory — nothing else needs to change, and `[models].primary` stays pointed at \
+             shard 00001.",
+            missing.len(),
+            model_path.parent().unwrap_or(model_path).display(),
+            missing.join("\n    "),
+        ));
+        return s;
+    }
+
+    // Sum every shard: for a split, the path we were handed is a ~10 MB header
+    // and reporting its size next to host RAM makes an unrelated diagnosis look
+    // obvious ("0.0 GB on disk … likely didn't fit in memory").
+    let size_gb = Some(crate::embedded::total_model_bytes(model_path) as f64 / 1_000_000_000.0)
+        .filter(|g| *g > 0.0);
     let ram_gb =
         crate::hardware::HardwareProfile::detect().system_ram_bytes as f64 / 1_000_000_000.0;
     if let Some(g) = size_gb {
@@ -422,4 +445,61 @@ pub fn list_llama_ggml_backend_devices() -> Vec<BackendDevice> {
         }
     }
     out
+}
+
+#[cfg(test)]
+mod load_failure_message_tests {
+    use super::describe_model_load_failure;
+
+    /// The message a friend actually reads when they copied shard 1 and not the
+    /// rest. It must NAME the missing files and must NOT offer the memory/quant
+    /// advice, which is wrong for this cause and sends them somewhere useless.
+    #[test]
+    fn a_missing_shard_is_named_and_the_memory_advice_is_withheld() {
+        let d = tempfile::tempdir().unwrap();
+        let first = d.path().join("m-00001-of-00004.gguf");
+        std::fs::write(&first, b"x").unwrap();
+        std::fs::write(d.path().join("m-00003-of-00004.gguf"), b"x").unwrap();
+
+        let msg = describe_model_load_failure("primary", &first, "some llama.cpp error");
+
+        assert!(
+            msg.contains("m-00002-of-00004.gguf"),
+            "names the gap: {msg}"
+        );
+        assert!(msg.contains("m-00004-of-00004.gguf"), "names both: {msg}");
+        assert!(
+            !msg.contains("pick a smaller quant"),
+            "must not offer the wrong diagnosis when the cause is known: {msg}"
+        );
+        assert!(
+            !msg.contains("GB on disk"),
+            "must not print a header shard's size as the model size: {msg}"
+        );
+    }
+
+    /// A complete split still reports the WHOLE model's size, not shard 1's.
+    /// Before this, a 104 GB model read as "0.0 GB on disk" beside the host's
+    /// RAM — which makes "it didn't fit in memory" look obviously true.
+    #[test]
+    fn a_complete_split_reports_the_summed_size_not_the_header_shard() {
+        let d = tempfile::tempdir().unwrap();
+        let first = d.path().join("m-00001-of-00002.gguf");
+        // SPARSE, not a 4 GB allocation: `total_model_bytes` stats the files, it
+        // never reads them, and a unit test that materialises 4 GB of zeroes can
+        // OOM a loaded box during a full suite run.
+        std::fs::write(&first, vec![0u8; 1000]).unwrap();
+        std::fs::File::create(d.path().join("m-00002-of-00002.gguf"))
+            .unwrap()
+            .set_len(4_000_000_000)
+            .unwrap();
+
+        let msg = describe_model_load_failure("primary", &first, "boom");
+
+        assert!(msg.contains("4.0 GB on disk"), "sums every shard: {msg}");
+        assert!(
+            msg.contains("pick a smaller quant"),
+            "generic advice returns when the cause is genuinely unknown: {msg}"
+        );
+    }
 }

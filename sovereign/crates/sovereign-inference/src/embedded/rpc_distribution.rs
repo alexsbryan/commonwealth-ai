@@ -1565,6 +1565,32 @@ pub(crate) fn wants_no_host(model_path: &Path, model_bytes: u64, n_ctx: u32) -> 
 
 /// Operator escape hatch: `SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1` disables the
 /// gate entirely (mirrors `SOVEREIGN_SKIP_VRAM_CHECK` for the preflight).
+/// Does a predicted local shortfall REFUSE the load, or merely warn about it?
+///
+/// **Default: warn.** Operator direction 2026-08-27, and it reverses this gate's
+/// original posture deliberately. The gate predicts; it does not know. Its
+/// estimate is weights + a projection of KV/scratch against `MemAvailable` minus
+/// a heuristic reserve, and every one of those terms can be conservative — most
+/// sharply for a model that leaves a large tensor in the mmap, which is exactly
+/// the shape (Qwen3.8-Flash-Next) that made this gate refuse a model that then
+/// loaded and served fine.
+///
+/// The failure modes are not symmetric. A wrong REFUSAL is silent and total: the
+/// daemon reports the model unavailable, the operator has a valid configuration
+/// and no way forward unless they happen to know an env var name that appears
+/// only in a log line they never see. A wrong ADMISSION is loud and bounded: the
+/// load fails or the process dies, with this gate's full arithmetic already in
+/// the log immediately above it. Prefer the loud one.
+///
+/// `SOVEREIGN_LOCAL_FIT_ENFORCE=1` restores refusal for a host that would rather
+/// stay up than crash — the right choice for an unattended server, and the wrong
+/// default for someone trying to run a model on their own machine.
+fn local_fit_enforce() -> bool {
+    std::env::var("SOVEREIGN_LOCAL_FIT_ENFORCE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 fn local_fit_skip() -> bool {
     std::env::var("SOVEREIGN_LOCAL_FIT_CHECK_SKIP")
         .or_else(|_| std::env::var("SOVEREIGN_SKIP_LOCAL_FIT_CHECK"))
@@ -1775,6 +1801,27 @@ fn gate_local(model_path: &Path, model_bytes: u64, cpu_only: bool, n_ctx: u32) -
     match local_fit_verdict(chargeable, overhead, available, reserve) {
         None => LoadPlacement::LocalOnly,
         Some(shortfall) => {
+            if !local_fit_enforce() {
+                // ADVISORY (the default). Everything the refusal would have
+                // known is here, BEFORE the load, so that if the host does die
+                // the last thing in the log is the prediction and its terms —
+                // "crash with a good log" beats "blocked with no way round".
+                tracing::warn!(
+                    model_mb = model_bytes / (1024 * 1024),
+                    chargeable_mb = chargeable / (1024 * 1024),
+                    host_resident_mb = host_resident / (1024 * 1024),
+                    need_mb = shortfall.need_mb,
+                    usable_mb = shortfall.usable_mb,
+                    available_mb = available / (1024 * 1024),
+                    reserve_mb = reserve / (1024 * 1024),
+                    "local-fit gate: PREDICTS a shortfall and is LOADING ANYWAY (advisory by \
+                     default). If the daemon dies during this load, this line is why and these \
+                     are the numbers. The estimate is conservative for models that leave large \
+                     tensors in the mmap, so a prediction of unfit is not proof of unfit. \
+                     SOVEREIGN_LOCAL_FIT_ENFORCE=1 makes this a refusal instead."
+                );
+                return LoadPlacement::LocalOnly;
+            }
             tracing::warn!(
                 model_mb = model_bytes / (1024 * 1024),
                 chargeable_mb = chargeable / (1024 * 1024),
@@ -1785,7 +1832,8 @@ fn gate_local(model_path: &Path, model_bytes: u64, cpu_only: bool, n_ctx: u32) -
                 reserve_mb = reserve / (1024 * 1024),
                 "local-fit gate: refusing local fallback load — model would starve \
                  the host (2026-07-27 session-kill class); staying unavailable until \
-                 the cluster re-forms. SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1 overrides."
+                 the cluster re-forms. Refusal is OPT-IN via SOVEREIGN_LOCAL_FIT_ENFORCE; \
+                 unset it to load anyway."
             );
             LoadPlacement::LocalUnfit {
                 need_mb: shortfall.need_mb,
@@ -2653,6 +2701,29 @@ mod rpc_prune_tests {
             !wants_no_host(path, 0, 4096),
             "and so does a zero-byte / unreadable one"
         );
+    }
+
+    #[test]
+    fn the_local_fit_gate_is_advisory_by_default() {
+        // Operator direction 2026-08-27. The two failure modes are not
+        // symmetric: a wrong REFUSAL is silent and total (the model is simply
+        // unavailable, and the override appears only in a log line the operator
+        // never sees), while a wrong ADMISSION is loud and bounded (the load
+        // fails, with the gate's arithmetic logged immediately above it).
+        // Default to the loud one. Enforcement is for hosts that would rather
+        // stay up than crash, and it must be asked for.
+        assert!(
+            !local_fit_enforce(),
+            "refusal must be OPT-IN — a valid configuration must never be blocked \
+             by a prediction with no roundabout"
+        );
+
+        // The PREDICATE is unchanged by that flip: the 2026-07-27 numbers still
+        // register as a shortfall. They just no longer veto the load — the
+        // difference is what the placement DOES with the verdict, not the
+        // arithmetic, so the incident replay below still means what it meant.
+        const GIB: u64 = 1024 * 1024 * 1024;
+        assert!(local_fit_verdict(84 * GIB, None, 110 * GIB, 16 * GIB).is_some());
     }
 
     #[test]

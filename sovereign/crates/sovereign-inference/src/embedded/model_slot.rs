@@ -72,6 +72,38 @@ pub fn total_model_bytes(model_path: &Path) -> u64 {
     total
 }
 
+/// The shards of a split GGUF that are NOT on disk beside `model_path`.
+///
+/// Empty for a single-file model, and empty for a complete split — so a
+/// non-empty result is always a real, actionable problem.
+///
+/// This exists because of what the operator actually does with a split model:
+/// point `[models].primary` at shard `00001` and expect it to work. That IS the
+/// supported gesture — llama.cpp resolves the siblings itself — but it fails
+/// confusingly when a sibling is absent, because shard `00001` is often a
+/// ~10 MB header-only file. The load then dies inside llama.cpp, and every
+/// size-derived diagnostic above it reports ~0 GB, which reads as "your model is
+/// corrupt" or "it didn't fit" when the truth is "you are missing two files".
+/// `total_model_bytes` already refuses to guess in this case; this names WHAT is
+/// missing so the message can say so (ARCH §18.3 — absence is reported, never
+/// defaulted).
+pub fn missing_shards(model_path: &Path) -> Vec<String> {
+    let Some(name) = model_path.file_name().and_then(|n| n.to_str()) else {
+        return Vec::new();
+    };
+    let Some(dir) = model_path.parent() else {
+        return Vec::new();
+    };
+    // The one shard-name parser, shared with `shard_files` / `total_model_bytes`.
+    let Some(names) = super::rpc_warm_cache::split_shard_names(name) else {
+        return Vec::new(); // not a split — nothing can be missing
+    };
+    names
+        .into_iter()
+        .filter(|n| !dir.join(n).exists())
+        .collect()
+}
+
 // ─── ModelSlot ─────────────────────────────────────────────────
 
 /// Per-slot inference mode. A sum type so the illegal hybrid state
@@ -1608,8 +1640,10 @@ impl ModelSlot {
                 return Err(Error::Inference(format!(
                     "local-fit gate: {} needs ~{need_mb} MiB (weights + KV + scratch) but only \
                      ~{usable_mb} MiB of system memory is usable after the host reserve — not \
-                     loading locally; retries as workers rejoin. \
-                     SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1 overrides.",
+                     loading locally; retries as workers rejoin. You are seeing this because \
+                     SOVEREIGN_LOCAL_FIT_ENFORCE is set: UNSET IT and the daemon will attempt \
+                     the load and, if it fails, say why. The estimate is conservative for models \
+                     that leave large tensors in the mmap.",
                     model_path.display()
                 )));
             }
@@ -5674,7 +5708,37 @@ mod queue_gauge_tests {
 
 #[cfg(test)]
 mod total_model_bytes_tests {
-    use super::total_model_bytes;
+    use super::{missing_shards, total_model_bytes};
+
+    #[test]
+    fn a_complete_split_is_missing_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        for i in 1..=3 {
+            std::fs::write(d.path().join(format!("m-0000{i}-of-00003.gguf")), b"x").unwrap();
+        }
+        assert!(missing_shards(&d.path().join("m-00001-of-00003.gguf")).is_empty());
+    }
+
+    #[test]
+    fn missing_siblings_are_named_not_merely_counted() {
+        // The operator copied only shard 1 — the exact shape this exists for.
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("m-00001-of-00004.gguf"), b"x").unwrap();
+        std::fs::write(d.path().join("m-00003-of-00004.gguf"), b"x").unwrap();
+        assert_eq!(
+            missing_shards(&d.path().join("m-00001-of-00004.gguf")),
+            vec!["m-00002-of-00004.gguf", "m-00004-of-00004.gguf"]
+        );
+    }
+
+    #[test]
+    fn a_single_file_model_can_never_be_missing_a_shard() {
+        let d = tempfile::tempdir().unwrap();
+        let only = d.path().join("solo.gguf");
+        std::fs::write(&only, b"x").unwrap();
+        assert!(missing_shards(&only).is_empty());
+    }
+
     use std::path::PathBuf;
 
     /// Write a file of `len` bytes and return its path.
