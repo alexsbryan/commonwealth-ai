@@ -35,7 +35,42 @@ const COOLDOWN: Duration = Duration::from_secs(30 * 60);
 /// new peer just appeared, in which case `corpus_collaborate` is still
 /// called. That handler checks `active_ingests` itself and skips the
 /// local partition spawn while still dispatching work to the new peer.
-pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) {
+/// Handle to the spawned auto-collaborate task. Aborts the task when dropped,
+/// exactly like [`crate::gossip::GossipHandle`] beside it, so stopping the
+/// daemon tears this loop down with everything else.
+///
+/// # Why this function returns a value at all
+///
+/// It returned `()` until 2026-08-26, and on 2026-07-21 commit `ec7ca66c`
+/// ("feat: fim") deleted three lines from its body — one of them the
+/// `tokio::spawn` that started the loop. Peer-assisted ingest handoff was dark
+/// for five weeks and NOTHING could notice, because with a `()` return
+/// "spawned the loop" and "spawned nothing" are the same type.
+///
+/// The control plane above it kept working the whole time, which is what made
+/// the outage invisible rather than merely unnoticed: the
+/// `SOVEREIGN_DISABLE_AUTO_COLLAB` kill switch still seeded `mesh_quiesced`,
+/// `POST /internal/mesh/quiesce` still set it, the desktop still toggled it,
+/// and a unit test still asserted it round-trips — over an atomic whose only
+/// behavioural reader is inside this loop. An operator could quiesce a node,
+/// be told `quiesced: true`, and change nothing.
+///
+/// Returning the handle makes the regression UNREPRESENTABLE rather than
+/// merely detected (ARCH §7): the `tokio::spawn` cannot be removed again
+/// without the function failing to produce its own return type.
+#[must_use = "dropping the handle aborts the auto-collaborate loop; the daemon \
+              holds it on DaemonState::Running like _gossip_handle"]
+pub struct CollaborateHandle {
+    _task: tokio::task::JoinHandle<()>,
+}
+
+impl Drop for CollaborateHandle {
+    fn drop(&mut self) {
+        self._task.abort();
+    }
+}
+
+pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) -> CollaborateHandle {
     // Operator-toggleable kill switch. The env var seeds the
     // runtime atomic on `AppState`; the loop itself reads the
     // atomic on every tick so `POST /internal/mesh/quiesce` can
@@ -51,6 +86,15 @@ pub fn spawn_auto_collaborate_loop(state: AppState, daemon_port: u16) {
              starting in quiesced mode; flip via POST /internal/mesh/quiesce \
              to rejoin without a restart"
         );
+    }
+    // Spawn unconditionally: quiesce is a RUNTIME toggle the loop re-reads on
+    // every tick (`state.mesh_quiesced()` below), not a reason to skip
+    // starting. Not spawning here is what would make `POST
+    // /internal/mesh/quiesce` unable to un-quiesce without a restart.
+    CollaborateHandle {
+        _task: tokio::spawn(async move {
+            auto_collaborate_loop(state, daemon_port).await;
+        }),
     }
 }
 

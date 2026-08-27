@@ -102,7 +102,7 @@ async fn main() {
         // usage error rather than a default, because silently defaulting
         // `--format` or `--upstream` would score something other than
         // what the operator asked for.
-        let mut value = || -> String {
+        let value = || -> String {
             args.get(i + 1).cloned().unwrap_or_else(|| {
                 eprintln!("{flag} requires a value");
                 usage()

@@ -19,7 +19,9 @@ mod audit;
 pub(crate) use audit::cmd_audit;
 mod phase;
 pub(crate) use phase::{cmd_phase, cmd_phase_pass};
-mod charter_amend;
+// `pub(crate)` for `hash_charter`, which `amend.rs` and `audit` also stamp
+// with. It came here when `found.rs` was deleted (2026-08-26).
+pub(crate) mod charter_amend;
 pub(crate) use charter_amend::{cmd_amend, cmd_charter};
 mod hooks;
 use hooks::cmd_install_hooks;

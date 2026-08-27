@@ -77,15 +77,12 @@ mod design_onboarding;
 #[cfg(feature = "workbench")]
 mod design_session;
 #[cfg(feature = "workbench")]
-mod doc_fetcher;
 #[cfg(feature = "workbench")]
 mod drift_cmd_orchestrator;
 #[cfg(feature = "workbench")]
 mod dry_report_cmd;
 #[cfg(feature = "workbench")]
-mod found;
 #[cfg(feature = "workbench")]
-mod honesty;
 #[cfg(feature = "workbench")]
 mod phases;
 #[cfg(feature = "workbench")]

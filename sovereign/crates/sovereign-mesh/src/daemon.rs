@@ -180,6 +180,13 @@ enum DaemonState {
         /// Running variant means stopping the daemon also stops
         /// gossip; no explicit teardown.
         _gossip_handle: GossipHandle,
+        /// Aborts the peer-assisted ingest handoff loop on Drop. Same pattern
+        /// as `_gossip_handle`, and held for the same second reason the gossip
+        /// one is not: a spawner that returns nothing can lose its
+        /// `tokio::spawn` in a stray three-line diff and stay silent about it
+        /// for five weeks (`ec7ca66c`, 2026-07-21 — see
+        /// `auto_ingest::CollaborateHandle`).
+        _collaborate_handle: crate::auto_ingest::CollaborateHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
         /// The API-server task that owns the `:9741`/`:9742` listeners.
         /// Kept (not discarded) so `stop_inner` can await its exit after
@@ -2654,7 +2661,8 @@ impl EmbeddedDaemon {
             persist_dir,
         );
 
-        crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
+        let collaborate_handle =
+            crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
 
         // Re-spawn any solo corpus ingest the daemon was running before
         // restart. The mesh auto-collaborate loop above only handles
@@ -3060,6 +3068,7 @@ impl EmbeddedDaemon {
             mdns,
             _browse_handle: browse_handle,
             _gossip_handle: gossip_handle,
+            _collaborate_handle: collaborate_handle,
             _shutdown_tx: shutdown_tx,
             serve_handle,
             iroh_access,
