@@ -42,11 +42,7 @@ impl ReleaseScopeTool {
     }
 
     /// The executable half of `release_scope`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let claim_id_str = params
             .get("claim_id")
             .and_then(|v| v.as_str())

@@ -40,9 +40,15 @@ async fn daemon_with_online_peer(
         SetupConfig::unconfigured(),
         mesh_admin_services(),
     );
-    daemon.create_mesh("rotate-guard-mesh", "founder").await.unwrap();
+    daemon
+        .create_mesh("rotate-guard-mesh", "founder")
+        .await
+        .unwrap();
 
-    let state = daemon.app_state().await.expect("app_state after create_mesh");
+    let state = daemon
+        .app_state()
+        .await
+        .expect("app_state after create_mesh");
     let peer_id = NodeId::from_u128(0x5150_6060_7070_8080);
     {
         let mut mesh = state.inner.mesh.write().await;
@@ -193,7 +199,10 @@ async fn a_peer_that_upgrades_stops_blocking_rotation() {
     let state = daemon.app_state().await.unwrap();
 
     state.observe_peer_split_generation(peer_id, false);
-    assert!(daemon.rotate_invite(false).await.is_err(), "blocked while old");
+    assert!(
+        daemon.rotate_invite(false).await.is_err(),
+        "blocked while old"
+    );
 
     state.observe_peer_split_generation(peer_id, true);
     daemon

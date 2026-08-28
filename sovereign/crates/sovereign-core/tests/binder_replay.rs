@@ -173,7 +173,10 @@ async fn run_arm(
     containment: &ContainmentConfig,
     tau: f64,
 ) -> ArmRow {
-    std::env::set_var("SOVEREIGN_DR_AUDIT_BATCH_LOCATE", if batch { "1" } else { "0" });
+    std::env::set_var(
+        "SOVEREIGN_DR_AUDIT_BATCH_LOCATE",
+        if batch { "1" } else { "0" },
+    );
     std::env::set_var(
         "SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT",
         if early { "1" } else { "0" },
@@ -287,8 +290,12 @@ async fn binder_replay() {
         arms.iter().map(|_| Default::default()).collect();
     let tau = run_tau();
     let containment = ContainmentConfig::default();
-    let provider: Arc<dyn InferenceProvider> =
-        Arc::new(RemoteApiProvider::new(ENDPOINT, None, MODEL_ID, PROVIDER_CTX));
+    let provider: Arc<dyn InferenceProvider> = Arc::new(RemoteApiProvider::new(
+        ENDPOINT,
+        None,
+        MODEL_ID,
+        PROVIDER_CTX,
+    ));
 
     eprintln!(
         "binder replay — bed {} ({} chunks, {} loop-reaching claims, capped at {}), \
@@ -296,7 +303,11 @@ async fn binder_replay() {
         path.display(),
         chunks.len(),
         bed.claims.len(),
-        if cap == usize::MAX { bed.claims.len() } else { cap },
+        if cap == usize::MAX {
+            bed.claims.len()
+        } else {
+            cap
+        },
         arms.iter().map(|(n, ..)| *n).collect::<Vec<_>>(),
     );
 
@@ -305,8 +316,16 @@ async fn binder_replay() {
         let mut arm_rows: Vec<ArmRow> = Vec::new();
         for ((name, batch, early, budget), spans) in arms.iter().zip(caches.iter()) {
             let r = run_arm(
-                name, *batch, *early, *budget, spans, &provider, &claim.text, &chunks,
-                &containment, tau,
+                name,
+                *batch,
+                *early,
+                *budget,
+                spans,
+                &provider,
+                &claim.text,
+                &chunks,
+                &containment,
+                tau,
             )
             .await;
             eprintln!(
@@ -318,7 +337,10 @@ async fn binder_replay() {
                 r.verdict,
                 r.origins,
                 r.bound,
-                r.reason.as_deref().map(|s| format!("  — {s}")).unwrap_or_default(),
+                r.reason
+                    .as_deref()
+                    .map(|s| format!("  — {s}"))
+                    .unwrap_or_default(),
             );
             arm_rows.push(r);
         }

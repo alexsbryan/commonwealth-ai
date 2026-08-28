@@ -719,13 +719,22 @@ impl Detector for ArgLoopDetector {
 /// Widening this list is a settings change, and the digest below makes it a
 /// visible diff that restarts the series (interlock 7).
 const PROVENANCE_KEYS: &[(&str, &str)] = &[
-    ("source", "Origin::source — the channel content arrived through"),
+    (
+        "source",
+        "Origin::source — the channel content arrived through",
+    ),
     ("source_id", "Origin::source — the channel's own id"),
     ("url", "Origin::locator — where it was fetched from"),
     ("peer_name", "Origin::server — which machine served it"),
     ("peer", "Origin::server — same question, second spelling"),
-    ("custody", "Evidence::custody — the CUSTODY_META_KEY channel"),
-    ("attributed_to", "Attribution — which engine produced the text"),
+    (
+        "custody",
+        "Evidence::custody — the CUSTODY_META_KEY channel",
+    ),
+    (
+        "attributed_to",
+        "Attribution — which engine produced the text",
+    ),
 ];
 
 /// Provenance riding an untyped `HashMap<String, String>`.
@@ -1160,7 +1169,10 @@ mod tests {
         let multi = "metadata.insert(\n    crate::types::CUSTODY_META_KEY.to_string(),\n";
         assert!(re.is_match(multi), "multi-line CUSTODY_META_KEY insert");
         assert!(re.is_match("c.metadata.get(\"source\")"), "field receiver");
-        assert!(re.is_match("meta.insert(\"peer_name\".to_string(), n)"), "short receiver");
+        assert!(
+            re.is_match("meta.insert(\"peer_name\".to_string(), n)"),
+            "short receiver"
+        );
         assert!(re.is_match("m.metadata.get(&\"url\")"), "borrowed key");
     }
 
@@ -1170,7 +1182,14 @@ mod tests {
     #[test]
     fn bibliographic_and_structural_keys_are_not_provenance() {
         let re = ProvenanceChannelDetector::matcher();
-        for key in ["title", "authors", "year", "ordinal", "section_id", "raptor_level"] {
+        for key in [
+            "title",
+            "authors",
+            "year",
+            "ordinal",
+            "section_id",
+            "raptor_level",
+        ] {
             assert!(
                 !re.is_match(&format!("metadata.get(\"{key}\")")),
                 "{key} must not read as provenance"
@@ -1198,7 +1217,11 @@ mod tests {
             .captures_iter(&stripped)
             .filter_map(|c| c.get(1).map(|g| g.as_str().to_string()))
             .collect();
-        assert_eq!(keys, vec!["source", "url"], "the test module's key must be gone");
+        assert_eq!(
+            keys,
+            vec!["source", "url"],
+            "the test module's key must be gone"
+        );
         assert_eq!(
             stripped.lines().count(),
             src.lines().count(),
@@ -1325,7 +1348,10 @@ mod tests {
         );
         assert_eq!(s.fields, 5);
         assert_eq!(s.cells(), 5);
-        assert_eq!(s.mix(), "1 ArcSwap, 1 Atomic, 1 Mutex, 1 RwLock, 1 Semaphore");
+        assert_eq!(
+            s.mix(),
+            "1 ArcSwap, 1 Atomic, 1 Mutex, 1 RwLock, 1 Semaphore"
+        );
     }
 
     /// The distinction the whole detector rests on: a shared handle is not
@@ -1427,12 +1453,8 @@ mod tests {
     #[test]
     fn the_floor_admits_at_the_boundary_and_refuses_below_it() {
         let field = |i: usize| format!("    f{i}: RwLock<u64>,\n");
-        let build = |n: usize| {
-            format!(
-                "struct R {{\n{}}}\n",
-                (0..n).map(field).collect::<String>()
-            )
-        };
+        let build =
+            |n: usize| format!("struct R {{\n{}}}\n", (0..n).map(field).collect::<String>());
         let at = scan_one(&build(CELL_FLOOR));
         assert_eq!(at.cells(), CELL_FLOOR);
         assert!(at.cells() >= CELL_FLOOR, "boundary must fire");

@@ -139,7 +139,11 @@ pub fn strip_comments(src: &str) -> String {
                 if b[i] == b'*' && i + 1 < b.len() && b[i + 1] == b'/' {
                     blank(&mut out, i);
                     blank(&mut out, i + 1);
-                    st = if depth == 1 { St::Code } else { St::Block(depth - 1) };
+                    st = if depth == 1 {
+                        St::Code
+                    } else {
+                        St::Block(depth - 1)
+                    };
                     i += 2;
                     continue;
                 }
@@ -391,8 +395,6 @@ pub struct ArgLoopScan {
     pub mixed: Vec<PathBuf>,
 }
 
-
-
 pub fn classify_flag_surface(text: &str) -> (FlagSurface, usize) {
     let stripped = strip_comments(text);
     let derive_re = Regex::new(r"#\[derive\([^)]*Parser[^)]*\)\]").expect("static");
@@ -443,8 +445,15 @@ mod tests {
         let src = "/// a `metadata.get(\"source\")` downstream is the other half\n\
                    fn real() { metadata.get(\"source\"); }\n";
         let out = strip_comments(src);
-        assert_eq!(out.matches("metadata.get").count(), 1, "only the code site survives");
-        assert!(out.starts_with("   "), "the doc line is blanked, not deleted");
+        assert_eq!(
+            out.matches("metadata.get").count(),
+            1,
+            "only the code site survives"
+        );
+        assert!(
+            out.starts_with("   "),
+            "the doc line is blanked, not deleted"
+        );
         assert_eq!(out.lines().count(), src.lines().count());
     }
 
@@ -464,8 +473,14 @@ mod tests {
         let src = "/* a /* b */ c */ keep(); let r = r#\"x // y\"#;\n";
         let out = strip_comments(src);
         assert!(out.contains("keep()"), "got: {out}");
-        assert!(out.contains("x // y"), "raw string body must survive: {out}");
-        assert!(!out.contains('b'), "nested block comment must be gone: {out}");
+        assert!(
+            out.contains("x // y"),
+            "raw string body must survive: {out}"
+        );
+        assert!(
+            !out.contains('b'),
+            "nested block comment must be gone: {out}"
+        );
     }
 
     /// Found by running the detector over this workspace: a `#[cfg(test)]`
@@ -478,7 +493,10 @@ mod tests {
         // spells it, and the next brace is a CLOSE.
         let src = "fn f() {\n    let s = \"#[cfg(test)]\";\n}\nfn g() { keep(); }\n";
         let out = strip_test_scope(src);
-        assert!(out.contains("keep()"), "nothing after the text may be blanked");
+        assert!(
+            out.contains("keep()"),
+            "nothing after the text may be blanked"
+        );
         assert_eq!(out.lines().count(), src.lines().count());
     }
 
@@ -576,6 +594,10 @@ fn parse() {
         // one. Same rule `strip_test_scope` follows, for the same reason.
         let s = strip_comments("a /* x\ny */ b // tail\nc");
         assert_eq!(s, "a     \n     b        \nc");
-        assert_eq!(s.len(), "a /* x\ny */ b // tail\nc".len(), "byte offsets must be stable");
+        assert_eq!(
+            s.len(),
+            "a /* x\ny */ b // tail\nc".len(),
+            "byte offsets must be stable"
+        );
     }
 }

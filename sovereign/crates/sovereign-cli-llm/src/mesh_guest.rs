@@ -250,7 +250,8 @@ async fn resolve_guest_path(url_override: Option<&str>, port: u16) -> Result<Gue
         // reporting on itself (§18.4). The daemon publishes this string only
         // once it holds a reachable address.
         let base_url = published.unwrap_or_else(|| {
-            guest_base_url(url_override, port).unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
+            guest_base_url(url_override, port)
+                .unwrap_or_else(|_| format!("http://127.0.0.1:{port}"))
         });
         return Ok(GuestPath::Tunnel { dial, base_url });
     }
@@ -438,7 +439,9 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             eprintln!("  - PLAINTEXT: set `[daemon] client_bind = \"0.0.0.0\"` in");
             eprintln!("    ~/.svrnmesh/config.toml and restart the daemon (or pass --url <base>");
             eprintln!("    if something else fronts it). Does NOT work on an encrypted mesh —");
-            eprintln!("    the mesh policy forces that API loopback-only whatever the config says.");
+            eprintln!(
+                "    the mesh policy forces that API loopback-only whatever the config says."
+            );
             eprintln!("  - ENCRYPTED: the guest tunnels in over iroh instead, but this daemon");
             eprintln!("    published no dial string. Check `svrn mesh status` — a node with no");
             eprintln!("    reachable relay or direct address cannot be dialled either.");

@@ -263,20 +263,12 @@ pub fn shots_for<'a>(under_test: &std::collections::BTreeSet<String>) -> Vec<&'a
         .collect()
 }
 
-pub fn compose_prompt(
-    root: &Path,
-    group: &NameGroup,
-    sums: &Summaries,
-    shots: &[&Shot],
-) -> String {
+pub fn compose_prompt(root: &Path, group: &NameGroup, sums: &Summaries, shots: &[&Shot]) -> String {
     let mut p = String::new();
     if !shots.is_empty() {
         p.push_str("Worked examples of this same judgement:\n\n");
         for s in shots {
-            p.push_str(&format!(
-                "{}\n-> {} : {}\n\n",
-                s.sketch, s.judgement, s.why
-            ));
+            p.push_str(&format!("{}\n-> {} : {}\n\n", s.sketch, s.judgement, s.why));
         }
         p.push_str("---\n\n");
     }
@@ -642,7 +634,9 @@ mod tests {
     #[test]
     fn an_exemplar_colliding_with_a_scored_group_is_dropped() {
         let under_test: std::collections::BTreeSet<String> =
-            ["Config".to_string(), "Verdict".to_string()].into_iter().collect();
+            ["Config".to_string(), "Verdict".to_string()]
+                .into_iter()
+                .collect();
         let shots = shots_for(&under_test);
         assert_eq!(shots.len(), SHOTS.len() - 1);
         assert!(!shots.iter().any(|s| s.name == "Config"));
@@ -665,7 +659,12 @@ mod tests {
         js.sort();
         assert_eq!(
             js,
-            vec!["different-concepts", "one-concept", "per-crate-idiom", "unsure"]
+            vec![
+                "different-concepts",
+                "one-concept",
+                "per-crate-idiom",
+                "unsure"
+            ]
         );
     }
 
@@ -675,7 +674,11 @@ mod tests {
     fn no_exemplar_borrows_a_name_this_program_adjudicates() {
         for s in SHOTS {
             for taken in ["Verdict", "Gap", "Evidence", "Origin", "Answer", "Custody"] {
-                assert_ne!(s.name, taken, "exemplar `{}` collides with a real concept", s.name);
+                assert_ne!(
+                    s.name, taken,
+                    "exemplar `{}` collides with a real concept",
+                    s.name
+                );
             }
         }
     }

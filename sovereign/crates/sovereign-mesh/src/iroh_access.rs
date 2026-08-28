@@ -734,7 +734,8 @@ mod tests {
     async fn a_stranger_on_the_client_alpn_is_routed_to_the_bearer_gate() {
         let r = routes();
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member()).await,
+            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
+                .await,
             r.guest,
         );
     }
@@ -759,7 +760,8 @@ mod tests {
             ..routes()
         };
         assert_eq!(
-            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member()).await,
+            r.forward_for(CLIENT_ALPN, STRANGER, &only_the_member())
+                .await,
             None,
         );
         // The member arm is unaffected — this is not "refuse everything".
@@ -790,7 +792,8 @@ mod tests {
     async fn the_guest_alpn_admits_any_dialer_because_its_listener_checks() {
         let r = routes();
         assert_eq!(
-            r.forward_for(GUEST_ALPN, STRANGER, &only_the_member()).await,
+            r.forward_for(GUEST_ALPN, STRANGER, &only_the_member())
+                .await,
             r.guest,
         );
     }

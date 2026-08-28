@@ -32,8 +32,7 @@ const ALLOWED: &[&str] = &["tool_bundle::install", "load_from_setup_config"];
 
 fn recipe_source() -> String {
     let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/lib.rs");
-    std::fs::read_to_string(&path)
-        .unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
 }
 
 /// Strip doc comments and line comments: this census is about CODE, and the

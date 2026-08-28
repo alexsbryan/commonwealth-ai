@@ -108,7 +108,6 @@ pub const PROOF_WINDOW_SECS: u64 = 30;
 /// hand in two crates is one rename away from disagreeing.
 pub const MESH_SECRET_UNSET: [u8; 32] = [0u8; 32];
 
-
 /// 32-byte adapter over [`crate::ct::constant_time_eq`]. Kept as a name because
 /// every caller here compares fixed-width credentials and the slice form would
 /// invite a length check at each site.
@@ -1621,7 +1620,11 @@ mod tests {
         let holder = proof_mesh([9u8; 32]);
         let unset = proof_mesh([0u8; 32]);
         let now = 1_000_000;
-        assert!(!unset.verify_mesh_proof(&holder.mesh_proof(sender, now).unwrap_or_default(), sender, now));
+        assert!(!unset.verify_mesh_proof(
+            &holder.mesh_proof(sender, now).unwrap_or_default(),
+            sender,
+            now
+        ));
     }
 
     /// The upgraded case: a peer proves possession and sends NO raw secret at
@@ -1778,11 +1781,18 @@ mod tests {
         local.mesh_secret = secret;
 
         // The founder rotates, then gossips at us.
-        let mut founder = mesh_with(vec![member(NodeId::from_u128(2), "F", 100)], mesh_id, [7u8; 32]);
+        let mut founder = mesh_with(
+            vec![member(NodeId::from_u128(2), "F", 100)],
+            mesh_id,
+            [7u8; 32],
+        );
         founder.mesh_secret = secret;
         founder.rotate_invite_key([9u8; 32], Some(4242));
 
-        assert_eq!(founder.invite_version, 1, "rotating must advance the version");
+        assert_eq!(
+            founder.invite_version, 1,
+            "rotating must advance the version"
+        );
         assert!(!local.merge_from(me, &founder).rejected);
         assert_eq!(
             local.invite_key_hash, [9u8; 32],
@@ -1810,7 +1820,11 @@ mod tests {
         local.mesh_secret = secret;
         local.rotate_invite_key([9u8; 32], None); // version 1
 
-        let mut stale = mesh_with(vec![member(NodeId::from_u128(2), "S", 100)], mesh_id, [7u8; 32]);
+        let mut stale = mesh_with(
+            vec![member(NodeId::from_u128(2), "S", 100)],
+            mesh_id,
+            [7u8; 32],
+        );
         stale.mesh_secret = secret; // version 0, old hash
 
         assert!(!local.merge_from(me, &stale).rejected);
@@ -1851,7 +1865,10 @@ mod tests {
             "both sides must land on ONE invite; a split here means two \
              admission regimes inside one mesh"
         );
-        assert_eq!(a.invite_key_hash, [2u8; 32], "the higher hash is the tie-break");
+        assert_eq!(
+            a.invite_key_hash, [2u8; 32],
+            "the higher hash is the tie-break"
+        );
     }
 
     /// ARCH §7.1: the invariant is structural, not remembered. `rotate_invite_key`
@@ -1867,8 +1884,7 @@ mod tests {
         assert_eq!(mesh.invite_key_hash, [8u8; 32]);
         assert_eq!(mesh.invite_expires_at, Some(1234));
         assert_eq!(
-            mesh.mesh_secret,
-            [3u8; 32],
+            mesh.mesh_secret, [3u8; 32],
             "rotation must be structurally incapable of re-keying gossip"
         );
     }

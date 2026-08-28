@@ -65,7 +65,11 @@ fn scan(fields: &[&str], skip_resolver: bool) -> Vec<(String, usize, String)> {
     rust_files(&root, &mut files);
     let mut hits = Vec::new();
     for f in files {
-        let name = f.file_name().unwrap_or_default().to_string_lossy().to_string();
+        let name = f
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string();
         if skip_resolver && name == RESOLVER {
             continue;
         }

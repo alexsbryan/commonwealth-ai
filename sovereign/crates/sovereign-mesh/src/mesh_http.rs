@@ -185,7 +185,11 @@ pub struct StatusResponse {
     /// Renamed from `founder_reachability`: it reads THIS node's iroh endpoint
     /// and watchdog status, never the founder's. Alias kept for one release
     /// because attach mode lets the desktop and daemon run different versions.
-    #[serde(default, skip_serializing_if = "Option::is_none", alias = "founder_reachability")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        alias = "founder_reachability"
+    )]
     pub self_reachability: Option<crate::daemon::SelfReachability>,
     /// Live per-device memory as the LOADER sees it, in its plan order (eligible
     /// RPC workers first, this host's GPU last). Empty when this node would not
@@ -425,7 +429,7 @@ async fn mesh_status(
                     peer_inflight_ceiling,
                     fanout_inflight_current,
                     active_corpus_ingests,
-                    iroh_transport: vec![],     // no mesh → no peers
+                    iroh_transport: vec![],  // no mesh → no peers
                     self_reachability: None, // no mesh → no founder endpoint
                     // Reported even without a mesh: a solo daemon can still have
                     // RPC workers pinned by env, and the memory it would gate on

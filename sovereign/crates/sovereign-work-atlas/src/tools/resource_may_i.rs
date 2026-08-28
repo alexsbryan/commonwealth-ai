@@ -224,11 +224,7 @@ impl ResourceMayITool {
     }
 
     /// The executable half of `resource_may_i`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let scope = params
             .get("scope")
             .and_then(|v| v.as_str())
@@ -555,10 +551,7 @@ mod tests {
         let ctx = ctx();
         let err = tool.run(&json!({}), &ctx).await.unwrap_err();
         assert!(err.to_string().contains("requires 'scope'"));
-        let err = tool
-            .run(&json!({ "scope": "  " }), &ctx)
-            .await
-            .unwrap_err();
+        let err = tool.run(&json!({ "scope": "  " }), &ctx).await.unwrap_err();
         assert!(err.to_string().contains("must not be empty"));
     }
 }

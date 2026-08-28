@@ -222,9 +222,11 @@ impl LabelStore {
                             seen.insert(label.key.clone(), (origin.clone(), label.disp));
                             store.by_key.insert(label.key.clone(), label);
                         }
-                        Err(e) => store
-                            .malformed
-                            .push(format!("{}:{}: {e}", path.display(), i + 1)),
+                        Err(e) => {
+                            store
+                                .malformed
+                                .push(format!("{}:{}: {e}", path.display(), i + 1))
+                        }
                     }
                 }
             }
@@ -449,9 +451,27 @@ mod tests {
     #[test]
     fn shards_from_parallel_workers_all_load() {
         let d = tempfile::tempdir().unwrap();
-        LabelStore::append_to(d.path(), DetectorId::Name, &lbl("name/a/A", Disposition::Converge), Some("w1")).unwrap();
-        LabelStore::append_to(d.path(), DetectorId::Name, &lbl("name/b/B", Disposition::Distinct), Some("w2")).unwrap();
-        LabelStore::append_to(d.path(), DetectorId::Name, &lbl("name/c/C", Disposition::Leave), None).unwrap();
+        LabelStore::append_to(
+            d.path(),
+            DetectorId::Name,
+            &lbl("name/a/A", Disposition::Converge),
+            Some("w1"),
+        )
+        .unwrap();
+        LabelStore::append_to(
+            d.path(),
+            DetectorId::Name,
+            &lbl("name/b/B", Disposition::Distinct),
+            Some("w2"),
+        )
+        .unwrap();
+        LabelStore::append_to(
+            d.path(),
+            DetectorId::Name,
+            &lbl("name/c/C", Disposition::Leave),
+            None,
+        )
+        .unwrap();
         let st = LabelStore::load(d.path());
         assert_eq!(st.len(), 3, "base file plus every shard");
         assert!(st.collisions.is_empty());
@@ -464,8 +484,20 @@ mod tests {
     #[test]
     fn two_shards_disagreeing_on_one_key_is_reported_not_silently_resolved() {
         let d = tempfile::tempdir().unwrap();
-        LabelStore::append_to(d.path(), DetectorId::Name, &lbl("name/x/X", Disposition::Converge), Some("w1")).unwrap();
-        LabelStore::append_to(d.path(), DetectorId::Name, &lbl("name/x/X", Disposition::Distinct), Some("w2")).unwrap();
+        LabelStore::append_to(
+            d.path(),
+            DetectorId::Name,
+            &lbl("name/x/X", Disposition::Converge),
+            Some("w1"),
+        )
+        .unwrap();
+        LabelStore::append_to(
+            d.path(),
+            DetectorId::Name,
+            &lbl("name/x/X", Disposition::Distinct),
+            Some("w2"),
+        )
+        .unwrap();
         let st = LabelStore::load(d.path());
         assert_eq!(st.collisions.len(), 1, "got {:?}", st.collisions);
         assert!(st.collisions[0].contains("name/x/X"), "{:?}", st.collisions);
@@ -479,8 +511,20 @@ mod tests {
     #[test]
     fn the_same_verdict_from_two_shards_is_not_a_collision() {
         let d = tempfile::tempdir().unwrap();
-        LabelStore::append_to(d.path(), DetectorId::Name, &lbl("name/x/X", Disposition::Converge), Some("w1")).unwrap();
-        LabelStore::append_to(d.path(), DetectorId::Name, &lbl("name/x/X", Disposition::Converge), Some("w2")).unwrap();
+        LabelStore::append_to(
+            d.path(),
+            DetectorId::Name,
+            &lbl("name/x/X", Disposition::Converge),
+            Some("w1"),
+        )
+        .unwrap();
+        LabelStore::append_to(
+            d.path(),
+            DetectorId::Name,
+            &lbl("name/x/X", Disposition::Converge),
+            Some("w2"),
+        )
+        .unwrap();
         let st = LabelStore::load(d.path());
         assert!(st.collisions.is_empty(), "got {:?}", st.collisions);
         assert_eq!(st.len(), 1);
@@ -492,12 +536,22 @@ mod tests {
     fn shard_read_order_is_deterministic() {
         let d = tempfile::tempdir().unwrap();
         for w in ["w9", "w1", "w5"] {
-            LabelStore::append_to(d.path(), DetectorId::Name, &lbl(&format!("name/{w}/K"), Disposition::Leave), Some(w)).unwrap();
+            LabelStore::append_to(
+                d.path(),
+                DetectorId::Name,
+                &lbl(&format!("name/{w}/K"), Disposition::Leave),
+                Some(w),
+            )
+            .unwrap();
         }
         let a = LabelStore::files_for(d.path(), DetectorId::Name);
         let b = LabelStore::files_for(d.path(), DetectorId::Name);
         assert_eq!(a, b);
-        let names: Vec<String> = a.iter().skip(1).map(|p| p.file_name().unwrap().to_string_lossy().into()).collect();
+        let names: Vec<String> = a
+            .iter()
+            .skip(1)
+            .map(|p| p.file_name().unwrap().to_string_lossy().into())
+            .collect();
         let mut sorted = names.clone();
         sorted.sort();
         assert_eq!(names, sorted, "shards must be read in sorted order");

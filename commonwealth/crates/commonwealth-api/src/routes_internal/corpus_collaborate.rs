@@ -71,14 +71,17 @@ pub async fn corpus_collaborate(
     // (the source of truth, present from registration) rather than the
     // stamped index — the post-create `grantable` stamp may not be written
     // yet during a fresh collaborative ingest.
-    let recipe_privacy = engine.load_recipe(req.corpus_id.as_str()).await.map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
-            }),
-        )
-    })?;
+    let recipe_privacy = engine
+        .load_recipe(req.corpus_id.as_str())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody {
+                    error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
+                }),
+            )
+        })?;
     if !recipe_privacy.corpus.mesh_sharing {
         // Local-only corpus. Require a live grant that authorizes exactly
         // the requested peer set. `grantable = false` (structural
@@ -255,7 +258,9 @@ pub async fn corpus_collaborate(
     // lease reaper. See `commonwealth-knowledge::work_queue`.
     if use_pull_queue() {
         let units = if is_jsonl {
-            let shard_count = engine.jsonl_source_shard_count(req.corpus_id.as_str()).unwrap_or(1);
+            let shard_count = engine
+                .jsonl_source_shard_count(req.corpus_id.as_str())
+                .unwrap_or(1);
             if shard_count > 1 {
                 // Union LOCAL processed_shards (this peer's partition
                 // dirs on disk) with PEER processed_shards (every
@@ -311,21 +316,23 @@ pub async fn corpus_collaborate(
                 build_work_units_jsonl_single(current_article, total_articles, 32)
             }
         } else {
-            let remaining = engine.remaining_source_files(req.corpus_id.as_str()).map_err(|e| {
-                let status = if e.to_string().contains("No index found") {
-                    StatusCode::NOT_FOUND
-                } else if e.to_string().contains("No source manifest") {
-                    StatusCode::UNPROCESSABLE_ENTITY
-                } else {
-                    StatusCode::INTERNAL_SERVER_ERROR
-                };
-                (
-                    status,
-                    Json(ErrorBody {
-                        error: e.to_string(),
-                    }),
-                )
-            })?;
+            let remaining = engine
+                .remaining_source_files(req.corpus_id.as_str())
+                .map_err(|e| {
+                    let status = if e.to_string().contains("No index found") {
+                        StatusCode::NOT_FOUND
+                    } else if e.to_string().contains("No source manifest") {
+                        StatusCode::UNPROCESSABLE_ENTITY
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    };
+                    (
+                        status,
+                        Json(ErrorBody {
+                            error: e.to_string(),
+                        }),
+                    )
+                })?;
             build_work_units_hf(&remaining)
         };
 
@@ -685,7 +692,9 @@ pub async fn corpus_collaborate(
         // was unsafe (silent corruption when snapshots drifted, a
         // confusing "zero chunks" error when B's extraction was
         // truncated) and is now only used for the single-shard case.
-        let shard_count = engine.jsonl_source_shard_count(req.corpus_id.as_str()).unwrap_or(1);
+        let shard_count = engine
+            .jsonl_source_shard_count(req.corpus_id.as_str())
+            .unwrap_or(1);
         if shard_count > 1 {
             let processed: std::collections::HashSet<usize> = engine
                 .corpus_processed_shards(req.corpus_id.as_str())
@@ -774,21 +783,23 @@ pub async fn corpus_collaborate(
         }
     } else {
         // ── HF parquet path (Gutenberg, StackExchange, …) ─────────────────
-        let remaining = engine.remaining_source_files(req.corpus_id.as_str()).map_err(|e| {
-            let status = if e.to_string().contains("No index found") {
-                StatusCode::NOT_FOUND
-            } else if e.to_string().contains("No source manifest") {
-                StatusCode::UNPROCESSABLE_ENTITY
-            } else {
-                StatusCode::INTERNAL_SERVER_ERROR
-            };
-            (
-                status,
-                Json(ErrorBody {
-                    error: e.to_string(),
-                }),
-            )
-        })?;
+        let remaining = engine
+            .remaining_source_files(req.corpus_id.as_str())
+            .map_err(|e| {
+                let status = if e.to_string().contains("No index found") {
+                    StatusCode::NOT_FOUND
+                } else if e.to_string().contains("No source manifest") {
+                    StatusCode::UNPROCESSABLE_ENTITY
+                } else {
+                    StatusCode::INTERNAL_SERVER_ERROR
+                };
+                (
+                    status,
+                    Json(ErrorBody {
+                        error: e.to_string(),
+                    }),
+                )
+            })?;
 
         if remaining.is_empty() {
             return Err((

@@ -250,9 +250,7 @@ pub fn apply_guest_link(globals: &mut ChatGlobals, link: Option<GuestLink>, base
 /// Async because a link that names an iroh endpoint has to have its tunnel
 /// opened before there is an address to point at, and that tunnel must be live
 /// for the rest of the process.
-pub async fn parse_globals_for_chat(
-    args: &[String],
-) -> Result<(ChatGlobals, Vec<String>), String> {
+pub async fn parse_globals_for_chat(args: &[String]) -> Result<(ChatGlobals, Vec<String>), String> {
     let (mut globals, rest) = parse_globals(args)?;
     let Some(link) = guest_link::load_live(guest_link::now_secs()) else {
         return Ok((globals, rest));

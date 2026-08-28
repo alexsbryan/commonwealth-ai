@@ -67,11 +67,7 @@ impl DeclareScopeTool {
     }
 
     /// The executable half of `declare_scope`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let intent_raw = params
             .get("intent")
             .and_then(|v| v.as_str())

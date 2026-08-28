@@ -1281,7 +1281,10 @@ mod change_set_gate_tests {
         for exporter in all_exporters() {
             for ext in exporter.extensions {
                 assert!(
-                    !ext.starts_with('.') && ext.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                    !ext.starts_with('.')
+                        && ext
+                            .chars()
+                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
                     "{}: extension {ext:?} is not the bare lowercase form the \
                      reindexer produces with to_ascii_lowercase()",
                     exporter.language_id

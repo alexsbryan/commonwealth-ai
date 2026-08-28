@@ -102,7 +102,10 @@ async fn same_mesh_id_survives_a_failed_join_from_a_solo_mesh() {
     )
     .await
     .expect("join_mesh returns well within the timeout");
-    assert!(result.is_err(), "a join against an unreachable peer must fail");
+    assert!(
+        result.is_err(),
+        "a join against an unreachable peer must fail"
+    );
 
     let after = persist::active_mesh_id(tmp.path()).expect("still a mesh after the failed join");
     assert_eq!(
@@ -127,7 +130,10 @@ async fn same_mesh_id_survives_a_failed_join_from_a_populated_mesh() {
         SetupConfig::unconfigured(),
         mesh_admin_services(),
     );
-    daemon.create_mesh("populated-mesh", "founder").await.unwrap();
+    daemon
+        .create_mesh("populated-mesh", "founder")
+        .await
+        .unwrap();
     add_peer(&daemon, "synthetic-peer").await;
     let before = persist::active_mesh_id(tmp.path()).expect("a mesh is active");
 
@@ -137,7 +143,10 @@ async fn same_mesh_id_survives_a_failed_join_from_a_populated_mesh() {
     )
     .await
     .expect("join_mesh returns well within the timeout");
-    assert!(result.is_err(), "a join against an unreachable peer must fail");
+    assert!(
+        result.is_err(),
+        "a join against an unreachable peer must fail"
+    );
 
     assert_eq!(
         Some(before),
@@ -156,7 +165,10 @@ async fn on_disk_state_survives_a_failed_join() {
         SetupConfig::unconfigured(),
         mesh_admin_services(),
     );
-    daemon.create_mesh("populated-mesh", "founder").await.unwrap();
+    daemon
+        .create_mesh("populated-mesh", "founder")
+        .await
+        .unwrap();
     add_peer(&daemon, "synthetic-peer").await;
 
     let mesh_json = persist::mesh_file(tmp.path());
@@ -193,7 +205,10 @@ async fn a_populated_mesh_is_no_longer_a_reason_to_refuse() {
         SetupConfig::unconfigured(),
         mesh_admin_services(),
     );
-    daemon.create_mesh("populated-mesh", "founder").await.unwrap();
+    daemon
+        .create_mesh("populated-mesh", "founder")
+        .await
+        .unwrap();
     add_peer(&daemon, "synthetic-peer").await;
 
     let result = tokio::time::timeout(

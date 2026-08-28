@@ -72,14 +72,17 @@ pub async fn corpus_grant_issue(
     // Grantability is enforced here, from the recipe (the source of truth,
     // always present at registration). A non-grantable corpus — a structural
     // KnowledgeView corpus — can NEVER be lent to peers, even under a grant.
-    let recipe = engine.load_recipe(req.corpus_id.as_str()).await.map_err(|e| {
-        (
-            StatusCode::NOT_FOUND,
-            Json(ErrorBody {
-                error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
-            }),
-        )
-    })?;
+    let recipe = engine
+        .load_recipe(req.corpus_id.as_str())
+        .await
+        .map_err(|e| {
+            (
+                StatusCode::NOT_FOUND,
+                Json(ErrorBody {
+                    error: format!("cannot resolve recipe for corpus '{}': {e}", req.corpus_id),
+                }),
+            )
+        })?;
     if !recipe.corpus.grantable {
         return Err((
             StatusCode::FORBIDDEN,

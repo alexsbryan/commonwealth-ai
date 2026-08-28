@@ -225,7 +225,11 @@ pub async fn serve_turn(
                             .handle_message_stream_as(content, conversation_id, intent)
                             .await
                     }
-                    None => runtime.handle_message_stream(content, conversation_id).await,
+                    None => {
+                        runtime
+                            .handle_message_stream(content, conversation_id)
+                            .await
+                    }
                 },
                 // Raw model: no retrieval, router, grounding gate, tools or
                 // atlas. Reachable over the wire since phase 6 — before it,

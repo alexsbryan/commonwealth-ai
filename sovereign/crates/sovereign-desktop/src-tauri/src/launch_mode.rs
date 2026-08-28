@@ -50,5 +50,8 @@ pub(crate) fn get() -> Launch {
 /// drove a subsystem without going through `main`; it is the same answer, just
 /// paid for again.
 pub(crate) fn daemon_host() -> DaemonHost {
-    DAEMON_HOST.get().copied().unwrap_or_else(DaemonHost::from_env)
+    DAEMON_HOST
+        .get()
+        .copied()
+        .unwrap_or_else(DaemonHost::from_env)
 }

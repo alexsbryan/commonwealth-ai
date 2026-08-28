@@ -104,7 +104,10 @@ async fn main() {
     println!("  pubkey:   {}", hex::encode(secret.public().as_bytes()));
     println!("  alpn:     {}", String::from_utf8_lossy(alpn));
     println!("  path:     {path}");
-    println!("  bearer:   {}", if bearer.is_some() { "yes" } else { "no" });
+    println!(
+        "  bearer:   {}",
+        if bearer.is_some() { "yes" } else { "no" }
+    );
 
     let target = match parse_dial_string(&dial) {
         Ok(t) => t,

@@ -190,11 +190,7 @@ impl WorkInFlightTool {
     }
 
     /// The executable half of `work_in_flight`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let scope = params
             .get("scope")
             .and_then(|v| v.as_str())
@@ -245,7 +241,6 @@ impl WorkInFlightTool {
     }
 
     async fn signal_now(&self) -> Option<String> {
-
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())

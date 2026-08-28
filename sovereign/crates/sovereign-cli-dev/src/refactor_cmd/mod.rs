@@ -570,9 +570,7 @@ async fn label_model_cmd(args: &[String]) -> i32 {
         .map(|g| label_model::summary_coverage(g, &sums).0)
         .sum();
     let total: usize = groups.iter().map(|g| g.sites.len()).sum();
-    println!(
-        "             {covered}/{total} of the sites under test carry one"
-    );
+    println!("             {covered}/{total} of the sites under test carry one");
 
     println!(
         "scoring {} group(s) against {} — model `{model}`, local daemon, no external tokens",
@@ -879,7 +877,10 @@ async fn next_cmd(args: &[String]) -> i32 {
             }
         }
         Err(e) => {
-            eprintln!("refused: could not judge destination {} — {e}", chosen.destination);
+            eprintln!(
+                "refused: could not judge destination {} — {e}",
+                chosen.destination
+            );
             return 3;
         }
     }

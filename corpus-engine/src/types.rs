@@ -647,7 +647,10 @@ pub struct ScoredChunk {
     /// `Deserialize` (a derive is a public constructor). `ScoredChunk`'s own
     /// `Deserialize` is vestigial — no production path deserializes one — and
     /// what it yields is honestly "this process did not acquire it".
-    #[serde(skip_deserializing, default = "crate::index::ChunkProvenance::off_the_wire")]
+    #[serde(
+        skip_deserializing,
+        default = "crate::index::ChunkProvenance::off_the_wire"
+    )]
     pub provenance: crate::index::ChunkProvenance,
 }
 

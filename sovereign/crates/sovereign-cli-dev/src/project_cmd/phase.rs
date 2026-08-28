@@ -194,7 +194,9 @@ pub(crate) async fn cmd_phase_pass(args: &[String]) -> i32 {
             print!("  Did it pass? [y/N] ");
             use std::io::Write;
             let _ = std::io::stdout().flush();
-            let answer = sovereign_cli_shared::prompts::prompt_string("").unwrap_or_default().to_lowercase();
+            let answer = sovereign_cli_shared::prompts::prompt_string("")
+                .unwrap_or_default()
+                .to_lowercase();
             let passed = matches!(answer.chars().next(), Some('y'));
             crate::phases::PhasePassOutcome {
                 passed,

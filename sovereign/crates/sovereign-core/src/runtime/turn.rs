@@ -89,7 +89,6 @@ impl Runtime {
     // collecting sink instead of a forwarding one, so there is one answer to
     // "which handler runs" regardless of whether the caller wants deltas.
 
-
     /// Drive the streaming turn pipeline and drain it into a single
     /// [`Response`]. Reuses [`Self::handle_message_stream`] wholesale —
     /// context build, user-message persistence, routing, and the

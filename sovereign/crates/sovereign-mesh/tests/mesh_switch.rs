@@ -20,7 +20,11 @@ use sovereign_mesh::persist;
 /// Write a second, PARKED mesh straight to disk under `root`, leaving the
 /// active pointer where it is. Mirrors what a join to a second mesh leaves
 /// behind, without needing a second daemon to hand it to us.
-fn park_a_mesh(root: &std::path::Path, name: &str, self_id: commonwealth_core::ids::NodeId) -> Mesh {
+fn park_a_mesh(
+    root: &std::path::Path,
+    name: &str,
+    self_id: commonwealth_core::ids::NodeId,
+) -> Mesh {
     let (mut mesh, _key) = commonwealth_discovery::membership::init_mesh_with_node_id(
         name,
         "self",
@@ -74,7 +78,10 @@ async fn switching_to_the_active_mesh_is_refused_rather_than_bouncing_the_daemon
         matches!(err, Err(MeshError::MeshAlreadyActive(_))),
         "expected MeshAlreadyActive, got {err:?}"
     );
-    assert!(daemon.is_running().await, "a refused switch must not stop us");
+    assert!(
+        daemon.is_running().await,
+        "a refused switch must not stop us"
+    );
 }
 
 #[tokio::test]
@@ -148,9 +155,15 @@ async fn switch_and_forget_resolve_a_mesh_the_same_way() {
     let prefix = parked.id.to_hex()[..8].to_string();
 
     // The reference switch accepts...
-    daemon.switch_mesh(&prefix).await.expect("an 8-char id prefix switches");
+    daemon
+        .switch_mesh(&prefix)
+        .await
+        .expect("an 8-char id prefix switches");
     // ...and, once it is parked again, the reference forget accepts.
-    daemon.switch_mesh("active-mesh").await.expect("switch back");
+    daemon
+        .switch_mesh("active-mesh")
+        .await
+        .expect("switch back");
     daemon
         .forget_mesh(&prefix)
         .expect("the same 8-char prefix must forget");
@@ -198,7 +211,10 @@ async fn a_parked_mesh_survives_where_a_left_one_does_not() {
         mesh_admin_services(),
     );
     daemon.create_mesh("active-mesh", "founder").await.unwrap();
-    let self_id = daemon.self_node_id().await.expect("node id after create_mesh");
+    let self_id = daemon
+        .self_node_id()
+        .await
+        .expect("node id after create_mesh");
     let parked = park_a_mesh(tmp.path(), "parked-mesh", self_id);
 
     daemon.leave().await.unwrap();

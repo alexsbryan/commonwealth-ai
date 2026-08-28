@@ -440,7 +440,11 @@ fn opt_out_policy(raw: Option<&str>) -> bool {
 /// (§18.3), so this changes which path is normal, not whether a failure is
 /// visible.
 fn composed_report_enabled() -> bool {
-    opt_out_policy(std::env::var("SOVEREIGN_DR_COMPOSED_REPORT").ok().as_deref())
+    opt_out_policy(
+        std::env::var("SOVEREIGN_DR_COMPOSED_REPORT")
+            .ok()
+            .as_deref(),
+    )
 }
 
 /// drb1-r4: hand the writer distilled FINDINGS instead of retrieved
@@ -541,7 +545,11 @@ fn report_section_evidence_enabled() -> bool {
 /// 52.04). It cost 0.25 of instruction-following, which is the whole price.
 /// Row and reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
 fn report_architecture_enabled() -> bool {
-    opt_out_policy(std::env::var("SOVEREIGN_DR_REPORT_ARCHITECTURE").ok().as_deref())
+    opt_out_policy(
+        std::env::var("SOVEREIGN_DR_REPORT_ARCHITECTURE")
+            .ok()
+            .as_deref(),
+    )
 }
 
 /// Whether each section's writer is shown the report's outline and its own
@@ -3040,8 +3048,17 @@ mod tests {
         // are hardest to inspect: round 3 restarts at ev-1, collides with
         // round 1, and the report mis-attributes with no error.
         let windows = vec![
-            ew(1, vec![wc("estate-1", "estate:c:1"), wc("estate-2", "estate:c:2")]),
-            ew(1, vec![wc("ev-1", "https://a.example/1"), wc("ev-2", "https://b.example/2")]),
+            ew(
+                1,
+                vec![wc("estate-1", "estate:c:1"), wc("estate-2", "estate:c:2")],
+            ),
+            ew(
+                1,
+                vec![
+                    wc("ev-1", "https://a.example/1"),
+                    wc("ev-2", "https://b.example/2"),
+                ],
+            ),
             ew(2, vec![wc("ev-3", "https://c.example/3")]),
         ];
         assert_eq!(

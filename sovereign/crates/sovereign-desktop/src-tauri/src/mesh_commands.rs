@@ -484,7 +484,10 @@ pub async fn mesh_forget(state: State<'_, Arc<AppState>>, mesh: String) -> Resul
     let Some(daemon) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
-    daemon.forget_mesh(&mesh).map(|_| ()).map_err(|e| e.to_string())
+    daemon
+        .forget_mesh(&mesh)
+        .map(|_| ())
+        .map_err(|e| e.to_string())
 }
 
 /// Leave the current mesh and return the node to a fresh solo mesh.

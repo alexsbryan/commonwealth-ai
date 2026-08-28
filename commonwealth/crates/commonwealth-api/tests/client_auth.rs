@@ -563,9 +563,13 @@ async fn get_via_guest_listener(
 /// local user to the default policy; on the guest listener it must not.
 #[tokio::test]
 async fn the_guest_listener_refuses_a_loopback_caller_with_no_credential() {
-    let status =
-        get_via_guest_listener(state_with_token(Some(TOKEN)), "/v1/models", Some(LOOPBACK), None)
-            .await;
+    let status = get_via_guest_listener(
+        state_with_token(Some(TOKEN)),
+        "/v1/models",
+        Some(LOOPBACK),
+        None,
+    )
+    .await;
     assert!(
         is_auth_rejection(status),
         "a request forwarded by the iroh acceptor arrives from 127.0.0.1 and has \
@@ -578,7 +582,13 @@ async fn the_guest_listener_refuses_a_loopback_caller_with_no_credential() {
 /// the policy is what separates the two listeners.
 #[tokio::test]
 async fn the_ordinary_listener_still_admits_that_same_loopback_caller() {
-    let status = get_status(state_with_token(Some(TOKEN)), "/v1/models", Some(LOOPBACK), None).await;
+    let status = get_status(
+        state_with_token(Some(TOKEN)),
+        "/v1/models",
+        Some(LOOPBACK),
+        None,
+    )
+    .await;
     assert!(
         !is_auth_rejection(status),
         "the daemon's own listener must keep admitting the local user (got {status})"
@@ -623,8 +633,13 @@ async fn a_guest_bearer_is_still_scoped_on_the_guest_listener() {
 /// probes, and it carries nothing.
 #[tokio::test]
 async fn the_exempt_paths_stay_open_on_the_guest_listener() {
-    let status =
-        get_via_guest_listener(state_with_token(Some(TOKEN)), "/status", Some(LOOPBACK), None).await;
+    let status = get_via_guest_listener(
+        state_with_token(Some(TOKEN)),
+        "/status",
+        Some(LOOPBACK),
+        None,
+    )
+    .await;
     assert!(
         !is_auth_rejection(status),
         "/status is in AUTH_EXEMPT_PATHS on every listener (got {status})"

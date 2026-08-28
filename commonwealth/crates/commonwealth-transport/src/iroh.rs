@@ -829,7 +829,10 @@ impl IrohAcceptor {
     /// NOT correct where it trusts loopback — see
     /// [`spawn_admitting`](Self::spawn_admitting).
     pub fn spawn(endpoint: iroh::Endpoint, forward_to: SocketAddr) -> Self {
-        Self::run(endpoint, move |_alpn, _dialer| async move { Some(forward_to) })
+        Self::run(
+            endpoint,
+            move |_alpn, _dialer| async move { Some(forward_to) },
+        )
     }
 
     /// Spawn the accept loop routing each connection to a local

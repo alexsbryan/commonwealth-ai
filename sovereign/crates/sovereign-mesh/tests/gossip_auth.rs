@@ -39,7 +39,10 @@ use common::{member_with_last_seen as member, spawn_router};
 /// Build a founder AppState pinned to (mesh_id, invite_key_hash) +
 /// install a counter-incrementing mesh-mutation hook so the test
 /// can assert the hook does NOT fire on rejected payloads.
-fn build_founder(mesh_id: MeshId, invite_key_hash: [u8; 32]) -> (AppState, NodeId, Arc<AtomicUsize>) {
+fn build_founder(
+    mesh_id: MeshId,
+    invite_key_hash: [u8; 32],
+) -> (AppState, NodeId, Arc<AtomicUsize>) {
     let founder_id = NodeId::from_u128(0xCAFE_BABE_CAFE_BABE);
     let mut members = HashMap::new();
     members.insert(

@@ -480,7 +480,10 @@ mod tests {
         let reach = view
             .self_reachability
             .expect("a node on the pre-rename build still reports reachability");
-        assert!(reach.degraded, "and its DEGRADED state must survive the read");
+        assert!(
+            reach.degraded,
+            "and its DEGRADED state must survive the read"
+        );
         assert_eq!(reach.rebuilds, 2);
     }
 

@@ -324,10 +324,7 @@ pub fn migrate_legacy_layout(root: &Path) -> std::io::Result<bool> {
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(
-                dir.join(JOIN_KEY_FILE),
-                fs::Permissions::from_mode(0o600),
-            );
+            let _ = fs::set_permissions(dir.join(JOIN_KEY_FILE), fs::Permissions::from_mode(0o600));
         }
     }
 
@@ -552,11 +549,7 @@ pub fn save_join_key(data_dir: &Path, join_key: &str) -> std::io::Result<()> {
 /// one. Needed because a join writes the key for the mesh it just joined, which
 /// is not yet the active one at that instant, and because tests set up parked
 /// meshes with their own keys.
-pub fn save_join_key_for(
-    data_dir: &Path,
-    mesh_id: &MeshId,
-    join_key: &str,
-) -> std::io::Result<()> {
+pub fn save_join_key_for(data_dir: &Path, mesh_id: &MeshId, join_key: &str) -> std::io::Result<()> {
     let dir = mesh_dir(data_dir, mesh_id);
     fs::create_dir_all(&dir)?;
     let target = dir.join(JOIN_KEY_FILE);
@@ -685,7 +678,11 @@ pub fn save(data_dir: &Path, mesh: &Mesh, self_node_id: NodeId) -> std::io::Resu
 /// booted into a mesh that does not exist on disk. This order's worst case is
 /// a mesh written but not yet activated, which the next boot simply does not
 /// resume — recoverable, and never a dangling pointer.
-pub fn save_and_activate(data_dir: &Path, mesh: &Mesh, self_node_id: NodeId) -> std::io::Result<()> {
+pub fn save_and_activate(
+    data_dir: &Path,
+    mesh: &Mesh,
+    self_node_id: NodeId,
+) -> std::io::Result<()> {
     save(data_dir, mesh, self_node_id)?;
     if active_mesh_id(data_dir).as_ref() != Some(&mesh.id) {
         set_active(data_dir, &mesh.id)?;
@@ -806,7 +803,6 @@ mod tests {
         assert_eq!(restored.members.len(), 1);
         assert_eq!(restored_node, node_id);
     }
-
 
     #[test]
     fn load_returns_none_when_missing() {
@@ -978,7 +974,10 @@ mod tests {
         .unwrap();
         fs::write(tmp.path().join(JOIN_KEY_FILE), b"cwth-aaaa-bbbb-cccc").unwrap();
 
-        assert!(migrate_legacy_layout(tmp.path()).unwrap(), "first run moves");
+        assert!(
+            migrate_legacy_layout(tmp.path()).unwrap(),
+            "first run moves"
+        );
         assert!(
             !migrate_legacy_layout(tmp.path()).unwrap(),
             "second run is a no-op"
@@ -1128,7 +1127,10 @@ mod tests {
         let hex = mesh.id.to_hex();
 
         assert!(resolve_known(&known, "Study Group").is_some());
-        assert!(resolve_known(&known, "  study group  ").is_some(), "trimmed + case-folded");
+        assert!(
+            resolve_known(&known, "  study group  ").is_some(),
+            "trimmed + case-folded"
+        );
         assert!(resolve_known(&known, &hex).is_some());
         assert!(resolve_known(&known, &hex[..8]).is_some());
         assert!(

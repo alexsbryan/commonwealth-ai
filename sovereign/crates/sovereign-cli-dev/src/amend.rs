@@ -49,7 +49,6 @@ use crate::project_cmd::charter_amend::hash_charter;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-
 // ─── Section parsing ─────────────────────────────────────────────────────────
 
 /// A parsed CHARTER.md, bucketed by known top-level sections.
@@ -335,7 +334,14 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
         let _ = writeln!(stderr);
         let _ = write!(stderr, "  [A]pprove amendment, or [C]ancel? ");
         let _ = stderr.flush();
-        matches!(sovereign_cli_shared::prompts::prompt_string("").unwrap_or_default().to_lowercase().chars().next(), Some('a'))
+        matches!(
+            sovereign_cli_shared::prompts::prompt_string("")
+                .unwrap_or_default()
+                .to_lowercase()
+                .chars()
+                .next(),
+            Some('a')
+        )
     }
 
     fn confirm_drift(&mut self, diff_hint: &str) -> bool {
@@ -356,7 +362,14 @@ impl AmendmentInterlocutor for StdinAmendmentInterlocutor {
             "  Fold these existing edits into this amendment? [y/N] "
         );
         let _ = stderr.flush();
-        matches!(sovereign_cli_shared::prompts::prompt_string("").unwrap_or_default().to_lowercase().chars().next(), Some('y'))
+        matches!(
+            sovereign_cli_shared::prompts::prompt_string("")
+                .unwrap_or_default()
+                .to_lowercase()
+                .chars()
+                .next(),
+            Some('y')
+        )
     }
 }
 

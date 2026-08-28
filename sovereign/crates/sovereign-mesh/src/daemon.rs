@@ -2870,20 +2870,23 @@ impl EmbeddedDaemon {
         // host surfaces. A guest's scope reaches `/v1/models` and
         // `/v1/chat/completions`; mounting less than `permits_path` allows is
         // free defence in depth.
-        let (guest_listener, guest_addr) =
-            match tokio::net::TcpListener::bind(("127.0.0.1", 0u16)).await {
-                Ok(l) => match l.local_addr() {
-                    Ok(a) => (Some(l), Some(a)),
-                    Err(e) => {
-                        warn!("guest listener bound but has no local address ({e}) — guest links over iroh disabled");
-                        (None, None)
-                    }
-                },
+        let (guest_listener, guest_addr) = match tokio::net::TcpListener::bind(("127.0.0.1", 0u16))
+            .await
+        {
+            Ok(l) => match l.local_addr() {
+                Ok(a) => (Some(l), Some(a)),
                 Err(e) => {
-                    warn!("guest listener could not bind loopback ({e}) — guest links over iroh disabled");
+                    warn!("guest listener bound but has no local address ({e}) — guest links over iroh disabled");
                     (None, None)
                 }
-            };
+            },
+            Err(e) => {
+                warn!(
+                    "guest listener could not bind loopback ({e}) — guest links over iroh disabled"
+                );
+                (None, None)
+            }
+        };
 
         // Spawn the API servers in the background. The JoinHandle is stored
         // in `DaemonState::Running` (not discarded) so `stop_inner` can await
@@ -2917,7 +2920,8 @@ impl EmbeddedDaemon {
             for router in mounted {
                 client_router = client_router.merge(router);
             }
-            let internal_router = commonwealth_api::server::internal_router(app_state_clone.clone());
+            let internal_router =
+                commonwealth_api::server::internal_router(app_state_clone.clone());
             let guest_router = commonwealth_api::server::client_router_with(
                 app_state_clone,
                 commonwealth_api::client_auth::ClientAuthPolicy::UNTRUSTED_LOOPBACK,
@@ -3304,9 +3308,9 @@ impl EmbeddedDaemon {
                 let app_state = app_state.clone();
                 Box::pin(async move {
                     let mesh = app_state.inner.mesh.read().await;
-                    mesh.members.values().any(|m| {
-                        m.removed_at.is_none() && m.node_pubkey == Some(dialer)
-                    })
+                    mesh.members
+                        .values()
+                        .any(|m| m.removed_at.is_none() && m.node_pubkey == Some(dialer))
                 })
             })
         };

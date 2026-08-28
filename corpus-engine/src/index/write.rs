@@ -618,7 +618,10 @@ impl CorpusIndex {
     /// fact this door can read. Unknown REFUSES downstream, which is the
     /// correct posture — the alternative is a fabricated class (ARCH §18.3).
     /// `score` is left at 0.0 for the caller to rank.
-    pub async fn acquire_chunks(&self, chunk_ids: &[u64]) -> Result<Vec<crate::types::ScoredChunk>> {
+    pub async fn acquire_chunks(
+        &self,
+        chunk_ids: &[u64],
+    ) -> Result<Vec<crate::types::ScoredChunk>> {
         let stored = self.get_chunks(chunk_ids).await?;
         Ok(stored
             .into_iter()

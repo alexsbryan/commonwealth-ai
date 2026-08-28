@@ -95,7 +95,10 @@ impl Resolution {
                 s
             }
             Self::NotATypePath { what, exists: true } => format!("present      {what}"),
-            Self::NotATypePath { what, exists: false } => format!("ABSENT       {what}"),
+            Self::NotATypePath {
+                what,
+                exists: false,
+            } => format!("ABSENT       {what}"),
         }
     }
 }
@@ -196,7 +199,9 @@ impl Workspace {
                 file: self.rel(&cur),
                 line,
             },
-            Some(Declared::ReExport) => Resolution::ReExported { file: self.rel(&cur) },
+            Some(Declared::ReExport) => Resolution::ReExported {
+                file: self.rel(&cur),
+            },
             None => self.elsewhere_or_unbuilt(ty),
         }
     }
@@ -401,7 +406,10 @@ fn declares(file: &Path, ty: &str) -> Option<Declared> {
             Some((b, _)) => b,
             None => continue,
         };
-        if body.split(|c: char| !c.is_alphanumeric() && c != '_').any(|w| w == ty) {
+        if body
+            .split(|c: char| !c.is_alphanumeric() && c != '_')
+            .any(|w| w == ty)
+        {
             return Some(Declared::ReExport);
         }
     }
@@ -645,7 +653,12 @@ mod tests {
 
         // And the two agreeing shapes stay quiet.
         for (declared, found) in [
-            (Home::Minted, Resolution::ReExported { file: "x.rs".into() }),
+            (
+                Home::Minted,
+                Resolution::ReExported {
+                    file: "x.rs".into(),
+                },
+            ),
             (Home::Planned, Resolution::Unbuilt),
         ] {
             let r = Row {

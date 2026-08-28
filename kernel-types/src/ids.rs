@@ -268,7 +268,11 @@ mod tests {
             !f.is_transparent(),
             "adopting NodeId at a String site must NOT be wire-transparent"
         );
-        assert!(f.after.starts_with("[0,0,0"), "unexpected wire form: {}", f.after);
+        assert!(
+            f.after.starts_with("[0,0,0"),
+            "unexpected wire form: {}",
+            f.after
+        );
     }
 
     #[test]
