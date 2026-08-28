@@ -180,6 +180,13 @@ enum DaemonState {
         /// Running variant means stopping the daemon also stops
         /// gossip; no explicit teardown.
         _gossip_handle: GossipHandle,
+        /// Aborts the peer-assisted ingest handoff loop on Drop. Same pattern
+        /// as `_gossip_handle`, and held for the same second reason the gossip
+        /// one is not: a spawner that returns nothing can lose its
+        /// `tokio::spawn` in a stray three-line diff and stay silent about it
+        /// for five weeks (`ec7ca66c`, 2026-07-21 — see
+        /// `auto_ingest::CollaborateHandle`).
+        _collaborate_handle: crate::auto_ingest::CollaborateHandle,
         _shutdown_tx: tokio::sync::oneshot::Sender<()>,
         /// The API-server task that owns the `:9741`/`:9742` listeners.
         /// Kept (not discarded) so `stop_inner` can await its exit after
@@ -201,7 +208,7 @@ enum DaemonState {
         /// self-discovery health and self-heals (nudge → relay bounce → endpoint
         /// rebuild) with no daemon restart. `None` when iroh is disabled. Aborts
         /// its task on Drop (tied to the Running variant, like `_gossip_handle`);
-        /// also read by `founder_reachability()` for the status surface.
+        /// also read by `self_reachability()` for the status surface.
         reachability_watchdog: Option<crate::iroh_watchdog::WatchdogHandle>,
     },
 }
@@ -254,6 +261,11 @@ pub(crate) fn install_iroh_access(
 enum StopMode {
     Leave,
     Shutdown,
+    /// Set this mesh down without giving it up: persistence is preserved
+    /// exactly as `Shutdown` does, and the caller announces `Offline` (never a
+    /// `removed_at` tombstone) so peers see us step away rather than depart.
+    /// The listeners are dropped so the next mesh can rebind them.
+    Park,
 }
 
 /// Result of creating a new mesh.
@@ -279,11 +291,11 @@ pub struct IrohPeerPath {
 }
 
 /// The founder's OWN iroh reachability (Track W hardening), for
-/// `/v1/mesh/status.founder_reachability` and the desktop "Reachable /
+/// `/v1/mesh/status.self_reachability` and the desktop "Reachable /
 /// Reconnecting" indicator. Flattens the reachability watchdog's live health
 /// snapshot so the wire object is one flat record.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct FounderReachability {
+pub struct SelfReachability {
     /// This node's current dial-by-key string (all relays + direct addrs), or
     /// `None` before any reachable address is known.
     #[serde(skip_serializing_if = "Option::is_none", default)]
@@ -572,6 +584,22 @@ impl EmbeddedDaemon {
         if self.is_running().await {
             return Ok(false);
         }
+        // One-time move of a pre-multi-mesh layout into `meshes/<id>/`, which
+        // also derives the `mesh_secret` this node will gossip. Idempotent, so
+        // it is cheap to attempt on every boot and there is no flag to forget.
+        if let Err(e) = persist::migrate_legacy_layout(&self.data_dir) {
+            warn!(error = %e, "mesh: legacy layout migration failed; continuing");
+        }
+        self.resume_active().await
+    }
+
+    /// Bring up whichever mesh `<data_dir>/active` names.
+    ///
+    /// This is the second half of both [`Self::try_resume`] and
+    /// [`Self::switch_mesh`] — a resume and a switch differ only in whether
+    /// the pointer moved first, which is exactly why re-entering a mesh whose
+    /// roster is still on disk costs no handshake and no invite.
+    async fn resume_active(&self) -> Result<bool, MeshError> {
         let loaded = match persist::load(&self.data_dir) {
             Ok(Some(p)) => p,
             Ok(None) => return Ok(false),
@@ -612,6 +640,97 @@ impl EmbeddedDaemon {
         // DEFAULT_GOSSIP_INTERVAL.
         self.trigger_initial_sync().await;
         Ok(true)
+    }
+
+    /// Every mesh this node is a member of — the active one and the parked
+    /// ones. Read straight off disk so it answers even when stopped.
+    pub fn known_meshes(&self) -> Vec<persist::PersistedMesh> {
+        if !self.persistence_enabled() {
+            return Vec::new();
+        }
+        persist::list_known(&self.data_dir)
+    }
+
+    /// Set the active mesh down and bring another one up, without giving up
+    /// membership in either.
+    ///
+    /// Re-entering the mesh we park costs nothing later: `mesh.json` keeps the
+    /// roster and the `mesh_secret`, and gossip authenticates on that secret,
+    /// so coming back is a resume rather than a join. No invite is redeemed,
+    /// no founder is involved, and an expired invite is irrelevant.
+    ///
+    /// `target` matches a mesh id (hex, full or unique prefix) or a mesh name,
+    /// because an operator types the name and a script has the id.
+    pub async fn switch_mesh(&self, target: &str) -> Result<String, MeshError> {
+        let known = self.known_meshes();
+        let found = persist::resolve_known(&known, target)
+            .ok_or_else(|| MeshError::UnknownMesh(target.to_string()))?;
+
+        if persist::active_mesh_id(&self.data_dir).as_ref() == Some(&found.mesh_id) {
+            return Err(MeshError::MeshAlreadyActive(found.name.clone()));
+        }
+        let target_name = found.name.clone();
+        let target_id = found.mesh_id;
+
+        // Tell the mesh we are stepping out BEFORE the listeners drop, and say
+        // "offline", not "departed" — a `removed_at` tombstone would read as a
+        // leave, and we intend to come back.
+        if let Some(app_state) = self.app_state().await {
+            crate::gossip::announce_presence_change(
+                &app_state,
+                crate::gossip::PresenceChange::Parked,
+            )
+            .await;
+        }
+        if self.is_running().await {
+            self.stop_inner(StopMode::Park).await?;
+        }
+
+        persist::set_active(&self.data_dir, &target_id)
+            .map_err(|e| MeshError::Config(format!("could not set active mesh: {e}")))?;
+
+        match self.resume_active().await {
+            Ok(true) => {
+                info!(mesh = %target_name, "mesh: switched");
+                Ok(target_name)
+            }
+            Ok(false) => Err(MeshError::Config(format!(
+                "'{target_name}' is listed but its mesh.json could not be read"
+            ))),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Drop a PARKED mesh from disk. Refuses on the active one — switch or
+    /// leave first, so "forget" can never strand the active pointer.
+    pub fn forget_mesh(&self, target: &str) -> Result<String, MeshError> {
+        let known = self.known_meshes();
+        // Same resolver as `switch_mesh`. It used not to be: forget refused the
+        // id prefix switch accepted, so a reference that could switch a mesh
+        // could not forget it.
+        let found = persist::resolve_known(&known, target)
+            .ok_or_else(|| MeshError::UnknownMesh(target.to_string()))?;
+        persist::forget(&self.data_dir, &found.mesh_id)
+            .map_err(|e| MeshError::Config(e.to_string()))?;
+        Ok(found.name.clone())
+    }
+
+    /// Any ONLINE peer whose credential generation we have not observed since
+    /// this daemon started. Drives the one confirmation round `rotate_invite`
+    /// runs before it is willing to refuse — see there for why.
+    ///
+    /// Reads `None`, not `false`: a peer we merged from and found pre-split is
+    /// already answered, and re-gossiping will not change it. Only genuine
+    /// absence is worth a round-trip.
+    async fn has_unconfirmed_online_peers(&self, app_state: &AppState) -> bool {
+        let mesh = app_state.inner.mesh.read().await;
+        let self_id = app_state.self_node_id();
+        mesh.members.values().any(|m| {
+            m.node_id != self_id
+                && m.is_active()
+                && m.status == commonwealth_core::mesh::NodeStatus::Online
+                && app_state.peer_split_generation(m.node_id).is_none()
+        })
     }
 
     /// Whether the daemon is currently running.
@@ -786,22 +905,25 @@ impl EmbeddedDaemon {
             // Clone the endpoint handle out of the state lock — the
             // relay wait below must not hold the daemon-state read
             // lock across its await.
-            let endpoint = {
+            let (endpoint, app_state_for_ttl) = {
                 let state = self.state.read().await;
                 match &*state {
                     DaemonState::Running {
                         app_state,
                         iroh_access: Some(access),
                         ..
-                    } => {
-                        if expires_at.is_some() {
-                            app_state.set_join_key_expiry(expires_at);
-                        }
-                        Some(access.endpoint_handle())
-                    }
-                    _ => None,
+                    } => (Some(access.endpoint_handle()), Some(app_state.clone())),
+                    DaemonState::Running { app_state, .. } => (None, Some(app_state.clone())),
+                    _ => (None, None),
                 }
             };
+            // Arm the TTL on the MESH, not on this node's AppState — it has to
+            // gossip and persist, or it is enforced only here and only until
+            // the next restart. Written after the state lock is dropped: the
+            // mesh guard is async and must not be taken inside the match.
+            if let (Some(exp), Some(app_state)) = (expires_at, app_state_for_ttl) {
+                app_state.inner.mesh.write().await.invite_expires_at = Some(exp);
+            }
             let dial = match &endpoint {
                 Some(ep) => {
                     crate::iroh_access::MeshIrohAccess::wait_for_relay(
@@ -847,7 +969,10 @@ impl EmbeddedDaemon {
         if self.persistence_enabled() {
             if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
                 let live = app_state.inner.mesh.read().await.clone();
-                if let Err(e) = persist::save(&self.data_dir, &live, node_id) {
+                // ESTABLISHING call: creating a mesh is one of exactly two acts
+                // that make a mesh this node's active one. `save` alone no
+                // longer moves the pointer — see `persist::save`.
+                if let Err(e) = persist::save_and_activate(&self.data_dir, &live, node_id) {
                     warn!(error = %e, "mesh.json write failed — mesh is in-memory only");
                 }
             }
@@ -923,42 +1048,51 @@ impl EmbeddedDaemon {
         // mesh", not "AlreadyRunning error, please run leave first".
         // The solo case is harmless to auto-leave.
         if self.is_running().await {
-            // Snapshot member count under the read lock. We pull
-            // `app_state` here even though we don't keep a handle
-            // to it past the check — refusing without observing
-            // the live mesh would either always-refuse or
-            // always-allow, both worse than this honest probe.
-            let live_members: Option<(String, usize)> = {
+            // PARK the mesh we are in; never destroy it. This is the step that
+            // makes a node capable of holding more than one membership — every
+            // other multi-mesh surface (`known_meshes`, `mesh list|switch|
+            // forget`, the desktop `MeshList`) reads state that only ever comes
+            // into existence here.
+            //
+            // Until 2026-08-27 this branch auto-left a solo mesh and refused a
+            // populated one, so `persist::clear` deleted the outgoing
+            // `mesh.json` and a second membership could not exist outside
+            // tests. The switcher was complete and unreachable.
+            //
+            // Parking is safe where leaving was not: the outgoing mesh keeps
+            // its own `meshes/<id>/` directory and join key, `persist::save`
+            // re-points `active` at the mesh we are about to join, and the
+            // roster we set down is exactly the one `mesh switch` resumes. The
+            // 2026-05-10 incident this branch was written for — a join
+            // silently destroying peer relationships the user could not
+            // recover from local state — cannot happen when nothing is
+            // deleted.
+            let parked: Option<String> = {
                 let state = self.state.read().await;
                 match &*state {
                     DaemonState::Running { app_state, .. } => {
-                        let mesh = app_state.inner.mesh.read().await;
-                        Some((mesh.name.clone(), mesh.members.len()))
+                        Some(app_state.inner.mesh.read().await.name.clone())
                     }
                     DaemonState::Stopped => None,
                 }
             };
-            if let Some((mesh_name_now, member_count)) = live_members {
-                if member_count > 1 {
-                    tracing::warn!(
-                        mesh_name = %mesh_name_now,
-                        members = member_count,
-                        "join_mesh: refusing to auto-leave a populated mesh"
-                    );
-                    return Err(MeshError::AlreadyInPopulatedMesh {
-                        mesh_name: mesh_name_now,
-                        members: member_count,
-                    });
-                }
+            // Say "offline", not "departed", before the listeners drop: a
+            // `removed_at` tombstone would tell peers we left, and we have not.
+            if let Some(app_state) = self.app_state().await {
+                crate::gossip::announce_presence_change(
+                    &app_state,
+                    crate::gossip::PresenceChange::Parked,
+                )
+                .await;
+            }
+            self.stop_inner(StopMode::Park).await?;
+            if let Some(name) = parked {
                 tracing::info!(
-                    mesh_name = %mesh_name_now,
-                    "join_mesh: daemon is in a solo mesh — auto-leaving before joining"
+                    parked_mesh = %name,
+                    "join_mesh: parked the current mesh — it stays joined and \
+                     `svrn mesh switch` returns to it"
                 );
             }
-            // Solo mesh (or daemon already stopped — leave is a
-            // no-op then). Safe to clear state and proceed with
-            // the new handshake.
-            let _ = self.leave().await;
         }
 
         let (join_key, url_mesh_name, relay_hint, iroh_dial, invite_encrypted) = match link {
@@ -976,6 +1110,19 @@ impl EmbeddedDaemon {
                 iroh_dial.clone(),
                 *encrypted,
             ),
+            // A guest link is deliberately NOT joinable. Refusing here with a
+            // message that names the right command is the whole difference
+            // between "this link is broken" and "you pasted the other kind" —
+            // and joining on a guest link would hand membership to someone the
+            // issuer meant to lend one model to.
+            DeepLink::Guest { .. } => {
+                return Err(MeshError::InvalidJoinKey(
+                    "that is a guest link, not an invite — it grants use of a \
+                     node's models without joining its mesh. Use `svrn mesh use \
+                     <link>` instead."
+                        .to_string(),
+                ))
+            }
         };
         let mesh_name = url_mesh_name
             .clone()
@@ -1095,23 +1242,44 @@ impl EmbeddedDaemon {
         let handshake = match handshake {
             Ok(h) => h,
             Err(e) => {
-                // Roll back to a fresh SOLO mesh rather than leaving the
-                // daemon meshless. A failed join (bad key, peer offline,
-                // network blip) must NOT strand the client API on :9741 —
-                // that was the recurring "daemon alive but :9741 down"
-                // wedge. `leave_to_solo` tears down the placeholder join
-                // mesh (its persistence clear is a no-op — we never
-                // persisted the placeholder) and rebinds a solo mesh, so
-                // the caller's post-join reconnect poll finds a working
-                // daemon. Mirrors the user-facing Leave button, which also
-                // re-solos in-process. The join still returns Err so the UI
-                // reports the failure.
-                if let Err(re) = self.leave_to_solo().await {
-                    warn!(
-                        error = %re,
-                        "join rollback: re-solo after failed handshake failed \
-                         — daemon may be left meshless"
-                    );
+                // A failed join (bad key, peer offline, network blip) must NOT
+                // strand the client API on :9741 — that was the recurring
+                // "daemon alive but :9741 down" wedge.
+                //
+                // Roll back to the mesh we PARKED on the way in. Nothing was
+                // destroyed and `persist::save` never ran for the mesh we
+                // failed to join, so `active` still names the parked one and
+                // resuming it is exact: same roster, same join key, same id.
+                //
+                // This used to `leave_to_solo()`, which was right only while
+                // the pre-flight destroyed the outgoing mesh — there was
+                // nothing to go back TO, so a fresh solo mesh was the least-bad
+                // landing. Re-soloing now would mint a THIRD mesh and orphan
+                // the parked one, which is the clobber this path exists to
+                // prevent.
+                match self.resume_active().await {
+                    Ok(true) => {
+                        info!("join rollback: resumed the parked mesh after a failed handshake");
+                    }
+                    // No parked mesh to go back to (a first-ever join from a
+                    // meshless daemon). Solo is the correct landing there, and
+                    // is what keeps :9741 bound.
+                    Ok(false) => {
+                        if let Err(re) = self.leave_to_solo().await {
+                            warn!(
+                                error = %re,
+                                "join rollback: no parked mesh and re-solo failed \
+                                 — daemon may be left meshless"
+                            );
+                        }
+                    }
+                    Err(re) => {
+                        warn!(
+                            error = %re,
+                            "join rollback: parked mesh could not be resumed \
+                             — daemon may be left meshless"
+                        );
+                    }
                 }
                 return Err(MeshError::Network(e.to_string()));
             }
@@ -1148,7 +1316,11 @@ impl EmbeddedDaemon {
         if self.persistence_enabled() {
             if let DaemonState::Running { app_state, .. } = &*self.state.read().await {
                 let live = app_state.inner.mesh.read().await.clone();
-                if let Err(e) = persist::save(&self.data_dir, &live, adopted_node_id) {
+                // The other ESTABLISHING call. Joining a second mesh PARKS the
+                // first (P1) rather than leaving it, so the pointer move is the
+                // whole switch — it must be explicit here, not a side effect of
+                // whichever code path happened to persist last.
+                if let Err(e) = persist::save_and_activate(&self.data_dir, &live, adopted_node_id) {
                     warn!(error = %e, "mesh.json write failed — joined mesh is in-memory only");
                 }
             }
@@ -1293,13 +1465,39 @@ impl EmbeddedDaemon {
                     if let Err(e) = persist::clear_client_exposed(&self.data_dir) {
                         warn!(error = %e, "client-exposed marker could not be cleared on leave");
                     }
+                    // The pointer goes LAST, and it has to go at all: the three
+                    // deletions above resolve their targets THROUGH `active`, and
+                    // `active` used to survive every leave — still naming a
+                    // directory whose `mesh.json` we had just removed. Boot looked
+                    // healthy (`load` returns None, `resume_active` returns false)
+                    // while `forget` refused that mesh forever, because forget
+                    // refuses the ACTIVE one and nothing could move the pointer off
+                    // it. `persist::clear_active` was written for exactly this and
+                    // had no caller anywhere in the workspace.
+                    let departed = persist::active_mesh_id(&self.data_dir);
+                    if let Err(e) = persist::clear_active(&self.data_dir) {
+                        warn!(error = %e, "active-mesh pointer could not be cleared on leave");
+                    }
+                    // …and with the pointer gone, drop the husk. Leaving already
+                    // deleted everything inside it, so what remains is residue, and
+                    // `list_known` cannot show it (no mesh.json) which means
+                    // `forget` could never be aimed at it either.
+                    if let Some(id) = departed {
+                        if let Err(e) = persist::forget(&self.data_dir, &id) {
+                            warn!(error = %e, "left mesh's directory could not be removed");
+                        }
+                    }
                 }
-                if matches!(mode, StopMode::Leave) {
+                if matches!(mode, StopMode::Leave | StopMode::Park) {
+                    // Park clears the cache but not the file: the plaintext is
+                    // per-mesh on disk now, and `resume_active` reloads
+                    // whichever mesh comes up next.
                     *self.join_key_plaintext.write().await = None;
                 }
                 match mode {
                     StopMode::Leave => info!("mesh daemon stopped (left mesh)"),
                     StopMode::Shutdown => info!("mesh daemon stopped (preserving mesh state)"),
+                    StopMode::Park => info!("mesh daemon stopped (parked; state preserved)"),
                 }
                 Ok(())
             }
@@ -1401,12 +1599,12 @@ impl EmbeddedDaemon {
         // wart). No relay wait here: polls repeat.
         let dial =
             endpoint.and_then(|ep| crate::iroh_access::MeshIrohAccess::dial_for_endpoint(&ep));
-        // The exp param mirrors the ARMED founder-side expiry — read,
-        // never re-armed here, or every status poll would extend the
-        // invite forever. Rotation is what re-arms (see mesh_http's
-        // rotate handler).
+        // The exp param mirrors the armed expiry — read, never re-armed here,
+        // or every status poll would extend the invite forever. Rotation is
+        // what re-arms (see `rotate_invite`). Read from the mesh so a member
+        // that did not personally mint the invite still renders the real TTL.
         let expires_at = if require_encryption {
-            app_state.join_key_expiry()
+            app_state.inner.mesh.read().await.invite_expires_at
         } else {
             None
         };
@@ -1465,7 +1663,7 @@ impl EmbeddedDaemon {
     /// isn't running (mesh on the IP path). Clones the endpoint id / dial and the
     /// watchdog status handle out of the state lock BEFORE awaiting, per the
     /// codebase's clone-out-then-await rule.
-    pub async fn founder_reachability(&self) -> Option<FounderReachability> {
+    pub async fn self_reachability(&self) -> Option<SelfReachability> {
         let (dial, endpoint_id, status_arc) = {
             let state = self.state.read().await;
             match &*state {
@@ -1485,7 +1683,7 @@ impl EmbeddedDaemon {
             Some(arc) => arc.read().await.clone(),
             None => crate::iroh_watchdog::ReachabilityStatus::default(),
         };
-        Some(FounderReachability {
+        Some(SelfReachability {
             dial,
             endpoint_id,
             health,
@@ -1500,28 +1698,153 @@ impl EmbeddedDaemon {
         *self.join_key_plaintext.write().await = Some(key);
     }
 
-    /// Arm a fresh invite TTL for an ENCRYPTED mesh's rotated key.
-    /// Rotation is the one place a TTL gets re-armed — `current_invite`
-    /// only READS the armed expiry (re-arming on status polls would
-    /// extend the invite forever). No-op (returns `None`) on a
-    /// plaintext mesh or a stopped daemon.
-    pub async fn rearm_join_key_expiry(&self) -> Option<u64> {
-        let state = self.state.read().await;
-        let app_state = match &*state {
-            DaemonState::Running { app_state, .. } => app_state.clone(),
-            DaemonState::Stopped => return None,
-        };
-        drop(state);
-        if !app_state.inner.mesh.read().await.require_encryption {
-            return None;
-        }
+    /// Rotate the invite credential. **The one and only implementation of
+    /// what rotation means** (ARCH §10.6).
+    ///
+    /// Before the credential split this was spread across three callers that
+    /// each did a different amount of the job — the CLI wrote only disk, the
+    /// HTTP handler additionally refreshed the cached plaintext and re-armed a
+    /// node-local TTL, the desktop bypassed the daemon entirely — and *none*
+    /// of them wrote the live `Mesh`. Two failures fell out of that: the
+    /// gossip loop re-persists the in-memory mesh every round, so the new hash
+    /// on disk was silently reverted within seconds while `join_key.secret`
+    /// kept the new plaintext (the operator was left holding an invite that
+    /// hashed to nothing the mesh accepted); and if a restart landed inside
+    /// that window instead, the rotator came back with a hash no peer shared
+    /// and partitioned itself symmetrically.
+    ///
+    /// Now: mutate the live mesh first, persist from it, and let the ordinary
+    /// gossip round carry it. Rotation cannot touch `mesh_secret` — that is
+    /// enforced by [`Mesh::rotate_invite_key`] not being able to name the
+    /// field — so it can no longer partition anyone.
+    ///
+    /// `force` overrides the pre-split-peer refusal below. It must be typed;
+    /// silently partitioning a peer is the substitution ARCH §18.3 forbids.
+    pub async fn rotate_invite(&self, force: bool) -> Result<RotatedInvite, MeshError> {
+        let app_state = self.app_state().await.ok_or(MeshError::NotRunning)?;
+
+        let new_key = commonwealth_discovery::membership::generate_join_key();
+        let new_hash = commonwealth_discovery::membership::hash_join_key(&new_key);
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        let expires_at = now + INVITE_TTL_SECS;
-        app_state.set_join_key_expiry(Some(expires_at));
-        Some(expires_at)
+
+        // Never refuse on an instrument that has not been run (ARCH §18.4).
+        // The confirmation map is in-memory, so every restart empties it — and
+        // a rotate seconds after boot then reported a fully-migrated fleet as
+        // "still on a pre-split build" when the truth was that this daemon had
+        // not spoken to anyone yet. One round costs about one RTT per peer and
+        // answers exactly the question the guard is about to ask. Run it BEFORE
+        // taking the write lock: the round takes it too.
+        if !force && self.has_unconfirmed_online_peers(&app_state).await {
+            info!("rotate: peers unconfirmed since boot — one gossip round before deciding");
+            if let Err(e) =
+                gossip::run_one_round(&app_state, gossip::DEFAULT_OFFLINE_THRESHOLD).await
+            {
+                warn!(
+                    error = %e,
+                    "rotate: the confirmation round failed; deciding on what we already know"
+                );
+            }
+        }
+
+        let (mesh_name, expires_at, self_id) = {
+            let mut mesh = app_state.inner.mesh.write().await;
+
+            // A peer still on a pre-split build authorizes gossip on
+            // `invite_key_hash` (the compat arm in `Mesh::gossip_authorized`),
+            // so rotating now would drop exactly those nodes out of the mesh.
+            // Name them and refuse rather than partition them quietly.
+            if !force {
+                // Refuse unless every online peer is CONFIRMED post-split.
+                //
+                // The confirmation comes from `AppState::peer_confirmed_post_split`,
+                // which is fed by the gossip round from `MergeReport::peer_pre_split`.
+                // Unknown counts as unsafe: a peer we have not gossiped with
+                // since boot may be on either build, and rotating on the
+                // optimistic assumption is precisely the silent partition this
+                // whole change exists to remove (ARCH §18.3 — never substitute
+                // a success-shaped answer for an absent one).
+                //
+                // This read is deliberately NOT `mesh.mesh_secret`. That is OUR
+                // credential; it says nothing about any peer, and testing it
+                // here made the guard inert on every migrated node — the exact
+                // failure the guard was written to prevent.
+                // Why a rotate was refused is otherwise unanswerable from a
+                // deployed daemon: the guard's input is an in-memory map, not
+                // anything on disk or in the roster.
+                //
+                // Classify in THREE values, not two. "We merged from it and it
+                // offered neither a proof nor a secret" and "we have not merged
+                // from it at all" are different facts with different remedies —
+                // upgrade that node, versus wait one round — and collapsing
+                // them is what made the refusal tell operators their fleet was
+                // un-migrated when it was not. `peer_confirmed_post_split` is
+                // still the right SAFETY read (unknown is unsafe); it is the
+                // wrong DIAGNOSTIC one.
+                let mut pre_split: Vec<String> = Vec::new();
+                let mut unconfirmed: Vec<String> = Vec::new();
+                for m in mesh.members.values() {
+                    if m.node_id == app_state.self_node_id() {
+                        continue;
+                    }
+                    let generation = app_state.peer_split_generation(m.node_id);
+                    tracing::debug!(
+                        peer = %m.node_id,
+                        name = %m.name,
+                        status = ?m.status,
+                        active = m.is_active(),
+                        generation = ?generation,
+                        "rotate: pre-split check"
+                    );
+                    let online =
+                        m.is_active() && m.status == commonwealth_core::mesh::NodeStatus::Online;
+                    if !online {
+                        continue;
+                    }
+                    match generation {
+                        Some(true) => {}
+                        Some(false) => pre_split.push(m.name.clone()),
+                        None => unconfirmed.push(m.name.clone()),
+                    }
+                }
+                if !pre_split.is_empty() || !unconfirmed.is_empty() {
+                    return Err(MeshError::RotateWouldPartition {
+                        pre_split,
+                        unconfirmed,
+                    });
+                }
+            }
+
+            let expires_at = mesh.require_encryption.then_some(now + INVITE_TTL_SECS);
+            mesh.rotate_invite_key(new_hash, expires_at);
+            (mesh.name.clone(), expires_at, app_state.self_node_id())
+        };
+
+        // Persist FROM the live mesh, so disk and memory agree and the next
+        // gossip round has nothing to revert.
+        if self.persistence_enabled() {
+            let mesh = app_state.inner.mesh.read().await;
+            if let Err(e) = persist::save(&self.data_dir, &mesh, self_id) {
+                warn!(error = %e, "rotate: mesh.json could not be written");
+            }
+            if let Err(e) = persist::save_join_key(&self.data_dir, &new_key) {
+                warn!(error = %e, "rotate: join_key.secret could not be written");
+            }
+        }
+        *self.join_key_plaintext.write().await = Some(new_key.clone());
+
+        info!(
+            mesh_name,
+            expires_at = ?expires_at,
+            "rotate: invite key rotated; mesh_secret untouched"
+        );
+        Ok(RotatedInvite {
+            mesh_name,
+            join_key: new_key,
+            expires_at,
+        })
     }
 
     /// Get the Commonwealth API address (for internal use).
@@ -2307,6 +2630,13 @@ impl EmbeddedDaemon {
         // always-on so we don't have to race the first `register` call.
         let _reaper = app_state.start_work_queue_reaper();
 
+        // Sweep lapsed guest grants. Auth already fails closed on an expired
+        // grant (`GuestGrantStore::live` evaluates expiry per read), so this
+        // bounds the map rather than enforcing the TTL — but a `drain_dead`
+        // with no caller is exactly the shape that left `ingest_grant`'s
+        // expiry unenforced, so it gets a caller at birth.
+        let _guest_reaper = app_state.start_guest_grant_reaper();
+
         // Register the locally-loaded model slots so `/v1/models`
         // answers with something meaningful instead of an empty list.
         // Without this, the OpenAI-compatible models list returns
@@ -2654,7 +2984,8 @@ impl EmbeddedDaemon {
             persist_dir,
         );
 
-        crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
+        let collaborate_handle =
+            crate::auto_ingest::spawn_auto_collaborate_loop(app_state.clone(), internal_port);
 
         // Re-spawn any solo corpus ingest the daemon was running before
         // restart. The mesh auto-collaborate loop above only handles
@@ -3060,6 +3391,7 @@ impl EmbeddedDaemon {
             mdns,
             _browse_handle: browse_handle,
             _gossip_handle: gossip_handle,
+            _collaborate_handle: collaborate_handle,
             _shutdown_tx: shutdown_tx,
             serve_handle,
             iroh_access,
@@ -3950,9 +4282,12 @@ mod tests {
         use commonwealth_core::mesh::Mesh;
 
         let mesh = Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id: commonwealth_core::ids::MeshId::generate(),
             name: "test".into(),
-            join_key_hash: [0u8; 32],
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
             require_encryption: false,
             members: Default::default(),
             peers: vec![],
@@ -4080,6 +4415,34 @@ mod takeover_tests {
     }
 }
 
+/// Prose for [`MeshError::RotateWouldPartition`]. A free function rather than a
+/// format string because the right sentence depends on WHICH population is
+/// non-empty, and the two remedies are different actions — "upgrade that node"
+/// versus "wait one round". A single joined list could only say one of them.
+fn describe_rotate_refusal(pre_split: &[String], unconfirmed: &[String]) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    if !pre_split.is_empty() {
+        parts.push(format!(
+            "{} peer(s) are still on a pre-split build ({}) — upgrade them first",
+            pre_split.len(),
+            pre_split.join(", ")
+        ));
+    }
+    if !unconfirmed.is_empty() {
+        parts.push(format!(
+            "{} peer(s) have not been confirmed since this daemon started ({}) — \
+             retry after the next gossip round",
+            unconfirmed.len(),
+            unconfirmed.join(", ")
+        ));
+    }
+    format!(
+        "Rotating now could partition the mesh: {}. Or re-run with --force to \
+         rotate anyway.",
+        parts.join("; ")
+    )
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum MeshError {
     #[error("Mesh daemon is already running")]
@@ -4097,18 +4460,45 @@ pub enum MeshError {
     #[error("Network error: {0}")]
     Network(String),
 
-    /// `join_mesh` was called on a daemon already in a populated mesh
-    /// (members beyond self). The auto-leave-then-join shortcut is
-    /// fine for switching out of a freshly-created solo mesh, but
-    /// against a real mesh it would persist::clear before attempting
-    /// the new handshake — if that handshake then failed for any
-    /// reason (bad key, no peer, network), the user is left with the
-    /// old mesh's `mesh.json` already deleted on disk. Refuse early
-    /// so the destructive step never runs without an explicit
-    /// `mesh leave` from the caller.
-    #[error(
-        "Cannot auto-switch meshes: already in '{mesh_name}' with {members} member(s). \
-         Run `sovereign mesh leave` first if you intend to switch."
-    )]
-    AlreadyInPopulatedMesh { mesh_name: String, members: usize },
+    // `AlreadyInPopulatedMesh` was removed 2026-08-27. It refused a join while
+    // the daemon was in a populated mesh, because `join_mesh` used to
+    // `persist::clear` the outgoing mesh before the handshake and a failed
+    // handshake then left the user with no mesh on disk. `join_mesh` now PARKS
+    // instead of leaving, so nothing is deleted and there is no destructive
+    // step to refuse in front of — and refusing was itself the reason a second
+    // membership could never exist. See `tests/join_parks_not_leaves.rs`.
+    /// `rotate_invite` refused because rotating now could drop an online peer
+    /// out of the mesh. Refusing loudly beats partitioning quietly (ARCH
+    /// §18.3); `--force` overrides.
+    ///
+    /// Two populations, deliberately kept apart because their remedies differ:
+    /// `pre_split` peers authorize gossip on `invite_key_hash` and need
+    /// UPGRADING; `unconfirmed` peers have simply not been merged from since
+    /// this daemon started and need one gossip ROUND. The old single-list
+    /// wording called both "still on a pre-split build", which sent operators
+    /// hunting for un-migrated nodes that did not exist.
+    #[error("{}", describe_rotate_refusal(pre_split, unconfirmed))]
+    RotateWouldPartition {
+        pre_split: Vec<String>,
+        unconfirmed: Vec<String>,
+    },
+
+    /// `switch_mesh` was given a mesh this node is not a member of.
+    #[error("Not a member of any mesh matching '{0}' — `svrn mesh list` shows what is joined")]
+    UnknownMesh(String),
+
+    /// `switch_mesh` was given the mesh that is already active.
+    #[error("Already active in '{0}'")]
+    MeshAlreadyActive(String),
+}
+
+/// Result of [`EmbeddedDaemon::rotate_invite`].
+#[derive(Debug, Clone)]
+pub struct RotatedInvite {
+    pub mesh_name: String,
+    /// Plaintext of the freshly-minted invite key. Shown once; the mesh keeps
+    /// only its hash.
+    pub join_key: String,
+    /// When the new invite lapses, for an encrypted mesh. `None` = no expiry.
+    pub expires_at: Option<u64>,
 }

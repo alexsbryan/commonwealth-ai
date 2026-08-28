@@ -51,11 +51,7 @@ impl RecordAtosEventTool {
     }
 
     /// The executable half of `record_atos_event`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let run_id = params.get("run_id").and_then(|v| v.as_str()).unwrap_or("");
         let call_id = params.get("call_id").and_then(|v| v.as_str()).unwrap_or("");
         let tool_name = params
@@ -103,7 +99,6 @@ impl RecordAtosEventTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         for key in ["run_id", "call_id", "tool_name", "phase"] {
             params
                 .get(key)

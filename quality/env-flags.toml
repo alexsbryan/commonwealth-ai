@@ -47,6 +47,13 @@ status = "experiment"
 purpose = "Per-tensor placement at load, llama.cpp `-ot` syntax: `<regex>=<buffer-type>[,...]`, e.g. `per_layer_token_embd=CPU`. CPU is the only buffer type resolved, and it is the one that changes RESIDENCY: a tensor on the CPU buffer type is left pointing into the mmap'd GGUF instead of copied into a device buffer (llama-model-loader.cpp -> ggml_backend_tensor_alloc(buf_mmap, cur, data)), so it stays demand-paged from disk and EVICTABLE under pressure rather than pinned — pressure costs a page fault, not an OOM kill. Built for Qwen3.8-Flash-Next's per_layer_token_embd, a single 26.8 GiB IQ4_NL n-gram table read 16 rows (1440 B) per token; measured NVMe marginal cost on RuggedFox is ~92 us against a ~25.6 ms token budget. Applied on LocalOnly/StreamSplit only — a distributed OwnedOverrides load derives its own -ot set from the shard plan and REFUSES to merge (logged at warn, not silently dropped). A malformed entry or unknown buffer type refuses the whole variable rather than half-applying. Read in one place: model_slot.rs::env_tensor_buft_overrides."
 
 [[flag]]
+name = "SOVEREIGN_MESH_STRICT_AUTH"
+cluster = "mesh"
+default = "off"
+status = "guard"
+purpose = "Refuse the pre-split gossip compat arm instead of falling back to it. OFF by default: `Mesh::gossip_authorized` falls through to comparing `invite_key_hash` whenever EITHER side's `mesh_secret` is zeroed, which is what makes the credential-split upgrade rolling rather than flag-day. That fallback is peer-selected — a caller omits the field and gets the weaker predicate — so once every node is upgraded it is pure attack surface. =1/true/on refuses those peers outright, but ONLY on a node whose own secret is set; a node that has not migrated would otherwise refuse every peer and self-partition. Read once via OnceLock in commonwealth-core (a value that changed mid-run would make `which predicate authorized this round` depend on when the round happened). Turning this on while any node is still pre-split PARTITIONS those nodes — that is the point, and it is why it is opt-in. Flip-to-default condition and review-by: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
 name = "SOVEREIGN_NATIVE_GROUNDING"
 cluster = "grounding"
 default = "on"
@@ -1226,6 +1233,22 @@ cluster = "dev-gates"
 default = "unset (derived from cores + free memory)"
 status = "guard"
 purpose = "Caps the cargo job fan for scripts/sovereign-test.sh — build+link+run, the heaviest fan in the repo. Twin of SOVEREIGN_LINT_JOBS on the same lib/cargo-jobs.sh budget; --jobs overrides it per run. The resolved value is what the banner's `jobs:` line reports, so a run that self-throttled on low free memory says so instead of just being slow."
+
+# ── dev-gates: which host tool the gate reaches for ─────────────────
+
+[[flag]]
+name = "SOVEREIGN_PYTHON"
+cluster = "dev-gates"
+default = "unset (first of python3.13, python3.12, python3.11, python3 on PATH)"
+status = "guard"
+purpose = "Names the interpreter scripts/co-review.sh and scripts/co-sweep.sh run their python passes under. Unset walks a fixed candidate list; when NOTHING on it resolves, both scripts SAY SO and exit rather than skipping the pass — an audit that did not run is reported, never defaulted to green (ARCH §18.3). This is the per-machine escape hatch for a host whose python lives off PATH or under a name the list does not carry."
+
+[[flag]]
+name = "SOVEREIGN_TOOLBOX"
+cluster = "dev-gates"
+default = "sovereign-vulkan"
+status = "guard"
+purpose = "The toolbox container scripts/lib/release-host.sh runs native build legs inside. The default matches the container this repo's native deps (cmake, clang, vulkan) are installed in; the knob exists because the container name is a property of the HOST, not of the release. Resolution is guarded, not assumed: the driver uses `toolbox run -c $SOVEREIGN_TOOLBOX` only when the `toolbox` binary exists AND `toolbox list --containers` actually names it, so a missing or renamed container degrades loudly instead of producing a leg that silently built on the host."
 
 [[flag]]
 name = "SOVEREIGN_FAST_SHORT_QUEUE_CAP"

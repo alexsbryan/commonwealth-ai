@@ -394,9 +394,7 @@ pub fn provenance_header_typed(
 /// diagnostic visibility, and converting the host to a client while silently
 /// dropping two of its five columns would have been a downgrade wearing a
 /// convergence badge.
-pub fn citations_footer(
-    citations: &[sovereign_contracts::types::projection::Citation],
-) -> String {
+pub fn citations_footer(citations: &[sovereign_contracts::types::projection::Citation]) -> String {
     if citations.is_empty() {
         return String::new();
     }

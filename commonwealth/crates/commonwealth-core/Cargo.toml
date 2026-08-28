@@ -10,6 +10,11 @@ license.workspace = true
 # since noun-convergence rung nc-1-kernel — see src/ids.rs for why.
 kernel-types = { workspace = true }
 oicp-types = { path = "../../../oicp-types" }
+# Keyed BLAKE3 for `Mesh::mesh_proof` — proof-of-possession of `mesh_secret`
+# so the raw credential stops riding every gossip round. Same crate and same
+# version as `commonwealth-discovery`, which derives the secret itself.
+blake3 = "1"
+
 serde = { workspace = true }
 serde_json = { workspace = true }
 toml = { workspace = true }

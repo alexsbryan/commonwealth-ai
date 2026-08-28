@@ -1504,7 +1504,8 @@ embedding_dimensions = 8
     };
 
     let sym_out = text(
-        &sym.declared().execute(&serde_json::json!({ "name": "make_widget" }), &ctx)
+        &sym.declared()
+            .execute(&serde_json::json!({ "name": "make_widget" }), &ctx)
             .await,
     );
     assert!(

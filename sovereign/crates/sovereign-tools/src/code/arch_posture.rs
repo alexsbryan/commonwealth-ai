@@ -12,13 +12,12 @@
 
 use std::path::PathBuf;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
 use super::arch_report::compute_fingerprint;
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 pub struct ArchPostureTool {
     data_dir: PathBuf,
@@ -88,11 +87,7 @@ impl ArchPostureTool {
     }
 
     /// The executable half of `arch_posture`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let corpus_id = match params.get("corpus_id").and_then(|v| v.as_str()) {
             Some(c) => c.to_string(),
             None => {
@@ -237,7 +232,6 @@ impl ArchPostureTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
             if c.is_empty()
                 || !c

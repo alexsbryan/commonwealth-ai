@@ -1969,6 +1969,7 @@ dependencies = [
 name = "commonwealth-core"
 version = "0.5.0"
 dependencies = [
+ "blake3",
  "ed25519-dalek 2.2.0",
  "getrandom 0.3.4",
  "hex",

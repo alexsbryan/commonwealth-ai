@@ -29,7 +29,7 @@ pub struct MeshStatus {
     /// or `/v1/mesh/status` (attach mode); drives the desktop's
     /// "Reachable / Reconnecting" indicator.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub founder_reachability: Option<crate::daemon::FounderReachability>,
+    pub self_reachability: Option<crate::daemon::SelfReachability>,
 }
 
 /// A member of the mesh, as shown in the UI.

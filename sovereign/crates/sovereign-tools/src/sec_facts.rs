@@ -33,10 +33,15 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::runtime::numeric_audit::numeric_tokens;
 use sovereign_core::types::{StepOutput, ToolContext};
 
-use corpus_engine::enrichment::atlas::analysis::sec_facts::{available_period_ends, calendar_period_in_question, change, coverage_summary, discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept, scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal, SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR};
+use corpus_engine::enrichment::atlas::analysis::sec_facts::{
+    available_period_ends, calendar_period_in_question, change, coverage_summary,
+    discover_authoritative_stores, fmt_compact, fmt_full, fmt_pct, lookup, ratio, resolve_concept,
+    scope_qualifier_in_question, store_claims, SecFact, SecFactStore, SecRefusal,
+    SEC_FACTS_AUTHORITY_TOOL, SEC_FACTS_SIDECAR,
+};
 use corpus_engine::CorpusEngine;
-use sovereign_core::types::AuthorityClaim;
 use sovereign_core::tool_manifest::DeclaredTool;
+use sovereign_core::types::AuthorityClaim;
 
 /// Typed SEC-filing figures over an installed SEC filings corpus —
 /// identified by its recipe's `[authority]` declaration, not by the
@@ -129,8 +134,7 @@ impl SecFactsTool {
         // The id stays bound to the const a recipe's `[authority] tool = …`
         // must name, so a rename cannot leave the two spellings disagreeing
         // and silently un-claim every corpus (ARCH §10.6).
-        let mut manifest =
-            sovereign_core::tool_manifest::require(SEC_FACTS_AUTHORITY_TOOL).clone();
+        let mut manifest = sovereign_core::tool_manifest::require(SEC_FACTS_AUTHORITY_TOOL).clone();
         manifest.parameters = Self::parameter_schema();
         sovereign_core::tool_manifest::declared_from(manifest, move |params, ctx| {
             let state = Arc::clone(&run_state);
@@ -194,11 +198,7 @@ impl SecFactsTool {
     }
 
     /// The executable half of `sec_facts`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let explicit = params.get("corpus_id").and_then(|v| v.as_str());
         let (corpus_id, store) = self.resolve_corpus(explicit)?;
         let mode = params
@@ -511,7 +511,6 @@ impl SecFactsTool {
     }
 
     fn claims_for(&self, question: &str) -> Vec<AuthorityClaim> {
-
         self.claim_stores()
             .iter()
             .filter_map(|(corpus_id, store)| {
@@ -525,7 +524,6 @@ impl SecFactsTool {
     }
 
     fn authority_domains_for(&self) -> Vec<AuthorityClaim> {
-
         self.claim_stores()
             .iter()
             .map(|(corpus_id, store)| AuthorityClaim {

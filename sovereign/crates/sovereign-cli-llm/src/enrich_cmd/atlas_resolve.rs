@@ -93,33 +93,41 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
         }
     };
 
-    let cfg = match EnrichConfig::require(&parsed.corpus_id) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: loading enrichment config: {e}");
-            return 1;
+    match run(&parsed).await {
+        Ok(_) => 0,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            1
         }
-    };
+    }
+}
+
+/// Resolve a corpus's cached Phase 1 sketches into the live atlas dir.
+///
+/// Keeps its progress printing — resolution embeds every description
+/// through the daemon and the per-atom-kind lines are the operator's
+/// view of a slow pass.
+pub async fn run(parsed: &ParsedResolve) -> Result<ResolveReport, String> {
+    let cfg = EnrichConfig::require(&parsed.corpus_id)
+        .map_err(|e| format!("loading enrichment config: {e}"))?;
 
     // Validate the pipeline is atlas-shaped. A `literary` (v1) cache
     // doesn't carry section_extraction payloads, so Phase 3a
     // resolution would produce an empty atlas — tell the operator
     // rather than silently writing empty files.
     if super::pipeline_resolve::resolve_pipeline(&cfg).is_none() {
-        eprintln!(
-            "error: unknown pipeline `{}` in enrichment config",
+        return Err(format!(
+            "unknown pipeline `{}` in enrichment config",
             cfg.pipeline_id
-        );
-        return 1;
+        ));
     }
     if !cfg.pipeline_id.ends_with("_atlas") {
-        eprintln!(
-            "error: pipeline `{}` does not produce atlas sketches. Re-init with \
-             --pipeline literary_atlas (or another *_atlas pipeline) and re-run \
-             extract before resolving.",
+        return Err(format!(
+            "pipeline `{}` does not produce atlas sketches. Re-init with --pipeline \
+             literary_atlas (or another *_atlas pipeline) and re-run extract before \
+             resolving.",
             cfg.pipeline_id
-        );
-        return 1;
+        ));
     }
 
     // Load the Phase 1 cache. No cache = nothing to resolve.
@@ -127,18 +135,13 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     let phase1: Phase1Output = match cache.read(PipelinePhase::Questions) {
         Ok(Some(p)) => p,
         Ok(None) => {
-            eprintln!(
-                "error: no Phase 1 cache at {}. Run `svrn enrich extract {} \
-                 --full` first.",
+            return Err(format!(
+                "no Phase 1 cache at {}. Run `svrn enrich extract {} --full` first.",
                 paths::cache_dir(&cfg.corpus_id).display(),
                 cfg.corpus_id
-            );
-            return 1;
+            ))
         }
-        Err(e) => {
-            eprintln!("error: reading Phase 1 cache: {e}");
-            return 1;
-        }
+        Err(e) => return Err(format!("reading Phase 1 cache: {e}")),
     };
 
     // Extract section_extraction from each chapter. Skip chapters
@@ -146,12 +149,12 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     // run) with a warning so the operator knows coverage is partial.
     let sections = collect_section_extractions(&phase1.questions_by_chapter);
     if sections.is_empty() {
-        eprintln!(
-            "error: Phase 1 cache contains no `section_extraction` payloads. \
-             Either re-run extract with the `literary_atlas` pipeline or \
-             resolve a different corpus."
+        return Err(
+            "Phase 1 cache contains no `section_extraction` payloads. Either \
+                    re-run extract with the `literary_atlas` pipeline or resolve a \
+                    different corpus."
+                .to_string(),
         );
-        return 1;
     }
     println!(
         "  loaded {} section(s) with atlas sketches (of {} total chapter(s) in cache)",
@@ -162,13 +165,8 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     // Build the embed closure. Resolution needs embeddings for the
     // description-cosine rule; the daemon client is the same one
     // used by `extract`.
-    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: building daemon client: {e}");
-            return 1;
-        }
-    };
+    let client = DaemonInferenceClient::from_enrich_config(&cfg)
+        .map_err(|e| format!("building daemon client: {e}"))?;
     let (embed, _chat, _chat_with_tokens) = client.into_closures_with_tokens();
 
     // Resolve into the live atlas dir. The `enrich delta` command
@@ -176,13 +174,7 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
     // wrapper preserves the original "write to the corpus's canonical
     // atlas/" behaviour byte-for-byte.
     let atlas_dir = atlas_dir_for(&cfg.corpus_id);
-    match resolve_into_dir(&cfg, &sections, &embed, &atlas_dir, parsed.phase).await {
-        Ok(()) => 0,
-        Err(e) => {
-            eprintln!("error: {e}");
-            1
-        }
-    }
+    resolve_into_dir(&cfg, &sections, &embed, &atlas_dir, parsed.phase).await
 }
 
 /// Resolve the section sketches into `target_atlas_dir` (Step 3a +
@@ -206,13 +198,90 @@ pub async fn cmd_atlas_resolve(args: &[String]) -> i32 {
 /// On the error path the message is a complete sentence (the caller
 /// just prefixes `error: ` and returns nonzero) so this fn carries no
 /// process-exit policy of its own.
+/// What resolution produced.
+///
+/// An ENUM rather than one struct with zeroed 3b fields: a 3a-only run
+/// has no states because 3b never ran, and a full run with zero states
+/// found none. Collapsing both into `states: 0` is the substitution ARCH
+/// §18.3 forbids — and `resolve_into_dir` used to return `()`, so a
+/// caller could not tell either case from the other, or from a run that
+/// resolved four thousand atoms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ResolveReport {
+    /// `--phase 3a`: entities, events, and the `Involves` edges.
+    Step3aOnly {
+        entities: usize,
+        events: usize,
+        edges: usize,
+        failures: usize,
+    },
+    /// `--phase 3b` or `all`: 3a plus the typed extensions.
+    Full {
+        entities: usize,
+        events: usize,
+        states: usize,
+        relations: usize,
+        claims: usize,
+        questions: usize,
+        argument_reconstructions: usize,
+        positions: usize,
+        oppositions: usize,
+        edges: usize,
+        trajectories: usize,
+        failures: usize,
+    },
+}
+
+impl ResolveReport {
+    /// One line naming what this step resolved, for the build
+    /// orchestrator's `StepDone` event.
+    pub fn summary(&self) -> String {
+        let (head, failures) = match self {
+            Self::Step3aOnly {
+                entities,
+                events,
+                edges,
+                failures,
+            } => (
+                format!("3a only: {entities} entity, {events} event atom(s), {edges} edge(s)"),
+                *failures,
+            ),
+            Self::Full {
+                entities,
+                events,
+                states,
+                relations,
+                claims,
+                questions,
+                edges,
+                trajectories,
+                failures,
+                ..
+            } => (
+                format!(
+                    "{} atom(s) ({entities} entity, {events} event, {states} state, \
+                     {relations} relation, {claims} claim, {questions} question), \
+                     {edges} edge(s), {trajectories} trajectory chain(s)",
+                    entities + events + states + relations + claims + questions
+                ),
+                *failures,
+            ),
+        };
+        if failures == 0 {
+            head
+        } else {
+            format!("{head}; {failures} resolution drop(s)")
+        }
+    }
+}
+
 pub(crate) async fn resolve_into_dir(
     cfg: &EnrichConfig,
     sections: &[SectionExtraction],
     embed: &EmbedFn,
     target_atlas_dir: &Path,
     phase: ResolvePhase,
-) -> Result<(), String> {
+) -> Result<ResolveReport, String> {
     // Step 3a: always runs. Step 3b is re-resolved from 3a's
     // output so the atom ids remain consistent regardless of
     // whether the caller chose 3a-only or 3b/all.
@@ -229,6 +298,11 @@ pub(crate) async fn resolve_into_dir(
     let mut resolution_failures: Vec<corpus_engine::enrichment::pipeline::PhaseFailure> =
         Vec::new();
     resolution_failures.extend(step_3a.failures.iter().cloned());
+
+    // Deferred init, not `Option` + `expect`: both branches assign
+    // before yielding `w`, and the compiler proves it — so there is no
+    // panic path asserting what the control flow already guarantees.
+    let counts: ResolveReport;
 
     let written = if want_3b {
         let step_3b = resolve_step_3b(sections, &step_3a.entities, &step_3a.events)
@@ -309,6 +383,20 @@ pub(crate) async fn resolve_into_dir(
                 println!("  ✓ {} opposition atom(s)", typed.new_oppositions.len());
                 println!("  ✓ {} edge(s) total", edges.len());
                 println!("  ✓ {} trajectory chain(s)", step_3b.trajectories.len());
+                counts = ResolveReport::Full {
+                    entities: entities.len(),
+                    events: step_3a.events.len(),
+                    states: step_3b.states.len(),
+                    relations: step_3b.relations.len(),
+                    claims: claims.len(),
+                    questions: step_3b.questions.len(),
+                    argument_reconstructions: step_3b.argument_reconstructions.len(),
+                    positions: typed.new_positions.len(),
+                    oppositions: typed.new_oppositions.len(),
+                    edges: edges.len(),
+                    trajectories: step_3b.trajectories.len(),
+                    failures: 0,
+                };
                 w
             }
             Err(e) => {
@@ -327,6 +415,12 @@ pub(crate) async fn resolve_into_dir(
                 println!("  ✓ {} entity atom(s)", step_3a.entities.len());
                 println!("  ✓ {} event atom(s)", step_3a.events.len());
                 println!("  ✓ {} involves edge(s)", step_3a.edges.len());
+                counts = ResolveReport::Step3aOnly {
+                    entities: step_3a.entities.len(),
+                    events: step_3a.events.len(),
+                    edges: step_3a.edges.len(),
+                    failures: 0,
+                };
                 w
             }
             Err(e) => {
@@ -368,7 +462,13 @@ pub(crate) async fn resolve_into_dir(
         }
     }
 
-    Ok(())
+    let mut report = counts;
+    match &mut report {
+        ResolveReport::Step3aOnly { failures, .. } | ResolveReport::Full { failures, .. } => {
+            *failures = resolution_failures.len();
+        }
+    }
+    Ok(report)
 }
 
 /// Collect the per-section atlas sketches from a cached
@@ -447,60 +547,33 @@ impl AtlasResolveTool {
             }
         };
 
-        let cfg = EnrichConfig::require(corpus).map_err(|e| {
-            Error::Execution(format!(
-                "atlas_resolve: enrichment config for `{corpus}`: {e} — run `enrich init` first"
-            ))
-        })?;
-        if !cfg.pipeline_id.ends_with("_atlas") {
-            return Err(Error::Execution(format!(
-                "atlas_resolve: pipeline `{}` does not produce atlas sketches (need an *_atlas pipeline)",
-                cfg.pipeline_id
-            )));
-        }
-
-        // Load the Phase-1 cache (questions.json) and pull its section sketches.
-        let cache = cfg.phase_cache();
-        let phase1: Phase1Output = cache
-            .read(PipelinePhase::Questions)
-            .map_err(|e| Error::Execution(format!("atlas_resolve: read Phase 1 cache: {e}")))?
-            .ok_or_else(|| {
-                Error::Execution(format!(
-                    "atlas_resolve: no Phase 1 cache for `{corpus}` — run the extract phase first"
-                ))
-            })?;
-        let sections = collect_section_extractions(&phase1.questions_by_chapter);
-        if sections.is_empty() {
-            return Err(Error::Execution(
-                "atlas_resolve: Phase 1 cache carries no `section_extraction` sketches \
-                 (re-run extract with an *_atlas pipeline)"
-                    .into(),
-            ));
-        }
-
-        // The description-cosine merge rule needs embeddings — build the same
-        // daemon embed closure the bespoke resolver uses.
-        let client = DaemonInferenceClient::from_enrich_config(&cfg)
-            .map_err(|e| Error::Execution(format!("atlas_resolve: build daemon client: {e}")))?;
-        let (embed, _chat, _chat_with_tokens) = client.into_closures_with_tokens();
-
-        let atlas_dir = atlas_dir_for(&cfg.corpus_id);
-        resolve_into_dir(&cfg, &sections, &embed, &atlas_dir, phase)
-            .await
-            .map_err(|e| Error::Execution(format!("atlas_resolve: {e}")))?;
+        // Calls the same `run` the CLI verb calls. This block used to be
+        // a line-for-line copy of it — same config load, same `_atlas`
+        // pipeline check, same Phase-1 cache read, same
+        // `collect_section_extractions`, same embed client, same
+        // `resolve_into_dir` — because a `cmd_*` taking argv and
+        // returning an exit code was not callable from here. It is now.
+        let report = run(&ParsedResolve {
+            corpus_id: corpus.to_string(),
+            phase,
+        })
+        .await
+        .map_err(|e| Error::Execution(format!("atlas_resolve: {e}")))?;
 
         Ok(StepOutput::Text(format!(
-            "atlas_resolve: resolved {} section(s) into {}/atoms.json + edges.json + trajectories.json",
-            sections.len(),
-            atlas_dir.display()
+            "atlas_resolve: {}",
+            report.summary()
         )))
     }
 }
 
-#[derive(Debug)]
-struct ParsedResolve {
-    corpus_id: String,
-    phase: ResolvePhase,
+/// A parsed `atlas-resolve` invocation. Public so the `enrich build`
+/// orchestrator constructs one directly instead of round-tripping
+/// through argv.
+#[derive(Debug, Clone)]
+pub struct ParsedResolve {
+    pub corpus_id: String,
+    pub phase: ResolvePhase,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedResolve, String> {

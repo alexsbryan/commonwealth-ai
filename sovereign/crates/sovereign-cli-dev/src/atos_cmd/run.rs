@@ -1820,9 +1820,11 @@ struct ReviewerVerdict {
     gaps: Vec<Gap>,
 }
 
-/// The reviewer model's JSON shape, not `honesty::Gap` and not
+/// The reviewer model's JSON shape, not
 /// `sovereign_contracts::types::epistemic::Gap` — three fields the model
-/// fills, with no id and no demand index.
+/// fills, with no id and no demand index. (It was also distinct from
+/// `honesty::Gap` until that module was deleted on 2026-08-26 as
+/// unreachable since `de34eb36`.)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 struct Gap {
     #[serde(default)]

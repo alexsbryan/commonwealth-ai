@@ -24,6 +24,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use corpus_engine::index::CorpusIndex;
+use corpus_engine::Corpus;
 use sovereign_contracts::types::{CompletionRequest, CompletionResponse, Speed};
 
 use super::acquisition::web_hit_relevance;
@@ -51,7 +52,7 @@ pub fn indexes_dir() -> PathBuf {
 /// (the same validity gate the engine's `installed_indexes` uses).
 fn corpus_searchable(dir: &std::path::Path) -> bool {
     std::fs::metadata(dir.join("chunks.lance").join("_versions")).is_ok()
-        || std::fs::metadata(dir.join("_corpus_meta.json")).is_ok()
+        || std::fs::metadata(Corpus::meta_in(dir)).is_ok()
 }
 
 /// The chunk count from `_corpus_meta.json` when present; 0 when the
@@ -62,7 +63,7 @@ fn corpus_searchable(dir: &std::path::Path) -> bool {
 /// survey listed apollo11-evidence with chunks_count 0 because the
 /// read looked for the schema-v2 `chunk_count` key.
 fn corpus_chunk_count(dir: &std::path::Path) -> i64 {
-    std::fs::read_to_string(dir.join("_corpus_meta.json"))
+    std::fs::read_to_string(Corpus::meta_in(dir))
         .ok()
         .and_then(|meta| serde_json::from_str::<serde_json::Value>(&meta).ok())
         .and_then(|v| {

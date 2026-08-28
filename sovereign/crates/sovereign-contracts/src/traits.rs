@@ -666,6 +666,29 @@ pub trait InferenceProvider: Send + Sync {
     fn compute_children(&self) -> Vec<ComputeChildStatus> {
         Vec::new()
     }
+
+    /// The manifests of every peer this provider would actually consult
+    /// when resolving a model NAME, paired with each peer's display name.
+    ///
+    /// This exists so a listing surface can be built from the same source
+    /// name resolution reads. `/v1/models` was built from the gossiped
+    /// `inference` KV store instead, which accumulates every model any peer
+    /// ever wrote and is filtered only by "was the last writer online" — so
+    /// it listed ids that `locate_named_model` answers `NotAdvertised` for,
+    /// and the refusal told the operator to "check `/v1/models`", the list
+    /// that was wrong. Two registries behind one question (ARCH §10.6).
+    ///
+    /// Implementors MUST apply the same peer filter their name resolution
+    /// applies — same reachability, same quarantine, same manifest cache.
+    /// A peer this omits must be a peer that cannot serve a named request,
+    /// or the listing regains the ability to lie in the other direction.
+    ///
+    /// Default empty: only a mesh-aware forwarder has peers. A provider
+    /// that owns its weights answers for itself through
+    /// [`Self::resident_slots`] and its own manifest.
+    async fn peer_manifests(&self) -> Vec<(String, crate::oicp::ProviderManifest)> {
+        Vec::new()
+    }
 }
 
 /// Adapt a typed [`StreamFrame`] stream down to the legacy

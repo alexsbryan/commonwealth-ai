@@ -22,7 +22,7 @@ use std::io::{self, BufRead, Write};
 use sovereign_contracts::types::TurnMode;
 use sovereign_turn_client::{TurnClient, TurnObserver};
 
-use crate::chat_cmd::config::parse_globals;
+use crate::chat_cmd::config::parse_globals_for_chat as parse_globals;
 use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 
@@ -159,13 +159,12 @@ async fn run_one(
     // The daemon narrates what it is doing while the answer is still being
     // retrieved. The in-process REPL had no way to show this — the narration
     // channel existed but nothing in this file subscribed to it.
-    let mut narrate = |_p: &sovereign_contracts::types::NarrationPhase,
-                       text: &str,
-                       elapsed_ms: u64| {
-        if !text.is_empty() {
-            eprintln!("· {text} ({:.1}s)", elapsed_ms as f64 / 1000.0);
-        }
-    };
+    let mut narrate =
+        |_p: &sovereign_contracts::types::NarrationPhase, text: &str, elapsed_ms: u64| {
+            if !text.is_empty() {
+                eprintln!("· {text} ({:.1}s)", elapsed_ms as f64 / 1000.0);
+            }
+        };
 
     let outcome = {
         let mut observer = TurnObserver {
@@ -174,7 +173,13 @@ async fn run_one(
             on_queue_position: None,
         };
         client
-            .run_turn(conversation_id, question, TurnMode::Grounded, None, &mut observer)
+            .run_turn(
+                conversation_id,
+                question,
+                TurnMode::Grounded,
+                None,
+                &mut observer,
+            )
             .await
     };
 

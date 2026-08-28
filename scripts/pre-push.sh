@@ -216,6 +216,22 @@ run_gate() {
     fi
 }
 
+# Same shape as run_gate, but findings are REPORTED and the push continues.
+# For gates that are real and currently in arrears: turning a multi-failure
+# wall on at the push is exactly how a gate teaches people to reach for
+# --no-verify (see the rustfmt note below). Promote a gate to run_gate the
+# day its backlog reaches zero.
+warn_gate() {
+    local label="$1"; shift
+    local started=$SECONDS
+    printf '%s\n' "${C_DIM}────${C_RESET} ${C_BOLD}${label}${C_RESET}" >&2
+    if "$@"; then
+        say "${C_GREEN}ok${C_RESET} ${label} ($((SECONDS - started))s)"
+    else
+        warn "${label} reported findings ($((SECONDS - started))s) — advisory, push continues"
+    fi
+}
+
 # ── Gate 1: rustfmt. Instant, deterministic, cannot flake. ─────────────────
 #
 # A rustfmt failure is mechanical, zero-risk, and always fixed by exactly one
@@ -254,6 +270,39 @@ fi
 # resolve on disk. Runs on ANY change, not just doc edits: the usual way this
 # breaks is a CODE file being renamed out from under a citation.
 run_gate "docs-gate (cited paths resolve)" cargo run --quiet -p xtask -- docs-gate
+
+# ── Gate 2b: the other seven xtask gates. ADVISORY. ────────────────────────
+#
+# docs-gate above was ONE of ten. The rest ran only when somebody typed
+# `cargo xtask quality` — not in CI (ci.yml's `gates:` job has been commented
+# out since the day it was written, deliberately: docs/CI_ECONOMY.md argues
+# the real gate is local), not here, and not in AGENTS.md's definition of
+# done. Measured 2026-08-27: six of eight enforcing gates were failing and
+# nothing surfaced it. boundary-gate is documented "NOT advisory" and had no
+# caller at all.
+#
+# Wiring them here makes them structural instead of remembered (ARCH §7; the
+# ten's #10). The marginal cost is ~0 — xtask is already compiled for
+# docs-gate above, and each gate runs in well under a second.
+ADVISORY_GATES=(arch-gate boundary-gate layer-gate lock-gate layout-gate env-gate concept-gate)
+
+xtask_advisory_gates() {
+    local g rc=0
+    local -a failed=()
+    for g in "${ADVISORY_GATES[@]}"; do
+        # Output is suppressed on purpose: seven gates' full findings at every
+        # push is the crisis-wall shape the rustfmt note below warns about.
+        # Name who failed, point at the one command that explains it.
+        cargo run --quiet -p xtask -- "$g" >/dev/null 2>&1 || { failed+=("$g"); rc=1; }
+    done
+    if (( rc )); then
+        printf '%s\n' "  ${C_BOLD}${#failed[@]} of ${#ADVISORY_GATES[@]} failing:${C_RESET} ${failed[*]}" >&2
+        printf '\n%s\n\n' "  ${C_BOLD}see why:${C_RESET} cargo xtask quality   ${C_DIM}(each gate's output ends with its own fix command)${C_RESET}" >&2
+    fi
+    return $rc
+}
+
+warn_gate "xtask gates (advisory)" xtask_advisory_gates
 
 # ── Gate 3: the workspace test suite. The expensive one. ───────────────────
 if (( RUST )); then

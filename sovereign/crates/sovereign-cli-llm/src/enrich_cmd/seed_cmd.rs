@@ -10,10 +10,8 @@
 //! Idempotent: the runner caches the seed and short-circuits on
 //! cache hit unless `--force` is passed.
 
-use std::sync::Arc;
-
 use corpus_engine::enrichment::pipeline::{
-    PhaseRunner, PipelineRegistry, RunOutputWriter, SeedStrategy,
+    PhaseRunner, PipelineRegistry, RunOutputWriter, SeedEntities, SeedStrategy,
 };
 
 use super::config::EnrichConfig;
@@ -51,51 +49,94 @@ const HELP: Help = Help {
     ],
 };
 
-pub async fn cmd_seed(args: &[String]) -> i32 {
-    if help::wants_help(args) {
-        help::print(&HELP);
-        return 0;
+/// Why seeding stopped.
+///
+/// The `i32` return collapsed two different things into "nonzero": a
+/// pipeline that has no seed step at all (a USAGE error — nothing went
+/// wrong, the caller asked for something this pipeline does not have),
+/// and a seed attempt that failed. They exit with different codes and
+/// mean different things to an orchestrator, so they are different
+/// values (ARCH §18.3).
+#[derive(Debug, Clone)]
+pub enum SeedError {
+    /// The corpus's pipeline declares `SeedStrategy::None`.
+    NoSeedStrategy { pipeline_id: String },
+    /// Seeding was attempted and failed.
+    Failed(String),
+}
+
+impl SeedError {
+    /// The code `svrn enrich seed` exits with. 2 for usage, 1 for failure.
+    pub fn exit_code(&self) -> i32 {
+        match self {
+            Self::NoSeedStrategy { .. } => 2,
+            Self::Failed(_) => 1,
+        }
     }
 
-    let parsed = match parse_args(args) {
-        Ok(p) => p,
-        Err(msg) => {
-            eprintln!("error: {msg}");
-            eprintln!();
-            help::print(&HELP);
-            return 2;
+    pub fn message(&self) -> String {
+        match self {
+            Self::NoSeedStrategy { pipeline_id } => format!(
+                "pipeline `{pipeline_id}` declares SeedStrategy::None — it does not use a \
+                 seed entity list. Either switch to an atlas pipeline (e.g. \
+                 `literary_atlas`) that does, or skip this step."
+            ),
+            Self::Failed(m) => m.clone(),
         }
-    };
+    }
+}
 
-    let cfg = match EnrichConfig::require(&parsed.corpus_id) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: loading enrichment config: {e}");
-            return 1;
-        }
-    };
+/// What the seed step produced.
+#[derive(Debug, Clone)]
+pub struct SeedReport {
+    pub seed: SeedEntities,
+    /// The section stage 1a read. Named on the report because "12 entities
+    /// from sec_0001" and "12 entities from sec_0093" are different runs.
+    pub first_section: String,
+    pub cache_path: std::path::PathBuf,
+    pub forced: bool,
+}
+
+impl SeedReport {
+    /// One line naming what this step found, for the build orchestrator's
+    /// `StepDone` event.
+    pub fn summary(&self) -> String {
+        let forced = if self.forced { " (forced)" } else { "" };
+        format!(
+            "{} seed entity(ies) from {} (origin {:?}){forced}",
+            self.seed.entries.len(),
+            self.first_section,
+            self.seed.origin
+        )
+    }
+}
+
+/// Run stage 1a and write the seed list.
+///
+/// Unlike the deterministic steps, this one keeps its two progress
+/// `println!`s: the LLM call in the middle can take a while, and a line
+/// before it is the operator's only sign the run is alive. The RESULT
+/// printing is [`render`]'s.
+pub async fn run(parsed: &ParsedSeed) -> Result<SeedReport, SeedError> {
+    let cfg = EnrichConfig::require(&parsed.corpus_id)
+        .map_err(|e| SeedError::Failed(format!("loading enrichment config: {e}")))?;
 
     let registry = PipelineRegistry::builtin();
     let Some(pipeline) = super::pipeline_resolve::resolve_pipeline(&cfg) else {
-        eprintln!(
-            "error: unknown pipeline `{}`; known ids: {:?}",
+        return Err(SeedError::Failed(format!(
+            "unknown pipeline `{}`; known ids: {:?}",
             cfg.pipeline_id,
             registry.pipeline_ids()
-        );
-        return 1;
+        )));
     };
 
     // Check the strategy before rebuilding corpus state so we can
     // fail fast on pipelines that don't support seed extraction.
     match pipeline.seed_strategy() {
         SeedStrategy::None => {
-            eprintln!(
-                "error: pipeline `{}` declares SeedStrategy::None — it does not use a \
-                 seed entity list. Either switch to an atlas pipeline (e.g. \
-                 `literary_atlas`) that does, or skip this step.",
-                cfg.pipeline_id
-            );
-            return 2;
+            return Err(SeedError::NoSeedStrategy {
+                pipeline_id: cfg.pipeline_id.clone(),
+            })
         }
         SeedStrategy::Llm | SeedStrategy::Structural => {}
     }
@@ -103,25 +144,14 @@ pub async fn cmd_seed(args: &[String]) -> i32 {
     // Rebuild chapter inputs — we need the first section's text
     // for LLM-strategy pipelines and the full corpus context for
     // Structural-strategy ones.
-    let (inputs, _manifest) = match rebuild_corpus_state(&cfg) {
-        Ok(x) => x,
-        Err(e) => {
-            eprintln!("error: rebuilding corpus state: {e}");
-            return 1;
-        }
-    };
+    let (inputs, _manifest) = rebuild_corpus_state(&cfg)
+        .map_err(|e| SeedError::Failed(format!("rebuilding corpus state: {e}")))?;
     if inputs.is_empty() {
-        eprintln!("error: corpus has no sections");
-        return 1;
+        return Err(SeedError::Failed("corpus has no sections".into()));
     }
 
-    let client = match DaemonInferenceClient::from_enrich_config(&cfg) {
-        Ok(c) => c,
-        Err(e) => {
-            eprintln!("error: building daemon client: {e}");
-            return 1;
-        }
-    };
+    let client = DaemonInferenceClient::from_enrich_config(&cfg)
+        .map_err(|e| SeedError::Failed(format!("building daemon client: {e}")))?;
     let (embed, chat) = client.into_closures();
 
     let cache = cfg.phase_cache();
@@ -141,31 +171,41 @@ pub async fn cmd_seed(args: &[String]) -> i32 {
         chunks: Vec::new(),
     };
 
-    println!(
-        "  running stage 1a (seed) on first section: {}",
-        inputs[0].chapter_id
-    );
+    let first_section = inputs[0].chapter_id.clone();
+    println!("  running stage 1a (seed) on first section: {first_section}");
     if parsed.force {
         println!("  · --force: recomputing even if cache is warm");
     }
-    let result = match runner
+
+    let seed = match runner
         .phase_1a_extract_seed(&cfg.corpus_id, &ctx, parsed.force)
         .await
     {
         Ok(Some(seed)) => seed,
         Ok(None) => {
-            // Shouldn't happen — we checked strategy above.
-            eprintln!("error: seed extraction returned None despite non-None strategy");
-            return 1;
+            // The strategy check above rules this out; if it happens the
+            // pipeline and the runner disagree, which is worth saying.
+            return Err(SeedError::Failed(
+                "seed extraction returned None despite a non-None strategy — the \
+                 pipeline's declared strategy and the runner disagree"
+                    .into(),
+            ));
         }
-        Err(e) => {
-            eprintln!("error: stage 1a failed: {e}");
-            return 1;
-        }
+        Err(e) => return Err(SeedError::Failed(format!("stage 1a failed: {e}"))),
     };
 
-    println!("  ✓ {} seed entity(ies):", result.entries.len());
-    for entry in &result.entries {
+    Ok(SeedReport {
+        seed,
+        first_section,
+        cache_path: paths::cache_dir(&cfg.corpus_id).join("seed.json"),
+        forced: parsed.force,
+    })
+}
+
+/// Print the seed list the way `svrn enrich seed` always has.
+pub fn render(report: &SeedReport) {
+    println!("  ✓ {} seed entity(ies):", report.seed.entries.len());
+    for entry in &report.seed.entries {
         let aliases = if entry.aliases.is_empty() {
             String::new()
         } else {
@@ -178,18 +218,43 @@ pub async fn cmd_seed(args: &[String]) -> i32 {
             aliases
         );
     }
-    println!(
-        "  ✓ cache: {}/seed.json",
-        paths::cache_dir(&cfg.corpus_id).display()
-    );
-    let _ = Arc::new(()); // silence unused `Arc` import on release builds
-    0
+    println!("  ✓ cache: {}", report.cache_path.display());
 }
 
-#[derive(Debug)]
-struct ParsedSeed {
-    corpus_id: String,
-    force: bool,
+pub async fn cmd_seed(args: &[String]) -> i32 {
+    if help::wants_help(args) {
+        help::print(&HELP);
+        return 0;
+    }
+
+    let parsed = match parse_args(args) {
+        Ok(p) => p,
+        Err(msg) => {
+            eprintln!("error: {msg}");
+            eprintln!();
+            help::print(&HELP);
+            return 2;
+        }
+    };
+
+    match run(&parsed).await {
+        Ok(report) => {
+            render(&report);
+            0
+        }
+        Err(e) => {
+            eprintln!("error: {}", e.message());
+            e.exit_code()
+        }
+    }
+}
+
+/// A parsed `seed` invocation. Public so the `enrich build` orchestrator
+/// constructs one directly instead of round-tripping through argv.
+#[derive(Debug, Clone)]
+pub struct ParsedSeed {
+    pub corpus_id: String,
+    pub force: bool,
 }
 
 fn parse_args(args: &[String]) -> Result<ParsedSeed, String> {

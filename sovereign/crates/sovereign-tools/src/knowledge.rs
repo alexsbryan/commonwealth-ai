@@ -2,7 +2,6 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-
 use corpus_engine::recipe::CatalogConfig;
 use corpus_engine::types::CorpusKind;
 use sovereign_core::error::{Error, Result};
@@ -54,11 +53,7 @@ impl KnowledgeTool {
     }
 
     /// The executable half of `knowledge`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -188,7 +183,6 @@ impl KnowledgeTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if params.get("query").and_then(|v| v.as_str()).is_none() {
             return Err(Error::InvalidInput(
                 "Knowledge tool requires a 'query' string parameter".to_string(),

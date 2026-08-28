@@ -76,9 +76,12 @@ fn capture_subscriber(buf: Arc<Mutex<Vec<u8>>>) -> tracing::subscriber::DefaultG
 
 fn empty_mesh() -> Mesh {
     Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "injection-test".into(),
-        join_key_hash: [9u8; 32],
+        invite_key_hash: [9u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: HashMap::new(),
         peers: vec![],

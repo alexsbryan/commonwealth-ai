@@ -48,11 +48,7 @@ impl ProvisionFeatureTool {
     }
 
     /// The executable half of `provision_feature`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let id = params.get("id").and_then(|v| v.as_str()).unwrap_or("");
         let title = params.get("title").and_then(|v| v.as_str()).unwrap_or("");
         let charter_md = params
@@ -85,7 +81,6 @@ impl ProvisionFeatureTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         for key in ["id", "title", "charter_md"] {
             params
                 .get(key)

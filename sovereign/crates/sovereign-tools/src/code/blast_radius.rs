@@ -145,11 +145,7 @@ impl BlastRadiusTool {
     }
 
     /// The executable half of `blast`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -253,7 +249,6 @@ impl BlastRadiusTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())

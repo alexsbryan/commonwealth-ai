@@ -66,11 +66,7 @@ impl FindCalleesTool {
     }
 
     /// The executable half of `callees`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -139,7 +135,6 @@ impl FindCalleesTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())

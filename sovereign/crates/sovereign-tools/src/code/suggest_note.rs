@@ -39,7 +39,7 @@ use std::sync::Arc;
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{ApprovalChannel};
+use sovereign_core::traits::ApprovalChannel;
 use sovereign_core::types::*;
 
 use corpus_engine_notes::{NoteScope, NoteStore};
@@ -89,40 +89,36 @@ impl SuggestNoteTool {
     /// declaration and the check can never disagree (ARCH principle 8).
     fn parameter_schema() -> serde_json::Value {
         json!({
-                "type": "object",
-                "properties": {
-                    "kind": {
-                        "type": "string",
-                        "enum": SUGGEST_NOTE_KINDS,
-                        "description": "commitment = relational speech act ('I'll do X'). \
-                                        follow_up = temporal marker ('check back in 2 weeks'). \
-                                        goal = declared desired outcome ('under 5% churn by Q3')."
-                    },
-                    "content": {
-                        "type": "string",
-                        "description": "One sentence in the user's voice. Concise enough to \
-                                        be the digest entry. Do NOT include the user's name \
-                                        — it's already known."
-                    },
-                    "related_entity": {
-                        "type": "string",
-                        "description": "Person/Organization name for commitment + follow_up; \
-                                        Initiative name for goal. Match the canonical name \
-                                        used in conversation. Optional but strongly preferred — \
-                                        without it the digest can't surface the note alongside \
-                                        the right entity."
-                    }
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "enum": SUGGEST_NOTE_KINDS,
+                    "description": "commitment = relational speech act ('I'll do X'). \
+                                    follow_up = temporal marker ('check back in 2 weeks'). \
+                                    goal = declared desired outcome ('under 5% churn by Q3')."
                 },
-                "required": ["kind", "content"]
-            })
+                "content": {
+                    "type": "string",
+                    "description": "One sentence in the user's voice. Concise enough to \
+                                    be the digest entry. Do NOT include the user's name \
+                                    — it's already known."
+                },
+                "related_entity": {
+                    "type": "string",
+                    "description": "Person/Organization name for commitment + follow_up; \
+                                    Initiative name for goal. Match the canonical name \
+                                    used in conversation. Optional but strongly preferred — \
+                                    without it the digest can't surface the note alongside \
+                                    the right entity."
+                }
+            },
+            "required": ["kind", "content"]
+        })
     }
 
     /// The executable half of `suggest_note`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let kind = params
             .get("kind")
             .and_then(|v| v.as_str())
@@ -229,7 +225,6 @@ impl SuggestNoteTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let kind = params
             .get("kind")
             .and_then(|v| v.as_str())

@@ -21,7 +21,7 @@
 use std::time::{Duration, Instant};
 
 use commonwealth_api::state::AppState;
-use commonwealth_core::ids::MeshId;
+use commonwealth_core::ids::{MeshId, NodeId};
 use commonwealth_core::mesh::{MemberRecord, Mesh, MeshPeering, NodeStatus};
 use commonwealth_transport::{peer_contact, PeerContact, TrafficClass};
 use serde::{Deserialize, Serialize};
@@ -630,8 +630,17 @@ pub async fn run_one_round(
             // be correlated with a run of failed reaches on a specific
             // address family (LAN vs Tailscale).
             let attempt_start = Instant::now();
-            match gossip_with_peer(http, &ep.base_url, &my_snapshot).await {
-                Ok(their_view) => {
+            match gossip_with_peer(
+                http,
+                &ep.base_url,
+                &my_snapshot,
+                self_id,
+                now,
+                app_state.peer_confirmed_post_split(peer_id),
+            )
+            .await
+            {
+                Ok((their_view, their_auth)) => {
                     let reach_ms = attempt_start.elapsed().as_millis() as u64;
                     info!(
                         peer = %peer_id,
@@ -667,7 +676,37 @@ pub async fn run_one_round(
                     // change. Talking to someone IS the evidence.
                     app_state.observe_peer_contact(peer_id, now);
                     let mut mesh = app_state.inner.mesh.write().await;
-                    let report = mesh.merge_from(self_id, &their_view);
+                    let report = mesh.merge_from_authenticated(self_id, &their_view, &their_auth);
+                    // A REFUSED merge on this path used to be completely
+                    // silent: `added` and `updated` are both 0, so it fell
+                    // through both arms below and logged nothing, while
+                    // `observe_peer_contact` above had ALREADY stamped the
+                    // peer Online. A node whose every gossip round was
+                    // rejected therefore read as a healthy peer forever —
+                    // reach ok every round, roster intact, converging on
+                    // nothing. That is a partition wearing a green light, and
+                    // it is the shape of the bug this whole change exists to
+                    // remove. Say it out loud (ARCH §9.1).
+                    if report.rejected {
+                        tracing::warn!(
+                            peer = %peer_id,
+                            peer_addr = %ep.label,
+                            "gossip: REJECTED — peer answered but its mesh did not \
+                             authorize (mesh_id or mesh_secret mismatch). We are \
+                             reachable but NOT converging with this peer."
+                        );
+                    } else {
+                        // Which credential generation this peer runs is visible
+                        // ONLY in the payload we just merged. Retain it —
+                        // `rotate_invite` needs it to refuse rather than
+                        // partition this peer, and has no other way to learn it.
+                        app_state.observe_peer_split_generation(peer_id, !report.peer_pre_split);
+                        tracing::debug!(
+                            peer = %peer_id,
+                            pre_split = report.peer_pre_split,
+                            "gossip: recorded peer credential generation"
+                        );
+                    }
                     // Stamp local-observation time for every peer whose record
                     // advanced in this merge (incl. transitively-relayed ones),
                     // so offline-decay sees them as freshly-observed.
@@ -946,13 +985,34 @@ pub async fn run_one_round(
 /// strictly later than any peer's last-seen-of-us — and peers that receive it
 /// re-gossip it onward, so it converges even to peers we couldn't reach
 /// directly. Best-effort; called from `EmbeddedDaemon::leave` before teardown.
+/// Why this node is stepping out of the mesh — the one thing that differs
+/// between leaving and parking.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PresenceChange {
+    /// Giving up membership. Stamps a `removed_at` tombstone, which the
+    /// event-time LWW in `Mesh::merge_from` uses to out-compete any stale live
+    /// copy a peer still holds.
+    Left,
+    /// Setting this mesh down while staying a member — the multi-mesh switch.
+    /// Marks us `Offline` and stops there: a tombstone would tell peers we
+    /// departed, and the whole point of parking is that we intend to come back.
+    Parked,
+}
+
+/// Leaving: tombstone + offline. Thin wrapper so existing callers read the same.
 pub async fn announce_departure(app_state: &AppState) {
+    announce_presence_change(app_state, PresenceChange::Left).await
+}
+
+pub async fn announce_presence_change(app_state: &AppState, change: PresenceChange) {
     let self_id = *app_state.inner.self_node_id_swap.load_full().as_ref();
     let now = app_state.clock().now_unix_secs();
     let (snapshot, targets) = {
         let mut mesh = app_state.inner.mesh.write().await;
         if let Some(me) = mesh.members.get_mut(&self_id) {
-            me.removed_at = Some(now);
+            if change == PresenceChange::Left {
+                me.removed_at = Some(now);
+            }
             me.status = NodeStatus::Offline;
             me.last_seen = now; // event_time(self) = now, beating peers' stale copies
         }
@@ -972,9 +1032,16 @@ pub async fn announce_departure(app_state: &AppState) {
     for contact in &targets {
         let eps = transport.endpoints(contact, TrafficClass::Gossip).await;
         for ep in &eps {
-            if gossip_with_peer(http, &ep.base_url, &snapshot)
-                .await
-                .is_ok()
+            if gossip_with_peer(
+                http,
+                &ep.base_url,
+                &snapshot,
+                self_id,
+                now,
+                app_state.peer_confirmed_post_split(contact.node_id),
+            )
+            .await
+            .is_ok()
             {
                 announced += 1;
                 break;
@@ -1108,9 +1175,27 @@ async fn gossip_with_peer(
     http: &reqwest::Client,
     base_url: &str,
     my_view: &Mesh,
-) -> Result<Mesh, GossipError> {
+    self_id: NodeId,
+    now_secs: u64,
+    peer_is_post_split: bool,
+) -> Result<(Mesh, commonwealth_core::mesh::GossipAuth), GossipError> {
+    let mut wire = MeshWire::from(my_view);
+    // Stop putting the raw credential on the wire the moment the peer can
+    // authorize without it. `peer_is_post_split` is our own observation from a
+    // previous round (`AppState::peer_confirmed_post_split`), not the peer's
+    // claim, so a caller cannot talk us into sending it.
+    //
+    // A peer we have NOT confirmed still gets it: it may be running a build
+    // that authorizes on raw-secret comparison, and withholding would partition
+    // it. That is the back-compat half, and it retires itself as the fleet
+    // upgrades — no flag day, and no round where both sides are stuck.
+    if peer_is_post_split {
+        wire.mesh_secret = [0u8; 32];
+    }
     let body = GossipRequestWire {
-        mesh: MeshWire::from(my_view),
+        mesh: wire,
+        from: Some(self_id),
+        mesh_proof: my_view.mesh_proof(self_id, now_secs),
     };
     let url = format!("{base_url}/internal/gossip");
     let response = http
@@ -1134,7 +1219,15 @@ async fn gossip_with_peer(
         .json()
         .await
         .map_err(|e| GossipError::BadResponse(e.to_string()))?;
-    Ok(parsed.mesh.into_mesh())
+    // The reply is an auth boundary in its own direction — we merge it, so it
+    // must prove itself. Initiating the round is not evidence about who
+    // answered.
+    let auth = commonwealth_core::mesh::GossipAuth {
+        sender: parsed.from,
+        proof: parsed.mesh_proof,
+        now_secs,
+    };
+    Ok((parsed.mesh.into_mesh(), auth))
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1160,18 +1253,49 @@ pub enum GossipError {
 #[derive(Debug, Serialize)]
 struct GossipRequestWire {
     mesh: MeshWire,
+    /// Who we are, so the peer can bind our proof to us. Omitted rather than
+    /// nulled so a pre-proof peer's serde sees byte-identical input.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    from: Option<NodeId>,
+    /// Proof we hold `mesh_secret`, so an upgraded pair never has to put the
+    /// raw credential on the wire.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mesh_proof: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct GossipResponseWire {
     mesh: MeshWire,
+    #[serde(default)]
+    from: Option<NodeId>,
+    #[serde(default)]
+    mesh_proof: Option<String>,
 }
 
+/// The gossip round's wire shape. A THIRD mirror of
+/// `commonwealth_api::routes_internal::MeshWire` (the others live in
+/// `join.rs` and in the api crate itself); they must agree field for field or
+/// the round-trip 422s.
+///
+/// Both new fields are load-bearing here, not decoration:
+/// - `mesh_secret` must survive the round trip. Dropping it would zero the
+///   remote's secret on every merge, silently pushing every peer through the
+///   pre-split compat arm forever — a degradation nothing would report.
+/// - `invite_key_hash` keeps its historical wire name. Renaming the Rust field
+///   without this made every gossip round fail with 422, which is exactly how
+///   the two `gossip_integration` round-trip tests caught it.
 #[derive(Debug, Serialize, Deserialize)]
 struct MeshWire {
     id: MeshId,
     name: String,
-    join_key_hash: [u8; 32],
+    #[serde(default)]
+    mesh_secret: [u8; 32],
+    #[serde(rename = "join_key_hash")]
+    invite_key_hash: [u8; 32],
+    #[serde(default)]
+    invite_version: u64,
+    #[serde(default)]
+    invite_expires_at: Option<u64>,
     #[serde(default)]
     require_encryption: bool,
     members: Vec<MemberRecord>,
@@ -1183,7 +1307,10 @@ impl From<&Mesh> for MeshWire {
         Self {
             id: m.id,
             name: m.name.clone(),
-            join_key_hash: m.join_key_hash,
+            mesh_secret: m.mesh_secret,
+            invite_key_hash: m.invite_key_hash,
+            invite_version: m.invite_version,
+            invite_expires_at: m.invite_expires_at,
             require_encryption: m.require_encryption,
             members: m.members.values().cloned().collect(),
             peers: m.peers.clone(),
@@ -1200,9 +1327,18 @@ impl MeshWire {
             .map(|m| (m.node_id, m))
             .collect::<HashMap<_, _>>();
         Mesh {
+            mesh_secret: self.mesh_secret,
+            invite_expires_at: self.invite_expires_at,
             id: self.id,
             name: self.name,
-            join_key_hash: self.join_key_hash,
+            invite_key_hash: self.invite_key_hash,
+            // Carry it. Hardcoding 0 here pins every peer's invite at version
+            // 0 on arrival, so `merge_invite_from` never sees a newer one and a
+            // rotation stops propagating — silently, with gossip still green.
+            // This exact function zero-filled `mesh_secret` the same way on
+            // 2026-08-26; that is why the audit for hardcoded conversion
+            // fields is part of the ritual now, not a one-off.
+            invite_version: self.invite_version,
             require_encryption: self.require_encryption,
             members,
             peers: self.peers,

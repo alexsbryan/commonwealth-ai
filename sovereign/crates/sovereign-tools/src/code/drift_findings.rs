@@ -59,9 +59,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 /// On-disk shape of one finding inside the drift report's JSON
 /// sidecar. Mirrors `Finding` in `atlas_drift_report.rs`. We
@@ -173,11 +173,7 @@ impl DriftFindingsTool {
     }
 
     /// The executable half of `drift_findings`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())

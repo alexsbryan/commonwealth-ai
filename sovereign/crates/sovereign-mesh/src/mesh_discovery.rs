@@ -183,7 +183,7 @@ pub(crate) fn reachable_addresses(port: u16) -> Vec<SocketAddr> {
 /// erroring at boot — a bad env var should degrade to auto-detect with
 /// a warning, not refuse to start a daemon that would otherwise work
 /// on its LAN.
-pub(crate) fn read_advertise_addr_override(port: u16) -> Option<Vec<SocketAddr>> {
+pub fn read_advertise_addr_override(port: u16) -> Option<Vec<SocketAddr>> {
     let raw = std::env::var("SOVEREIGN_ADVERTISE_ADDR").ok()?;
     let trimmed = raw.trim();
     if trimmed.is_empty() {

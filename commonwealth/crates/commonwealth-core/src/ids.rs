@@ -35,7 +35,7 @@ define_id!(HandoffId, "handoff");
 /// transport-ready.
 ///
 /// Serializes as a 32-byte array (same convention as
-/// `Mesh::join_key_hash`). Display is full lowercase hex — this is
+/// `Mesh::invite_key_hash`). Display is full lowercase hex — this is
 /// public key material, never secret.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct NodePubkey(pub [u8; 32]);

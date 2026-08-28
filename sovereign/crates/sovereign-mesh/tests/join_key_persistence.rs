@@ -3,7 +3,7 @@
 //! `current_invite`.
 //!
 //! Why this matters: the founder's invite link is reconstructed at
-//! display time from the cached plaintext key. `Mesh.join_key_hash`
+//! display time from the cached plaintext key. `Mesh.invite_key_hash`
 //! is one-way, so once the in-memory copy is dropped (restart, crash,
 //! or process kill), nobody can reconstruct the link — and the
 //! founder's mesh share UI silently goes blank.

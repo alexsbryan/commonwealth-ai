@@ -35,9 +35,9 @@ use std::path::{Path, PathBuf};
 use serde_json::{json, Value};
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct AtosPlanEmitTool {}
 
@@ -72,11 +72,7 @@ impl AtosPlanEmitTool {
     }
 
     /// The executable half of `atos_plan_emit`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let workdir = params
             .get("workdir")
             .and_then(Value::as_str)
@@ -187,7 +183,6 @@ impl AtosPlanEmitTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let workdir = params
             .get("workdir")
             .and_then(Value::as_str)

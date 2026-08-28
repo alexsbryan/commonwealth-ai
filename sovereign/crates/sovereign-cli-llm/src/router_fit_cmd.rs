@@ -596,8 +596,7 @@ async fn cmd_fit(args: &[String]) -> i32 {
         // owning decisions the LLM would otherwise be woken for. The
         // binary axes are asymmetric one-shot commits, so they take
         // the caller's objective (safe-recall by default).
-        let obj = if axis.as_str() == "intent"
-            && matches!(objective, Objective::SafeRecall { .. })
+        let obj = if axis.as_str() == "intent" && matches!(objective, Objective::SafeRecall { .. })
         {
             Objective::MaxCoverage { min_precision: 1.0 }
         } else {
@@ -1249,8 +1248,14 @@ mod tests {
 
     #[test]
     fn field_name_becomes_the_long_flag_and_the_type_does_the_coercion() {
-        let o = parse(&["--bank", "/tmp/b.toml", "--max-false-positives", "3", "--explain"])
-            .unwrap();
+        let o = parse(&[
+            "--bank",
+            "/tmp/b.toml",
+            "--max-false-positives",
+            "3",
+            "--explain",
+        ])
+        .unwrap();
         assert_eq!(o.bank, Some(PathBuf::from("/tmp/b.toml")));
         assert_eq!(o.max_false_positives, 3);
         assert!(o.explain);
@@ -1339,7 +1344,13 @@ mod tests {
         // `sovereign-cli-llm` rather than the command printed directly beneath
         // it by `HELP`.
         let rendered = format!("router fit: {}", parse(&["--nope"]).unwrap_err());
-        assert!(!rendered.starts_with("router fit: error:"), "got: {rendered}");
-        assert!(rendered.contains(&format!("Usage: {COMMAND}")), "got: {rendered}");
+        assert!(
+            !rendered.starts_with("router fit: error:"),
+            "got: {rendered}"
+        );
+        assert!(
+            rendered.contains(&format!("Usage: {COMMAND}")),
+            "got: {rendered}"
+        );
     }
 }

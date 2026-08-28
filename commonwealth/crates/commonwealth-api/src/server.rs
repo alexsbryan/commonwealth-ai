@@ -135,6 +135,24 @@ pub fn client_router(state: AppState) -> Router {
             "/internal/inference/warmup",
             post(routes_internal::inference_warmup),
         )
+        // Guest-grant lifecycle. Mounted HERE for the same reason warmup is,
+        // one route up: on `internal_router` these would be reachable by any
+        // mesh PEER with no auth gate, i.e. a "forge a credential for an
+        // outsider" lever. Behind `client_auth` they are loopback-or-full-token
+        // — and a guest cannot reach them because no `Scope` names these paths,
+        // so grants cannot mint grants without a check anywhere.
+        .route(
+            "/internal/guest/grant",
+            post(routes_internal::guest_grant_issue),
+        )
+        .route(
+            "/internal/guest/grant/revoke",
+            post(routes_internal::guest_grant_revoke),
+        )
+        .route(
+            "/internal/guest/grant/list",
+            get(routes_internal::guest_grant_list),
+        )
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
         // OICP v0.4 §5 ingest extension: install a corpus by recipe id,
@@ -791,7 +809,7 @@ mod tests {
         // After the gossip handler was wired for real (replacing the
         // accept-any-JSON stub), the minimal shape it accepts is a
         // full `MeshWire` payload. A test AppState has mesh_id=1 and
-        // an all-zero join_key_hash; posting a body with a different
+        // an all-zero invite_key_hash; posting a body with a different
         // mesh_id proves the auth guard fires. The full "merges
         // incoming delta" happy path is covered by the dedicated
         // tests/gossip_route.rs integration file.

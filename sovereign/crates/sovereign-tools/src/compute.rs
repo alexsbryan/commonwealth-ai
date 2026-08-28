@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Sandboxed Python code execution tool.
 pub struct ComputeTool;
@@ -27,11 +27,7 @@ impl ComputeTool {
     }
 
     /// The executable half of `compute`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let code = params
             .get("code")
             .and_then(|v| v.as_str())
@@ -81,7 +77,6 @@ impl ComputeTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if params.get("code").and_then(|v| v.as_str()).is_none() {
             return Err(Error::InvalidInput(
                 "Compute requires a 'code' string parameter".to_string(),

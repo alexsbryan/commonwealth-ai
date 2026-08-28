@@ -7,7 +7,6 @@
 
 use std::sync::Arc;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
@@ -59,11 +58,7 @@ impl FindCallersTool {
     }
 
     /// The executable half of `callers`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())
@@ -133,7 +128,6 @@ impl FindCallersTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let symbol = params
             .get("symbol")
             .and_then(|v| v.as_str())

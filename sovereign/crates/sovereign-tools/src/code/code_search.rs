@@ -19,7 +19,7 @@ use lancedb::index::scalar::FullTextSearchQuery;
 use lancedb::query::{ExecutableQuery, QueryBase};
 
 use sovereign_core::error::{Error, Result};
-use sovereign_core::traits::{InferenceProvider};
+use sovereign_core::traits::InferenceProvider;
 use sovereign_core::types::*;
 
 use corpus_engine::CorpusEngine;
@@ -107,11 +107,7 @@ impl CodeSearchTool {
     }
 
     /// The executable half of `code_search`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -277,7 +273,6 @@ impl CodeSearchTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         params
             .get("query")
             .and_then(|v| v.as_str())

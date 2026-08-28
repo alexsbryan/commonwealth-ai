@@ -8,7 +8,6 @@
 
 use std::sync::Arc;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
@@ -56,11 +55,7 @@ impl RecentChangesTool {
     }
 
     /// The executable half of `recent_changes`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let hours = params
             .get("hours")
             .and_then(|v| v.as_u64())
@@ -119,7 +114,6 @@ impl RecentChangesTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if let Some(h) = params.get("hours").and_then(|v| v.as_u64()) {
             if h == 0 {
                 return Err(Error::InvalidInput("hours must be positive".into()));

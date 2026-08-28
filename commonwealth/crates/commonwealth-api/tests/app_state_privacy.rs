@@ -69,9 +69,12 @@ fn single_node_mesh(node_a: NodeId) -> Mesh {
     let mut map = HashMap::new();
     map.insert(node_a, member(node_a, "A", 100));
     Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(7),
         name: "Test".into(),
-        join_key_hash: [3u8; 32],
+        invite_key_hash: [3u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: map,
         peers: vec![],

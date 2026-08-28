@@ -1,0 +1,49 @@
+DeepResearch Bench — vendored components
+========================================
+
+This directory contains material redistributed from the DeepResearch Bench
+project, used here as the frozen external holdout for the deep-research
+measurement work (see ../README.md "Provenance").
+
+  Upstream:  https://github.com/Ayanami0730/deep_research_bench
+  Commit:    469cce54ea7f6a63c163d3d9fec879cf289ec484 (2026-05-11)
+  Paper:     arXiv 2506.11763 v2, Appendix E
+  License:   Apache License 2.0 (full text in ./LICENSE)
+
+Redistributed here
+------------------
+
+  utils/                     the official FACT pipeline (extract, deduplicate,
+                             validate, stat, io_utils, json_extractor,
+                             score_calculator, clean_article, generate_criteria,
+                             scrape) — verbatim except as noted below.
+
+  ../leaderboard.csv         the official leaderboard, fetched verbatim
+                             2026-08-16 from
+                             https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard/raw/main/data/leaderboard.csv
+
+  ../query.full.jsonl        the upstream 100-task prompt set.
+  ../query.subset.jsonl      a 10-task subset of the above, selected by the
+                             content-blind seeded draw recorded in ../README.md.
+
+  fixture-validated.jsonl    the upstream claude-3-7-sonnet-latest validated
+                             output, used as the stat.py reproduction fixture.
+                             NOT redistributed in this repository — it is
+                             gitignored on size (69.7 MB) and is re-fetchable
+                             from the pinned upstream commit above.
+
+Modifications
+-------------
+
+Apache-2.0 §4(b) requires that modified files carry prominent notice of the
+change. One file is modified:
+
+  utils/api.py               rewritten as a drop-in replacement for the
+                             upstream google.genai-backed client, exposing the
+                             same surface (AIClient, call_model, scrape_url,
+                             Model, FACT_Model) over an OpenAI-compatible
+                             endpoint, so FACT judging can run against a local
+                             daemon rather than a hosted API.
+
+All other vendored files are unmodified. ../SHA256SUMS records the hashes the
+freeze discipline re-checks at landing.

@@ -53,6 +53,34 @@ pub enum DeepLink {
         /// `None` ⇒ no expiry (legacy / plaintext mesh).
         expires_at: Option<u64>,
     },
+    /// Use a mesh node's models as a GUEST: `sovereign://guest/<token>?url=…&exp=…&s=…`
+    ///
+    /// Not a join. The holder never becomes a member, never receives
+    /// `mesh_secret`, and never learns an invite key — they present `token` as
+    /// an `Authorization: Bearer` to `url` and get exactly what the issuing
+    /// node's grant says, for as long as it says.
+    Guest {
+        /// The bearer. Opaque here — this crate never interprets it.
+        token: String,
+        /// Base URL of the issuing node's client API, no trailing `/v1`.
+        url: String,
+        /// Unix-seconds the grant lapses. Display + a local pre-flight so
+        /// `mesh use` can refuse a dead link without a round-trip; the ISSUING
+        /// NODE is the authority and rejects an expired token regardless.
+        expires_at: u64,
+        /// **Display only.** What the minting node said this buys, so `mesh
+        /// use` can print it without a round-trip.
+        ///
+        /// Deliberately one opaque string rather than structured params: the
+        /// grant's scope lives in the issuer's store, and a second
+        /// machine-readable copy on the wire would be a second answer to "what
+        /// does this link permit" (§10.6) — one that travels through a
+        /// clipboard and can be edited. A link claiming more than the grant
+        /// gives changes nothing; the request is still refused.
+        ///
+        /// This is also why a future scope needs no wire change at all.
+        summary: Option<String>,
+    },
 }
 
 /// Parse a `sovereign://` deep link URL.
@@ -99,8 +127,49 @@ pub fn parse_deep_link(url: &str) -> Option<DeepLink> {
                 expires_at,
             })
         }
+        // A guest link REQUIRES `url` and `exp`. Neither is optional the way
+        // join's hints are: without `url` there is nowhere to send the bearer,
+        // and without `exp` the link would read as permanent, which is the one
+        // thing an ephemeral grant must never look like. Missing either is a
+        // malformed link, not a link with defaults (§18.3).
+        "guest" if parts.len() >= 2 => {
+            let token = parts[1].to_string();
+            if token.is_empty() {
+                return None;
+            }
+            let params = parse_query_params(query);
+            let url = params.get("url")?.trim_end_matches('/').to_string();
+            if url.is_empty() {
+                return None;
+            }
+            let expires_at = params.get("exp").and_then(|s| s.parse::<u64>().ok())?;
+            Some(DeepLink::Guest {
+                token,
+                url,
+                expires_at,
+                summary: params.get("s").map(|s| s.replace('+', " ")),
+            })
+        }
         _ => None,
     }
+}
+
+/// Build a `sovereign://guest/…` link. Mirror of [`build_join_link`].
+///
+/// Carries the bearer, where to send it, and when it dies — and one human
+/// string. Not the scope: see [`DeepLink::Guest::summary`].
+pub fn build_guest_link(token: &str, url: &str, expires_at: u64, summary: Option<&str>) -> String {
+    let mut link = format!("sovereign://guest/{token}");
+    let mut params = vec![
+        format!("url={}", percent_encode(url.trim_end_matches('/'))),
+        format!("exp={expires_at}"),
+    ];
+    if let Some(s) = summary {
+        params.push(format!("s={}", percent_encode(s).replace(' ', "+")));
+    }
+    link.push('?');
+    link.push_str(&params.join("&"));
+    link
 }
 
 /// Parse an HTTPS join URL: `https://sovereign.dev/join/<key>[?...]`.
@@ -166,8 +235,15 @@ pub fn parse_join_argument(arg: &str) -> Option<DeepLink> {
         return None;
     }
 
+    // Filter to `Join`, don't just forward what parsed. This function's
+    // contract is "a join argument", and `parse_deep_link` now answers a wider
+    // question — a guest link parses fine and is not a join. Forwarding it
+    // would put a `Guest` where every caller's name says `Join`, and the
+    // callers that destructure would panic or, worse, the ones that match
+    // loosely would treat a guest as a member. The enum makes that
+    // representable; this is where it gets refused.
     if let Some(link) = parse_deep_link(trimmed) {
-        return Some(link);
+        return matches!(link, DeepLink::Join { .. }).then_some(link);
     }
     if let Some(link) = parse_https_join(trimmed) {
         return Some(link);
@@ -282,6 +358,10 @@ pub fn join_confirmation_from_link(link: &DeepLink) -> Option<JoinConfirmation> 
             encrypted: *encrypted,
             expires_at: *expires_at,
         }),
+        // A guest link is not a join and must never be confirmable as one:
+        // accepting it here would walk a guest into the membership flow, which
+        // is the exact conflation this whole surface exists to prevent.
+        DeepLink::Guest { .. } => None,
     }
 }
 
@@ -382,6 +462,7 @@ mod tests {
                 assert!(relay_hint.is_none());
                 assert!(mesh_name.is_none());
             }
+            other => panic!("expected a join link, got {other:?}"),
         }
     }
 
@@ -402,6 +483,7 @@ mod tests {
                 assert_eq!(relay_hint.as_deref(), Some("192.168.1.100"));
                 assert_eq!(mesh_name.as_deref(), Some("Lab Squad"));
             }
+            other => panic!("expected a join link, got {other:?}"),
         }
     }
 
@@ -439,6 +521,7 @@ mod tests {
                 assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
                 assert_eq!(mesh_name.as_deref(), Some("My Mesh"));
             }
+            other => panic!("expected a join link, got {other:?}"),
         }
     }
 
@@ -450,7 +533,10 @@ mod tests {
             relay_hint,
             mesh_name,
             ..
-        } = link;
+        } = link
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
         assert!(relay_hint.is_none());
         assert!(mesh_name.is_none());
@@ -467,7 +553,10 @@ mod tests {
             relay_hint,
             mesh_name,
             ..
-        } = link;
+        } = link
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
         assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
         assert_eq!(mesh_name.as_deref(), Some("Lab Squad"));
@@ -483,21 +572,27 @@ mod tests {
     #[test]
     fn parse_join_argument_accepts_bare_key() {
         let link = parse_join_argument("cwth-7f3a-9b2e-4d1c").unwrap();
-        let DeepLink::Join { join_key, .. } = link;
+        let DeepLink::Join { join_key, .. } = link else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-7f3a-9b2e-4d1c");
     }
 
     #[test]
     fn parse_join_argument_accepts_https() {
         let link = parse_join_argument("https://sovereign.dev/join/cwth-abcd-ef01-2345").unwrap();
-        let DeepLink::Join { join_key, .. } = link;
+        let DeepLink::Join { join_key, .. } = link else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-abcd-ef01-2345");
     }
 
     #[test]
     fn parse_join_argument_accepts_scheme() {
         let link = parse_join_argument("sovereign://join/cwth-1111-2222-3333").unwrap();
-        let DeepLink::Join { join_key, .. } = link;
+        let DeepLink::Join { join_key, .. } = link else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-1111-2222-3333");
     }
 
@@ -528,7 +623,10 @@ mod tests {
             relay_hint,
             mesh_name,
             ..
-        } = link;
+        } = link
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-abcd-ef01-2345");
         assert_eq!(relay_hint.as_deref(), Some("10.0.0.5"));
         assert_eq!(mesh_name.as_deref(), Some("My Mesh"));
@@ -549,7 +647,10 @@ mod tests {
             relay_hint,
             mesh_name,
             ..
-        } = link;
+        } = link
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-4d5f-6211-64d6");
         assert_eq!(relay_hint.as_deref(), Some("100.64.0.2:9742"));
         assert_eq!(mesh_name.as_deref(), Some("example-host.local's Mesh"));
@@ -562,7 +663,9 @@ mod tests {
         let link = parse_deep_link(
             "sovereign://join/cwth-7f3a-9b2e-4d1c?relay=%5Bfd7a%3A115c%3Aa1e0%3A%3Aa3a%3A241c%5D%3A9742"
         ).unwrap();
-        let DeepLink::Join { relay_hint, .. } = link;
+        let DeepLink::Join { relay_hint, .. } = link else {
+            panic!("expected a join link")
+        };
         assert_eq!(
             relay_hint.as_deref(),
             Some("[fd7a:115c:a1e0::a3a:241c]:9742")
@@ -632,7 +735,10 @@ mod tests {
             expires_at,
             mesh_name,
             ..
-        } = link;
+        } = link
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(join_key, "cwth-abcd-efgh-ijkl");
         assert_eq!(iroh_dial.as_deref(), Some(dial));
         assert!(encrypted);
@@ -662,7 +768,10 @@ mod tests {
             encrypted,
             expires_at,
             ..
-        } = parse_https_join(&url).unwrap();
+        } = parse_https_join(&url).unwrap()
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(iroh_dial.as_deref(), Some(dial));
         assert!(encrypted);
         assert_eq!(expires_at, Some(42));
@@ -692,7 +801,10 @@ mod tests {
             encrypted,
             expires_at,
             ..
-        } = parse_deep_link(&url).unwrap();
+        } = parse_deep_link(&url).unwrap()
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(iroh_dial.as_deref(), Some(dial));
         assert!(!encrypted);
         assert!(expires_at.is_none());
@@ -708,7 +820,10 @@ mod tests {
             iroh_dial,
             encrypted,
             ..
-        } = parse_https_join(&https).unwrap();
+        } = parse_https_join(&https).unwrap()
+        else {
+            panic!("expected a join link")
+        };
         assert_eq!(iroh_dial.as_deref(), Some(dial));
         assert!(!encrypted);
     }
@@ -734,9 +849,80 @@ mod tests {
             encrypted,
             expires_at,
             ..
-        } = parse_deep_link(&url).unwrap();
+        } = parse_deep_link(&url).unwrap()
+        else {
+            panic!("expected a join link")
+        };
         assert!(iroh_dial.is_none());
         assert!(!encrypted);
         assert!(expires_at.is_none());
+    }
+
+    // ── Guest links ────────────────────────────────────────────────
+    //
+    // A guest link is not an invite. These pin the two properties that make
+    // that true on the wire: it round-trips without carrying a scope, and it
+    // cannot be mistaken for something joinable.
+
+    #[test]
+    fn guest_link_round_trips() {
+        let url = build_guest_link(
+            "deadbeef",
+            "http://192.168.1.10:9741",
+            1_787_900_000,
+            Some("big-model, small-model"),
+        );
+        let DeepLink::Guest {
+            token,
+            url: base,
+            expires_at,
+            summary,
+        } = parse_deep_link(&url).unwrap()
+        else {
+            panic!("expected a guest link")
+        };
+        assert_eq!(token, "deadbeef");
+        assert_eq!(base, "http://192.168.1.10:9741");
+        assert_eq!(expires_at, 1_787_900_000);
+        assert_eq!(summary.as_deref(), Some("big-model, small-model"));
+    }
+
+    /// The link carries WHERE and WHEN, never WHAT. The issuing node's store
+    /// is the sole authority on scope — see `DeepLink::Guest::summary`.
+    #[test]
+    fn guest_link_carries_no_machine_readable_scope() {
+        let url = build_guest_link("tok", "http://h:9741", 1, Some("big-model"));
+        // The only place a model name appears is inside the opaque display
+        // string. Nothing parses it, so nothing can act on it.
+        assert!(!url.contains("m="), "no per-model param: {url}");
+        assert!(!url.contains("scope"), "no scope param: {url}");
+    }
+
+    /// Both are load-bearing: no `url` means nowhere to send the bearer, no
+    /// `exp` means the link reads as permanent. Neither gets a default.
+    #[test]
+    fn a_guest_link_without_url_or_exp_is_malformed_not_defaulted() {
+        assert!(parse_deep_link("sovereign://guest/tok?exp=123").is_none());
+        assert!(parse_deep_link("sovereign://guest/tok?url=http://h:9741").is_none());
+        assert!(parse_deep_link("sovereign://guest/tok").is_none());
+        assert!(parse_deep_link("sovereign://guest/").is_none());
+        // A non-numeric expiry is absent, not zero — zero would read as
+        // "expired at the epoch", which is a different (and wrong) claim.
+        assert!(parse_deep_link("sovereign://guest/tok?url=http://h&exp=soon").is_none());
+    }
+
+    /// The guardrail against the conflation this feature exists to prevent:
+    /// a guest link must never walk into the membership flow.
+    #[test]
+    fn a_guest_link_is_not_joinable() {
+        let url = build_guest_link("tok", "http://h:9741", 1, None);
+        let link = parse_deep_link(&url).unwrap();
+        assert!(
+            join_confirmation_from_link(&link).is_none(),
+            "a guest link must not be confirmable as a join"
+        );
+        // And it is not accepted by the join-argument parser at all, so
+        // `svrn mesh join <guest link>` cannot silently half-work.
+        assert!(parse_join_argument(&url).is_none());
     }
 }

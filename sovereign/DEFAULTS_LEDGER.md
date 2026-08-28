@@ -30,6 +30,86 @@ store (ids cited per row).
 
 ## DARK — proven or plausible, awaiting a named condition
 
+### `Mesh::gossip_authorized` legacy compat arm — shipped ON (2026-08-26)
+
+**What is dark.** Not a capability held back: a *fallback* held open. The
+credential split gives `Mesh` a `mesh_secret` that authorizes gossip and never
+rotates, separate from the `invite_key_hash` that admits joiners. A peer on a
+pre-split build sends a zeroed `mesh_secret`, so `gossip_authorized` falls back
+to comparing `invite_key_hash` — the old predicate — and logs
+`gossip: legacy auth` at `warn` naming the mesh.
+
+**Why it is not just removed.** Every node upgrades on its own schedule. Without
+the arm, the first upgraded node rejects every peer that has not upgraded yet
+and is rejected by them, which is precisely the symmetric partition the split
+exists to eliminate. The arm is the only thing that makes the upgrade rolling
+rather than flag-day.
+
+**What it costs while open.** Invite rotation is still unsafe for un-upgraded
+peers, because they authorize on the very hash rotation changes.
+`EmbeddedDaemon::rotate_invite` therefore refuses with `PreSplitPeersOnline`
+(HTTP 409) unless every online member is CONFIRMED post-split, naming the ones
+that are not; `--force` overrides. So the cost is visible and gated, not silent.
+
+The confirmation is our own observation, never a peer's claim: a merged gossip
+payload carrying a `mesh_secret` proves the sender is post-split, and
+`MergeReport::peer_pre_split` is the only place that fact surfaces before it is
+discarded. `AppState::peer_post_split` retains it. Unknown counts as unsafe, so
+a fresh daemon refuses until it has gossiped once with each online peer.
+
+This guard shipped INERT on 2026-08-26 and was fixed 2026-08-27: it filtered on
+`mesh.mesh_secret` — our OWN credential, non-zero on every migrated node — so
+the predicate was always false and the refusal never fired. No test covered it
+(`tests/rotate_pre_split_guard.rs` now does, five cases). Worth recording because
+the failure was invisible in exactly the way this ledger exists to catch: a
+guard that reads as protection, passes every gate, and protects nothing.
+
+**Flip condition (falsifiable).** No `gossip: legacy auth` warn observed on any
+fleet node for one full week. At that point every peer carries a real secret and
+the arm is unreachable.
+
+That condition was NOT falsifiable as first shipped, and it is worth recording
+why. `DAEMON_TRACING_FILTER` listed `commonwealth_discovery` and
+`commonwealth_api` but not `commonwealth_core`, where the warn is emitted, and
+the filter's default directive is ERROR — so the warn was dropped before it
+reached the log. The flip condition would have been satisfied by construction,
+on a fleet still actively running the arm. Measured live 2026-08-27: a peer
+sending a zeroed `mesh_secret` produced 5 gossip rounds and zero log lines.
+Fixed by adding `commonwealth_core=info` to the filter and pinning it in
+`tests::daemon_filter_lists_grounding_targets`. Verified after the fix: one
+`gossip: legacy auth` warn per round, `self_has_secret=true
+peer_has_secret=false`.
+
+Before flipping, confirm the reader is actually wired: the absence of this warn
+means nothing unless `commonwealth_core` is in the daemon's filter.
+
+**Two things narrow the arm while it stays open (2026-08-27).** The fallback is
+peer-SELECTED — `gossip_authorized` takes it whenever EITHER side's secret is
+zeroed, so a caller omits the field and gets the weaker predicate, and its only
+entry ticket is an `invite_key_hash` that rides every gossip payload and every
+join snapshot. That is exactly what a departed member holds, and the mesh has no
+eviction (todo `23f0b547`).
+
+1. The gossip reply now REDACTS `mesh_secret` whenever the merge authorized on
+   the legacy arm. Without it, a holder of any current-or-stale invite hash
+   could read the real secret out of the response and hold permanent gossip
+   auth — `mesh_secret` never rotates and `rotate_invite_key` structurally
+   cannot change it, so there is no revocation path afterwards. That would be
+   strictly worse than the pre-split model, where rotating DID revoke. Costs a
+   genuine pre-split peer nothing: its build has no such field.
+2. `SOVEREIGN_MESH_STRICT_AUTH=1` refuses the arm outright, for operators who
+   know their fleet is upgraded and want the surface closed before the
+   fleet-wide flip. Off by default. It only acts on a node whose own secret is
+   set, so a not-yet-migrated node cannot self-partition with it.
+
+**What settles it.** Delete the fallback branch in
+`commonwealth-core/src/mesh.rs::gossip_authorized`, the `UNSET` zero-checks
+around it, and the `PreSplitPeersOnline` refusal in
+`EmbeddedDaemon::rotate_invite` — rotation becomes unconditionally safe once
+there is no peer that reads `invite_key_hash` for auth.
+
+**Review by:** 2026-10-01.
+
 ### `[models].fast_context_size` — per-slot KV windows, shipped UNSET (2026-08-25)
 
 **What is dark.** The mechanism, not the value. Until now `[models].context_size`

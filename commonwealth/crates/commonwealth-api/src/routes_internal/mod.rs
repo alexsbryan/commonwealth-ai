@@ -35,6 +35,7 @@ mod corpus_queue;
 mod corpus_sync;
 mod enrichment_status;
 mod gossip;
+mod guest_grant;
 mod knowledge;
 mod mesh_admin;
 mod model_files;
@@ -52,6 +53,7 @@ pub use corpus_ingest::{
     CorpusStatusResponse, ExpandRequest, InstallRequest, InstallResponse, PauseResponse,
     ProgressSnapshotResponse,
 };
+pub use guest_grant::{guest_grant_issue, guest_grant_list, guest_grant_revoke};
 // Crate-internal: the OICP ingest routes (`routes_oicp_ingest`) reuse the
 // same progress→fraction projection so the two surfaces can't diverge.
 pub(crate) use corpus_ingest::progress_fraction;

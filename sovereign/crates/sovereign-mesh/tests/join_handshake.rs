@@ -6,7 +6,7 @@
 //! `gossip_integration.rs` covers the *merge* (two AppStates with
 //! pre-seeded members converging); this file covers the **admission**
 //! (a fresh joiner POSTs a raw join key, the founder verifies it
-//! against `mesh.join_key_hash`, mints a new `MemberRecord`, and
+//! against `mesh.invite_key_hash`, mints a new `MemberRecord`, and
 //! returns the full mesh snapshot). Two failure modes worth pinning:
 //!
 //! 1. **Happy path:** valid `join_key` → 200 with assigned NodeId +
@@ -253,7 +253,7 @@ async fn invalid_join_key_rejects_with_401_and_does_not_mutate() {
     let joiner_addr: SocketAddr = "127.0.0.1:9877".parse().unwrap();
     // A well-formed but wrong key. Format check passes in
     // `validate_join_key_format` (so we get past the deserialiser);
-    // the BLAKE3 comparison against `mesh.join_key_hash` then fails.
+    // the BLAKE3 comparison against `mesh.invite_key_hash` then fails.
     let bad_key = "cwth-AAAA-BBBB-CCCC";
 
     let resp = reqwest::Client::new()
@@ -343,17 +343,17 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
         "founder's AppState mesh must match the wire snapshot served to the joiner"
     );
 
-    // The mesh_id and join_key_hash must also round-trip — the
+    // The mesh_id and invite_key_hash must also round-trip — the
     // joiner uses these to authorise subsequent gossip rounds.
     // `Mesh::merge_from` rejects gossip from a peer whose mesh_id
-    // or join_key_hash doesn't match, so drift here would silently
+    // or invite_key_hash doesn't match, so drift here would silently
     // brick the joiner's gossip loop after a successful handshake.
     let wire_mesh_id = body["mesh"]["id"].clone();
     let wire_hash = body["mesh"]["join_key_hash"].clone();
     let live_mesh_id = serde_json::to_value(live.id).unwrap();
-    let live_hash = serde_json::to_value(live.join_key_hash).unwrap();
+    let live_hash = serde_json::to_value(live.invite_key_hash).unwrap();
     assert_eq!(wire_mesh_id, live_mesh_id, "mesh_id round-trips");
-    assert_eq!(wire_hash, live_hash, "join_key_hash round-trips");
+    assert_eq!(wire_hash, live_hash, "invite_key_hash round-trips");
     drop(live);
 
     // Sanity: AppState construction works for the joiner too. We
@@ -368,9 +368,12 @@ async fn joiner_can_adopt_founder_mesh_after_handshake() {
         hm.insert(m.node_id, m);
     }
     let joiner_mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: serde_json::from_value(body["mesh"]["id"].clone()).unwrap(),
         name: body["mesh"]["name"].as_str().unwrap().to_string(),
-        join_key_hash: serde_json::from_value(body["mesh"]["join_key_hash"].clone()).unwrap(),
+        invite_key_hash: serde_json::from_value(body["mesh"]["join_key_hash"].clone()).unwrap(),
+        invite_version: 0,
         require_encryption: false,
         members: hm,
         peers: serde_json::from_value(body["mesh"]["peers"].clone()).unwrap_or_default(),

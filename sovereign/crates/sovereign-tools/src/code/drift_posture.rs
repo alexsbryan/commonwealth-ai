@@ -37,9 +37,9 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 
 use sovereign_core::error::Result;
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Default narrative docs the architectural drift detector tracks.
 /// Resolved relative to the workspace root.
@@ -362,11 +362,7 @@ impl DriftPostureTool {
     }
 
     /// The executable half of `drift_posture`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let narrative_paths = resolve_narratives(params, self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
         Ok(StepOutput::Json(
@@ -375,7 +371,6 @@ impl DriftPostureTool {
     }
 
     async fn signal_now(&self) -> Option<String> {
-
         let narrative_paths = resolve_narratives(&json!({}), self.workspace_root.as_deref());
         let posture = compute_posture(&self.drift_dir, &narrative_paths);
         match posture.status {

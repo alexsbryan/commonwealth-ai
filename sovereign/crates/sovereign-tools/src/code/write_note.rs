@@ -60,11 +60,7 @@ impl WriteNoteTool {
     }
 
     /// The executable half of `note`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let kind = params
             .get("kind")
             .and_then(|v| v.as_str())
@@ -174,7 +170,6 @@ impl WriteNoteTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let kind = params
             .get("kind")
             .and_then(|v| v.as_str())

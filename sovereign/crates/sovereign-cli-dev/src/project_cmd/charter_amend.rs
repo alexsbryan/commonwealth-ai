@@ -10,6 +10,20 @@
 
 use super::*;
 
+/// SHA-256 of a charter's text, hex-encoded.
+///
+/// The stamp `amend` writes and `audit` re-checks, so a CHARTER.md edited
+/// outside the amend flow is detectable. Lived in `found.rs` until 2026-08-26
+/// and came here when that module was deleted — `svrn project found` was
+/// retired in favour of `svrn design` / `charter` / `plan`, and its 2,800-line
+/// implementation outlived the verb by leaving these five lines behind.
+pub(crate) fn hash_charter(content: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let mut h = Sha256::new();
+    h.update(content.as_bytes());
+    format!("{:x}", h.finalize())
+}
+
 const HELP_CHARTER: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::Help {
     command: "svrn project charter",
     summary: "Create or edit the team's free-form CHARTER.md (governance, culture, onboarding). Distinct from DESIGN.md.",
@@ -94,7 +108,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
 
     // Snapshot BEFORE opening the editor so we can diff after.
     let old_signals = corpus_engine_atos::design_signals::extract(&old_text);
-    let old_hash = crate::found::hash_charter(&old_text);
+    let old_hash = hash_charter(&old_text);
 
     // Hand off to $EDITOR. `invoke_editor` returns the re-read file
     // contents on a clean exit, None if the editor failed — in
@@ -112,7 +126,7 @@ async fn cmd_amend_design(args: &[String]) -> i32 {
     }
 
     let new_signals = corpus_engine_atos::design_signals::extract(&new_text);
-    let new_hash = crate::found::hash_charter(&new_text);
+    let new_hash = hash_charter(&new_text);
     let changed = crate::amend::changed_design_sections(&old_signals, &new_signals);
 
     // Build adversarial Q&A — but only for curated sections. Non-
@@ -270,7 +284,7 @@ pub(crate) async fn cmd_charter(args: &[String]) -> i32 {
             return 1;
         }
     };
-    let new_hash = crate::found::hash_charter(&charter_text);
+    let new_hash = hash_charter(&charter_text);
 
     let project_toml_path = sovereign_dir.join("project.toml");
     if let Ok(mut tf) = crate::project_toml::ProjectTomlFile::read(&project_toml_path) {
@@ -387,7 +401,7 @@ pub(crate) async fn cmd_amend(args: &[String]) -> i32 {
     };
 
     // Drift detection.
-    let disk_hash = crate::found::hash_charter(&old_charter);
+    let disk_hash = hash_charter(&old_charter);
     let mut interlocutor = crate::amend::StdinAmendmentInterlocutor::new();
     if disk_hash != project_toml.lifecycle.charter_hash {
         let hint = crate::amend::drift_summary(&project_toml.lifecycle.charter_hash, &old_charter);

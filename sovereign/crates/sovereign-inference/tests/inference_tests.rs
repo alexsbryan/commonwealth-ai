@@ -2,7 +2,6 @@
 use std::sync::Arc;
 
 use sovereign_core::oicp::*;
-use sovereign_core::types::*;
 use sovereign_inference::health::HealthTracker;
 use sovereign_inference::selector::*;
 
