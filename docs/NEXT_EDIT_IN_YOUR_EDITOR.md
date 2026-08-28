@@ -193,6 +193,13 @@ asymmetry, and the honest consequences are:
   deleting unrelated blocks — so it's switched off until a
   deterministic engine handles it. The detection already works; the
   suggestion is what's withheld.
+- **In Rust and Go it checks what a match *is*, not just how it
+  reads.** A site whose syntactic role differs from the one you edited
+  — the same word in a comment, a string, a different kind of
+  declaration — is withheld. That removes a bit over half the junk
+  suggestions for about an eighth of the good ones, which is a trade
+  we made on purpose and can show you the numbers for. Other languages
+  don't have it yet, so they offer more and filter less.
 - **History is per-file.** Switching files starts the pattern over.
 - **Sites are single-file.** Nothing crosses file boundaries yet.
 - Undo isn't treated as a pattern — undoing an edit won't teach it to
@@ -212,12 +219,14 @@ number to move.
 - **Rule engine** — 120 cases mined from this repository's real commit
   history plus hand-written probes (`gym/next-edit/`). Latest run:
   **zero malformed or wrong edits across all 120**, and every one of the
-  25 negatives correctly silent. Well inside the 150 ms latency bar.
-  Two authored cases (`a03-guards-support3`, `a15-tabs-4char-bar`) and
-  part of the harvest recall still encode the *previous* firing policy
-  — they were written against a support tier that measurement retired
-  (see `MIN_RULE_CHARS` in `next_edit.rs`), so the bank reads red on
-  those until the fixtures are re-cut.
+  25 negatives correctly silent. Well inside the 150 ms latency bar
+  (p95 24 ms). Twenty-five of the 120 are declined by a deliberate
+  precision trade rather than scored: fourteen by the syntax filter
+  below, eight by the minimum rule length, three routed to a
+  wider-anchored rule that makes the same change. Each one names its
+  mechanism in the fixture, and the harness re-derives that mechanism
+  on every run — if a case stops declining for the stated reason, or
+  starts working outright, the bank goes red and says which.
 - **Model engine** — 60 hand-written cases across 11 languages
   (`gym/next-edit/gen/`), including 20 negatives where the correct
   answer is silence. Latest run: 30/30 fired-and-correct, **zero** wrong
