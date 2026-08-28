@@ -221,6 +221,24 @@ pub(crate) fn ctx_n_batch(context_size: u32) -> u32 {
 /// the measured skeleton batches were prefill-bound at ~700-1000
 /// tok/s with ubatch=512 on Strix Halo Vulkan — larger micro-batches
 /// lift exactly this. FastShort already ran 2048 for the same reason.
+/// Whether the MTP prefill flags ONLY its final position for logits.
+///
+/// Off by default: production keeps flagging every position. See the block at
+/// the MTP prefill in `model_slot.rs` for why the flag is not needed and why
+/// it is nevertheless not the default yet — the short version is that
+/// pre-norm extraction is bit-identical without it, but `n_outputs_all` going
+/// from n to 1 shifts the next-token logits by 1.46e-1 against a zero floor,
+/// which has to clear a byte-identity arm on a real report first.
+///
+/// The prize is the daemon's largest unreclaimable allocation:
+/// `n_vocab * n_prompt_tokens * 4`, ~19.9 GB on a 20k-token prompt, retained
+/// at high-water until the process exits.
+pub(crate) fn mtp_prefill_tail_logits_only() -> bool {
+    std::env::var("SOVEREIGN_MTP_PREFILL_TAIL_LOGITS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 pub(crate) fn chat_slot_n_ubatch() -> u32 {
     std::env::var("SOVEREIGN_N_UBATCH")
         .ok()

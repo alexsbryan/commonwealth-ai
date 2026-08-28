@@ -2236,6 +2236,66 @@ are Logical Structure and Paragraph Cohesion — the fragmentation ones — whic
 is why the outline itself is the next arm (`arms/bed/fly-outline-arm.sh`,
 via the new `COMPOSE_SECTIONS`).
 
+## `SOVEREIGN_MTP_PREFILL_TAIL_LOGITS` — stop reserving a logits row per prompt token
+
+**Landed 2026-08-27, DEFAULT OFF.**
+
+**What it is for.** The MTP prefill flags every position for logits, which
+makes `n_outputs_all` the whole prompt (`llama-context.cpp:1700`), so
+`output_reserve` sizes the logits buffer at `n_vocab * n_prompt_tokens * 4` —
+**993,280 bytes per prompt token** at the qwen35 family's 248,320 vocab. Past
+~3,650 tokens that buffer exceeds this device's 4 GiB `maxBufferSize`, fails to
+pin, and falls back to a host CPU buffer that is retained at high-water until
+the process exits (`ggml-vulkan.cpp:16191`; `llama-context.cpp:2092` grows and
+never shrinks). One 20k-token request strands ~19.9 GB. It is the daemon's
+single largest unreclaimable allocation, and the reason "restart between runs"
+kept being proposed as a workaround the operator had already ruled out.
+
+**The justification for the flag is false, and that is measured, not argued.**
+`model_slot.rs` cites an upstream invariant — `get_embeddings_pre_norm_ith`
+errors with `batch.logits[N] != true`. That error comes from
+`output_resolve_row`, which `get_embeddings_nextn_ith` calls ONLY on the masked
+path (`llama-context.cpp:966`). The unmasked path returns early at :954-960,
+indexing nextn rows "densely, by raw token position", and `common_speculative`
+initialises the MTP **target** unmasked (`speculative.cpp:1371`) — confirmed at
+runtime, the daemon logs `set_embeddings_nextn: value = 1, masked = 0`.
+
+**The derisking ladder, in the order it was climbed**
+(`tests/mtp_prefill_logits_spike.rs`, Qwen3.5-4B-UD-MTP, 681-token prompt):
+
+| | pre-norm | next-token |
+|---|---|---|
+| FLOOR (all vs all) | 0e0 | 0e0 |
+| SIGNAL (all vs last) | **0e0** | **1.46e-1** |
+
+Pre-norm hidden states — what MTP actually consumes — are BIT-IDENTICAL at
+every one of the 681 positions. 128 greedy tokens generate identically.
+
+**Why it is nevertheless default OFF.** The floor arm is what makes the second
+column a result rather than noise: the model is bit-deterministic run-to-run in
+one configuration, so the 1.46e-1 next-token shift is REAL and attributable —
+`n_outputs_all` going from n to 1 changes the output-gathering graph and hence
+the float accumulation order for the row read. It did not flip a greedy
+decision over 128 tokens, but "did not flip in 128 tokens on one prompt" is not
+"cannot flip", and a composed report is ~10,000 words.
+
+**The vendored precondition has a tripwire.** A bump flipping that `masked`
+argument would not degrade — it would make `output_resolve_row` throw on an
+unflagged position and `GGML_ABORT` the daemon, so by the time a runtime check
+could see it the process is gone. `the_mtp_target_context_is_still_initialised_unmasked`
+asserts it at rest, in the normal test run.
+
+**Cost when on.** None. It removes work and removes an allocation.
+
+**Reversal condition.** Flip default-ON when a byte-identity arm on a real
+composed report reproduces the control's draft sha256 exactly, with the memory
+step measured on the same run. Revert on any divergence in composed output, or
+on any arm that costs RACE score beyond the band.
+
+**Evidence at landing.** The spike above. The byte-identity arm is IN FLIGHT
+and its result belongs here before the flip; until it lands, this row's claim
+is "the mechanism is clear", not "the change is safe".
+
 ## `SOVEREIGN_DR_SECTION_CONTEXT` — the section knows it is part of a report
 
 **Landed 2026-08-27, DEFAULT OFF.** Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`.

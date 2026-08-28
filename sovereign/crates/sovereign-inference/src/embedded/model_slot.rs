@@ -3636,9 +3636,43 @@ impl ModelSlot {
         // back below.
         let prefill_capacity = tokens.len().max(n_batch_max);
         let mut prefill = LlamaBatch::new(prefill_capacity, 1);
+        // THE FLAG ABOVE IS NOT NEEDED, AND IT IS THE DAEMON'S LARGEST
+        // UNRECLAIMABLE ALLOCATION. Flagging every position makes
+        // `n_outputs_all` the whole prompt (llama-context.cpp:1700), so
+        // `output_reserve` sizes the logits buffer at
+        // `n_vocab * n_prompt_tokens * 4` — 993,280 bytes PER PROMPT TOKEN at
+        // this family's 248,320 vocab. Past ~3,650 tokens that exceeds the
+        // device's 4 GiB maxBufferSize, fails to pin, and falls back to host
+        // memory that is retained at high-water until the process exits
+        // (ggml-vulkan.cpp:16191; llama-context.cpp:2092 grows and never
+        // shrinks). ~19.9 GB from one 20k-token request.
+        //
+        // The comment above justifies it as an upstream invariant. MEASURED
+        // 2026-08-27 (`tests/mtp_prefill_logits_spike.rs`), that is false: the
+        // error it cites comes from `output_resolve_row`, which
+        // `get_embeddings_nextn_ith` calls only on the MASKED path, and
+        // `common_speculative` initialises the TARGET unmasked
+        // (speculative.cpp:1371; the daemon logs `masked = 0`). On a 681-token
+        // prompt the pre-norm hidden states are BIT-IDENTICAL at every
+        // position either way, against a floor of 0e0, and 128 greedy tokens
+        // generate identically.
+        //
+        // DEFAULT OFF anyway, because the spike also found what a source
+        // reading would not: the next-token logits shift by 1.46e-1 against a
+        // ZERO floor, since `n_outputs_all` going n -> 1 changes the
+        // output-gathering graph and hence the float accumulation order. That
+        // is small and did not flip a greedy decision in 128 tokens, but it is
+        // not nothing, and it makes this a change that has to earn a
+        // byte-identity arm on a real composed report before it becomes the
+        // default. `the_mtp_target_context_is_still_initialised_unmasked` is
+        // the tripwire for the vendored precondition.
+        let tail_logits_only = mtp_prefill_tail_logits_only();
+        let last_idx = tokens.len().saturating_sub(1);
         for (i, &tok) in tokens[prefix_base..].iter().enumerate() {
+            let pos = prefix_base + i;
+            let want_logits = !tail_logits_only || pos == last_idx;
             prefill
-                .add(tok, (prefix_base + i) as i32, &[0], true)
+                .add(tok, pos as i32, &[0], want_logits)
                 .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
         }
         session
