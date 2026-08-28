@@ -316,25 +316,15 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         return 2;
     }
 
-    // The inert-link check. A loopback-bound daemon cannot serve a guest at
-    // all, so a link minted here would fail on the guest's first request with
-    // a connection error that says nothing about the real cause. An explicit
-    // --url is the escape hatch for an operator fronting the daemon with a
-    // proxy or tunnel — that is a claim only they can make, so we warn rather
-    // than refuse.
+    // The inert-link check, first arm: the config says loopback. Cheap, and it
+    // produces the precise repair, so it runs before any network work.
     let bind = client_bind();
-    if bind_is_loopback(&bind) {
-        if url_override.is_none() {
-            eprintln!("This daemon binds {bind} — loopback only, so no guest can reach it.");
-            eprintln!();
-            eprintln!("Set `[daemon] client_bind = \"0.0.0.0\"` in ~/.svrnmesh/config.toml and");
-            eprintln!("restart the daemon, or pass --url <base> if something else fronts it.");
-            return 1;
-        }
-        eprintln!(
-            "(warning: client_bind is {bind} — loopback. Trusting --url; the guest reaches you \
-             only if something else forwards to this port.)"
-        );
+    if bind_is_loopback(&bind) && url_override.is_none() {
+        eprintln!("This daemon binds {bind} — loopback only, so no guest can reach it.");
+        eprintln!();
+        eprintln!("Set `[daemon] client_bind = \"0.0.0.0\"` in ~/.svrnmesh/config.toml and");
+        eprintln!("restart the daemon, or pass --url <base> if something else fronts it.");
+        return 1;
     }
 
     let base_url = match guest_base_url(url_override.as_deref(), port) {
@@ -344,6 +334,39 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
             return 1;
         }
     };
+
+    // Second arm, and the one that actually decides: can anything reach the URL
+    // this link is about to carry?
+    //
+    // Reading `[daemon] client_bind` is NOT sufficient and this is not
+    // hypothetical — it was measured on 2026-08-27. On an ENCRYPTED mesh
+    // `start_daemon` forces the client listener back to loopback whatever the
+    // config says (`sovereign-mesh/src/daemon.rs`, "encrypted mesh: forcing
+    // client API to loopback-only"), because remote access is the
+    // key-authenticated iroh acceptor and a guest holds no mesh key. A host
+    // with `client_bind = "0.0.0.0"` in config and an encrypted mesh on disk
+    // therefore passes the arm above and binds `127.0.0.1` anyway — and would
+    // mint a link naming an address nothing is listening on.
+    //
+    // So ask the address instead of inferring it. `/status` is in
+    // `AUTH_EXEMPT_PATHS`, so this needs no credential, and one probe covers
+    // every cause — encrypted-mesh forcing, a loopback bind behind an explicit
+    // --url, a firewall, a wrong advertised interface — rather than
+    // enumerating the ones we thought of.
+    if let Err(e) = probe_reachable(&base_url).await {
+        eprintln!("{base_url} is not reachable, so a link naming it would be inert.");
+        eprintln!("  {e}");
+        eprintln!();
+        eprintln!("Most likely one of:");
+        eprintln!("  - this mesh has require_encryption = true, which forces the client API");
+        eprintln!("    loopback-only no matter what `client_bind` says (remote peers reach it");
+        eprintln!("    over the iroh acceptor, which a guest cannot use);");
+        eprintln!("  - the daemon has not been restarted since `client_bind` changed;");
+        eprintln!("  - a firewall, or the wrong interface — pass --url <base> to name it.");
+        eprintln!();
+        eprintln!("Nothing was minted.");
+        return 1;
+    }
 
     let client = match http_client(15) {
         Ok(c) => c,
@@ -714,6 +737,26 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
     println!("  svrn mesh use --forget     # go back to your own daemon");
     println!();
     0
+}
+
+/// Can anything reach `base_url`? GET `<base>/status`, which is in
+/// `AUTH_EXEMPT_PATHS` and therefore needs no credential.
+///
+/// The mint-side twin of [`verify_link`]. Both exist for the same reason: a
+/// credential that names an unreachable address fails on someone else's
+/// machine, minutes later, with an error that describes the symptom and not
+/// the cause.
+async fn probe_reachable(base_url: &str) -> Result<(), String> {
+    let client = http_client(5)?;
+    let url = format!("{base_url}/status");
+    // A response of ANY status proves something is listening there, which is
+    // the whole claim. Only a transport failure means inert — refusing on a
+    // 404 or a 401 would block a legitimate reverse proxy that answers
+    // differently than the daemon does.
+    match client.get(&url).send().await {
+        Ok(_) => Ok(()),
+        Err(e) => Err(format!("{url}: {e}")),
+    }
 }
 
 /// GET `<url>/v1/models` with the bearer. Returns the ids the grant exposes.
