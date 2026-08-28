@@ -18,7 +18,6 @@
 
 use std::sync::Arc;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
@@ -73,11 +72,7 @@ impl SymbolLookupTool {
     }
 
     /// The executable half of `symbols`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let name = params
             .get("name")
             .and_then(|v| v.as_str())
@@ -145,7 +140,6 @@ impl SymbolLookupTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         let name = params
             .get("name")
             .and_then(|v| v.as_str())

@@ -1273,6 +1273,30 @@ export async function meshRotateInvite(): Promise<RotateInviteResponse> {
   return invoke("mesh_rotate_invite");
 }
 
+/** Every mesh this node has joined — active and parked. */
+export async function meshList(): Promise<import("./types").KnownMesh[]> {
+  return invoke("mesh_list");
+}
+
+/** Park the active mesh and bring another joined one up.
+ *
+ *  The daemon rebinds :9741 as part of this, so callers must poll through
+ *  the bounce — reuse `waitForDaemonAndRefresh` and the reconnecting banner
+ *  that Leave already uses, or the UI flashes "Failed to load mesh state".
+ *
+ *  Peers on the parked mesh see this node go OFFLINE, not depart, so
+ *  switching back later needs no invite. */
+export async function meshSwitch(mesh: string): Promise<void> {
+  return invoke("mesh_switch", { mesh });
+}
+
+/** Drop a PARKED mesh from this node. Rejoining afterwards needs a fresh
+ *  invite, since the roster and mesh secret are deleted. Refuses on the
+ *  active mesh. */
+export async function meshForget(mesh: string): Promise<void> {
+  return invoke("mesh_forget", { mesh });
+}
+
 export async function meshDiagnostics(): Promise<import("./types").MeshDiagnostics> {
   return invoke("mesh_diagnostics");
 }

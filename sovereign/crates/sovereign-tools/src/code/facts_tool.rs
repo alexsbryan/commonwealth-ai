@@ -32,9 +32,9 @@ use serde_json::json;
 
 use corpus_engine::facts_store::FactStore;
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct FactsTool {
     /// Root under which each corpus has `<corpus_id>/facts.db` (a legacy
@@ -85,11 +85,7 @@ impl FactsTool {
     }
 
     /// The executable half of `facts`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())

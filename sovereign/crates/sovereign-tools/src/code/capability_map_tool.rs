@@ -9,13 +9,12 @@
 
 use std::path::PathBuf;
 
-
 use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
 use corpus_engine_scip::{build_capability_map, MapOptions, ProviderKind, ScipGraph};
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 pub struct CapabilityMapTool {
     /// The `~/.svrnmesh/indexes` directory (or `$SOVEREIGN_DATA_DIR/indexes`).
@@ -79,11 +78,7 @@ impl CapabilityMapTool {
     }
 
     /// The executable half of `capability_map`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         // Resolve the corpus: explicit, or the sole indexed code corpus.
         let corpus_id = match params.get("corpus_id").and_then(|v| v.as_str()) {
             Some(c) => c.to_string(),
@@ -153,7 +148,6 @@ impl CapabilityMapTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         if let Some(c) = params.get("corpus_id").and_then(|v| v.as_str()) {
             // corpus_id becomes a path component — keep it to a safe charset.
             if c.is_empty()

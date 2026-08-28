@@ -2022,6 +2022,44 @@ impl MeshInferenceProvider {
         ))
     }
 
+    /// Every peer whose manifest a named request could resolve against,
+    /// paired with its display name — [`gather_peer_candidates`] with the
+    /// model-id filter removed and nothing else changed.
+    ///
+    /// The two MUST stay in lock-step on WHO is consulted: same endpoint
+    /// source, same quarantine skip, same cache. That is the whole point —
+    /// this feeds `/v1/models`, and a listing built from a different peer
+    /// set than the resolver uses is how the endpoint came to advertise ids
+    /// that `locate_named_model` answers `NotAdvertised` for. If you add a
+    /// filter to `model_candidate_for`, add it here too.
+    ///
+    /// Cache-honouring (never `bypass`): a listing is not worth a forced
+    /// fan-out of fresh fetches, and a name that a stale cache omits is
+    /// recovered by `locate_named_model`'s own retry when it is actually
+    /// requested. Erring toward omission is the safe direction here —
+    /// under-listing costs a name the operator can still dispatch;
+    /// over-listing is the bug being fixed.
+    ///
+    /// [`gather_peer_candidates`]: Self::gather_peer_candidates
+    pub(crate) async fn reachable_peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
+        let peers = self.mesh.peer_inference_endpoints().await;
+        let mut fetches = Vec::with_capacity(peers.len());
+        for peer in peers {
+            fetches.push(async move {
+                if self.peer_health.is_quarantined(&peer.name) {
+                    return None;
+                }
+                let read = self.get_peer_manifest(&peer).await?;
+                Some((peer.name.clone(), read.manifest))
+            });
+        }
+        futures::stream::iter(fetches)
+            .buffered(MANIFEST_FETCH_CONCURRENCY)
+            .filter_map(|c| async move { c })
+            .collect()
+            .await
+    }
+
     async fn gather_peer_candidates(
         &self,
         model_id: &str,
@@ -3407,6 +3445,14 @@ impl InferenceProvider for MeshInferenceProvider {
         // installed provider — without this forward `/status.inference.
         // compute_children` would always be empty.
         self.local.compute_children()
+    }
+
+    /// This node IS the mesh-aware forwarder, so it is the only provider
+    /// that can answer this. Delegates to `reachable_peer_manifests`, which
+    /// shares its peer filter with `locate_named_model` — see that method
+    /// for why the two must not drift.
+    async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
+        self.reachable_peer_manifests().await
     }
 
     fn effective_context_size(&self) -> Option<u32> {

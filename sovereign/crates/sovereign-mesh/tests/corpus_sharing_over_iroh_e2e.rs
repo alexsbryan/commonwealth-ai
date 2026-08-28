@@ -256,7 +256,8 @@ async fn knowledge_fanout_over_iroh_reaches_peer_with_no_ip() {
     let mesh_a = Mesh {
         id: mesh_id,
         name: mesh_name.into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: members_a,
         peers: vec![],
@@ -279,7 +280,8 @@ async fn knowledge_fanout_over_iroh_reaches_peer_with_no_ip() {
     let mesh_b = Mesh {
         id: mesh_id,
         name: mesh_name.into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: members_b,
         peers: vec![],
@@ -388,7 +390,8 @@ async fn canonical_pull_over_iroh_from_peer_with_no_ip() {
     let mesh_a = Mesh {
         id: mesh_id,
         name: "canon-mesh".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: Default::default(),
         peers: vec![],

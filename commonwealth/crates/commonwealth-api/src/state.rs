@@ -399,6 +399,27 @@ pub trait LocalInferenceService: Send + Sync {
     fn edit_status(&self) -> Option<EditSlotStatus> {
         None
     }
+
+    /// The manifests of every mesh peer this node's router would actually
+    /// consult when resolving a model NAME, paired with the peer's display
+    /// name. Empty by default — only a mesh-aware backend has peers.
+    ///
+    /// [`list_models`] builds `/v1/models` from this plus
+    /// [`Self::provider_manifest`], because those two together ARE the
+    /// source name resolution reads. It used to build the list from the
+    /// gossiped `inference` KV store, which holds every model any peer ever
+    /// wrote and is filtered only by "was the entry's last writer online" —
+    /// so `/v1/models` advertised ids that a chat completion refused with
+    /// "no node in this mesh advertises model 'X' — check `/v1/models`".
+    /// One question, two registries (ARCH §10.6).
+    ///
+    /// Backed by `InferenceProvider::peer_manifests`, which is where the
+    /// "same peers as the resolver" contract is stated and enforced.
+    ///
+    /// [`list_models`]: crate::routes_inference::list_models
+    async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
+        Vec::new()
+    }
 }
 
 /// Worker side of the distributed-inference auto-warm orchestration. When a host
@@ -669,12 +690,6 @@ pub struct AppStateInner {
     pub self_iroh_dialinfo: std::sync::RwLock<
         Option<std::sync::Arc<dyn Fn() -> commonwealth_core::mesh::IrohDialInfo + Send + Sync>>,
     >,
-    /// Unix-seconds TTL on the active mesh's join key, for an ENCRYPTED
-    /// mesh whose invite is short-lived. Set by the founder when it
-    /// mints the invite; the `/internal/join` handler rejects a join
-    /// once `now >= this`. `None` (default) = no expiry (plaintext /
-    /// legacy mesh).
-    pub join_key_expires_at: std::sync::RwLock<Option<u64>>,
     /// Closure that signs this node's dial info (relay_url + direct addrs)
     /// for the gossip self-stamp — `(version, relay, addrs) -> hex sig`.
     /// The daemon installs it from the node `SigningKey`, so `AppState`
@@ -719,6 +734,21 @@ pub struct AppStateInner {
     /// Offline (the "~9 min flap"). Ephemeral; rebuilt after restart as gossip
     /// re-observes peers.
     pub peer_last_contact: std::sync::RwLock<std::collections::HashMap<NodeId, u64>>,
+    /// Which peers we have CONFIRMED are running a post-credential-split
+    /// build, by having merged a gossip payload from them that carried a
+    /// `mesh_secret`.
+    ///
+    /// Absence is not "pre-split", it is "unknown", and both are treated as
+    /// unsafe by `EmbeddedDaemon::rotate_invite` — the fail-safe direction.
+    /// A peer we have not gossiped with since boot could be either, and
+    /// rotating on that assumption is what partitions a mesh. One gossip
+    /// round per peer clears it, so the conservative window is short.
+    ///
+    /// Deliberately NOT on `MemberRecord`: this is our own local observation
+    /// of a peer's payload, not a claim the peer makes about itself and not
+    /// something another node may assert on its behalf (ARCH §18.1 — never
+    /// let the subject supply the field a guard reads).
+    pub peer_post_split: std::sync::RwLock<std::collections::HashMap<NodeId, bool>>,
     /// ATOS middleware registry. Holds one instance of each
     /// middleware the pipelines can reference by id.
     pub middleware_registry: Arc<crate::middleware::MiddlewareRegistry>,
@@ -1292,26 +1322,6 @@ impl AppState {
             .map(|provider| provider())
     }
 
-    /// Set (or clear) the active join key's TTL. The founder calls this
-    /// when it mints an encrypted-mesh invite; the join handler reads it
-    /// to reject an expired join.
-    pub fn set_join_key_expiry(&self, expires_at: Option<u64>) {
-        *self
-            .inner
-            .join_key_expires_at
-            .write()
-            .unwrap_or_else(std::sync::PoisonError::into_inner) = expires_at;
-    }
-
-    /// The active join key's expiry (unix-seconds), if any.
-    pub fn join_key_expiry(&self) -> Option<u64> {
-        *self
-            .inner
-            .join_key_expires_at
-            .read()
-            .unwrap_or_else(std::sync::PoisonError::into_inner)
-    }
-
     /// Install the dial-info signing closure (daemon builds it from the
     /// node SigningKey after binding iroh).
     #[allow(clippy::type_complexity)]
@@ -1479,6 +1489,52 @@ impl AppState {
             .or_insert(now_secs)
     }
 
+    /// Record which credential generation `peer` is running, learned from a
+    /// gossip payload we just merged (`MergeReport::peer_pre_split`).
+    ///
+    /// Call this on EVERY successful merge, not only when the answer is
+    /// "pre-split": a peer that upgrades mid-session must be able to clear its
+    /// own flag, or the first pre-split round it ever sent would block invite
+    /// rotation for the rest of the daemon's life.
+    pub fn observe_peer_split_generation(&self, peer: NodeId, post_split: bool) {
+        self.inner
+            .peer_post_split
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .insert(peer, post_split);
+    }
+
+    /// Whether we have positively confirmed `peer` is post-credential-split.
+    ///
+    /// Unknown answers `false` — see [`AppStateInner::peer_post_split`]. A
+    /// caller using this to decide whether a destructive action is safe gets
+    /// the conservative answer until a gossip round proves otherwise.
+    pub fn peer_confirmed_post_split(&self, peer: NodeId) -> bool {
+        self.peer_split_generation(peer).unwrap_or(false)
+    }
+
+    /// What we actually know about `peer`'s credential generation, WITHOUT
+    /// collapsing the two ways of not knowing into one.
+    ///
+    /// - `Some(true)`  — it proved possession, or sent a matching secret.
+    /// - `Some(false)` — we merged from it and it offered neither. A genuinely
+    ///                   pre-split build.
+    /// - `None`        — we have not merged from it since this daemon started.
+    ///
+    /// [`Self::peer_confirmed_post_split`] answers the SAFETY question and is
+    /// right to fold `None` into "unsafe". This answers the DIAGNOSTIC one, and
+    /// folding there produced a refusal that told the operator their fleet was
+    /// un-migrated when the truth was "this daemon has been up for four
+    /// seconds". Same map, two questions, one decider each (ARCH §10.6).
+    pub fn peer_split_generation(&self, peer: NodeId) -> Option<bool> {
+        self.inner
+            .peer_post_split
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(&peer)
+            .copied()
+    }
+
     pub fn new(self_node_id: NodeId, mesh: Mesh) -> Self {
         // Test-support constructor (callers in tests/ + the test-harness);
         // in-memory MeshStore creation is infallible — fail-fast is correct.
@@ -1584,7 +1640,6 @@ impl AppState {
                 servable_model_files: ArcSwap::from_pointee(Vec::new()),
                 self_node_pubkey: std::sync::RwLock::new(None),
                 self_iroh_dialinfo: std::sync::RwLock::new(None),
-                join_key_expires_at: std::sync::RwLock::new(None),
                 self_dial_signer: std::sync::RwLock::new(None),
                 client_token: std::sync::RwLock::new(None),
                 peer_transport: std::sync::RwLock::new(Arc::new(
@@ -1592,6 +1647,7 @@ impl AppState {
                 )),
                 clock: std::sync::RwLock::new(Arc::new(commonwealth_core::SystemClock)),
                 peer_last_contact: std::sync::RwLock::new(std::collections::HashMap::new()),
+                peer_post_split: std::sync::RwLock::new(std::collections::HashMap::new()),
                 middleware_registry: Arc::new(middleware_registry),
                 #[cfg(feature = "atos")]
                 session_store,
@@ -2393,9 +2449,12 @@ pub fn test_app_state() -> AppState {
     use commonwealth_core::mesh::Mesh;
     use std::collections::HashMap;
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "Test Mesh".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: HashMap::new(),
         peers: vec![],

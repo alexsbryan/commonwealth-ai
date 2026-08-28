@@ -7,16 +7,180 @@ use serde::{Deserialize, Serialize};
 use crate::capabilities::NodeCapabilities;
 use crate::ids::{MeshId, NodeId, NodePubkey};
 
+/// Constant-time equality for a 32-byte secret.
+///
+/// A plain `==` short-circuits on the first differing byte, so a peer that can
+/// time our gossip response learns how long a prefix it guessed correctly and
+/// can walk the secret out a byte at a time. `membership::verify_join_key`
+/// already pays this cost for the same reason (it compares through
+/// `blake3::Hash`, whose `PartialEq` is constant-time); before the credential
+/// split the gossip predicate did not, and that gap is not worth carrying
+/// forward onto a value that never rotates.
+///
+/// Accumulate-then-compare rather than early return: the loop runs all 32
+/// bytes regardless of input, so the timing carries no information.
+/// Whether the operator has declared the fleet fully post-split, so
+/// [`Mesh::gossip_authorized`] may refuse the legacy arm instead of falling
+/// back to it. Off by default — see `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// Read once: this sits in the gossip hot path, and a knob whose value can
+/// change mid-run would make "which predicate authorized this round" depend on
+/// when the round happened.
+fn strict_gossip_auth() -> bool {
+    static STRICT: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *STRICT.get_or_init(|| {
+        std::env::var("SOVEREIGN_MESH_STRICT_AUTH")
+            .map(|v| {
+                let v = v.trim().to_ascii_lowercase();
+                v == "1" || v == "true" || v == "on"
+            })
+            .unwrap_or(false)
+    })
+}
+
+/// What a gossip round proved about its sender, supplied alongside the payload.
+///
+/// Deliberately NOT a field on [`Mesh`]: a proof is bound to one sender in one
+/// time window, so it describes a round, not the mesh. Carrying it on `Mesh`
+/// would persist one round's credential into `mesh.json`.
+#[derive(Debug, Default, Clone)]
+pub struct GossipAuth {
+    /// Who claims to be sending. `None` on a pre-proof peer, whose request
+    /// carries no sender identity.
+    pub sender: Option<NodeId>,
+    /// Keyed-BLAKE3 proof of `mesh_secret` possession — see
+    /// [`Mesh::mesh_proof`]. `None` on a pre-proof peer.
+    pub proof: Option<String>,
+    /// Receiver's clock, for the proof's time window.
+    pub now_secs: u64,
+}
+
+impl GossipAuth {
+    /// No evidence offered — the pre-proof path. Authorization falls through to
+    /// comparing raw secrets and then to the legacy arm, exactly as before the
+    /// proof existed. This is what keeps a mixed fleet converging.
+    pub fn none() -> Self {
+        Self::default()
+    }
+}
+
+/// Which predicate authorized a gossip round.
+///
+/// One decider (ARCH §10.6). Before this existed, [`MergeReport::peer_pre_split`]
+/// re-derived the sender's build generation from the payload — "its
+/// `mesh_secret` was zero, so it must be pre-split" — which stopped being true
+/// the moment an UPGRADED peer started withholding its secret on purpose. Two
+/// upgraded nodes then reported each other pre-split, blocked each other's
+/// invite rotation, and resumed putting the raw credential back on the wire.
+/// The authorization decision and the generation it implies must come from the
+/// same place.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum GossipAuthArm {
+    /// Not authorized. Nothing was merged.
+    #[default]
+    Refused,
+    /// The caller proved possession of `mesh_secret` without sending it.
+    /// Definitively post-split, whatever its payload carried.
+    Proof,
+    /// Both sides sent matching raw secrets — post-split, pre-proof.
+    RawSecret,
+    /// Authorized on `invite_key_hash` because at least one side has no
+    /// secret to compare. The compat arm.
+    Legacy,
+}
+
+/// Time bucket a gossip proof is bound to, seconds. A captured proof is
+/// replayable for at most two of these (see [`Mesh::verify_mesh_proof`], which
+/// accepts the previous window for clock skew).
+///
+/// 30s against a 10s gossip cadence: long enough that a round never lands in a
+/// window neither side accepts, short enough that a sniffed proof is stale
+/// before it is useful.
+pub const PROOF_WINDOW_SECS: u64 = 30;
+
+/// The "no gossip credential" sentinel. `mesh_secret` is all-zero exactly when
+/// it is ABSENT — a `mesh.json` or a gossip payload written before the
+/// credential split has no such field and serde defaults it — and all-zero is
+/// never a legitimate value.
+///
+/// Named because the same 32 zero bytes are also the sentinel for
+/// `PersistedMesh::mesh_secret` in another crate, and a sentinel spelled by
+/// hand in two crates is one rename away from disagreeing.
+pub const MESH_SECRET_UNSET: [u8; 32] = [0u8; 32];
+
+
+/// 32-byte adapter over [`crate::ct::constant_time_eq`]. Kept as a name because
+/// every caller here compares fixed-width credentials and the slice form would
+/// invite a length check at each site.
+fn ct_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
+    crate::ct::constant_time_eq(a, b)
+}
+
 /// A Commonwealth mesh — a closed group of trusted nodes.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Mesh {
     pub id: MeshId,
     pub name: String,
-    /// BLAKE3 hash of the join key; raw key is never persisted.
-    pub join_key_hash: [u8; 32],
+    /// Gossip auth — "are we the same mesh". Minted once at creation and
+    /// **never rotated**: there is no setter, no parameter that reaches it,
+    /// and [`crate::mesh::Mesh::rotate_invite_key`] cannot name it. That is
+    /// deliberate (ARCH §7.1) — the whole point of splitting this out of
+    /// `invite_key_hash` is that rotating an invite must not be able to
+    /// partition the mesh.
+    ///
+    /// `[0u8; 32]` means "not set", which happens two ways: a peer running a
+    /// pre-split build (the field is absent from its wire payload and serde
+    /// defaults it), or a `mesh.json` written before the split and not yet
+    /// migrated. Both are handled by [`Mesh::gossip_authorized`].
+    #[serde(default)]
+    pub mesh_secret: [u8; 32],
+
+    /// Join admission — "may this node in". BLAKE3 hash of the invite key;
+    /// the raw key is never persisted. Rotates freely, and rotation is
+    /// invisible to gossip because [`Mesh::gossip_authorized`] does not read
+    /// it once both sides carry a `mesh_secret`.
+    ///
+    /// Serialized under its historical name so wire and `mesh.json` bytes stay
+    /// identical for pre-split peers.
+    #[serde(rename = "join_key_hash")]
+    pub invite_key_hash: [u8; 32],
+
+    /// When the current invite key stops being accepted, unix seconds.
+    ///
+    /// This lived in `AppState` as per-node RAM until the split, which meant
+    /// it died on restart and was never set at all on any member that had not
+    /// personally minted the invite — so a joiner aimed at any other member
+    /// bypassed the TTL entirely. It is mesh state: it persists, it gossips,
+    /// and every admitting member enforces the same value.
+    ///
+    /// `None` = no expiry (plaintext meshes set none).
+    #[serde(default)]
+    pub invite_expires_at: Option<u64>,
+
+    /// Monotonic counter over the invite credential, bumped by
+    /// [`Mesh::rotate_invite_key`] and by nothing else.
+    ///
+    /// Without it a rotation could not propagate. [`Mesh::merge_from`] merges
+    /// members by per-record `last_seen`, but the invite is mesh-wide and has
+    /// no such clock, so before this existed the merge simply skipped
+    /// `invite_key_hash` and `invite_expires_at` entirely — a founder's rotate
+    /// stayed node-local, every other member kept admitting joiners on the
+    /// REVOKED key indefinitely, and the TTL was never enforced anywhere but
+    /// on the node that minted it.
+    ///
+    /// Same anti-rollback rule as [`MemberRecord::dial_info_version`], which
+    /// solves the identical problem for dial info one field over: a replayed
+    /// older payload can never win. Reusing that rule rather than inventing a
+    /// second ordering scheme is deliberate (ARCH §10.6).
+    ///
+    /// `0` = never rotated, which is also what a pre-`invite_version` peer's
+    /// payload deserializes to. That is correct rather than merely convenient:
+    /// such a peer cannot have rotated in a way this node needs to learn.
+    #[serde(default)]
+    pub invite_version: u64,
     /// Mesh-wide encryption policy, set by the founder at creation and
     /// inherited by every joiner (it rides the same live gossip + join
-    /// snapshot as [`Self::join_key_hash`]). When `true`, every member
+    /// snapshot as [`Self::invite_key_hash`]). When `true`, every member
     /// enforces dial-by-key iroh transport for all traffic classes with
     /// no plaintext fallback, closes its plaintext ingress, and requires
     /// an encrypted join. Founder-set and **monotonic**: [`Self::merge_from`]
@@ -188,9 +352,30 @@ pub struct MergeReport {
     /// Members that existed locally but were replaced by a newer
     /// record from `other` (higher `last_seen`).
     pub updated: usize,
+    /// Whether the peer we merged FROM is running a pre-split build — its
+    /// payload carried no [`Mesh::mesh_secret`], so serde defaulted it to
+    /// zero.
+    ///
+    /// This is the ONLY moment that fact is observable: it lives in the
+    /// gossip payload, not in any member record, so a caller that does not
+    /// capture it here cannot recover it later. `EmbeddedDaemon::rotate_invite`
+    /// needs it, because rotating while such a peer is online partitions
+    /// exactly that peer (it still authorizes gossip on `invite_key_hash`).
+    ///
+    /// Meaningful only when [`Self::rejected`] is false — a refused merge
+    /// tells us nothing about the sender's build.
+    ///
+    /// Derived from [`Self::auth_arm`], never from the payload alone: an
+    /// upgraded peer withholds its `mesh_secret` deliberately, so a zeroed
+    /// field is no longer evidence of a pre-split build.
+    pub peer_pre_split: bool,
+    /// Which predicate authorized this merge. The caller's reply uses it to
+    /// decide whether the raw `mesh_secret` still needs to be on the wire —
+    /// see `routes_internal::gossip`.
+    pub auth_arm: GossipAuthArm,
     /// True when the merge was refused outright because `other`
     /// described a different mesh (mismatching `id` or
-    /// `join_key_hash`). When set, nothing was mutated.
+    /// `invite_key_hash`). When set, nothing was mutated.
     pub rejected: bool,
     /// Node IDs whose records we just observed advance (added or
     /// LWW-updated) in this merge. The caller stamps these in its local
@@ -213,27 +398,62 @@ impl Mesh {
     /// updated 0" in tracing logs — useful for noticing when gossip
     /// is actually converging vs. spinning.
     ///
-    /// Rejects outright when `other.id` or `other.join_key_hash`
-    /// doesn't match ours — that's the auth boundary. Anyone who
-    /// knows our mesh_id (public via mDNS) but not the join_key
-    /// shouldn't be able to inject members into our view.
+    /// Rejects outright when [`Mesh::gossip_authorized`] says no — that's the
+    /// auth boundary. Anyone who knows our mesh_id (public via mDNS) but not
+    /// the mesh secret shouldn't be able to inject members into our view.
     pub fn merge_from(&mut self, self_node_id: NodeId, other: &Mesh) -> MergeReport {
-        if self.id != other.id || self.join_key_hash != other.join_key_hash {
+        self.merge_from_authenticated(self_node_id, other, &GossipAuth::none())
+    }
+
+    /// [`Mesh::merge_from`] with the round's authentication evidence attached.
+    ///
+    /// The evidence is per-ROUND, not per-`Mesh` — a proof is bound to one
+    /// sender in one time window — so it is a parameter rather than a field.
+    /// Putting it on `Mesh` would persist a single round's credential into
+    /// `mesh.json` and invite exactly the confusion between "state" and
+    /// "what this caller just proved" that the credential split exists to undo.
+    ///
+    /// `merge_from` delegates here with [`GossipAuth::none`], which is
+    /// byte-for-byte today's behaviour: no proof, fall through to comparing
+    /// raw secrets, then the legacy arm. That is what keeps a mixed fleet
+    /// converging while the proof path rolls out.
+    pub fn merge_from_authenticated(
+        &mut self,
+        self_node_id: NodeId,
+        other: &Mesh,
+        auth: &GossipAuth,
+    ) -> MergeReport {
+        let arm = self.gossip_authorized_with(other, auth);
+        if arm == GossipAuthArm::Refused {
             return MergeReport {
                 added: 0,
                 updated: 0,
                 rejected: true,
                 observed: Vec::new(),
+                peer_pre_split: false,
+                auth_arm: GossipAuthArm::Refused,
             };
         }
 
         // Mesh-wide encryption policy is monotonic: stricter wins. A peer
-        // (stale or hostile, but past the join_key_hash auth boundary
+        // (stale or hostile, but past the invite_key_hash auth boundary
         // above) advertising `require_encryption = false` can never relax
         // a local `true`. Once a node learns the mesh is encrypted, no
         // gossip round demotes it to plaintext — this only ever turns ON.
         if other.require_encryption {
             self.require_encryption = true;
+        }
+
+        // Carry a rotation. `rotate_invite`'s doc says it mutates the live mesh
+        // and lets "the ordinary gossip round carry it" — this is the line that
+        // makes that true. Without it the claim was false: the round carried
+        // the new hash on the wire and the merge dropped it on the floor.
+        if self.merge_invite_from(other) {
+            tracing::info!(
+                mesh = %self.name,
+                invite_version = self.invite_version,
+                "gossip: adopted a rotated invite from a peer"
+            );
         }
         // Whether to REJECT unsigned dial info outright (WS-D). An
         // encrypted mesh trusts only signed reachability; a plaintext
@@ -243,6 +463,18 @@ impl Mesh {
         let enforce_signed = self.require_encryption;
 
         let mut report = MergeReport::default();
+        // Captured here and nowhere else: the sender's build generation is a
+        // property of THIS ROUND, and it is gone the moment the merge ends.
+        //
+        // A proof settles it outright — only a holder of the current secret
+        // can produce one, so the sender is post-split no matter what its
+        // payload carried. Reading the payload alone was correct only while
+        // every post-split node still shipped the raw secret; an upgraded
+        // peer now zeroes that field ON PURPOSE once it has confirmed us,
+        // and calling that pre-split flips the pair back to sending the
+        // credential and blocks rotation on both sides.
+        report.auth_arm = arm;
+        report.peer_pre_split = arm != GossipAuthArm::Proof && !other.has_mesh_secret();
         for (id, incoming) in &other.members {
             if *id == self_node_id {
                 // Authoritative-for-self: never accept an incoming
@@ -303,6 +535,207 @@ impl Mesh {
             }
         }
         report
+    }
+
+    /// Proof that we hold `mesh_secret`, without transmitting it.
+    ///
+    /// The secret used to ride every gossip round in cleartext on a
+    /// `require_encryption = false` mesh. The field it replaced was a one-way
+    /// hash precisely so nothing recoverable travelled, and this credential is
+    /// worse to lose than that one was: it never rotates, and
+    /// [`Mesh::rotate_invite_key`] structurally cannot change it, so a passive
+    /// sniffer gained permanent gossip auth with no revocation path.
+    ///
+    /// Whether this mesh holds a gossip credential at all.
+    ///
+    /// One decider for a sentinel that was spelled two ways in this one file —
+    /// a bare `[0u8; 32]` at three sites and a local `const UNSET` at four —
+    /// and read at seven (ARCH §10.6). The sentinel itself is
+    /// [`MESH_SECRET_UNSET`], which the one other crate that must spell it
+    /// (`sovereign_mesh::persist`) now shares.
+    pub fn has_mesh_secret(&self) -> bool {
+        self.mesh_secret != MESH_SECRET_UNSET
+    }
+
+    /// Bound to two things, each closing a replay:
+    /// - `sender` — a proof captured from one peer cannot be presented by
+    ///   another, so an eavesdropper cannot borrow a member's identity.
+    /// - a [`PROOF_WINDOW_SECS`] time bucket — a captured proof expires,
+    ///   rather than being a bearer token forever.
+    ///
+    /// Keyed BLAKE3 rather than hash-of-concatenation: the secret is the key,
+    /// so a length-extension or prefix game on the message cannot forge one.
+    /// `None` when we hold no secret. A node that has not migrated MUST NOT
+    /// offer a proof: the receiver would refuse it (it cannot verify against an
+    /// unset secret), and because an offered-and-failed proof is a hard refusal
+    /// rather than a downgrade, two un-migrated nodes would hard-refuse each
+    /// other and partition. Caught by `gossip_integration`'s round-trip tests,
+    /// which is exactly what they are for.
+    pub fn mesh_proof(&self, sender: NodeId, now_secs: u64) -> Option<String> {
+        if !self.has_mesh_secret() {
+            return None;
+        }
+        Some(Self::proof_for(
+            &self.mesh_secret,
+            self.id,
+            sender,
+            now_secs / PROOF_WINDOW_SECS,
+        ))
+    }
+
+    fn proof_for(secret: &[u8; 32], mesh_id: MeshId, sender: NodeId, window: u64) -> String {
+        let mut hasher = blake3::Hasher::new_keyed(secret);
+        hasher.update(mesh_id.as_bytes());
+        hasher.update(sender.as_bytes());
+        hasher.update(&window.to_be_bytes());
+        hasher.finalize().to_hex().to_string()
+    }
+
+    /// Whether `proof` was produced by a holder of our `mesh_secret` acting as
+    /// `sender`, in this window or the previous one.
+    ///
+    /// The previous window is accepted for clock skew and for a round that
+    /// straddles a boundary — without it, one gossip in every
+    /// [`PROOF_WINDOW_SECS`] would fail for no reason. It is a bounded
+    /// concession: the replay horizon is two windows, never unbounded.
+    ///
+    /// Returns false when we have no secret: an unset secret would key every
+    /// proof identically across every un-migrated mesh, which is worse than
+    /// refusing.
+    pub fn verify_mesh_proof(&self, proof: &str, sender: NodeId, now_secs: u64) -> bool {
+        if !self.has_mesh_secret() {
+            return false;
+        }
+        let window = now_secs / PROOF_WINDOW_SECS;
+        // Constant-time compare on each candidate: a proof is a secret-derived
+        // value, and `String == String` short-circuits.
+        [window, window.saturating_sub(1)].iter().any(|w| {
+            let expected = Self::proof_for(&self.mesh_secret, self.id, sender, *w);
+            crate::ct::constant_time_eq(expected.as_bytes(), proof.as_bytes())
+        })
+    }
+
+    /// Whether `other`'s gossip may merge into ours — the auth boundary.
+    ///
+    /// Before the credential split one field, `invite_key_hash`, answered both
+    /// this question and "may this node join". That conflation is why rotating
+    /// an invite partitioned the mesh: re-keying admission also re-keyed
+    /// gossip, so every peer still holding the old hash rejected us and we
+    /// rejected them, symmetrically. `mesh_secret` never rotates, so this
+    /// predicate is stable across any number of invite rotations.
+    ///
+    /// The compat arm below is a **temporary second decider** (a deliberate
+    /// ARCH §10.6 deviation, ledgered in `sovereign/DEFAULTS_LEDGER.md`): a
+    /// pre-split peer sends a zeroed `mesh_secret`, and refusing it would
+    /// partition the mesh on upgrade — exactly the failure this change
+    /// removes. It falls back to the legacy predicate and says so at `warn`,
+    /// naming the mesh, so "is this still load-bearing" is observable rather
+    /// than remembered. Delete this arm, and the zero-checks with it, once no
+    /// node reports it.
+    fn gossip_authorized_with(&self, other: &Mesh, auth: &GossipAuth) -> GossipAuthArm {
+        if self.id != other.id {
+            return GossipAuthArm::Refused;
+        }
+        // PREFERRED: the caller proved it holds the secret without sending it.
+        // Tried first so an upgraded pair never needs the raw credential on the
+        // wire at all — that is the whole point of the proof.
+        if let (Some(sender), Some(proof)) = (auth.sender, auth.proof.as_deref()) {
+            if self.verify_mesh_proof(proof, sender, auth.now_secs) {
+                return GossipAuthArm::Proof;
+            }
+            // A proof that was OFFERED and did not verify is a failure, not an
+            // invitation to try a weaker predicate. Falling through here would
+            // let an attacker strip the proof — or send a junk one — and be
+            // handed the legacy arm, which is the downgrade this ordering
+            // exists to prevent.
+            tracing::warn!(
+                mesh = %self.name,
+                %sender,
+                "gossip: REFUSED — a mesh_proof was offered and did not verify"
+            );
+            return GossipAuthArm::Refused;
+        }
+        if self.has_mesh_secret() && other.has_mesh_secret() {
+            return if ct_eq(&self.mesh_secret, &other.mesh_secret) {
+                GossipAuthArm::RawSecret
+            } else {
+                GossipAuthArm::Refused
+            };
+        }
+        // Strict mode: refuse the legacy arm outright once the operator says
+        // the fleet is upgraded. Only meaningful when WE have a secret — if
+        // ours is unset we have not migrated and strict would refuse every
+        // peer, self-partitioning the node it was meant to protect.
+        if strict_gossip_auth() && self.has_mesh_secret() {
+            tracing::warn!(
+                mesh = %self.name,
+                "gossip: REFUSED a legacy-auth peer — SOVEREIGN_MESH_STRICT_AUTH \
+                 is on. Turn it off if any node is still pre-split."
+            );
+            return GossipAuthArm::Refused;
+        }
+        tracing::warn!(
+            mesh = %self.name,
+            self_has_secret = self.has_mesh_secret(),
+            peer_has_secret = other.has_mesh_secret(),
+            "gossip: legacy auth — a peer on a pre-split build authorized on \
+             invite_key_hash. Invite rotation can still partition this mesh \
+             until every node is upgraded."
+        );
+        if ct_eq(&self.invite_key_hash, &other.invite_key_hash) {
+            GossipAuthArm::Legacy
+        } else {
+            GossipAuthArm::Refused
+        }
+    }
+
+    /// Replace the invite credential. The **only** way to change admission,
+    /// and structurally incapable of touching [`Mesh::mesh_secret`] — that is
+    /// the invariant the whole split exists to hold (ARCH §7.1), so it is
+    /// expressed as a method that cannot name the field rather than as a
+    /// comment asking callers not to.
+    pub fn rotate_invite_key(&mut self, new_hash: [u8; 32], expires_at: Option<u64>) {
+        self.invite_key_hash = new_hash;
+        self.invite_expires_at = expires_at;
+        // Bump LAST and always: this is what makes the rotation travel. A
+        // rotation that does not advance the version is invisible to every
+        // other member, which is precisely the node-local rotate this counter
+        // exists to end.
+        self.invite_version = self.invite_version.saturating_add(1);
+    }
+
+    /// Adopt `other`'s invite credential if it is strictly newer than ours.
+    ///
+    /// Returns whether anything changed, so the caller can log a real rotation
+    /// rather than every merge.
+    ///
+    /// The three invite fields move TOGETHER or not at all. Merging the hash
+    /// without the expiry would admit joiners on a new key with a stale TTL,
+    /// which is a worse state than either endpoint.
+    ///
+    /// Ties are broken by hash, not by "keep ours". Two nodes that rotate in
+    /// the same round land on the same version with different hashes, and
+    /// "keep ours" is not a decision — it is each node keeping a different
+    /// answer forever. Comparing hashes is a total order every node computes
+    /// identically, so the mesh converges on one invite instead of splitting
+    /// into two admission regimes.
+    fn merge_invite_from(&mut self, other: &Mesh) -> bool {
+        let newer = other.invite_version > self.invite_version;
+        let tie_break = other.invite_version == self.invite_version
+            && other.invite_key_hash > self.invite_key_hash;
+        if !(newer || tie_break) {
+            return false;
+        }
+        self.invite_key_hash = other.invite_key_hash;
+        self.invite_expires_at = other.invite_expires_at;
+        self.invite_version = other.invite_version;
+        true
+    }
+
+    /// Whether the current invite has lapsed at `now` (unix seconds).
+    /// No expiry set means the invite does not lapse.
+    pub fn invite_expired_at(&self, now: u64) -> bool {
+        matches!(self.invite_expires_at, Some(exp) if now >= exp)
     }
 
     /// WS-D dial-info reconciliation. `record` already has its
@@ -468,9 +901,12 @@ mod tests {
             map.insert(m.node_id, m);
         }
         Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id,
             name: "test".into(),
-            join_key_hash: hash,
+            invite_key_hash: hash,
+            invite_version: 0,
             require_encryption: false,
             members: map,
             peers: vec![],
@@ -977,7 +1413,7 @@ mod tests {
     }
 
     #[test]
-    fn merge_rejects_mismatched_join_key_hash() {
+    fn merge_rejects_mismatched_invite_key_hash() {
         let me = NodeId::from_u128(1);
         let mesh_id = MeshId::from_u128(1);
         let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
@@ -990,5 +1426,462 @@ mod tests {
         let report = local.merge_from(me, &remote);
         assert!(report.rejected);
         assert_eq!(local.members.len(), 1);
+    }
+
+    /// THE point of the credential split. Two members whose invite hashes have
+    /// diverged — one rotated, the other has not gossiped it yet — must still
+    /// authorize each other, because gossip auth reads `mesh_secret`.
+    ///
+    /// Before the split this exact state was a symmetric partition: each side
+    /// rejected the other and both reported `[1/N online]`.
+    #[test]
+    fn a_rotated_invite_does_not_partition_the_mesh() {
+        let me = NodeId::from_u128(1);
+        let mesh_id = MeshId::from_u128(1);
+        let secret = [3u8; 32];
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = secret;
+        let mut remote = mesh_with(
+            vec![member(NodeId::from_u128(2), "X", 100)],
+            mesh_id,
+            [9u8; 32], // rotated out from under us
+        );
+        remote.mesh_secret = secret;
+
+        let report = local.merge_from(me, &remote);
+        assert!(
+            !report.rejected,
+            "same mesh_secret means same mesh, whatever the invite hash says"
+        );
+        assert_eq!(local.members.len(), 2);
+    }
+
+    /// A different mesh that happens to share an invite hash is still refused.
+    #[test]
+    fn a_shared_invite_hash_is_not_enough_once_secrets_are_set() {
+        let me = NodeId::from_u128(1);
+        let mesh_id = MeshId::from_u128(1);
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = [3u8; 32];
+        let mut remote = mesh_with(
+            vec![member(NodeId::from_u128(2), "X", 100)],
+            mesh_id,
+            [7u8; 32], // same invite hash...
+        );
+        remote.mesh_secret = [4u8; 32]; // ...different mesh
+
+        assert!(local.merge_from(me, &remote).rejected);
+        assert_eq!(local.members.len(), 1);
+    }
+
+    /// The compat arm: a pre-split peer sends a zeroed secret and must still be
+    /// admitted on the legacy predicate, or upgrading the fleet partitions it.
+    #[test]
+    fn a_pre_split_peer_authorizes_on_the_legacy_predicate() {
+        let me = NodeId::from_u128(1);
+        let mesh_id = MeshId::from_u128(1);
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = [3u8; 32];
+        let remote = mesh_with(
+            vec![member(NodeId::from_u128(2), "X", 100)],
+            mesh_id,
+            [7u8; 32],
+        ); // mesh_secret defaults to zeroed
+
+        let report = local.merge_from(me, &remote);
+        assert!(!report.rejected, "a peer mid-upgrade must not be dropped");
+        assert_eq!(local.members.len(), 2);
+        assert!(
+            report.peer_pre_split,
+            "the merge must REPORT that this peer is pre-split — it is the \
+             only moment that fact is visible, and rotate_invite depends on it"
+        );
+    }
+
+    /// The signal `rotate_invite`'s guard stands on. Reported per merge,
+    /// because it describes the SENDER's build and nothing in any member
+    /// record carries it.
+    #[test]
+    fn a_post_split_peer_is_reported_as_post_split() {
+        let me = NodeId::from_u128(1);
+        let mesh_id = MeshId::from_u128(1);
+        let secret = [3u8; 32];
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = secret;
+        let mut remote = mesh_with(
+            vec![member(NodeId::from_u128(2), "X", 100)],
+            mesh_id,
+            [7u8; 32],
+        );
+        remote.mesh_secret = secret;
+
+        let report = local.merge_from(me, &remote);
+        assert!(!report.rejected);
+        assert!(
+            !report.peer_pre_split,
+            "a peer that sent a mesh_secret is post-split; flagging it would \
+             block invite rotation on a fully-upgraded fleet forever"
+        );
+    }
+
+    /// A REFUSED merge says nothing about the sender's build, so the flag must
+    /// not be read as "post-split" on that path. Guards that treat an absent
+    /// answer as a positive one are the §18.3 substitution.
+    #[test]
+    fn a_rejected_merge_reports_no_split_generation() {
+        let me = NodeId::from_u128(1);
+        let mut local = mesh_with(vec![member(me, "M", 10)], MeshId::from_u128(1), [7u8; 32]);
+        local.mesh_secret = [3u8; 32];
+        let mut remote = mesh_with(vec![], MeshId::from_u128(2), [7u8; 32]);
+        remote.mesh_secret = [4u8; 32];
+
+        let report = local.merge_from(me, &remote);
+        assert!(report.rejected);
+        assert!(!report.peer_pre_split);
+    }
+
+    fn proof_mesh(secret: [u8; 32]) -> Mesh {
+        proof_mesh_with_id(secret, MeshId::from_u128(77))
+    }
+
+    /// The proof binds to `mesh_id`, so a test that verifies across two Mesh
+    /// values must give them the SAME id or the proof legitimately fails.
+    fn proof_mesh_with_id(secret: [u8; 32], id: MeshId) -> Mesh {
+        let mut m = mesh_with(vec![], id, [7u8; 32]);
+        m.mesh_secret = secret;
+        m
+    }
+
+    /// The happy path: a holder of the secret proves it without sending it.
+    #[test]
+    fn a_proof_from_the_same_secret_verifies() {
+        let sender = NodeId::from_u128(5);
+        let a = proof_mesh([9u8; 32]);
+        let b = proof_mesh([9u8; 32]);
+        let now = 1_000_000;
+        assert!(b.verify_mesh_proof(&a.mesh_proof(sender, now).unwrap(), sender, now));
+    }
+
+    /// The point of the exercise: a different secret cannot forge one.
+    #[test]
+    fn a_proof_from_a_different_secret_is_refused() {
+        let sender = NodeId::from_u128(5);
+        let a = proof_mesh([9u8; 32]);
+        let b = proof_mesh([8u8; 32]);
+        let now = 1_000_000;
+        assert!(!b.verify_mesh_proof(&a.mesh_proof(sender, now).unwrap(), sender, now));
+    }
+
+    /// Bound to the sender: an eavesdropper who captures a member's proof
+    /// cannot present it as themselves.
+    #[test]
+    fn a_proof_cannot_be_replayed_by_a_different_peer() {
+        let real = NodeId::from_u128(5);
+        let impostor = NodeId::from_u128(6);
+        let a = proof_mesh([9u8; 32]);
+        let b = proof_mesh([9u8; 32]);
+        let now = 1_000_000;
+        let stolen = a.mesh_proof(real, now).unwrap();
+        assert!(b.verify_mesh_proof(&stolen, real, now));
+        assert!(
+            !b.verify_mesh_proof(&stolen, impostor, now),
+            "a captured proof must not authorize a different node — otherwise it \
+             is a bearer token for anyone who can sniff one packet"
+        );
+    }
+
+    /// Bound to a time window: a captured proof goes stale rather than being
+    /// a credential forever. Two windows of slack, never more.
+    #[test]
+    fn a_proof_expires_after_two_windows() {
+        let sender = NodeId::from_u128(5);
+        let a = proof_mesh([9u8; 32]);
+        let b = proof_mesh([9u8; 32]);
+        let now = 1_000_000;
+        let proof = a.mesh_proof(sender, now).unwrap();
+
+        assert!(b.verify_mesh_proof(&proof, sender, now));
+        assert!(
+            b.verify_mesh_proof(&proof, sender, now + PROOF_WINDOW_SECS),
+            "one window of skew must be tolerated, or a round that straddles a \
+             boundary fails for no reason"
+        );
+        assert!(
+            !b.verify_mesh_proof(&proof, sender, now + PROOF_WINDOW_SECS * 3),
+            "the replay horizon must be bounded"
+        );
+    }
+
+    /// A node with no secret must refuse rather than key every proof
+    /// identically across every un-migrated mesh.
+    #[test]
+    fn a_node_without_a_secret_verifies_nothing() {
+        let sender = NodeId::from_u128(5);
+        let holder = proof_mesh([9u8; 32]);
+        let unset = proof_mesh([0u8; 32]);
+        let now = 1_000_000;
+        assert!(!unset.verify_mesh_proof(&holder.mesh_proof(sender, now).unwrap_or_default(), sender, now));
+    }
+
+    /// The upgraded case: a peer proves possession and sends NO raw secret at
+    /// all. This is what takes the credential off the wire.
+    #[test]
+    fn a_valid_proof_authorizes_without_any_raw_secret_on_the_wire() {
+        let me = NodeId::from_u128(1);
+        let sender = NodeId::from_u128(2);
+        let mesh_id = MeshId::from_u128(1);
+        let now = 1_000_000;
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = [9u8; 32];
+
+        // The peer's payload carries a ZEROED secret — it sent nothing.
+        let mut remote = mesh_with(vec![member(sender, "P", 100)], mesh_id, [7u8; 32]);
+        remote.mesh_secret = [0u8; 32];
+
+        let holder = proof_mesh_with_id([9u8; 32], mesh_id);
+        let auth = GossipAuth {
+            sender: Some(sender),
+            proof: holder.mesh_proof(sender, now),
+            now_secs: now,
+        };
+
+        let report = local.merge_from_authenticated(me, &remote, &auth);
+        assert!(
+            !report.rejected,
+            "a proof of possession must authorize; otherwise the secret can \
+             never leave the wire"
+        );
+        assert_eq!(local.members.len(), 2);
+    }
+
+    /// The mis-attribution this arm enum exists to prevent.
+    ///
+    /// Once the outbound path stops sending the raw secret to a CONFIRMED
+    /// post-split peer, a zeroed `mesh_secret` on the wire stops meaning "old
+    /// build" and starts meaning "upgraded peer, deliberately withholding".
+    /// Reading the payload alone flips two upgraded nodes to pre-split, which
+    /// (a) blocks `rotate_invite` on both sides forever and (b) makes each
+    /// resume sending the credential it had just stopped sending. The proof
+    /// settles it: only a holder of the current secret can produce one.
+    #[test]
+    fn a_peer_that_proves_possession_is_never_reported_pre_split() {
+        let me = NodeId::from_u128(1);
+        let sender = NodeId::from_u128(2);
+        let mesh_id = MeshId::from_u128(1);
+        let now = 1_000_000;
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = [9u8; 32];
+
+        // An UPGRADED peer that has confirmed us and now withholds the secret.
+        let mut remote = mesh_with(vec![member(sender, "P", 100)], mesh_id, [7u8; 32]);
+        remote.mesh_secret = [0u8; 32];
+
+        let holder = proof_mesh_with_id([9u8; 32], mesh_id);
+        let auth = GossipAuth {
+            sender: Some(sender),
+            proof: holder.mesh_proof(sender, now),
+            now_secs: now,
+        };
+
+        let report = local.merge_from_authenticated(me, &remote, &auth);
+        assert_eq!(report.auth_arm, GossipAuthArm::Proof);
+        assert!(
+            !report.peer_pre_split,
+            "a peer that PROVED possession of the current secret is post-split \
+             by definition; calling it pre-split blocks rotation on both sides \
+             and puts the credential back on the wire"
+        );
+    }
+
+    /// The compat half, still intact: no proof and no secret really is a
+    /// pre-split peer, and it must still be admitted.
+    #[test]
+    fn a_peer_with_neither_proof_nor_secret_is_still_pre_split() {
+        let me = NodeId::from_u128(1);
+        let sender = NodeId::from_u128(2);
+        let mesh_id = MeshId::from_u128(1);
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = [9u8; 32];
+        let mut remote = mesh_with(vec![member(sender, "P", 100)], mesh_id, [7u8; 32]);
+        remote.mesh_secret = [0u8; 32];
+
+        let report = local.merge_from_authenticated(me, &remote, &GossipAuth::none());
+        assert!(!report.rejected, "the compat arm must still admit");
+        assert_eq!(report.auth_arm, GossipAuthArm::Legacy);
+        assert!(report.peer_pre_split);
+    }
+
+    /// Two post-split-but-pre-proof nodes: raw secrets match, and that arm is
+    /// the one the reply may still answer with the credential on.
+    #[test]
+    fn matching_raw_secrets_report_the_raw_secret_arm() {
+        let me = NodeId::from_u128(1);
+        let sender = NodeId::from_u128(2);
+        let mesh_id = MeshId::from_u128(1);
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = [9u8; 32];
+        let mut remote = mesh_with(vec![member(sender, "P", 100)], mesh_id, [7u8; 32]);
+        remote.mesh_secret = [9u8; 32];
+
+        let report = local.merge_from_authenticated(me, &remote, &GossipAuth::none());
+        assert_eq!(report.auth_arm, GossipAuthArm::RawSecret);
+        assert!(!report.peer_pre_split);
+    }
+
+    /// Downgrade prevention. An OFFERED proof that does not verify is a
+    /// failure, not an invitation to try the weaker predicate — otherwise an
+    /// attacker sends junk and gets handed the legacy `invite_key_hash` arm.
+    #[test]
+    fn a_bad_proof_is_refused_and_does_not_fall_back_to_the_legacy_arm() {
+        let me = NodeId::from_u128(1);
+        let sender = NodeId::from_u128(2);
+        let mesh_id = MeshId::from_u128(1);
+        let now = 1_000_000;
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = [9u8; 32];
+
+        // The attacker knows the invite hash — which rides every payload — and
+        // would be admitted by the legacy arm if the bad proof fell through.
+        let mut remote = mesh_with(vec![member(sender, "X", 100)], mesh_id, [7u8; 32]);
+        remote.mesh_secret = [0u8; 32];
+
+        let auth = GossipAuth {
+            sender: Some(sender),
+            proof: Some("not a real proof".into()),
+            now_secs: now,
+        };
+
+        assert!(
+            local.merge_from_authenticated(me, &remote, &auth).rejected,
+            "a failed proof must REFUSE, not downgrade to invite_key_hash"
+        );
+        assert_eq!(local.members.len(), 1, "a refused merge must not mutate");
+    }
+
+    /// A rotation must TRAVEL. Before `invite_version` existed, `merge_from`
+    /// merged only `require_encryption` and `members`, so a founder's rotate
+    /// was node-local: every other member kept admitting joiners on the
+    /// revoked key forever. This is the test that would have caught that.
+    #[test]
+    fn a_rotated_invite_propagates_to_a_peer() {
+        let me = NodeId::from_u128(1);
+        let mesh_id = MeshId::from_u128(1);
+        let secret = [3u8; 32];
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = secret;
+
+        // The founder rotates, then gossips at us.
+        let mut founder = mesh_with(vec![member(NodeId::from_u128(2), "F", 100)], mesh_id, [7u8; 32]);
+        founder.mesh_secret = secret;
+        founder.rotate_invite_key([9u8; 32], Some(4242));
+
+        assert_eq!(founder.invite_version, 1, "rotating must advance the version");
+        assert!(!local.merge_from(me, &founder).rejected);
+        assert_eq!(
+            local.invite_key_hash, [9u8; 32],
+            "the peer must adopt the rotated invite, or it keeps admitting \
+             joiners on the revoked key"
+        );
+        assert_eq!(
+            local.invite_expires_at,
+            Some(4242),
+            "the TTL moves WITH the hash — a new key under a stale expiry is \
+             worse than either endpoint"
+        );
+        assert_eq!(local.invite_version, 1);
+    }
+
+    /// Anti-rollback, same rule as `dial_info_version`: a replayed older
+    /// payload never wins. Without this a stale peer re-arms a revoked invite.
+    #[test]
+    fn an_older_invite_never_overwrites_a_newer_one() {
+        let me = NodeId::from_u128(1);
+        let mesh_id = MeshId::from_u128(1);
+        let secret = [3u8; 32];
+
+        let mut local = mesh_with(vec![member(me, "M", 10)], mesh_id, [7u8; 32]);
+        local.mesh_secret = secret;
+        local.rotate_invite_key([9u8; 32], None); // version 1
+
+        let mut stale = mesh_with(vec![member(NodeId::from_u128(2), "S", 100)], mesh_id, [7u8; 32]);
+        stale.mesh_secret = secret; // version 0, old hash
+
+        assert!(!local.merge_from(me, &stale).rejected);
+        assert_eq!(
+            local.invite_key_hash, [9u8; 32],
+            "a version-0 peer must not roll our rotation back"
+        );
+        assert_eq!(local.invite_version, 1);
+    }
+
+    /// Two nodes rotating in the same round land on the same version with
+    /// different hashes. "Keep ours" is not a decision — it is each node
+    /// keeping a different answer forever, i.e. two admission regimes in one
+    /// mesh. The hash comparison is a total order every node computes
+    /// identically, so they converge.
+    #[test]
+    fn a_simultaneous_rotation_converges_rather_than_splitting() {
+        let mesh_id = MeshId::from_u128(1);
+        let secret = [3u8; 32];
+        let a_id = NodeId::from_u128(1);
+        let b_id = NodeId::from_u128(2);
+
+        let mut a = mesh_with(vec![member(a_id, "A", 10)], mesh_id, [7u8; 32]);
+        a.mesh_secret = secret;
+        a.rotate_invite_key([1u8; 32], None); // version 1, LOWER hash
+
+        let mut b = mesh_with(vec![member(b_id, "B", 10)], mesh_id, [7u8; 32]);
+        b.mesh_secret = secret;
+        b.rotate_invite_key([2u8; 32], None); // version 1, HIGHER hash
+
+        // Gossip both directions.
+        let (a_snapshot, b_snapshot) = (a.clone(), b.clone());
+        a.merge_from(a_id, &b_snapshot);
+        b.merge_from(b_id, &a_snapshot);
+
+        assert_eq!(
+            a.invite_key_hash, b.invite_key_hash,
+            "both sides must land on ONE invite; a split here means two \
+             admission regimes inside one mesh"
+        );
+        assert_eq!(a.invite_key_hash, [2u8; 32], "the higher hash is the tie-break");
+    }
+
+    /// ARCH §7.1: the invariant is structural, not remembered. `rotate_invite_key`
+    /// cannot name `mesh_secret`, and this pins that it stays that way.
+    #[test]
+    fn rotating_the_invite_never_touches_the_mesh_secret() {
+        let mesh_id = MeshId::from_u128(1);
+        let mut mesh = mesh_with(vec![], mesh_id, [7u8; 32]);
+        mesh.mesh_secret = [3u8; 32];
+
+        mesh.rotate_invite_key([8u8; 32], Some(1234));
+
+        assert_eq!(mesh.invite_key_hash, [8u8; 32]);
+        assert_eq!(mesh.invite_expires_at, Some(1234));
+        assert_eq!(
+            mesh.mesh_secret,
+            [3u8; 32],
+            "rotation must be structurally incapable of re-keying gossip"
+        );
+    }
+
+    #[test]
+    fn an_invite_with_no_expiry_never_lapses() {
+        let mesh_id = MeshId::from_u128(1);
+        let mut mesh = mesh_with(vec![], mesh_id, [7u8; 32]);
+        assert!(!mesh.invite_expired_at(u64::MAX));
+
+        mesh.invite_expires_at = Some(100);
+        assert!(!mesh.invite_expired_at(99));
+        assert!(mesh.invite_expired_at(100), "expiry is inclusive");
+        assert!(mesh.invite_expired_at(101));
     }
 }

@@ -91,9 +91,12 @@ async fn two_peers_converge_via_one_gossip_round() {
     // Two independent AppStates (representing founder + late-joining
     // peer), each bound to an ephemeral port.
     let mesh_a = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "Test".into(),
-        join_key_hash: hash,
+        invite_key_hash: hash,
+        invite_version: 0,
         require_encryption: false,
         members: {
             let mut m = HashMap::new();
@@ -111,9 +114,12 @@ async fn two_peers_converge_via_one_gossip_round() {
     let addr_a = spawn_internal_router(state_a.clone()).await;
 
     let mesh_b = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "Test".into(),
-        join_key_hash: hash,
+        invite_key_hash: hash,
+        invite_version: 0,
         require_encryption: false,
         members: {
             let mut m = HashMap::new();
@@ -196,9 +202,12 @@ async fn gossip_decays_peer_after_local_contact_goes_stale() {
         member_at(ghost, "Ghost", 1_000, "127.0.0.1:9001".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(7),
         name: "Test".into(),
-        join_key_hash: [1u8; 32],
+        invite_key_hash: [1u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],
@@ -262,9 +271,12 @@ async fn gossip_skewed_last_seen_does_not_false_decay() {
         member_at(peer, "Skewed", 1, "127.0.0.1:9001".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(7),
         name: "Test".into(),
-        join_key_hash: [1u8; 32],
+        invite_key_hash: [1u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],
@@ -316,9 +328,12 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
 
     // B: a healthy peer with a REAL router, on a clock that never moves.
     let mesh_b = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "Test".into(),
-        join_key_hash: hash,
+        invite_key_hash: hash,
+        invite_version: 0,
         require_encryption: false,
         members: {
             let mut m = HashMap::new();
@@ -335,9 +350,12 @@ async fn answering_peer_whose_record_is_frozen_must_not_decay() {
     let addr_b = spawn_internal_router((*state_b).clone()).await;
 
     let mesh_a = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "Test".into(),
-        join_key_hash: hash,
+        invite_key_hash: hash,
+        invite_version: 0,
         require_encryption: false,
         members: {
             let mut m = HashMap::new();
@@ -435,9 +453,12 @@ async fn departure_tombstones_self_on_peers() {
 
     // A starts knowing only itself; its server must be up so B can reach it.
     let mesh_a = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "T".into(),
-        join_key_hash: hash,
+        invite_key_hash: hash,
+        invite_version: 0,
         require_encryption: false,
         members: {
             let mut m = HashMap::new();
@@ -454,9 +475,12 @@ async fn departure_tombstones_self_on_peers() {
 
     // B knows A (at A's real addr) + itself.
     let mesh_b = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: mesh_id,
         name: "T".into(),
-        join_key_hash: hash,
+        invite_key_hash: hash,
+        invite_version: 0,
         require_encryption: false,
         members: {
             let mut m = HashMap::new();

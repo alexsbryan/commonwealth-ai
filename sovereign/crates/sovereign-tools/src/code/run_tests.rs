@@ -47,11 +47,7 @@ impl RunTestsTool {
     }
 
     /// The executable half of `run_tests`.
-    async fn run(
-        &self,
-        _params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, _params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         self.watcher.force_run().await;
         Ok(StepOutput::Json(json!({
             "status": "started",

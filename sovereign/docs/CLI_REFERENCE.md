@@ -74,7 +74,10 @@ Manage the local Commonwealth mesh.
 |---|---|
 | `create [--name <name>]` | Promote the solo mesh to a joinable mesh; print invite |
 | `join <arg>` | Join an existing mesh (bare key, https url, or sovereign://) |
-| `rotate` | Generate a new shareable join key (invalidates previous) |
+| `rotate [--force]` | Mint a new invite key. Existing members stay connected — rotation changes only who may JOIN |
+| `list [--json]` | Show every mesh this node has joined; the active one is marked |
+| `switch <mesh>` | Park the active mesh and bring another joined one up |
+| `forget <mesh>` | Drop a parked mesh from this node (refuses on the active one) |
 | `status` | Show mesh members, hosted knowledge, loaded models |
 | `balance` | Render the dimensional contribution ledger (inference / knowledge / network, never collapsed) |
 | `leave` | Leave the current mesh |

@@ -36,11 +36,10 @@
 
 use std::sync::Arc;
 
-
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::traits::{InferenceProvider, StateStore};
 use sovereign_core::types::{AssetState, StepOutput, ToolContext};
-use sovereign_core::tool_manifest::DeclaredTool;
 
 pub struct AttachedDocumentSearchTool {
     store: Arc<dyn StateStore>,
@@ -72,11 +71,7 @@ impl AttachedDocumentSearchTool {
     }
 
     /// The executable half of `attached_doc_search`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let query = params
             .get("query")
             .and_then(|v| v.as_str())
@@ -604,7 +599,6 @@ impl AttachedDocumentSearchTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         match params.get("query").and_then(|v| v.as_str()) {
             Some(s) if !s.trim().is_empty() => Ok(()),
             _ => Err(Error::InvalidInput(

@@ -218,13 +218,12 @@ async fn run_turn(
     // Progress the in-process path never showed: the daemon narrates what it
     // is doing while the answer is still being retrieved. Stderr, so it stays
     // out of a piped `--format json` payload.
-    let mut narrate = |_phase: &sovereign_contracts::types::NarrationPhase,
-                       text: &str,
-                       elapsed_ms: u64| {
-        if echo_live && !text.is_empty() {
-            eprintln!("· {text} ({:.1}s)", elapsed_ms as f64 / 1000.0);
-        }
-    };
+    let mut narrate =
+        |_phase: &sovereign_contracts::types::NarrationPhase, text: &str, elapsed_ms: u64| {
+            if echo_live && !text.is_empty() {
+                eprintln!("· {text} ({:.1}s)", elapsed_ms as f64 / 1000.0);
+            }
+        };
     let mut queued = |position: u32, wait_ms: u64| {
         eprintln!("· queued #{position} · ~{:.0}s", wait_ms as f64 / 1000.0);
     };

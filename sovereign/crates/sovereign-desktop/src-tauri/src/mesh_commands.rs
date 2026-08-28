@@ -326,7 +326,7 @@ pub async fn mesh_get_state(
     resp.client_token = mesh.running_client_token().await;
     // Track W: the founder's own reachability, for the "Reachable /
     // Reconnecting" indicator (MeshState doesn't carry it).
-    resp.status.founder_reachability = mesh.founder_reachability().await;
+    resp.status.self_reachability = mesh.self_reachability().await;
     Ok(Some(resp))
 }
 
@@ -373,22 +373,118 @@ pub async fn mesh_rotate_invite(
             .map_err(|e| format!("parse mesh/rotate response: {e}"));
     }
 
-    // Local mode — talk to persist directly so we don't need a new
-    // EmbeddedDaemon method just for this. Mirror what the HTTP
-    // handler does: rotate on disk, then push the plaintext back
-    // into the daemon so subsequent status polls see the new key.
+    // Local mode — go through the daemon, not around it.
+    //
+    // This used to call `persist::rotate_join_key` directly, on the reasoning
+    // that a disk write needed no daemon method. It did: rotation has to
+    // change the LIVE mesh or the gossip loop re-persists the old hash over
+    // the new one within a round, and this path skipped that just as the CLI
+    // and HTTP paths did. Three callers, three different partial jobs — the
+    // §10.6 duplicated-decider failure. There is now one implementation.
     let Some(mesh) = state.mesh().await else {
         return Err("mesh daemon not available".into());
     };
-    let data_dir = mesh.data_dir().to_path_buf();
-    let rotated = sovereign_mesh::persist::rotate_join_key(&data_dir)
-        .map_err(|e| format!("rotate failed: {e}"))?
-        .ok_or_else(|| "no mesh to rotate".to_string())?;
-    mesh.set_join_key(rotated.join_key.clone()).await;
+    let rotated = mesh
+        .rotate_invite(false)
+        .await
+        .map_err(|e| format!("rotate failed: {e}"))?;
     Ok(RotateInviteResponse {
         mesh_name: rotated.mesh_name,
         join_key: rotated.join_key,
     })
+}
+
+/// One membership in the mesh switcher's list.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KnownMeshDto {
+    pub mesh_id: String,
+    pub name: String,
+    pub members_total: usize,
+    pub is_active: bool,
+    pub last_seen_unix: u64,
+}
+
+/// Every mesh this node has joined — active and parked.
+#[tauri::command]
+pub async fn mesh_list(state: State<'_, Arc<AppState>>) -> Result<Vec<KnownMeshDto>, String> {
+    if let Some(port) = attached_port(&state) {
+        // Attach mode reads it off the status payload the daemon already
+        // serves, rather than a second endpoint.
+        let client = http_client()?;
+        let resp = client
+            .get(format!("http://localhost:{port}/v1/mesh/status"))
+            .send()
+            .await
+            .map_err(|e| format!("mesh list: {e}"))?;
+        let body: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| format!("parse mesh/status: {e}"))?;
+        let rows = body.get("meshes").cloned().unwrap_or(serde_json::json!([]));
+        return serde_json::from_value(rows).map_err(|e| format!("parse meshes: {e}"));
+    }
+    let Some(mesh) = state.mesh().await else {
+        return Ok(Vec::new());
+    };
+    let active = sovereign_mesh::persist::active_mesh_id(mesh.data_dir());
+    Ok(mesh
+        .known_meshes()
+        .into_iter()
+        .map(|m| KnownMeshDto {
+            is_active: active.as_ref() == Some(&m.mesh_id),
+            mesh_id: m.mesh_id.to_hex(),
+            members_total: m.members.len(),
+            last_seen_unix: m.members.iter().map(|r| r.last_seen).max().unwrap_or(0),
+            name: m.name,
+        })
+        .collect())
+}
+
+/// Park the active mesh and bring another joined mesh up.
+///
+/// The daemon rebinds `:9741` as part of this, so the caller must poll
+/// through the bounce — `MeshSettings` reuses the same `reconnecting` banner
+/// and `waitForDaemonAndRefresh` helper that Leave already uses.
+#[tauri::command]
+pub async fn mesh_switch(state: State<'_, Arc<AppState>>, mesh: String) -> Result<(), String> {
+    if let Some(port) = attached_port(&state) {
+        let client = http_client()?;
+        let resp = client
+            .post(format!("http://localhost:{port}/v1/mesh/switch"))
+            .json(&serde_json::json!({ "mesh": mesh }))
+            .send()
+            .await
+            .map_err(|e| format!("mesh switch: {e}"))?;
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let text = resp.text().await.unwrap_or_default();
+            return Err(format!("mesh switch failed ({status}): {text}"));
+        }
+        return Ok(());
+    }
+    let Some(daemon) = state.mesh().await else {
+        return Err("mesh daemon not available".into());
+    };
+    daemon
+        .switch_mesh(&mesh)
+        .await
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// Drop a PARKED mesh from this node. Refuses on the active one.
+#[tauri::command]
+pub async fn mesh_forget(state: State<'_, Arc<AppState>>, mesh: String) -> Result<(), String> {
+    if attached_port(&state).is_some() {
+        return Err(
+            "forgetting a mesh is not yet exposed over HTTP — run `svrn mesh forget` instead"
+                .into(),
+        );
+    }
+    let Some(daemon) = state.mesh().await else {
+        return Err("mesh daemon not available".into());
+    };
+    daemon.forget_mesh(&mesh).map(|_| ()).map_err(|e| e.to_string())
 }
 
 /// Leave the current mesh and return the node to a fresh solo mesh.
@@ -602,7 +698,7 @@ impl MeshStateResponse {
                 is_connected: remote.running,
                 join_link: remote.join_link,
                 join_key: remote.join_key,
-                founder_reachability: remote.founder_reachability,
+                self_reachability: remote.self_reachability,
             },
             members,
             corpora: Vec::new(),

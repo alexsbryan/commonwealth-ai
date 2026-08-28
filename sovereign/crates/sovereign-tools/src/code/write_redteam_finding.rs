@@ -58,11 +58,7 @@ impl WriteRedteamFindingTool {
     }
 
     /// The executable half of `write_redteam_finding`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let feature_id = params
             .get("feature_id")
             .and_then(|v| v.as_str())
@@ -129,7 +125,6 @@ impl WriteRedteamFindingTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         for key in ["feature_id", "invariant", "status", "confidence"] {
             params
                 .get(key)

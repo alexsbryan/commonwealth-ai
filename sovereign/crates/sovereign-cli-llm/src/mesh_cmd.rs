@@ -78,11 +78,14 @@ pub async fn run_mesh(args: &[String]) -> i32 {
     match args[0].as_str() {
         "create" => cmd_create(&args[1..]).await,
         "join" => cmd_join(&args[1..]).await,
+        "list" => cmd_list(&args[1..]).await,
+        "switch" => cmd_switch(&args[1..]).await,
+        "forget" => cmd_forget(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "transport" => cmd_transport(&args[1..]).await,
         "balance" => cmd_balance().await,
-        "leave" => cmd_leave().await,
+        "leave" => cmd_leave(&args[1..]).await,
         "logs" => cmd_logs().await,
         "fetch-model" => cmd_fetch_model(&args[1..]).await,
         "warm-cache" => cmd_warm_cache(&args[1..]).await,
@@ -457,6 +460,9 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
                 "Show each peer's live iroh path (direct / relayed / mixed)",
             ),
             ("balance", "Show your contribution to the mesh"),
+            ("list", "Show every mesh this node has joined; the active one is marked"),
+            ("switch <mesh>", "Park the active mesh and bring another one up"),
+            ("forget <mesh>", "Drop a parked mesh from this node"),
             ("leave", "Leave the current mesh"),
             ("logs", "Show mesh daemon logs"),
             (
@@ -2746,7 +2752,7 @@ async fn cmd_join(args: &[String]) -> i32 {
     // still completes on the founder's side, but only the CLI
     // process's mesh state gets updated — never the long-running
     // daemon's. CLI exits, in-memory join state evaporates, and the
-    // daemon keeps its solo-mesh `join_key_hash`. Every subsequent
+    // daemon keeps its solo-mesh `invite_key_hash`. Every subsequent
     // gossip from peers mismatches and gets rejected.
     //
     // Routing through `POST /v1/mesh/join` makes the running daemon
@@ -2876,28 +2882,81 @@ async fn cmd_rotate(args: &[String]) -> i32 {
         sovereign_cli_shared::help::print(&HELP_MESH_ROTATE);
         return 0;
     }
-    match sovereign_mesh::persist::rotate_join_key(&sovereign_root()) {
-        Ok(Some(rotated)) => {
-            eprintln!();
-            eprintln!("Note: existing members stay connected. Only future joins need the new key.");
-            eprintln!("If the daemon is currently running, restart it to load the new key.");
-            // Rotation is an offline persist op — the API token is
-            // unchanged, so it isn't reprinted here (shown on create /
-            // `mesh status`).
-            // Offline persist op — no running daemon to read a dial
-            // string from; the daemon's status poll (`current_invite`)
-            // serves the dial-bearing link once it's back up.
-            print_mesh_share(&rotated.mesh_name, &rotated.join_key, None, None);
-            0
-        }
-        Ok(None) => {
-            eprintln!("No mesh to rotate — run `svrn setup` or `svrn mesh create` first.");
-            1
-        }
+    let force = args.iter().any(|a| a == "--force");
+
+    // Rotation MUST go through the running daemon. It used to be an offline
+    // disk write, which is why it had to tell the user to restart: the daemon
+    // held the old hash in memory and re-persisted it over the new one on its
+    // next gossip round, silently reverting the rotation. There is no correct
+    // offline rotation — the live mesh is the thing that has to change.
+    if !daemon_listening_on(daemon_client_port()).await {
+        eprintln!(
+            "No daemon detected on :{} — rotation needs one.",
+            daemon_client_port()
+        );
+        eprintln!("Start it with `svrn daemon start`, then re-run.");
+        return 1;
+    }
+    rotate_via_running_daemon(force).await
+}
+
+/// The daemon's client port from `SetupConfig`, not a hardcoded 9741 — a
+/// sandbox pointed at its own daemon must not rotate the operator's mesh.
+fn daemon_client_port() -> u16 {
+    sovereign_core::setup_config::SetupConfig::load()
+        .map(|c| c.daemon.client_port)
+        .unwrap_or(9741)
+}
+
+async fn rotate_via_running_daemon(force: bool) -> i32 {
+    let port = daemon_client_port();
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/rotate?force={force}");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
         Err(e) => {
-            eprintln!("Failed to rotate join key: {e}");
-            1
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
         }
+    };
+    let resp = match client.post(&url).send().await {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach running daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let payload: serde_json::Value = match resp.json().await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Daemon returned non-JSON response (status={status}): {e}");
+            return 1;
+        }
+    };
+    if status.is_success() {
+        let mesh_name = payload
+            .get("mesh_name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        let join_key = payload
+            .get("join_key")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(unknown)");
+        eprintln!();
+        eprintln!("Existing members stay connected — rotation changes only who may JOIN.");
+        print_mesh_share(mesh_name, join_key, None, None);
+        0
+    } else {
+        let err = payload
+            .get("error")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no error message)");
+        eprintln!();
+        eprintln!("Failed to rotate (daemon returned {status}): {err}");
+        1
     }
 }
 
@@ -3186,9 +3245,203 @@ async fn cmd_balance() -> i32 {
     0
 }
 
-async fn cmd_leave() -> i32 {
-    println!("(mesh leave requires a running daemon)");
+/// `svrn mesh leave`
+///
+/// Was a success-shaped stub: it printed "(mesh leave requires a running
+/// daemon)" and exited **0** having done nothing, while a daemon WAS running
+/// and `POST /v1/mesh/leave` worked one hop away. That collapses ARCH §18.2's
+/// *never-ran* into *passed* — the caller's script sees success and moves on.
+/// No daemon is now a non-zero exit that says so.
+async fn cmd_leave(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh leave");
+        eprintln!();
+        eprintln!("Give up membership in the active mesh and return to a solo mesh.");
+        eprintln!("Parked meshes are untouched — use `svrn mesh forget` to drop those.");
+        return 0;
+    }
+    let port = daemon_client_port();
+    if !daemon_listening_on(port).await {
+        eprintln!("No daemon detected on :{port} — nothing to leave.");
+        eprintln!("Start it with `svrn daemon start` if the mesh should be running.");
+        return 1;
+    }
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/leave");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
+        }
+    };
+    match client.post(&url).send().await {
+        Ok(r) if r.status().is_success() => {
+            println!();
+            println!("Left the mesh. This node is now its own solo mesh.");
+            println!("The daemon restarts to rebind; give it ~10s.");
+            0
+        }
+        Ok(r) => {
+            let status = r.status();
+            let body = r.text().await.unwrap_or_default();
+            eprintln!("Failed to leave (daemon returned {status}): {body}");
+            1
+        }
+        Err(e) => {
+            eprintln!("Failed to reach running daemon at {url}: {e}");
+            1
+        }
+    }
+}
+
+/// `svrn mesh list` — every mesh this node has joined, active one marked.
+///
+/// Reads disk directly rather than the daemon: the answer is the same either
+/// way, and an operator debugging a daemon that will not start still needs to
+/// see what it is a member of.
+async fn cmd_list(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) {
+        eprintln!("Usage: svrn mesh list [--json]");
+        eprintln!();
+        eprintln!("Show every mesh this node has joined. The active one is marked '*'.");
+        return 0;
+    }
+    let root = sovereign_root();
+    let active = sovereign_mesh::persist::active_mesh_id(&root);
+    let known = sovereign_mesh::persist::list_known(&root);
+
+    if args.iter().any(|a| a == "--json") {
+        let rows: Vec<serde_json::Value> = known
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "mesh_id": m.mesh_id.to_hex(),
+                    "name": m.name,
+                    "members_total": m.members.len(),
+                    "is_active": active.as_ref() == Some(&m.mesh_id),
+                })
+            })
+            .collect();
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&rows).unwrap_or_default()
+        );
+        return 0;
+    }
+
+    if known.is_empty() {
+        println!(
+            "No meshes joined yet. `svrn mesh create` or paste an invite with `svrn mesh join`."
+        );
+        return 0;
+    }
+    println!();
+    for m in &known {
+        let mark = if active.as_ref() == Some(&m.mesh_id) {
+            "*"
+        } else {
+            " "
+        };
+        let state = if active.as_ref() == Some(&m.mesh_id) {
+            "active"
+        } else {
+            "parked"
+        };
+        println!(
+            " {mark} {:<28} {:>3} member(s)  {state}",
+            m.name,
+            m.members.len()
+        );
+    }
+    println!();
     0
+}
+
+/// `svrn mesh switch <mesh>` — park the active mesh, bring another up.
+async fn cmd_switch(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+        eprintln!("Usage: svrn mesh switch <mesh-name-or-id>");
+        eprintln!();
+        eprintln!("Park the active mesh and bring another joined mesh up in its place.");
+        eprintln!("Peers on the parked mesh see this node go offline — NOT depart, so");
+        eprintln!("switching back later is a resume and needs no invite.");
+        eprintln!();
+        eprintln!("`svrn mesh list` shows what is joined.");
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    let target = args[0].clone();
+    let port = daemon_client_port();
+    if !daemon_listening_on(port).await {
+        eprintln!("No daemon detected on :{port} — switching needs one.");
+        return 1;
+    }
+    let url = format!("http://127.0.0.1:{port}/v1/mesh/switch");
+    let client = match reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("Failed to build HTTP client: {e}");
+            return 1;
+        }
+    };
+    let resp = match client
+        .post(&url)
+        .json(&serde_json::json!({ "mesh": target }))
+        .send()
+        .await
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("Failed to reach running daemon at {url}: {e}");
+            return 1;
+        }
+    };
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if status.is_success() {
+        println!();
+        println!("Switching to \"{target}\" — the daemon rebinds, give it ~10s.");
+        println!("`svrn mesh status` will show the new roster.");
+        0
+    } else {
+        eprintln!("Failed to switch (daemon returned {status}): {body}");
+        1
+    }
+}
+
+/// `svrn mesh forget <mesh>` — drop a PARKED mesh from this node.
+async fn cmd_forget(args: &[String]) -> i32 {
+    if sovereign_cli_shared::help::wants_help(args) || args.is_empty() {
+        eprintln!("Usage: svrn mesh forget <mesh-name-or-id>");
+        eprintln!();
+        eprintln!("Delete a parked mesh's roster and invite key from this node.");
+        eprintln!("Refuses on the ACTIVE mesh — switch or leave first.");
+        eprintln!();
+        eprintln!("Rejoining afterwards needs a fresh invite, since the roster is gone.");
+        return if args.is_empty() { 1 } else { 0 };
+    }
+    let root = sovereign_root();
+    let known = sovereign_mesh::persist::list_known(&root);
+    let Some(found) = sovereign_mesh::persist::resolve_known(&known, &args[0]) else {
+        eprintln!("Not a member of any mesh matching '{}'.", args[0]);
+        eprintln!("`svrn mesh list` shows what is joined.");
+        return 1;
+    };
+    match sovereign_mesh::persist::forget(&root, &found.mesh_id) {
+        Ok(()) => {
+            println!("Forgot \"{}\".", found.name);
+            0
+        }
+        Err(e) => {
+            eprintln!("Failed to forget \"{}\": {e}", found.name);
+            1
+        }
+    }
 }
 
 async fn cmd_logs() -> i32 {

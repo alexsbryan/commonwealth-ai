@@ -3771,7 +3771,7 @@ hardening, 2026-07.
 |-------------------------------|--------------------------------------------------------|
 | `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `commonwealth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
 | `POST /v1/responses`          | OpenAI Responses-API adapter (codex 0.130+). Wire-format translator over chat-completions. See [`docs/inference.md`](./docs/inference.md). |
-| `GET  /v1/models`             | Loaded models w/ capabilities + performance estimates  |
+| `GET  /v1/models`             | **Names this daemon can dispatch by name**, one row per name. Built from the local OICP manifest + every reachable peer's — the same source `locate_named_model` resolves against, so a listed id resolves and an omitted one does not. Carries `residency` (`resident`/`cold` — cold is a lazy slot, not an outage) and `advertised_by` (which nodes hold it). Falls back to the gossiped `inference_store` scan ONLY on the orchestrator daemon, which has no manifest; that path can say "the entry's last writer is reachable" and nothing stronger. Before 2026-08-27 the store scan was the ONLY path, and it advertised ids chat completions refused. |
 | `POST /v1/embeddings`         | Embedding endpoint (what `embed_http::http_embed_fn` peers call) |
 | `POST /v1/knowledge/search`   | Determines target corpora, fans out, merges, reranks   |
 | `/v1/apps*`, `/app/{app_id}/{*path}` | Mesh-app install/status + reverse proxy (`commonwealth-app`) |
@@ -4778,6 +4778,19 @@ mesh identity, deliberately platform-native so the desktop app and CLI share it:
 - `mesh.json` + `join_key.secret` at the root are the **legacy single-mesh
   layout**. `persist::migrate_legacy_layout` moves them into `meshes/<id>/` on
   first boot and derives that mesh's `mesh_secret`; it is idempotent.
+- **Writing a mesh does not make it active.** `persist::save` writes into
+  `meshes/<mesh.id>/` and touches nothing else; `persist::save_and_activate` is
+  the two-step, used by the only two callers that ESTABLISH a membership
+  (`create_mesh`, `join_mesh`), and `switch_mesh` moves the pointer itself.
+  Saving used to re-point `active` at its subject, which made every caller an
+  implicit switcher — including the gossip loop's per-round re-persist and the
+  mesh-mutation hook, so a round still in flight for the mesh just PARKED could
+  silently undo a switch. The order is file-then-pointer, so `active` never
+  names a directory with no `mesh.json` in it.
+- `leave` clears the pointer (`persist::clear_active`) and removes the departed
+  mesh's directory. It used to leave `active` naming a mesh whose `mesh.json` it
+  had just deleted, which read as healthy at boot while making that mesh
+  permanently unforgettable — `forget` refuses the ACTIVE one.
 
 `Mesh` carries two credentials, and the split is load-bearing:
 `mesh_secret` authorizes gossip (`Mesh::gossip_authorized`) and never rotates;
@@ -4787,6 +4800,36 @@ invite used to partition the rotator — re-keying admission re-keyed gossip.
 `invite_expires_at` moved onto the mesh at the same time, from per-node RAM
 where it died on restart and was never armed on any member that had not
 personally minted the invite.
+
+`mesh_secret` does not ride the wire between upgraded peers. A gossip round
+carries `from` + `mesh_proof` — a keyed-BLAKE3 proof (`Mesh::mesh_proof`) bound
+to the SENDER and to a 30s window (`PROOF_WINDOW_SECS`), so a captured proof is
+neither transferable nor durable. `Mesh::gossip_authorized_with` tries the proof
+first and reports which predicate won as a `GossipAuthArm`: `Proof`, `RawSecret`
+(both sides sent matching secrets — the pre-proof path), `Legacy` (`invite_key_hash`,
+the compat arm), or `Refused`. An OFFERED proof that fails is a hard refusal, never
+a fall-through — otherwise stripping it buys the weaker predicate. A node with no
+secret offers no proof at all (`mesh_proof` returns `None`), or two un-migrated
+nodes would hard-refuse each other. The raw secret goes out only to peers not yet
+confirmed post-split, and comes BACK only on the `RawSecret` arm.
+
+Rotation is refused while the fleet is mixed. `rotate_invite` answers `409
+RotateWouldPartition { pre_split, unconfirmed }` — two populations, because the
+remedies differ: a `pre_split` peer authorizes on `invite_key_hash` and needs
+UPGRADING; an `unconfirmed` peer has simply not been merged from since this
+daemon started and needs one gossip ROUND. Collapsing them told operators their
+fleet was un-migrated when it was not.
+
+The confirmation is local observation, never a peer's claim.
+`MergeReport::peer_pre_split` derives from the `GossipAuthArm`, not from the
+payload: an upgraded peer withholds its `mesh_secret` deliberately, so a zeroed
+field stopped being evidence of an old build — reading it as one made two
+upgraded nodes report each other pre-split, blocking rotation on both sides.
+`AppState::peer_split_generation` is the three-valued read (`Some(true)` /
+`Some(false)` / `None`); `peer_confirmed_post_split` folds `None` into unsafe and
+stays the SAFETY read. Because that map is in-memory, `rotate_invite` runs ONE
+gossip round before it is willing to refuse — it never reports a verdict from an
+instrument it has not run. `--force` overrides.
 
 Mesh HTTP surface (`mesh_http.rs`, loopback-only): `GET /v1/mesh/status`,
 `POST /v1/mesh/{create,join,rotate,switch,leave}`,

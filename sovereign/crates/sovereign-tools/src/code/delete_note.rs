@@ -44,11 +44,7 @@ impl DeleteNoteTool {
     }
 
     /// The executable half of `delete_note`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let id = params
             .get("id")
             .and_then(|v| v.as_str())
@@ -70,7 +66,6 @@ impl DeleteNoteTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         params
             .get("id")
             .and_then(|v| v.as_str())

@@ -20,8 +20,8 @@ use sovereign_core::error::{Error, Result};
 use sovereign_core::types::*;
 
 use super::capability_posture::resolve_corpus_dir;
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 /// One finding from the reconcile artifact (permissive subset — extra fields
 /// ignored so the writer can evolve without breaking this reader).
@@ -98,11 +98,7 @@ impl CapabilityFindingsTool {
     }
 
     /// The executable half of `capability_findings`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let caps_dir = match resolve_corpus_dir(&self.root, params) {
             Ok(d) => d,
             Err(e) => {

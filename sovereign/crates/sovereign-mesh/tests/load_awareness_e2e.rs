@@ -53,9 +53,12 @@ use common::{member_with_last_seen, spawn_router, TestProvider};
 
 fn empty_mesh() -> Mesh {
     Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "test".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: std::collections::HashMap::new(),
         peers: vec![],
@@ -207,9 +210,12 @@ async fn desktop_topology_serving_a_peer_request_does_not_publish_in_flight() {
         member_with_last_seen(self_id, "self", 100, "127.0.0.1:9742".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(77),
         name: "inbound-load-test".into(),
-        join_key_hash: [3u8; 32],
+        invite_key_hash: [3u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

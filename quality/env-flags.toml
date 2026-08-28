@@ -40,6 +40,13 @@ third_party_allowlist = []
 # ── grounding ───────────────────────────────────────────────────────
 
 [[flag]]
+name = "SOVEREIGN_MESH_STRICT_AUTH"
+cluster = "mesh"
+default = "off"
+status = "guard"
+purpose = "Refuse the pre-split gossip compat arm instead of falling back to it. OFF by default: `Mesh::gossip_authorized` falls through to comparing `invite_key_hash` whenever EITHER side's `mesh_secret` is zeroed, which is what makes the credential-split upgrade rolling rather than flag-day. That fallback is peer-selected — a caller omits the field and gets the weaker predicate — so once every node is upgraded it is pure attack surface. =1/true/on refuses those peers outright, but ONLY on a node whose own secret is set; a node that has not migrated would otherwise refuse every peer and self-partition. Read once via OnceLock in commonwealth-core (a value that changed mid-run would make `which predicate authorized this round` depend on when the round happened). Turning this on while any node is still pre-split PARTITIONS those nodes — that is the point, and it is why it is opt-in. Flip-to-default condition and review-by: sovereign/DEFAULTS_LEDGER.md."
+
+[[flag]]
 name = "SOVEREIGN_NATIVE_GROUNDING"
 cluster = "grounding"
 default = "on"

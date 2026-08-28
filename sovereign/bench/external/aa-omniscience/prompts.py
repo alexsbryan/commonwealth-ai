@@ -32,6 +32,66 @@ Do not say that you do not know and do not ask for more context or tools.
 """
 
 
+# ── OURS, NOT AA's ───────────────────────────────────────────────────────────
+# R1 coverage judge (PREREG.md, addendum "retrieval coverage"). It answers ONE
+# question about a retrieved passage: does the passage STATE the gold answer?
+# It grades no model's reply and its output never enters an OI -- it measures
+# the corpus, not the model. It exists because the obvious instrument, a string
+# match on the gold answer, scores topical adjacency as coverage.
+#
+# Single letter, few-shot, per note ece0767a: local judges need structure, not
+# prose instructions. Example 3 IS the disqualifying case from the addendum,
+# and example 5 is the paraphrase a string match would miss -- the two
+# directions the grep gets wrong, both pinned in the prompt.
+COVERAGE_GRADER_TEMPLATE = """
+Your job is to decide whether a PASSAGE contains the information needed to answer a QUESTION, given the GOLD ANSWER.
+Reply with a single letter, A or B, and nothing else.
+
+A: COVERED. The passage states the gold answer, or states it in different words. A reader holding only this passage could answer the question correctly.
+B: NOT COVERED. The passage does not state the gold answer. The passage may be about the same topic, mention the same people or places, or even contain the gold answer as a word used for something else -- that is still B.
+
+Judge ONLY from the passage. Do not use your own knowledge of the subject. If you happen to know the answer but the passage does not state it, the grade is B.
+
+Example 1 - A:
+Question: What city is OpenAI headquartered in?
+Gold answer: San Francisco
+Passage: OpenAI is an American artificial intelligence company headquartered in San Francisco, California. It was founded in 2015.
+Grade: A
+
+Example 2 - A:
+Question: How many years did Mentuhotep II reign?
+Gold answer: 51 years
+Passage: He reigned for 51 years, according to the Turin King List. Mentuhotep II succeeded his father Intef III on the throne.
+Grade: A
+
+Example 3 - B:
+Question: After Mentuhotep II reunited Egypt, which city did he assign to the authority of Intef, son of Tjefi?
+Gold answer: Herakleopolis
+Passage: Egypt was not unified during this time, and the Tenth Dynasty, rival to Mentuhotep's Eleventh, ruled Lower Egypt from Herakleopolis. During Mentuhotep II's fourteenth regnal year, he took advantage of a revolt in the Thinite Nome to launch an attack on Herakleopolis, which met little resistance.
+Grade: B
+
+Example 4 - B:
+Question: In which NumPy version was support for passing an empty list to the domain parameter first introduced?
+Gold answer: 1.5.0
+Passage: NumPy is a library for the Python programming language, adding support for large, multi-dimensional arrays and matrices, along with a large collection of high-level mathematical functions to operate on these arrays.
+Grade: B
+
+Example 5 - A:
+Question: What award did the paper win at NAACL 2024?
+Gold answer: Outstanding Paper Award
+Passage: At the 2024 meeting the committee singled the paper out, giving it one of that year's outstanding paper awards.
+Grade: A
+
+Here is the case to grade.
+
+Question: {question}
+Gold answer: {gold}
+Passage: {passage}
+
+Grade:
+"""
+
+
 OMNISCIENCE_GRADER_TEMPLATE = """
 Your job is to look at a question, a gold target, and a predicted answer, and then assign a grade of either ["CORRECT", "INCORRECT", "PARTIAL_ANSWER", "NOT_ATTEMPTED"].
 First, I will give examples of each grade, and then you will grade a new example.

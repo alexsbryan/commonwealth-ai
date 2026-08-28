@@ -3,7 +3,7 @@
 //! fields (`relay_url` + `iroh_direct_addrs`) on a [`MemberRecord`].
 //!
 //! Those fields ride last-writer-wins gossip, so without a signature a
-//! peer past the `join_key_hash` auth boundary could publish a
+//! peer past the `invite_key_hash` auth boundary could publish a
 //! forged-newer record that strips or substitutes another node's dial
 //! info — forcing it unreachable (DoS) or, on a non-required class, a
 //! downgrade. Signing binds the dial info to the OWNING node's key:

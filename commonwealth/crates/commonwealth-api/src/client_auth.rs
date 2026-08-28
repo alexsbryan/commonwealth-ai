@@ -38,6 +38,7 @@
 //! *before* it could possibly hold a token. Everything that does work
 //! or returns user data is gated.
 
+use commonwealth_core::ct::constant_time_eq;
 use std::net::SocketAddr;
 
 use axum::extract::{ConnectInfo, Request, State};
@@ -61,23 +62,6 @@ pub use commonwealth_transport::identity::load_or_create_client_token;
 /// child path inherits the exemption.
 pub const AUTH_EXEMPT_PATHS: &[&str] = &["/status", "/oicp/v1/capabilities"];
 
-/// Constant-time byte comparison. Unequal lengths short-circuit
-/// (length is not the secret — the token width is fixed and public);
-/// equal lengths fold an XOR accumulator over every byte so the
-/// running time doesn't depend on the position of the first
-/// mismatch. Dependency-free; deliberately NOT `==` (which
-/// short-circuits at the first differing byte and leaks a timing
-/// oracle on the secret).
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-    let mut diff: u8 = 0;
-    for (x, y) in a.iter().zip(b.iter()) {
-        diff |= x ^ y;
-    }
-    diff == 0
-}
 
 /// Extract the bearer token from an `Authorization` header value, if
 /// present and well-formed (`Bearer <token>`, case-insensitive scheme).
@@ -179,15 +163,6 @@ pub async fn client_auth_layer(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn constant_time_eq_matches_only_identical_bytes() {
-        assert!(constant_time_eq(b"abc123", b"abc123"));
-        assert!(!constant_time_eq(b"abc123", b"abc124"));
-        assert!(!constant_time_eq(b"abc", b"abcd")); // length differs
-        assert!(!constant_time_eq(b"", b"x"));
-        assert!(constant_time_eq(b"", b""));
-    }
 
     #[test]
     fn bearer_parsing_is_scheme_insensitive_and_trims() {

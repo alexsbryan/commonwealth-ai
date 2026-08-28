@@ -21,8 +21,8 @@ use sovereign_core::error::Result;
 use sovereign_core::types::*;
 
 use super::drift_posture::{compute_posture, PostureStatus, DEFAULT_NARRATIVES};
-use std::sync::Arc;
 use sovereign_core::tool_manifest::DeclaredTool;
+use std::sync::Arc;
 
 /// Headline tallies pulled from the reconcile's JSON artifact — a permissive
 /// subset of its `FindingSet` (extra fields ignored so the writer can evolve).
@@ -145,11 +145,7 @@ impl CapabilityPostureTool {
     }
 
     /// The executable half of `capability_posture`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let caps_dir = match resolve_corpus_dir(&self.root, params) {
             Ok(d) => d,
             Err(e) => {

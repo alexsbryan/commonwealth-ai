@@ -38,7 +38,9 @@ use sovereign_core::types::*;
 use corpus_engine_watchers::LintResultStore;
 use corpus_engine_watchers::WatcherHeartbeat;
 
-use super::watcher_health::{apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs};
+use super::watcher_health::{
+    apply_liveness, assess, read_legacy, watcher_json, WatcherHealthInputs,
+};
 use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Maximum output bytes per error in the default (non-`full`)
@@ -118,11 +120,7 @@ impl BuildTool {
     }
 
     /// The executable half of `build`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let full = params
             .get("full")
             .and_then(|v| v.as_bool())
@@ -281,7 +279,6 @@ impl BuildTool {
     }
 
     async fn signal_now(&self) -> Option<String> {
-
         let status = self.store.latest_run().await.ok().flatten()?;
         if status.passed() && !self.store.has_stale_files().await.unwrap_or(false) {
             return None;

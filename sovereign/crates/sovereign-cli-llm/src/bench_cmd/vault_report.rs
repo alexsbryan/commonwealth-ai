@@ -1640,7 +1640,10 @@ mod tests {
         // flag surface became `#[derive(clap::Parser)]` — it renders "cannot be
         // used with" and names both flags, where the hand-rolled loop said
         // "mutually exclusive". A user-facing text change, declared, not silent.
-        assert!(err.contains("--corpus-id") && err.contains("--folder"), "got: {err}");
+        assert!(
+            err.contains("--corpus-id") && err.contains("--folder"),
+            "got: {err}"
+        );
     }
 
     #[test]
@@ -1868,8 +1871,14 @@ mod tests {
 
     #[test]
     fn mode_is_total_once_an_opts_exists() {
-        assert_eq!(parse(&["--folder", "/tmp", "--cold"]).unwrap().mode(), Mode::Cold);
-        assert_eq!(parse(&["--folder", "/tmp", "--warm"]).unwrap().mode(), Mode::Warm);
+        assert_eq!(
+            parse(&["--folder", "/tmp", "--cold"]).unwrap().mode(),
+            Mode::Cold
+        );
+        assert_eq!(
+            parse(&["--folder", "/tmp", "--warm"]).unwrap().mode(),
+            Mode::Warm
+        );
     }
 
     #[test]

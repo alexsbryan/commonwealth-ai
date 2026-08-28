@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 use std::path::{Path, PathBuf};
 
-
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::*;
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 /// Scoped filesystem tool. All operations are restricted to allowed root directories.
 pub struct FileTool {
@@ -52,11 +51,7 @@ impl FileTool {
     }
 
     /// The executable half of `file`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let action = params
             .get("action")
             .and_then(|v| v.as_str())

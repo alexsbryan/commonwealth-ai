@@ -791,7 +791,7 @@ mod tests {
         // After the gossip handler was wired for real (replacing the
         // accept-any-JSON stub), the minimal shape it accepts is a
         // full `MeshWire` payload. A test AppState has mesh_id=1 and
-        // an all-zero join_key_hash; posting a body with a different
+        // an all-zero invite_key_hash; posting a body with a different
         // mesh_id proves the auth guard fires. The full "merges
         // incoming delta" happy path is covered by the dedicated
         // tests/gossip_route.rs integration file.

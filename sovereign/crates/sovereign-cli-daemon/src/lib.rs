@@ -58,6 +58,7 @@ const DAEMON_TRACING_FILTER: &str = "sovereign_cli_daemon=info,\
      corpus_engine=info,\
      commonwealth_discovery=info,\
      commonwealth_api=info,\
+     commonwealth_core=info,\
      prefix_state=info,\
      capability=info,\
      post_stream=info,\
@@ -344,6 +345,16 @@ mod tests {
             "gate.lifecycle",
             "agentic_kq",
             "retrieval_audit",
+            // Mesh credential generation. `Mesh::gossip_authorized`'s compat
+            // arm warns from `commonwealth_core` when a peer authorizes on the
+            // legacy predicate, and `sovereign/DEFAULTS_LEDGER.md` flips that
+            // arm off on "no `gossip: legacy auth` warn fleet-wide for a week".
+            // The crate was absent from the filter until 2026-08-27, so the
+            // warn was dropped and the flip condition was unfalsifiable — it
+            // would have been satisfied by construction, on a fleet still
+            // running the arm. Measured live: a peer sending a zeroed
+            // mesh_secret produced zero log lines.
+            "commonwealth_core",
             // Distributed-inference placement: distributed-vs-local + the
             // per-device split. An operator must see this in the deployed
             // daemon, never infer it from `free`.

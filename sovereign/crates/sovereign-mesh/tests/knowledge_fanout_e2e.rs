@@ -189,9 +189,12 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         },
     );
     let mesh_a = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "fanout-test".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: members_a,
         peers: vec![],
@@ -258,9 +261,12 @@ async fn joiner_fans_out_to_peer_when_corpus_not_local() {
         },
     );
     let mesh_b = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: "fanout-test".into(),
-        join_key_hash: [0u8; 32],
+        invite_key_hash: [0u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members: members_b,
         peers: vec![],
@@ -357,9 +363,12 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     let state_a = AppState::new_with_platform_and_engine(
         id_a,
         Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id: MeshId::from_u128(1),
             name: "offline-test".into(),
-            join_key_hash: [0u8; 32],
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
             require_encryption: false,
             members: HashMap::new(),
             peers: vec![],
@@ -414,9 +423,12 @@ async fn offline_peer_is_excluded_from_fan_out_plan() {
     let state_b = AppState::new_with_platform_and_engine(
         id_b,
         Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id: MeshId::from_u128(1),
             name: "offline-test".into(),
-            join_key_hash: [0u8; 32],
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
             require_encryption: false,
             members: members_b,
             peers: vec![],
@@ -488,9 +500,12 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     let state_a = AppState::new_with_platform_and_engine(
         id_a,
         Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id: MeshId::from_u128(1),
             name: "ledger-stamp-test".into(),
-            join_key_hash: [0u8; 32],
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
             require_encryption: false,
             members: HashMap::new(),
             peers: vec![],
@@ -544,9 +559,12 @@ async fn fan_out_stamps_x_node_id_so_peer_emits_ledger() {
     let state_b = AppState::new_with_platform_and_engine(
         id_b,
         Mesh {
+            mesh_secret: [0u8; 32],
+            invite_expires_at: None,
             id: MeshId::from_u128(1),
             name: "ledger-stamp-test".into(),
-            join_key_hash: [0u8; 32],
+            invite_key_hash: [0u8; 32],
+            invite_version: 0,
             require_encryption: false,
             members: members_b,
             peers: vec![],

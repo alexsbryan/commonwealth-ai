@@ -35,9 +35,9 @@ use serde_json::json;
 
 use sovereign_contracts::frame::{Frame, FrameSchema};
 use sovereign_core::error::{Error, Result};
+use sovereign_core::tool_manifest::DeclaredTool;
 use sovereign_core::types::{StepOutput, ToolContext};
 use std::sync::Arc;
-use sovereign_core::tool_manifest::DeclaredTool;
 
 /// The nine schema-v1 sections, in contract order (SESSION_CONTINUITY §2).
 ///
@@ -667,11 +667,7 @@ impl SessionStateTool {
     }
 
     /// The executable half of `session_state`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let obj = params.as_object().ok_or_else(|| {
             Error::InvalidInput("session_state: params must be a JSON object".into())
         })?;

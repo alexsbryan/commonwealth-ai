@@ -44,11 +44,7 @@ impl GetRunOutputTool {
     }
 
     /// The executable half of `get_run_output`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        _ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, _ctx: &ToolContext) -> Result<StepOutput> {
         let run_id = params
             .get("run_id")
             .and_then(|v| v.as_i64())
@@ -72,7 +68,6 @@ impl GetRunOutputTool {
     }
 
     fn validate_extra(&self, params: &serde_json::Value) -> Result<()> {
-
         params
             .get("run_id")
             .and_then(|v| v.as_i64())

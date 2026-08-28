@@ -55,11 +55,7 @@ impl SessionReflectionTool {
     }
 
     /// The executable half of `session_reflection`.
-    async fn run(
-        &self,
-        params: &serde_json::Value,
-        ctx: &ToolContext,
-    ) -> Result<StepOutput> {
+    async fn run(&self, params: &serde_json::Value, ctx: &ToolContext) -> Result<StepOutput> {
         let task_summary = params
             .get("task_summary")
             .and_then(|v| v.as_str())

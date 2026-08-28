@@ -48,14 +48,23 @@ pub struct NodeStatusView {
     /// Track W: this node's own founder reachability (relay-home + discovery
     /// self-heal watchdog). Absent on non-iroh / older nodes → `None` → treated
     /// as not-degraded (inert), so the reachability SLI is a no-op there.
-    #[serde(default)]
-    pub founder_reachability: Option<FounderReachabilityView>,
+    ///
+    /// The alias is load-bearing, not cosmetic. The producer
+    /// (`mesh_http.rs`'s status view) renamed this from `founder_reachability`
+    /// and kept an alias for old READERS; without the mirror-image alias here,
+    /// this soak silently reads `None` from every node still emitting the old
+    /// name — and `None` means "not degraded". The one window this SLI exists
+    /// to measure, the mixed-version window, is exactly the window it would
+    /// report green through (ARCH §18.1: a check with no failing input it can
+    /// name is not a check).
+    #[serde(default, alias = "founder_reachability")]
+    pub self_reachability: Option<SelfReachabilityView>,
 }
 
-/// Minimal projection of `founder_reachability` for the soak's reachability SLI:
+/// Minimal projection of `self_reachability` for the soak's reachability SLI:
 /// is the founder's self-heal watchdog currently `degraded` (mid-recovery)?
 #[derive(Debug, Clone, Deserialize, Default)]
-pub struct FounderReachabilityView {
+pub struct SelfReachabilityView {
     #[serde(default)]
     pub degraded: bool,
     #[serde(default)]
@@ -281,7 +290,7 @@ pub fn founder_degraded_addrs(snapshots: &[NodeSnapshot]) -> Vec<String> {
     snapshots
         .iter()
         .filter_map(|s| {
-            let fr = s.status.as_ref()?.founder_reachability.as_ref()?;
+            let fr = s.status.as_ref()?.self_reachability.as_ref()?;
             fr.degraded.then(|| s.addr.clone())
         })
         .collect()
@@ -456,6 +465,37 @@ pub fn gate_slis(
 mod tests {
     use super::*;
 
+    /// The alias earns its keep on exactly one input: a node still emitting the
+    /// pre-rename field name. Without it this deserializes to `None`, which the
+    /// reachability SLI reads as "not degraded" — a green verdict from the
+    /// mixed-version window the SLI exists to measure.
+    #[test]
+    fn a_node_emitting_the_old_field_name_is_still_read() {
+        let old_name = serde_json::json!({
+            "members_total": 1,
+            "members": [],
+            "founder_reachability": { "degraded": true, "relay_homed": false, "rebuilds": 2 }
+        });
+        let view: NodeStatusView = serde_json::from_value(old_name).unwrap();
+        let reach = view
+            .self_reachability
+            .expect("a node on the pre-rename build still reports reachability");
+        assert!(reach.degraded, "and its DEGRADED state must survive the read");
+        assert_eq!(reach.rebuilds, 2);
+    }
+
+    /// The current name keeps working — an alias must add a reader, not swap it.
+    #[test]
+    fn a_node_emitting_the_current_field_name_is_still_read() {
+        let current = serde_json::json!({
+            "members_total": 1,
+            "members": [],
+            "self_reachability": { "degraded": true, "relay_homed": true, "rebuilds": 0 }
+        });
+        let view: NodeStatusView = serde_json::from_value(current).unwrap();
+        assert!(view.self_reachability.expect("present").degraded);
+    }
+
     fn view(members: &[(&str, &str, bool)], total: usize) -> NodeStatusView {
         NodeStatusView {
             members_total: total,
@@ -471,7 +511,7 @@ mod tests {
             peer_inflight_current: 0,
             peer_inflight_ceiling: 0,
             fanout_inflight_current: 0,
-            founder_reachability: None,
+            self_reachability: None,
         }
     }
     fn snap(addr: &str, v: NodeStatusView) -> NodeSnapshot {
@@ -486,7 +526,7 @@ mod tests {
     }
     fn snap_reach(addr: &str, degraded: bool) -> NodeSnapshot {
         let mut v = view(&[("n1", "online", true)], 1);
-        v.founder_reachability = Some(FounderReachabilityView {
+        v.self_reachability = Some(SelfReachabilityView {
             degraded,
             relay_homed: !degraded,
             rebuilds: 0,

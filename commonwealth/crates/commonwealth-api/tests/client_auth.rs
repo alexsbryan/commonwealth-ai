@@ -79,9 +79,12 @@ fn state_with_token(token: Option<&str>) -> AppState {
     let mut members = HashMap::new();
     members.insert(node, member(node));
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(7),
         name: "Test".into(),
-        join_key_hash: [3u8; 32],
+        invite_key_hash: [3u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

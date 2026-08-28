@@ -109,7 +109,7 @@ async fn try_resume_brings_back_persisted_mesh_and_serves_internal_http() {
     drop(mesh);
 
     // (b) HTTP listener bound: `/internal/gossip` accepts a probe
-    // with matching mesh_id + join_key_hash. We don't have direct
+    // with matching mesh_id + invite_key_hash. We don't have direct
     // access to those values via the public API, so use a softer
     // probe: hit `/status` on the client API surface (always loopback-
     // open, no auth) and assert it responds. A bound listener that

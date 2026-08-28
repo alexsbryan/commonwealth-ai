@@ -110,9 +110,12 @@ fn build_state(peer_name: &str) -> (AppState, NodeId) {
         member_with_last_seen(peer_id, peer_name, 100, "127.0.0.1:9876".parse().unwrap()),
     );
     let mesh = Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(42),
         name: "tally-e2e".into(),
-        join_key_hash: [7u8; 32],
+        invite_key_hash: [7u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

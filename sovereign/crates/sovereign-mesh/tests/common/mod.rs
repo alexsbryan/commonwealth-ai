@@ -97,7 +97,7 @@ pub fn member(id: NodeId, name: &str, addr: SocketAddr) -> MemberRecord {
 }
 
 /// Build a single-member `Mesh` rooted at `self_id`. The mesh_id is
-/// 1 and the join_key_hash is `[0x77; 32]` — neither matters for
+/// 1 and the invite_key_hash is `[0x77; 32]` — neither matters for
 /// tests that don't exercise the gossip auth boundary; for those
 /// tests, construct the mesh inline with the right values.
 pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
@@ -107,9 +107,12 @@ pub fn solo_mesh(self_id: NodeId, name: &str) -> Mesh {
         member(self_id, "self", "127.0.0.1:9742".parse().unwrap()),
     );
     Mesh {
+        mesh_secret: [0u8; 32],
+        invite_expires_at: None,
         id: MeshId::from_u128(1),
         name: name.into(),
-        join_key_hash: [0x77u8; 32],
+        invite_key_hash: [0x77u8; 32],
+        invite_version: 0,
         require_encryption: false,
         members,
         peers: vec![],

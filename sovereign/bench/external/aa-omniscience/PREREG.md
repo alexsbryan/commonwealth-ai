@@ -164,3 +164,157 @@ With a perfect selector over both pools, `OI_oracle = 2.65 + 383*q*1.1/6`:
 The forced arm's own NOT_ATTEMPTED rate — the model may decline even when told
 not to. That is not a failure of the arm, it measures how deeply the
 conservatism is baked in, and it is reported next to `q_forced` always.
+
+---
+
+# Addendum — retrieval coverage (R1)
+
+Registered 2026-08-26, **before any coverage judgment was run** and before any
+grounded arm exists. The two closed-book verdicts are in notes `1fc325b3` (G1)
+and `5e52b17b` (P1); nothing below is fitted to them.
+
+## Why measure `r` before running the arms
+
+The grounded arm costs ~3.8 h per 60 items and the gate-on/gate-off pair costs
+7.5 h. Its ceiling is set by one quantity we have not measured — **`r`, the
+fraction of the bank whose answer is actually present in what retrieval
+returns.** A full-system arm that retrieves at coverage `r`, answers at
+precision `p` on what it retrieves, and honestly abstains on the rest scores
+
+    OI_taxed = 100*( r*(2p - 0.9) - 0.1 )
+
+so the target is reachable only where `p >= (0.2/r + 0.9)/2`:
+
+| r | p needed for OI 10 | OI at p=0.8 | OI at p=0.9 | OI at p=1.0 |
+|---|---|---|---|---|
+| 0.10 | unreachable | -3.0 | -1.0 | +1.0 |
+| 0.15 | unreachable | +0.5 | +3.5 | +6.5 |
+| **0.182** | **1.00** | +2.7 | +6.4 | **+10.0** |
+| 0.20 | 0.95 | +4.0 | +8.0 | +12.0 |
+| 0.30 | 0.78 | +11.0 | +17.0 | +23.0 |
+| 0.40 | 0.70 | +18.0 | +26.0 | +34.0 |
+
+**`r = 0.182` is a hard floor, not a threshold to tune.** Below it a literally
+perfect answerer — right on every retrieved item, honestly silent on every
+other — still misses 10. That is the same shape as G1: a ceiling argument that
+costs one 30-minute measurement instead of a 7.5-hour run.
+
+## The instrument, and why the obvious one is disqualified
+
+Retrieval only, no chat slot: `chat inspect --format json` (documented to hit
+`/v1/embeddings` and nothing else, so it survives a contended host). Then each
+item's retrieved context is graded by the existing local judge on a single
+question — does this context state the gold answer? — as a two-letter template
+in the shape of `OMNISCIENCE_GRADER_TEMPLATE`, few-shot and single-letter, per
+the judge lesson in note `ece0767a`.
+
+**A string match on the gold answer is NOT the instrument and must not be used.**
+Verified on the Mentuhotep/Intef item 2026-08-26: "Herakleopolis" appears 4x in
+the top-10 as the Tenth Dynasty's capital while the fact asked for — the city
+assigned to Intef, son of Tjefi — is absent from every retrieved chunk. The grep
+scores that item covered; it is not. String presence over-counts on topical
+adjacency and under-counts on paraphrase.
+
+## Instrument validation — required before any `r` is reported (§18.4)
+
+1. **Shuffled-context negative control.** 30 (question, gold) pairs judged
+   against a DIFFERENT item's retrieved context. Bar: **>=90% NOT COVERED.**
+   This is the one that catches the judge answering from its own weights
+   instead of from the passage, which is the failure that would silently
+   manufacture coverage.
+2. **Hand-check a stratified 20** of the real judgments. Bar: **>=90% agreement
+   AND false-positive rate on the COVERED class <=10%.** Asymmetric on purpose:
+   a false positive inflates `r`, and that is the direction that wrongly
+   green-lights a 7.5-hour run.
+3. Below either bar, no `r` is reported and no arm is scheduled.
+
+## Bars
+
+Measured on the stratified 60 (`load_bank(60)`), unscoped retrieval — the
+faithful mirror of what the answer path does.
+
+- **GO** — `r >= 0.30`. Target 10 needs only `p >= 0.78`. Run the gate-on /
+  gate-off pair at full length.
+- **AMBIGUOUS** — `0.182 <= r < 0.30`. Target reachable only at `p >= 0.78`
+  rising to 1.0. Run the pair anyway, but the deliverable is the abstention
+  delta, not a leaderboard number. Decide on the per-domain table, not the
+  headline.
+- **KILL the retrieval-to-10 route** — `r < 0.182`. No precision reaches the
+  target. The answer is then a different or additional corpus — tavily,
+  stackexchange, openalex, crs_reports — not a longer run against this one.
+  **Even on a KILL, still run one gate-on/gate-off pair**: the abstention
+  benefit is the product claim and it is cheap relative to what it proves.
+
+## Registered predictions
+
+1. `r` at k=10 lands between **0.15 and 0.40**.
+2. **The sharp one — retrieval REORDERS the domains.** Closed-book, Humanities
+   was the worst stratum in the P1 probe (q_forced 0.000, 0 of 69). It will NOT
+   be the worst here, because that failure was parametric recall and retrieval
+   is precisely the lever that addresses it. Finance and Law will be worst:
+   their answers are ASC and regulatory section identifiers that live in
+   paywalled standards, not in wikipedia. If the closed-book ordering survives
+   retrieval unchanged, the corpus is not the binding constraint and this
+   whole line needs rethinking.
+3. **gate ON - gate OFF >= +15 OI points** on the same 60. The sign is not in
+   doubt. Worst-case arithmetic is far larger: if the gate-off arm converts
+   every unretrieved item into a caveated parametric guess at the measured
+   q=0.0757 (invariant `0ee9fc42`), each such item pays `2q-1 = -0.849`, and at
+   r=0.30 the two arms differ by **~52 points**. The floor is set at 15 because
+   gate-off may simply decline on some unretrieved items rather than confabulate.
+
+## Confounds, named
+
+| Confound | Effect | Handling |
+|---|---|---|
+| `--limit` is DISPLAY depth, not context-assembly depth | `r` overstates what the answer path was actually handed | report at k=5 and k=10; **k=5 is operative**, k=10 is the ceiling. The mapping to assembled context is UNVERIFIED and is stated as such |
+| Entailment != usable | context may state the fact in a form the answerer cannot extract | `r` is an upper bound on achievable `r*p`, never a prediction of it |
+| The 60 is harder than the bank | naked acc 8.3% vs 11.5% full-600 | grounded numbers off it read pessimistic; compare to the 60-item anchor (oi_taxed -23.33), never to -18.55 |
+| Self-judging | same weights answer and grade | `judge_is_official: false`, as every other arm |
+
+## Reported regardless
+
+Per-domain `r`, and **the count of items where the gold string appears in the
+retrieved context but the judge rules NOT COVERED** — that number is the size of
+the trap the grep instrument falls into, and it is worth publishing whichever
+way the headline goes.
+
+## Amendments to R1 — registered 2026-08-26, after an n=6 instrument smoke, before any real `r`
+
+Both amendments came out of a 6-item smoke run whose only purpose was to
+exercise the instrument. No coverage number from that smoke is reported and
+none is fitted to below. Both changes make the bar HARDER, which is the only
+direction an amendment may move after a pre-registration is written.
+
+**A1 — the validation was one-sided, and a positive control is now required.**
+The shuffled-context control catches a judge answering from its own weights
+(a false COVERED). It cannot catch the opposite failure: a judge that always
+answers B passes it at 100% and reports `r = 0.0`, which is
+indistinguishable from a corpus that genuinely holds nothing. The smoke
+returned exactly that shape — control 3/3 NOT COVERED, r = 0.0 on all six —
+and it was not possible to tell the two apart from the summary alone. Added:
+a **positive control** that plants the fact mid-passage in the item's own
+retrieved context and requires the judge to find it, **bar >=0.90 COVERED**,
+placed mid-passage rather than at the front so recency cannot carry it.
+`summarize` now refuses to emit `r` unless BOTH controls pass.
+
+**A2 — the operative cut is one corpus, because the unscoped cut is a host
+artifact.** R1 registered unscoped retrieval as primary, on the reasoning that
+it mirrors the answer path. The smoke shows what that actually retrieves on
+this machine: for the Law item on OSHA's cadmium rulemaking, the top-10 chunks
+are **Rust unit tests from this repository** (`score_wrong_specialization_returns_none`,
+`requirements_default_is_local_only`). This host carries ~40 installed corpora,
+most of them dev fixtures and code indexes that no deployment would have. An
+`r` measured across them prices this laptop, not the product.
+
+The operative number is therefore **`--scope wikipedia`**, and the registered
+unscoped number is still computed and published beside it as
+`r_registered_unscoped_k10`. This is a declared substitution under §18.3, not
+a quiet swap: both appear in every summary, and a reader can see the gap.
+
+The same smoke also re-condemns the grep instrument from a second direction.
+Both of its two `gold_string_present` hits were noise — gold `6` matching a
+digit inside Rust source, and gold `;` matching semicolons. A single-character
+gold answer matches essentially any passage. The judged verdict on both was
+NOT COVERED, correctly.
+
