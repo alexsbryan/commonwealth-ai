@@ -79,11 +79,19 @@ const MAX_PARSE_BYTES: usize = 1024 * 1024;
 /// measurement that earns them a place. Adding an id here without one
 /// is exactly the move this list exists to prevent (ARCH §18.1: a gate
 /// nobody has watched work is not a gate).
-const PROVEN_LANGUAGES: &[&str] = &["rust", "go"];
+const PROVEN_LANGUAGES: &[&str] = &["rust", "go", "typescript"];
+
+/// Languages where an empty filter result must DECLINE rather than fall
+/// through. See [`SyntaxOracle::keep`] — this is measured per language
+/// because the two answers disagree, not as a matter of taste.
+const DECLINE_WHEN_EMPTIED: &[&str] = &["typescript"];
 
 /// A parsed buffer, ready to judge candidate sites.
 pub struct SyntaxOracle {
     tree: tree_sitter::Tree,
+    /// Whether emptying the site set means "decline" here. Decided at
+    /// parse time from the language id, so `keep` stays language-blind.
+    decline_when_emptied: bool,
 }
 
 impl SyntaxOracle {
@@ -109,6 +117,7 @@ impl SyntaxOracle {
         parser.set_language(&language).ok()?;
         Some(Self {
             tree: parser.parse(text, None)?,
+            decline_when_emptied: DECLINE_WHEN_EMPTIED.contains(&cfg.id),
         })
     }
 
@@ -141,10 +150,32 @@ impl SyntaxOracle {
         if exemplars.is_empty() {
             return sites;
         }
-        sites
-            .into_iter()
+        let kept: Vec<usize> = sites
+            .iter()
+            .copied()
             .filter(|&o| exemplars.iter().any(|e| *e == self.kinds_at(o + locus)))
-            .collect()
+            .collect();
+        // EMPTYING THE SET IS NOT THE SAME AS FILTERING IT. An empty
+        // return hands the case to the pair fallback
+        // (`next_edit::predict_filtered`), which re-induces a different,
+        // anchored rule — and that rule can be wrong. Whether that
+        // fallback is an improvement is a property of the LANGUAGE, and
+        // the two we serve disagree, so this is a measurement rather
+        // than a preference (react-ts and main golden banks, 2026-08-28):
+        //
+        //   TypeScript  filter alone   precision 45.5%, useful-fire 41.2%
+        //               declining      precision 41.9%, useful-fire 51.0%
+        //               -> 88 junk hunks removed for 2 good ones, 44:1,
+        //                  and it is what makes TS shippable at all.
+        //   Rust/Go     filter alone   precision 47.0%, useful-fire 31.4%
+        //               declining      precision 44.0%, useful-fire 36.1%
+        //               -> precision -3.0 pts (paired 95% CI -6.8..-0.2)
+        //                  and wrong-fire +4.1. The fallback EARNS its
+        //                  place there, so Rust and Go keep it.
+        if kept.is_empty() && self.decline_when_emptied {
+            return sites;
+        }
+        kept
     }
 
     /// Kinds at the occurrences of `replace` — the edits the user has
@@ -240,27 +271,64 @@ mod tests {
     /// `.tsx` is a different grammar from `.ts` (corpus-engine carries
     /// the split). A JSX buffer must parse well enough that a match
     /// after the JSX is still judged in code.
-    /// TypeScript has a grammar and is still DECLINED, because the
-    /// filter measured worse there — useful-fire 52.0% → 41.2% and
-    /// wrong-fire 6.2% → 9.7% on the React/TS bank. Having a parser is
-    /// not evidence that using it helps.
+    /// Having a grammar is still not evidence that filtering with it
+    /// helps — that is what this test defends, and the membership below
+    /// is a measurement rather than a list of what parses.
     ///
-    /// This is the test that stops someone widening [`PROVEN_LANGUAGES`]
-    /// because "we already parse tsx". We do; it did not help.
+    /// TypeScript was DECLINED until 2026-08-28 on real evidence: the
+    /// filter alone cost useful-fire 52.0% → 41.2%. It is admitted now
+    /// only in company with [`DECLINE_WHEN_EMPTIED`], which recovers
+    /// that to 51.0% while keeping +3.0 pts of hunk-precision (paired
+    /// 95% CI +1.0..+6.7 over 2,000 bootstraps of the react-ts bank);
+    /// 88 junk hunks leave the queue for 2 good ones. Widening the list
+    /// WITHOUT that pairing reverts to the number that blocked it.
+    ///
+    /// Python still has a grammar and still no measurement, so it stays
+    /// out — the case this test exists to stop.
     #[test]
     fn a_grammar_we_have_is_not_a_language_we_filter() {
         let tsx = "const Row = () => <div className=\"x\">y</div>;\n\
                    const beta = 1;\n\
                    const alpha = 2;\n";
         assert!(
-            SyntaxOracle::parse("Row.tsx", tsx).is_none(),
-            "typescript is parseable but unproven — see PROVEN_LANGUAGES"
+            SyntaxOracle::parse("x.py", "alpha = 1\n").is_none(),
+            "python is parseable but unmeasured — see PROVEN_LANGUAGES"
         );
-        assert!(SyntaxOracle::parse("x.ts", tsx).is_none());
-        assert!(SyntaxOracle::parse("x.py", "alpha = 1\n").is_none());
-        // ...while the proven two are admitted.
+        // ...while the measured three are admitted.
+        assert!(SyntaxOracle::parse("Row.tsx", tsx).is_some());
+        assert!(SyntaxOracle::parse("x.ts", tsx).is_some());
         assert!(SyntaxOracle::parse("x.rs", "fn a() { let alpha = 1; }\n").is_some());
         assert!(SyntaxOracle::parse("x.go", "func a() { alpha := 1 }\n").is_some());
+    }
+
+    /// The guard that makes TypeScript shippable, and its absence on the
+    /// languages that measured better without it. A filter that removes
+    /// every site must DECLINE on TS (returning the input) and must NOT
+    /// on Rust — emptying the set there hands the case to the pair lane,
+    /// which earns its place (+4.7 useful-fire).
+    #[test]
+    fn emptying_the_set_declines_on_typescript_and_does_not_on_rust() {
+        // `beta` is the edit the user already made (the exemplar, in
+        // code); the only remaining `alpha` is in a comment, so kind
+        // agreement rejects it and the set comes back EMPTY.
+        let r = rule("alpha", "beta");
+
+        let ts_body = "const beta = 1;\n// alpha\n";
+        let ts = SyntaxOracle::parse("x.ts", ts_body).expect("ts grammar");
+        let ts_site = vec![ts_body.find("alpha").unwrap()];
+        assert_eq!(
+            ts.keep(ts_body, &r, ts_site.clone()),
+            ts_site,
+            "TS must decline rather than hand the case to the pair lane"
+        );
+
+        let rs_body = "fn a() { let beta = 1; }\n// alpha\n";
+        let rs = SyntaxOracle::parse("x.rs", rs_body).expect("rust grammar");
+        let rs_site = vec![rs_body.find("alpha").unwrap()];
+        assert!(
+            rs.keep(rs_body, &r, rs_site).is_empty(),
+            "rust keeps the pair-lane fallthrough it measured better with"
+        );
     }
 
     #[test]
