@@ -107,6 +107,8 @@ sovereign/bench/calibration/step3/*.jsonl
 research/deep-research/drb/overall-derivation/flights*/**/*.jsonl
 research/deep-research/drb/overall-derivation/inputs/perplexity-*.jsonl
 
+research/clean-room
+
 # The DRB reproduction fixture: 69.7 MB, and re-downloadable from the pinned
 # upstream commit named in research/deep-research/drb/README.md "Provenance".
 # Untracked on SIZE, not licence -- upstream is Apache-2.0, so redistribution
