@@ -385,12 +385,16 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
     }
 
     // Under a guest link the local `SetupConfig` names THIS machine's models,
-    // which the lending node does not serve. Reading them would put a model id
-    // on the wire that the host refuses — and the refusal names *scope*, which
-    // sends the guest hunting in exactly the wrong place. The host's own
-    // `/v1/models`, already filtered to the granted ids, is the only honest
-    // source here.
-    let guest = globals.bearer.is_some();
+    // and the guest wants the LENT one. Reading config here would name a model
+    // the turn was not borrowed for.
+    //
+    // Falling through to `/v1/models` is now the honest source in a second
+    // sense: since 2026-08-28 that listing is our OWN daemon's, and it carries
+    // the granted ids alongside local slots (`lender_manifest`). So the id
+    // this resolves to is one the local daemon can actually route — which is
+    // the whole point, because the turn runs there and only the completion
+    // crosses.
+    let guest = globals.guest_link_active;
 
     // (b) SetupConfig filename stems. The daemon loads
     //     `config.models.embed` and advertises it on `/v1/models`

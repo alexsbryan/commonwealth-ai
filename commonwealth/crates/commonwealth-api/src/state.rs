@@ -422,6 +422,19 @@ pub trait LocalInferenceService: Send + Sync {
     async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
         Vec::new()
     }
+
+    /// Model ids reachable through a GUEST LINK this node accepted, with the
+    /// lending node's display name.
+    ///
+    /// Same contract as [`Self::peer_manifests`] and the same reason: name
+    /// resolution routes these ids, so the listing must carry them or it lies
+    /// by omission. Kept SEPARATE from the peer list because a lender is not
+    /// a mesh member, and `advertised_by` must not say it is.
+    ///
+    /// Backed by `InferenceProvider::lender_manifest`.
+    async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
+        None
+    }
 }
 
 /// Worker side of the distributed-inference auto-warm orchestration. When a host

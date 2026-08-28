@@ -144,6 +144,14 @@ impl ProviderFactory for LlamaCppFactory {
                 mesh_provider.set_slot_aliases(map);
             }
         }
+        // A guest link this node has accepted lets a granted model id resolve
+        // to the LENDING node, while the turn itself stays here. Wired from
+        // the data dir because that is where `svrn mesh use` writes
+        // `guest.json`; a node that never ran it gets `NoGuestLenders` and
+        // pays nothing. See `sovereign_mesh::guest_lender`.
+        mesh_provider.set_guest_source(std::sync::Arc::new(
+            sovereign_mesh::guest_lender::StoredGuestLink::new(cfg.data.dir.clone()),
+        ));
         // Route this node's primary turns into the mesh-hosted shared model, if
         // one is configured (SOVEREIGN_SHARED_MODEL_ID, from [shared_model]
         // model_id). Survives reload — the env is set once at daemon entry.

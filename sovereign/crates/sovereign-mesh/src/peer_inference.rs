@@ -468,6 +468,15 @@ pub struct MeshInferenceProvider {
     /// candidates while quarantined; one successful response clears
     /// the state. See [`peer_health`] for the policy.
     peer_health: Arc<commonwealth_core::peer_health::PeerHealthTracker>,
+    /// "Do I hold a live guest grant for this model id?"
+    ///
+    /// Defaults to [`NoGuestLenders`] — almost every node has no link, and a
+    /// node that never ran `svrn mesh use` must not pay a file read per
+    /// resolution. The daemon swaps in [`StoredGuestLink`] at startup.
+    ///
+    /// [`NoGuestLenders`]: crate::guest_lender::NoGuestLenders
+    /// [`StoredGuestLink`]: crate::guest_lender::StoredGuestLink
+    guest: std::sync::RwLock<Arc<dyn crate::guest_lender::GuestLenderSource>>,
     /// Peers that answered `yielded_to_local` within their stated
     /// `retry_after_secs`. Excluded from candidacy — before the manifest
     /// fetch — for that window, so a peer serving its own user costs this
@@ -568,6 +577,28 @@ impl MeshInferenceProvider {
     /// to.
     pub fn new(local: Arc<dyn InferenceProvider>, mesh: Arc<EmbeddedDaemon>) -> Self {
         Self::with_peer_source(local, mesh as Arc<dyn PeerEndpointSource>)
+    }
+
+    /// Install the source that answers "do I hold a live guest grant for this
+    /// model id?".
+    ///
+    /// A SETTER, not a constructor argument, for the same reason
+    /// `set_shared_model_id` and `set_slot_aliases` are: the provider is
+    /// already behind an `Arc` by the time the daemon knows its data dir, and
+    /// it is rebuilt on every hot reload. The default is
+    /// [`NoGuestLenders`] — almost every node has no link, and a node that
+    /// never ran `svrn mesh use` must not pay a file read per resolution.
+    ///
+    /// [`NoGuestLenders`]: crate::guest_lender::NoGuestLenders
+    /// The current source, cloned out. Callers must hold the `Arc`, not the
+    /// lock guard: a `std::sync::RwLock` guard is not `Send`, and every use
+    /// of the source is `await`ed.
+    fn guest_source(&self) -> Arc<dyn crate::guest_lender::GuestLenderSource> {
+        self.guest.read().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    pub fn set_guest_source(&self, guest: Arc<dyn crate::guest_lender::GuestLenderSource>) {
+        *self.guest.write().unwrap_or_else(|e| e.into_inner()) = guest;
     }
 
     /// Rebuild `self_manifest` against the current state of the local
@@ -671,6 +702,8 @@ impl MeshInferenceProvider {
             local_observations: Arc::new(RwLock::new(local_obs)),
             extension_registry: Arc::new(RwLock::new(ExtensionRegistry::new())),
             peer_health: Arc::new(commonwealth_core::peer_health::PeerHealthTracker::new()),
+            guest: std::sync::RwLock::new(Arc::new(crate::guest_lender::NoGuestLenders)
+                as Arc<dyn crate::guest_lender::GuestLenderSource>),
             yield_backoff: Arc::new(crate::yield_backoff::YieldBackoff::new()),
             local_inflight_by_model: Arc::new(std::sync::Mutex::new(
                 std::collections::HashMap::new(),
@@ -1816,6 +1849,32 @@ impl MeshInferenceProvider {
             };
         }
 
+        // A guest link is a PIN, and it is consulted here — after local,
+        // before any peer scoring.
+        //
+        // AFTER local, because the same id served from our own slot costs no
+        // round-trip and spends none of a bounded grant, and it is the SAME
+        // named model either way, so this is not a substitution (§18.3).
+        //
+        // BEFORE peers, because the operator explicitly ran `svrn mesh use`
+        // and named this lender, while peer candidates are automatic. Explicit
+        // beats scored. It is logged at INFO for exactly that reason: on a
+        // node that is ALSO a mesh member, a link silently redirects traffic
+        // the mesh would have served itself, and a redirect nobody can see is
+        // the kind of thing that gets debugged twice (§9.1).
+        if !local_has {
+            let guest = self.guest_source();
+            if let Some(lender) = guest.lender_for(model_id).await {
+                tracing::info!(
+                    model = %model_id,
+                    lender = %lender.display,
+                    "mesh-inference: serving a named model from a GUEST LINK — the \
+                     turn stays local and only the completion leaves this node"
+                );
+                return NamedModelLocation::Lender(lender);
+            }
+        }
+
         // First pass — honour the manifest cache. Normal traffic
         // gets the cheap path (no extra round-trips).
         let mut peer_candidates = self.gather_peer_candidates(model_id, false).await;
@@ -2240,7 +2299,7 @@ impl MeshInferenceProvider {
             //
             // A spent budget is a definite fact about this request's history.
             // Privacy-by-default is an absence. Report the fact first.
-            NamedModelLocation::Peer(..) if !may_forward => {
+            NamedModelLocation::Peer(..) | NamedModelLocation::Lender(..) if !may_forward => {
                 let local_has = self
                     .self_manifest
                     .load()
@@ -2265,7 +2324,13 @@ impl MeshInferenceProvider {
             }
             // The privacy arm is SECOND on purpose (see above): a spent budget
             // outranks an unstated privacy field as an explanation.
-            NamedModelLocation::Peer(..) if !privacy_permits_peer => {
+            // `Lender` is here for the same reason `Peer` is, and the reason is
+            // stronger: `local_only` must not cross to a node that is not even a
+            // mesh member. A guest link is an explicit act by the operator, but
+            // it is not consent for THIS request's envelope.
+            NamedModelLocation::Peer(..) | NamedModelLocation::Lender(..)
+                if !privacy_permits_peer =>
+            {
                 let local_has = self
                     .self_manifest
                     .load()
@@ -2297,6 +2362,10 @@ impl MeshInferenceProvider {
             NamedModelLocation::Peer(peer, cand, _) => Verdict::NamedPeer {
                 peer: peer.name.clone(),
                 model_id: cand.model_id.clone(),
+            },
+            NamedModelLocation::Lender(l) => Verdict::NamedLender {
+                lender: l.display.clone(),
+                model_id: model_id.to_string(),
             },
             NamedModelLocation::Unknown(_) => Verdict::NamedUnknown {
                 model_id: model_id.to_string(),
@@ -2340,6 +2409,18 @@ impl MeshInferenceProvider {
                     Ok(plan(vec![RouteDecision::LocalNamed {
                         attribution: model_id,
                         guard,
+                    }]))
+                }
+                NamedModelLocation::Lender(lender) => {
+                    tracing::info!(
+                        lender = %lender.display,
+                        model = %model_id,
+                        soft,
+                        "mesh-inference: routing to a GUEST LENDER by model name"
+                    );
+                    Ok(plan(vec![RouteDecision::Lender {
+                        lender,
+                        model_id: model_id.clone(),
                     }]))
                 }
                 NamedModelLocation::Peer(peer, peer_cand, local_alt) => {
@@ -2670,6 +2751,18 @@ enum RouteDecision {
         attribution: String,
         guard: LocalInflightGuard,
     },
+    /// Serve via a node this one holds a GUEST GRANT with. One URL, no
+    /// failover, and no fallback to a different model: a lender is a pin, so
+    /// if it cannot serve, the caller is told rather than quietly given this
+    /// node's own model (§18.3).
+    Lender {
+        lender: crate::guest_lender::GuestLender,
+        /// The REAL model id, sent on the wire. Not optional the way the peer
+        /// route's `pinned_model_id` is: the lender's scope check matches on
+        /// the model NAME, so an unnamed request is refused as
+        /// `model_not_granted` no matter how live the grant is.
+        model_id: String,
+    },
     /// Serve via peer; iterate `peer.base_urls` and apply
     /// `disposition` if every URL fails.
     Peer {
@@ -2709,6 +2802,15 @@ enum NamedModelLocation {
     /// says whether OURS does too — see [`LocalAlternative`], which
     /// decides what a peer failure is allowed to mean.
     Peer(PeerInferenceEndpoint, ModelCandidate, LocalAlternative),
+    /// A guest link THIS node holds names this model id, so the completion
+    /// goes to the lending node while the turn stays here.
+    ///
+    /// Not a scoring outcome. `Peer` is chosen by weighing candidates;
+    /// this is a PIN — the operator ran `svrn mesh use` and said which
+    /// lender. It therefore beats peer selection, and is glassboxed at the
+    /// resolution site because it redirects traffic a mesh would otherwise
+    /// have served itself.
+    Lender(crate::guest_lender::GuestLender),
     /// This node will not dispatch the id — for one of
     /// [`NamedUnknownReason`]'s reasons, only ONE of which is
     /// "the mesh does not have it".
@@ -2874,6 +2976,15 @@ fn pinned_request<'a>(
 /// 2026-08-06, where four concurrent peer requests serialized to
 /// 6.41 s with `peer_inflight_current` never leaving 0. `None`
 /// therefore means "we do not know who we are", never "don't bother".
+/// Context window assumed for a lending node.
+///
+/// A guest grant advertises no window, and `/v1/models` under a bearer does
+/// not carry one. Matching `PEER_CONTEXT` keeps ONE number for "a remote
+/// Sovereign node we cannot interrogate" instead of inventing a second
+/// (§10.6). Wrong only conservatively: a smaller assumed window truncates
+/// earlier, it never overruns the lender.
+const LENDER_CONTEXT: u32 = 32_768;
+
 fn provider_for_peer(
     peer: &PeerInferenceEndpoint,
     url: &str,
@@ -2937,6 +3048,54 @@ impl InferenceProvider for MeshInferenceProvider {
         for (attempt_index, step) in steps.into_iter().enumerate() {
             let attempt_index = attempt_index as u32;
             match step {
+                RouteDecision::Lender { lender, model_id } => {
+                    // The real model id on the wire, and NO `X-Node-Id`. Both
+                    // differ from `provider_for_peer` deliberately — see the
+                    // `crate::guest_lender` module docs. A placeholder id
+                    // resolves to nobody on the lender AND cannot satisfy its
+                    // scope check, which matches on the model NAME; a node
+                    // stamp would run the lender's PEER admission on something
+                    // that is not a peer, and mis-attribute it in their tally.
+                    let rp = RemoteApiProvider::with_client_and_bearer(
+                        &lender.base_url,
+                        // The wrapper's OWN pooled client, not a fresh one per
+                        // request: a new `reqwest::Client` builds a new
+                        // connection pool and throws away keep-alive, which on
+                        // a tunnelled route costs a full QUIC round-trip every
+                        // turn. It is also two fewer egress construction sites
+                        // for the F26 census to have to reason about.
+                        self.http.clone(),
+                        lender.bearer.clone(),
+                        &model_id,
+                        LENDER_CONTEXT,
+                    );
+                    let serve_request = pinned_request(request, Some(model_id.as_str()));
+                    match rp.complete(serve_request.as_ref()).await {
+                        Ok(mut resp) => {
+                            resp.model_id = model_id.clone();
+                            return Ok(resp);
+                        }
+                        Err(e) => {
+                            // Any refusal invalidates the cached scope: the
+                            // grant may have expired, been revoked, or died
+                            // with the lender's process (its store is RAM
+                            // only). Re-resolving is cheap; continuing to
+                            // claim the model is reachable is not.
+                            self.guest_source().invalidate().await;
+                            // No failover, and no local substitute. The caller
+                            // named a model this node does not have and
+                            // explicitly borrowed; serving something else is
+                            // the substitution this surface exists to refuse.
+                            return Err(sovereign_core::error::Error::Routing(format!(
+                                "the guest link for {} could not serve '{}': {}. The grant \
+                                 may have expired, been revoked, or the lending node may \
+                                 have restarted (grants are held in memory). Nothing was \
+                                 served in its place.",
+                                lender.display, model_id, e
+                            )));
+                        }
+                    }
+                }
                 RouteDecision::LocalNamed { attribution, guard } => {
                     return self
                         .complete_named_locally(
@@ -3177,6 +3336,51 @@ impl InferenceProvider for MeshInferenceProvider {
         for (attempt_index, step) in steps.into_iter().enumerate() {
             let attempt_index = attempt_index as u32;
             match step {
+                RouteDecision::Lender { lender, model_id } => {
+                    // The real model id on the wire, and NO `X-Node-Id`. Both
+                    // differ from `provider_for_peer` deliberately — see the
+                    // `crate::guest_lender` module docs. A placeholder id
+                    // resolves to nobody on the lender AND cannot satisfy its
+                    // scope check, which matches on the model NAME; a node
+                    // stamp would run the lender's PEER admission on something
+                    // that is not a peer, and mis-attribute it in their tally.
+                    let rp = RemoteApiProvider::with_client_and_bearer(
+                        &lender.base_url,
+                        // The wrapper's OWN pooled client, not a fresh one per
+                        // request: a new `reqwest::Client` builds a new
+                        // connection pool and throws away keep-alive, which on
+                        // a tunnelled route costs a full QUIC round-trip every
+                        // turn. It is also two fewer egress construction sites
+                        // for the F26 census to have to reason about.
+                        self.http.clone(),
+                        lender.bearer.clone(),
+                        &model_id,
+                        LENDER_CONTEXT,
+                    );
+                    let serve_request = pinned_request(request, Some(model_id.as_str()));
+                    match rp.complete_stream_with_finish(serve_request.as_ref()).await {
+                        Ok(stream) => return Ok((stream, model_id)),
+                        Err(e) => {
+                            // Any refusal invalidates the cached scope: the
+                            // grant may have expired, been revoked, or died
+                            // with the lender's process (its store is RAM
+                            // only). Re-resolving is cheap; continuing to
+                            // claim the model is reachable is not.
+                            self.guest_source().invalidate().await;
+                            // No failover, and no local substitute. The caller
+                            // named a model this node does not have and
+                            // explicitly borrowed; serving something else is
+                            // the substitution this surface exists to refuse.
+                            return Err(sovereign_core::error::Error::Routing(format!(
+                                "the guest link for {} could not serve '{}': {}. The grant \
+                                 may have expired, been revoked, or the lending node may \
+                                 have restarted (grants are held in memory). Nothing was \
+                                 served in its place.",
+                                lender.display, model_id, e
+                            )));
+                        }
+                    }
+                }
                 RouteDecision::LocalNamed { attribution, guard } => {
                     let stream = self.local.complete_stream_with_finish(request).await?;
                     let observed: Pin<Box<dyn Stream<Item = StreamFrame> + Send>> =
@@ -3453,6 +3657,12 @@ impl InferenceProvider for MeshInferenceProvider {
     /// for why the two must not drift.
     async fn peer_manifests(&self) -> Vec<(String, ProviderManifest)> {
         self.reachable_peer_manifests().await
+    }
+
+    /// Same source `locate_named_model` consults, so the listing and the
+    /// routing cannot disagree about what a guest link buys.
+    async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
+        self.guest_source().granted_models().await
     }
 
     fn effective_context_size(&self) -> Option<u32> {

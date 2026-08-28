@@ -648,6 +648,24 @@ pub(crate) fn mock_router(state: AppState) -> Router {
     client_router(state).layer(from_fn(inject))
 }
 
+/// [`mock_router`] for a named surface. Same loopback `ConnectInfo`
+/// injection; the surface decides both the auth posture and the route set,
+/// so a test can ask "is this route MOUNTED here" separately from "would
+/// auth admit me" — 404 and 401 are different answers and a test that
+/// cannot tell them apart proves nothing.
+#[cfg(test)]
+pub(crate) fn mock_router_for(state: AppState, surface: ClientSurface) -> Router {
+    use axum::extract::{ConnectInfo, Request};
+    use axum::middleware::{from_fn, Next};
+    async fn inject(mut req: Request, next: Next) -> axum::response::Response {
+        req.extensions_mut().insert(ConnectInfo(
+            "127.0.0.1:12345".parse::<SocketAddr>().unwrap(),
+        ));
+        next.run(req).await
+    }
+    client_router_for(state, surface).layer(from_fn(inject))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -984,37 +1002,27 @@ mod tests {
     /// arrives wearing the acceptor's loopback address, so `client_auth`
     /// admits it before reading anything. The peer bind serves a router
     /// where the route does not exist.
+    ///
+    /// Each surface is driven with a credential it ACCEPTS, so the only
+    /// thing left to observe is whether the route is mounted. Asserting
+    /// 404 through a refusal would prove nothing — a 401 also is not 200.
     #[tokio::test]
     async fn the_peer_and_guest_surfaces_do_not_serve_the_operator_only_routes() {
-        for (surface, name) in [
-            (ClientSurface::Peer, "peer"),
-            (ClientSurface::Guest, "guest"),
-        ] {
-            for path in [
-                "/internal/inference/warmup",
-                "/internal/guest/grant",
-                "/internal/guest/grant/revoke",
-            ] {
-                let response = client_router_for(test_app_state(), surface)
-                    .oneshot(
-                        Request::post(path)
-                            .header("content-type", "application/json")
-                            .body(Body::from("{}"))
-                            .unwrap(),
-                    )
-                    .await
-                    .unwrap();
-                assert_eq!(
-                    response.status(),
-                    StatusCode::NOT_FOUND,
-                    "{name} surface must not serve {path}"
-                );
-            }
+        const OPERATOR_ONLY: &[&str] = &[
+            "/internal/inference/warmup",
+            "/internal/guest/grant",
+            "/internal/guest/grant/revoke",
+        ];
+        const TOKEN: &str = "deadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00ddeadbeefcafef00d";
 
-            let response = client_router_for(test_app_state(), surface)
+        // `Peer` trusts a loopback caller — a member's key was already proved
+        // at the QUIC handshake — so the injected ConnectInfo admits us.
+        for path in OPERATOR_ONLY {
+            let response = mock_router_for(test_app_state(), ClientSurface::Peer)
                 .oneshot(
-                    Request::get("/internal/guest/grant/list")
-                        .body(Body::empty())
+                    Request::post(*path)
+                        .header("content-type", "application/json")
+                        .body(Body::from("{}"))
                         .unwrap(),
                 )
                 .await
@@ -1022,9 +1030,47 @@ mod tests {
             assert_eq!(
                 response.status(),
                 StatusCode::NOT_FOUND,
-                "{name} surface must not serve the grant list"
+                "peer surface must not serve {path}"
             );
         }
+
+        // `Guest` does not trust loopback, so it needs the daemon token to get
+        // past auth. Once past it, the same routes are simply absent.
+        for path in OPERATOR_ONLY {
+            let state = test_app_state();
+            state.install_client_token(Some(TOKEN.into()));
+            let response = mock_router_for(state, ClientSurface::Guest)
+                .oneshot(
+                    Request::post(*path)
+                        .header("content-type", "application/json")
+                        .header(axum::http::header::AUTHORIZATION, format!("Bearer {TOKEN}"))
+                        .body(Body::from("{}"))
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(
+                response.status(),
+                StatusCode::NOT_FOUND,
+                "guest surface must not serve {path}"
+            );
+        }
+
+        // And the control: the SAME request on the operator surface is served,
+        // so the 404s above are the route set changing and not a broken probe.
+        let response = mock_router_for(test_app_state(), ClientSurface::Operator)
+            .oneshot(
+                Request::get("/internal/guest/grant/list")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            response.status(),
+            StatusCode::OK,
+            "the operator surface must still serve what the others refuse"
+        );
     }
 
     #[tokio::test]

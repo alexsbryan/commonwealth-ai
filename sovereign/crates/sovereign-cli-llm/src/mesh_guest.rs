@@ -526,9 +526,19 @@ pub(crate) async fn cmd_grant(args: &[String]) -> i32 {
         }
     }
     println!(
-        "  Expires:  in {} (unix {expires_at_secs})",
+        "  Expires:  in {} (unix {expires_at_secs}), or when this daemon restarts",
         human_duration(expires_at_secs.saturating_sub(now))
     );
+    // Grants live in RAM by design (`commonwealth_knowledge::guest_grant`,
+    // "In memory, and that is deliberate"): restart-survival would cost a
+    // revocation denylist. That is the right trade, but printing only the TTL
+    // promises a window the daemon does not actually guarantee — a link minted
+    // at 08:58 died at 09:14 to an unrelated restart and the guest saw a bare
+    // 401, which reads as a broken credential rather than a dead one
+    // (2026-08-28, live bar 3.2). Say it here, where the operator is deciding
+    // what to promise someone.
+    println!("            (grants are held in memory — a daemon restart drops every");
+    println!("            outstanding grant, and the holder then gets a 401)");
     println!();
     println!("Send them this, and have them run:");
     println!();
@@ -741,7 +751,11 @@ pub(crate) async fn cmd_use(args: &[String]) -> i32 {
                     l.summary.as_deref().unwrap_or("(not stated)")
                 );
                 match l.remaining_secs(now) {
-                    Some(rem) => println!("  Expires:  in {}", human_duration(rem)),
+                    Some(rem) => {
+                        println!("  Expires:  in {}", human_duration(rem));
+                        println!("            (or sooner — the issuing daemon holds grants in");
+                        println!("            memory, so its restart ends this link early)");
+                    }
                     None => println!("  Expires:  EXPIRED — `svrn mesh use --forget` to clear it"),
                 }
                 println!("  Stored:   {}", guest_link::path().display());

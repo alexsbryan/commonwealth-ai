@@ -32,9 +32,12 @@ fn usage() -> ! {
     eprintln!(
         "usage: dial_probe --dial <string> [--alpn client|guest|rpc|internal] \\\n\
         \x20                 [--path /v1/models] [--bearer <token>] [--key <64-hex>]\n\
+        \x20                 [--body <json>]\n\
         \n\
         --alpn defaults to `client`. --key defaults to a fresh random identity\n\
-        (a stranger). Relay posture comes from this host's [iroh] config."
+        (a stranger). --body makes it a POST, which is what the scope bars on\n\
+        /v1/chat/completions need. Relay posture comes from this host's [iroh]\n\
+        config."
     );
     std::process::exit(2)
 }
@@ -47,6 +50,7 @@ async fn main() {
     let mut path = "/v1/models".to_string();
     let mut bearer: Option<String> = None;
     let mut key_hex: Option<String> = None;
+    let mut body: Option<String> = None;
     let mut i = 0;
     while i < args.len() {
         let take = |i: &mut usize| -> String {
@@ -59,6 +63,7 @@ async fn main() {
             "--path" => path = take(&mut i),
             "--bearer" => bearer = Some(take(&mut i)),
             "--key" => key_hex = Some(take(&mut i)),
+            "--body" => body = Some(take(&mut i)),
             "-h" | "--help" => usage(),
             other => {
                 eprintln!("unknown arg: {other}");
@@ -103,6 +108,10 @@ async fn main() {
     println!("dialing as: {who}");
     println!("  pubkey:   {}", hex::encode(secret.public().as_bytes()));
     println!("  alpn:     {}", String::from_utf8_lossy(alpn));
+    println!(
+        "  method:   {}",
+        if body.is_some() { "POST" } else { "GET" }
+    );
     println!("  path:     {path}");
     println!(
         "  bearer:   {}",
@@ -139,9 +148,20 @@ async fn main() {
         }
     };
 
-    let mut req = reqwest::Client::new()
-        .get(format!("http://{}{path}", bridge.local_addr()))
-        .timeout(Duration::from_secs(20));
+    let url = format!("http://{}{path}", bridge.local_addr());
+    let client = reqwest::Client::new();
+    // `--body` selects POST. The interesting scope bars are POST routes
+    // (`/v1/chat/completions`), and a GET against one is refused by the auth
+    // layer BEFORE routing — so it cannot tell an out-of-scope refusal apart
+    // from a method mismatch, which is the distinction those bars are about.
+    let mut req = match &body {
+        Some(b) => client
+            .post(&url)
+            .header("content-type", "application/json")
+            .body(b.clone()),
+        None => client.get(&url),
+    }
+    .timeout(Duration::from_secs(60));
     if let Some(b) = &bearer {
         req = req.bearer_auth(b);
     }

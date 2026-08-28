@@ -40,129 +40,40 @@
 //! (`commonwealth_transport::identity`).
 
 use std::io;
-use std::path::{Path, PathBuf};
-
-use serde::{Deserialize, Serialize};
 
 use sovereign_cli_shared::dirs::sovereign_root;
 
-/// Filename under the sovereign root, sibling of `node_key` / `client-token`.
-pub const GUEST_LINK_FILE: &str = "guest.json";
+// The TYPE and its file format live in `sovereign-core`, because the DAEMON
+// reads this file too: `svrn chat ask` is a surface, so a guest's turn runs on
+// their own daemon and it is the daemon that must resolve a granted model id
+// to the lender (`sovereign_mesh::guest_lender`). A daemon cannot depend on a
+// CLI crate, and two copies of the format would be the §10.6 failure.
+//
+// What stays here is the CLI's own half: the well-known root, and the stderr
+// wording a person reads. A library must not print to stderr.
+pub use sovereign_core::guest_link::{
+    forget_in, load_in, load_live_in, now_secs, path_in, save_in, GuestLink, GUEST_LINK_FILE,
+};
 
-/// A guest link this node has accepted.
-///
-/// The persisted form of [`sovereign_mesh::deep_link::DeepLink::Guest`], minus
-/// nothing: what the link carried is exactly what is stored, because the link
-/// deliberately carries the minimum (token, where, until when, one display
-/// string). There is no scope here for the same reason there is none on the
-/// wire — the issuing node's store is the only authority on what this buys.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GuestLink {
-    /// The bearer, presented verbatim as `Authorization: Bearer <token>`.
-    pub token: String,
-    /// Base URL of the issuing node's client API — no trailing `/v1`.
-    ///
-    /// Where the bearer goes when [`Self::dial`] is absent; otherwise
-    /// provenance and display only. Never read directly to build a request —
-    /// [`open_route`] is the one decider.
-    pub url: String,
-    /// The lender's iroh dial string, when the plaintext API is not the way
-    /// in. `#[serde(default)]` so a `guest.json` written before this field
-    /// existed still reads as "no tunnel" rather than as a corrupt file.
-    #[serde(default)]
-    pub dial: Option<String>,
-    /// Unix SECONDS at which the grant lapses (the link's `exp=` param).
-    pub expires_at: u64,
-    /// Display only. What the minting node said this buys. Never consulted for
-    /// a decision — see the type docs.
-    #[serde(default)]
-    pub summary: Option<String>,
-}
-
-impl GuestLink {
-    pub fn is_live(&self, now_secs: u64) -> bool {
-        now_secs < self.expires_at
-    }
-
-    /// Seconds left, or `None` once lapsed. Rendered by `mesh use` and by the
-    /// stderr banner `svrn chat` prints when it routes through a guest link —
-    /// a guest should never be surprised by the window closing.
-    pub fn remaining_secs(&self, now_secs: u64) -> Option<u64> {
-        self.expires_at.checked_sub(now_secs).filter(|&s| s > 0)
-    }
-}
-
-/// Wall clock in unix seconds. One definition, so the store and its callers
-/// cannot disagree about what "now" is.
-pub fn now_secs() -> u64 {
-    std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
-pub fn path() -> PathBuf {
+pub fn path() -> std::path::PathBuf {
     path_in(&sovereign_root())
-}
-
-pub fn path_in(root: &Path) -> PathBuf {
-    root.join(GUEST_LINK_FILE)
 }
 
 pub fn save(link: &GuestLink) -> io::Result<()> {
     save_in(&sovereign_root(), link)
 }
 
-/// Write `guest.json` 0600, tmp-then-rename so a crash mid-write cannot leave
-/// a half-parsed credential behind.
-pub fn save_in(root: &Path, link: &GuestLink) -> io::Result<()> {
-    std::fs::create_dir_all(root)?;
-    let target = path_in(root);
-    let tmp = target.with_extension("json.tmp");
-    let body = serde_json::to_string_pretty(link)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    std::fs::write(&tmp, body.as_bytes())?;
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o600))?;
-    }
-    std::fs::rename(&tmp, &target)?;
-    Ok(())
-}
-
 pub fn load() -> Option<GuestLink> {
     load_in(&sovereign_root())
 }
 
-/// Read the stored link, whatever its expiry. `None` for absent OR unparseable
-/// — and an unparseable one is named on stderr rather than passed off as
-/// absent, because the two have different repairs (`mesh use` again vs. `mesh
-/// use --forget`).
-pub fn load_in(root: &Path) -> Option<GuestLink> {
-    let path = path_in(root);
-    let raw = std::fs::read_to_string(&path).ok()?;
-    match serde_json::from_str::<GuestLink>(&raw) {
-        Ok(link) => Some(link),
-        Err(e) => {
-            eprintln!(
-                "warning: {} exists but will not parse ({e}) — ignoring it. \
-                 Run `svrn mesh use --forget` to clear it.",
-                path.display()
-            );
-            None
-        }
-    }
-}
-
+/// The accessor every CLI consumer should use: present AND live.
+///
+/// An expired one returns `None` **loudly**. The core accessor is silent by
+/// design (a daemon has no stderr worth writing to), so the wording lives
+/// here, where there is a person to read it.
 pub fn load_live(now_secs: u64) -> Option<GuestLink> {
-    load_live_in(&sovereign_root(), now_secs)
-}
-
-/// The accessor every consumer should use: a link that is present AND live.
-/// An expired one returns `None` **loudly** — see the module docs.
-pub fn load_live_in(root: &Path, now_secs: u64) -> Option<GuestLink> {
-    let link = load_in(root)?;
+    let link = load_in(&sovereign_root())?;
     if link.is_live(now_secs) {
         return Some(link);
     }
@@ -219,17 +130,6 @@ static TUNNEL: std::sync::OnceLock<sovereign_mesh::guest_tunnel::GuestTunnel> =
 
 pub fn forget() -> io::Result<bool> {
     forget_in(&sovereign_root())
-}
-
-/// Drop the stored link. `Ok(false)` when there was nothing to drop — absence
-/// is not an error, and `mesh use --forget` on a clean node must not fail.
-pub fn forget_in(root: &Path) -> io::Result<bool> {
-    let path = path_in(root);
-    match std::fs::remove_file(&path) {
-        Ok(()) => Ok(true),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(e) => Err(e),
-    }
 }
 
 #[cfg(test)]

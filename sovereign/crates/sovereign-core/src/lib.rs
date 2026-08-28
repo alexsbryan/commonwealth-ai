@@ -11,6 +11,7 @@ pub mod conv_tiered;
 pub mod dossier;
 pub mod embed_fn;
 pub mod executor;
+pub mod guest_link;
 pub mod health_monitor;
 pub mod insight;
 pub mod memory;

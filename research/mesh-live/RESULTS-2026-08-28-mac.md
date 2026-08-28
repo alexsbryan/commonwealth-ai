@@ -125,6 +125,52 @@ failing: `a_guest_grant_is_honoured_on_a_daemon_with_no_client_token` and
 Phase 3 must be RE-RUN against a build carrying that fix. This record is the
 first observation; the re-run is a second one, not a replacement.
 
+## Phase 3 — SECOND OBSERVATION, on FOX grant `370eafa6`. 3.2/3.4/3.5 PASS.
+
+The first round's 401 was CORRECT BEHAVIOUR ON A DEAD TOKEN, not an auth bug.
+FOX's `/internal/guest/grant/list` returned `200 []` — empty, with `svrn mesh
+grant --list` agreeing, which rules out the two-process pubkey collision of
+note `88e3353e`: one store, and it was empty. FOX's daemon had been through
+three pids in twenty minutes and the grant was minted into the middle one.
+Grants are `Mutex<HashMap>` in RAM by design. So the fix was not implicated;
+it was reporting a token that no longer existed.
+
+Re-run on a grant verified present in FOX's store, MAC on a freshly built
+`sovereign-cli-llm` (a stale sibling invalidates any claim about mesh CLI
+behaviour — the dispatcher warns about exactly this):
+
+| bar | pre-registered | observed | verdict |
+|---|---|---|---|
+| 3.2 | verifies, stores, prints granted ids read back FROM FOX | `Verified against http://100.115.12.21:9741 (over the mesh tunnel) — models in scope: Qwen3.5-4B-UD-MTP-Q6_K_XL` | **PASS** |
+| 3.4 | refused, code `model_not_granted` | `403` · `{"code":"model_not_granted","message":"this guest link does not cover model 'llama-3.3-70b' — it grants: Qwen3.5-4B-UD-MTP-Q6_K_XL"}` | **PASS** |
+| 3.5 | `403`, code `out_of_scope` | `403` · `{"code":"out_of_scope","message":"this guest link does not cover /v1/knowledge/search"}` | **PASS** |
+
+POSITIVE CONTROL, not in the pre-registration and added because 3.4 and 3.5
+are both REFUSALS — a listener that refused everything would pass both and be
+useless (§18.1). POST `/v1/chat/completions` naming the GRANTED model, same
+tunnel, same bearer:
+
+    HTTP 200 · {"model":"Qwen3.5-4B-UD-MTP-Q6_K_XL",
+                "choices":[{"message":{"content":"mesh ok"}}],
+                "usage":{"total_tokens":26}}
+
+A non-member, holding nothing but a scoped bearer, ran inference on FOX's
+model over the mesh tunnel. That is the feature.
+
+3.3 REMAINS FAILED and is not FOX's. `svrn chat ask` is a pure surface — the
+turn runs on the daemon — so pointing the CLI at a lender sends the whole
+conversation there, and a grant scopes only `/v1/models` +
+`/v1/chat/completions`. Fix is daemon-side guest routing on the GUEST's node.
+
+3.6 (revoke takes effect on the next request) and 3.7 (`--forget` returns
+chat to the local daemon) not yet run.
+
+TOOLING CHANGED MID-RUN, disclosed because it is part of the instrument:
+`dial_probe` gained `--body` (POST). The interesting scope bars are POST
+routes, and a GET against one is refused by the auth layer BEFORE routing, so
+it cannot tell an out-of-scope refusal from a method mismatch — which is the
+distinction 3.4 is about.
+
 ## Phases 4, 5 — NOT RUN
 
 Park/switch and rotation need the peer to run commands or to have its status

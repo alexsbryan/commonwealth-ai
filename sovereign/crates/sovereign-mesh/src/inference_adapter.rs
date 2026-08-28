@@ -1371,6 +1371,14 @@ impl LocalInferenceService for SovereignInferenceAdapter {
         self.provider.peer_manifests().await
     }
 
+    /// Straight delegation, same reasoning: the `MeshInferenceProvider` is
+    /// the only thing here that holds a guest link, and without this hop the
+    /// listing inherits the empty default while `locate_named_model` happily
+    /// routes the ids — the omission the listing contract forbids.
+    async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
+        self.provider.lender_manifest().await
+    }
+
     async fn embed(&self, input: &str) -> Result<Vec<f32>, String> {
         // Delegate to the underlying provider's EmbedSlot. The
         // commonwealth-api handler wraps the returned vector in an

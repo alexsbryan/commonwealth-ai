@@ -833,6 +833,46 @@ async fn manifest_rows(state: &AppState) -> Option<Vec<ModelObject>> {
         }
     }
 
+    // Models reachable through a GUEST LINK this node accepted. They belong
+    // here for the reason peers do: `locate_named_model` routes these ids, so
+    // a listing that omitted them would lie by omission — the same §10.6
+    // failure the peer listing was fixed for, in the other direction. The
+    // holder is the LENDER's own display name, never `LOCAL_HOLDER` and never
+    // a peer name: `advertised_by` must not claim a mesh relationship that
+    // does not exist.
+    //
+    // `Cold` on purpose (the default `ModelStatus`). A grant advertises no
+    // residency and the lender publishes no slot state to a guest, so
+    // claiming `Resident` would be a guess in the flattering direction. Cold
+    // is honest and costs only a slower first turn.
+    if let Some((lender, ids)) = service.lender_manifest().await {
+        for id in ids {
+            holders.push((
+                lender.clone(),
+                commonwealth_inference::oicp::ProviderModel {
+                    id,
+                    base_model: None,
+                    quantization: None,
+                    context_tokens: 0,
+                    // available, NOT loaded: the grant says it can be
+                    // dispatched, and nothing about whether the lender has
+                    // the weights warm. Claiming `loaded` would upgrade the
+                    // row to Resident on a guess.
+                    status: commonwealth_inference::oicp::ModelStatus {
+                        available: true,
+                        loaded: false,
+                        estimated_tokens_per_sec: None,
+                        estimated_ttft_ms: None,
+                        estimated_load_time_sec: None,
+                    },
+                    size_gb: None,
+                    claims: Vec::new(),
+                    fingerprint: None,
+                },
+            ));
+        }
+    }
+
     let slot_aliases = state.inner.slot_aliases.load();
     let mut rows: Vec<ModelObject> = Vec::new();
     let mut index: std::collections::HashMap<String, usize> = std::collections::HashMap::new();

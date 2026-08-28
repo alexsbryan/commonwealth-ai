@@ -689,6 +689,24 @@ pub trait InferenceProvider: Send + Sync {
     async fn peer_manifests(&self) -> Vec<(String, crate::oicp::ProviderManifest)> {
         Vec::new()
     }
+
+    /// Models reachable through a GUEST LINK this node has accepted, with the
+    /// lending node's display name.
+    ///
+    /// Separate from [`Self::peer_manifests`] because a lender is not a peer:
+    /// no shared secret, no gossip, no node id, and it was chosen by the
+    /// operator rather than scored. Folding it into the peer list would make
+    /// `/v1/models`'s `advertised_by` claim a mesh relationship that does not
+    /// exist.
+    ///
+    /// It belongs in the listing for the reason stated above: name resolution
+    /// routes these ids, so a listing that omitted them would lie by
+    /// omission — the same §10.6 failure, in the other direction.
+    ///
+    /// Default `None`: only a mesh-aware forwarder can hold a link.
+    async fn lender_manifest(&self) -> Option<(String, Vec<String>)> {
+        None
+    }
 }
 
 /// Adapt a typed [`StreamFrame`] stream down to the legacy

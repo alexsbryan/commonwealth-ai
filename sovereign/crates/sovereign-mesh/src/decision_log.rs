@@ -519,6 +519,13 @@ pub enum Verdict {
     NamedLocal { model_id: String },
     /// Named-model dispatch resolved to a peer.
     NamedPeer { peer: String, model_id: String },
+    /// An explicitly-named model served by a node this one holds a GUEST
+    /// GRANT with. Distinct from `NamedPeer` because a lender is not a mesh
+    /// member: no shared secret, no gossip, no node id — and the choice was
+    /// a pin the operator made with `svrn mesh use`, not a scoring outcome.
+    /// Collapsing the two would make the decision record claim a mesh
+    /// relationship that does not exist.
+    NamedLender { lender: String, model_id: String },
     /// Named-model dispatch found nobody advertising the name.
     NamedUnknown { model_id: String },
 }
@@ -834,6 +841,7 @@ fn verdict_label(v: &Verdict) -> String {
         Verdict::Peers { ranked } => format!("peers:{}", ranked.len()),
         Verdict::NamedLocal { .. } => "named_local".into(),
         Verdict::NamedPeer { peer, .. } => format!("named_peer:{peer}"),
+        Verdict::NamedLender { lender, .. } => format!("named_lender:{lender}"),
         Verdict::NamedUnknown { .. } => "named_unknown".into(),
     }
 }

@@ -171,6 +171,34 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     ("sovereign/crates/sovereign-mesh/src/model_fetch.rs", Class::Mesh, 4),
     ("sovereign/crates/sovereign-mesh/src/loopback_guard.rs", Class::Mesh, 3),
     ("sovereign/crates/sovereign-mesh/src/peer_inference.rs", Class::Mesh, 2),
+    // guest_lender.rs (2026-08-28, order mesh-guest-grant): resolving a model
+    // id to a node this one holds a GUEST GRANT with, so a guest's turn runs
+    // on their own daemon and only the completion crosses. ONE site — the
+    // client that fetches the lender's `/v1/models` under the bearer, which
+    // is the authority on what the grant buys. The dispatch itself constructs
+    // nothing: it reuses `MeshInferenceProvider::http`.
+    //
+    // Mesh, and the judgement is worth stating because a lender is NOT a mesh
+    // member and the class name reads as if it should be. Three checks:
+    //   - NOT third-party. The boundary guards egress to third-party
+    //     endpoints — commercial model providers and search engines (see the
+    //     module header; the RemotePayload exemplar is the `--provider` chat
+    //     client). A lender is another Sovereign node speaking the same
+    //     client API. Mesh peers are equally "someone else's machine"; what
+    //     separates Mesh from RemotePayload here is a Sovereign counterparty
+    //     the operator has an explicit trust relationship with, not whose
+    //     hardware it is.
+    //   - The estate's own transport, own auth. It rides GUEST_ALPN through
+    //     `sovereign_mesh::guest_tunnel` on an encrypted mesh, and the
+    //     credential is a grant that node itself issued and can revoke.
+    //   - The destination is operator-chosen and not request-derived. It
+    //     comes from `guest.json`, written only by `svrn mesh use`. No
+    //     parameter of any function here names a host, so no caller — and no
+    //     prompt — can aim it.
+    // What this row does NOT cover: widening a grant beyond
+    // `/v1/chat/completions` + `/v1/models`, or letting a request parameter
+    // choose the lender. Either is a re-classification, not a count bump.
+    ("sovereign/crates/sovereign-mesh/src/guest_lender.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-mesh/src/join.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/daemon.rs", Class::Mesh, 2),
     ("sovereign/crates/sovereign-mesh/src/auto_ingest.rs", Class::Mesh, 2),

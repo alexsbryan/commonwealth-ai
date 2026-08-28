@@ -232,11 +232,11 @@ pub async fn client_auth_layer(
     // — see `commonwealth_knowledge::guest_grant`.
     if let Some(p) = presented {
         let now = commonwealth_core::clock::unix_now_millis();
-        return match state.inner.guest_grants.live(p, now) {
+        match state.inner.guest_grants.live(p, now) {
             Some(grant) if grant.permits_path(request.uri().path()) => {
                 let mut request = request;
                 request.extensions_mut().insert(Guest(Arc::new(grant)));
-                next.run(request).await
+                return next.run(request).await;
             }
             Some(grant) => {
                 // Out of scope, not unauthenticated. Say which — a bare 403
@@ -248,21 +248,30 @@ pub async fn client_auth_layer(
                     scopes = %grant.summary(),
                     "client_auth: guest grant does not cover this path"
                 );
-                guest_out_of_scope(&grant, request.uri().path())
+                return guest_out_of_scope(&grant, request.uri().path());
             }
-            None => unauthorized("bearer mismatch"),
-        };
+            // Not a live grant either. Fall through to the shared refusal
+            // below rather than answering here, so that "this node has no
+            // client token" wins over "your bearer did not match" — it is
+            // the operative fact, and the more actionable one.
+            None => {}
+        }
     }
 
-    // No credential at all. If the operator never configured a token, say so
-    // rather than emitting a generic 401 — this daemon is reachable from
-    // somewhere remote and cannot serve anyone who is not holding a grant.
+    // Nothing admitted. A daemon that never configured a client token is
+    // reachable from somewhere remote and can serve nobody but a live guest;
+    // saying THAT is more useful than a generic 401, which sends the operator
+    // hunting for a credential problem when the node was simply never set up
+    // to serve remotely. Same reasoning as `guest_out_of_scope`: name the
+    // boundary when naming it leaks nothing the caller could not already
+    // infer from being refused.
     if configured.is_none() {
         tracing::warn!(
             peer = %peer,
             path = %request.uri().path(),
-            "client_auth: remote caller with no credential and no client token \
-             configured — refusing (bind 127.0.0.1, or set a token to serve remotely)"
+            presented_a_bearer = presented.is_some(),
+            "client_auth: remote caller refused and no client token configured — \
+             (bind 127.0.0.1, or set a token to serve remotely)"
         );
         return (
             StatusCode::FORBIDDEN,
@@ -270,7 +279,11 @@ pub async fn client_auth_layer(
         )
             .into_response();
     }
-    unauthorized("missing bearer")
+    unauthorized(if presented.is_some() {
+        "bearer mismatch"
+    } else {
+        "missing bearer"
+    })
 }
 
 /// The authenticated guest behind a request, attached by [`client_auth_layer`]

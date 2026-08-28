@@ -58,6 +58,15 @@ pub struct ChatGlobals {
     /// effect (`svrn mesh use`), where `daemon_base` points at somebody else's
     /// machine and this is the credential that says the window is still open.
     pub bearer: Option<String>,
+    /// True iff a guest link is in effect for this invocation.
+    ///
+    /// Distinct from `bearer.is_some()`, which is what this used to be read
+    /// off. A link no longer sets a bearer — the DAEMON holds the grant and
+    /// the turn runs there — so the two facts came apart, and bootstrap needs
+    /// this one: under a link the local `SetupConfig`'s model names are the
+    /// wrong answer, and `/v1/models` (which now lists the granted ids) is
+    /// the right one.
+    pub guest_link_active: bool,
     /// True iff `--daemon` was passed explicitly. A guest link must never
     /// override an endpoint the operator named on the command line — an
     /// explicit `--daemon` is the more specific instruction, and silently
@@ -98,6 +107,7 @@ impl ChatGlobals {
         };
         Self {
             daemon_base,
+            guest_link_active: false,
             data_dir,
             chat_model: None,
             embed_model: None,
@@ -233,8 +243,27 @@ pub fn apply_guest_link(globals: &mut ChatGlobals, link: Option<GuestLink>, base
         remaining / 60,
         link.summary.as_deref().unwrap_or("scope not stated")
     );
-    globals.daemon_base = base;
-    globals.bearer = Some(link.token);
+    // The link decides WHICH MODEL, never WHERE THE TURN RUNS.
+    //
+    // Until 2026-08-28 this set `daemon_base` to the lender and put the grant
+    // token on every outbound call. That sent the whole CONVERSATION there —
+    // `svrn chat ask` is a surface, the turn runs on a daemon — and
+    // `/v1/conversations` is in no `Scope` and is not served on the guest
+    // listener at all. Observed: `POST <bridge>/v1/conversations -> 403`
+    // (live bar 3.3). A guest's conversation is their own state.
+    //
+    // So the base stays LOCAL. The guest's own daemon runs the turn and
+    // resolves the granted id to the lender itself
+    // (`sovereign_mesh::guest_lender`), which is also why no bearer is set
+    // here: the daemon holds the grant, and a token aimed at our own loopback
+    // daemon would be meaningless.
+    //
+    // `base` is still taken, because opening the tunnel is what proves the
+    // lender is reachable before we tell the guest their question is going
+    // there — a banner promising a live link we never dialled is the failure
+    // this whole surface refuses.
+    let _ = base;
+    globals.guest_link_active = true;
     true
 }
 
@@ -286,24 +315,45 @@ mod tests {
         }
     }
 
+    /// THE 3.3 regression. A guest link must NOT move where the turn runs.
+    ///
+    /// It used to set `daemon_base` to the lender and put the grant on every
+    /// call, which sent the CONVERSATION there — `svrn chat ask` is a
+    /// surface, the turn runs on a daemon — and `/v1/conversations` is in no
+    /// `Scope` and is not served on the guest listener. Live bar 3.3
+    /// observed `POST <bridge>/v1/conversations -> 403` before this changed.
+    ///
+    /// Watched failing: restore either assignment and this goes red.
     #[test]
-    fn a_guest_link_redirects_the_daemon_and_carries_a_bearer() {
+    fn a_guest_link_does_not_move_where_the_turn_runs() {
         let (mut g, _) = parse_globals(&svec(&["ask", "hi"])).unwrap();
+        let before = g.daemon_base.clone();
         assert!(apply_guest_link(
             &mut g,
             Some(a_link("http://box:9741")),
             "http://box:9741".into()
         ));
-        assert_eq!(g.daemon_base, "http://box:9741");
-        assert_eq!(g.bearer.as_deref(), Some("tok"));
+        assert_eq!(
+            g.daemon_base, before,
+            "the turn runs on the guest's OWN daemon; only the completion crosses"
+        );
+        assert!(
+            g.bearer.is_none(),
+            "the DAEMON holds the grant — a token aimed at our own loopback \
+             daemon is meaningless, and setting it is what used to send the \
+             conversation to the lender"
+        );
+        assert!(g.guest_link_active, "but bootstrap must still know");
     }
 
-    /// A dialled link routes to the TUNNEL, not to the address the link names
-    /// — that address is closed on an encrypted mesh, and sending the bearer
-    /// there would be plaintext against a mesh that asked for encryption.
+    /// A dialled link still opens the tunnel before the banner promises the
+    /// lender is reachable — the address the link names is closed on an
+    /// encrypted mesh, so a link we never dialled is a promise we cannot keep.
+    /// The tunnel's base still must not become the turn's daemon.
     #[test]
-    fn a_dialled_link_routes_to_the_tunnel_and_not_to_the_links_url() {
+    fn a_dialled_link_is_still_dialled_but_does_not_capture_the_turn() {
         let (mut g, _) = parse_globals(&svec(&["ask", "hi"])).unwrap();
+        let before = g.daemon_base.clone();
         let mut link = a_link("http://box:9741");
         link.dial = Some("beef@https://relay.example".into());
         assert!(apply_guest_link(
@@ -311,8 +361,9 @@ mod tests {
             Some(link),
             "http://127.0.0.1:41007".into()
         ));
-        assert_eq!(g.daemon_base, "http://127.0.0.1:41007");
-        assert_eq!(g.bearer.as_deref(), Some("tok"));
+        assert_eq!(g.daemon_base, before);
+        assert!(g.bearer.is_none());
+        assert!(g.guest_link_active);
     }
 
     /// An endpoint the operator typed is the more specific instruction. This
@@ -327,6 +378,10 @@ mod tests {
         ));
         assert_eq!(g.daemon_base, "http://mine:9741");
         assert!(g.bearer.is_none());
+        assert!(
+            !g.guest_link_active,
+            "a refused link must not put bootstrap into guest model-resolution"
+        );
     }
 
     #[test]
