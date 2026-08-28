@@ -1463,6 +1463,26 @@ pub fn number_citations(md: &str, window: &EvidenceWindow) -> (String, Vec<Strin
             .find(|c| c.id == id)
             .map(|c| c.source_url.clone())
     };
+    // The id PREFIXES this window actually uses (`ev`, `estate`, ...), taken
+    // from the data rather than hardcoded (§2.1). A bracket like `[estate-8]`
+    // that names no chunk is a DANGLING HANDLE and is dropped, exactly as the
+    // `[Source: ...]` form is — but `[RFC-2119]` or `[ISO-8601]` is ordinary
+    // prose and must survive, which a generic `<word>-<digits>` rule would
+    // silently eat. Deriving the prefixes from the window separates the two
+    // without a match on string ids.
+    let handle_prefixes: std::collections::BTreeSet<&str> = window
+        .chunks
+        .iter()
+        .filter_map(|c| c.id.split_once('-').map(|(p, _)| p))
+        .collect();
+    let is_handle_shaped = |tok: &str| match tok.split_once('-') {
+        Some((pre, num)) => {
+            handle_prefixes.contains(pre)
+                && !num.is_empty()
+                && num.bytes().all(|b| b.is_ascii_digit())
+        }
+        None => false,
+    };
     let mut numbering: Vec<String> = Vec::new();
     let mut out = String::with_capacity(md.len());
     let mut rest = md;
@@ -1526,12 +1546,15 @@ pub fn number_citations(md: &str, window: &EvidenceWindow) -> (String, Vec<Strin
             // reader's page; the verdict set still records the
             // claim's refusal (ref-required), so the absence is
             // on the record rather than hidden.
-            None if explicit => {}
+            // A DANGLING HANDLE, in either form: it names no chunk in this
+            // window, so it is dropped from the reader's page. The verdict set
+            // still records the claim's refusal (ref-required), so the absence
+            // is on the record rather than hidden.
+            None if explicit || is_handle_shaped(inner) => {}
             // NOT A HANDLE AT ALL — a markdown link's text, a citation we
             // already numbered, ordinary bracketed prose. Emitted VERBATIM.
-            // Dropping these the way an unresolvable `[Source: x]` is dropped
-            // would silently eat every `[text](url)` in the report, which is
-            // why the bare form only ever REWRITES and never deletes.
+            // Dropping every unresolvable bracket would silently eat each
+            // `[text](url)` in the report, which is why this arm never deletes.
             None => out.push_str(&after[..=close]),
         }
         rest = &after[close + 1..];
@@ -2343,6 +2366,24 @@ Regulatory approval followed the announcement [Source: ev-1]."#;
             "both forms resolve to the same numbered source: {out}"
         );
         assert_eq!(srcs.len(), 1, "and they share one source row");
+    }
+
+    #[test]
+    fn number_citations_drops_a_dangling_bare_handle_but_keeps_foreign_ids() {
+        // `[ev-99]` names no chunk in this window: a dangling handle, dropped
+        // like its `[Source: ...]` twin. `[RFC-2119]` has the same
+        // word-dash-digits SHAPE but `RFC` is not a prefix this window uses,
+        // so it is ordinary prose and survives. A generic shape rule would eat
+        // it — which is why the prefixes come from the window's own chunk ids.
+        let md = "Dangling [ev-99], real [ev-1], and the spec [RFC-2119] says so.";
+        let (out, srcs) = number_citations(md, &two_source_window());
+        assert!(!out.contains("ev-99"), "the dangling handle is gone: {out}");
+        assert!(out.contains("[1]"), "the real handle is numbered: {out}");
+        assert!(
+            out.contains("[RFC-2119]"),
+            "a foreign identifier is NOT a handle and survives whole: {out}"
+        );
+        assert_eq!(srcs.len(), 1, "only the resolvable handle lists a source");
     }
 
     #[test]

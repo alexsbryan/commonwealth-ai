@@ -427,3 +427,50 @@ async fn plan_outline_dump() {
         .unwrap_or_else(|e| panic!("write {out}: {e}"));
     eprintln!("wrote {out}");
 }
+
+/// Re-render an arm markdown that already exists, with the CURRENT renderer.
+///
+/// The render delta was measured by scoring `arm-N.md` against
+/// `arm-N.rendered.md` — but that rendered file was produced by whatever
+/// `number_citations` looked like when the arm flew. Changing the renderer
+/// therefore invalidates the comparison without re-flying, and re-flying costs
+/// ~10 minutes of writer calls to reproduce a draft we already have byte for
+/// byte. This re-renders the SAME draft, so the only variable is the renderer.
+///
+///     COMPOSE_ARM_MD=/abs/path/arm-16x4.md \
+///     COMPOSE_INPUT=/abs/path/compose-input.json \
+///     cargo test -p sovereign-core --test compose_replay \
+///       -- --ignored --nocapture rerender_existing_arm
+///
+/// Writes `<stem>.rerendered.md` beside it — NOT `.rendered.md`, which would
+/// overwrite the artifact an earlier score is keyed to and make two scores
+/// silently incomparable.
+#[test]
+#[ignore = "reads an existing arm markdown; run explicitly"]
+fn rerender_existing_arm() {
+    let md_path = std::env::var("COMPOSE_ARM_MD").expect("COMPOSE_ARM_MD=<abs path to arm-*.md>");
+    assert!(
+        std::path::Path::new(&md_path).is_absolute(),
+        "COMPOSE_ARM_MD must be ABSOLUTE ({md_path} is not) — `cargo test` runs \
+         with CWD at the package root"
+    );
+    let path = input_path();
+    let raw = std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("compose input {} unreadable ({e})", path.display()));
+    let input: ComposeInput = serde_json::from_str(&raw).expect("compose-input.json parses");
+    let md = std::fs::read_to_string(&md_path).unwrap_or_else(|e| panic!("{md_path}: {e}"));
+
+    let (numbered, sources) = synthesize::number_citations(&md, &input.window);
+
+    let count = |s: &str, re: &str| s.matches(re).count();
+    eprintln!(
+        "draft    : {} [Source: ev-  |  rerendered: {} [Source: ev-",
+        count(&md, "[Source: ev-"),
+        count(&numbered, "[Source: ev-")
+    );
+    eprintln!("sources listed: {}", sources.len());
+
+    let out = md_path.trim_end_matches(".md").to_string() + ".rerendered.md";
+    std::fs::write(&out, &numbered).unwrap_or_else(|e| panic!("write {out}: {e}"));
+    eprintln!("wrote {out}");
+}
