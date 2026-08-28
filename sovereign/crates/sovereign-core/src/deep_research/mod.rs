@@ -1596,14 +1596,30 @@ impl Controller {
     /// been consulted.
     fn estate_window(&self, survey: &Survey) -> EvidenceWindow {
         let mut chunks = Vec::new();
-        for (i, q) in survey.searched.iter().enumerate() {
+        // ONE HANDLE PER HIT, NOT PER QUERY. This counter used to be the
+        // QUERY index (`i + 1`), so every hit a query returned collapsed onto
+        // the same `estate-N`. Measured 2026-08-27 on bed dr-1787807617:
+        // `estate-1` covered EIGHT chunks and `estate-2` six — 12 of the
+        // window's 62 chunks were structurally uncitable, because a writer has
+        // no way to name the seventh hit of query 1 apart from the first.
+        //
+        // The waste was the smaller half of it. `number_citations` resolves a
+        // handle with `.find(|c| c.id == id)`, so EVERY `[estate-1]` rendered
+        // the FIRST hit's URL — a claim drawn from hit 5 shipped with hit 1's
+        // source in the Sources list. Silent mis-attribution in the one
+        // contract this pipeline exists to keep (§7.5: identity from essence,
+        // never a counter that is not unique in the scope the id is used in —
+        // and that scope is the merged WINDOW, not the query).
+        let mut hit_index = 0usize;
+        for q in survey.searched.iter() {
             for hit in &q.hits {
+                hit_index += 1;
                 let locator = hit
                     .url
                     .clone()
                     .unwrap_or_else(|| format!("estate:{}:{}", hit.corpus_id, hit.chunk_id));
                 chunks.push(WindowChunk {
-                    id: format!("estate-{}", i + 1),
+                    id: format!("estate-{hit_index}"),
                     locator: locator.clone(),
                     source_url: locator,
                     custody: "personal".to_string(),
@@ -1636,6 +1652,31 @@ impl Controller {
     /// Merge the accumulated windows: dedup by source URL (first wins),
     /// capped at the charter's window cap. Capping is declared — the
     /// flag surfaces in the manifest's `truncation_declared`.
+    /// Evidence handles that name more than one chunk in the same window.
+    ///
+    /// A window id is a WINDOW-LOCAL LABEL, and its whole correctness requirement
+    /// is that it is unique in the scope it is resolved against. `number_citations`
+    /// resolves with `.find(|c| c.id == id)` and the audit matches the same way, so
+    /// a repeated id does not fail loudly — it silently binds every citation to the
+    /// FIRST chunk carrying that id, shipping the wrong source URL for the rest.
+    ///
+    /// Both minting sites have produced collisions: `estate_window` numbered by
+    /// QUERY rather than by hit (fixed), and `fetch_round` restarts its counter
+    /// each round (`let mut index = 0usize`, fetch.rs:301), so round 2's `ev-1`
+    /// collides with round 1's. Measured on bed dr-1787807617: 7 ids covering 24
+    /// of 62 chunks.
+    pub(crate) fn duplicate_window_ids(chunks: &[WindowChunk]) -> Vec<(String, usize)> {
+        let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+        for c in chunks {
+            *counts.entry(c.id.as_str()).or_insert(0) += 1;
+        }
+        counts
+            .into_iter()
+            .filter(|(_, n)| *n > 1)
+            .map(|(id, n)| (id.to_string(), n))
+            .collect()
+    }
+
     fn merge_windows(&mut self) -> EvidenceWindow {
         let cap = self.config.evidence_window_max_chunks;
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -1662,6 +1703,24 @@ impl Controller {
             }
         }
         self.window_capped = capped;
+        // GLASSBOX, because the failure is silent by construction: a repeated
+        // handle binds every citation to the first chunk carrying it, so the
+        // deliverable ships a wrong source URL and nothing errors. Warned
+        // rather than refused — a flight that already acquired its evidence
+        // should still land, NAMED, rather than be thrown away (§18.3).
+        let dupes = Self::duplicate_window_ids(&chunks);
+        if !dupes.is_empty() {
+            let shadowed: usize = dupes.iter().map(|(_, n)| n - 1).sum();
+            tracing::warn!(
+                target: "deep_research",
+                duplicate_ids = dupes.len(),
+                shadowed_chunks = shadowed,
+                worst = ?dupes.iter().max_by_key(|(_, n)| *n),
+                "merge_windows: evidence handles are NOT unique in this window — \
+                 every citation to a repeated id resolves to the FIRST chunk, so \
+                 those claims will carry the wrong source URL"
+            );
+        }
         let custody = fetch::derive_custody(&chunks);
         EvidenceWindow {
             icd: "evidence_window".to_string(),
@@ -2842,6 +2901,61 @@ mod tests {
     use futures::Stream;
     use sovereign_contracts::types::{CompletionRequest, Speed};
     use std::pin::Pin;
+
+    fn wc(id: &str, url: &str) -> WindowChunk {
+        WindowChunk {
+            id: id.to_string(),
+            locator: url.to_string(),
+            source_url: url.to_string(),
+            custody: "public-web".to_string(),
+            provenance_class: "known".to_string(),
+            content: "body".to_string(),
+            ingested_into: None,
+            tags: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_repeated_evidence_handle_is_reported_not_silently_resolved() {
+        // The failure this catches is silent BY CONSTRUCTION: `number_citations`
+        // resolves a handle with `.find(|c| c.id == id)`, so a repeated id binds
+        // every citation to the FIRST chunk and the deliverable ships the wrong
+        // source URL for the rest. Nothing errors, and the report reads fine.
+        //
+        // Shape taken from the real bed dr-1787807617, where `estate_window`
+        // numbered by QUERY: estate-1 covered eight chunks.
+        let chunks = vec![
+            wc("estate-1", "https://a.example/one"),
+            wc("estate-1", "https://b.example/two"),
+            wc("estate-1", "https://c.example/three"),
+            wc("ev-2", "https://d.example/round1"),
+            wc("ev-2", "https://e.example/round2"),
+            wc("ev-9", "https://f.example/unique"),
+        ];
+        let dupes = Controller::duplicate_window_ids(&chunks);
+        assert_eq!(
+            dupes,
+            vec![("estate-1".to_string(), 3), ("ev-2".to_string(), 2)],
+            "both collision families are named, with their multiplicity"
+        );
+        let shadowed: usize = dupes.iter().map(|(_, n)| n - 1).sum();
+        assert_eq!(
+            shadowed, 3,
+            "three chunks cannot be cited apart from another"
+        );
+    }
+
+    #[test]
+    fn unique_handles_report_nothing() {
+        // Watch-it-fail: make the counter query-scoped again and this fires.
+        let chunks = vec![
+            wc("ev-1", "https://a.example/1"),
+            wc("ev-2", "https://b.example/2"),
+            wc("estate-1", "https://c.example/3"),
+            wc("estate-2", "https://d.example/4"),
+        ];
+        assert!(Controller::duplicate_window_ids(&chunks).is_empty());
+    }
 
     /// A port that answers "nothing" — start() never reaches the
     /// network, so defaults are honest.
