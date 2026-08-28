@@ -15,6 +15,7 @@
 // re-evaluates.
 
 import * as vscode from "vscode";
+import { CallSiteNavigator } from "./callSites";
 import {
   DaemonError,
   HistoryUnitWire,
@@ -57,7 +58,44 @@ interface Session {
   reported: boolean;
 }
 
+/** The workspace folder `doc` belongs to, or `null` when it is outside
+ *  every folder (a scratch file). The symbol lane needs it to bridge
+ *  the graph's repo-relative paths to disk, and there is nothing sane
+ *  to assume when it is absent. */
+function workspaceRootFor(doc: vscode.TextDocument): string | null {
+  return vscode.workspace.getWorkspaceFolder(doc.uri)?.uri.fsPath ?? null;
+}
+
+/** The symbol lane's request fields, or nothing at all.
+ *
+ *  All three must be present together: the daemon will not guess the
+ *  corpus (enumerating installed indexes opens every one on disk) and
+ *  cannot bridge an absolute editor path to the graph's repo-relative
+ *  keys without the root. Asking for the lane without them would spend
+ *  a round trip to be told `graph_unavailable`. */
+function symbolLaneRequest(
+  doc: vscode.TextDocument,
+  hasSurface: boolean,
+): { symbol_lane: true; corpus_id: string; workspace_root: string } | Record<string, never> {
+  if (!hasSurface) return {};
+  const cfg = vscode.workspace.getConfiguration("sovereign-fim");
+  if (!cfg.get<boolean>("nextEdit.symbolLane", true)) return {};
+  const root = workspaceRootFor(doc);
+  if (root === null) return {};
+  // Defaults to the workspace folder's own name, which is how
+  // `svrn code index` labels a repo corpus.
+  const corpusId =
+    cfg.get<string>("nextEdit.corpusId", "") || root.split("/").filter(Boolean).pop() || "";
+  if (corpusId === "") return {};
+  return { symbol_lane: true, corpus_id: corpusId, workspace_root: root };
+}
+
 export class NextEditController implements vscode.Disposable {
+  /** The symbol lane's surface. Injected rather than constructed here
+   *  so `extension.ts` owns its lifetime alongside every other
+   *  disposable, and so a test can drive the controller without a
+   *  status bar. */
+  private navigator: CallSiteNavigator | null = null;
   private session: Session | null = null;
   private tracked: { uri: string; text: string } | null = null;
   private readonly coalescer = new UnitCoalescer();
@@ -70,6 +108,12 @@ export class NextEditController implements vscode.Disposable {
   private readonly oldTextDeco: vscode.TextEditorDecorationType;
   private readonly hintDeco: vscode.TextEditorDecorationType;
   private readonly subs: vscode.Disposable[] = [];
+
+  /** Attach the call-site surface. Optional: with none attached the
+   *  symbol lane is simply not requested. */
+  setNavigator(nav: CallSiteNavigator): void {
+    this.navigator = nav;
+  }
 
   constructor() {
     this.oldTextDeco = vscode.window.createTextEditorDecorationType({
@@ -206,6 +250,11 @@ export class NextEditController implements vscode.Disposable {
           path: doc.fileName,
           language: doc.languageId,
           model_lane: cfg.get<boolean>("nextEdit.modelLane", true),
+          // The symbol lane needs to know WHICH graph and WHERE the
+          // source is: the daemon deliberately guesses neither.
+          // Without both, or without the surface to show a jump list
+          // on, the lane is not requested at all.
+          ...symbolLaneRequest(doc, this.navigator !== null),
         },
         ctrl.signal,
       );
@@ -236,6 +285,13 @@ export class NextEditController implements vscode.Disposable {
       return;
     }
     if (ctrl.signal.aborted || doc.version !== version) return;
+    // BEFORE the empty-edits return, deliberately. The rule lane is
+    // silent by construction on the shape the symbol lane fires on — a
+    // signature fanout's trigger and its consequence are different
+    // text, so no rule ever reaches support 2 (NEXT_EDIT_SYMBOL_LANE.md)
+    // — which means navigation arrives precisely when `edits` is empty.
+    // Updating after the return would surface it never.
+    this.navigator?.update(result.navigation, workspaceRootFor(doc) ?? "");
     if (result.edits.length === 0) return;
     // Model proposals have no rule_key; suppress per detected SHAPE
     // (the gate's reason) rather than per needle. The needle is the

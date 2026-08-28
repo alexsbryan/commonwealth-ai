@@ -863,6 +863,59 @@ _Historical record below — the reasoning while this row was `preview`._
   this is a property of sweep-1.5b only.
 - **Review by:** 2026-09-06.
 
+### Next-edit symbol lane — call-site NAVIGATION on, edit proposals withheld
+- **Shipped:** 2026-08-28, ON for Rust in the first-party extension
+  (`sovereign-fim.nextEdit.symbolLane`, default `true`); the daemon's
+  `symbol_lane` request field defaults `false`, so any other client is
+  unaffected until it asks. Rust only because it is the sole language
+  the SCIP graph indexes — `TRIGGER_LANGUAGES` in
+  `commonwealth-api/src/next_edit_symbols.rs`.
+- **What it does:** when the cursor is in a function's parameter list
+  AND that list differs from the last save, it names that function's
+  call sites — `path`, `line`, `col`, preview — as a jump list
+  (`navigation.sites`). A third induction source beside the rule and
+  model lanes: semantic consequence from the SCIP graph, actionable on
+  the FIRST edit, reaching the `signature_fanout` shape the rule lane
+  is silent on by construction (3.3% useful-fire over 90 golden cases).
+- **What is deliberately DARK: the edit text.** The lane proposes no
+  `new_text` at any site, and this is the measured posture rather than
+  a staging choice. On the index-aligned bank (`gym/next-edit/aligned/`,
+  M1a 2026-08-28), restricted to the shape it fires on — an existing
+  function whose parameter list changed, 34 episodes over 13
+  independent commits — site RECALL is **95.8%**, cluster-bootstrap 95%
+  CI **[87.0, 100.0]**, clear of the pre-registered 80% bar. Site
+  PRECISION is **69.7%**, CI **[34.4, 91.5]**: the 60% bar lies INSIDE
+  the interval, so precision is a **could-not-judge**, not a pass
+  (ARCH §18.1). A jump list's bar is recall — a wrong entry costs a
+  keystroke — while proposing text would be spending a precision
+  number nobody has.
+- **Value of on:** the rule lane serves 3.3% of `signature_fanout`
+  cases today. 45 of 90 such golden cases have a held-out truth that is
+  literally a call site gaining an argument, 89% of them in indexable
+  languages, against 3 served.
+- **Flip condition (for EDIT proposals, not for the jump list):** site
+  precision's CI lower bound clears 60% on the target shape. That needs
+  more independent commits, not a better filter — M1a measured ten
+  candidate filters and none reached 60% precision while holding 80%
+  recall. The named path is widening the harvest by mapping call-site
+  lines through intervening diffs instead of requiring byte-identity
+  with HEAD, which also recovers the 731 sites currently dropped as
+  unaligned.
+- **Not covered, on the record:** Rust only; the `is_call_site` filter
+  is unconditional because it measured free (105 junk occurrences
+  removed, **zero** true sites lost — all were `use` imports and
+  `pub use` re-export lists, since `refs` is an occurrence table whose
+  `ref_kind` is uniformly `direct` across 1.36M rows).
+- **Degrades, and says so:** no index ⇒ `graph_unavailable`, a normal
+  200 with every other lane untouched, plus a once-per-process `WARN`
+  naming `svrn init`. Announced at three surfaces because
+  silence is what made it invisible: `setup --fim` offers the command
+  (never runs it — indexing takes minutes), `doctor`'s `scip_indexed`
+  check names the lane and repairs it, and the editor reports the real
+  reason instead of "edit a parameter list". Bounded at 250 ms
+  (`SYMBOL_TIMEOUT_MS`) so a locked graph cannot stall a keystroke.
+- **Review by:** 2026-09-28.
+
 ### Next-edit syntax site filter — dark for TypeScript, JavaScript, Python
 - **Shipped:** 2026-08-06 (`5a962765`), ON for Go and Rust only.
   `next_edit_syntax::PROVEN_LANGUAGES = ["rust", "go"]`. The grammars

@@ -806,6 +806,82 @@ feature-agnostic, so a new stream is audited by the same code the day it
 is added. Ledger row (default-ON local write):
 `sovereign/DEFAULTS_LEDGER.md`.
 
+## 9e. The symbol lane — call-site navigation (2026-08-28)
+
+A THIRD induction source beside the rule lane and the model lane, and
+the first that is not textual. Spec and measurements:
+[`specs/NEXT_EDIT_SYMBOL_LANE.md`](./specs/NEXT_EDIT_SYMBOL_LANE.md).
+
+**The gap.** Measured on the golden set with the rule lane isolated,
+`signature_fanout` scores **3.3% useful-fire over 90 cases**, against
+35.0% overall. That is not a tuning miss: the rule lane's trigger is
+textual repetition needing support ≥ 2 of the SAME induced rule, and in
+a signature fanout the trigger (you edit the declaration) and the
+consequence (call sites gain an argument) are different text. Support
+never reaches 2 and the lane is correctly silent.
+
+**Why a last-save index is right here**, when `next_edit_syntax`
+declines it as stale. That objection holds for a rename — the symbol
+being created is by definition not indexed. It does not hold for a
+signature edit: the function EXISTED before its parameter list was
+touched, so the saved graph knows it and knows its callers, and the
+call sites are themselves unedited.
+
+**Shape.** `next_edit.rs` stays pure and untouched; the lane is a
+sibling module (`next_edit_symbols.rs`) whose trigger half is pure
+tree-sitter and whose site half is one indexed SQL lookup. It composes
+in `routes_edit_predictions::edit_predictions` rather than inside
+`predict_response`, because it reads no rule, consults no model and
+proposes no edit — keeping it out leaves `predict_response` the
+two-lane seam the offline scorer shares (§9a).
+
+**The trigger is falsifiable, deliberately.** The obvious version —
+"the cursor is in a parameter list and the user just edited" — is a
+gate that cannot fail: next-edit fires on edit-settle with the cursor
+AT the edit. The shipped trigger compares the buffer's parameter list
+against the one in the last save, whitespace-normalised so a rustfmt
+rewrap is not a contract change. That also rules out the two classes
+M1a found dominating an earlier measurement: a function being typed for
+the first time (`symbol_not_indexed`) and a file that merely moved
+(`signature_unchanged`).
+
+**Resolution is by SCIP descriptor, never by name.** `find_callers`
+matches `refs.callee_symbol`, a short name — on this repo's graph `new`
+maps to **631 distinct symbols**. The lane uses
+`ScipGraph::find_callers_qualified`, added for this, which names both
+columns: `callee_qualified` decides the result and the indexed
+`callee_symbol` makes it seekable. Measured on the live graph: same
+rows, **0.03 ms against 105 ms**, worst case 9.4 ms (`poll`, 21,420
+refs). More than one symbol of that name in the file ⇒
+`ambiguous_symbol`, never the union of their call sites.
+
+**It proposes no edit, and that is the measurement.** On the shape it
+fires on, site recall is 95.8% (CI [87.0, 100.0], 13 clusters) and site
+precision is 69.7% (CI [34.4, 91.5]) — the 60% bar inside the interval,
+so a could-not-judge. Navigation's bar is recall. See the ledger row.
+
+**Free filter, unconditional.** `refs` is an occurrence table
+(`ref_kind` uniformly `direct`). Dropping occurrences with no call
+paren removed 105 junk sites and **zero** true ones — all `use` imports
+and `pub use` re-export lists.
+
+**Wire.** Request opts in with `symbol_lane: true` and must supply
+`corpus_id` and `workspace_root`; the daemon guesses neither (index
+enumeration opens every corpus on disk, ~10 s, and the graph is keyed
+on repo-relative paths the editor does not send). Response carries
+`navigation: { symbol, sites[], truncated, dropped }`, or
+`navigation: { declined: "<reason>" }` — a named state, never an absent
+key. Client surface: a status-bar item and a QuickPick jump list
+(`packages/vscode-sovereign/src/callSites.ts`); selecting an entry moves
+the cursor and writes nothing.
+
+**Verification.** `commonwealth-api/tests/next_edit_symbol_lane_e2e.rs`
+drives the whole lane against a REAL `ScipGraph` and real files: recall
+on both call sites, the import and the declaration excluded, and one
+test per decline. Both guards were watched to fail — neutering
+`is_call_site` reds two tests, neutering the signature comparison reds
+one (ARCH §18.1).
+
 ## 10. Verification surface
 
 As built, mirroring FIM v1's: weight-free unit tests over the pure

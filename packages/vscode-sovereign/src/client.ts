@@ -146,6 +146,41 @@ export interface EditPredictionRequest {
   language?: string;
   /** Opt into the model lane (P2) — off until its eval bank gates green. */
   model_lane?: boolean;
+  /** Opt into the symbol lane: call-site NAVIGATION for a signature
+   *  edit. It proposes no text — `navigation.sites` is a jump list. */
+  symbol_lane?: boolean;
+  /** Which indexed corpus describes this workspace. Required by the
+   *  symbol lane; the daemon never guesses it (enumerating installed
+   *  indexes opens every corpus on disk). */
+  corpus_id?: string;
+  /** Absolute workspace root the corpus was indexed from. The graph
+   *  stores repo-relative paths and `path` above is absolute; only the
+   *  client knows how to bridge them. */
+  workspace_root?: string;
+}
+
+/** One place the developer can jump to. No `new_text`: the symbol lane
+ *  proposes no edit, which is what its measurement supports — site
+ *  recall passes (95.8%, CI [87.0, 100.0]) while site precision is a
+ *  could-not-judge (69.7%, CI [34.4, 91.5]). A jump costs a keystroke
+ *  when wrong; an inserted edit costs a correction. */
+export interface CallSite {
+  path: string;
+  /** 0-based, as the graph stores it. */
+  line: number;
+  col: number;
+  preview: string;
+}
+
+export interface Navigation {
+  symbol?: string;
+  sites?: CallSite[];
+  truncated?: boolean;
+  dropped?: number;
+  /** Present INSTEAD of the fields above when the lane said nothing.
+   *  A named state, never an absent key — the developer asking "why no
+   *  call sites?" gets an answer. */
+  declined?: string;
 }
 
 export interface EditPredictionEdit {
@@ -177,6 +212,9 @@ export interface EditPredictionDebug {
 export interface EditPredictionResult {
   edits: EditPredictionEdit[];
   engine: string;
+  /** Call-site jump list, when the request opted into the symbol lane
+   *  and the daemon supports it. `null` from an older daemon. */
+  navigation: Navigation | null;
   debug: EditPredictionDebug | null;
   wallMs: number;
   /** Opaque id joining this prediction to the outcome we report back
@@ -299,11 +337,13 @@ async function predictEditsOnce(
     engine?: string;
     edits?: EditPredictionEdit[];
     episode_id?: string;
+    navigation?: Navigation;
     sovereign_debug?: EditPredictionDebug;
   };
   return {
     edits: body.edits ?? [],
     engine: body.engine ?? "rule",
+    navigation: body.navigation ?? null,
     debug: body.sovereign_debug ?? null,
     wallMs: Date.now() - started,
     // Absent on a daemon older than the outcome route. Empty, not

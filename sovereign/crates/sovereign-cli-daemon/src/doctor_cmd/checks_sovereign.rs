@@ -261,7 +261,8 @@ pub(super) async fn check_scip_indexed() -> CheckResult {
                  Likely cause: the language exporter (rust-analyzer / scip-typescript / \
                  scip-python / scip-go) failed during the last rebuild — see daemon.err \
                  for the stderr tail, then check `svrn doctor` again for the \
-                 scip_exporters finding.",
+                 scip_exporters finding. next-edit's call-site jump list is silent \
+                 for these corpora too — it reads the same graph.",
                 empty.len(),
             ),
             repair: Repair::executable(format!("svrn project refresh --name {example} --local")),
@@ -284,8 +285,16 @@ pub(super) async fn check_scip_indexed() -> CheckResult {
         name: "scip_indexed",
         layer: Layer::Sovereign,
         status: CheckStatus::Failed,
-        message: "no SCIP graph DB found — call graph tools unavailable".into(),
-        repair: Repair::executable("svrn project init"),
+        message: "no SCIP graph DB found — call graph tools (callers/callees/blast) \
+                  unavailable, AND next-edit's call-site jump list stays silent in the \
+                  editor: it reads this graph, so with no index it declines \
+                  `graph_unavailable` and its status-bar item never appears. Index the \
+                  repo you edit, then reload the editor."
+            .into(),
+        // `svrn init` is the current spelling; `svrn project init` still
+        // forwards here but announces a deprecation, and a repair line is
+        // the last place to hand someone the old name.
+        repair: Repair::executable("svrn init"),
     }
 }
 

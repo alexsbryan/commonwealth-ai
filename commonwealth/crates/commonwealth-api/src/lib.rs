@@ -25,6 +25,7 @@ pub mod middleware;
 pub mod next_edit;
 pub mod next_edit_journal;
 pub mod next_edit_model;
+pub mod next_edit_symbols;
 pub mod next_edit_syntax;
 pub mod openai_types;
 pub mod principal;

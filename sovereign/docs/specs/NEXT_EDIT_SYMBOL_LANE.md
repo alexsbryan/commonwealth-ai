@@ -1,6 +1,10 @@
 # Next-edit: the symbol lane — spec
 
-**Status: SPEC, nothing built. M0 is a measurement, not a feature.**
+**Status: SHIPPED as NAVIGATION, 2026-08-28.** M0 and M1a are
+measurements; the lane that landed proposes call SITES and no edit
+text, because recall is the verdict that passed and precision is a
+could-not-judge. See "M3 — what shipped" at the end, `NEXT_EDIT.md`
+§9e, and the `DEFAULTS_LEDGER.md` row.
 Written 2026-08-28. Sibling of [`NEXT_EDIT.md`](../NEXT_EDIT.md), which
 is the as-built design; this proposes a THIRD induction source beside
 the rule lane and the model lane.
@@ -289,6 +293,58 @@ unaligned. Priced options, in order:
    reference this" with nothing proposed and nothing to accept wrongly —
    has a recall bar, not a precision bar. This is `NEXT_EDIT.md`'s own
    fallback and it needs neither the filter nor the content derivation.
+
+## M3 — WHAT SHIPPED (2026-08-28)
+
+The lane, as navigation. `next_edit_symbols.rs` beside the syntax
+oracle; `next_edit.rs` untouched and still pure. M2 (edit content) is
+NOT built and its bar is unchanged.
+
+**The crate-graph decision M3 flagged, resolved.** `commonwealth-api`
+takes a DIRECT dep on `corpus-engine-scip`. That is the carve-out's own
+rule, not an exception to it: `corpus-engine/src/lib.rs` states
+"external consumers import directly from `corpus_engine_scip::*`. No
+re-export shim from this crate", precisely so two crates cannot land on
+different versions of one logical type (ARCH §8.3). It is not a
+`sovereign-*` edge, so the layer gate's `commonwealth-api` forbid rule
+does not reach it, and no `ARCH_LAYERS.toml` entry was needed.
+
+**One new method on the graph's owner**, rather than SQLite opened by
+hand in a second place: `ScipGraph::find_callers_qualified`. The
+existing `find_callers` resolves a plain NAME and matches
+`refs.callee_symbol`, which is also a short name — `new` maps to 631
+distinct symbols on this graph, so it answers "every `new` in the
+workspace". The new method keys on the SCIP descriptor. It names both
+columns because `callee_qualified` has no index: measured on the live
+graph, identical rows at **0.03 ms** against **105 ms** for the bare
+qualified scan, worst case **9.4 ms** (`poll`, 21,420 refs). The 6.8%
+of rows with an empty `callee_symbol` are all module references, never
+functions, so the pairing cannot hide a call site.
+
+**The trigger was made falsifiable.** "Cursor in a parameter list and
+the user just edited" is a gate that cannot fail — next-edit fires on
+edit-settle with the cursor AT the edit (ARCH §18.1). Shipped instead:
+the buffer's parameter list must DIFFER from the last save,
+whitespace-normalised so a rustfmt rewrap is not a contract change.
+This is also M1a's shape implemented rather than approximated, and it
+excludes the two classes that dominated M0's population —
+`symbol_not_indexed` (a function being typed for the first time) and
+`signature_unchanged` (a file that merely moved).
+
+**M1a's free filter ships unconditional.** Dropping occurrences with no
+call paren after them removed 105 junk sites and zero true ones.
+
+**Verification.** `commonwealth-api/tests/next_edit_symbol_lane_e2e.rs`
+— six tests against a REAL `ScipGraph` and real files on disk, plus 12
+unit tests in the module. Both measured guards were watched to FAIL:
+neutering `is_call_site` reds two e2e tests, neutering the signature
+comparison reds one. Gates on the landing commit: lint `--full` 0
+errors, 11,037 tests 0 fail, extension 50/50 with tsc clean.
+
+**What is NOT covered**, unchanged from M1a: Rust only, because it is
+the only language the graph indexes; and the precision number that
+would justify proposing edit text still does not exist — the path to it
+is a wider harvest, not a better filter.
 
 ## M2 — the edit content (only if M1 clears)
 

@@ -30,6 +30,16 @@ export interface MockDaemon {
       episode_id?: string;
       edits?: { start: number; end: number; new_text: string }[];
       sovereign_debug?: Record<string, unknown>;
+      /** Symbol-lane jump list, or `{ declined }` — a named state, never
+       *  an absent key. Omitted entirely by a daemon predating the lane,
+       *  which the client must report as `null` rather than `{}`. */
+      navigation?: {
+        symbol?: string;
+        sites?: { path: string; line: number; col: number; preview: string }[];
+        truncated?: boolean;
+        dropped?: number;
+        declined?: string;
+      };
     };
     /** Outcome reports the extension fired at
      *  /v1/edit_predictions/outcome, in arrival order. */

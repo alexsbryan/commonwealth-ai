@@ -8,15 +8,23 @@ ranked backlog, not a spec — the spec is
 ## What you are inheriting
 
 After you make the same edit twice, the editor offers the remaining
-sites as a queue you walk with Tab. It is two engines behind one route
-and one key:
+sites as a queue you walk with Tab. THREE engines behind one route:
 
-| | rule lane | model lane |
-|---|---|---|
-| where | `commonwealth-api/src/next_edit.rs` | `next_edit_model.rs` |
-| needs a model | no | yes, any competent chat model |
-| latency | p95 24 ms | p95 ~1.8 s |
-| can invent | structurally no — string search only | yes, so it is fenced hard |
+| | rule lane | model lane | symbol lane |
+|---|---|---|---|
+| where | `next_edit.rs` | `next_edit_model.rs` | `next_edit_symbols.rs` |
+| needs a model | no | yes, any competent chat model | no |
+| needs an INDEX | no | no | **yes — see the traps** |
+| latency | p95 24 ms | p95 ~1.8 s | p95 < 10 ms (one indexed SQL lookup) |
+| can invent | structurally no — string search only | yes, so it is fenced hard | structurally no — it proposes NO text |
+| gesture | Tab | Tab | status bar → QuickPick, Enter |
+
+The symbol lane (2026-08-28) is the odd one and the difference is not
+cosmetic: it proposes call SITES and never edit text. That is the
+measurement, not a staging choice — on the shape it fires on, site
+recall is 95.8% (CI [87.0, 100.0], clear of the 80% bar) while site
+precision is 69.7% (CI [34.4, 91.5]) with the 60% bar INSIDE the
+interval, i.e. a could-not-judge. A jump list's bar is recall.
 
 Both answer `POST /v1/edit_predictions`
 (`routes_edit_predictions.rs`). All policy is daemon-side by design,
@@ -69,15 +77,21 @@ direction. That is the point of them.
 
 ## Open work, ranked
 
-1. **The syntax oracle for TypeScript, JavaScript and Python.**
-   `PROVEN_LANGUAGES` in `next_edit_syntax.rs` is Rust and Go only,
-   because on TypeScript the filter measured *worse* — useful-fire
-   52.0% → 41.2%, wrong-fire 6.2% → 9.7%. This is the widest user
-   surface still blocked, and `cases.react-ts.jsonl.gz` (383 cases) is
-   already cut for it. The known residue is same-kind-different-
-   referent matches, which needs name binding a parse tree does not
-   carry. Adding a language to that list without a measurement is the
-   exact move the list exists to prevent.
+1. **The syntax oracle for JavaScript and Python.** TypeScript LANDED
+   2026-08-28 and this entry is narrowed, not closed. The TS blocker
+   was re-tested under current code and reproduced to the decimal — it
+   was never stale — and the unlock was not a better filter but
+   `DECLINE_WHEN_EMPTIED`: emptying the site set hands the case to the
+   pair fallback, whose rule can be wrong, so declining instead
+   recovered useful-fire to 51.0% at hunk-precision 38.9% → 41.5%
+   (88 junk hunks removed for 2 good, 44:1). Whether that guard helps
+   is a property of the LANGUAGE — on Rust/Go it COSTS 3.0 pts, so
+   they keep the fallthrough. `PROVEN_LANGUAGES` is now
+   `["rust", "go", "typescript"]`. JS and Python parse fine and stay
+   out for want of a measurement; adding one without it is the exact
+   move the list exists to prevent. The known residue is
+   same-kind-different-referent matches, which needs name binding a
+   parse tree does not carry — and which the symbol lane now has.
 
 2. **The casing-variant rule sub-lane.** Renaming `getUserData` while
    `get_user_data` survives elsewhere is detected today and declined
@@ -99,9 +113,25 @@ direction. That is the point of them.
    wider anchor — and could be re-cut once someone decides the
    anchored form is the intended answer.
 
-4. **Cross-file sites.** Named deferred. Note the oracle's own
-   reasoning applies: next-edit fires on an unsaved, often unindexed
-   buffer, so a SCIP index is stale exactly where it is needed.
+4. **Edit CONTENT for the symbol lane** (cross-file SITES shipped
+   2026-08-28). This entry used to say cross-file was deferred because
+   "a SCIP index is stale exactly where it is needed" — **that was
+   measured and refuted.** The staleness objection holds for a RENAME,
+   where the symbol being created is by definition not indexed. It does
+   not hold for a signature edit: the function existed before its
+   parameter list was touched, so the last-save graph knows it and its
+   callers, and the call sites are themselves unedited. Site recall on
+   that shape is 95.8%.
+
+   What is still deferred is the TEXT to write at each site, and the
+   blocker is **bank construction, not a filter**. M1a measured ten
+   candidate filters and none reached 60% precision while holding 80%
+   recall; the precision CI is wide because the population is only 13
+   independent commits. The named path is widening the harvest by
+   mapping call-site lines through intervening diffs instead of
+   requiring byte-identity with HEAD — which also recovers the 731
+   sites currently dropped as unaligned. Do NOT reach for a filter
+   first; M1a is the record of why.
 
 5. **The JetBrains port.** Named deferred, and cheap by construction —
    all policy is daemon-side, so the port is a capture-and-render
@@ -111,6 +141,41 @@ direction. That is the point of them.
 
 ## Traps that will cost you a day
 
+- **No indexed corpus means the SYMBOL lane is inert — but it now says
+  so in three places.** `svrn setup --fim` does NOT build a code index
+  (indexing takes minutes and setup is a command people expect to
+  finish), so a fresh install has FIM and next-edit working and the
+  jump list absent. That was silent until 2026-08-28; it is now
+  announced, and the three surfaces are deliberate rather than
+  redundant — a developer meets whichever one they reach first:
+
+  1. **`svrn setup --fim`** closes with an OFFER — the command, and why
+     the lane is worth having — suppressed once any corpus holds a
+     populated graph.
+  2. **`svrn doctor`** — the `scip_indexed` check names the jump list
+     among its consumers and repairs with `svrn init`. It
+     asks the graph for its symbol count, so an empty schema from a
+     failed export reads as failed, not present.
+  3. **The editor** — invoking the command with no sites reports the
+     real reason instead of "edit a parameter list", and offers to open
+     a terminal with `svrn init` typed but NOT run.
+
+  The daemon also logs `WARN` once per process, and only for
+  `graph_unavailable`: `symbol_not_indexed` fires for every new
+  function and `no_path` for every scratch file, so warning on those
+  would fire on ordinary typing and train the reader to ignore the log.
+  Corpus id defaults to the workspace folder's name; override with
+  `sovereign-fim.nextEdit.corpusId`. **Still the first thing to check
+  when someone reports "I never see call sites."**
+- **The symbol lane is bounded at 250 ms and degrades to `timed_out`.**
+  The measured lookup is 0.03 ms (9.4 ms worst-cased), but the
+  reindexer can hold SQLite's lock and this runs on the typing path. A
+  jump list is never worth a stalled keystroke.
+- **The symbol lane is Rust-only** (`TRIGGER_LANGUAGES`), because Rust
+  is the only language the SCIP exporter indexes on this host. It is
+  not a policy whitelist like `PROVEN_LANGUAGES` — adding an id without
+  an index behind it builds a trigger that can only ever find zero
+  sites.
 - **No `[models.edit]` means the model lane is silently inert** —
   `dropped: "unavailable"`, not an error. The rule lane keeps working,
   which is exactly what makes it easy to miss.

@@ -224,7 +224,7 @@ pub(super) async fn run_fim_setup(opts: &Opts) -> i32 {
         install_extension()
     };
 
-    print_decision(&plan, &verified, &editor);
+    print_decision(&plan, &verified, &editor, any_scip_graph_populated().await);
     0
 }
 
@@ -949,7 +949,47 @@ fn build_vsix(dir: &Path) -> Option<PathBuf> {
 /// The decision, the escape hatch, and the one upgrade worth trying —
 /// in that order, and short. An operator who reads nothing else
 /// should still know what changed on their machine and how to undo it.
-fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
+/// Does ANY corpus hold a populated SCIP graph?
+///
+/// Asks the graph for its symbol count rather than testing the file's
+/// existence or size: an empty schema is ~4 KB and a failed export leaves
+/// exactly that, which is the bug `doctor`'s `scip_indexed` check was
+/// rewritten to catch. Same question that check asks, and it must not drift
+/// into a second answer (ARCH §10.6) — if this ever needs more than a
+/// boolean, call into that check rather than growing a rival.
+async fn any_scip_graph_populated() -> bool {
+    let dir = crate::daemon_cmd::sovereign_root().join("indexes");
+    let Ok(entries) = std::fs::read_dir(&dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let db = entry.path().join("scip_graph.db");
+        if !db.exists() {
+            continue;
+        }
+        let Some(name) = entry
+            .path()
+            .file_name()
+            .and_then(|n| n.to_str())
+            .map(str::to_string)
+        else {
+            continue;
+        };
+        if let Ok(graph) = corpus_engine_scip::ScipGraph::open(&db, &name) {
+            if graph.symbol_count().await > 0 {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn print_decision(
+    plan: &Plan,
+    v: &Verified,
+    editor: &EditorOutcome,
+    scip_populated: bool,
+) {
     println!();
     println!("  {}", "─".repeat(54));
     println!("  \u{2713} Inline completion is live");
@@ -992,6 +1032,27 @@ fn print_decision(plan: &Plan, v: &Verified, editor: &EditorOutcome) {
             truncate(&v.sample, 44),
             v.ttft_ms.map(|t| format!(" in {t}ms")).unwrap_or_default()
         );
+    }
+
+    // The symbol lane needs a code index and setup does not build one.
+    // OFFERED, never run: indexing a repo takes minutes, and `setup --fim`
+    // is a command people expect to finish. Silence here is what makes the
+    // lane invisible on a fresh install — the status-bar item simply never
+    // appears, there is no error, and nobody thinks to look (that failure
+    // mode is the first entry under "Traps" in NEXT_EDIT_HANDOVER.md).
+    // Suppressed once a populated graph exists, so this stops nagging the
+    // moment it is true.
+    if !scip_populated {
+        println!();
+        println!("  Optional \u{2014} unlock call-site navigation");
+        println!("    svrn init                # in your repo; minutes, one time");
+        println!();
+        println!("    Edit a function's parameter list and the editor offers its call");
+        println!("    sites as a jump list \u{2014} the shape the pattern engine cannot see,");
+        println!("    because there the edit you make and the edits it implies are");
+        println!("    different text. It reads a symbol graph, so it needs that index.");
+        println!("    Rust only today. It proposes no edits, only places to go.");
+        println!("    Check it later with:  svrn doctor        # see `scip_indexed`");
     }
 
     println!();

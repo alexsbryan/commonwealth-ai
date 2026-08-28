@@ -25,6 +25,14 @@ corpus-engine = { workspace = true, features = ["treesitter"] }
 # place where `.tsx` vs `.ts` is decided.
 tree-sitter = "0.26"
 corpus-engine-notes = { workspace = true }
+# The SCIP call graph, for `next_edit_symbols` (call-site navigation).
+# A DIRECT dep by the carve-out's own rule: corpus-engine deliberately
+# ships no re-export shim for it ("external consumers import directly
+# from `corpus_engine_scip::*`", corpus-engine/src/lib.rs), precisely so
+# two crates cannot end up on different versions of one logical type
+# (ARCH §8.3). Not a `sovereign-*` edge, so the layer gate's
+# commonwealth-api forbid rule does not reach it.
+corpus-engine-scip = { workspace = true }
 # Staging recipe TOML to a throwaway file for the OICP recipe-test route
 # (the engine's `test_recipe` reads from a path). Also used in dev-deps.
 tempfile = "3"

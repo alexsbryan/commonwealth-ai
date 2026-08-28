@@ -159,6 +159,15 @@ pub struct Caller {
     pub file_path: String,
     pub line: i32,
     pub call_kind: CallKind,
+    /// Column just past the occurrence's last character, from the
+    /// exporter's own span. `-1` on legacy rows that predate spans.
+    ///
+    /// `refs` is an OCCURRENCE table, not a call table: `ref_kind` is
+    /// uniformly `direct` across all 1.36M rows here, and a `use`
+    /// import or a re-export list names a function without calling it.
+    /// The character that follows the occurrence is what separates
+    /// them, so a consumer that must show only CALLS needs this column.
+    pub end_col: i32,
 }
 
 /// A single entry in a blast-radius traversal result.
@@ -1000,7 +1009,7 @@ impl ScipGraph {
                     // file_path from refs is the source of truth.
                     let mut stmt = conn
                         .prepare(
-                            "SELECT r.caller_symbol, r.file_path, r.line, r.ref_kind
+                            "SELECT r.caller_symbol, r.file_path, r.line, r.ref_kind, r.end_col
                              FROM refs r
                              WHERE r.callee_symbol = ?
                              ORDER BY r.file_path, r.line",
@@ -1016,6 +1025,7 @@ impl ScipGraph {
                                 call_kind: CallKind::from_ref_kind(
                                     &row.get::<_, String>(3).unwrap_or_default(),
                                 ),
+                                end_col: row.get(4).unwrap_or(-1),
                             })
                         })
                         .map_err(|e| Error::Database(format!("find_callers query: {e}")))?
@@ -1299,6 +1309,69 @@ impl ScipGraph {
             .filter_map(|r| r.ok())
             .collect();
         Ok(rows)
+    }
+
+    /// Call sites of ONE function, identified by its full SCIP
+    /// descriptor rather than by its short name.
+    ///
+    /// WHY THIS EXISTS BESIDE [`find_callers`](Self::find_callers).
+    /// That method resolves a plain name and matches `refs.callee_symbol`,
+    /// which is a short name too: on this repo's graph `new` maps to 631
+    /// distinct symbols, so a name-keyed lookup answers "every `new` in
+    /// the workspace". For anything that will point a developer at a
+    /// specific line, that is the wrong question. `callee_qualified`
+    /// carries the descriptor and is exact.
+    ///
+    /// WHY THE QUERY NAMES BOTH COLUMNS. There is no index on
+    /// `callee_qualified`, so a bare qualified predicate full-scans the
+    /// refs table — measured 105 ms over 1.36M rows on the
+    /// `commonwealth-ai` graph. `callee_symbol` IS indexed
+    /// (`idx_refs_callee`), so pairing them lets SQLite seek on the name
+    /// and then verify the descriptor: same rows, 0.03 ms, and 9.4 ms
+    /// for the worst-case symbol in that graph (`poll`, 21,420 refs).
+    /// The pair is a performance rewrite of one predicate, not a
+    /// widening of it — `callee_qualified` alone decides the result.
+    ///
+    /// `name` must be the short name whose descriptor is `qualified`;
+    /// passing a mismatched pair returns nothing rather than guessing.
+    /// The 6.8% of rows with an empty `callee_symbol` are all module
+    /// references (`…/`-suffixed descriptors), never functions, so this
+    /// pairing cannot hide a call site.
+    pub async fn find_callers_qualified(
+        &self,
+        qualified: &str,
+        name: &str,
+    ) -> Result<(Vec<Caller>, StalenessCaution)> {
+        let callers: Vec<Caller> = {
+            let conn = self.conn.lock().await;
+            let mut stmt = conn
+                .prepare(
+                    "SELECT r.caller_symbol, r.file_path, r.line, r.ref_kind, r.end_col
+                     FROM refs r
+                     WHERE r.corpus_id = ? AND r.callee_symbol = ? AND r.callee_qualified = ?
+                     ORDER BY r.file_path, r.line",
+                )
+                .map_err(|e| Error::Database(format!("find_callers_qualified prepare: {e}")))?;
+            let rows: Vec<Caller> = stmt
+                .query_map(params![self.corpus_id, name, qualified], |row| {
+                    Ok(Caller {
+                        symbol_name: row.get(0)?,
+                        file_path: row.get(1)?,
+                        line: row.get(2)?,
+                        call_kind: CallKind::from_ref_kind(
+                            &row.get::<_, String>(3).unwrap_or_default(),
+                        ),
+                        end_col: row.get(4).unwrap_or(-1),
+                    })
+                })
+                .map_err(|e| Error::Database(format!("find_callers_qualified query: {e}")))?
+                .filter_map(|r| r.ok())
+                .collect();
+            rows
+        };
+        let files: Vec<String> = callers.iter().map(|c| c.file_path.clone()).collect();
+        let caution = self.staleness_for(&files).await;
+        Ok((callers, caution))
     }
 
     pub async fn find_callees_qualified(

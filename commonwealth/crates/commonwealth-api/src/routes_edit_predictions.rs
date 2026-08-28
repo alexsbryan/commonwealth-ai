@@ -28,6 +28,7 @@ use futures::StreamExt;
 
 use crate::next_edit::{self, HistoryUnit};
 use crate::next_edit_model::{self, Consult};
+use crate::next_edit_symbols;
 use crate::next_edit_syntax;
 use crate::openai_types::{ChatCompletionRequest, ErrorResponse, StreamFrame};
 use crate::state::{AppState, FimCompletionRequest};
@@ -46,9 +47,26 @@ const MAX_UNIT_BYTES: usize = 2 * 1024;
 /// refused before serde allocates it rather than after.
 pub const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 
+/// Has the actionable symbol-lane warning already been said?
+///
+/// Once per process. This fires on the typing path, so an un-throttled
+/// warn would emit on every coalesced edit unit and bury the log it is
+/// trying to make useful — and the condition it reports (no index) is
+/// static until somebody runs a command.
+static SYMBOL_LANE_WARNED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Model-lane inference budget; a slower response is dropped as
 /// `timeout` (the GM5 latency gate lives in the §6 bank, not here).
 const MODEL_TIMEOUT_MS: u64 = 15_000;
+
+/// Symbol-lane budget. The measured lookup is 0.03 ms, and 9.4 ms for
+/// the worst-cased symbol on this repo's graph — but the reindexer can
+/// hold SQLite's write lock, and this runs on the interactive typing
+/// path. Bounded rather than trusted: a jump list is never worth a
+/// stalled keystroke, and the decline says `timed_out` rather than
+/// disappearing.
+const SYMBOL_TIMEOUT_MS: u64 = 250;
 
 #[derive(Debug, Deserialize)]
 pub struct EditPredictionsRequestWire {
@@ -71,6 +89,28 @@ pub struct EditPredictionsRequestWire {
     /// (`gym/next-edit/gen/README.md`).
     #[serde(default)]
     pub model_lane: bool,
+    /// Opt-in to the symbol lane: call-site NAVIGATION for a signature
+    /// edit (`crate::next_edit_symbols`). Off by default, and it
+    /// proposes no edits in any case — `navigation.sites` is a jump
+    /// list. Requires `corpus_id`.
+    #[serde(default)]
+    pub symbol_lane: bool,
+    /// Which indexed corpus describes this workspace. Supplied by the
+    /// client, never guessed: enumerating installed indexes to find out
+    /// opens every corpus on disk (~10 s), which is not a thing to do
+    /// on the interactive editing path. Absent means the symbol lane
+    /// declines and says so, rather than silently searching the wrong
+    /// graph (ARCH §18.3).
+    #[serde(default)]
+    pub corpus_id: Option<String>,
+    /// Absolute path of the workspace root the corpus was indexed from.
+    /// The graph stores REPO-RELATIVE paths while the editor sends an
+    /// absolute one, and nothing on the daemon can bridge that: the
+    /// index root is `~/.svrnmesh/indexes`, which says nothing about
+    /// where the source lives. Supplied by the client, which knows it;
+    /// absent means the symbol lane declines.
+    #[serde(default)]
+    pub workspace_root: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -540,6 +580,69 @@ pub async fn edit_predictions(
         "edit prediction"
     );
 
+    // The symbol lane runs HERE rather than inside `predict_response`
+    // because it is independent of both lanes that function owns: it
+    // reads no rule, consults no model, and proposes no edit. Keeping
+    // it out also keeps `predict_response` the pure two-lane seam the
+    // offline scorer shares (NEXT_EDIT.md §9a) — that harness scores
+    // edits, and a jump list is not one.
+    let mut body = out.body;
+    if wire.symbol_lane {
+        let nav = match tokio::time::timeout(
+            Duration::from_millis(SYMBOL_TIMEOUT_MS),
+            symbol_lane(&state, &wire),
+        )
+        .await
+        {
+            Ok(r) => r,
+            Err(_) => Err(next_edit_symbols::Decline::TimedOut),
+        };
+        body["navigation"] = match &nav {
+            Ok(n) => serde_json::json!({
+                "symbol": n.symbol,
+                "sites": n.sites.iter().map(|s| serde_json::json!({
+                    "path": s.path,
+                    "line": s.line,
+                    "col": s.col,
+                    "preview": s.preview,
+                })).collect::<Vec<_>>(),
+                "truncated": n.truncated,
+                "dropped": n.dropped,
+            }),
+            // A decline is a NAMED state on the wire, not an absent
+            // key: the client renders nothing either way, but a
+            // developer asking why gets an answer (ARCH §9).
+            Err(reason) => serde_json::json!({ "declined": reason.as_str() }),
+        };
+        match &nav {
+            // A decline the developer can ACT on is worth saying out
+            // loud — once. The lane degrades gracefully either way (the
+            // response is a normal 200 and every other lane is
+            // untouched), and that is exactly what makes a missing
+            // index invisible: no error, no failed request, just a
+            // status-bar item that never appears.
+            Err(r) if r.is_actionable() => {
+                if !SYMBOL_LANE_WARNED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+                    tracing::warn!(
+                        target: "next_edit",
+                        reason = r.as_str(),
+                        corpus_id = wire.corpus_id.as_deref().unwrap_or("<unset>"),
+                        "{}",
+                        r.remedy().unwrap_or("symbol lane unavailable")
+                    );
+                }
+            }
+            _ => tracing::debug!(
+                target: "next_edit",
+                symbol_lane = match &nav {
+                    Ok(n) => format!("{} site(s), {} dropped", n.sites.len(), n.dropped),
+                    Err(r) => format!("declined:{}", r.as_str()),
+                },
+                "symbol lane"
+            ),
+        }
+    }
+
     // The developer's own local record of what this lane did. Off the
     // request path and unable to fail it: `record` drops the join handle
     // and turns any error into a `warn` (see that function).
@@ -547,7 +650,61 @@ pub async fn edit_predictions(
         out.episode,
     ));
 
-    Json(out.body).into_response()
+    Json(body).into_response()
+}
+
+/// The symbol lane's impure half: locate the corpus graph, then hand
+/// the pure lane a reader for the last-saved text.
+///
+/// Every failure is a named [`Decline`]. The graph is opened per
+/// request — a SQLite open on a warm page cache, against a lookup the
+/// lane only reaches after the trigger has already fired, which is
+/// rare. Caching a handle here would need invalidation against the
+/// reindexer's rewrite of the same file and is not worth that until a
+/// measurement says the open is the cost.
+async fn symbol_lane(
+    state: &AppState,
+    wire: &EditPredictionsRequestWire,
+) -> Result<next_edit_symbols::Navigation, next_edit_symbols::Decline> {
+    use next_edit_symbols::Decline;
+    let corpus_id = wire.corpus_id.as_deref().ok_or(Decline::GraphUnavailable)?;
+    let root = std::path::Path::new(wire.workspace_root.as_deref().ok_or(Decline::NoPath)?);
+    let engine = state
+        .inner
+        .corpus_engine
+        .as_ref()
+        .ok_or(Decline::GraphUnavailable)?;
+    let db = engine.index_dir().join(corpus_id).join("scip_graph.db");
+    if !db.exists() {
+        return Err(Decline::GraphUnavailable);
+    }
+
+    // The editor sends an absolute path; the graph is keyed on the
+    // repo-relative one. Relativise here, and REFUSE when the file is
+    // outside the declared root rather than falling back to the
+    // absolute form — a lookup that cannot match would report
+    // `symbol_not_indexed`, which reads like "new function" and is a
+    // different diagnosis (ARCH §18.3).
+    let abs = wire.path.as_deref().ok_or(Decline::NoPath)?;
+    let rel = std::path::Path::new(abs)
+        .strip_prefix(root)
+        .map_err(|_| Decline::NoPath)?
+        .to_string_lossy()
+        .into_owned();
+
+    let graph = corpus_engine_scip::scip_graph::ScipGraph::open(&db, corpus_id)
+        .map_err(|_| Decline::GraphUnavailable)?;
+    let cursor = next_edit::utf16_to_byte(&wire.text, wire.cursor);
+    // Reads are confined to the declared root and to paths the INDEX
+    // named — never to a path the request supplied.
+    next_edit_symbols::navigate(&graph, Some(&rel), &wire.text, cursor, |p| {
+        let candidate = root.join(p);
+        if !candidate.starts_with(root) {
+            return None;
+        }
+        std::fs::read_to_string(&candidate).ok()
+    })
+    .await
 }
 
 /// The model lane, end to end: consult gate → region guards → prompt

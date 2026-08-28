@@ -170,6 +170,79 @@ describe("predictEdits", () => {
     expect(mock.state.lastEditPredictionBody?.cursor).toBe(4);
   });
 
+  it("parses the symbol lane's jump list, and a decline is a named state not an absent key", async () => {
+    mock.state.mode = "happy";
+    const canned = mock.state.editPrediction;
+    mock.state.editPrediction = {
+      object: "edit_prediction",
+      engine: "rule",
+      edits: [],
+      episode_id: "ep-nav",
+      navigation: {
+        symbol: "helper",
+        sites: [{ path: "a.rs", line: 3, col: 4, preview: "helper(1, 2)" }],
+        truncated: false,
+        dropped: 1,
+      },
+    };
+    const ctrl = new AbortController();
+    const r = await predictEdits(
+      mock.endpoint,
+      { history: [], text: "fn helper(a: u8, b: u8) {}", cursor: 20, path: "lib.rs" },
+      ctrl.signal,
+    );
+    // Navigation arrives WITH an empty edits array — the rule lane is
+    // silent by construction on a signature fanout, so this is the
+    // normal case rather than an edge one.
+    expect(r.edits).toEqual([]);
+    expect(r.navigation?.symbol).toBe("helper");
+    expect(r.navigation?.sites?.[0]).toEqual({
+      path: "a.rs",
+      line: 3,
+      col: 4,
+      preview: "helper(1, 2)",
+    });
+    expect(r.navigation?.dropped).toBe(1);
+
+    mock.state.editPrediction = {
+      object: "edit_prediction",
+      engine: "rule",
+      edits: [],
+      episode_id: "ep-declined",
+      navigation: { declined: "symbol_not_indexed" },
+    };
+    const d = await predictEdits(
+      mock.endpoint,
+      { history: [], text: "x", cursor: 0 },
+      ctrl.signal,
+    );
+    expect(d.navigation?.declined).toBe("symbol_not_indexed");
+    expect(d.navigation?.sites).toBeUndefined();
+    mock.state.editPrediction = canned;
+  });
+
+  it("reports no navigation at all from a daemon that predates the lane", async () => {
+    mock.state.mode = "happy";
+    const canned = mock.state.editPrediction;
+    mock.state.editPrediction = {
+      object: "edit_prediction",
+      engine: "rule",
+      edits: [],
+      episode_id: "ep-old",
+    };
+    const ctrl = new AbortController();
+    const r = await predictEdits(
+      mock.endpoint,
+      { history: [], text: "x", cursor: 0 },
+      ctrl.signal,
+    );
+    // `null`, not `{}`: "this daemon does not have the lane" and "the
+    // lane declined" are different facts and the surface treats them
+    // the same only by accident.
+    expect(r.navigation).toBeNull();
+    mock.state.editPrediction = canned;
+  });
+
   it("surfaces the daemon's actionable 400 as DaemonError", async () => {
     mock.state.mode = "error400";
     const ctrl = new AbortController();

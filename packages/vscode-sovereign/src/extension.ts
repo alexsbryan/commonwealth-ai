@@ -4,6 +4,7 @@
 // this file only wires editor events to the client.
 
 import * as vscode from "vscode";
+import { CallSiteNavigator } from "./callSites";
 import { readConfig } from "./config";
 import { FimDebugLog } from "./debug";
 import { NextEditController } from "./nextEdit";
@@ -17,11 +18,18 @@ export function activate(context: vscode.ExtensionContext): void {
   // Next-edit rule lane (NEXT_EDIT.md): ambient watcher, daemon-side
   // policy via POST /v1/edit_predictions.
   const nextEdit = new NextEditController();
+  // The symbol lane's surface: a jump list for the call sites of a
+  // function whose signature is being edited. Proposes no text — see
+  // `callSites.ts` for the measurement that makes navigation the
+  // affordance and edits the thing still waiting on a number.
+  const callSites = new CallSiteNavigator();
+  nextEdit.setNavigator(callSites);
 
   context.subscriptions.push(
     log,
     statusBar,
     nextEdit,
+    callSites,
     vscode.languages.registerInlineCompletionItemProvider(
       { pattern: "**" },
       provider,
@@ -37,6 +45,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("sovereign-fim.nextEdit.dismiss", () => {
       nextEdit.dismiss();
+    }),
+    vscode.commands.registerCommand("sovereign-fim.callSites.show", () => {
+      void callSites.show();
     }),
   );
 
