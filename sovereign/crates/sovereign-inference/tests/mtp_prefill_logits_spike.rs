@@ -192,7 +192,7 @@ fn pre_norm_extraction_does_not_need_all_position_logits() {
     // being responsible. The floor is the same configuration run twice; only a
     // signal that exceeds it is attributable (§18.4, and the FLOOR-arm pattern
     // `rs_rollback_spike` already uses for exactly this reason).
-    let mut capture = |ctx: &mut LlamaContext<'_>, all: bool| {
+    let capture = |ctx: &mut LlamaContext<'_>, all: bool| {
         ctx.clear_kv_cache();
         assert!(
             prefill(ctx, &tokens, all),
@@ -298,5 +298,70 @@ fn pre_norm_extraction_does_not_need_all_position_logits() {
          (signal {d_pre:e}, floor {floor_pre:e}). `logits=true` on non-final \
          prefill positions is not needed for MTP extraction on the UNMASKED \
          target, and it forces the buffer above."
+    );
+}
+
+/// Locate the vendored llama.cpp tree by walking UP from this crate, rather
+/// than by a deep `../../../` literal that a crate move silently breaks.
+fn vendored_llama_cpp() -> Option<std::path::PathBuf> {
+    let mut dir = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    loop {
+        let cand = dir.join("vendor/llama-cpp-sys-4/llama.cpp");
+        if cand.is_dir() {
+            return Some(cand);
+        }
+        if !dir.pop() {
+            return None;
+        }
+    }
+}
+
+/// TRIPWIRE: the MTP target context must still be initialised UNMASKED.
+///
+/// Everything about dropping the all-position prefill flag rests on one line
+/// of vendored upstream. `common_speculative`'s MTP init sets the target
+/// unmasked and the DRAFT masked:
+///
+/// ```c
+/// llama_set_embeddings_nextn(ctx_tgt, true, /*masked*/ false);
+/// llama_set_embeddings_nextn(ctx_dft, true, /*masked*/ true);
+/// ```
+///
+/// Unmasked is what lets `get_embeddings_nextn_ith` index nextn rows densely
+/// by raw token position without consulting `output_resolve_row` — the
+/// function that actually requires `batch.logits[i]`. Flip that argument to
+/// `true` in a vendor bump and the optimisation stops being safe, silently:
+/// the next daemon to prefill would take the masked path, `output_resolve_row`
+/// would throw on an unflagged position, and upstream's `GGML_ABORT` would
+/// SIGABRT the daemon rather than return an error.
+///
+/// This is deliberately a source assertion and not a runtime one. By the time
+/// a runtime check could observe the masked flag, the abort has already
+/// happened. We vendor the tree, so the precondition is checkable at rest.
+#[test]
+fn the_mtp_target_context_is_still_initialised_unmasked() {
+    let Some(root) = vendored_llama_cpp() else {
+        // Absent tree is COULD-NOT-JUDGE, never a pass — a green tick here
+        // would be a tripwire that verified nothing (ARCH 18.1).
+        panic!("vendored llama.cpp not found by walking up from CARGO_MANIFEST_DIR");
+    };
+    let spec = root.join("common/speculative.cpp");
+    let src = std::fs::read_to_string(&spec).unwrap_or_else(|e| panic!("{}: {e}", spec.display()));
+
+    let unmasked_target =
+        src.contains("llama_set_embeddings_nextn(ctx_tgt, true, /*masked*/ false)");
+    let masked_draft = src.contains("llama_set_embeddings_nextn(ctx_dft, true, /*masked*/ true)");
+
+    assert!(
+        unmasked_target,
+        "vendored speculative.cpp no longer initialises the MTP TARGET unmasked. \
+         Dropping `logits=true` on non-final prefill positions (model_slot.rs) is \
+         only safe on the unmasked path — re-run \
+         `mtp_prefill_logits_spike` before trusting it again."
+    );
+    assert!(
+        masked_draft,
+        "the MTP DRAFT context is no longer initialised masked; the two contexts \
+         have different extraction rules and this spike's reasoning assumed both"
     );
 }
