@@ -42,7 +42,7 @@ def load(run_dir):
         # the whole point (how much of the readability gap is render clutter).
         # A regex of `[0-9x]+\.md` silently drops it — skipping exactly the row
         # the comparison exists for.
-        m = re.search(r"arm-([0-9x]+(?:\.rendered)?)\.md", d.get("article_path", ""))
+        m = re.search(r"arm-([0-9x]+(?:\.[a-z]+)*)\.md", d.get("article_path", ""))
         if m:
             rows[m.group(1)] = d["judge_output"]
     if not rows:
@@ -59,8 +59,9 @@ def main():
     arms = []
     for a in known:
         arms.append(a)
-        if a + ".rendered" in rows:
-            arms.append(a + ".rendered")
+        for suffix in (".rendered", ".rerendered"):
+            if a + suffix in rows:
+                arms.append(a + suffix)
     arms += sorted(set(rows) - set(arms))
     focus = sys.argv[2] if len(sys.argv) > 2 else ("16x4" if "16x4" in rows else arms[-1])
     if focus not in rows:
