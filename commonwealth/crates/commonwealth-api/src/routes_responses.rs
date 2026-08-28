@@ -260,7 +260,14 @@ pub async fn responses(
     }));
 
     // ── Inner invocation ──────────────────────────────────────────────
-    let inner = chat_completions(State(state), headers, Json(chat_req)).await;
+    let inner = chat_completions(
+        State(state),
+        headers,
+        // `/v1/responses` is not a path any `Scope` names — see routes_ollama.
+        None,
+        Json(chat_req),
+    )
+    .await;
 
     // ── Response translation ──────────────────────────────────────────
     if stream_mode {

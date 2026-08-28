@@ -221,6 +221,15 @@ const REGISTRY: &[(&str, Class, usize)] = &[
     // in particular HAD to move: an offline rotation was reverted by the next
     // gossip round. Class unchanged — loopback to our own daemon.
     ("sovereign/crates/sovereign-cli-llm/src/mesh_cmd.rs", Class::Mesh, 10),
+    // NEW 2026-08-27: `svrn mesh grant` / `svrn mesh use`, the two ends of an
+    // ephemeral guest link. One shared `http_client()` builder serves both
+    // directions — loopback to our own daemon to mint/revoke/list, and one
+    // outbound GET to the ISSUING node's `/v1/models` so `mesh use` can refuse
+    // a dead link before storing it. Both are Commonwealth nodes, so Mesh is
+    // the honest class: no third-party model or search traffic passes here,
+    // and nothing on this path may construct a RemotePayload/QueryEgress
+    // client (that stays in the boundary).
+    ("sovereign/crates/sovereign-cli-llm/src/mesh_guest.rs", Class::Mesh, 1),
     ("sovereign/crates/sovereign-cli-llm/src/search_gym_cmd/mod.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/recipe_agent_live_trial.rs", Class::LocalDaemon, 3),
     ("sovereign/crates/sovereign-cli-llm/src/mesh_bench.rs", Class::Mesh, 3),

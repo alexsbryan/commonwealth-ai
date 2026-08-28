@@ -135,6 +135,24 @@ pub fn client_router(state: AppState) -> Router {
             "/internal/inference/warmup",
             post(routes_internal::inference_warmup),
         )
+        // Guest-grant lifecycle. Mounted HERE for the same reason warmup is,
+        // one route up: on `internal_router` these would be reachable by any
+        // mesh PEER with no auth gate, i.e. a "forge a credential for an
+        // outsider" lever. Behind `client_auth` they are loopback-or-full-token
+        // — and a guest cannot reach them because no `Scope` names these paths,
+        // so grants cannot mint grants without a check anywhere.
+        .route(
+            "/internal/guest/grant",
+            post(routes_internal::guest_grant_issue),
+        )
+        .route(
+            "/internal/guest/grant/revoke",
+            post(routes_internal::guest_grant_revoke),
+        )
+        .route(
+            "/internal/guest/grant/list",
+            get(routes_internal::guest_grant_list),
+        )
         // OICP capability manifest.
         .route("/oicp/v1/capabilities", get(routes_oicp::capabilities))
         // OICP v0.4 §5 ingest extension: install a corpus by recipe id,

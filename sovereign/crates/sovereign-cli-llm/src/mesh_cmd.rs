@@ -82,6 +82,8 @@ pub async fn run_mesh(args: &[String]) -> i32 {
         "switch" => cmd_switch(&args[1..]).await,
         "forget" => cmd_forget(&args[1..]).await,
         "rotate" => cmd_rotate(&args[1..]).await,
+        "grant" => crate::mesh_guest::cmd_grant(&args[1..]).await,
+        "use" => crate::mesh_guest::cmd_use(&args[1..]).await,
         "status" => cmd_status(&args[1..]).await,
         "transport" => cmd_transport(&args[1..]).await,
         "balance" => cmd_balance().await,
@@ -450,6 +452,14 @@ const HELP_MESH: sovereign_cli_shared::help::Help = sovereign_cli_shared::help::
             (
                 "rotate",
                 "Generate a new shareable join key (invalidates the previous)",
+            ),
+            (
+                "grant --model <id>",
+                "Lend named models to a NON-member for a bounded window; prints a guest link",
+            ),
+            (
+                "use <link>",
+                "Accept a guest link — `svrn chat` then routes to the issuing node",
             ),
             (
                 "status",
@@ -2695,7 +2705,13 @@ fn print_mesh_share(
             encrypted,
             expires_at,
         ),
-        None => build_https_join_link(join_key, None, Some(mesh_name), None, false, None),
+        // `parse_join_argument` FILTERS to `Join`, so a guest link cannot
+        // reach here — it is spelled out rather than folded into `_` so that a
+        // third `DeepLink` variant breaks this build instead of silently
+        // rendering an invite from something that is not one.
+        Some(sovereign_mesh::deep_link::DeepLink::Guest { .. }) | None => {
+            build_https_join_link(join_key, None, Some(mesh_name), None, false, None)
+        }
     };
     println!();
     println!("Mesh created.");
@@ -2801,7 +2817,7 @@ async fn cmd_join(args: &[String]) -> i32 {
 /// than `/` because the daemon's root route returns 405 for GET and
 /// reqwest's `.send()` succeeds against 405 just as well as 200 — the
 /// goal is "is anything listening", not "is the response 2xx".
-async fn daemon_listening_on(port: u16) -> bool {
+pub(crate) async fn daemon_listening_on(port: u16) -> bool {
     let url = format!("http://127.0.0.1:{port}/v1/models");
     let Ok(client) = reqwest::Client::builder()
         .timeout(std::time::Duration::from_millis(500))

@@ -243,3 +243,278 @@ async fn gated_path_still_blocks_when_exempt_path_is_open() {
         "/status must stay open (got {open})"
     );
 }
+
+// ─────────────────────────── guest grants ────────────────────────────
+//
+// A guest is the third principal class on this port: not loopback, not the
+// daemon token. The arm sits strictly AFTER the full-token arm, asks
+// `permits_path`, and never inspects a `Scope` variant. These pin all three,
+// plus the ratchet that makes a future scope safe to add.
+//
+// Every one of these was watched fail before it was kept — see
+// `guest_falsification` at the bottom of this file for the probe.
+
+use commonwealth_knowledge::{GuestGrant, Scope};
+
+const GUEST_TOKEN: &str = "9c1f7b2ea4d68053aa11ff7c3e5b90d4c7a2f16b8e04d93b5c7a1e2f3b4d5c6a";
+const GRANTED_MODEL: &str = "shared-primary";
+
+/// Minutes, in the milliseconds the store speaks.
+fn ms(mins: u64) -> u64 {
+    mins * 60 * 1_000
+}
+
+/// `AppState` with the daemon token installed AND one guest grant live,
+/// scoped to a single model.
+fn state_with_guest(scopes: Vec<Scope>) -> AppState {
+    let state = state_with_token(Some(TOKEN));
+    let now = commonwealth_core::clock::unix_now_millis();
+    state
+        .inner
+        .guest_grants
+        .issue(GUEST_TOKEN, scopes, Some("test".into()), 3_600, now);
+    state
+}
+
+/// Like `get_status`, but keeps the body so a refusal can be told apart from
+/// its neighbours. Three different things return 403 on this port; a test that
+/// asserted only the status could not say which one fired.
+async fn get_with_body(
+    state: AppState,
+    path: &str,
+    peer: Option<&str>,
+    bearer: Option<&str>,
+) -> (StatusCode, serde_json::Value) {
+    let mut builder = Request::get(path);
+    if let Some(b) = bearer {
+        builder = builder.header(axum::http::header::AUTHORIZATION, format!("Bearer {b}"));
+    }
+    let mut req = builder.body(Body::empty()).unwrap();
+    if let Some(p) = peer {
+        req.extensions_mut()
+            .insert(ConnectInfo(p.parse::<SocketAddr>().unwrap()));
+    }
+    let resp = client_router(state).oneshot(req).await.unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let json = serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null);
+    (status, json)
+}
+
+#[tokio::test]
+async fn a_live_guest_token_reaches_a_path_its_scope_names() {
+    let state = state_with_guest(vec![Scope::Models(vec![GRANTED_MODEL.into()])]);
+    let (status, _) = get_with_body(state, "/v1/models", Some(LAN_PEER), Some(GUEST_TOKEN)).await;
+    assert!(
+        !is_auth_rejection(status),
+        "/v1/models is in Scope::Models::paths() — a live guest must reach it (got {status})"
+    );
+}
+
+#[tokio::test]
+async fn the_same_guest_token_is_403_on_a_path_no_scope_names() {
+    let state = state_with_guest(vec![Scope::Models(vec![GRANTED_MODEL.into()])]);
+    let (status, body) = get_with_body(
+        state,
+        "/v1/knowledge/search",
+        Some(LAN_PEER),
+        Some(GUEST_TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    // The TYPED refusal, not the "remote access not configured" 403 and not a
+    // bare one: a guest holding a valid credential must be told which boundary
+    // they hit, or "the link is broken" gets filed against a working link.
+    assert_eq!(body["error"]["type"], "guest_scope");
+    assert_eq!(body["error"]["code"], "out_of_scope");
+    assert!(
+        body["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains(GRANTED_MODEL),
+        "the refusal names what the grant DOES cover: {body}"
+    );
+}
+
+/// The ordering invariant, from the other side. A guest token must never
+/// widen into the daemon token's reach — and the way you observe that is that
+/// the guest arm answers (typed 403), not the full-token arm (admitted).
+#[tokio::test]
+async fn a_guest_token_never_satisfies_the_full_token_arm() {
+    let state = state_with_guest(vec![Scope::Models(vec![GRANTED_MODEL.into()])]);
+    let (guest_status, body) = get_with_body(
+        state.clone(),
+        "/v1/knowledge/search",
+        Some(LAN_PEER),
+        Some(GUEST_TOKEN),
+    )
+    .await;
+    assert_eq!(guest_status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["type"], "guest_scope");
+
+    // The daemon token on the same path IS admitted — so the 403 above is the
+    // grant's narrowness, not the route being closed to everyone.
+    let (full_status, _) =
+        get_with_body(state, "/v1/knowledge/search", Some(LAN_PEER), Some(TOKEN)).await;
+    assert!(
+        !is_auth_rejection(full_status),
+        "the daemon token reaches this route (got {full_status})"
+    );
+}
+
+#[tokio::test]
+async fn an_expired_guest_token_is_401_not_admitted() {
+    let state = state_with_token(Some(TOKEN));
+    let now = commonwealth_core::clock::unix_now_millis();
+    // Issue against a clock two hours in the past with a 1s TTL: lapsed by the
+    // time the layer reads it, without sleeping.
+    state.inner.guest_grants.issue(
+        GUEST_TOKEN,
+        vec![Scope::Models(vec![GRANTED_MODEL.into()])],
+        None,
+        1,
+        now - ms(120),
+    );
+    let (status, _) = get_with_body(state, "/v1/models", Some(LAN_PEER), Some(GUEST_TOKEN)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn a_revoked_guest_token_fails_closed_on_the_very_next_request() {
+    let state = state_with_guest(vec![Scope::Models(vec![GRANTED_MODEL.into()])]);
+    let (before, _) = get_with_body(
+        state.clone(),
+        "/v1/models",
+        Some(LAN_PEER),
+        Some(GUEST_TOKEN),
+    )
+    .await;
+    assert!(!is_auth_rejection(before), "live before revoke");
+
+    assert!(state.inner.guest_grants.revoke(GUEST_TOKEN).is_some());
+
+    let (after, _) = get_with_body(state, "/v1/models", Some(LAN_PEER), Some(GUEST_TOKEN)).await;
+    assert_eq!(
+        after,
+        StatusCode::UNAUTHORIZED,
+        "revocation is immediate — there is no window behind the reaper"
+    );
+}
+
+/// A grant that names no scope permits nothing. `any()` over an empty
+/// iterator is false, and this pins that the direction never flips.
+#[tokio::test]
+async fn a_grant_with_no_scopes_permits_nothing() {
+    let state = state_with_guest(vec![]);
+    let (status, body) =
+        get_with_body(state, "/v1/models", Some(LAN_PEER), Some(GUEST_TOKEN)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert_eq!(body["error"]["type"], "guest_scope");
+}
+
+// ───────────────── the extension ratchet (plan §Verification) ─────────────────
+
+/// Paths no guest scope may EVER unlock, matched by prefix.
+///
+/// The one hand-maintained list in this design, and deliberately deny-side:
+/// forgetting an entry here fails closed for the operator (a dangerous path
+/// simply isn't granted by any existing scope) rather than open. `/internal/*`
+/// is where guest grants are MINTED — a scope reaching it would let grants
+/// mint grants, which is the property the whole design rests on not being
+/// expressible.
+const NEVER_GUESTABLE: &[&str] = &["/internal/", "/v1/apps", "/v1/mesh/"];
+
+/// One sample per `Scope` variant.
+///
+/// The `match` below is the ratchet: adding a variant makes it non-exhaustive,
+/// so the build breaks HERE — in the test that would otherwise not know about
+/// the new variant — rather than shipping an unexamined scope.
+fn one_sample_per_scope_variant() -> Vec<Scope> {
+    let all = vec![Scope::Models(vec![GRANTED_MODEL.into()])];
+    for s in &all {
+        match s {
+            Scope::Models(_) => {}
+        }
+    }
+    all
+}
+
+/// Every path any scope unlocks must (a) actually exist on the client router
+/// and (b) not be privileged.
+///
+/// (a) catches a `paths()` arm naming a route that was renamed or never
+/// mounted — which would ship a grant that 403s on a path the daemon does not
+/// serve, and read as a scope bug. (b) catches the dangerous case: a variant
+/// added later that grants `/internal/*` or the apps API.
+#[tokio::test]
+async fn every_scope_paths_are_mounted_and_never_privileged() {
+    for scope in one_sample_per_scope_variant() {
+        for path in scope.paths() {
+            assert!(
+                !NEVER_GUESTABLE.iter().any(|deny| path.starts_with(deny)),
+                "scope {:?} unlocks the privileged path {path}",
+                scope.label()
+            );
+
+            // Mounted? Drive it as a LOOPBACK caller so the auth layer admits
+            // and routing gets to answer. 405 (wrong method for this probe's
+            // GET) is a positive mount signal; 404 is the failure.
+            let (status, _) =
+                get_with_body(state_with_token(Some(TOKEN)), path, Some(LOOPBACK), None).await;
+            assert_ne!(
+                status,
+                StatusCode::NOT_FOUND,
+                "scope {:?} unlocks {path}, which is not mounted on client_router — \
+                 a grant naming it would be born broken",
+                scope.label()
+            );
+        }
+    }
+}
+
+/// The deny-list is prefix-matched, and the sample paths prove it bites. If
+/// this ever passes vacuously (empty list, or a `starts_with` that matches
+/// nothing) the ratchet above is inert.
+#[test]
+fn the_never_guestable_list_actually_rejects_the_paths_it_names() {
+    for privileged in [
+        "/internal/guest/grant",
+        "/internal/guest/grant/revoke",
+        "/v1/apps",
+        "/v1/mesh/join",
+    ] {
+        assert!(
+            NEVER_GUESTABLE.iter().any(|d| privileged.starts_with(d)),
+            "{privileged} must be denied by NEVER_GUESTABLE"
+        );
+    }
+    for ordinary in ["/v1/models", "/v1/chat/completions"] {
+        assert!(
+            !NEVER_GUESTABLE.iter().any(|d| ordinary.starts_with(d)),
+            "{ordinary} is guestable and must not be on the deny-list"
+        );
+    }
+}
+
+/// Not a scope check — a shape check on the grant the layer will consult.
+/// `permits_path` is exact-match, the same discipline `AUTH_EXEMPT_PATHS`
+/// keeps: no child path inherits access by prefix.
+#[test]
+fn permits_path_is_exact_and_grants_no_children() {
+    let grant = GuestGrant {
+        token: GUEST_TOKEN.into(),
+        scopes: vec![Scope::Models(vec![GRANTED_MODEL.into()])],
+        label: None,
+        issued_at_ms: 0,
+        expires_at_ms: u64::MAX,
+        revoked: false,
+    };
+    assert!(grant.permits_path("/v1/models"));
+    assert!(grant.permits_path("/v1/chat/completions"));
+    assert!(!grant.permits_path("/v1/models/secret"));
+    assert!(!grant.permits_path("/v1/chat/completions/../../internal/guest/grant"));
+    assert!(!grant.permits_path("/v1/model"));
+    assert!(!grant.permits_path(""));
+}

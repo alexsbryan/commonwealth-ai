@@ -41,7 +41,7 @@ use sovereign_contracts::types::projection::{Citation, Provenance};
 use sovereign_contracts::types::TurnMode;
 use sovereign_turn_client::{TurnClient, TurnObserver, TurnOutcome};
 
-use crate::chat_cmd::config::parse_globals;
+use crate::chat_cmd::config::parse_globals_for_chat as parse_globals;
 use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

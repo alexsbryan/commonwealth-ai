@@ -32,8 +32,52 @@ const LOCAL_HOLDER: &str = "local";
 pub async fn chat_completions(
     State(state): State<AppState>,
     headers: HeaderMap,
+    guest: Option<axum::Extension<crate::client_auth::Guest>>,
     Json(mut request): Json<ChatCompletionRequest>,
 ) -> Response {
+    // ── Guest scope refinement ────────────────────────────────────────
+    //
+    // `client_auth` already decided this caller may reach this ROUTE. What
+    // it cannot decide is which MODEL, because that is in the body. So the
+    // per-request half of `Scope::Models` lives here, next to the handler
+    // that serves it — a future scope refines against its own handler, not
+    // this one.
+    //
+    // This must REFUSE, never fall through. Below, an absent or unmatched
+    // `model` walks down to Priority 4 and gets `default_model_id()`, which
+    // for a guest would mean: asked for the model they were granted, got a
+    // different one, HTTP 200, no way to tell. That is §18.3's `d45489a3`
+    // verbatim — same model string, seconds apart, served by something else.
+    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+        let named = request.model.as_deref().map(str::trim).unwrap_or("");
+        if !grant.allows_model(named) {
+            let asked = if named.is_empty() {
+                "no model named".to_string()
+            } else {
+                format!("model '{named}'")
+            };
+            warn!(
+                asked = %named,
+                grants = %grant.summary(),
+                "chat_completions: refusing a guest request outside its grant"
+            );
+            return (
+                StatusCode::FORBIDDEN,
+                Json(serde_json::json!({
+                    "error": {
+                        "message": format!(
+                            "this guest link does not cover {asked} — it grants: {}. \
+                             Name one of those in `model`.",
+                            grant.summary()
+                        ),
+                        "type": "guest_scope",
+                        "code": "model_not_granted",
+                    }
+                })),
+            )
+                .into_response();
+        }
+    }
     // ── Foreground-yield bump ─────────────────────────────────────────
     //
     // Fire-and-forget atomic store of the current unix-ts. The
@@ -706,11 +750,23 @@ pub async fn embeddings(
 /// The store path survives as [`store_rows`] for the orchestrator daemon,
 /// which has no embedded engine and therefore no manifest to read. It is a
 /// strictly narrower claim than it used to make — see its own docs.
-pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn list_models(
+    State(state): State<AppState>,
+    guest: Option<axum::Extension<crate::client_auth::Guest>>,
+) -> impl IntoResponse {
     let mut data = match manifest_rows(&state).await {
         Some(rows) => rows,
         None => store_rows(&state).await,
     };
+    // A guest sees only what their grant covers. This is the SAME contract the
+    // rest of this handler keeps — every id returned is dispatchable — held for
+    // one caller instead of for the node. Listing a name a guest would be
+    // refused reintroduces exactly the defect this endpoint was rewritten to
+    // remove, in a new place: the list would advertise, and the request would
+    // refuse, and the refusal would point back at the list.
+    if let Some(axum::Extension(crate::client_auth::Guest(grant))) = guest.as_ref() {
+        data.retain(|m| grant.allows_model(&m.id));
+    }
     // Stable order, and the dedup key is the id a caller would actually
     // send. Deterministic output matters for the Ollama `/api/tags` shim
     // and for anyone diffing the list across polls.
@@ -731,6 +787,24 @@ pub async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
 /// `hash(role, absolute path)`, which differs per machine for the same
 /// weights. Grouping on the id a caller sends fixes that without touching
 /// the `ModelId` scheme.
+/// Every model id this node can dispatch by name right now, as
+/// `/v1/models` would report it to an ungated caller.
+///
+/// Exists so the guest-grant mint route can refuse an unknown `--model`
+/// against the SAME set the request path will resolve against. Re-deriving
+/// that set at the mint site would be a second answer to "what can this node
+/// serve" (§10.6) — and the failure would be quiet: a grant minted for a name
+/// nothing advertises produces a link that looks fine and 403s on first use.
+pub(crate) async fn dispatchable_ids(state: &AppState) -> Vec<String> {
+    match manifest_rows(state).await {
+        Some(rows) => rows,
+        None => store_rows(state).await,
+    }
+    .into_iter()
+    .map(|m| m.id)
+    .collect()
+}
+
 /// `None` means "this node has no manifest surface at all", which is the
 /// only condition that licenses the store fallback. An EMPTY manifest is
 /// `Some(vec![])`, not `None`: a node advertising nothing can dispatch
@@ -1770,11 +1844,26 @@ mod list_models_tests {
 
     #[async_trait::async_trait]
     impl LocalInferenceService for TwoNodeMesh {
+        /// Echoes back the model it was asked to serve.
+        ///
+        /// It used to `unimplemented!()` — listing does not generate. The
+        /// guest tests need the ADMITTED arm of the scope gate to be
+        /// observable, and "the request reached dispatch" is only observable
+        /// if dispatch answers. Echoing the model id also makes a silent
+        /// substitution visible: if the gate ever let a request through and
+        /// something downstream swapped the name, this response says so.
         async fn chat_completion(
             &self,
-            _r: ChatCompletionRequest,
+            r: ChatCompletionRequest,
         ) -> Result<ChatCompletionResponse, LocalInferenceError> {
-            unimplemented!("listing does not generate")
+            Ok(ChatCompletionResponse {
+                id: "test".into(),
+                object: "chat.completion".into(),
+                created: 0,
+                model: r.model.unwrap_or_default(),
+                choices: vec![],
+                usage: None,
+            })
         }
         async fn chat_completion_stream(
             &self,
@@ -1806,7 +1895,7 @@ mod list_models_tests {
 
     async fn rows(service: Arc<dyn LocalInferenceService>) -> Vec<ModelObject> {
         let state = test_app_state().with_local_inference(service);
-        let resp = list_models(State(state)).await.into_response();
+        let resp = list_models(State(state), None).await.into_response();
         let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .expect("body reads");
@@ -1858,7 +1947,7 @@ mod list_models_tests {
             supports_pipeline_shard: false,
         });
 
-        let resp = list_models(State(state)).await.into_response();
+        let resp = list_models(State(state), None).await.into_response();
         let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();
@@ -1963,11 +2052,210 @@ mod list_models_tests {
             supports_parallel_instances: false,
             supports_pipeline_shard: false,
         });
-        let resp = list_models(State(state)).await.into_response();
+        let resp = list_models(State(state), None).await.into_response();
         let body = axum::body::to_bytes(resp.into_body(), usize::MAX)
             .await
             .unwrap();
         let list: ModelListResponse = serde_json::from_slice(&body).unwrap();
         assert!(list.data.iter().any(|m| m.id == "orchestrated"));
+    }
+
+    // ── guest scope refinement ───────────────────────────────────────────
+    //
+    // `client_auth` decided this caller may reach the ROUTE. These pin the
+    // half it cannot decide, because it lives in the body: WHICH MODEL.
+    //
+    // Both were watched fail — see `guest_falsification` in
+    // `tests/client_auth.rs` for the probe and what went red.
+
+    use commonwealth_knowledge::{GuestGrant, Scope};
+
+    /// A live grant over `models`, as `client_auth` would have inserted it.
+    fn guest_for(models: &[&str]) -> Option<axum::Extension<crate::client_auth::Guest>> {
+        Some(axum::Extension(crate::client_auth::Guest(Arc::new(
+            GuestGrant {
+                token: "t".into(),
+                scopes: vec![Scope::Models(
+                    models.iter().map(|m| m.to_string()).collect(),
+                )],
+                label: None,
+                issued_at_ms: 0,
+                expires_at_ms: u64::MAX,
+                revoked: false,
+            },
+        ))))
+    }
+
+    async fn chat_as_guest(
+        model: Option<&str>,
+        granted: &[&str],
+    ) -> (StatusCode, serde_json::Value) {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let request: ChatCompletionRequest = serde_json::from_value(serde_json::json!({
+            "model": model,
+            "messages": [{"role": "user", "content": "hello"}],
+        }))
+        .expect("request shape");
+        let resp = chat_completions(
+            State(state),
+            HeaderMap::new(),
+            guest_for(granted),
+            Json(request),
+        )
+        .await;
+        let status = resp.status();
+        let bytes = axum::body::to_bytes(resp.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        (
+            status,
+            serde_json::from_slice(&bytes).unwrap_or(serde_json::Value::Null),
+        )
+    }
+
+    /// **THE §18.3 gate**, and the reason this refinement is in the handler
+    /// rather than the auth layer. Without the refusal, an out-of-scope
+    /// `model` walks down to Priority 4 and is served by `default_model_id()`:
+    /// asked for one model, got another, HTTP 200, no way to tell. That is
+    /// `d45489a3` verbatim — so the assertion is on the BODY, not the status.
+    #[tokio::test]
+    async fn a_guest_naming_an_ungranted_model_is_refused_not_served_the_default() {
+        let (status, body) = chat_as_guest(Some("peer-only"), &["shared-primary"]).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"]["type"], "guest_scope");
+        assert_eq!(body["error"]["code"], "model_not_granted");
+        let message = body["error"]["message"].as_str().unwrap_or_default();
+        assert!(
+            message.contains("peer-only") && message.contains("shared-primary"),
+            "the refusal names what was asked AND what is granted: {message}"
+        );
+    }
+
+    /// The subtler half. An absent `model` is exactly what reaches the default
+    /// today — so "no model named" must refuse too, or the gate is bypassed by
+    /// omitting a field rather than by naming the wrong one.
+    #[tokio::test]
+    async fn a_guest_naming_no_model_at_all_is_refused_rather_than_defaulted() {
+        let (status, body) = chat_as_guest(None, &["shared-primary"]).await;
+        assert_eq!(status, StatusCode::FORBIDDEN);
+        assert_eq!(body["error"]["code"], "model_not_granted");
+        assert!(body["error"]["message"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("no model named"));
+    }
+
+    /// Whitespace is not a widening. `" shared-primary "` trims to the granted
+    /// name; `"shared-primary-v2"` does not become it.
+    #[tokio::test]
+    async fn the_model_match_is_exact_after_trimming() {
+        let (padded, _) = chat_as_guest(Some("  shared-primary  "), &["shared-primary"]).await;
+        assert_ne!(
+            padded,
+            StatusCode::FORBIDDEN,
+            "a trimmed exact name is inside the grant"
+        );
+        let (prefixed, _) = chat_as_guest(Some("shared-primary-v2"), &["shared-primary"]).await;
+        assert_eq!(
+            prefixed,
+            StatusCode::FORBIDDEN,
+            "a longer name that merely starts with a granted one is NOT granted"
+        );
+    }
+
+    /// The ADMITTED arm, and the reason the refusal tests are not vacuous: a
+    /// granted model reaches dispatch, and comes back as ITSELF. Without this
+    /// the whole gate could be "refuse every guest" and every other test here
+    /// would still pass.
+    #[tokio::test]
+    async fn a_guest_naming_a_granted_model_is_served_that_model() {
+        let (status, body) = chat_as_guest(Some("shared-primary"), &["shared-primary"]).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            body["model"], "shared-primary",
+            "served the model that was asked for, not a default"
+        );
+    }
+
+    /// The listing keeps the same contract for one caller that it keeps for
+    /// the node: every id returned is dispatchable BY THEM. A guest shown a
+    /// name they would be refused reintroduces the `/v1/models` defect in a
+    /// new place — the list would advertise and the request would refuse, and
+    /// the refusal would point back at the list.
+    #[tokio::test]
+    async fn a_guest_sees_only_the_models_its_grant_names() {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let ungated = list_models(State(state.clone()), None)
+            .await
+            .into_response();
+        let ungated: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(ungated.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        // The fixture advertises more than one name, or the filter below would
+        // pass vacuously.
+        assert!(
+            ungated.data.len() > 1,
+            "fixture must list several models for the filter to mean anything"
+        );
+
+        let gated = list_models(State(state), guest_for(&["shared-primary"]))
+            .await
+            .into_response();
+        let gated: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(gated.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let ids: Vec<&str> = gated.data.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, vec!["shared-primary"]);
+    }
+
+    /// A grant naming a model this node cannot serve lists NOTHING — it does
+    /// not conjure a row from the grant. The mint route is what stops such a
+    /// grant existing; this pins that the listing never papers over one.
+    #[tokio::test]
+    async fn a_grant_naming_an_unserved_model_lists_nothing() {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let resp = list_models(State(state), guest_for(&["not-on-this-node"]))
+            .await
+            .into_response();
+        let list: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        assert!(list.data.is_empty());
+    }
+
+    /// `dispatchable_ids` is what the mint route gates `--model` against. It
+    /// must be the SAME set `/v1/models` reports to an ungated caller — a
+    /// second answer here is how a grant gets minted for a name the request
+    /// path will refuse (§10.6).
+    #[tokio::test]
+    async fn dispatchable_ids_matches_what_an_ungated_listing_reports() {
+        let state = test_app_state().with_local_inference(Arc::new(TwoNodeMesh));
+        let resp = list_models(State(state.clone()), None)
+            .await
+            .into_response();
+        let listed: ModelListResponse = serde_json::from_slice(
+            &axum::body::to_bytes(resp.into_body(), usize::MAX)
+                .await
+                .unwrap(),
+        )
+        .unwrap();
+        let mut from_listing: Vec<String> = listed.data.iter().map(|m| m.id.clone()).collect();
+        let mut from_mint_gate = dispatchable_ids(&state).await;
+        from_listing.sort();
+        from_mint_gate.sort();
+        assert_eq!(from_mint_gate, from_listing);
+        assert!(
+            !from_mint_gate.is_empty(),
+            "fixture must advertise something"
+        );
     }
 }

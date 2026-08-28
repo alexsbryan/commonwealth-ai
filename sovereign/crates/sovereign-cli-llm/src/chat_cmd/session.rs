@@ -22,7 +22,7 @@ use std::io::{self, BufRead, Write};
 use sovereign_contracts::types::TurnMode;
 use sovereign_turn_client::{TurnClient, TurnObserver};
 
-use crate::chat_cmd::config::parse_globals;
+use crate::chat_cmd::config::parse_globals_for_chat as parse_globals;
 use crate::chat_cmd::render;
 use sovereign_cli_shared::help::{self, Help, HelpSection};
 

@@ -93,7 +93,7 @@ pub async fn build_session_with_skills(
     //    the cryptic timeout from the first real request.
     let base = globals.daemon_base.clone();
     let v1 = format!("{base}/v1");
-    probe_or_bail(&base).await?;
+    probe_or_bail(&base, globals.bearer.as_deref()).await?;
 
     // 2. Resolve model IDs. Preference order:
     //       a) explicit `--chat-model` / `--embed-model` flag,
@@ -120,15 +120,17 @@ pub async fn build_session_with_skills(
     // v0.3 host that doesn't serve `/oicp/v1/capabilities`, fall back to 8192 +
     // the `DEFAULT_MANIFEST`-derived prefix (the prior behavior, bit-identical).
     let inference: Arc<dyn InferenceProvider> = Arc::new(
-        match sovereign_inference::remote::fetch_manifest(&base, None).await {
-            Some(manifest) => SplitInferenceProvider::from_manifest(
+        match sovereign_inference::remote::fetch_manifest(&base, globals.bearer.clone()).await {
+            Some(manifest) => SplitInferenceProvider::from_manifest_with_bearer(
                 &v1,
+                globals.bearer.clone(),
                 &manifest,
                 chat_model,
                 embed_model.clone(),
             ),
-            None => SplitInferenceProvider::new(
+            None => SplitInferenceProvider::new_with_bearer(
                 &v1,
+                globals.bearer.clone(),
                 chat_model,
                 embed_model.clone(),
                 8192,
@@ -342,13 +344,22 @@ impl RecipeProgress for Banner {
 /// GET `/v1/models` with a 2s timeout. Any non-200 aborts bootstrap
 /// with a clear remediation hint — the alternative is cryptic
 /// "connection refused" errors minutes later, mid-retrieval.
-async fn probe_or_bail(base: &str) -> Result<()> {
+/// `bearer` is `Some` only under a guest link. `/v1/models` is NOT in
+/// `AUTH_EXEMPT_PATHS`, so probing it without the bearer against a lender's
+/// node returns 401 and the message would blame the daemon rather than the
+/// missing credential. (`/status` is exempt, but it does not prove the
+/// inference surface is reachable, which is what this probe is for.)
+async fn probe_or_bail(base: &str, bearer: Option<&str>) -> Result<()> {
     let url = format!("{base}/v1/models");
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(2))
         .build()
         .map_err(|e| Error::Serialization(format!("http client build: {e}")))?;
-    match client.get(&url).send().await {
+    let mut req = client.get(&url);
+    if let Some(t) = bearer {
+        req = req.bearer_auth(t);
+    }
+    match req.send().await {
         Ok(r) if r.status().is_success() => Ok(()),
         Ok(r) => Err(Error::Serialization(format!(
             "daemon at {base} returned {} from /v1/models. \
@@ -357,7 +368,9 @@ async fn probe_or_bail(base: &str) -> Result<()> {
         ))),
         Err(_) => Err(Error::Serialization(format!(
             "daemon unreachable at {base}. \
-             Start it with `svrn daemon run`, or pass --daemon <url>."
+             Start it with `svrn daemon run`, or pass --daemon <url>. \
+             (If this is a guest link, the lending node is down or unreachable — \
+             `svrn mesh use --forget` returns you to your own daemon.)"
         ))),
     }
 }
@@ -371,6 +384,14 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
         return Ok((c.clone(), e.clone()));
     }
 
+    // Under a guest link the local `SetupConfig` names THIS machine's models,
+    // which the lending node does not serve. Reading them would put a model id
+    // on the wire that the host refuses — and the refusal names *scope*, which
+    // sends the guest hunting in exactly the wrong place. The host's own
+    // `/v1/models`, already filtered to the granted ids, is the only honest
+    // source here.
+    let guest = globals.bearer.is_some();
+
     // (b) SetupConfig filename stems. The daemon loads
     //     `config.models.embed` and advertises it on `/v1/models`
     //     under its filename stem (e.g. `qwen-embedding-0.6b.gguf`
@@ -378,7 +399,11 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
     //     `/v1/models` iteration means we always reach the
     //     *local* slot, never a mesh-peer advertisement, and the
     //     answer is stable across invocations.
-    let from_config = chat_and_embed_stems_from_config();
+    let from_config = if guest {
+        None
+    } else {
+        chat_and_embed_stems_from_config()
+    };
     let mut chat_found = globals
         .chat_model
         .clone()
@@ -399,8 +424,11 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
         .timeout(Duration::from_secs(5))
         .build()
         .map_err(|e| Error::Serialization(format!("http client build: {e}")))?;
-    let resp = client
-        .get(&url)
+    let mut req = client.get(&url);
+    if let Some(t) = globals.bearer.as_deref() {
+        req = req.bearer_auth(t);
+    }
+    let resp = req
         .send()
         .await
         .map_err(|e| Error::Serialization(format!("GET {url}: {e}")))?;
@@ -438,6 +466,20 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
         (None, _) => Err(Error::Serialization(
             "daemon lists no chat models — check `svrn setup` and the primary/fast slots".into(),
         )),
+        // A guest grant may cover chat and no embedding model at all — today
+        // `Scope::Models` unlocks `/v1/chat/completions`, not `/v1/embeddings`.
+        // That is not a reason to refuse the whole session: chat works. It IS
+        // a reason never to substitute a plausible-looking id, which would make
+        // retrieval appear to work and quietly return nothing (§18.3). The
+        // sentinel is unservable BY DESIGN — an embed call fails with the host
+        // naming this exact string.
+        (Some(c), None) if guest => {
+            eprintln!(
+                "Guest link: this grant covers chat only — no embedding model is in scope, \
+                 so retrieval over local corpora will be refused by the lending node."
+            );
+            Ok((c, NO_EMBED_MODEL_IN_GRANT.to_string()))
+        }
         (_, None) => Err(Error::Serialization(
             "daemon lists no embedding model — retrieval will fail. Set `[models] embed` in \
              ~/.svrnmesh/config.toml or pass --embed-model."
@@ -445,6 +487,14 @@ async fn resolve_model_ids(v1: &str, globals: &ChatGlobals) -> Result<(String, S
         )),
     }
 }
+
+/// Stand-in embed-model id when a guest grant names no embedding model.
+///
+/// Deliberately not a real name, and deliberately not the chat model's: any
+/// embed request fails with the host quoting THIS string back, which says
+/// exactly what happened. A plausible substitute would make the failure look
+/// like a retrieval miss.
+const NO_EMBED_MODEL_IN_GRANT: &str = "(no-embedding-model-in-this-guest-grant)";
 
 /// Filename-stem extraction for `SetupConfig.models.{primary,embed}`.
 /// The daemon advertises these on `/v1/models` using exactly the

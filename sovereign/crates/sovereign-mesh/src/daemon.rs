@@ -1103,6 +1103,19 @@ impl EmbeddedDaemon {
                 iroh_dial.clone(),
                 *encrypted,
             ),
+            // A guest link is deliberately NOT joinable. Refusing here with a
+            // message that names the right command is the whole difference
+            // between "this link is broken" and "you pasted the other kind" —
+            // and joining on a guest link would hand membership to someone the
+            // issuer meant to lend one model to.
+            DeepLink::Guest { .. } => {
+                return Err(MeshError::InvalidJoinKey(
+                    "that is a guest link, not an invite — it grants use of a \
+                     node's models without joining its mesh. Use `svrn mesh use \
+                     <link>` instead."
+                        .to_string(),
+                ))
+            }
         };
         let mesh_name = url_mesh_name
             .clone()
@@ -1719,7 +1732,8 @@ impl EmbeddedDaemon {
         // taking the write lock: the round takes it too.
         if !force && self.has_unconfirmed_online_peers(&app_state).await {
             info!("rotate: peers unconfirmed since boot — one gossip round before deciding");
-            if let Err(e) = gossip::run_one_round(&app_state, gossip::DEFAULT_OFFLINE_THRESHOLD).await
+            if let Err(e) =
+                gossip::run_one_round(&app_state, gossip::DEFAULT_OFFLINE_THRESHOLD).await
             {
                 warn!(
                     error = %e,
@@ -1777,8 +1791,8 @@ impl EmbeddedDaemon {
                         generation = ?generation,
                         "rotate: pre-split check"
                     );
-                    let online = m.is_active()
-                        && m.status == commonwealth_core::mesh::NodeStatus::Online;
+                    let online =
+                        m.is_active() && m.status == commonwealth_core::mesh::NodeStatus::Online;
                     if !online {
                         continue;
                     }
@@ -2608,6 +2622,13 @@ impl EmbeddedDaemon {
         // gets registered via `corpus_collaborate` with the pull-based flag;
         // always-on so we don't have to race the first `register` call.
         let _reaper = app_state.start_work_queue_reaper();
+
+        // Sweep lapsed guest grants. Auth already fails closed on an expired
+        // grant (`GuestGrantStore::live` evaluates expiry per read), so this
+        // bounds the map rather than enforcing the TTL — but a `drain_dead`
+        // with no caller is exactly the shape that left `ingest_grant`'s
+        // expiry unenforced, so it gets a caller at birth.
+        let _guest_reaper = app_state.start_guest_grant_reaper();
 
         // Register the locally-loaded model slots so `/v1/models`
         // answers with something meaningful instead of an empty list.
@@ -4437,7 +4458,6 @@ pub enum MeshError {
     // instead of leaving, so nothing is deleted and there is no destructive
     // step to refuse in front of — and refusing was itself the reason a second
     // membership could never exist. See `tests/join_parks_not_leaves.rs`.
-
     /// `rotate_invite` refused because rotating now could drop an online peer
     /// out of the mesh. Refusing loudly beats partitioning quietly (ARCH
     /// §18.3); `--force` overrides.

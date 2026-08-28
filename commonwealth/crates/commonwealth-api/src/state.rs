@@ -18,7 +18,9 @@ use commonwealth_inference::model_aliases::ModelAliasTable;
 use commonwealth_inference::oicp::ProviderManifest;
 use commonwealth_inference::store_adapter::InferenceStateStore;
 use commonwealth_knowledge::store_adapter::KnowledgeStateStore;
-use commonwealth_knowledge::{EphemeralGrantStore, VerifyReport, WorkQueueManager};
+use commonwealth_knowledge::{
+    EphemeralGrantStore, GuestGrantStore, VerifyReport, WorkQueueManager,
+};
 use commonwealth_state::{ActivityEmitter, ContributionEmitter, MeshStore, PeerPreferenceStore};
 use corpus_engine::CorpusEngine;
 use futures::Stream;
@@ -889,6 +891,13 @@ pub struct AppStateInner {
     /// standing `mesh_sharing = false` posture is preserved throughout).
     /// See `commonwealth-knowledge::ingest_grant`.
     pub grant_store: Arc<EphemeralGrantStore>,
+    /// Ephemeral guest grants — short-lived bearers that are NOT mesh
+    /// membership. Consulted at exactly one point, `client_auth_layer`, which
+    /// asks the grant whether it permits the request's path and never inspects
+    /// a `Scope` variant itself. Never persisted, never gossiped, and never
+    /// touches `Mesh` — a guest is not a member and cannot become one.
+    /// See `commonwealth-knowledge::guest_grant`.
+    pub guest_grants: Arc<GuestGrantStore>,
     /// Handoff IDs for which this node is currently running a pull loop
     /// (as a peer). Prevents `auto_ingest` from spawning duplicate pull
     /// loops when the same open handoff is seen across multiple gossip ticks.
@@ -1669,6 +1678,7 @@ impl AppState {
                 rpc_shard_warmer: None,
                 work_queue: Arc::new(WorkQueueManager::new()),
                 grant_store: Arc::new(EphemeralGrantStore::new()),
+                guest_grants: Arc::new(GuestGrantStore::new()),
                 active_pull_loops: RwLock::new(HashSet::new()),
                 verify_reports: RwLock::new(HashMap::new()),
                 // 0 sentinel = no foreground activity observed yet.
@@ -1776,6 +1786,16 @@ impl AppState {
     /// would matter.
     pub fn start_work_queue_reaper(&self) -> tokio::task::JoinHandle<()> {
         Arc::clone(&self.inner.work_queue).spawn_reaper()
+    }
+
+    /// Spawn the guest-grant sweep. Call once per daemon process beside
+    /// [`Self::start_work_queue_reaper`].
+    ///
+    /// Skipping this does not open a hole — `GuestGrantStore::live` evaluates
+    /// expiry on every read, so a lapsed grant already fails closed. What it
+    /// costs is unbounded growth of the grant map over a long-lived daemon.
+    pub fn start_guest_grant_reaper(&self) -> tokio::task::JoinHandle<()> {
+        Arc::clone(&self.inner.guest_grants).spawn_reaper()
     }
 
     /// This node's NodeId, by value. Cheap (atomic load + Arc deref).

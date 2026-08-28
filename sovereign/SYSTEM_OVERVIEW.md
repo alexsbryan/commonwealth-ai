@@ -3767,6 +3767,19 @@ through a bearer-token layer (`client_auth`, `[daemon] client_token`,
 with exempt paths for federation/health) — added with the SaaS
 hardening, 2026-07.
 
+A non-loopback caller can now present one of **two** bearers, matched in
+that order. `client_token` is the daemon-wide one and unlocks everything.
+An **ephemeral guest grant** (`commonwealth-knowledge::guest_grant`,
+2026-08-27) is the narrow one: short-lived, revocable, and bound to a
+closed `Scope` enum whose `paths()` is the only route allowlist there is.
+A guest is not a mesh member — no `mesh_secret`, no gossip, no invite key
+— and cannot mint further grants, because no `Scope` variant names
+`/internal/*`. `svrn mesh grant` mints one and prints a
+`sovereign://guest/…` link; `svrn mesh use` accepts it and repoints
+`svrn chat`. The auth layer never matches on a `Scope` variant: it asks
+`GuestGrant::permits_path` and inserts the grant, so a future scope is a
+variant plus its `paths()` arm and touches neither auth nor the wire.
+
 | Path                          | Notes                                                  |
 |-------------------------------|--------------------------------------------------------|
 | `POST /v1/chat/completions`   | OpenAI-compatible. Routing differs by daemon shape (embedded vs standalone) — see `commonwealth/docs/routing-field-guide.md`. `LocalOnly` privacy → 400. |
@@ -3778,6 +3791,7 @@ hardening, 2026-07.
 | `GET  /status`                | Node / mesh / inference / knowledge summary            |
 | `GET  /oicp/v1/capabilities`  | Provider manifest + federation info                    |
 | `/api/{version,tags,ps,show,chat,generate,embed,embeddings}` | **Ollama-native compatibility shim** (`routes_ollama.rs`). Pure translation over the OpenAI handlers above — lets Ollama-native clients (Open WebUI's Ollama mode, IDE plugins) connect. `chat`/`generate` are non-streaming-backed in v1: the inner handler runs `stream:false` and the complete answer is framed as Ollama NDJSON (one content frame + terminal). No CORS layer + the same auth posture as `/v1/*` (documented in-module); incremental streaming is a tracked follow-up. |
+| `/internal/guest/grant`, `…/revoke`, `…/list` | Mint / kill / list ephemeral guest grants. On the CLIENT router, deliberately: `:9742` has no auth gate, so a mint route there would let any mesh peer forge guest credentials. Unreachable by a guest because no `Scope` names it. |
 | `/v1/mesh/*` `/v1/admin/*` `/mcp/*` | **Loopback-only** (router middleware + per-handler `enforce_localhost`) |
 
 **Internal API — :9742, plaintext (perimeter-trust)**

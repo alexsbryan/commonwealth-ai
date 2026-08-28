@@ -1289,6 +1289,36 @@ impl SplitInferenceProvider {
         context_size: u32,
         embed_query_instruction: String,
     ) -> Self {
+        Self::new_with_bearer(
+            endpoint_v1,
+            None,
+            chat_model_id,
+            embed_model_id,
+            context_size,
+            embed_query_instruction,
+        )
+    }
+
+    /// Same, carrying an `Authorization: Bearer` on every outbound call.
+    ///
+    /// The bearer exists for the case where the daemon on the far end is
+    /// **not this operator's** — a node that lent named models to a guest for
+    /// a bounded window (`svrn mesh grant`). A local daemon needs none: a
+    /// loopback caller is admitted before any bearer is read.
+    ///
+    /// Deliberately a second constructor rather than a `with_bearer(self)`
+    /// builder: the key lives inside the two `RemoteApiProvider`s, so a
+    /// post-hoc setter would have to rebuild both — and would then be a second
+    /// site deciding shed-waiting and the query-instruction prefix. One body
+    /// builds the pair; `new` is the no-bearer call of it.
+    pub fn new_with_bearer(
+        endpoint_v1: &str,
+        bearer: Option<String>,
+        chat_model_id: String,
+        embed_model_id: String,
+        context_size: u32,
+        embed_query_instruction: String,
+    ) -> Self {
         // BOTH slots wait out a shed, and this is the ONE site that opts in
         // (ARCH §7 — structural, not remembered). This provider owns no
         // weights: the daemon on the other end of `endpoint_v1` is the only
@@ -1307,14 +1337,14 @@ impl SplitInferenceProvider {
         // `bf432b4d`). The hint was computed, serialised, transported — and
         // dropped.
         let chat = std::sync::Arc::new(
-            RemoteApiProvider::new(endpoint_v1, None, &chat_model_id, context_size)
+            RemoteApiProvider::new(endpoint_v1, bearer.clone(), &chat_model_id, context_size)
                 .waiting_out_sheds(),
         );
         // The embed slot carries the query-instruction prefix so
         // `embed_query` stays bit-identical to the embedded engine. The chat
         // slot never embeds, so it leaves the prefix empty.
         let embed = std::sync::Arc::new(
-            RemoteApiProvider::new(endpoint_v1, None, &embed_model_id, context_size)
+            RemoteApiProvider::new(endpoint_v1, bearer, &embed_model_id, context_size)
                 .with_query_instruction(embed_query_instruction)
                 .waiting_out_sheds(),
         );
@@ -1352,6 +1382,18 @@ impl SplitInferenceProvider {
         chat_model_id: String,
         embed_model_id: String,
     ) -> Self {
+        Self::from_manifest_with_bearer(endpoint_v1, None, manifest, chat_model_id, embed_model_id)
+    }
+
+    /// [`Self::from_manifest`] carrying a bearer. See [`Self::new_with_bearer`]
+    /// for why the credential is a constructor argument rather than a setter.
+    pub fn from_manifest_with_bearer(
+        endpoint_v1: &str,
+        bearer: Option<String>,
+        manifest: &ProviderManifest,
+        chat_model_id: String,
+        embed_model_id: String,
+    ) -> Self {
         /// The pre-v0.4 client default, used when the host doesn't advertise a
         /// truthful `context_tokens` for the chat model.
         const V03_FALLBACK_CONTEXT: u32 = 8192;
@@ -1371,8 +1413,9 @@ impl SplitInferenceProvider {
             .and_then(|k| k.embed_model.as_ref())
             .map(|e| e.query_instruction_prefix.clone())
             .unwrap_or_default();
-        Self::new(
+        Self::new_with_bearer(
             endpoint_v1,
+            bearer,
             chat_model_id,
             embed_model_id,
             context_size,
