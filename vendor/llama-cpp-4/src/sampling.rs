@@ -395,7 +395,6 @@ impl LlamaSampler {
     pub fn dry(
         &self,
         model: &LlamaModel,
-        n_ctx_train: i32,
         multiplier: f32,
         base: f32,
         allowed_length: i32,
@@ -414,7 +413,6 @@ impl LlamaSampler {
         let sampler = unsafe {
             llama_sampler_init_dry(
                 model.get_vocab().vocab.as_ref(),
-                n_ctx_train,
                 multiplier,
                 base,
                 allowed_length,
@@ -443,6 +441,7 @@ impl LlamaSampler {
     #[allow(clippy::too_many_arguments)]
     #[must_use]
     pub fn penalties(
+        model: &LlamaModel,
         penalty_last_n: i32,
         penalty_repeat: f32,
         penalty_freq: f32,
@@ -450,6 +449,9 @@ impl LlamaSampler {
     ) -> Self {
         let sampler = unsafe {
             llama_sampler_init_penalties(
+                // Upstream re-added n_vocab as the leading arg; common/sampling.cpp
+                // passes llama_vocab_n_tokens(vocab), which is what n_vocab() is.
+                model.n_vocab(),
                 penalty_last_n,
                 penalty_repeat,
                 penalty_freq,
@@ -472,8 +474,9 @@ impl LlamaSampler {
     ///
     /// Panics if llama.cpp returns a null pointer.
     #[must_use]
-    pub fn penalties_simple(penalty_last_n: i32, penalty_repeat: f32) -> Self {
+    pub fn penalties_simple(model: &LlamaModel, penalty_last_n: i32, penalty_repeat: f32) -> Self {
         Self::penalties(
+            model,
             #[allow(clippy::cast_precision_loss)]
             {
                 penalty_last_n

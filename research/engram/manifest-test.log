@@ -1,0 +1,1502 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+sovereign-test: features in scope: corpus-engine/treesitter
+sovereign-test: scoped run → sharing the workspace target dir (no wired sccache;
+sovereign-test:   an isolated dir would be a guaranteed cold rebuild). Set
+sovereign-test:   RUSTC_WRAPPER=sccache to get isolation back.
+   Compiling kernel-types v0.5.0 (/home/alexbryan/dev/commonwealth-ai/kernel-types)
+   Compiling oicp-types v0.1.0 (/home/alexbryan/dev/commonwealth-ai/oicp-types)
+warning: lance-linalg@4.0.0: fp16kernels feature is not enabled, skipping build of fp16 kernels
+warning: lance-linalg@4.0.0: fp16kernels feature is not enabled, skipping build of fp16 kernels
+   Compiling corpus-engine-notes v0.5.0 (/home/alexbryan/dev/commonwealth-ai/corpus-engine-notes)
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:33:5
+   |
+33 |     General,
+   |     ^^^^^^^
+   |
+note: the lint level is defined here
+  --> oicp-types/src/lib.rs:4:9
+   |
+ 4 | #![warn(missing_docs)]
+   |         ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:34:5
+   |
+34 |     Code,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:35:5
+   |
+35 |     Analysis,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:36:5
+   |
+36 |     Math,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:37:5
+   |
+37 |     Creative,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:38:5
+   |
+38 |     Instruction,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:39:5
+   |
+39 |     Multilingual,
+   |     ^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:40:5
+   |
+40 |     Vision,
+   |     ^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:41:5
+   |
+41 |     LongContext,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/capability.rs:43:5
+   |
+43 |     Unknown,
+   |     ^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:35:5
+   |
+35 |     pub corpus_id: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:45:5
+   |
+45 |     pub corpus_id: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:57:5
+   |
+57 |     Pending,
+   |     ^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:58:5
+   |
+58 |     Downloading,
+   |     ^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:59:5
+   |
+59 |     Embedding,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:60:5
+   |
+60 |     Indexing,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:61:5
+   |
+61 |     Optimizing,
+   |     ^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:62:5
+   |
+62 |     Enriching,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:63:5
+   |
+63 |     Complete,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/ingest.rs:64:5
+   |
+64 |     Failed,
+   |     ^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:78:5
+   |
+78 |     pub phase: IngestPhase,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/ingest.rs:91:5
+   |
+91 |     pub progress: BTreeMap<String, CorpusIngestProgress>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:100:5
+    |
+100 |     pub options: RecipeTestOptions,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:120:5
+    |
+120 |     pub docs_in: u32,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:121:5
+    |
+121 |     pub docs_out: u32,
+    |     ^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/ingest.rs:133:5
+    |
+133 |     pub stages: Vec<RecipeStageReport>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/knowledge.rs:17:1
+   |
+17 | pub struct KnowledgeSearchRequest {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:32:5
+   |
+32 |     pub corpora: Option<Vec<String>>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:34:5
+   |
+34 |     pub limit: Option<u32>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/knowledge.rs:48:1
+   |
+48 | pub struct KnowledgeSearchResponse {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:49:5
+   |
+49 |     pub results: Vec<KnowledgeResult>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:50:5
+   |
+50 |     pub corpora_searched: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:52:5
+   |
+52 |     pub corpora_unavailable: Vec<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:54:5
+   |
+54 |     pub total_chunks_searched: Option<u64>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/knowledge.rs:58:1
+   |
+58 | pub struct KnowledgeResult {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:59:5
+   |
+59 |     pub content: String,
+   |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:61:5
+   |
+61 |     pub title: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:62:5
+   |
+62 |     pub corpus_id: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:64:5
+   |
+64 |     pub url: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:65:5
+   |
+65 |     pub score: f32,
+   |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/knowledge.rs:67:5
+   |
+67 |     pub metadata: HashMap<String, String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/knowledge.rs:127:5
+    |
+127 |     pub view_id: String,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/knowledge.rs:128:5
+    |
+128 |     pub body: String,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/knowledge.rs:167:5
+    |
+167 |     pub digests: Vec<LandscapeDigestEntry>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:102:5
+    |
+102 |     pub oicp_version: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:104:5
+    |
+104 |     pub provider: Option<ProviderInfo>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:105:5
+    |
+105 |     pub models: Vec<ProviderModel>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:107:5
+    |
+107 |     pub knowledge: Option<KnowledgeManifest>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:109:5
+    |
+109 |     pub federation: Option<FederationManifest>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+   --> oicp-types/src/manifest.rs:119:5
+    |
+119 |     pub fn new(models: Vec<ProviderModel>) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:137:1
+    |
+137 | pub struct ProviderInfo {
+    | ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:139:5
+    |
+139 |     pub name: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:141:5
+    |
+141 |     pub provider_type: Option<ProviderType>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:149:5
+    |
+149 |     Local,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:150:5
+    |
+150 |     Mesh,
+    |     ^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:151:5
+    |
+151 |     Cloud,
+    |     ^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/manifest.rs:152:5
+    |
+152 |     Hybrid,
+    |     ^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:156:1
+    |
+156 | pub struct ProviderModel {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:157:5
+    |
+157 |     pub id: String,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:159:5
+    |
+159 |     pub base_model: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:161:5
+    |
+161 |     pub quantization: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:162:5
+    |
+162 |     pub context_tokens: u32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:163:5
+    |
+163 |     pub status: ModelStatus,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:190:1
+    |
+190 | pub struct ModelStatus {
+    | ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:191:5
+    |
+191 |     pub available: bool,
+    |     ^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:192:5
+    |
+192 |     pub loaded: bool,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:194:5
+    |
+194 |     pub estimated_tokens_per_sec: Option<f32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:196:5
+    |
+196 |     pub estimated_ttft_ms: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:198:5
+    |
+198 |     pub estimated_load_time_sec: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:241:5
+    |
+241 |     pub pooling: PoolingStrategy,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:242:5
+    |
+242 |     pub normalization: NormalizationStrategy,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:253:1
+    |
+253 | pub struct KnowledgeManifest {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:254:5
+    |
+254 |     pub corpora: Vec<CorpusDescriptor>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:255:5
+    |
+255 |     pub search_endpoint: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:269:1
+    |
+269 | pub struct CorpusDescriptor {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:270:5
+    |
+270 |     pub id: String,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:272:5
+    |
+272 |     pub name: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:273:5
+    |
+273 |     pub total_chunks: u64,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:275:5
+    |
+275 |     pub shards: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:277:5
+    |
+277 |     pub replicas: Option<u32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:278:5
+    |
+278 |     pub fully_available: bool,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:280:5
+    |
+280 |     pub last_updated: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:284:1
+    |
+284 | pub struct FederationManifest {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:285:5
+    |
+285 |     pub peers: Vec<PeerDescriptor>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/manifest.rs:289:1
+    |
+289 | pub struct PeerDescriptor {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:290:5
+    |
+290 |     pub name: String,
+    |     ^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:291:5
+    |
+291 |     pub capabilities_url: String,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/manifest.rs:293:5
+    |
+293 |     pub trust_level: Option<String>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an associated function
+  --> oicp-types/src/registry.rs:65:5
+   |
+65 |     pub fn new() -> Self {
+   |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> oicp-types/src/registry.rs:128:5
+    |
+128 |     pub fn is_empty(&self) -> bool {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/requirements.rs:17:5
+   |
+17 |     pub oicp_version: String,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/requirements.rs:19:5
+   |
+19 |     pub privacy: Option<PrivacyRequirements>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/requirements.rs:21:5
+   |
+21 |     pub request_id: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct
+   --> oicp-types/src/requirements.rs:190:1
+    |
+190 | pub struct PrivacyRequirements {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/requirements.rs:192:5
+    |
+192 |     pub sharding: ShardingPrivacy,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/requirements.rs:206:5
+    |
+206 |     LocalOnly,
+    |     ^^^^^^^^^
+
+warning: missing documentation for a variant
+   --> oicp-types/src/requirements.rs:207:5
+    |
+207 |     MeshAllowed,
+    |     ^^^^^^^^^^^
+
+warning: missing documentation for a struct
+  --> oicp-types/src/response.rs:14:1
+   |
+14 | pub struct OicpResponseMeta {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/response.rs:16:5
+   |
+16 |     pub quantization: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/response.rs:18:5
+   |
+18 |     pub match_quality: Option<MatchQuality>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+  --> oicp-types/src/response.rs:20:5
+   |
+20 |     pub request_id: Option<String>,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for an enum
+  --> oicp-types/src/response.rs:32:1
+   |
+32 | pub enum MatchQuality {
+   | ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:33:5
+   |
+33 |     Full,
+   |     ^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:34:5
+   |
+34 |     Partial,
+   |     ^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:35:5
+   |
+35 |     Degraded,
+   |     ^^^^^^^^
+
+warning: missing documentation for a variant
+  --> oicp-types/src/response.rs:36:5
+   |
+36 |     Unmatched,
+   |     ^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:439:5
+    |
+439 |     pub score: f32,
+    |     ^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:440:5
+    |
+440 |     pub size_gb: Option<f32>,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:441:5
+    |
+441 |     pub model_id: String,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:512:5
+    |
+512 |     pub claim_score: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:516:5
+    |
+516 |     pub load_penalty: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:517:5
+    |
+517 |     pub locality_bonus: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:518:5
+    |
+518 |     pub cold_start_weight: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: missing documentation for a struct field
+   --> oicp-types/src/scoring.rs:519:5
+    |
+519 |     pub throughput_factor: f32,
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `oicp-types` (lib) generated 114 warnings
+   Compiling sovereign-contracts v0.5.0 (/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-contracts)
+   Compiling corpus-engine-sections v0.5.0 (/home/alexbryan/dev/commonwealth-ai/corpus-engine-sections)
+   Compiling corpus-engine v0.1.0 (/home/alexbryan/dev/commonwealth-ai/corpus-engine)
+   Compiling corpus-engine-scip v0.5.0 (/home/alexbryan/dev/commonwealth-ai/corpus-engine-scip)
+   Compiling commonwealth-core v0.5.0 (/home/alexbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-core)
+warning: missing documentation for a struct field
+  --> sovereign/crates/sovereign-contracts/src/types/search_privacy.rs:32:16
+   |
+32 |     External { provider: &'static str },
+   |                ^^^^^^^^^^^^^^^^^^^^^^
+   |
+note: the lint level is defined here
+  --> sovereign/crates/sovereign-contracts/src/lib.rs:4:9
+   |
+ 4 | #![warn(missing_docs)]
+   |         ^^^^^^^^^^^^
+
+   Compiling sovereign-tools-base v0.1.0 (/home/alexbryan/dev/commonwealth-ai/studio/crates/sovereign-tools-base)
+warning: function `now` is never used
+   --> studio/crates/sovereign-tools-base/src/search.rs:499:4
+    |
+499 | fn now() -> i64 {
+    |    ^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sovereign-contracts` (lib) generated 1 warning
+warning: `sovereign-tools-base` (lib) generated 1 warning
+   Compiling oicp-client v0.1.0 (/home/alexbryan/dev/commonwealth-ai/oicp-client)
+warning: missing documentation for an associated function
+   --> oicp-client/src/lib.rs:199:5
+    |
+199 |     pub fn new(endpoint: &str, api_key: Option<String>, model_id: &str, context_size: u32) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+note: the lint level is defined here
+   --> oicp-client/src/lib.rs:4:9
+    |
+  4 | #![warn(missing_docs)]
+    |         ^^^^^^^^^^^^
+
+warning: missing documentation for a method
+   --> oicp-client/src/lib.rs:368:5
+    |
+368 |     pub fn with_node_id(mut self, node_id_hex: impl Into<String>) -> Self {
+    |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `oicp-client` (lib) generated 2 warnings
+   Compiling sovereign-recipe-author v0.1.0 (/home/alexbryan/dev/commonwealth-ai/studio/crates/sovereign-recipe-author)
+   Compiling commonwealth-state v0.5.0 (/home/alexbryan/dev/commonwealth-ai/commonwealth/crates/commonwealth-state)
+   Compiling corpus-engine-watchers v0.5.0 (/home/alexbryan/dev/commonwealth-ai/corpus-engine-watchers)
+   Compiling arch-layers v0.5.0 (/home/alexbryan/dev/commonwealth-ai/quality/arch-layers)
+warning: value assigned to `last_error` is never read
+   --> corpus-engine/src/enrichment/field_engine.rs:697:46
+    |
+697 |         let mut last_error: Option<String> = None;
+    |                                              ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable `skipped_kind` is assigned to, but never used
+  --> corpus-engine/src/enrichment/code_intel/scip_source.rs:84:9
+   |
+84 |     let mut skipped_kind = 0usize;
+   |         ^^^^^^^^^^^^^^^^
+   |
+   = note: consider using `_skipped_kind` instead
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `skipped_kind` is never read
+   --> corpus-engine/src/enrichment/code_intel/scip_source.rs:122:13
+    |
+122 |             skipped_kind += 1;
+    |             ^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: function `aggregated_article_for_test` is never used
+   --> corpus-engine/src/enrichment/atlas/strategies/structure_first.rs:827:15
+    |
+827 | pub(crate) fn aggregated_article_for_test(
+    |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: static `PHASE1A_SEED_SYSTEM` is never used
+  --> corpus-engine/src/enrichment/pipeline/pipelines/referential_atlas.rs:52:8
+   |
+52 | static PHASE1A_SEED_SYSTEM: ::std::sync::LazyLock<&'static str> =
+   |        ^^^^^^^^^^^^^^^^^^^
+
+   Compiling sovereign-core v0.5.0 (/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-core)
+warning: unused import: `FetchFailure`
+  --> sovereign/crates/sovereign-core/src/deep_research/audit.rs:33:87
+   |
+33 |     ClaimVerdict, CorroborationRecord, EmptyRoundReason, EmptyWindow, EvidenceWindow, FetchFailure,
+   |                                                                                       ^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `super::estate::DraftLeg`
+  --> sovereign/crates/sovereign-core/src/deep_research/fetch.rs:30:5
+   |
+30 | use super::estate::DraftLeg;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `EmptyRoundReason` and `VerdictSet`
+  --> sovereign/crates/sovereign-core/src/deep_research/render.rs:20:63
+   |
+20 |     AlignmentRecord, BudgetTotals, ClaimCitation, EmptyRound, EmptyRoundReason, EvidenceWindow,
+   |                                                               ^^^^^^^^^^^^^^^^
+21 |     FinalClaim, GateAction, LockRecord, Manifest, ReframeRecord, ResidueRow, RoundRow,
+22 |     SourceLedger, Verdict, VerdictSet,
+   |                            ^^^^^^^^^^
+
+warning: unused imports: `EmptyRoundReason` and `FetchList`
+  --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:38:17
+   |
+38 |     EmptyRound, EmptyRoundReason, EvidenceWindow, FailedSource, FetchFailure, FetchList,
+   |                 ^^^^^^^^^^^^^^^^                                              ^^^^^^^^^
+
+warning: unused import: `CompletionRequest`
+  --> sovereign/crates/sovereign-core/src/lessons.rs:31:5
+   |
+31 |     CompletionRequest, LessonProposedPayload, NarrationEvent, NarrationPhase, TurnNarration,
+   |     ^^^^^^^^^^^^^^^^^
+
+warning: unused import: `GateJudgeVerdict`
+    --> sovereign/crates/sovereign-core/src/runtime/grounding/mod.rs:1269:22
+     |
+1269 |         EvidenceRef, GateJudgeVerdict, GroundingDecisionLine, GroundingLine,
+     |                      ^^^^^^^^^^^^^^^^
+
+warning: unused import: `CompletionRequest`
+  --> sovereign/crates/sovereign-core/src/title.rs:22:20
+   |
+22 | use crate::types::{CompletionRequest, Message, Role};
+   |                    ^^^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+    --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:1175:13
+     |
+1175 |         let mut ctl = Controller {
+     |             ----^^^
+     |             |
+     |             help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::io::Write`
+  --> sovereign/crates/sovereign-core/src/deep_research/state.rs:12:5
+   |
+12 | use std::io::Write as _;
+   |     ^^^^^^^^^^^^^^
+
+warning: unused variable: `posture`
+   --> sovereign/crates/sovereign-core/src/deep_research/containment.rs:406:5
+    |
+406 |     posture: ShardingPrivacy,
+    |     ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_posture`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> sovereign/crates/sovereign-core/src/deep_research/budget.rs:133:13
+    |
+133 |         let mut d = SpendDecider {
+    |             ----^
+    |             |
+    |             help: remove this `mut`
+
+warning: `corpus-engine` (lib) generated 5 warnings
+warning: value assigned to `orphan_count` is never read
+  --> sovereign/crates/sovereign-core/src/deep_research/render.rs:63:36
+   |
+63 |             let mut orphan_count = 0;
+   |                                    ^
+   |
+   = help: maybe it is overwritten before being read?
+   = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `audits`
+    --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:1956:18
+     |
+1956 |             let (audits, gap_list) = self.audit_pass(&draft, &window).await?;
+     |                  ^^^^^^ help: if this is intentional, prefix it with an underscore: `_audits`
+
+warning: variable does not need to be mutable
+   --> sovereign/crates/sovereign-core/src/runtime/epistemic.rs:309:9
+    |
+309 |     let mut push_unique = |demands: &mut Vec<Demand>, facet: DemandFacet, text: &str| {
+    |         ----^^^^^^^^^^^
+    |         |
+    |         help: remove this `mut`
+
+warning: value assigned to `sub_extract_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:575:34
+    |
+575 |         let mut sub_extract_ms = 0u64;
+    |                                  ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `sub_gliner_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:576:33
+    |
+576 |         let mut sub_gliner_ms = 0u64;
+    |                                 ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `sub_record_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:577:33
+    |
+577 |         let mut sub_record_ms = 0u64;
+    |                                 ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `sub_pulls_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:578:32
+    |
+578 |         let mut sub_pulls_ms = 0u64;
+    |                                ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `sub_hops_ms` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/retrieval/query_expansion.rs:579:31
+    |
+579 |         let mut sub_hops_ms = 0u64;
+    |                               ^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `head_flushed` is never read
+   --> sovereign/crates/sovereign-core/src/runtime/streaming.rs:300:17
+    |
+300 |                 head_flushed = true;
+    |                 ^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: method `journal_path` is never used
+    --> sovereign/crates/sovereign-core/src/deep_research/mod.rs:1406:8
+     |
+1125 | impl Controller {
+     | --------------- method in this implementation
+...
+1406 |     fn journal_path(&self) -> PathBuf {
+     |        ^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `file` is never read
+   --> sovereign/crates/sovereign-core/src/deep_research/state.rs:196:5
+    |
+195 | pub struct RunLock {
+    |            ------- field in this struct
+196 |     file: File,
+    |     ^^^^
+    |
+    = note: `RunLock` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: field `skills` is never read
+   --> sovereign/crates/sovereign-core/src/router.rs:296:5
+    |
+293 | pub struct LlmRouter {
+    |            --------- field in this struct
+...
+296 |     skills: Arc<SkillRegistry>,
+    |     ^^^^^^
+
+warning: function `grounding_gate_flags` is never used
+   --> sovereign/crates/sovereign-core/src/runtime/grounding/config.rs:590:8
+    |
+590 | pub fn grounding_gate_flags() -> Vec<(&'static str, EnvFlag)> {
+    |        ^^^^^^^^^^^^^^^^^^^^
+
+warning: fields `margin`, `source`, `pool`, and `elapsed_ms` are never read
+   --> sovereign/crates/sovereign-core/src/runtime/grounding/native_grounding/admission.rs:223:9
+    |
+221 |     Decided {
+    |     ------- fields in this variant
+222 |         verdict: GroundingVerdict,
+223 |         margin: f32,
+    |         ^^^^^^
+224 |         source: MarginSource,
+    |         ^^^^^^
+225 |         pool: usize,
+    |         ^^^^
+226 |         elapsed_ms: u64,
+    |         ^^^^^^^^^^
+    |
+    = note: `AdmissionOutcome` has a derived impl for the trait `Debug`, but this is intentionally ignored during dead code analysis
+
+warning: method `build_question_conditional_passages` is never used
+    --> sovereign/crates/sovereign-core/src/runtime/handlers/attached_doc.rs:1232:25
+     |
+  11 | impl Runtime {
+     | ------------ method in this implementation
+...
+1232 |     pub(crate) async fn build_question_conditional_passages(
+     |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `GuardStory` is never used
+   --> sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:329:17
+    |
+329 | pub(crate) enum GuardStory {
+    |                 ^^^^^^^^^^
+
+warning: function `guard_story` is never used
+   --> sovereign/crates/sovereign-core/src/runtime/authority_guard.rs:345:15
+    |
+345 | pub(crate) fn guard_story(intent: &crate::types::Intent) -> GuardStory {
+    |               ^^^^^^^^^^^
+
+   Compiling sovereign-enrichment-catalog v0.5.0 (/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-enrichment-catalog)
+   Compiling sovereign-work-atlas v0.5.0 (/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-work-atlas)
+   Compiling sovereign-store v0.5.0 (/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-store)
+   Compiling sovereign-tools v0.5.0 (/home/alexbryan/dev/commonwealth-ai/sovereign/crates/sovereign-tools)
+warning: unused import: `sovereign_core::types::CompletionRequest`
+   --> sovereign/crates/sovereign-tools/src/corpus/mod.rs:223:9
+    |
+223 |     use sovereign_core::types::CompletionRequest;
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `BTreeMap`
+  --> sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs:34:24
+   |
+34 | use std::collections::{BTreeMap, HashMap};
+   |                        ^^^^^^^^
+
+warning: unused import: `Deserialize`
+  --> sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs:38:13
+   |
+38 | use serde::{Deserialize, Serialize};
+   |             ^^^^^^^^^^^
+
+warning: `sovereign-core` (lib) generated 28 warnings (run `cargo fix --lib -p sovereign-core` to apply 12 suggestions)
+warning: unused variable: `ctx`
+  --> sovereign/crates/sovereign-tools/src/knowledge.rs:60:9
+   |
+60 |         ctx: &ToolContext,
+   |         ^^^ help: if this is intentional, prefix it with an underscore: `_ctx`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `conversation_messages`
+   --> sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs:569:9
+    |
+569 |         conversation_messages: &[String],
+    |         ^^^^^^^^^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_conversation_messages`
+
+warning: fields `inference` and `embed_model` are never read
+   --> sovereign/crates/sovereign-tools/src/atlas_context_manager.rs:168:5
+    |
+166 | pub struct AtlasContextManager {
+    |            ------------------- fields in this struct
+167 |     indexes_dir: PathBuf,
+168 |     inference: Arc<dyn InferenceProvider>,
+    |     ^^^^^^^^^
+169 |     embed_model: String,
+    |     ^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `id` is never read
+   --> sovereign/crates/sovereign-tools/src/atlas_postinstall.rs:559:9
+    |
+558 |     struct Expansion {
+    |            --------- field in this struct
+559 |         id: String,
+    |         ^^
+
+warning: function `is_valid_symbol_name` is never used
+   --> sovereign/crates/sovereign-tools/src/code/mod.rs:317:15
+    |
+317 | pub(crate) fn is_valid_symbol_name(name: &str) -> bool {
+    |               ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `humanize_age` is never used
+   --> sovereign/crates/sovereign-tools/src/code/brief.rs:429:4
+    |
+429 | fn humanize_age(seconds: u64) -> String {
+    |    ^^^^^^^^^^^^
+
+warning: function `short_hash` is never used
+   --> sovereign/crates/sovereign-tools/src/code/brief.rs:696:4
+    |
+696 | fn short_hash(s: &str) -> String {
+    |    ^^^^^^^^^^
+
+warning: function `parse_lean_skeleton_batch` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:2977:4
+     |
+2977 | fn parse_lean_skeleton_batch(
+     |    ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_segment_naming` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:3123:4
+     |
+3123 | fn parse_segment_naming(text: &str) -> Option<(String, String, SectionFunction, Vec<String>)> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `parse_entity_kind` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:3394:4
+     |
+3394 | fn parse_entity_kind(s: &str) -> EntityKind {
+     |    ^^^^^^^^^^^^^^^^^
+
+warning: function `parse_skeleton_batch` is never used
+    --> sovereign/crates/sovereign-tools/src/document_asset.rs:3415:4
+     |
+3415 | fn parse_skeleton_batch(response: &str, batch_start: usize) -> Option<Vec<SkeletonBatchEntry>> {
+     |    ^^^^^^^^^^^^^^^^^^^^
+
+warning: field `name_to_id` is never read
+  --> sovereign/crates/sovereign-tools/src/entity_graph.rs:63:5
+   |
+61 | pub struct EntityGraph {
+   |            ----------- field in this struct
+62 |     /// Canonical entity name → compact node id.
+63 |     name_to_id: HashMap<String, u32>,
+   |     ^^^^^^^^^^
+   |
+   = note: `EntityGraph` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+
+warning: fields `db_path` and `notes_db_path` are never read
+   --> sovereign/crates/sovereign-tools/src/knowledge_view/manager.rs:112:5
+    |
+ 93 | pub struct KnowledgeViewManager {
+    |            -------------------- fields in this struct
+...
+112 |     db_path: PathBuf,
+    |     ^^^^^^^
+...
+116 |     notes_db_path: PathBuf,
+    |     ^^^^^^^^^^^^^
+
+warning: field `task` is never read
+   --> sovereign/crates/sovereign-tools/src/local_corpus/watched/enrich.rs:200:5
+    |
+192 | struct JobHandle {
+    |        --------- field in this struct
+...
+200 |     task: JoinHandle<()>,
+    |     ^^^^
+
+warning: `sovereign-tools` (lib) generated 17 warnings (run `cargo fix --lib -p sovereign-tools` to apply 5 suggestions)
+warning: struct `AlwaysSearchInference` is never constructed
+   --> sovereign/crates/sovereign-core/tests/harness.rs:194:12
+    |
+194 | pub struct AlwaysSearchInference;
+    |            ^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: field `scripted_approval` is never read
+   --> sovereign/crates/sovereign-core/tests/harness.rs:250:9
+    |
+243 | pub struct TestHarness {
+    |            ----------- field in this struct
+...
+250 |     pub scripted_approval: Option<Arc<ScriptedApprovalChannel>>,
+    |         ^^^^^^^^^^^^^^^^^
+
+warning: associated items `provenance`, `conversation_length`, and `new_with_collaborate` are never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:311:12
+    |
+253 | impl TestHarness {
+    | ---------------- associated items in this implementation
+...
+311 |     pub fn provenance(&self, response: &Response) -> ResponseProvenance {
+    |            ^^^^^^^^^^
+...
+324 |     pub async fn conversation_length(&self, conversation_id: &str) -> usize {
+    |                  ^^^^^^^^^^^^^^^^^^^
+...
+335 |     pub fn new_with_collaborate(
+    |            ^^^^^^^^^^^^^^^^^^^^
+
+warning: enum `PhraseScript` is never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:434:10
+    |
+434 | pub enum PhraseScript {
+    |          ^^^^^^^^^^^^
+
+warning: enum `RefineScript` is never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:449:10
+    |
+449 | pub enum RefineScript {
+    |          ^^^^^^^^^^^^
+
+warning: variants `Pasted`, `Skip`, and `Unused` are never constructed
+   --> sovereign/crates/sovereign-core/tests/harness.rs:468:5
+    |
+466 | pub enum InfoResponseScript {
+    |          ------------------ variants in this enum
+467 |     /// User pasted this exact text.
+468 |     Pasted(String),
+    |     ^^^^^^
+469 |     /// User pressed Skip — returns `None`.
+470 |     Skip,
+    |     ^^^^
+471 |     /// Should not be called in this scenario — panics if invoked.
+472 |     Unused,
+    |     ^^^^^^
+    |
+    = note: `InfoResponseScript` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: struct `ScriptableInference` is never constructed
+   --> sovereign/crates/sovereign-core/tests/harness.rs:475:12
+    |
+475 | pub struct ScriptableInference {
+    |            ^^^^^^^^^^^^^^^^^^^
+
+warning: associated function `new` is never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:482:12
+    |
+481 | impl ScriptableInference {
+    | ------------------------ associated function in this implementation
+482 |     pub fn new(phrase: PhraseScript, refine: RefineScript) -> Self {
+    |            ^^^
+
+warning: associated items `new` and `refined_emissions` are never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:579:12
+    |
+578 | impl ScriptedApprovalChannel {
+    | ---------------------------- associated items in this implementation
+579 |     pub fn new(response: InfoResponseScript) -> Self {
+    |            ^^^
+...
+589 |     pub fn refined_emissions(&self) -> Vec<MessageRefinedPayload> {
+    |            ^^^^^^^^^^^^^^^^^
+
+warning: field `snippet_source` is never read
+  --> sovereign/crates/sovereign-core/tests/drb1_t1_admission.rs:77:5
+   |
+68 | struct Row {
+   |        --- field in this struct
+...
+77 |     snippet_source: &'static str,
+   |     ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sovereign-core` (test "custody_reds") generated 9 warnings
+warning: unused variable: `leg`
+  --> sovereign/crates/sovereign-core/tests/oneshot_rag.rs:91:9
+   |
+91 |         leg: DraftLeg,
+   |         ^^^ help: if this is intentional, prefix it with an underscore: `_leg`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sovereign-core` (test "drb1_t1_admission") generated 1 warning
+warning: struct `TestHarness` is never constructed
+   --> sovereign/crates/sovereign-core/tests/harness.rs:243:12
+    |
+243 | pub struct TestHarness {
+    |            ^^^^^^^^^^^
+
+warning: multiple associated items are never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:256:12
+    |
+253 | impl TestHarness {
+    | ---------------- associated items in this implementation
+...
+256 |     pub fn new() -> Self {
+    |            ^^^
+...
+263 |     pub fn with_skills(skills: SkillRegistry) -> Self {
+    |            ^^^^^^^^^^^
+...
+297 |     pub async fn send(&self, message: &str) -> Response {
+    |                  ^^^^
+...
+303 |     pub async fn send_in(&self, message: &str, conversation_id: &str) -> Response {
+    |                  ^^^^^^^
+...
+311 |     pub fn provenance(&self, response: &Response) -> ResponseProvenance {
+    |            ^^^^^^^^^^
+...
+324 |     pub async fn conversation_length(&self, conversation_id: &str) -> usize {
+    |                  ^^^^^^^^^^^^^^^^^^^
+...
+335 |     pub fn new_with_collaborate(
+    |            ^^^^^^^^^^^^^^^^^^^^
+...
+380 |     pub async fn ingest_test_corpus(&self, corpus_id: &str, chunks: Vec<(&str, &str)>) {
+    |                  ^^^^^^^^^^^^^^^^^^
+
+warning: enum `InfoResponseScript` is never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:466:10
+    |
+466 | pub enum InfoResponseScript {
+    |          ^^^^^^^^^^^^^^^^^^
+
+warning: struct `ScriptedApprovalChannel` is never constructed
+   --> sovereign/crates/sovereign-core/tests/harness.rs:570:12
+    |
+570 | pub struct ScriptedApprovalChannel {
+    |            ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `sovereign-core` (test "oneshot_rag") generated 1 warning (run `cargo fix --test "oneshot_rag" -p sovereign-core` to apply 1 suggestion)
+warning: `sovereign-core` (test "routing_moves") generated 10 warnings (6 duplicates)
+warning: variants `RemotePayload` and `QueryEgress` are never constructed
+  --> sovereign/crates/sovereign-core/tests/f26_egress_census.rs:83:5
+   |
+76 | enum Class {
+   |      ----- variants in this enum
+...
+83 |     RemotePayload,
+   |     ^^^^^^^^^^^^^
+...
+86 |     QueryEgress,
+   |     ^^^^^^^^^^^
+   |
+   = note: `Class` has derived impls for the traits `Clone` and `Debug`, but these are intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sovereign-core` (test "f26_egress_census") generated 1 warning
+warning: `sovereign-core` (test "router_bootstrap_parity") generated 10 warnings (10 duplicates)
+warning: unused import: `FAMILY_WEB_SEARCH`
+  --> sovereign/crates/sovereign-core/tests/drb1_r1_reds.rs:12:37
+   |
+12 |     SpendDecider, FAMILY_WEB_FETCH, FAMILY_WEB_SEARCH, KEY_FETCH_PAGES,
+   |                                     ^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `CHUNK_CONTENT_CAP`
+  --> sovereign/crates/sovereign-core/tests/drb1_r1_reds.rs:14:63
+   |
+14 | use sovereign_core::deep_research::fetch::{self, fetch_round, CHUNK_CONTENT_CAP};
+   |                                                               ^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `MockBackendImpl` and `MockDraftSurface`
+  --> sovereign/crates/sovereign-core/tests/drb1_r1_reds.rs:15:42
+   |
+15 | use sovereign_core::deep_research::gym::{MockBackendImpl, MockDraftSurface};
+   |                                          ^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^
+
+warning: unused import: `EmptyRoundReason`
+  --> sovereign/crates/sovereign-core/tests/drb1_r1_reds.rs:17:5
+   |
+17 |     EmptyRoundReason, FetchList, SearchHit, TriageOutcome, ICD_VERSION,
+   |     ^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::path::PathBuf`
+   --> sovereign/crates/sovereign-core/tests/drb1_r1_reds.rs:251:9
+    |
+251 |     use std::path::PathBuf;
+    |         ^^^^^^^^^^^^^^^^^^
+
+warning: `sovereign-core` (test "drb1_r1_reds") generated 5 warnings (run `cargo fix --test "drb1_r1_reds" -p sovereign-core` to apply 5 suggestions)
+warning: fields `store` and `scripted_approval` are never read
+   --> sovereign/crates/sovereign-core/tests/harness.rs:245:9
+    |
+243 | pub struct TestHarness {
+    |            ----------- fields in this struct
+244 |     pub runtime: Runtime,
+245 |     pub store: Arc<SqliteStateStore>,
+    |         ^^^^^
+...
+250 |     pub scripted_approval: Option<Arc<ScriptedApprovalChannel>>,
+    |         ^^^^^^^^^^^^^^^^^
+
+warning: associated items `send`, `send_in`, `provenance`, `conversation_length`, `new_with_collaborate`, and `ingest_test_corpus` are never used
+   --> sovereign/crates/sovereign-core/tests/harness.rs:297:18
+    |
+253 | impl TestHarness {
+    | ---------------- associated items in this implementation
+...
+297 |     pub async fn send(&self, message: &str) -> Response {
+    |                  ^^^^
+...
+303 |     pub async fn send_in(&self, message: &str, conversation_id: &str) -> Response {
+    |                  ^^^^^^^
+...
+311 |     pub fn provenance(&self, response: &Response) -> ResponseProvenance {
+    |            ^^^^^^^^^^
+...
+324 |     pub async fn conversation_length(&self, conversation_id: &str) -> usize {
+    |                  ^^^^^^^^^^^^^^^^^^^
+...
+335 |     pub fn new_with_collaborate(
+    |            ^^^^^^^^^^^^^^^^^^^^
+...
+380 |     pub async fn ingest_test_corpus(&self, corpus_id: &str, chunks: Vec<(&str, &str)>) {
+    |                  ^^^^^^^^^^^^^^^^^^
+
+warning: `sovereign-core` (test "retrieval_pipeline_mechanics") generated 9 warnings (7 duplicates)
+warning: unused imports: `Charter`, `Draft`, `EvidenceWindow`, `FetchList`, `GapList`, `Manifest`, `SkipLedger`, `Survey`, and `VerdictSet`
+  --> sovereign/crates/sovereign-core/tests/golden_fixtures.rs:13:15
+   |
+13 |     Artifact, Charter, Draft, EvidenceWindow, FetchList, GapList, GateAction, Manifest, SkipLedger,
+   |               ^^^^^^^  ^^^^^  ^^^^^^^^^^^^^^  ^^^^^^^^^  ^^^^^^^              ^^^^^^^^  ^^^^^^^^^^
+14 |     Survey, Verdict, VerdictSet,
+   |     ^^^^^^           ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sovereign-core` (test "golden_fixtures") generated 1 warning (run `cargo fix --test "golden_fixtures" -p sovereign-core` to apply 1 suggestion)
+warning: `sovereign-core` (test "landscape_digest_splice") generated 10 warnings (10 duplicates)
+warning: field `queries` is never read
+   --> sovereign/crates/sovereign-core/examples/replay_flight.rs:584:5
+    |
+581 | struct FetchMaterial {
+    |        ------------- field in this struct
+...
+584 |     queries: Vec<(String, String)>,
+    |     ^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variant `Direct` is never constructed
+   --> sovereign/crates/sovereign-core/tests/turn_tool_census.rs:139:5
+    |
+133 | enum Extraction {
+    |      ---------- variant in this enum
+...
+139 |     Direct,
+    |     ^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `sovereign-core` (example "replay_flight") generated 1 warning
+warning: `sovereign-core` (test "turn_tool_census") generated 1 warning
+warning: duplicated attribute
+    --> sovereign/crates/sovereign-core/src/deep_research/audit.rs:1591:5
+     |
+1591 |     #[test]
+     |     ^^^^^^^
+     |
+     = note: `#[warn(duplicate_macro_attributes)]` on by default
+
+warning: unused import: `VerdictSet`
+  --> sovereign/crates/sovereign-core/src/deep_research/render.rs:22:28
+   |
+22 |     SourceLedger, Verdict, VerdictSet,
+   |                            ^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> sovereign/crates/sovereign-core/src/deep_research/acquisition.rs:937:13
+    |
+937 |         let mut figureless_hit = |id: &str| hit(id, 0.9);
+    |             ----^^^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> sovereign/crates/sovereign-core/src/deep_research/acquisition.rs:938:13
+    |
+938 |         let mut figure_bearing_hit = |id: &str| SearchHit {
+    |             ----^^^^^^^^^^^^^^^^^^
+    |             |
+    |             help: remove this `mut`
+
+warning: function `sentence_splitter_attaches_spans` is never used
+    --> sovereign/crates/sovereign-core/src/deep_research/audit.rs:1636:8
+     |
+1636 |     fn sentence_splitter_attaches_spans() {
+     |        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `contradicted_negative_records_its_reason_in_the_audit` is never used
+    --> sovereign/crates/sovereign-core/src/deep_research/audit.rs:2348:14
+     |
+2348 |     async fn contradicted_negative_records_its_reason_in_the_audit() {
+     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `sovereign-core` (lib test) generated 28 warnings (22 duplicates) (run `cargo fix --lib -p sovereign-core --tests` to apply 3 suggestions)
+    Finished `test` profile [unoptimized] target(s) in 1m 59s
+────────────
+ Nextest run ID a9efb329-b5bf-476d-aeed-9a1e6433cfd0 with nextest profile: default
+    Starting 18 tests across 36 binaries (1467 tests skipped)
+────────────
+     Summary [   0.101s] 18 tests run: 18 passed, 1467 skipped
+
+═══════════════════════════════════════════════════════════════
+ sovereign-test — repo-wide regression gate
+═══════════════════════════════════════════════════════════════
+ engine:       nextest
+ doctests:     SKIPPED (--doctests to include; CI runs them)
+ jobs:         2 — memory-capped: 11GB available, 4GB/job
+ pass:         18
+ fail:         0
+ elapsed:      120697ms
+   build:      119s
+   tests:      ~2s
+ cargo exit:   0
+
+ ✓ All green.
+
+{"t":"summary","pass":18,"fail":0,"warn":0,"ms":120697,"empty":false,"doctests":false}

@@ -72,3 +72,69 @@ def unscorable(out, dims=DIMS):
     if missing or empty:
         return "missing dims %s, empty dims %s" % (missing, empty)
     return None
+
+
+# ── INSTRUMENT AMENDMENT 2026-08-26: the judge ENDPOINT is decided here too ──
+#
+# The defect this closes, found mid-flight. `score_race.py`'s guard
+# (`served_models`) defaulted to the local daemon, while the vendored
+# `utils/api.py` resolves ITS endpoint at import time from `LLM_BACKEND`, which
+# defaults to `openrouter`. Both bed runners export LLM_BACKEND/OPENAI_BASE_URL/
+# OPENAI_API_KEY, so the trap never fired through them — but a scorer invoked
+# directly, the way its own docstring documents it, verified that OUR daemon
+# serves the pinned judge and then sent every judge call to OpenRouter, using
+# whatever OPENROUTER_API_KEY happened to be in the ambient environment.
+#
+# Two deciders for one endpoint (§10.6) whose failure mode is a silent
+# substitution of the instrument (§18.3): the run emits numbers reported as
+# "our pinned 27B ruler" that some other service produced. The guard passing is
+# what makes it dangerous — it reads as verified.
+#
+# So the endpoint joins the sampling pin as instrument state: decided once,
+# here, and enforced for every scorer that drives this judge.
+LOCAL_HOSTS = ("127.0.0.1", "localhost", "::1", "0.0.0.0")
+DEFAULT_JUDGE_BASE_URL = "http://127.0.0.1:9741/v1"
+
+
+# The vendored client also freezes its socket timeout at import
+# (utils/api.py:82, `LLM_HTTP_TIMEOUT`, default 600s). Task 83 is the largest
+# prompt in the subset — a ~40k-token reference plus the article — and at this
+# host's prefill rate it needs ~8 min before the first token. At 600s it is cut
+# off CLIENT-side and recorded NEVER-RAN, which reads as a model refusal and is
+# not one. A judge call is allowed to be slow; it is not allowed to be silently
+# cut off. `score_one.py` carried this fix in its own copy while `score_race.py`
+# did not — which is exactly why both now live here.
+JUDGE_HTTP_TIMEOUT_S = "3600"
+
+
+def configure_judge_client() -> str:
+    """Decide the judge endpoint and socket timeout, refuse a remote endpoint,
+    and set the env the vendored client reads AT IMPORT TIME.
+
+    MUST be called before `from utils.api import AIClient` — api.py binds
+    LLM_BACKEND, its base URL and its timeout at module import, so setting them
+    afterwards changes nothing and the call still leaves the host.
+
+    Returns the resolved base URL, which the caller's `/models` guard must use
+    so the endpoint it verifies is the endpoint the judge calls reach.
+    """
+    import os
+    import sys
+
+    base = os.environ.get("OPENAI_BASE_URL", DEFAULT_JUDGE_BASE_URL)
+    if not os.environ.get("SOVEREIGN_RACE_ALLOW_REMOTE_JUDGE"):
+        host = base.split("//", 1)[-1].split("/", 1)[0].split(":")[0]
+        if host not in LOCAL_HOSTS:
+            sys.exit(
+                f"exit 3: judge endpoint {base} is not local. Every RACE number "
+                f"this campaign holds is defined as our pinned judge on our own "
+                f"daemon; scoring against a remote service substitutes the "
+                f"instrument without saying so (ARCH 18.3), and bills for it. "
+                f"Set SOVEREIGN_RACE_ALLOW_REMOTE_JUDGE=1 to override — and name "
+                f"the substitution wherever the number is reported."
+            )
+    os.environ["LLM_BACKEND"] = "openai"
+    os.environ["OPENAI_BASE_URL"] = base
+    os.environ.setdefault("OPENAI_API_KEY", "local")
+    os.environ.setdefault("LLM_HTTP_TIMEOUT", JUDGE_HTTP_TIMEOUT_S)
+    return base

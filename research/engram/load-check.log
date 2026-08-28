@@ -1,0 +1,11 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+0.00.031.695 I llama_completion: llama backend init
+0.00.031.698 I llama_completion: load the model and apply lora adapter, if any
+ggml_validate_row_data: found nan value at block 2889389
+ggml_validate_row_data: found nan value at block 11533401
+0.34.816.203 E load_all_data: tensor 'blk.10.ffn_up_exps.weight' has invalid data
+0.34.819.741 E load_all_data: tensor 'blk.29.ffn_down_exps.weight' has invalid data
+0.36.490.943 E llama_model_load: error loading model: found tensors with invalid data
+0.36.490.968 E llama_model_load_from_file_impl: failed to load model
+0.36.490.973 E cmn  common_init_: failed to load model 'sovereign/models/Qwen3.8-Flash-Next/Qwen3.8-Flash-Next-UD-Q4_K_XL-00001-of-00004.gguf'
+0.36.490.975 E llama_completion: error: unable to create context

@@ -1,0 +1,85 @@
+{
+  "icd": "draft",
+  "version": 1,
+  "run_id": "dr-1787730496",
+  "charter_hash": "e872b3993ffc1291",
+  "round": 1,
+  "provider": "port:draft",
+  "url_constraint": {
+    "enabled": true,
+    "layer": "sovereign-inference:UrlAllowlistConstraint"
+  },
+  "text": "Based on the provided evidence, here is a synthesis of information regarding the Agent2Agent (A2A) protocol:\n\n**Overview and Purpose**\nThe A2A Protocol is an open standard designed to enable seamless communication, collaboration, and interoperability between AI agents built by different vendors or using different frameworks [Source: estate-1] [Source: estate-2]. It addresses the \"M×N problem\" in enterprise AI, where integrating multiple agents with various tools requires combinatorial custom integrations; A2A provides a common semantic model for discovery, communication, and transaction without vendor lock-in [Source: estate-1]. Unlike Anthropic’s Model Context Protocol (MCP), which focuses on connecting models to external tools and data sources (\"model-to-world interface\"), A2A focuses on agent-to-agent coordination (\"agent-to-agent collaboration framework\") [Source: estate-1] [Source: estate-2]. The protocols are complementary rather than competing; MCP handles tool integration while A2A enables peer-to-peer task outsourcing and workflow orchestration [Source: estate-1] [Source: estate-2].\n\n**Governance and Adoption**\nGoogle launched the protocol in April 2025 with support from over 50 technology partners, including Atlassian, Box, LangChain, Salesforce, and ServiceNow [Source: estate-1]. On June 23, 2025, Google announced at the North American Open Source Summit that it would donate A2A to the Linux Foundation to ensure neutral governance and long-term stability [Source: estate-2]. This move aims to promote open standards and industry collaboration among more than 100 supporting companies, such as Amazon, Cisco, Microsoft, and AWS [Source: estate-2] [Source: estate-1]. By April 9, 2026 (the one-year mark), adoption had surpassed 150 organizations, with deep integration into major cloud platforms including Azure AI Foundry, Copilot Studio, and Amazon Bedrock AgentCore Runtime [Source: estate-1]. The protocol’s core GitHub repository has accumulated over 22,000 stars (with some sources citing up to 25.5k) and the SDK ecosystem supports five production-ready languages: Python, Go, JavaScript, Java, and .NET [Source: estate-1].\n\n**Technical Architecture**\nA2A operates by treating agents as network-accessible services that expose an \"Agent Card\" via HTTP (typically at `/.well-known/agent.json`) to advertise their capabilities, skills, and authentication requirements [Source: estate-1] [Source: estate-2]. Interactions revolve around a central object called a **Task**, which represents a unit of work between a client agent and a remote agent [Source: estate-1]. The protocol uses JSON-RPC 2.0 over HTTP(S) for communication and supports multiple interaction modes based on task duration: request/response with polling, Server-Sent Events (SSE) for streaming updates during short-to-medium tasks, and push notifications for long-running asynchronous tasks [Source: estate-1] [Source: estate-2]. A key design principle is \"opacity,\" allowing agents to collaborate without exposing their internal memory, prompts, or proprietary tool stacks, thereby preserving intellectual property and security boundaries [Source: estate-1] [Source: estate-2].\n\n**Security Considerations and Challenges**\nWhile A2A provides a structured framework, researchers have identified critical vulnerabilities regarding the handling of sensitive data such as payment credentials and identity documents [Source: estate-2]. Identified weaknesses include insufficient token lifetime control, lack of strong customer authentication (SCA), overbroad access scopes, missing explicit user consent flows, and risks of prompt injection leading to data leakage or privilege escalation [Source: estate-2]. Proposed enhancements include ephemeral scoped tokens, direct user-to-service data channels, and explicit consent orchestration to mitigate these harms [Source: estate-2]. Additionally, community feedback highlights challenges such as slower decision-making due to multi-party governance under the Linux Foundation and potential conflicts of interest among contributing enterprises [Source: estate-2]. Some developers also note that A2A’s reliance on gRPC/JSON-RPC adds implementation complexity compared to simpler REST-based alternatives like MCP for certain use cases [Source: estate-1].\n\n**Comparison with Other Protocols**\nIn a broader survey of agent interoperability protocols, A2A is distinguished from Model Context Protocol (MCP) by its peer-to-peer nature versus MCP's client-server tool invocation model; it differs from Agent Communication Protocol (ACP), which uses REST-native messaging for local multimodal interactions; and it contrasts with Agent Network Protocol (ANP), which utilizes decentralized identifiers (DIDs) for open-internet marketplaces [Source: estate-2]. A phased adoption roadmap suggests using MCP first for tool access, followed by A2A for enterprise-scale collaborative task execution [Source: estate-2].",
+  "citations": [
+    {
+      "evidence_id": "estate-1",
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://agentstoday.substack.com/p/agents-today-15-ai-agent-interoperability",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://medium.com/@sandibesen/an-unbiased-comparison-of-mcp-acp-and-a2a-protocols-0b45923a20f3",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://ikala.ai/blog/ai-trends/an-in-depth-analysis-of-googles-a2a-protocol-and-its-relationship-with-anthropics-mcp-en",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://cohorte.co/blog/googles-agent2agent-a2a-protocol-a-new-era-of-ai-agent-interoperability",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://www.linuxfoundation.org/press/a2a-protocol-surpasses-150-organizations-lands-in-major-cloud-platforms-and-sees-enterprise-production-use-in-first-year",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://github.com/a2aproject/A2A",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-1",
+      "url": "https://news.ycombinator.com/item?id=48582679",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://codilime.com/blog/a2a-protocol-explained",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://arxiv.org/html/2505.12490v3",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://www.koyeb.com/blog/a2a-and-mcp-start-of-the-ai-agent-protocol-wars",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://a2aprotocol.ai/blog/impact-analysis-google-donating-a2a-protocol-linux-foundation",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://www.helpnetsecurity.com/2025/06/24/the-linux-foundation-agent2agent",
+      "custody": "personal"
+    },
+    {
+      "evidence_id": "estate-2",
+      "url": "https://arxiv.org/html/2505.02279v1",
+      "custody": "personal"
+    }
+  ]
+}

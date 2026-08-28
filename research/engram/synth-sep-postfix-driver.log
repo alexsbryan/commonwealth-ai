@@ -1,0 +1,4 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+eval pid=1079641 guard=6144MiB corpus=sep sample=5
+  log=/home/alexbryan/dev/commonwealth-ai/research/engram/synth-sep-n5.log
+── synth:sep rc=1 guard_tripped=0 min_avail=34467MiB

@@ -470,6 +470,22 @@ fn stage_active_patches(patches_dir: &Path, staged_dir: &Path) -> bool {
         "0003-exact-speculative-state.patch",
         "0004-exact-decode-lifecycle-hooks.patch",
         "0005-fail-closed-eagle3-process.patch",
+        // Hides mtmd-helper.h's `namespace mtmd_helper` C++ wrappers from
+        // bindgen, which flattens `mtmd_helper::gen_audio` onto the C opaque
+        // `mtmd_helper_gen_audio` and emits a duplicate definition (E0428).
+        // Paired with -DMTMD_HELPER_NO_CXX_WRAPPERS in the bindgen args below;
+        // the C++ build never defines that macro and is unaffected.
+        "0006-mtmd-helper-hide-cxx-wrappers-from-bindgen.patch",
+        // MADV_RANDOM on tensors left resident in the mmap (i.e. placed on
+        // the CPU buffer type via -ot). Without it the fd carries
+        // POSIX_FADV_SEQUENTIAL for the whole file and readahead amplifies
+        // every small gather. Pairs with SOVEREIGN_TENSOR_BUFT_OVERRIDE.
+        "0007-madvise-random-on-mmap-resident-tensors.patch",
+        // Do not MAP_POPULATE the mapping when the load bypasses the device
+        // host buffer. Without this the CPU-placed weights the local-fit gate
+        // discounts are made fully resident at load anyway, and the discount
+        // is a promise the loader immediately breaks.
+        "0008-no-prefetch-when-host-buffer-bypassed.patch",
     ];
     for name in always_active {
         let source = patches_dir.join(name);
@@ -1521,6 +1537,9 @@ fn main() {
     if cfg!(feature = "mtmd") {
         builder = builder
             .clang_arg("-DMTMD_SUPPORT")
+            // See patch 0006: skip the C++ namespace wrappers, whose flattened
+            // names collide with the C opaque types they wrap.
+            .clang_arg("-DMTMD_HELPER_NO_CXX_WRAPPERS")
             .clang_arg(format!("-I{}", llama_dst.join("tools/mtmd").display()))
             .allowlist_function("mtmd_.*")
             .allowlist_type("mtmd_.*")

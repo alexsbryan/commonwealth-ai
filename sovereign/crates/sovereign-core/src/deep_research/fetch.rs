@@ -239,6 +239,16 @@ async fn fetch_with_retries(
 /// decided on CONTENT after fetch. Tier members the walk never reached
 /// are recorded as failures (`round-cap` / `budget-refused`) — never
 /// silently un-ledgered.
+///
+/// `next_evidence_id` is the RUN's evidence-handle counter, not the
+/// round's. A window id is resolved against the MERGED window (every
+/// round's chunks in one list — `number_citations` finds a chunk with
+/// `.find(|c| c.id == id)`), so a counter that restarts each round
+/// mints round 2's `ev-1` on top of round 1's, and every citation to
+/// it renders round 1's URL. The counter is threaded, not local, for
+/// the same reason the decider is: it is run-scoped mutable state with
+/// exactly one owner. The caller advances nothing by hand — this
+/// function is the only writer.
 #[allow(clippy::too_many_arguments)]
 pub async fn fetch_round(
     port: &dyn ResearchPort,
@@ -249,6 +259,7 @@ pub async fn fetch_round(
     fetch_list: &FetchList,
     candidates: &[SearchHit],
     already_fetched: &[String],
+    next_evidence_id: &mut usize,
     at_unix: i64,
     policy: &FetchPolicy,
 ) -> Result<FetchRoundOutcome, String> {
@@ -298,7 +309,6 @@ pub async fn fetch_round(
     let mut registry_rows: Vec<SourceRegistryRow> = Vec::new();
     // The dedup set: prior rounds' URLs plus this round's as it fills.
     let mut fetched: Vec<String> = already_fetched.to_vec();
-    let mut index = 0usize;
     let mut spent_round = 0usize;
     // The walk queue, in rank order. On a failure the next SAME-QUERY
     // candidate is promoted to the front (AIQ's per-query fallback
@@ -483,9 +493,9 @@ pub async fn fetch_round(
                 // stamps; an empty stamp is `Unknown` at the join — the
                 // audit refuses per-claim on unknown chunks, never a
                 // silent default.
-                index += 1;
+                *next_evidence_id += 1;
                 chunks.push(WindowChunk {
-                    id: format!("ev-{index}"),
+                    id: format!("ev-{}", *next_evidence_id),
                     locator: hit.url.clone(),
                     source_url: hit.url.clone(),
                     custody: hit.custody.clone(),
@@ -837,6 +847,7 @@ mod tests {
                 &fetch_list,
                 &hits,
                 &[],
+                &mut 0usize,
                 1234,
                 &content_gate_off(),
             )
@@ -871,6 +882,7 @@ mod tests {
                 &fetch_list,
                 &hits,
                 &[],
+                &mut 0usize,
                 1000,
                 &content_gate_off(),
             )
@@ -887,6 +899,7 @@ mod tests {
                 &fetch_list,
                 &hits,
                 &[url.clone()],
+                &mut 0usize,
                 2000,
                 &content_gate_off(),
             )
@@ -900,6 +913,106 @@ mod tests {
             assert_eq!(round2.dedup_refused, vec![url.clone()]);
             let calls = port.calls.lock().unwrap().len();
             assert_eq!(calls, 1, "round 2 never reached the port");
+        });
+    }
+
+    /// RED (2026-08-27): "round 2's evidence handles do not collide with
+    /// round 1's". Failed at HEAD — `fetch_round` opened `let mut index =
+    /// 0usize` on every call, so a two-round flight minted `ev-1` twice.
+    ///
+    /// The collision is not merely wasteful. The merged window is the
+    /// scope a handle is RESOLVED against, and `number_citations` resolves
+    /// with `.find(|c| c.id == id)`, so the second `ev-1` is unreachable
+    /// and every citation written against it renders the FIRST chunk's
+    /// URL — a claim drawn from round 2 ships with a round-1 source, exit
+    /// 0, no warning, and a report that reads correctly (§7.5).
+    ///
+    /// Measured on bed dr-1787807617 before the fix: 7 ids covering 24 of
+    /// 62 chunks, 5 of them from this site (the other 12 were
+    /// `estate_window` numbering by query, fixed in 9588704c2).
+    #[test]
+    fn evidence_handles_are_unique_across_rounds() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(async {
+            let urls: Vec<String> = (1..=4)
+                .map(|i| format!("https://example.com/p{i}"))
+                .collect();
+            let port = CountingPort {
+                calls: Arc::new(Mutex::new(Vec::new())),
+                bodies: urls
+                    .iter()
+                    .map(|u| (u.clone(), "the body".to_string()))
+                    .collect(),
+            };
+            let tmp = tempfile::tempdir().unwrap();
+            let mut decider = SpendDecider::new(
+                "r-ids",
+                "h",
+                HashMap::from([(format!("{FAMILY_WEB_FETCH}:{KEY_FETCH_PAGES}"), 8u32)]),
+                &tmp.path().join("budget-ledger.json"),
+            )
+            .unwrap();
+
+            // The counter the CONTROLLER owns: one per run, threaded
+            // across the rounds exactly as `acquire_round` threads it.
+            let mut next_evidence_id = 0usize;
+
+            let round1 = fetch_round(
+                &port,
+                &mut decider,
+                "r-ids",
+                "h",
+                1,
+                &fetch_list_admitting(&["h1", "h2"]),
+                &[hit("h1", &urls[0]), hit("h2", &urls[1])],
+                &[],
+                &mut next_evidence_id,
+                1000,
+                &content_gate_off(),
+            )
+            .await
+            .unwrap()
+            .window;
+
+            let already: Vec<String> = round1.chunks.iter().map(|c| c.source_url.clone()).collect();
+            let round2 = fetch_round(
+                &port,
+                &mut decider,
+                "r-ids",
+                "h",
+                2,
+                &fetch_list_admitting(&["h3", "h4"]),
+                &[hit("h3", &urls[2]), hit("h4", &urls[3])],
+                &already,
+                &mut next_evidence_id,
+                2000,
+                &content_gate_off(),
+            )
+            .await
+            .unwrap()
+            .window;
+
+            assert_eq!(round1.chunks.len(), 2, "round 1 fetched both");
+            assert_eq!(round2.chunks.len(), 2, "round 2 fetched both");
+
+            let ids: Vec<&str> = round1
+                .chunks
+                .iter()
+                .chain(round2.chunks.iter())
+                .map(|c| c.id.as_str())
+                .collect();
+            assert_eq!(
+                ids,
+                vec!["ev-1", "ev-2", "ev-3", "ev-4"],
+                "the counter is run-scoped: round 2 continues where round 1 stopped"
+            );
+            let distinct: std::collections::BTreeSet<&&str> = ids.iter().collect();
+            assert_eq!(
+                distinct.len(),
+                ids.len(),
+                "no handle names two chunks in the merged window"
+            );
+            assert_eq!(next_evidence_id, 4, "the caller sees the advanced counter");
         });
     }
 
@@ -952,6 +1065,7 @@ mod tests {
                 &fetch_list,
                 &hits,
                 &[],
+                &mut 0usize,
                 1000,
                 &content_gate_off(),
             )
@@ -985,6 +1099,7 @@ mod tests {
                     &fetch_list,
                     &hits,
                     &[],
+                    &mut 0usize,
                     1000 + i64::from(round),
                     &content_gate_off(),
                 )
@@ -1035,6 +1150,7 @@ mod tests {
                 &fetch_list,
                 &hits,
                 &[],
+                &mut 0usize,
                 4000,
                 &content_gate_off(),
             )
@@ -1240,6 +1356,7 @@ mod tests {
                 &fetch_list,
                 &triaged.candidates,
                 &[],
+                &mut 0usize,
                 1234,
                 &production_policy(),
             )
@@ -1370,6 +1487,7 @@ mod tests {
                 &fetch_list,
                 &triaged.candidates,
                 &[],
+                &mut 0usize,
                 1234,
                 &production_policy(),
             )
@@ -1460,6 +1578,7 @@ mod tests {
                     &fetch_list,
                     &triaged.candidates,
                     &[],
+                    &mut 0usize,
                     1234,
                     &production_policy(),
                 )
@@ -1560,6 +1679,7 @@ mod tests {
                 &fetch_list,
                 &triaged.candidates,
                 &[],
+                &mut 0usize,
                 1234,
                 &production_policy(),
             )
@@ -1705,6 +1825,7 @@ mod tests {
                 &fetch_list,
                 &triaged.candidates,
                 &[],
+                &mut 0usize,
                 1234,
                 &policy,
             )
@@ -1816,6 +1937,7 @@ mod tests {
                 &fetch_list,
                 &triaged.candidates,
                 &[],
+                &mut 0usize,
                 1234,
                 &policy,
             )
@@ -1915,6 +2037,7 @@ mod tests {
                 &fetch_list,
                 &triaged.candidates,
                 &[],
+                &mut 0usize,
                 1234,
                 &policy,
             )

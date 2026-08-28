@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787742429",
+  "charter_hash": "db550b2182884580",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Count of major AI agents supporting the Model Context Protocol (MCP) as of 2024",
+      "Number of enterprise partners announcing support for Google's Agent-to-Agent (A2A) protocol in March 2025",
+      "Percentage share of API calls routed through MCP servers versus A2A endpoints in early adopter deployments during Q1 2025",
+      "Median latency difference between agent communication via JSON-RPC over HTTP (MCP standard) and A2A specified transport mechanisms",
+      "Ratio of bidirectional conversational turns supported by A2A compared to unidirectional tool invocations defined in MCP specifications",
+      "Total number of distinct use cases categorized under \"agent collaboration\" vs. \"tool execution\" in the official documentation of both protocols",
+      "Count of security vulnerabilities reported for open-source MCP server implementations prior to the release of Google's A2A specification",
+      "Share of cloud computing resources allocated to inter-agent coordination tasks when using A2A versus local context management with MCP",
+      "Price premium or cost differential per 1,000 tokens processed when agents interact via A2A remote servers compared to local MCP integrations",
+      "Number of programming languages officially supported by reference implementations of the Model Context Protocol as of late 2024",
+      "Median time-to-integration measured in developer hours for adding MCP support versus A2A support to an existing LLM application stack",
+      "Percentage change in search engine visibility for \"agent interoperability\" keywords following the public announcement of Google's A2A initiative on March 26, 2025",
+      "Count of distinct authentication mechanisms (e.g., OAuth 2.0, API keys) mandated or recommended by the A2A specification compared to those in the MCP standard",
+      "Ratio of asynchronous message queueing capabilities present in A2A architecture relative to synchronous request-response patterns dominant in current MCP implementations",
+      "Number of major cloud providers (AWS, Azure, GCP) offering native managed services specifically optimized for A2A protocol endpoints as of mid-2025",
+      "Median size in kilobytes of context window payload transferred during a single agent-to-agent handshake under A2A versus an initial tool listing call under MCP",
+      "Share of developer community forum posts discussing \"MCP limitations\" that explicitly cite lack of multi-agent coordination as the primary issue before 2025",
+      "Count of standardized data formats defined within the Agent Card specification of A2A compared to the Tool Schema definitions in MCP",
+      "Percentage increase in network bandwidth consumption when executing complex multi-step workflows using distributed agents via A2A relative to localized execution via MCP",
+      "Number of distinct error codes and status types formally documented in the A2A protocol specification versus those available in standard HTTP responses used by MCP"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

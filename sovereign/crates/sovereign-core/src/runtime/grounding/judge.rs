@@ -1449,6 +1449,73 @@ impl EvidenceFamily {
         (prompt, boundary)
     }
 
+    /// The LOCATED-SPAN TRIAGE register's prompt: the family prefix — this
+    /// call's candidate spans, one per chunk, in chunk order — then ONE claim
+    /// and one instruction. One prefill, N verdicts.
+    ///
+    /// # The transpose of [`Self::batched_claims_prompt`]
+    ///
+    /// That register asks N claims against one shared window, and it is a
+    /// family MEMBER because its window is shared with every sibling judge of
+    /// the pass. This one's window is CLAIM-CONDITIONED — the spans are the
+    /// ones cosine picked as being about this particular claim — so it has no
+    /// sibling to share a prefix with and pins nothing for anyone. It renders
+    /// here anyway because `impl EvidenceFamily` is the one place the scaffold
+    /// and the separator may be written (`one_renderer_owns_the_family`);
+    /// putting it anywhere else is how the boundary got two deciders before.
+    ///
+    /// Passages are addressed by ORDINAL POSITION rather than by an injected
+    /// number, because the prefix render belongs to the family and this
+    /// register does not get to change it. `n` is passed in rather than
+    /// recomputed here so the instruction's count and the caller's expectation
+    /// are one number and cannot drift apart.
+    ///
+    /// # A TRIAGE IS A RECALL INSTRUMENT — measured 2026-08-26
+    ///
+    /// The first cut of this prompt asked whether each passage supported the
+    /// claim **on its own**, reasoning that the location loop wants origins
+    /// and the whole-window judge upstream has already settled assembly. That
+    /// is a STRICTER bar than [`Self::claim_prompt`]'s, and putting a stricter
+    /// bar in front of a calibrated judge inverts what a triage is for. On the
+    /// binder bed it voted B on 49 of 52 candidates and threw away BOTH chunks
+    /// the calibrated register went on to bind — turning a `Passed` claim with
+    /// two origins into a corroboration-floor `CouldNotJudge`.
+    ///
+    /// So the standard now tracks `claim_prompt`'s exactly, and the tie-break
+    /// is stated explicitly and in the recall direction: when unsure, admit.
+    /// The cost of a false admit is one ~2.5s calibrated call that says no;
+    /// the cost of a false reject is a citation the deliverable never gets and
+    /// a verdict that silently changes. Those are not symmetric and the prompt
+    /// says which way to err.
+    pub(super) fn span_triage_prompt(&self, claim: &str, n: usize) -> (String, Option<usize>) {
+        let mut prompt = self.prefix.clone();
+        prompt.push_str(&format!(
+            "\n\"\"\"\n\nThe {n} passages above are numbered 1 to {n} in the order shown.\n\n\
+             CLAIM: {claim}\n\n\
+             For EACH numbered passage, could that passage support the CLAIM — does it \
+             state, clearly imply, or supply part of it? Paraphrase counts; partial \
+             support counts; a passage merely mentioning the people or things involved, \
+             without bearing on the claimed connection at all, does NOT count.\n\n\
+             This is a SHORTLIST, not a verdict: each passage you mark A is then checked \
+             by a stricter judge, so a wrong A costs almost nothing and a wrong B loses \
+             the evidence for good. WHEN IN DOUBT, ANSWER A.\n\n\
+             Output EXACTLY one line per passage, in order, formatted \"<n>: A\" (could \
+             support the claim) or \"<n>: B\" (clearly irrelevant to it). Output the {n} \
+             lines and nothing else.",
+            claim = claim.chars().take(2_000).collect::<String>(),
+        ));
+        let boundary = self.prefix_len();
+        debug_assert!(
+            boundary.is_none_or(|b| prompt.is_char_boundary(b) && b <= prompt.len()),
+            "the family boundary must be a char boundary inside the prompt"
+        );
+        debug_assert!(
+            prompt.starts_with(&self.prefix),
+            "a span-triage prompt must open with the family prefix"
+        );
+        (prompt, boundary)
+    }
+
     /// The specifics scan's prompt as a MEMBER of the family (order
     /// audit-economy D3 candidate A): the family prefix, then the summary
     /// tier appended after the boundary (same placement as a thematic claim
@@ -1530,6 +1597,98 @@ pub(super) fn replay_render_batched_claims_prompt(
     claims: &[String],
 ) -> (String, Option<usize>) {
     EvidenceFamily::new(shared).batched_claims_prompt(claims)
+}
+
+/// Score EVERY candidate span of ONE claim in a single generation — the
+/// deep-research audit's location loop, batched.
+///
+/// # Why this exists
+///
+/// `deep_research::audit::assess_claim` locates a claim's origins by judging
+/// the claim against each chunk's best span separately. Measured on the
+/// pin-validate flight of 2026-08-25 (`runs-pin-validate/pinned-1.log`, 328
+/// claim audits over 102.5 minutes): 35 claims — 11% — reached that loop and
+/// consumed 90.6 minutes, 88% of the whole audit, at ~130s each against a
+/// 57-chunk window. The other 285 claims short-circuited before the loop and
+/// averaged 1.85s. The loop is one model call per chunk and it returned 0-2
+/// bound chunks out of 57.
+///
+/// # The window is the PINNED one, and that is the whole latency argument
+///
+/// `passages` MUST be the same slice the pass's whole-window judge was given,
+/// so `EvidenceFamily::new` renders a byte-identical prefix and the daemon
+/// restores it instead of prefilling it. The first cut built the window from
+/// claim-conditioned best-spans, which by construction shares a prefix with
+/// nothing: measured 2026-08-26, that cost **71,947ms of pure prefill per
+/// claim** (43,816 prompt chars at this host's ~160 tok/s) against the 1,613ms
+/// the same claim's whole-window judge paid on a warm prefix. A triage that
+/// costs more than the 52 calls it saves is not a triage.
+///
+/// # TRIAGE ONLY — this is never the released verdict
+///
+/// This is a text A/B over N lines, not the calibrated single-token
+/// forced-choice logit, so `SUPPORT_FLOOR`'s semantics do not transfer to it —
+/// the same gap [`claims_support_batched`] carries. It is therefore used
+/// strictly to decide WHICH spans are worth the calibrated call: a span this
+/// register admits is re-judged by [`claim_violation_joint`] against
+/// `SUPPORT_FLOOR` before it may bind, and a span it cannot settle (`None`)
+/// falls through to that same call. The only verdict it can change is a span's
+/// REJECTION, whose consequence is a claim losing support it might have had —
+/// could-not-judge rather than passed. That direction is the honesty floor's,
+/// which is why this may default on where a pass-direction substitution could
+/// not (ARCH §18.3).
+///
+/// Alignment is hardened exactly as the sibling register's is: explicit
+/// numbering, and a mis-count leaves the affected rows `None` (fallback to the
+/// calibrated call), never a shifted verdict.
+pub async fn spans_supporting_claim_batched(
+    inference: &Arc<dyn InferenceProvider>,
+    claim: &str,
+    passages: &[String],
+    posture: ShardingPrivacy,
+) -> Vec<Option<bool>> {
+    let spans = passages;
+    if spans.is_empty() {
+        return Vec::new();
+    }
+    let family = EvidenceFamily::new(spans);
+    let (prompt, stable_prefix_len) = family.span_triage_prompt(claim, spans.len());
+    let req = CompletionRequest {
+        prompt,
+        stable_prefix_len,
+        system_message: Some(CHUNK_JUDGE_SYSTEM.into()),
+        preferred_speed: Speed::Slow,
+        oicp: Some(Workload::Judge.requirements(posture)),
+        // ~5 tokens per "<n>: A\n" verdict line + headroom for two-digit indices.
+        max_tokens: Some(spans.len() * 8 + 16),
+        temperature: Some(0.0),
+        think_budget: Some(0),
+        enable_thinking: Some(false),
+        ..Default::default()
+    };
+    match gate_call(&**inference, &req, GateCallMechanism::LocatedSpanTriage).await {
+        Ok(resp) => {
+            let verdicts = parse_batched_verdicts(&resp.text, spans.len());
+            let n_sup = verdicts.iter().filter(|v| **v == Some(true)).count();
+            let n_none = verdicts.iter().filter(|v| v.is_none()).count();
+            dbg(&format!(
+                "span triage: {} spans -> {} admitted, {} unparsed | raw head: {:?}",
+                spans.len(),
+                n_sup,
+                n_none,
+                resp.text.chars().take(220).collect::<String>()
+            ));
+            verdicts
+        }
+        Err(e) => {
+            tracing::warn!(target: "grounding_gate", error = %e, "span triage pass failed");
+            dbg(&format!("span triage failed: {e}"));
+            // Total failure -> every span falls through to the calibrated call,
+            // which is exactly today's behaviour. A failed triage costs time,
+            // never a verdict.
+            vec![None; spans.len()]
+        }
+    }
 }
 
 /// `n_stable`: how many leading entries of `chunks` are the shared prompt

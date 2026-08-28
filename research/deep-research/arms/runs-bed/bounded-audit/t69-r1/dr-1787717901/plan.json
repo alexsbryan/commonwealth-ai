@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787717901",
+  "charter_hash": "cd802ac2afac94af",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of core components defined in the Google A2A protocol specification",
+      "List of supported communication methods (e.g., JSON-RPC, HTTP) specified in the MCP protocol standard (2)",
+      "Count of distinct message types or interaction patterns unique to the A2A protocol documentation",
+      "Percentage difference in payload size between a typical A2A task request and an equivalent MCP tool call",
+      "Median latency reported for agent-to-agent handshakes using the A2A protocol versus client-server calls using MCP",
+      "Share of enterprise AI frameworks that have announced native support for the A2A protocol as of Q1 2025",
+      "Ratio of open-source repositories implementing A2A agents compared to those implementing MCP servers on GitHub",
+      "Number of security vulnerability classes specifically addressed by the A2A authentication framework relative to MCP's OAuth implementation",
+      "Average token count required to describe an agent capability in an A2A Agent Card versus an MCP Tool Definition schema",
+      "List of specific interoperability problems cited in Google’s whitepaper regarding pre-A2A multi-agent systems",
+      "Count of third-party vendors integrating both A2A and MCP into a single middleware stack within six months of release",
+      "Percentage change in API call volume for LLM providers attributed to agentic workflows using A2A post-launch",
+      "Median time-to-integration reported by developers migrating from custom RPC solutions to the standard A2A protocol",
+      "Number of distinct error codes defined in the A2A specification that do not have direct equivalents in the MCP spec",
+      "Share of cloud service providers offering managed hosting environments specifically optimized for A2A agent discovery",
+      "Ratio of synchronous to asynchronous operation support ratios between the A2A event stream model and MCP request-response model",
+      "Count of major AI labs (e.g., OpenAI, Anthropic) officially endorsing or adopting the A2A standard alongside MCP",
+      "Average reduction in boilerplate code lines required when implementing multi-agent coordination with A2A versus raw HTTP/MCP calls",
+      "List of specific data privacy constraints inherent to the decentralized nature of A2A compared to centralized MCP gateways",
+      "Number of distinct use cases categorized as \"long-running tasks\" in the A2A documentation that are not supported by current MCP versions"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

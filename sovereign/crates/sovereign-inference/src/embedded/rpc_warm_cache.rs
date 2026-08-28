@@ -973,6 +973,16 @@ pub struct PlanOverheads {
     /// that only exists in the process driving the graph. Charged to the plan's
     /// LAST device (plan order is RPC workers first, host last).
     pub compute_host_bytes: u64,
+    /// Model WEIGHT bytes llama.cpp projects onto the host CPU buffer, i.e.
+    /// tensors it will leave resident in the mmap rather than copy into a
+    /// device buffer. These are file-backed and reclaimable, so they are NOT
+    /// demand the local-fit gate should charge against system memory.
+    ///
+    /// ONLY trustworthy when the load sets `no_host`. Without it the host
+    /// entry is the device's PINNED host buffer (`Vulkan_Host`), whose pages
+    /// are not reclaimable — discounting those would under-charge the gate by
+    /// exactly the bytes that can starve the host. See `gate_local`.
+    pub model_host_bytes: u64,
 }
 
 impl PlanOverheads {
@@ -1799,6 +1809,7 @@ mod tests {
             context_total_bytes: GIB,     // 256 MiB/block over 4 blocks
             compute_accel_bytes: GIB / 2, // every device reserves scratch
             compute_host_bytes: GIB,      // host-side scheduler buffer
+            model_host_bytes: 0,
         };
         let fits = shard_fits(&plan, &capacities, &mass, 1.0, Some(&o)).expect("judgeable");
         assert!(
@@ -1841,6 +1852,7 @@ mod tests {
             context_total_bytes: 4 * GIB,
             compute_accel_bytes: GIB / 4,
             compute_host_bytes: 0,
+            model_host_bytes: 0,
         };
         let fits =
             shard_fits(&plan, &[10 * GIB, 10 * GIB], &mass, 1.0, Some(&o)).expect("judgeable");

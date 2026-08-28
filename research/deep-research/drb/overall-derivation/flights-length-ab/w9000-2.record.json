@@ -1,0 +1,4 @@
+  attempt 1: missing dims ['readability'], empty dims [] — retrying
+  attempt 2: missing dims ['readability'], empty dims [] — retrying
+  attempt 3: missing dims ['readability'], empty dims [] — retrying
+exit 2: task 69 judge never returned a scorable verdict (missing dims ['readability'], empty dims []). NEVER-RAN, not zero.

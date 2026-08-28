@@ -1,0 +1,52 @@
+[00:34:01] === n_ubatch experiment start ===
+[00:34:01] stopping daemon to free GTT (operator-authorized)
+svrnmesh: bridged 1 legacy SOVEREIGN_* env var(s) to SVRNMESH_* (the SOVEREIGN_* prefix is deprecated — update your scripts)
+stopping the daemon …
+  sovereign.service is registered — stopping via the service manager
+✓ daemon stopped
+[00:34:10] pre-run: GTT 4060 MiB, MemAvailable 119188 MiB
+[00:34:10] running sweep: -b 4096 -ub 512,1024,2048,4096 -p 4096 -n 128 -r 3 (no -ngl, see frame dead-end)
+ggml_vulkan: Found 1 Vulkan devices:
+ggml_vulkan: 0 = AMD Radeon 8060S Graphics (RADV GFX1151) (radv) | uma: 1 | fp16: 1 | bf16: 0 | fp4: 0 | warp size: 64 | shared memory: 65536 | int dot: 1 | matrix cores: KHR_coopmat
+llama-bench: benchmark 1/8: starting
+llama-bench: benchmark 1/8: warmup prompt run
+llama-bench: benchmark 1/8: prompt run 1/3
+llama-bench: benchmark 1/8: prompt run 2/3
+llama-bench: benchmark 1/8: prompt run 3/3
+llama-bench: benchmark 2/8: starting
+llama-bench: benchmark 2/8: warmup generation run
+llama-bench: benchmark 2/8: generation run 1/3
+llama-bench: benchmark 2/8: generation run 2/3
+llama-bench: benchmark 2/8: generation run 3/3
+llama-bench: benchmark 3/8: starting
+llama-bench: benchmark 3/8: warmup prompt run
+llama-bench: benchmark 3/8: prompt run 1/3
+llama-bench: benchmark 3/8: prompt run 2/3
+llama-bench: benchmark 3/8: prompt run 3/3
+llama-bench: benchmark 4/8: starting
+llama-bench: benchmark 4/8: warmup generation run
+llama-bench: benchmark 4/8: generation run 1/3
+llama-bench: benchmark 4/8: generation run 2/3
+llama-bench: benchmark 4/8: generation run 3/3
+llama-bench: benchmark 5/8: starting
+llama-bench: benchmark 5/8: warmup prompt run
+llama-bench: benchmark 5/8: prompt run 1/3
+llama-bench: benchmark 5/8: prompt run 2/3
+llama-bench: benchmark 5/8: prompt run 3/3
+llama-bench: benchmark 6/8: starting
+llama-bench: benchmark 6/8: warmup generation run
+llama-bench: benchmark 6/8: generation run 1/3
+llama-bench: benchmark 6/8: generation run 2/3
+llama-bench: benchmark 6/8: generation run 3/3
+llama-bench: benchmark 7/8: starting
+llama-bench: benchmark 7/8: warmup prompt run
+llama-bench: benchmark 7/8: prompt run 1/3
+llama-bench: benchmark 7/8: prompt run 2/3
+llama-bench: benchmark 7/8: prompt run 3/3
+llama-bench: benchmark 8/8: starting
+llama-bench: benchmark 8/8: warmup generation run
+llama-bench: benchmark 8/8: generation run 1/3
+llama-bench: benchmark 8/8: generation run 2/3
+llama-bench: benchmark 8/8: generation run 3/3
+[00:39:14] llama-bench rc=0   peak GTT 85503 MiB   min avail 10069 MiB
+[00:39:14] === sweep done, restoring daemon ===

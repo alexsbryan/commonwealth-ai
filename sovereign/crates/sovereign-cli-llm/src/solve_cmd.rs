@@ -8,8 +8,6 @@
 
 use futures::StreamExt as _;
 use serde_json::Value;
-use sovereign_cli_shared::urls::DEFAULT_CLIENT_PORT;
-use sovereign_core::setup_config::SetupConfig;
 
 const HELP: &str = r#"svrn solve — give the daemon a coding goal, get a green tree back
 
@@ -141,14 +139,15 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
     Ok(out)
 }
 
+/// An explicit `--daemon` still wins; everything below it is the ONE decider
+/// (§10.6). This used to re-roll that resolution — same config field, same
+/// `http://localhost:{port}` shape, same trailing-slash trim — and so was
+/// blind to `SOVEREIGN_DAEMON_URL` like every other copy of it.
 fn daemon_base(explicit: Option<&str>) -> String {
-    if let Some(url) = explicit {
-        return url.trim_end_matches('/').to_string();
+    match explicit {
+        Some(url) => url.trim_end_matches('/').to_string(),
+        None => sovereign_core::setup_config::client_daemon_base(),
     }
-    let port = SetupConfig::load()
-        .map(|cfg| cfg.daemon.client_port)
-        .unwrap_or(DEFAULT_CLIENT_PORT);
-    format!("http://localhost:{port}")
 }
 
 pub async fn run(args: &[String]) -> i32 {

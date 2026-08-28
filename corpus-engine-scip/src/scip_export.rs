@@ -321,6 +321,65 @@ pub fn check_exporters(roots: &[std::path::PathBuf]) -> ExporterCheck {
     ExporterCheck { available, missing }
 }
 
+/// Would a full SCIP export LEARN ANYTHING from this change set?
+///
+/// The export is a whole-workspace `rust-analyzer scip` pass that costs
+/// ~11 GiB resident and several minutes. Until 2026-08-26 the daemon's
+/// reindexer armed it purely on a cooldown, never asking WHAT had changed —
+/// so editing a `.py`, `.sh`, `.json` or `.md` file scheduled a Rust export
+/// that could not possibly produce a symbol the graph did not already have.
+///
+/// That is not merely wasteful on this host, it is dangerous: the export is
+/// an 11 GiB tenant on a box whose measured memory wall is ~55 GiB, and on
+/// 2026-08-26 one of them landed beside a 47 GiB judge daemon mid-flight.
+/// Seven OOM kills that morning — each restart respawning this very export —
+/// ended in a forced reboot.
+///
+/// Cheap by construction: no globbing. A file with that extension CHANGED,
+/// which is proof that files with it exist — the existence glob
+/// [`check_exporters`] runs is redundant here. Availability goes through
+/// [`crate::tool_path::resolve`], the same resolver `check_exporters` uses,
+/// because the daemon's PATH is not the operator's (§18.4) — and only for
+/// exporters whose extensions actually changed.
+///
+/// Gates the FS-save path ONLY. Commit-triggered, startup and explicit
+/// rebuilds stay ungated: a commit is the operator saying "done here".
+///
+/// Skipping is SAFE and never degrades the graph: an export that does not run
+/// leaves the live graph exactly as it was, and the reindexer's tree-sitter
+/// overlay keeps symbol definitions fresh on every save regardless. The thing
+/// that lags a skipped export is precise cross-file edges — for a change set
+/// containing no code the exporter covers, there are none to learn.
+pub fn changed_extensions_have_exporter(
+    changed_extensions: &std::collections::HashSet<String>,
+) -> bool {
+    exporters_covering(changed_extensions)
+        .iter()
+        .any(|exporter| crate::tool_path::resolve(exporter.command).is_some())
+}
+
+/// The exporters whose declared extensions intersect this change set.
+///
+/// Split out from [`changed_extensions_have_exporter`] so the mapping can be
+/// tested without depending on which binaries happen to be installed on the
+/// test machine — the availability half is environment, this half is policy.
+pub fn exporters_covering(
+    changed_extensions: &std::collections::HashSet<String>,
+) -> Vec<&'static ScipExporterConfig> {
+    if changed_extensions.is_empty() {
+        return Vec::new();
+    }
+    all_exporters()
+        .iter()
+        .filter(|exporter| {
+            exporter
+                .extensions
+                .iter()
+                .any(|ext| changed_extensions.contains(*ext))
+        })
+        .collect()
+}
+
 /// Run all applicable SCIP exporters and ingest results into the graph.
 ///
 /// For `workspace_level` exporters (e.g. rust-analyzer) the exporter is run
@@ -1157,5 +1216,82 @@ mod tests {
         assert!(report.contains("847 symbols"));
         assert!(report.contains("TypeScript"));
         assert!(report.contains("npm install"));
+    }
+}
+
+#[cfg(test)]
+mod change_set_gate_tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    fn set(items: &[&str]) -> HashSet<String> {
+        items.iter().map(|s| s.to_string()).collect()
+    }
+
+    /// THE CASE THAT COST A MACHINE. On 2026-08-26 edits to python, shell,
+    /// json and markdown armed a whole-workspace rust-analyzer export
+    /// (~11 GiB) beside a 47 GiB judge daemon on a host with a ~55 GiB wall.
+    /// None of those extensions belongs to any exporter but `.py`, and the
+    /// gate must see that plainly.
+    #[test]
+    fn prose_and_shell_changes_reach_no_exporter() {
+        for exts in [
+            set(&["md"]),
+            set(&["json"]),
+            set(&["sh"]),
+            set(&["toml"]),
+            set(&["md", "json", "sh", "toml", "txt"]),
+        ] {
+            assert!(
+                exporters_covering(&exts).is_empty(),
+                "no exporter declares any of {exts:?}, so a full export learns nothing"
+            );
+        }
+    }
+
+    #[test]
+    fn an_empty_change_set_reaches_no_exporter() {
+        assert!(exporters_covering(&set(&[])).is_empty());
+        // and the composed predicate short-circuits regardless of PATH
+        assert!(!changed_extensions_have_exporter(&set(&[])));
+        assert!(!changed_extensions_have_exporter(&set(&["md", "sh"])));
+    }
+
+    #[test]
+    fn a_rust_change_reaches_the_rust_exporter() {
+        let hit = exporters_covering(&set(&["rs"]));
+        assert_eq!(hit.len(), 1, "exactly one exporter declares .rs");
+        assert_eq!(hit[0].language_id, "rust");
+        assert_eq!(hit[0].command, "rust-analyzer");
+    }
+
+    /// A mixed change set arms on the code in it, not on the prose beside it.
+    #[test]
+    fn a_mixed_change_set_arms_on_its_code() {
+        let hit = exporters_covering(&set(&["md", "rs", "json"]));
+        assert_eq!(hit.len(), 1);
+        assert_eq!(hit[0].language_id, "rust");
+    }
+
+    /// Every extension an exporter declares must be matchable — a typo in a
+    /// config (leading dot, uppercase) would silently stop arming that
+    /// language forever, and the symptom is a graph that quietly goes stale.
+    #[test]
+    fn every_declared_extension_is_matchable() {
+        for exporter in all_exporters() {
+            for ext in exporter.extensions {
+                assert!(
+                    !ext.starts_with('.') && ext.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()),
+                    "{}: extension {ext:?} is not the bare lowercase form the \
+                     reindexer produces with to_ascii_lowercase()",
+                    exporter.language_id
+                );
+                assert!(
+                    !exporters_covering(&set(&[ext])).is_empty(),
+                    "{}: declares {ext:?} but nothing matches it",
+                    exporter.language_id
+                );
+            }
+        }
     }
 }

@@ -401,6 +401,15 @@ static ggml_type tensor_type_fallback(quantize_state_impl & qs, const ggml_tenso
             case GGML_TYPE_Q5_K:    return_type = GGML_TYPE_Q5_1;   break;
             case GGML_TYPE_Q6_K:    return_type = GGML_TYPE_Q8_0;   break;
             default:
+                if (qk_k <= 32) {
+                    // the target is already a 32-block type, so there is no smaller block to demote to
+                    // and the shape is simply not representable; the check below turns it into F16, the
+                    // same answer 256-block types reach when their fallback does not fit. Getting here
+                    // means ncols is not a multiple of 32, e.g. a conv kernel a recipe forgot to pin;
+                    // throwing gave no tensor name or message, making a recipe gap look like corruption.
+                    return_type = target_type;
+                    break;
+                }
                 throw std::runtime_error(format("no tensor type fallback is defined for type %s",
                                                 ggml_type_name(target_type)));
         }
@@ -474,7 +483,12 @@ static ggml_type llama_tensor_get_type_impl(quantize_state_impl & qs, ggml_type 
     } else if (ftype == LLAMA_FTYPE_MOSTLY_MXFP4_MOE) {
         // MoE   tensors -> MXFP4
         // other tensors -> Q8_0
-        if (tensor->ne[2] > 1) {
+        // MLA projection tensors are also 3D, so match expert tensor roles explicitly.
+        const bool is_bailingmoe3_expert = arch == LLM_ARCH_BAILINGMOE3 &&
+            (category == tensor_category::FFN_UP ||
+             category == tensor_category::FFN_GATE ||
+             category == tensor_category::FFN_DOWN);
+        if (tensor->ne[2] > 1 && (arch != LLM_ARCH_BAILINGMOE3 || is_bailingmoe3_expert)) {
             new_type = GGML_TYPE_MXFP4;
         } else {
             new_type = GGML_TYPE_Q8_0;
@@ -676,7 +690,23 @@ static ggml_type llama_tensor_get_type(quantize_state_impl & qs, const llama_mod
         return tensor->type;
     }
     if (params->token_embedding_type < GGML_TYPE_COUNT && tm.category == tensor_category::TOKEN_EMBD) {
-        return params->token_embedding_type;
+        // per_layer_token_embd shares this category with token_embd.weight and follows
+        // --token-embedding-type by default. But it is a separate table and far from a
+        // rounding error: qwen4exp's is ~46% of a 4-bit file. Let an explicit --tensor-type
+        // name it; nothing changes unless such a pattern is passed.
+        bool named = false;
+        if (std::strcmp(tensor->name, "per_layer_token_embd.weight") == 0) {
+            const std::string tensor_name(tensor->name);
+            for (const auto & [pattern, qtype] : qs.tensor_type_patterns) {
+                if (std::regex_search(tensor_name, pattern)) {
+                    named = true;
+                    break;
+                }
+            }
+        }
+        if (!named) {
+            return params->token_embedding_type;
+        }
     }
     if (params->output_tensor_type < GGML_TYPE_COUNT && tm.category == tensor_category::OUTPUT) {
         return params->output_tensor_type;
@@ -1236,8 +1266,15 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
                 LLAMA_LOG_INFO("converting to %s .. ", ggml_type_name(new_type));
                 fflush(stdout);
 
-                if (work.size() < (size_t)nelements * 4) {
-                    work.resize(nelements * 4); // upper bound on size
+                // Exact output size: ggml_row_size(new_type, ne0) per row, ne1 rows, ne2 slices --
+                // what the loop writes, what new_size sums to, and what the GGUF metadata is
+                // asserted against. The previous `nelements * 4` was a loose upper bound, invisible
+                // on a normal model but 205 GB of dead address space on Qwen3.8-Flash-Next's 51.2 G
+                // element PLE table -- about half of what OOMed a 2 TB machine at five-wide.
+                const size_t out_size =
+                    ggml_row_size(new_type, tensor->ne[0]) * tensor->ne[1] * tensor->ne[2];
+                if (work.size() < out_size) {
+                    work.resize(out_size);
                 }
                 new_data = work.data();
 
@@ -1265,7 +1302,7 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
             total_size_org += tensor_size;
             total_size_new += new_size;
 
-            // update the gguf meta data as we go
+            // update the gguf metadata as we go
             gguf_set_tensor_type(ctx_outs[cur_split].get(), metadata[i].name.c_str(), new_type);
             GGML_ASSERT(gguf_get_tensor_size(ctx_outs[cur_split].get(), gguf_find_tensor(ctx_outs[cur_split].get(), metadata[i].name.c_str())) == new_size);
             gguf_set_tensor_data(ctx_outs[cur_split].get(), metadata[i].name.c_str(), new_data);
@@ -1273,6 +1310,10 @@ static void llama_model_quantize_impl(const std::string & fname_inp, const std::
             // write tensor data + padding
             fout.write((const char *) new_data, new_size);
             zeros(fout, GGML_PAD(new_size, align) - new_size);
+
+            // unmap the tensor to free memory
+            if (ml.use_mmap) { ml.unmap_weight(weight); }
+
         } // no --dry-run
     } // main loop
 

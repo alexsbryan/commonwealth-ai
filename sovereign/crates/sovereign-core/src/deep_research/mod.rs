@@ -410,17 +410,117 @@ fn composed_report_enabled() -> bool {
 /// `sovereign/DEFAULTS_LEDGER.md` row and `quality/env-flags.toml` entry
 /// carry the cost and the reversal condition.
 /// drb1-r5: plan the report's OUTLINE instead of writing one section per
-/// search query. Default OFF. Requires SOVEREIGN_DR_COMPOSED_REPORT=1 —
-/// there is no outline without a composed deliverable to structure. Row and
-/// reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+/// search query. **Default ON since 2026-08-27**; set
+/// `SOVEREIGN_DR_REPORT_OUTLINE=0` to restore the frontier. Requires
+/// SOVEREIGN_DR_COMPOSED_REPORT=1 — there is no outline without a composed
+/// deliverable to structure. Row and reversal condition in
+/// `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// WHY IT IS NOW THE DEFAULT, and it is not a score argument. The frontier is
+/// a list of retrieval targets: the planner prompt asks it for "the specific
+/// measure or statistic it implies — an index, a ratio, a share, a rate, a
+/// count". Those are good queries. As section headings a reader receives,
+/// they are indefensible — the shipped task-69 deliverable carried
+/// `## Median Session Establishment Time` and `## Schema Mismatch Failures in
+/// Third-Party Tool Integration` as top-level sections, which is our search
+/// plan printed as prose. No judge is needed to call that wrong.
+///
+/// A refused or unusable outline still falls back to the frontier and SAYS SO
+/// (§18.3) — the fallback is the reason this is safe to default, not a reason
+/// to leave it off.
 fn report_outline_enabled() -> bool {
     std::env::var("SOVEREIGN_DR_REPORT_OUTLINE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+        .map(|v| !(v == "0" || v.eq_ignore_ascii_case("false")))
+        .unwrap_or(true)
 }
 
 fn research_notes_enabled() -> bool {
     std::env::var("SOVEREIGN_DR_RESEARCH_NOTES")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// drb1-r7: the section writer sees GRADED evidence and is told how to use the
+/// grade, instead of a flat list it must weigh by itself.
+///
+/// On-form: `SOVEREIGN_DR_WRITER_CONTRACT_V2=1` (also `true`,
+/// case-insensitive); every other value, including unset, keeps the flat
+/// evidence block and the v1 contract. Row and reversal condition in
+/// `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// Why it exists: AIQ's writer prompt steers synthesis by a per-note
+/// `evidence_judgment` — high-scoring notes are anchors, medium ones support
+/// and nuance, low ones are for gaps and caveats
+/// (`deep_researcher/prompts/writer.j2`, "Synthesis Contract"). We already
+/// COMPUTE that grade on both evidence paths and then discard it: `Finding`
+/// carries `usefulness` (0-100) and `notes::findings_block` sorts by it before
+/// dropping it, and `synthesize::rank_passages` returns passages in descending
+/// cosine order which the evidence block then flattens. The writer is handed an
+/// ordered list with the ordering unexplained. This surfaces the grade it
+/// already earned and states the obligation that goes with it.
+fn writer_contract_v2_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_WRITER_CONTRACT_V2")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// drb1-r8: the deliverable carries the ARCHITECTURE of a report rather than
+/// the shape of the pipeline that produced it. Default OFF. Requires
+/// `SOVEREIGN_DR_COMPOSED_REPORT=1`; composes with `SOVEREIGN_DR_REPORT_OUTLINE`
+/// (that flag decides WHICH sections exist, this one decides what surrounds
+/// them). Row and reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+///
+/// Diagnosed, not guessed: across 25 scored task-69 judge records the RACE
+/// criteria we lose most are `Breadth and Depth of MCP Protocol Description`
+/// (ours 6.12 vs the reference's 9.36, in 25 of 25 draws), `Logical Structure
+/// and Coherent Flow of Argumentation` (6.60 vs 9.50) and `Formatting, Layout,
+/// and Typographical Consistency` (6.98 vs 9.48). The deliverable's H1 was the
+/// user's raw prompt sentence, it opened with no summary, closed on internal
+/// furniture, and capped at 8 sections — so a question naming two subjects
+/// could not afford a section for the second one.
+/// drb1-r9: how much of the evidence window one section's writer may see.
+/// Default OFF. Requires `SOVEREIGN_DR_COMPOSED_REPORT=1`. Independent of
+/// `SOVEREIGN_DR_REPORT_ARCHITECTURE` on purpose — that one decides the
+/// deliverable's SHAPE, this one decides how much evidence is behind each
+/// part of it, and they must be separable in a measurement.
+///
+/// Measured on the task-69 control flight `dr-1787742429`: a 1,060,308-char
+/// evidence window, of which one section's writer saw 11,200 chars (1.06%)
+/// and the whole eight-section report saw 8.5%. MCP material sits in 40 of
+/// the window's 46 chunks and the deliverable still has no MCP section.
+/// Row and reversal condition in `sovereign/DEFAULTS_LEDGER.md`.
+fn report_section_evidence_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_REPORT_SECTION_EVIDENCE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+fn report_architecture_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_REPORT_ARCHITECTURE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
+/// Whether each section's writer is shown the report's outline and its own
+/// place in it.
+///
+/// Deliberately SEPARATE from `SOVEREIGN_DR_REPORT_ARCHITECTURE`: that flag
+/// decides the deliverable's SHAPE (title, executive summary, closing), this
+/// one decides whether a section knows it is part of one. An arm that moves
+/// both cannot tell them apart.
+///
+/// Why it exists, measured rather than reasoned (2026-08-27, bed
+/// `dr-1787807617`): readability is the only RACE dimension still behind the
+/// reference, and the judge's objection is that the report "reads like a
+/// collection of research findings rather than a single narrative arc". The
+/// obvious cause — too many sections — was flown and REFUTED: cutting the
+/// outline from 20 sections to 10 left Logical Structure at exactly 8.5 and
+/// cost 0.61 overall. The remaining candidate is in the prompt: a section
+/// writer is handed the question, its own sub-question, and its evidence, and
+/// NOTHING about the sections around it, so every section is composed in
+/// isolation no matter how many there are.
+fn section_context_enabled() -> bool {
+    std::env::var("SOVEREIGN_DR_SECTION_CONTEXT")
         .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
         .unwrap_or(false)
 }
@@ -1045,6 +1145,14 @@ struct Controller {
     failed_sources: Vec<FailedSource>,
     artifacts: Vec<String>,
     aborted_at_round: Option<u32>,
+    /// The run's evidence-handle counter — the high-water mark of `ev-N`
+    /// ids minted so far. RUN-scoped, not round-scoped: `fetch_round`
+    /// used to number from 0 every round, so round 2's `ev-1` collided
+    /// with round 1's and `number_citations` bound both to round 1's URL
+    /// (§7.5 — a window id must be unique in the scope it is RESOLVED
+    /// against, which is the merged window). `fetch_round` is the only
+    /// writer; this field only carries it between rounds.
+    next_evidence_id: usize,
     /// Order deep-research-t3a: the round count a resume restored from
     /// (`None` on a fresh run). `drive()` skips the launch head
     /// (charter/plan/align — the checkpoint verified them) and the
@@ -1145,6 +1253,7 @@ impl Controller {
             figure_specifiers: Vec::new(),
             artifacts: Vec::new(),
             aborted_at_round: None,
+            next_evidence_id: 0,
             resumed_after_round: None,
             draft_retried: false,
         };
@@ -1277,6 +1386,14 @@ impl Controller {
             figure_specifiers: cp.figure_specifiers.clone(),
             artifacts: cp.artifacts.clone(),
             aborted_at_round: cp.aborted_at_round,
+            // The counter is RECOVERED from the restored windows rather
+            // than carried as its own checkpoint field. The windows are
+            // already durable and are the authority on which handles
+            // were issued, so there is one representation, not two that
+            // can disagree (§10.6) — and a checkpoint written BEFORE
+            // this fix resumes into the correct id space instead of
+            // serde-defaulting to 0 and re-colliding on the next round.
+            next_evidence_id: Self::evidence_id_high_water(&cp.windows),
             resumed_after_round: Some(cp.written_after_round),
             draft_retried: false,
         };
@@ -1511,14 +1628,30 @@ impl Controller {
     /// been consulted.
     fn estate_window(&self, survey: &Survey) -> EvidenceWindow {
         let mut chunks = Vec::new();
-        for (i, q) in survey.searched.iter().enumerate() {
+        // ONE HANDLE PER HIT, NOT PER QUERY. This counter used to be the
+        // QUERY index (`i + 1`), so every hit a query returned collapsed onto
+        // the same `estate-N`. Measured 2026-08-27 on bed dr-1787807617:
+        // `estate-1` covered EIGHT chunks and `estate-2` six — 12 of the
+        // window's 62 chunks were structurally uncitable, because a writer has
+        // no way to name the seventh hit of query 1 apart from the first.
+        //
+        // The waste was the smaller half of it. `number_citations` resolves a
+        // handle with `.find(|c| c.id == id)`, so EVERY `[estate-1]` rendered
+        // the FIRST hit's URL — a claim drawn from hit 5 shipped with hit 1's
+        // source in the Sources list. Silent mis-attribution in the one
+        // contract this pipeline exists to keep (§7.5: identity from essence,
+        // never a counter that is not unique in the scope the id is used in —
+        // and that scope is the merged WINDOW, not the query).
+        let mut hit_index = 0usize;
+        for q in survey.searched.iter() {
             for hit in &q.hits {
+                hit_index += 1;
                 let locator = hit
                     .url
                     .clone()
                     .unwrap_or_else(|| format!("estate:{}:{}", hit.corpus_id, hit.chunk_id));
                 chunks.push(WindowChunk {
-                    id: format!("estate-{}", i + 1),
+                    id: format!("estate-{hit_index}"),
                     locator: locator.clone(),
                     source_url: locator,
                     custody: "personal".to_string(),
@@ -1551,6 +1684,51 @@ impl Controller {
     /// Merge the accumulated windows: dedup by source URL (first wins),
     /// capped at the charter's window cap. Capping is declared — the
     /// flag surfaces in the manifest's `truncation_declared`.
+    /// Evidence handles that name more than one chunk in the same window.
+    ///
+    /// A window id is a WINDOW-LOCAL LABEL, and its whole correctness requirement
+    /// is that it is unique in the scope it is resolved against. `number_citations`
+    /// resolves with `.find(|c| c.id == id)` and the audit matches the same way, so
+    /// a repeated id does not fail loudly — it silently binds every citation to the
+    /// FIRST chunk carrying that id, shipping the wrong source URL for the rest.
+    ///
+    /// Both minting sites have produced collisions: `estate_window` numbered by
+    /// QUERY rather than by hit (fixed), and `fetch_round` restarts its counter
+    /// each round (`let mut index = 0usize`, fetch.rs:301), so round 2's `ev-1`
+    /// collides with round 1's. Measured on bed dr-1787807617: 7 ids covering 24
+    /// of 62 chunks.
+    /// The highest `ev-N` handle already minted across the accumulated
+    /// windows — the counter's durable form, read on resume.
+    ///
+    /// A MAX, not a count: a count assumes every minted chunk is still
+    /// present, and the moment anything filters a window that assumption
+    /// silently hands out an id that is already in use. The max is one
+    /// past the last handle issued whatever happened to the chunks in
+    /// between, which is the only property the counter actually needs.
+    /// Non-`ev-` ids (`estate-N`) live in a different handle space and
+    /// do not participate.
+    pub(crate) fn evidence_id_high_water(windows: &[EvidenceWindow]) -> usize {
+        windows
+            .iter()
+            .flat_map(|w| w.chunks.iter())
+            .filter_map(|c| c.id.strip_prefix("ev-"))
+            .filter_map(|n| n.parse::<usize>().ok())
+            .max()
+            .unwrap_or(0)
+    }
+
+    pub(crate) fn duplicate_window_ids(chunks: &[WindowChunk]) -> Vec<(String, usize)> {
+        let mut counts: std::collections::BTreeMap<&str, usize> = std::collections::BTreeMap::new();
+        for c in chunks {
+            *counts.entry(c.id.as_str()).or_insert(0) += 1;
+        }
+        counts
+            .into_iter()
+            .filter(|(_, n)| *n > 1)
+            .map(|(id, n)| (id.to_string(), n))
+            .collect()
+    }
+
     fn merge_windows(&mut self) -> EvidenceWindow {
         let cap = self.config.evidence_window_max_chunks;
         let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
@@ -1577,6 +1755,24 @@ impl Controller {
             }
         }
         self.window_capped = capped;
+        // GLASSBOX, because the failure is silent by construction: a repeated
+        // handle binds every citation to the first chunk carrying it, so the
+        // deliverable ships a wrong source URL and nothing errors. Warned
+        // rather than refused — a flight that already acquired its evidence
+        // should still land, NAMED, rather than be thrown away (§18.3).
+        let dupes = Self::duplicate_window_ids(&chunks);
+        if !dupes.is_empty() {
+            let shadowed: usize = dupes.iter().map(|(_, n)| n - 1).sum();
+            tracing::warn!(
+                target: "deep_research",
+                duplicate_ids = dupes.len(),
+                shadowed_chunks = shadowed,
+                worst = ?dupes.iter().max_by_key(|(_, n)| *n),
+                "merge_windows: evidence handles are NOT unique in this window — \
+                 every citation to a repeated id resolves to the FIRST chunk, so \
+                 those claims will carry the wrong source URL"
+            );
+        }
         let custody = fetch::derive_custody(&chunks);
         EvidenceWindow {
             icd: "evidence_window".to_string(),
@@ -2250,6 +2446,7 @@ impl Controller {
             &fetch_list,
             &triaged.candidates,
             &already_fetched,
+            &mut self.next_evidence_id,
             now_unix(),
             &fetch_policy,
         )
@@ -2435,6 +2632,30 @@ impl Controller {
         } else {
             self.frontier.clone()
         };
+
+        // FREEZE THE WRITER'S INPUTS. Written at the boundary, before the
+        // call, so `tests/compose_replay.rs` can re-run the production
+        // `compose_report` against identical evidence in ~12 minutes instead
+        // of paying the ~96-minute flight that surrounds it. Sibling to
+        // `arms/bed-binder/bed.json`, which does the same for the audit.
+        // Unconditional: a run that cannot be replayed is a measurement we
+        // can only repeat by rebuying its acquisition and its audit.
+        if composed_report_enabled() {
+            let (want, cap) = synthesize::section_evidence_budget();
+            let compose_input = icd::ComposeInput {
+                icd: "compose_input".to_string(),
+                version: icd::ICD_VERSION,
+                run_id: self.config.run_id.clone(),
+                charter_hash: self.charter_hash.clone(),
+                question: self.question.clone(),
+                window: window.clone(),
+                sections: sections.clone(),
+                notes: notes.clone(),
+                section_passages: want,
+                per_source_cap: cap,
+            };
+            self.write_artifact("compose-input.json", &compose_input)?;
+        }
 
         let composed = if composed_report_enabled() {
             match synthesize::compose_report(
@@ -2733,6 +2954,111 @@ mod tests {
     use futures::Stream;
     use sovereign_contracts::types::{CompletionRequest, Speed};
     use std::pin::Pin;
+
+    fn wc(id: &str, url: &str) -> WindowChunk {
+        WindowChunk {
+            id: id.to_string(),
+            locator: url.to_string(),
+            source_url: url.to_string(),
+            custody: "public-web".to_string(),
+            provenance_class: "known".to_string(),
+            content: "body".to_string(),
+            ingested_into: None,
+            tags: Vec::new(),
+        }
+    }
+
+    fn ew(round: u32, chunks: Vec<WindowChunk>) -> EvidenceWindow {
+        EvidenceWindow {
+            icd: "evidence_window".to_string(),
+            version: icd::ICD_VERSION,
+            run_id: "r".to_string(),
+            charter_hash: "h".to_string(),
+            round,
+            chunks,
+            fetch_failures: Vec::new(),
+            dedup_refused: Vec::new(),
+            content_refused: Vec::new(),
+            derived_custody: "public-web".to_string(),
+        }
+    }
+
+    #[test]
+    fn a_resumed_run_continues_the_evidence_handle_space() {
+        // The resume path recovers the counter from the restored windows.
+        // Get this wrong and the fix undoes itself on exactly the runs that
+        // are hardest to inspect: round 3 restarts at ev-1, collides with
+        // round 1, and the report mis-attributes with no error.
+        let windows = vec![
+            ew(1, vec![wc("estate-1", "estate:c:1"), wc("estate-2", "estate:c:2")]),
+            ew(1, vec![wc("ev-1", "https://a.example/1"), wc("ev-2", "https://b.example/2")]),
+            ew(2, vec![wc("ev-3", "https://c.example/3")]),
+        ];
+        assert_eq!(
+            Controller::evidence_id_high_water(&windows),
+            3,
+            "the next handle is ev-4 — estate ids are a different space and do not count"
+        );
+
+        // A MAX, not a count: a window that lost chunks must not hand back
+        // an id that is already in use.
+        let sparse = vec![ew(1, vec![wc("ev-7", "https://a.example/7")])];
+        assert_eq!(
+            Controller::evidence_id_high_water(&sparse),
+            7,
+            "the high-water mark survives chunks disappearing between rounds"
+        );
+
+        // A fresh run, and a run whose only evidence is the estate.
+        assert_eq!(Controller::evidence_id_high_water(&[]), 0);
+        assert_eq!(
+            Controller::evidence_id_high_water(&[ew(1, vec![wc("estate-4", "estate:c:4")])]),
+            0,
+            "an estate-only run has issued no ev- handle"
+        );
+    }
+
+    #[test]
+    fn a_repeated_evidence_handle_is_reported_not_silently_resolved() {
+        // The failure this catches is silent BY CONSTRUCTION: `number_citations`
+        // resolves a handle with `.find(|c| c.id == id)`, so a repeated id binds
+        // every citation to the FIRST chunk and the deliverable ships the wrong
+        // source URL for the rest. Nothing errors, and the report reads fine.
+        //
+        // Shape taken from the real bed dr-1787807617, where `estate_window`
+        // numbered by QUERY: estate-1 covered eight chunks.
+        let chunks = vec![
+            wc("estate-1", "https://a.example/one"),
+            wc("estate-1", "https://b.example/two"),
+            wc("estate-1", "https://c.example/three"),
+            wc("ev-2", "https://d.example/round1"),
+            wc("ev-2", "https://e.example/round2"),
+            wc("ev-9", "https://f.example/unique"),
+        ];
+        let dupes = Controller::duplicate_window_ids(&chunks);
+        assert_eq!(
+            dupes,
+            vec![("estate-1".to_string(), 3), ("ev-2".to_string(), 2)],
+            "both collision families are named, with their multiplicity"
+        );
+        let shadowed: usize = dupes.iter().map(|(_, n)| n - 1).sum();
+        assert_eq!(
+            shadowed, 3,
+            "three chunks cannot be cited apart from another"
+        );
+    }
+
+    #[test]
+    fn unique_handles_report_nothing() {
+        // Watch-it-fail: make the counter query-scoped again and this fires.
+        let chunks = vec![
+            wc("ev-1", "https://a.example/1"),
+            wc("ev-2", "https://b.example/2"),
+            wc("estate-1", "https://c.example/3"),
+            wc("estate-2", "https://d.example/4"),
+        ];
+        assert!(Controller::duplicate_window_ids(&chunks).is_empty());
+    }
 
     /// A port that answers "nothing" — start() never reaches the
     /// network, so defaults are honest.

@@ -182,12 +182,12 @@ When unsure: prefer `symbols(name)` → targeted Read of 15-25 lines around the 
 | "Where did my context/cache budget actually go?" | `sovereign cache-audit` (add `--sort ratio` / `--session <id>`) |
 | "Which crates/files across the workspace do X?" | a read-only search subagent (max 3 concurrent, one message) — `Explore` in Claude Code, `scout` via `pi-subagents` |
 | "Code intel is down and I need a broad sweep" | same — delegate it, and keep the file dumps out of your context |
-| "Am I clean before/after a cleanup session?" | `cargo xtask quality` (CLI: arch/docs/boundary/layer/lock/env gates) |
+| "Am I clean before/after a cleanup session?" | `cd corpus-engine && cargo xtask quality` — the `xtask` alias lives in `corpus-engine/.cargo/config.toml`, so it does NOT resolve from the repo root (arch/docs/boundary/layer/lock/env gates) |
 | "Is any quality subsystem's posture stale?" | `sovereign posture` — one table (drift/arch/capability/contract-nightly/watchers/env-gate/bench), each row names its refresh command |
 | "Did my change regress retrieval / routing / synthesis / enrichment?" | `./scripts/sovereign-ci-bench.sh --quick` — the ONE comprehensive bench; see `MAIN_SESSION_PROTOCOL.md` §"Measuring quality" |
 | "A bench says regressed — is that real or noise?" | `sovereign/docs/RUNBOOK.md` §6 (noise bands per lane type, baseline-age semantics, the legitimate re-mint path) |
 | "What does bench lane X measure, and how do I run just it?" | `sovereign/bench/README.md`, then `sovereign/bench/<lane>/README.md` |
-| "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails |
+| "Is this env var declared? What's its default/status?" | `quality/env-flags.toml` (the registry; human view `docs/ENV_FLAGS.md`); a NEW env read must be declared or `cargo xtask env-gate` fails (run it from `corpus-engine/`; the required keys are `name`/`cluster`/`default`/`purpose`/`status`, and `status` must be one of `guard`/`shipped`/`experiment`/`deprecated`) |
 | "Is the CLI surface I just changed covered by anything?" | `sovereign contract` (`map` / `census` / `nightly`) — promises, what can actually fail, and the last lane verdict on this host |
 | "I'm starting non-trivial work — claim it" | `declare_scope(symbols, intent, ttl_seconds?)` |
 | "Done with what I claimed" | `release_scope(claim_id)` |

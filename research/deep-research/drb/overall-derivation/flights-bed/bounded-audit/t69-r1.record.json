@@ -1,0 +1,13 @@
+  judge 474s (attempt 1)
+WARNING:root:ID: 69 - 1 criteria without exact matches: {'instruction_following:Provision and Detail of Explanation on Connections Between A2A and MCP'}
+{
+ "id": 69,
+ "overall_score": 0.49909622391052616,
+ "comprehensiveness": 0.5014409221902016,
+ "insight": 0.5130057803468208,
+ "instruction_following": 0.49444444444444446,
+ "readability": 0.46910112359550565,
+ "target_total": 8.835749999999999,
+ "reference_total": 8.867750000000001
+}
+OVERALL x100 = 49.9096

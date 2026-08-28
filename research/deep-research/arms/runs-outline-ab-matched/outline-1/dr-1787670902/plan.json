@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787670902",
+  "charter_hash": "3e76c720f7fc4c7a",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "The number of initial partner organizations listed in the official Google A2A protocol launch announcement",
+      "The count of major tech companies included in the Model Context Protocol (MCP) adoption list as of 2024",
+      "The percentage difference between the average latency of agent-to-agent communication using A2A versus direct API calls to MCP servers",
+      "The share of enterprise AI deployments that plan to adopt A2A within the first six months of its release compared to those adopting MCP",
+      "The median file size or payload weight for a standard request-response cycle in the A2A JSON-RPC format versus the MCP tool-calling schema",
+      "The rate at which developers have forked or contributed to the open-source GitHub repository for Google's A2A specification since its public release date",
+      "The number of distinct use cases explicitly cited by Google in their whitepaper as primary targets for the A2A protocol, such as multi-step task delegation",
+      "The count of security vulnerabilities reported in third-party audits of early A2A implementations during the beta testing phase",
+      "The percentage increase in token consumption required for an LLM to parse and execute instructions via the A2A agent card mechanism compared to standard function calling",
+      "The median time-to-integration metric reported by enterprise case studies comparing onboarding costs for MCP versus A2A frameworks",
+      "The share of cloud service providers that have announced native support or managed services for the Agent2Agent (A2A) protocol within 90 days of launch",
+      "The number of interoperability tests conducted between agents using different underlying foundation models when communicating via the A2A standard",
+      "The ratio of synchronous to asynchronous communication patterns supported natively in the core specification of Google's A2A protocol",
+      "The count of distinct metadata fields required in an A2A \"agent card\" JSON file to enable discovery and capability negotiation",
+      "The percentage reduction in manual coding effort estimated by developers migrating existing multi-agent systems from custom protocols to MCP versus those adopting A2A",
+      "The median price point difference per million tokens processed when routing complex reasoning tasks through a central orchestrator using A2A vs. local execution via MCP",
+      "The number of regulatory or compliance frameworks, such as EU AI Act guidelines, that explicitly reference agent-to-agent interoperability standards like A2A in their technical annexes",
+      "The share of open-source LLM agents on Hugging Face that have updated their configuration files to support the A2A handshake protocol since its release",
+      "The count of specific error codes defined in the Google A2A specification for handling agent unavailability or capability mismatch scenarios",
+      "The percentage change in user satisfaction scores reported in post-deployment surveys comparing multi-agent workflows built on A2A against single-agent workflows enhanced with MCP tools"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

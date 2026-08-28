@@ -1,0 +1,17 @@
+{
+  "icd": "budget_ledger",
+  "version": 1,
+  "run_id": "dr-1787741874",
+  "charter_hash": "cc45b7a4cf1c2ab9",
+  "allowance": {
+    "web-fetch:pages": 100,
+    "web-search:corpus": 40
+  },
+  "entries": [],
+  "spent": {},
+  "remaining": {
+    "web-fetch:pages": 100,
+    "web-search:corpus": 40
+  },
+  "refused_urls": []
+}

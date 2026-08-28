@@ -1,0 +1,39 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787670902",
+  "charter_hash": "3e76c720f7fc4c7a",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://github.com/a2aproject/a2a",
+      "title": "https://github.com/a2aproject/a2a",
+      "score": 0.02235264703631401,
+      "rank": 184,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q4",
+      "snippet": "chestrate workflows: Build sequential and hierarchical workflows of A2A-compliant agents. Multi-agent systems: Build a healthcare multi-agent system using different frameworks and see how A2A enables collaboration. A2A and MCP: Learn how A2A complements MCP by enabling agents to collaborate with each other. Why A2A?\nAs AI agents become more prevalent, their ability to interoperate is crucial for building complex, multi-functional applications. A2A aims to:\nBreak Down Silos: Connect agents across different ecosystems. Enable Complex Collaboration: Allow specialized agents to work together on ta"
+    },
+    {
+      "url": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "title": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "score": 0.022291023284196854,
+      "rank": 185,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q7",
+      "snippet": "lty Sales Activate pipeline data to unlock revenue attainment Supply Chain Activate operational data to unlock throughput excellence Analytics Activate enterprise data to unlock competitive advantage Support Activate experience data to unlock customer retention Explore all solutions Discover our complete portfolio of solutions Use Case Order-to-Cash Activate revenue data to unlock scalable growth Source-to-Pay Activate spend data to unlock total cost control Hire-to-Retire Activate talent data to unlock workforce productivity Data Sovereignty Govern data and AI where they move Integration Cent"
+    },
+    {
+      "url": "https://a2a-protocol.org/dev/topics/streaming-and-async",
+      "title": "https://a2a-protocol.org/dev/topics/streaming-and-async",
+      "score": 0.016129031777381897,
+      "rank": 194,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q17",
+      "snippet": "'s jti claim or event IDs) to prevent processing duplicate notifications. Secure Key Management and Rotation: Implement secure key management practices, including regular key rotation, especially for cryptographic keys. Protocols like JWKS (JSON Web Key Set) facilitate key rotation for asymmetric keys. Example Asymmetric Key Flow (JWT + JWKS)&para;\nClient creates a PushNotificationConfig specifying authentication.scheme: \"Bearer\" and possibly an expected issuer or audience for the JWT. A2A Server, when sending a notification: Generates a JWT, signing it with its private key. The JWT includes c"
+    }
+  ]
+}

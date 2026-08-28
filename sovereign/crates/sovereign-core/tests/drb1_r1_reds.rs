@@ -164,6 +164,7 @@ async fn fetch_failure_retries_with_backoff() {
         &fetch_list,
         &hits,
         &[],
+        &mut 0usize,
         1234,
         // drb1-t2: the retry contract is what this test pins — the
         // content gate is off so the fetch outcome (not the content

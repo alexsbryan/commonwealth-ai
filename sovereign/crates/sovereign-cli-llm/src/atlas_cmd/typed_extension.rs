@@ -30,7 +30,17 @@ use sovereign_tools::typed_extension::{run_typed_extension, ExtractionStatus};
 /// Daemon endpoint default. Overridable via `--endpoint <url>` so
 /// peer-daemon or worker-pod invocations are possible from the same
 /// CLI surface.
-const DEFAULT_ENDPOINT: &str = "http://127.0.0.1:9741/v1";
+/// The daemon this CLI talks to, resolved through the ONE decider — env
+/// (`SOVEREIGN_DAEMON_URL`), then `[daemon] client_port`, then the compiled
+/// default. Was a compiled literal, so the flag below was the only way to
+/// move it and a session pointed at a second daemon silently missed this
+/// verb (§10.6).
+///
+/// Keeps the `/v1` suffix the flag has always carried — this endpoint is the
+/// OpenAI-shape ROOT, not the daemon base.
+fn default_endpoint() -> String {
+    format!("{}/v1", sovereign_core::setup_config::client_daemon_base())
+}
 
 /// Context window the OpenAI-shape RemoteApiProvider claims. The
 /// typed-extension prompts cap at ~8K decode tokens; the daemon's
@@ -203,7 +213,7 @@ struct Args {
 
 fn parse_args(args: &[String]) -> Result<Args, String> {
     let mut corpus_id: Option<String> = None;
-    let mut endpoint = DEFAULT_ENDPOINT.to_string();
+    let mut endpoint = default_endpoint();
     let mut help = false;
     let mut force = false;
     let mut iter = args.iter();
@@ -235,6 +245,10 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
 }
 
 fn print_help() {
+    // Resolved, not compiled: the help must print the endpoint this
+    // invocation would actually use, or it documents a daemon the operator
+    // has already pointed away from.
+    let endpoint_default = default_endpoint();
     println!(
         "svrn atlas typed-extension <corpus> [--endpoint <url>]\n\
          \n\
@@ -243,7 +257,7 @@ fn print_help() {
          the corpus's atlas/ dir.\n\
          \n\
          <corpus>          Corpus id (must already be installed in the indexes dir).\n\
-         --endpoint <url>  Daemon OpenAI-shape endpoint. Default: {DEFAULT_ENDPOINT}\n\
+         --endpoint <url>  Daemon OpenAI-shape endpoint. Default: {endpoint_default}\n\
          --force           Drop the idempotency manifest first — re-extract with\n\
                            unchanged inputs (prompt iteration / run-variance checks).\n\
          \n\

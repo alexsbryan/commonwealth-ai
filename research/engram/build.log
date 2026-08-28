@@ -1,0 +1,8 @@
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+/home/alexbryan/.bashrc: line 51: /home/linuxbrew/.linuxbrew/bin/brew: No such file or directory
+   Compiling llama-cpp-sys-4 v0.5.1 (/home/alexbryan/dev/commonwealth-ai/vendor/llama-cpp-sys-4)
+warning: llama-cpp-sys-4@0.5.1: Applying patch (rust): /home/alexbryan/dev/commonwealth-ai/target/debug/build/llama-cpp-sys-4-50884a2c65b6ec4d/out/patches-active/0003-exact-speculative-state.patch
+warning: llama-cpp-sys-4@0.5.1: Applying patch (rust): /home/alexbryan/dev/commonwealth-ai/target/debug/build/llama-cpp-sys-4-50884a2c65b6ec4d/out/patches-active/0004-exact-decode-lifecycle-hooks.patch
+warning: llama-cpp-sys-4@0.5.1: Applying patch (rust): /home/alexbryan/dev/commonwealth-ai/target/debug/build/llama-cpp-sys-4-50884a2c65b6ec4d/out/patches-active/0005-fail-closed-eagle3-process.patch
+warning: llama-cpp-sys-4@0.5.1: Applying patch (rust): /home/alexbryan/dev/commonwealth-ai/target/debug/build/llama-cpp-sys-4-50884a2c65b6ec4d/out/patches-active/0006-mtmd-helper-hide-cxx-wrappers-from-bindgen.patch
+    Finished `dev` profile [unoptimized] target(s) in 2m 26s

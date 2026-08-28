@@ -1,0 +1,39 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787679284",
+  "charter_hash": "53db4ccef97f7b58",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.03015873208642006,
+      "rank": 24,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q14",
+      "snippet": "sers say about us\nWhy Orca Learn all about our purpose-built cloud security platform\nPartners Overview\nPartners MSPs Integration Directory Become a Partner Cloud Service Providers\nAmazon Web Services Google Cloud Microsoft Azure Alibaba Cloud Oracle Cloud Tencent Cloud Integrations\nChainguard Jira ServiceNow Snowflake Splunk Zscaler DISTRIBUTION\nTD SYNNEX QBS Software Company About Us Contact Us Careers Newsroom Media Kit Why Orca Learn how Orca is Leading the Market\nLog In USA Europe Australia US-Gov Get Demo\nView more results Blog Home Research Research Pod Bringing Memory to AI: A Look at A"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.027826087549328804,
+      "rank": 61,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "environments where the model has high levels of autonomy.\n8. Poorly Designed Authentication Procedures\nInitially, MCP lacked a standard for authentication. Later updates embedded OAuth 2.1 flows like token issuance and validation directly into the MCP server. This design breaks the principle of separation between identity and resource logic, increases operational complexity, and broadens the protocol’s attack surface.\nIn agent-to-agent architectures, improperly scoped authentication flows can result in agents trusting the wrong peers, or accepting tokens from unauthorized sources leading to "
+    },
+    {
+      "url": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "title": "https://boomi.com/blog/what-is-mcp-acp-a2a",
+      "score": 0.021968787536025047,
+      "rank": 188,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q6",
+      "snippet": " needs.\nVendor backing and long-term viability: MCP offers the strongest vendor ecosystem with OpenAI, Microsoft, and Google DeepMind adoption, though it originated from Anthropic. ACP provides Linux Foundation with stable governance for open development. A2A benefits from Googles 50+ enterprise technology partners but has complex implementation requirements. Technical implementation: MCP uses JSON-RPC protocol requiring specialized SDK knowledge while ACP uses familiar REST-based architecture that most developers already know. A2A requires enterprise-grade implementation with advanced authent"
+    }
+  ]
+}

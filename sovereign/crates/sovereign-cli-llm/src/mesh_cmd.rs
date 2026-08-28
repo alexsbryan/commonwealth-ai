@@ -998,7 +998,7 @@ async fn cmd_plan(args: &[String]) -> i32 {
     // weights-only fit, the same fallback the live gate takes. Measured
     // ~278 ms warm on a 155 GB set (tests/device_memory_probe.rs).
     let _backend = sovereign_inference::llama::cpp::llama_backend::LlamaBackend::init();
-    let overheads = sovereign_inference::embedded::projected_overheads(&model, n_ctx);
+    let overheads = sovereign_inference::embedded::projected_overheads(&model, n_ctx, false);
 
     // What peers have measured. A key pins the exact silicon *and* the exact
     // split, so an operator asking about a configuration they have never run will

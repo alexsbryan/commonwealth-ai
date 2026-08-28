@@ -8303,3 +8303,1024 @@ move a number set by a 466-token window.
 **Where the time went** (run 2 artifact mtimes): the 2-round loop took
 **4m40s**; compose + audit took **63m16s**. 93% of a 68-minute run was 27B
 inference over 466 tokens of evidence.
+
+---
+
+# The AIQ bar, resolved to our comparison surface (minted 2026-08-25)
+
+Declared BEFORE the bounded-audit arm's RACE numbers exist and before the
+ruler-noise read of frame `b95e5e21` step 1. Every later lever claim cites
+this section for its bar, or it is not a result (§18.5).
+
+## What was wrong with "the bar is 55.95"
+
+`55.95` is `nvidia-aiq-nemotron-gpt52-updated`'s **full-100** overall on the
+**gemini** tab of the vendored `drb/leaderboard.csv` (fetched 2026-08-16).
+We do not fly 100 tasks and we do not judge with gemini. Neither factor is
+neutral, and both push the bar **up**:
+
+| surface | AIQ overall | note |
+|---|---|---|
+| full-100, vendored `leaderboard.csv` | 55.95 | the number the frame carried |
+| full-100, live space per-task data (today) | **56.02** | named discrepancy, below |
+| our 10 frozen subset tasks, gemini judge | **56.47** | the subset is harder for us, not easier |
+| our 10 frozen subset tasks, our pinned 27B | **57.55** (est.) | offset-translated, note bdf94683 |
+| task 69 alone, our pinned 27B | **54.81** (est.) | t69 is one of AIQ's *weaker* subset tasks |
+
+**The working bar for a 10-task flight is 57.55, not 55.95 — 1.60 points
+higher than the frame assumed.** For a task-69-only arm it is 54.81.
+
+## Provenance and instrument validation (§18.4 — validate before the result)
+
+Per-task artifacts pulled 2026-08-25 from the leaderboard space
+(`https://huggingface.co/spaces/muset-ai/DeepResearch-Bench-Leaderboard`,
+`{data,data_gpt55}/raw_results/<model>/raw_results.jsonl`, LFS-resolved).
+The aggregation (`mean(overall_score) x 100`, per `utils/rank_leaderboard.py`
+`parse_race_result`) was validated against `leaderboard.csv` **before** any
+subset number was read off it:
+
+| model | sha256 (LFS oid) | full-100 recomputed | leaderboard.csv | verdict |
+|---|---|---|---|---|
+| perplexity-Research | `1141aa12a92d2026…` | 40.4581 | 40.46 | **reproduces** |
+| openai-deepresearch | `0ba1919ed5dc8b57…` | 46.4532 | 46.45 | **reproduces** |
+| gemini-2.5-pro-deepresearch | `6e27c4da148eb171…` | 49.7149 | 49.71 | **reproduces** |
+| nvidia-aiq-nemotron-gpt52-updated | `ac59eac4743322d0…` | **56.0213** | 55.95 | **does not** |
+
+Three of four rows reproduce to 4 decimals on all five numbers, so the
+instrument is sound. Perplexity's oid is byte-identical to the one D-B
+verified independently, which chains this pull to the existing derivation.
+
+**Named non-reproduction (D-F class, never reconciled by assumption).** AIQ's
+live per-task data aggregates to 56.0213 against the vendored row's 55.95
+(+0.07; all four dims shift with it). The vendored CSV is a 2026-08-16 fetch
+and the row has been updated upstream since. The vendored CSV stays frozen —
+it is the pre-registered artifact. Where a single AIQ number is quoted, it is
+the **live per-task data**, because that is what the subset is computed from
+and mixing the two would compare a subset to a different run's composite.
+
+## The offset, and the risk it carries
+
+Translation to our ruler uses the measured offset of note bdf94683
+(ours − gemini, on the 10 subset tasks, Perplexity's own articles — the only
+system for which we hold both official and our-judge numbers): overall
++1.08, comprehensiveness +1.16, insight +3.34, instruction_following −1.64,
+readability +0.92.
+
+**This is an estimate and it is the weakest link here.** The offset is
+anchored on ONE system at ONE score level and is being extrapolated ~14
+points upward to AIQ. The gemini-side numbers (56.47 subset, 53.73 on task
+69) are exact; every "(est.)" number above inherits that extrapolation risk.
+An offset that shrinks at higher scores makes the real bar *lower* than
+57.55; one that grows makes it higher. Nothing measured to date bounds it.
+
+## The per-task gap, corrected
+
+> **SUPERSEDED within the hour by "The per-task gap, honestly" below (operator
+> correction, 2026-08-25).** The table in this subsection compares OUR BEST
+> task-69 draw against AIQ's single draw. That is the max of a 15-draw
+> distribution against one point, and it is cherry-picking: 49.63 sits 1.99
+> standard deviations above our own mean. Its −5.18 headline is not our gap.
+> The subsection is kept, not deleted, because the reasoning it corrects in
+> bdf94683 (single task vs 100-task composite) still holds — only the
+> our-side statistic was wrong. Read the honest table below for the number.
+
+Note bdf94683 records the gap to AIQ as insight −18.06, comprehensiveness
+−16.67, readability −12.14, instruction-following −4.89. **That comparison
+put our single task-69 arm against AIQ's 100-task composite.** Task 69 is one
+of AIQ's weaker subset tasks (53.73 vs its 56.47 subset mean), so the
+like-for-like per-task gap is materially smaller:
+
+| dimension | ours, web arm | ours, best t69 read | AIQ t69 (our ruler, est.) | gap at best |
+|---|---|---|---|---|
+| overall | 43.35 | 49.63 | 54.81 | **−5.18** |
+| comprehensiveness | 41.39 | 50.21 | 55.07 | **−4.86** |
+| insight | 43.77 | 50.36 | 58.55 | **−8.19** |
+| instruction_following | 46.36 | 50.28 | 49.32 | **+0.96** |
+| readability | 42.20 | 45.76 | 54.70 | **−8.94** |
+
+Two things change. **The gap is roughly a third of what the frame assumed** —
+5.18 points at our best task-69 read, not 14+. And **readability (−8.94) is
+now level with insight (−8.19) as the widest gap**; bdf94683 ranked it third
+at −12.14 and pointed the lever queue at insight and comprehensiveness alone.
+
+Neither reading is safe yet, and the reason is the one step 1 exists to
+settle: `49.63` is a single draw, and the run-to-run spread at identical
+configuration is 7.56 points (86ac6f7c) with the judge's own share of it
+**never measured**. A −5.18 gap and a −11.46 gap (web arm) are the same
+measurement seen from two draws. **No lever is ranked off this table until
+the ruler-noise band exists.**
+
+## Bars registered here, before their data
+
+1. **Ruler noise** (frame `b95e5e21` step 1, unchanged): one unchanged article,
+   5 draws, `arms/lab/ruler_noise.py`. Spread ≥4 ⇒ the ruler dominates and
+   every lever A/B to date is uninterpretable; <2 ⇒ the pipeline owns it and
+   only reps help; 2–4 ⇒ report the band, both live. Confirmed 2026-08-25 that
+   this cannot be answered from disk: 15 fingerprinted articles across
+   `flights-*/*.judge.jsonl`, **every one judged exactly once**.
+2. **A 10-task flight beats AIQ** iff its pooled overall exceeds **57.55**
+   by more than the step-1 band, honesty floor intact.
+3. **A task-69 arm beats AIQ on that task** iff it exceeds **54.81** by more
+   than the step-1 band. This is a weaker claim than (2) and must be labelled
+   as one — task 69 is not the composite.
+
+## The per-task gap, honestly (operator correction, 2026-08-25)
+
+The subsection above used our BEST task-69 draw. The operator's correction:
+*"How our best compares to theirs is one part of the equation, it would be
+genuine to compare our worst as well."* Correct — a max selected from 15 draws
+against a single competitor draw is not a comparison. Here is the whole
+distribution.
+
+**Every task-69 RACE read on disk: n=15 scored, 1 unscored.** The unscored cell
+(`flights-length-ab/w9000-2`) is reported MISSING — the judge omitted
+`readability`, which is deterministic under the greedy pin (§18.3: never a
+defaulted zero).
+
+```
+39.76 40.38 41.11 41.27 41.99 42.13 42.21 43.35 43.79 43.89 45.41 45.77 46.29 48.91 49.63
+worst 39.76 | mean 43.73 | median 43.35 | best 49.63 | spread 9.87 | sd 2.97
+```
+
+| dimension | our worst | our mean | our best | sd | AIQ t69 | OAI t69 | PPLX t69 | mean vs AIQ | draws above AIQ |
+|---|---|---|---|---|---|---|---|---|---|
+| overall | 39.76 | **43.73** | 49.63 | 2.97 | 54.81 | 48.14 | 43.19 | **−11.08** | **0/15** |
+| comprehensiveness | 38.31 | 43.06 | 50.21 | 3.36 | 55.07 | 48.52 | 42.79 | −12.00 | 0/15 |
+| insight | 38.90 | 43.35 | 50.36 | 3.46 | 58.55 | 47.51 | 41.34 | **−15.20** | 0/15 |
+| instruction_following | 42.09 | 46.01 | 50.28 | 2.31 | 49.32 | 48.36 | 46.00 | −3.31 | 2/15 |
+| readability | 37.54 | 42.77 | 47.22 | 2.73 | 54.70 | 49.65 | 44.87 | −11.93 | 0/15 |
+
+**What this says, and it is not what the best-draw table said.**
+
+1. **We have never once produced a task-69 draw that reaches AIQ.** 0 of 15 on
+   overall and on three of four dimensions. The −5.18 "gap at best" was an
+   outlier two standard deviations above our own mean.
+2. **Our typical run is Perplexity-class on this task.** Mean 43.73 against
+   Perplexity's 43.19 — a +0.54 difference we cannot resolve. **7 of 15 draws
+   land BELOW Perplexity.**
+3. **The real gap to AIQ is −11.08 at the mean**, close to what bdf94683
+   reported. That note reached a roughly right magnitude by a wrong route
+   (single task vs 100-task composite); the per-task comparison against a
+   typical draw lands in the same place. Its dimension ORDER is confirmed too:
+   insight widest (−15.20), then comprehensiveness (−12.00) and readability
+   (−11.93) effectively tied, instruction_following nearly closed (−3.31, and
+   the only dimension where any draw beats AIQ: 2/15).
+4. **A user gets one run, so the distribution IS the product.** The 80% central
+   band a user actually experiences is roughly **39.9 to 47.5**. Reporting the
+   top of that band as our capability would misrepresent the product to
+   ourselves.
+5. **Variance is run-to-run, not configuration.** Within-identical-config
+   replicates span 0.22 / 1.02 / 1.88 / 4.22 / 5.02 points, against a 9.87
+   across-config spread — most of the range is draw noise, not lever effect.
+   This is the same finding from a second angle and it sharpens step 1 rather
+   than replacing it: we still do not know the RULER's share of that noise.
+
+**Their number is one draw too.** AIQ ran each task once; we hold no
+distribution for them. If their run-to-run sd resembles ours (~3), their true
+task-69 mean could sit anywhere near 51.8–57.8. That widens the uncertainty in
+both directions and rescues nothing — 0/15 stands regardless of where inside
+that band their mean sits.
+
+**Bar 3 of the previous section is restated accordingly.** "A task-69 arm
+beats AIQ" is not "some draw exceeds 54.81" — one draw from a 2.97-sd process
+proves nothing. It is: **the arm's MEAN over n≥5 draws exceeds 54.81 by more
+than the step-1 ruler band.** Any claim quoting a single draw, ours or theirs,
+is a lead and not a result (§18.5).
+
+---
+
+# The model-ceiling arm — architecture or model? (minted 2026-08-25 22:15 PDT)
+
+Declared BEFORE the arm flies. Operator directive: close the gap over an
+8-hour overnight shift, using AIQ's source code among all available data.
+
+## Why this arm and not a lever from the queue
+
+The gap is **−11.08 at the mean** (previous section). Per-draw sd is **2.97**.
+At ~90 min per cell an 8-hour shift buys four or five cells, and n=4 resolves
+about 3 points. **An 11-point gap cannot be closed by levers that are
+individually smaller than the noise, and it cannot be measured by arms that
+cannot see them.** So the only defensible use of tonight is the single
+untested lever large enough to move a double-digit gap.
+
+`SOVEREIGN_DR_ALL_LEGS_SLOW` is that lever, and it was already built for
+exactly this question. Its registry entry states the purpose verbatim: *"the
+strategy question 'is our ~11-point gap to AIQ our ARCHITECTURE or our MODEL?'
+... if the score approaches the bar the architecture is sound and we are
+model-limited, while if it barely moves the architecture is the bottleneck and
+model size will not save us."* It has **never been run** — no arm, no script,
+no note, no ledger row references it (verified by repo-wide grep 2026-08-25;
+the only hits are its own definition at `port.rs:992` and the registry).
+
+What it changes, from `port.rs:1094-1115`: `DraftLeg::Round | DraftLeg::Section
+=> Speed::Fast`, and **`Section` is the leg that writes the deliverable.** Our
+report is currently drafted by the 4B. AIQ's is drafted by
+`nvidia/nemotron-3-ultra-550b-a55b` (`configs/config_cli_default.yml`,
+`nemotron_ultra_writer_llm`, temperature 0.2, top_p 0.7, max_tokens 32768).
+**A 4B writer against a 550B writer is the starkest single contrast between the
+two systems**, and note bdf94683 already established that insight is a writer
+property, not a retrieval one ("a 160x evidence increase moved overall by
+nothing measurable"). Insight is our widest gap (−15.20).
+
+This arm moves the writer 4B → 27B. That is a ~7x parameter step, not the full
+550B contrast, but it is the rung available on this host tonight and it is the
+one that decides the fork. The 122B (`Qwen3.5-122B-A10B-UD-Q5_K_XL`, on disk)
+is the follow-on **only if this rung moves the number** — loading it evicts the
+27B and the host's OOM band is 36-38 GiB (notes 05cbffed, f2afc2cf), which is
+not a risk to take unattended before the cheap rung has reported.
+
+## The routing witness — why this arm can fail honestly
+
+`slot_for`'s effect is observable only through a `tracing::debug!` at
+`port.rs:478` naming `?leg` and `?speed`. `run-arm.sh` pins
+`RUST_LOG=deep_research=info`, under which that event **never emits** — an arm
+run through it could not prove the writer moved, and six hours of flights would
+be unfalsifiable. `arms/bed/run-ceiling.sh` forces `deep_research=debug` and
+**asserts** on the witness: every `leg=Section` dispatch must read `speed=Slow`,
+and the arm REFUSES to fly a second cell if the first cannot prove it. A flag
+that silently no-ops is precisely the exit-0-verified-nothing failure §18.1
+exists to catch. `summary.json` carries `routing_witnessed`; if it is not
+`"yes"`, the numbers in it measure nothing and must not be quoted.
+
+## Control
+
+Not a fresh control arm — the **existing 15-draw task-69 distribution**
+(mean 43.73, sd 2.97), which is the best-characterised baseline this campaign
+has and is exactly what "our system today" means. Spending half of tonight's
+four cells re-establishing a baseline that already has n=15 would be a worse
+use of them.
+
+**The confound this accepts, stated plainly.** Those 15 draws span several
+configurations, most were taken while the grounding gate was failing open
+(note 39473e42), and none had the audit bounded. Tonight's cells have the gate
+working and the audit bounded. Three changes ride along with the lever. The
+in-flight `bounded-audit` cell landing tonight is a single control draw at the
+current configuration and will be reported beside the arm; **n=1 does not fix
+the confound, it only bounds it.** If the arm's delta is small, this confound
+is the first thing to suspect and the honest verdict is "not resolved", not
+"the model does not matter".
+
+## Bars — pre-registered, before the data
+
+Let `Δ` = arm mean − 43.73. Pooled 2·se is computed by the runner.
+
+1. **Δ ≥ +6 and routing witnessed** ⇒ **MODEL-LIMITED.** The architecture is
+   sound; the writer is the bottleneck. Next action is the 122B rung, and the
+   outline/notes lever queue drops below it in priority.
+2. **Δ ≤ +2** (inside noise at n=4) ⇒ **ARCHITECTURE-LIMITED at this rung.**
+   Model size at 27B does not save us. The lever queue (outline, research
+   notes, and the AIQ writer-prompt contract in §"what to port" below) becomes
+   the work, and the 122B rung is NOT worth its risk on this evidence.
+3. **+2 < Δ < +6** ⇒ **PARTIAL, unresolved at this n.** Report the band; do not
+   call it either way. The follow-on is more reps at this rung, not a new lever.
+4. **Routing not witnessed** ⇒ the arm reports **could-not-judge** regardless of
+   the numbers, and the night's finding is the harness defect, not a score.
+
+Three of these four are not "the lever worked". That is deliberate.
+
+## What to port from AIQ regardless of this arm's verdict
+
+Read from `src/aiq_agent/agents/deep_researcher/prompts/writer.j2` (125 lines).
+These are prompt-contract items their writer carries and ours does not; each
+targets a dimension we measurably lack, and each is a candidate for the lever
+queue if bar 2 fires:
+
+- *"do not mechanically mirror [required components] as final headings when a
+  stronger narrative structure exists"* — the exact defect
+  `SOVEREIGN_DR_REPORT_OUTLINE` was minted to fix (sections titled `Count of
+  distinct error handling states...`). Targets instruction-following and insight.
+- *"Cross-synthesize across research files instead of summarizing one file at a
+  time. Combine related claims into higher-level conclusions"* — targets insight.
+- *"build a coherent analytical narrative rather than a checklist of short
+  component summaries"* — targets insight and readability.
+- *"Point out meaningful conflicts or disagreement ... avoid pretending the
+  record is cleaner than it is"* — targets insight; also compatible with our
+  honesty floor, which is stricter than theirs.
+- *"Use tables when the evidence has comparable entities, metrics, timelines...
+  avoid shallow tables that merely restate prose"* — targets readability
+  (−11.93), our second-widest gap and the one no lever in the queue addresses.
+- `evidence_judgment` per note (0-100 usefulness + confidence) steering
+  synthesis: high = anchors, medium = nuance, low = gaps/caveats. We have a
+  **harder** signal than theirs (verdicts, not model scores) and do not use it
+  to shape synthesis at all. This is the largest structural idea in their
+  writer that we have no analog for.
+
+---
+
+# RESULT — the ruler's own spread (executed 2026-08-25 22:33–23:05 PDT)
+
+Answers frame `b95e5e21` step 1, and closes step 2 (write the band down).
+Instrument `arms/lab/ruler_noise.py`; raw at
+`drb/overall-derivation/flights-ruler-noise/t69-ruler.json`.
+
+Task 69, article `flights-pinned-ours/t69-pinfix.report.md`, sha256
+`cdb5da4d1a4662bb…`, 34,502 bytes. Judge pinned greedy (temperature 0.0,
+top_p 1.0). Uncontended — the harness's tenant guard confirmed no flight, no
+distill, no second scorer (it had already refused twice under load, exit 3).
+
+```
+draw 1  43.790586   (388s, daemon 38.7 GiB)
+draw 2  43.790586   (388s, daemon 39.2 GiB)
+draw 3  43.790586   (388s, daemon 38.9 GiB)
+draw 4  43.790586   (388s, daemon 39.1 GiB)
+draw 5  43.790586   (388s, daemon 38.4 GiB)
+
+n=5   mean 43.7906   SPREAD 0.0000   sd 0.0000
+comprehensiveness 42.3547 · insight 42.5466 · instruction_following 46.3018 · readability 46.0000
+all four dimensions: spread 0.0000
+```
+
+**Verdict against the pre-registered bar (<2 ⇒ pipeline owns it): 0.0000.
+The ruler is deterministic. The pipeline owns 100% of the 7.56-point spread.**
+
+Five draws, bit-identical to six significant figures, 388 seconds each — these
+were real judge calls, ~32 minutes of inference, not a cache. The value also
+reproduces the historical `t69-pinfix` record (43.7906) exactly, which chains
+this read to the existing derivation.
+
+**What this settles.** Every lever A/B this campaign has run is interpretable
+in principle — the noise they failed against was theirs, not the
+instrument's. The remedy is reps, and only reps; averaging k judge calls per
+article (the fix step 1 pre-registered for a ≥4 spread) would buy **nothing**
+and must not be built.
+
+**What it does NOT settle, stated so it is not over-claimed.** One article,
+one task, one host, one greedy pin, five consecutive draws inside a
+half-hour. It shows the judge is deterministic *given the same prompt on this
+daemon*, not that it is stable across daemon restarts, model reloads, or
+prompt sizes. Task 83's ~40k-token prompt is the obvious untested case.
+
+**Incidental observation worth a follow-up.** The daemon sat at 38.4–39.2 GiB
+throughout, *above* the 36-38 GiB kill band recorded in notes 05cbffed /
+f2afc2cf, and survived all five draws. `ruler_noise.py` has no `settle()`
+restart guard (`run-arm.sh` and `run-ceiling.sh` do). Either the band is
+wider than recorded or this was luck; it should not be relied on, and the
+guard belongs in the harness.
+
+---
+
+# RESULT — the model-ceiling arm (executed 2026-08-25 23:05 → 2026-08-26 03:58)
+
+Answers the bars minted at 22:15. Raw at
+`drb/overall-derivation/flights-ceiling/all-legs-slow/`.
+
+## The routing witness passed — this measures something real
+
+| cell | words | leg dispatches | Section | not `speed=Slow` |
+|---|---|---|---|---|
+| t69-r1 | 11,731 | 23 | 20 | **0** |
+| t69-r2 | 11,585 | 22 | 19 | **0** |
+| t69-r3 | 11,927 | 23 | 20 | **0** |
+
+Full routing on every cell: `Round Slow`, `Section Slow`, `Synthesis Slow` —
+not one dispatch on the fast slot. **The 27B genuinely wrote these reports.**
+The flag is not a no-op and bar 4 does not fire.
+
+**No length confound.** Control 11,735 words against 11,731 / 11,585 / 11,927.
+Same audit configuration (`LOCATE_EARLY_EXIT=1`, `LOCATE_BUDGET=20`), same
+working gate, same estate, same word count. The writer model is the only
+variable that moved — which is exactly what this arm needed and what none of
+the earlier A/Bs had.
+
+## The numbers
+
+```
+arm (27B writer):  47.66   39.80   48.04      n=3  mean 45.17  sd 4.65  spread 8.24
+control, historical (n=15):              mean 43.73  sd 2.97
+control, tonight like-for-like (n=1):         49.91
+```
+
+| comparison | Δ | pooled 2·se | verdict |
+|---|---|---|---|
+| arm vs historical n=15 | **+1.44** | 5.59 | not resolved |
+| arm vs tonight's n=1 control | **−4.74** | — | n=1, not resolvable |
+
+**Bar 2 fires: ARCHITECTURE-LIMITED at this rung.** Δ = +1.44 ≤ +2. Bar 1
+(≥ +6, model-limited) does not fire and is not close. On the point estimate the
+arm closes **13% of the 11.08-point gap**, and the interval comfortably
+contains zero.
+
+## What this licenses, and what it does not
+
+**Licensed.** A ~7× larger writer (4B → 27B) on every drafting leg does not
+close the gap to AIQ. Two independent controls point the same way or worse:
++1.44 against the 15-draw history, −4.74 against tonight's like-for-like draw.
+**Do not spend the 122B rung on this hypothesis** — that was pre-registered as
+conditional on bar 1, bar 1 did not fire, and loading it evicts the 27B against
+a live OOM band for a hypothesis this arm just failed to support.
+
+**Not licensed.** "Model size does not matter." This tested 4B → 27B, not
+4B → 550B, and AIQ's writer is `nemotron-3-ultra-550b-a55b`. A step that size
+is not on this host. The honest claim is bounded: *the rung available to us
+does not pay*, so the next lever must come from the architecture and the prompt
+contract rather than from the model shelf.
+
+**Also not licensed: any claim about the direction.** n=3 against sd 4.65 has a
+2·se of 5.59. +1.44 and −4.74 are both inside it. The arm cannot say whether
+the bigger writer helped slightly or hurt; it can only say it did not deliver
+the +6 that would have made us model-limited. Two of three cells (47.66, 48.04)
+sit near the top of the historical range and one (39.80) near the bottom — the
+pipeline's own ~8-point spread, undiminished by the larger model.
+
+## The open question this created
+
+Tonight's like-for-like control draw is **49.91**, the highest task-69 read ever
+recorded (+2.08 sd above the historical mean), on the first configuration that
+had the grounding gate actually working (note 39473e42) and the audit bounded.
+If that is real rather than a high draw, **the audit-bounding + gate fix is
+worth ~+6 — larger than anything the model lever produced** — and the
+historical n=15 control is the wrong baseline for every future arm.
+
+The 4th arm cell was therefore **swapped for a second control cell** at 03:58
+(decision recorded in `scratchpad/swap-r4.sh`): a fourth arm draw refines an arm
+already reading no-effect, while a second control draw decides between two
+opposite readings of the arm. The control arm witnesses its own routing in the
+opposite direction — with the flag absent, every `Section` dispatch must read
+`speed=Fast`, proving the 4B wrote it.
+
+## Next lever, per bar 2
+
+The AIQ writer-prompt contract (§"What to port from AIQ", above) — in
+particular the `evidence_judgment` idea, which is the largest structural item in
+their writer we have no analog for, and where **we hold a harder signal than
+theirs** (verdicts, not model-generated usefulness scores) and do not use it to
+shape synthesis at all. Insight (−15.20) and readability (−11.93) are the two
+gaps it targets, and readability is addressed by nothing currently in the queue.
+
+## RESULT — the control arm, and the verdict (executed 2026-08-26 03:58–05:02)
+
+`flights-ceiling/control-4b/`. Routing witnessed in the OPPOSITE direction:
+`2 Round Fast, 19 Section Fast, 1 Synthesis Slow` — 0 of 19 Section dispatches
+on the slow slot, which **proves the 4B wrote the control**. Both arms of this
+comparison now carry a positive witness of the model that wrote them.
+
+**One cell failed and was NOT counted.** `control-4b/t69-r1` died at the first
+Round draft with `error sending request for url
+(http://localhost:9741/v1/chat/completions)` — a transport failure, the daemon
+not yet serving 60 seconds after the swap killed the previous flight. The
+harness reported `FLIGHT FAILED` and moved to r2; it did not score it, and it
+did not record a zero. Harness lesson: `ready()` polls `/v1/models`, which came
+back 200 while the daemon still could not serve a completion. **A liveness
+probe that answers before the thing is usable is not a readiness probe**
+(§9.5) — the swap should have settled longer, or `ready()` should probe a
+one-token completion rather than the model list.
+
+### The like-for-like comparison
+
+Same audit configuration, same working gate, same estate, 11.3-11.9k words in
+every cell, writer model witnessed on both sides:
+
+| arm | writer | n | cells | mean | spread |
+|---|---|---|---|---|---|
+| `control-4b` | 4B (Fast) | 2 | 49.91, 41.35 | **45.63** | 8.56 |
+| `all-legs-slow` | 27B (Slow) | 3 | 47.66, 39.80, 48.04 | **45.17** | 8.24 |
+
+**Δ = −0.46.** Pooled 2·se = 10.11. The point estimate is essentially zero and
+the interval is wide. **A 7× larger model on every drafting leg produced no
+measurable change in RACE score.**
+
+### The "+6 baseline lift" lead is dead
+
+The previous section flagged tonight's first control draw (49.91, the highest
+task-69 read ever recorded) as a possible ~+6 from the gate fix plus audit
+bounding, and swapped the 4th arm cell to test it. **It was a high draw.** The
+second control cell came back 41.35; tonight's control mean is 45.63, which sits
++0.64 sd from the historical 43.73 — consistent, not a lift.
+
+That swap is the single highest-value decision of the shift. Left alone, the
+night would have ended reporting a −4.74 "the bigger writer hurt" against a
+control that was noise, and a +6 baseline discovery that does not exist.
+
+### Final standing, task 69
+
+```
+all 5 cells at tonight's configuration:  mean 45.35  sd 4.48  range 39.80-49.91
+historical n=15:                         mean 43.73  sd 2.97
+AIQ task-69 (our ruler, est.):           54.81
+```
+
+**Gap to AIQ: −9.46 at the mean.** Closed tonight: nothing, and that is the
+honest result. What the shift bought instead is three things the campaign did
+not have at 22:00: the ruler exonerated, the model hypothesis killed at the
+rung available to us, and a false +6 lead killed before it became doctrine.
+
+---
+
+# DRB-I — THE BAR IS ABOVE THE RULER'S CEILING (declared 2026-08-26, BEFORE the data)
+
+## What provoked this
+
+A re-derivation of data **already on disk** (no new flight, no new judge call).
+Across all 20 scored task-69 draws and all 10 tasks of the perplexity A/B arm,
+the RACE `reference_total` — the weighted score our pinned 27B judge gives the
+*reference article* — is nearly invariant:
+
+| set | n | reference_total (mean ± sd) | implied ceiling if our article scored 10/10 |
+|---|---|---|---|
+| task 69, our own draws | 20 | 9.193 ± 0.153 | **52.10** |
+| 10 subset tasks, perplexity A/B arm | 10 | 9.337 ± 0.179 | **51.72** (range 51.10–52.66) |
+
+`overall = T/(T+R)`, criterion scores are 0–10, so `T ≤ 10` and the maximum
+attainable overall on our ruler is `10/(10+R)`. Our own draws span `T` = 6.04–8.84
+(sd 0.90) while `R` moves 8.87–9.42 (sd 0.15) — the reference is effectively a
+constant of the instrument, not a variable of the comparison.
+
+**The pre-registered bars — 57.55 for a 10-task flight, 54.81 for task 69 — are
+above the maximum the instrument can emit.** A flawless article scores 51.72.
+This is not a claim that AIQ is unreachable; it is a claim that *the number we
+have been aiming at was manufactured by extrapolation and is not on the scale we
+measure on*. The pre-registration named this risk in "The offset, and the risk
+it carries" — the +1.08 offset is anchored on ONE system at ONE score level and
+extrapolated ~14 points upward. That extrapolation is now bounded: it cannot be
+right, because its output exceeds the range.
+
+## The measurement that replaces the extrapolation
+
+The leaderboard space publishes every system's **raw articles**, not just its
+scores: `data/raw_data/nvidia-aiq-nemotron-gpt52-updated.jsonl` (7,731,077 bytes),
+the same surface `perplexity-Research.jsonl` was vendored from on 2026-08-17.
+
+**Run AIQ's own published articles through our own pinned 27B ruler**, on the 10
+frozen subset tasks, at the pinned greedy sampling — exactly the path the
+perplexity A/B arm took. This removes the offset, the extrapolation, and the
+judge-identity caveat in one step: both sides are then the same judge, the same
+reference article, the same prompt, the same slot.
+
+- Judge: `Qwen3.8-27B-UD-Q6_K_XL` on :9741, temperature 0.0, top_p 1.0.
+- One judge call per article. Justified by note `403a218a`: the ruler is
+  deterministic (5 draws of one article, spread 0.0000 on overall and all four
+  dims). The article is fixed, so one call **is** the measurement — there is no
+  arm noise on this path, unlike a flight.
+- Articles uncleaned on both sides. Ours are uncleaned by the standing caveat;
+  `raw_data` is the raw deliverable for theirs. Symmetric.
+- Both systems occupy `article_1`; the reference occupies `article_2`. Symmetric.
+
+## Decision rules, fixed before the number is seen
+
+1. **The est. bars 57.55 / 54.81 are RETIRED on arrival of this measurement**,
+   whatever it says. They are outputs of an extrapolation now shown to exceed the
+   instrument's range. They are replaced by the measured AIQ-on-our-ruler number.
+   This retirement is unconditional and is not contingent on the result being
+   favourable.
+2. **The new task-69 bar is AIQ's measured task-69 overall on our ruler**; the
+   new 10-task bar is the mean of its 10 per-task overalls. Both are exact, not
+   estimated — same instrument, same reference, no translation.
+3. **"We beat AIQ" still requires an arm mean over n≥5 draws to exceed the bar**,
+   by more than pooled 2·se. A single high draw proves nothing; that rule is
+   unchanged and the smaller gap does not relax it. Our best-ever task-69 draw
+   (49.91) sits +1.77 sd above our own mean and is not evidence of anything.
+4. **If the measured gap is ≤ 3 points**, the campaign's framing changes from
+   "find a lever worth 10" to "find a lever worth 3, and power the arm to see
+   it" — and the levers already built but never flown (`WRITER_CONTRACT_V2`,
+   landed dark) become the right next flight rather than a down payment on a
+   gap they cannot close.
+5. **If the measured gap is ≥ 8 points**, the ceiling finding stands but the
+   diagnosis does not change: we are genuinely far, and the per-criterion table
+   below is where the deficit lives.
+6. **Adversarial reading, stated in advance.** This measurement can only move the
+   bar DOWN (the extrapolated number is above the range, the measured one is
+   inside it), so it is structurally a result that flatters us. That is a reason
+   to state its caveats now, not after: (a) it does not make our articles better
+   by one point; (b) it does not transfer to the public leaderboard, where the
+   official judge and its own ceiling govern — a claim of parity is a claim
+   **on our ruler** and must always be written that way; (c) it re-opens rather
+   than closes the question of whether our ruler is the right instrument, since
+   a judge that scores the reference 9.34/10 compresses every comparison into
+   the top ~2 points of its own scale.
+
+## Where the deficit lives — the per-criterion table (from data already on disk)
+
+25 task-69 judge records, our score vs the reference's, ranked by deficit. The
+five worst are worth naming because they are consistent across every draw:
+
+| Δ | ours | ref | k | dimension / criterion |
+|---|---|---|---|---|
+| −3.24 | 6.12 | 9.36 | 25 | comprehensiveness / **Breadth and Depth of MCP Protocol Description** |
+| −2.90 | 6.60 | 9.50 | 25 | readability / Logical Structure and Coherent Flow of Argumentation |
+| −2.58 | 6.92 | 9.50 | 25 | insight / Clarity and Logical Rigor in Problem-Solution Mapping for A2A |
+| −2.50 | 6.98 | 9.48 | 25 | readability / Formatting, Layout, and Typographical Consistency |
+| −2.22 | 6.80 | 9.02 | 25 | readability / Paragraph Cohesion, Sentence Fluency, and Conciseness |
+
+**The task asks about A2A *and* MCP, and we answer half of it.** Our worst
+criterion by a full point is the MCP description (6.12 vs our A2A description at
+7.14, k=25/25 — every draw). The second block is readability: six of our seven
+worst-15 criteria are readability, averaging −2.15, and readability is a
+property of *how the article is written*, not of what was retrieved.
+
+## The arm that follows, declared before the bar lands (2026-08-26)
+
+Written while the AIQ measurement is still in flight, so its bar cannot be
+chosen to suit the result.
+
+**The lever: `SOVEREIGN_DR_REPORT_ARCHITECTURE` (drb1-r8), landed dark this
+session.** Diagnosed from the per-criterion table above, not from a hunch. Our
+task-69 deliverable carried the user's raw prompt as its H1, no summary, a
+closing section named after the pipeline step that wrote it, and a hard cap of
+8 sections. AIQ's own published task-69 article — read directly from
+`inputs/aiq-subset-articles.jsonl`, not inferred — opens with an executive
+summary, gives A2A and MCP a numbered section each, carries a consolidated
+comparison table, maps innovations to the problems they address, and closes on
+a conclusion. Ours shipped 48 headings, every one a retrieved statistic
+("Search Visibility Surge Following A2A Announcement", "Payload Efficiency in
+Agent Handshakes"), and **no section describing MCP at all** — which is exactly
+the criterion we lose worst, in 25 of 25 draws.
+
+**What the arm flies.** The stack of everything built and never measured:
+`SOVEREIGN_DR_REPORT_ARCHITECTURE=1`, `SOVEREIGN_DR_REPORT_OUTLINE=1`,
+`SOVEREIGN_DR_WRITER_CONTRACT_V2=1`, with the bounded audit
+(`SOVEREIGN_DR_AUDIT_LOCATE_EARLY_EXIT=1`, `..._BUDGET=20`).
+
+**This is a REACH test, not an attribution test, and it is declared as one.**
+Three dark levers fly together, so a positive result says "the deliverable's
+architecture is worth something" and says NOTHING about which of the three
+carries it. Attribution is a later, single-variable arm. Naming that now is the
+point of writing this before the data: a stacked win must not be reported as
+evidence for any one flag, and none of the three ledger rows may be flipped
+default-on by this arm alone.
+
+**Control.** `flights-ceiling/control-4b` plus the bounded-audit cell — the
+like-for-like control at 45.63, n=2, same estate, same binary, same audit
+configuration, writer model witnessed. NOT the historical n=15, which mixes
+lengths from 4.6k to 11.8k words and mostly ran with the grounding gate failing
+open (note `39473e42`).
+
+**Bars, fixed now.**
+1. The arm beats the control iff its mean over n≥2 exceeds the control mean by
+   more than the pooled 2·se. Per-draw sd is 2.97 and the judge contributes
+   zero of it, so n is the only lever on resolution: n=2 resolves ~5.9 points,
+   n=3 ~4.8. **An arm that lands inside the band resolves nothing and will be
+   reported as unresolved, not as a null result.**
+2. The arm reaches AIQ iff its mean exceeds the MEASURED AIQ task-69 number on
+   our ruler — whatever the flight now running returns. Not 54.81; that bar is
+   retired above, unconditionally.
+3. **Honesty floor, and it outranks the score.** Revert on any rise in audit
+   refusals or in could-not-judge verdicts against the control. An executive
+   summary is a new place to assert things, and a report that reads better
+   while asserting more than its evidence carries is a regression this campaign
+   does not accept at any score.
+
+**The routing witness applies unchanged.** `run-ceiling.sh` refuses to fly a
+second cell if the first cannot prove its lever changed anything. The
+architecture flag's witness is textual and cheaper than routing: the composed
+report must carry an H1 that is not the question and an `## Executive Summary`.
+A cell missing either flew the control by accident and must not be scored as
+the arm.
+
+## CORRECTION, same morning — THE CEILING DOES NOT EXIST (2026-08-26)
+
+**The section above titled "DRB-I — THE BAR IS ABOVE THE RULER'S CEILING" is
+wrong in its central claim, and this correction was written before the arm it
+declared was flown.** The section is kept, not deleted, because what it got
+right (the measurement it commissioned, the per-criterion diagnosis) is what
+produced the evidence that killed it.
+
+**What it claimed.** `overall = T/(T+R)`, criterion scores are 0-10, so
+`T ≤ 10` bounds `overall ≤ 10/(10+R)`. Our judge's `reference_total` measured
+9.19 ± 0.15 across 20 task-69 draws and 9.34 ± 0.18 across the 10-task
+Perplexity arm — an sd six times smaller than our own `T` moves — so it was
+treated as a constant of the instrument, giving a hard maximum of **51.72**.
+On that basis AIQ's 56.02 and the campaign's 57.55 / 54.81 bars were declared
+off the scale.
+
+**What the measurement said.** The very first task of the arm that section
+commissioned: **AIQ's own task-56 article scores 57.22 on our ruler**, with
+`T = 9.458` and `R = 7.072`. The same judge, on the same task, against the same
+reference article, scored that reference **9.163** when the target was
+Perplexity's article. R fell **2.09 points** because the *other* article
+changed.
+
+**Why the reasoning failed, precisely.** R is not a property of the ruler; it
+is a property of the COMPARISON. RACE is a single pairwise call in which the
+judge scores both articles against each other, so the reference's score anchors
+on the target in front of it. Every draw behind the "constant" was one of our
+own articles, all clustered in a narrow band of quality — **restricted range**.
+The signal was already in the data and was read as noise: within the task-69
+draws `corr(T, R) = −0.60`, and R's range (8.87–9.42) moved in the direction
+that mattered while being small enough to dismiss. A correlation of −0.60
+between the thing being measured and the thing assumed constant is not a
+rounding detail; it is the assumption failing.
+
+**What survives.**
+- The commissioned measurement — AIQ's own articles through our ruler — is the
+  right instrument, and is now the ONLY sound way to place AIQ on our scale.
+  Task 56 already shows why: ours reads 57.22 against the official 56.66, a
+  +0.56 agreement, where the offset-translation would have predicted +1.08.
+- The per-criterion diagnosis (MCP unwritten in 25 of 25 draws, the readability
+  cluster) is independent of all of this and stands.
+- The observation that R barely moves *across our own draws* is true, and it
+  still explains why a 3-point lever is hard to see on this instrument.
+
+**What does not.**
+- "A flawless article scores 51.72." Withdrawn.
+- "AIQ's 56.02 is above our ceiling." Withdrawn.
+- "Our judge is more generous to the reference than the official judge by
+  +1.57 of 10." Withdrawn as stated — our R and the official bound were
+  measured against *different targets*, so the comparison was never valid.
+- **The retirement of the 57.55 / 54.81 bars is NOT withdrawn, but its reason
+  is.** They are superseded because they are an extrapolation and a direct
+  measurement is now in hand — the ground the pre-registration named as the
+  weakest link when they were minted. They are not superseded for being
+  unreachable; on the evidence of task 56 they are entirely reachable.
+
+Recorded in `drb/bars.json` (`ruler.there_is_no_fixed_ceiling`) and in
+`overall-derivation/ruler_ceiling.py`, whose docstring now leads with the
+falsification rather than the claim.
+
+## A SECOND LEVER, larger than the first, and the arm redesigned around it (2026-08-26, before any cell)
+
+Found by counting the control flight's own `evidence-window-1.json` rather than
+by reasoning about it, and it reverses the assumption the previous section was
+built on.
+
+| | |
+|---|---|
+| evidence window, task-69 control `dr-1787742429` | 46 chunks, **1,060,308 chars** |
+| chunks mentioning MCP | **40 / 46** |
+| chunks carrying the MCP primitives | **41 / 46** |
+| what ONE section's writer sees | 8 × 1400 = **11,200 chars — 1.06%** |
+| what the whole 8-section report sees | **8.5%** |
+| distinct sources the 11,345-word deliverable cites | **22 / 46** |
+| sections describing MCP | **0** |
+
+**Acquisition is not the constraint. The writer is not failing to use the
+evidence; it is not being shown it.** The material for the MCP section we lose
+3.24 points on, in 25 of 25 draws, was retrieved and sat in 40 of the 46 chunks
+the run had in hand.
+
+This supersedes, for this bed, the reading recorded at the foot of the
+`SOVEREIGN_DR_COMPOSED_REPORT` ledger row — "the deliverable SHAPE is no longer
+the binding constraint on this score; acquisition is". That was measured on a
+run whose whole window was 4 chunks and 1,866 chars. Three orders of magnitude
+of window later, the binding constraint has moved to the budget BETWEEN the
+window and the writer.
+
+**Landed dark as `SOVEREIGN_DR_REPORT_SECTION_EVIDENCE` (drb1-r9):** 24
+passages per section at an 8-per-source cap, both through one decider, because
+widening the count while holding the cap at 3 fills the new room from new
+sources only — the opposite of what a section needing depth on one protocol
+needs.
+
+### The arm is redesigned, and the reason is the pin
+
+The stacked reach test declared above is **withdrawn in favour of an
+attributable one**, because a measured cell now costs 45.7 minutes (control-4b
+`t69-r2`, its own log timestamps) rather than the ~100 assumed, and because the
+lever that matters is now identified rather than guessed. A stacked arm that
+cannot say which of four flags moved it is worth less than a single-variable
+arm that can.
+
+**Three cells, in this order, and the order is the point (§18.4 — validate the
+instrument before the result):**
+
+| # | cell | what it decides |
+|---|---|---|
+| 1 | control, `SOVEREIGN_DR_PIN_SAMPLING=1` | — |
+| 2 | control, `SOVEREIGN_DR_PIN_SAMPLING=1`, byte-identical config | **the pin.** Cells 1 and 2 differ in nothing. Their spread IS the pinned pipeline's residual noise |
+| 3 | arm, same + `SOVEREIGN_DR_REPORT_SECTION_EVIDENCE=1` | the lever, against a control whose noise cell 2 just measured |
+
+**The pin has never been validated and note `ff625601` says so explicitly** —
+"a unit test proves the POLICY; it cannot prove the PIN reproduces". The
+acceptance run it names was attempted (`runs-pin-validate/pinned-1`) and never
+produced a report. Cells 1–2 are that acceptance run, and they pay for
+themselves twice: they validate the instrument AND they are the control the
+third cell is read against.
+
+**Bars, fixed now, before cell 1 flies.**
+1. **The pin reproduces** iff cells 1 and 2 land within **1.5 points** of each
+   other on RACE overall. Unpinned, three identical-configuration runs spread
+   6.92 points (note `86ac6f7c`) and the historical per-draw sd is 2.97, so
+   1.5 is well inside what the unpinned process does and is not a bar the pin
+   passes by luck. llama.cpp batching is not bit-deterministic, so byte
+   identity is the hope and not the bar.
+2. **If the pin does NOT reproduce**, cell 3 is still flown and reported, but
+   its delta is read against the unpinned band (2·se from sd = 2.97, n = 2 per
+   side ⇒ ~5.9 points) and will almost certainly be unresolved. That outcome
+   is declared here so it cannot later be dressed as a null result: an arm
+   inside the band **resolves nothing**.
+3. **If the pin DOES reproduce**, cell 3 minus cell 1 is the lever, and the
+   resolution is the pin's own measured spread rather than 5.9 points. This is
+   the only route by which a 3-point effect is visible in a single session.
+4. **Honesty floor, outranking the score, unchanged.** Revert on any rise in
+   audit refusals or could-not-judge verdicts. This lever's specific risk is
+   named in its ledger row: three times the evidence in front of a writer is
+   three times the opportunity to assert what the section's citations do not
+   carry. A better score bought with a worse floor is not a result here.
+
+**What is NOT claimed by this arm.** `SOVEREIGN_DR_REPORT_ARCHITECTURE`
+(drb1-r8) is landed dark and stays dark and unmeasured. It is not in these
+cells. Nothing in this session may be reported as evidence for or against it.
+
+## RESULT — the ruler is deterministic at 35k tokens, and across a daemon restart (2026-08-26)
+
+Free, from a duplicated run rather than a designed one: two `score_race.py`
+invocations judged AIQ's task-56 article independently, on **different daemon
+instances** (the daemon was restarted between them), from a **137,233-character
+prompt** — the article plus the reference plus the criteria list, ~35k tokens.
+
+```
+run A (race-20260826T071824):  T=9.4576  R=7.0723  overall=57.22
+run B (race-20260826T073002):  T=9.4576  R=7.0723  overall=57.22
+```
+
+Identical to four decimals on both weighted totals.
+
+This extends note `403a218a`, whose ruler-determinism read was five consecutive
+draws of ONE article on ONE daemon and which named the large-prompt case as the
+obvious untested one: *"task 83's ~40k-token prompt is the obvious untested
+case"*. It is no longer untested, and the answer is the same — **the judge
+contributes zero variance**, at 35k tokens as at small ones, and a daemon
+restart between draws does not perturb it. n is still the only lever on
+resolution, and it is still the pipeline that owns all of the spread.
+
+It also validates the seed path added the same day: run B's task 56 was later
+reused by a third run without a judge call, and the reused record recomputes to
+57.22 through `compute_record` — the same decider the fresh path uses.
+
+## The 1.06% is a PORT REGRESSION, not a tuned bound (traced 2026-08-26, before the arm flew)
+
+The operator's reaction to the 1.06% figure was "not clear why we
+overoptimized and self-limited". The honest answer, from `git log -S` rather
+than from memory: **nobody optimized anything. The number was never chosen.**
+
+`compose_report` was ported to Rust on 2026-08-23 in `a50d2fdf3` from the
+Python prototype `research/deep-research/arms/lab/compose2.py`. That commit's
+own message is the citation:
+
+> `compose_report` had NEVER executed. … The 44.40 composite that stood in for
+> its quality was measured by `arms/lab/compose2.py` — a Python
+> reimplementation.
+
+The prototype and the port agree on everything about how evidence is prepared:
+
+| | prototype `compose2.py` | Rust port |
+|---|---|---|
+| passage chunking | `passages(chunks, size=1400, overlap=200)` | `PASSAGE_CHARS=1400`, `PASSAGE_OVERLAP=200` |
+| ranking | cosine, sub-question vs passage | cosine, sub-question vs passage |
+| per-source cap mechanism | `repeat_cap`, skip once exceeded | `PER_SOURCE_CAP`, skip once exceeded |
+| **passages per section** | **`k = 28`** | **`SECTION_PASSAGES = 8`** |
+| **per-source cap** | **`repeat_cap = 5`** | **`PER_SOURCE_CAP = 3`** |
+| **evidence per section** | **39,200 chars** (its manifest records `evidence_chars_per_section: k * 1400`) | **11,200 chars** |
+
+**A 3.5× cut, in the port, with no commit message, note, ledger row or test
+recording it as a decision.** It is the kind of change that leaves no trace
+precisely because nobody made it deliberately — a default written fresh in the
+new language rather than carried across from the old one.
+
+It did not go entirely unseen. `14ddccf49` (2026-08-24) wrote, in the
+`SOVEREIGN_DR_RESEARCH_NOTES` registry entry, *"ours showed each section eight
+passages by cosine, so on the logged task-69 flight a 38-chunk window reached
+the writer eight chunks at a time"* — the symptom, correctly observed, one day
+after the port. The response was to add a researcher-worker flag that distils
+findings, not to ask why the number was 8. §19 again, in a new costume: the
+inventory (what the prototype already did, and at what setting) outranked the
+plan, and was not consulted.
+
+**Consequence for the arm, and it strengthens it.** `SECTION_PASSAGES_WIDE` was
+going to be 24 — a guess, chosen for being "about 3×". It is now **28**, and
+`PER_SOURCE_CAP_WIDE` is **5**, because those are the prototype's values and
+therefore the configuration the 44.40 composite was actually measured at. The
+arm stops being "does more evidence help?" and becomes **"does restoring the
+measured configuration recover what the port lost?"** — a question with a prior
+number attached to it. The test pins the pair and the 39,200 figure so a later
+edit away from them fails loudly.
+
+**What this does NOT establish.** That the 3.5× cut caused the gap. The cut is
+documented; its effect is not measured, and this arm is what measures it. A
+port regression with a plausible mechanism is still a hypothesis until a cell
+flies.
+
+---
+
+## The compose sweep — pre-registered 2026-08-27, before any arm flew
+
+The evidence lever is a measured LEAD (control 8/3 **47.2317** → wide 28/5
+**50.8998**, +3.67 at 1.24 sd, n=1; note 17abdd8c). Two budgets is two points,
+and two points cannot show a knee. This sweep asks the shape question:
+**where does more evidence stop paying?**
+
+**The single variable.** `(section_passages, per_source_cap)`. Arms:
+`8:3, 16:4, 28:5, 44:6, 60:8`. Held identical by construction: the evidence
+(one frozen `compose-input.json`, replayed — not re-acquired per arm), the
+sampling pin, the writer slot (`DraftLeg::Section → Speed::Fast`, the 4B), the
+judge (`Qwen3.8-27B-UD-Q6_K_XL`), and the scorer (`arms/lab/score_one.py` —
+the same instrument the flights use, §10.6).
+
+**The two anchored points.** `8:3` is the port default and the configuration
+that measured 47.2317. `28:5` is the Python prototype's setting and measured
+50.8998. Both are priors carried INTO this sweep, not results of it — if the
+replay reproduces neither, the harness is the suspect before the model is.
+
+**What a knee would look like.** Overall rises from 8:3 through some arm and
+then flattens or falls. The mechanism the lever predicts is comprehensiveness
+(+5.79 of the +3.67 total came from that dimension), so a knee should show as
+comprehensiveness saturating while the other three stay flat.
+
+**The ceiling that is NOT the model's.** The fast slot's window is the writer's
+real limit (65,536 tokens as flown). An arm that REFUSES is never-ran, not a
+zero, and must be read as "exceeded the slot", never as "the model got worse".
+The harness asserts this rather than scoring an empty file.
+
+**Declared before the data — what this sweep CANNOT establish.**
+
+1. **Every arm is a PRE-AUDIT DRAFT.** The replay stops at the writer; the
+   ~71-minute audit that follows in a real flight can still edit the report.
+   The winning budget owes a full end-to-end cell before it is a result.
+2. **n=1 per point.** A single-run delta is not a result (§18.5). The pin's
+   determinism is still unmeasured (ff625601, STILL OWED), so the arm-to-arm
+   noise floor is unknown and no arm may be declared the winner on rank alone.
+3. **One task (69), one estate.** Nothing here generalises to DRB-I overall.
+
+**What would falsify the lever rather than refine it:** a flat or non-monotone
+curve across 8→60 with comprehensiveness unmoved. That would say the +3.67 was
+sampling noise or a pin artifact, not evidence volume — and the honest report
+of that is the curve, not a re-run until it cooperates.
+
+## The readability arm — pre-registered 2026-08-27, before any arm flew
+
+**Why this and not the ranker cap.** The queued next lever was `want=16` at
+`cap 2/3/4/6` — the per-source cap isolated, since the evidence curve moved
+want and cap together and never separated them. It is being **deprioritised on
+data already on disk**, not abandoned. Running `arms/bed/criterion_gaps.py`
+against the sweep's own judge sidecar, with the real per-criterion weights and
+against AIQ's measured task-69 judgement (`drb/bars.json`,
+`flights-aiq-bar/race-20260826T092917`):
+
+```
+== vs AIQ == same judge, same task, same reference (AIQ 53.8638, ours 51.3347)
+   dim                        ours      AIQ    delta  ref(ours)  ref(AIQ)
+   comprehensiveness          8.92     9.25    -0.33       8.50      7.90
+   insight                    9.12     9.22    -0.10       8.03      7.75
+   instruction_following      9.68     9.34    +0.33       9.08      8.11
+   readability                8.20     9.20    -1.00       9.28      8.15
+   totals                   9.0288   9.2513  -0.2225     8.5593    7.9240
+```
+
+**The entire deliverable gap to AIQ is readability.** We already beat AIQ on
+instruction-following and sit within 0.33 and 0.10 on comprehensiveness and
+insight. The cap sweep's mechanism is comprehensiveness — a dimension where
+0.33 points are available and the curve has already flattened (8.92 → 8.75 →
+9.08 across 16→60). Readability is worth 1.00 against the peer and is the one
+dimension the evidence budget provably does **not** move: 7.86 → 8.43 across a
+7.5× evidence range, five arms.
+
+**The single variable.** One readability lever per arm, everything else held:
+the same bed replayed, the shipped `16:4` budget, the same sampling pin, the
+same writer slot, the same judge, the same scorer.
+
+| arm | environment |
+|---|---|
+| `control` | nothing set |
+| `arch` | `SOVEREIGN_DR_REPORT_ARCHITECTURE=1` |
+| `ctx` | `SOVEREIGN_DR_SECTION_CONTEXT=1` |
+| `arch-ctx` | both |
+
+`arch-ctx` flies only if at least one single lever clears bar 1. Two flags at
+once cannot attribute a gain, which is the reason the registry keeps them
+separate in the first place.
+
+**The bed is NEW and the reason matters.** `dr-1787887462`, minted 2026-08-27
+after the evidence-handle identity fix: **52 chunks, 52 distinct ids, 0
+shadowed**. The bed every earlier compose arm replayed (`dr-1787807617`) had
+62 chunks under 45 ids — 17 chunks structurally uncitable, and every citation
+to a repeated handle rendering the FIRST chunk's URL. **No number in this arm
+is comparable to the 50.95–52.13 band**; that band was measured on a window a
+third of which could not be addressed. The control below is what this arm is
+measured against, and it must be flown even though a control already "exists".
+
+**Bars, fixed before the data.**
+
+1. **The lever works** if readability's weighted average rises **≥ +0.30**
+   over the same-bed control. Chosen against the instrument's measured noise,
+   not against a hoped-for effect: `rep1` and `repdet` scored the same arm
+   **51.3347 and 51.3347** — identical to four decimals — so the replay is
+   deterministic and a delta of this size is the arm, not the draw. The one
+   prior observation of `arch` measured +0.72 unweighted on the old bed,
+   unregistered; +0.30 is well inside that and well outside zero.
+2. **It ships** if bar 1 holds **and** overall rises ≥ +0.30. An overall gain
+   with readability flat is not this lever working — it is a comprehensiveness
+   or insight fluctuation, and it must not be reported as a readability result
+   (§18.6).
+3. **It is refuted** if readability moves less than ±0.15. Then the isolated
+   section prompt is not the cause of the fragmentation the judge names, the
+   flag stays dark, and the finding is recorded as a refusal with its data.
+
+**Declared before the data — what this arm CANNOT establish.**
+
+1. **The replay does not exercise all of `arch`.** Its outline cap (8 → 12
+   sections) only bites when the outline is planned; `compose_replay` composes
+   against the bed's pinned 20 sections. This arm measures `arch`'s title,
+   executive summary and Conclusion — its *framing* half — and says nothing
+   about its cap.
+2. **Pre-audit draft**, like every compose arm. The ~71-minute audit can still
+   edit the report. A winning lever owes a full end-to-end cell.
+3. **One task, one bed, n=1.** The determinism above licenses n=1 *for this
+   bed*; it says nothing about task 69 generally and nothing about DRB-I.
+4. **Section COUNT is already refuted and is not retested here.** A 10-section
+   outline left Logical Structure at exactly 8.5, unchanged from the control,
+   and cost 0.61 overall. This arm changes what a section KNOWS, not how many
+   there are.
+
+**What would falsify the readability thesis rather than refine it:** all three
+arms flat on readability. That would say the deficit is not in the section
+prompt at all — not its framing and not its context — and the next place to
+look is the writer contract or the render, not another prompt knob.

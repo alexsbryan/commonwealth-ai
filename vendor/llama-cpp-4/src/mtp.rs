@@ -69,8 +69,6 @@
 //!
 //! | Method | MTP typical value | Meaning |
 //! |---|---|---|
-//! | [`MtpSession::need_embd_pre_norm`] | `true` | Next-n hidden states (upstream name) |
-//! | [`MtpSession::need_embd`] | `false` | Post-norm / seq embeddings not used |
 //!
 //! # Multi-head `NextN` (Step3.5+)
 //!
@@ -353,25 +351,6 @@ impl<'ctx, 'model> MtpSession<'ctx, 'model> {
     #[must_use]
     pub fn config(&self) -> MtpSessionConfig {
         self.config
-    }
-
-    /// True when the speculative backend needs post-norm embeddings on the
-    /// target context (`llama_set_embeddings`).
-    ///
-    /// MTP returns **false**; use [`Self::need_embd_pre_norm`] for MTP.
-    #[must_use]
-    pub fn need_embd(&self) -> bool {
-        unsafe { llama_cpp_sys_4::mtp_session_need_embd(self.raw.as_ptr()) }
-    }
-
-    /// True when the speculative backend needs pre-norm hidden states on the
-    /// target context (`llama_set_embeddings_pre_norm`).
-    ///
-    /// MTP returns **true**. Upstream configures this on both contexts during
-    /// session init; callers normally do not need to set it manually.
-    #[must_use]
-    pub fn need_embd_pre_norm(&self) -> bool {
-        unsafe { llama_cpp_sys_4::mtp_session_need_embd_pre_norm(self.raw.as_ptr()) }
     }
 
     /// Configured maximum number of tokens drafted per [`draft`](Self::draft)
@@ -825,7 +804,6 @@ impl std::fmt::Debug for MtpSession<'_, '_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("MtpSession")
             .field("config", &self.config)
-            .field("need_embd_pre_norm", &self.need_embd_pre_norm())
             .finish_non_exhaustive()
     }
 }

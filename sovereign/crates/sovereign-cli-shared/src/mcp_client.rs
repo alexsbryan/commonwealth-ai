@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use serde_json::{json, Value};
 
-use crate::urls::daemon_base_url;
+use sovereign_contracts::setup_config::client_daemon_base;
 
 /// Why a daemon tool call did not return a payload. The distinction
 /// is load-bearing: `Unreachable` means the caller MAY fall back to
@@ -57,7 +57,7 @@ pub async fn daemon_tool_call(tool: &str, arguments: Value) -> Result<Value, Dae
         "params": { "name": tool, "arguments": arguments }
     });
     let resp = client
-        .post(format!("{}/mcp/message", daemon_base_url()))
+        .post(format!("{}/mcp/message", client_daemon_base()))
         .json(&body)
         .send()
         .await

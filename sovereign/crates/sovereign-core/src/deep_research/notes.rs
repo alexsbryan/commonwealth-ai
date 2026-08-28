@@ -341,6 +341,23 @@ pub async fn gather(
 /// The writer's input for one sub-question: findings, best first, each
 /// carrying the citation the writer is expected to reuse verbatim.
 pub fn findings_block(note: &ResearchNote) -> String {
+    findings_block_inner(note, false)
+}
+
+/// drb1-r7: the same block, with each finding's usefulness grade shown.
+///
+/// The grade is not new information — `findings_block` has always sorted by
+/// `usefulness` and then dropped it, handing the writer an ordering with no
+/// stated meaning. This is AIQ's `evidence_judgment` steer
+/// (`deep_researcher/prompts/writer.j2`): anchors carry the section, support
+/// adds nuance, weak evidence is for caveats and conflicts. The writer's
+/// obligation for each grade is stated in `WRITER_CONTRACT_V2_EXTRA`; showing
+/// the grade without that obligation would be decoration.
+pub fn findings_block_graded(note: &ResearchNote) -> String {
+    findings_block_inner(note, true)
+}
+
+fn findings_block_inner(note: &ResearchNote, graded: bool) -> String {
     let mut ranked: Vec<&Finding> = note.findings.iter().collect();
     ranked.sort_by(|a, b| b.usefulness.cmp(&a.usefulness));
     let mut s = String::new();
@@ -350,7 +367,16 @@ pub fn findings_block(note: &ResearchNote) -> String {
             .iter()
             .map(|i| format!("[Source: {i}]"))
             .collect();
-        s.push_str(&format!("- {} {}\n", f.claim, cites.join(" ")));
+        if graded {
+            s.push_str(&format!(
+                "- [{}] {} {}\n",
+                crate::deep_research::synthesize::grade_for_usefulness(f.usefulness),
+                f.claim,
+                cites.join(" ")
+            ));
+        } else {
+            s.push_str(&format!("- {} {}\n", f.claim, cites.join(" ")));
+        }
     }
     s
 }
@@ -358,6 +384,57 @@ pub fn findings_block(note: &ResearchNote) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// drb1-r7: the graded block shows the grade the ungraded block already
+    /// sorted by and threw away. Same findings, same order, same citations —
+    /// the ONLY difference is the visible grade.
+    #[test]
+    fn the_graded_block_adds_the_grade_and_changes_nothing_else() {
+        let note = ResearchNote {
+            sub_question: "q".to_string(),
+            findings: vec![
+                Finding {
+                    claim: "a high-usefulness claim that is long enough".to_string(),
+                    evidence_ids: vec!["ev-1".to_string()],
+                    usefulness: 90,
+                },
+                Finding {
+                    claim: "an unscored claim that is also long enough".to_string(),
+                    evidence_ids: vec!["ev-2".to_string()],
+                    usefulness: DEFAULT_USEFULNESS,
+                },
+                Finding {
+                    claim: "a low-usefulness claim that is long enough too".to_string(),
+                    evidence_ids: vec!["ev-3".to_string()],
+                    usefulness: 10,
+                },
+            ],
+            refused: vec![],
+            passages_seen: 3,
+        };
+        let plain = findings_block(&note);
+        let graded = findings_block_graded(&note);
+        assert!(graded.contains("[ANCHOR]"), "{graded}");
+        assert!(graded.contains("[SUPPORT]"), "{graded}");
+        assert!(graded.contains("[WEAK]"), "{graded}");
+        assert!(!plain.contains("[ANCHOR]"), "v1 block must stay ungraded");
+        // Stripping the grades must reproduce the ungraded block byte for byte.
+        let stripped: String = graded
+            .lines()
+            .map(|l| {
+                l.replacen("- [ANCHOR] ", "- ", 1)
+                    .replacen("- [SUPPORT] ", "- ", 1)
+                    .replacen("- [WEAK] ", "- ", 1)
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(
+            stripped.trim(),
+            plain.trim(),
+            "grading must add the grade and nothing else"
+        );
+    }
+
     use crate::deep_research::icd::WindowChunk;
 
     fn window(ids: &[&str]) -> EvidenceWindow {

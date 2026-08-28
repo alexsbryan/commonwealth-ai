@@ -1,0 +1,39 @@
+{
+  "icd": "skip_ledger",
+  "version": 1,
+  "run_id": "dr-1787742429",
+  "charter_hash": "db550b2182884580",
+  "round": 1,
+  "entries": [
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.02967032976448536,
+      "rank": 26,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q15",
+      "snippet": "environments where the model has high levels of autonomy.\n8. Poorly Designed Authentication Procedures\nInitially, MCP lacked a standard for authentication. Later updates embedded OAuth 2.1 flows like token issuance and validation directly into the MCP server. This design breaks the principle of separation between identity and resource logic, increases operational complexity, and broadens the protocol’s attack surface.\nIn agent-to-agent architectures, improperly scoped authentication flows can result in agents trusting the wrong peers, or accepting tokens from unauthorized sources leading to "
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.028790388256311417,
+      "rank": 35,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q5",
+      "snippet": "sers say about us\nWhy Orca Learn all about our purpose-built cloud security platform\nPartners Overview\nPartners MSPs Integration Directory Become a Partner Cloud Service Providers\nAmazon Web Services Google Cloud Microsoft Azure Alibaba Cloud Oracle Cloud Tencent Cloud Integrations\nChainguard Jira ServiceNow Snowflake Splunk Zscaler DISTRIBUTION\nTD SYNNEX QBS Software Company About Us Contact Us Careers Newsroom Media Kit Why Orca Learn how Orca is Leading the Market\nLog In USA Europe Australia US-Gov Get Demo\nView more results Blog Home Research Research Pod Bringing Memory to AI: A Look at A"
+    },
+    {
+      "url": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "title": "https://orca.security/resources/blog/bringing-memory-to-ai-mcp-a2a-agent-context-protocols",
+      "score": 0.028594771400094032,
+      "rank": 37,
+      "reason": "below-cut",
+      "decision": "skip",
+      "query_id": "q9",
+      "snippet": "at expose context or capabilities.\nIn order to understand how MCP works lets get a few things straight the MCP Client acts as the user-facing application that initiates requests and displays results, while MCP servers function as intermediary systems that process these requests, manage connections to various data sources, and return organized information back to the client according to the standardized protocol.\nAs shown in the diagram, an MCP Client hosted on a users system can simultaneously communicate with multiple MCP Servers (A, B, and C), each serving different purposes. Each server int"
+    }
+  ]
+}

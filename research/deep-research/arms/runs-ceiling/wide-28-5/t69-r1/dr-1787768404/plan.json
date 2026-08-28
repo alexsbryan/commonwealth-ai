@@ -1,0 +1,37 @@
+{
+  "icd": "plan",
+  "version": 1,
+  "run_id": "dr-1787768404",
+  "charter_hash": "9a40ca214c62420d",
+  "rounds_planned": 2,
+  "estate_first": true,
+  "network_after_estate": true,
+  "acquisition": {
+    "queries_preplanned": [
+      "Number of major AI agent frameworks supporting the Model Context Protocol (MCP) as of Q2 2024",
+      "Count of enterprise partners listed in Google's initial A2A protocol announcement press release dated April 9, 2025",
+      "Percentage increase in API call latency when using MCP for multi-step tool execution compared to direct REST calls",
+      "Median token count required for an LLM to parse and execute a single MCP JSON-RPC request versus an A2A message envelope",
+      "Share of developer community discussions on GitHub mentioning \"agent interoperability\" that reference both MCP and A2A within a 30-day window post-A2A launch",
+      "Number of distinct agent-to-agent communication patterns defined in the official A2A specification version 1.0",
+      "Count of supported transport protocols (e.g., HTTP/SSE) explicitly documented in the Model Context Protocol specification v0.4",
+      "Percentage of enterprise AI deployments citing lack of cross-vendor agent collaboration as a primary barrier according to Gartner's 2025 Hype Cycle for Agentic AI",
+      "Median time required for two agents from different vendors to establish a secure session using OAuth 2.0 tokens under the A2A protocol",
+      "Number of open-source libraries implementing the MCP client interface across Python, TypeScript, and Go ecosystems as of May 2025",
+      "Share of API requests that fail due to schema mismatch errors when integrating third-party tools via MCP versus native function calling",
+      "Count of distinct task states (e.g., submitted, working, completed) defined in the A2A Task Lifecycle specification",
+      "Percentage reduction in prompt engineering complexity reported by developers migrating from custom agent orchestration code to standard A2A message formats",
+      "Number of security vulnerabilities disclosed for MCP implementations on CVE databases between January 1 and June 30, 2025",
+      "Median size in kilobytes of a typical context window payload transmitted over MCP stdio transport versus HTTP streaming",
+      "Count of major cloud providers (AWS, Azure, GCP) offering managed services that natively support both MCP servers and A2A agents as of Q2 2025",
+      "Share of AI developer survey respondents who prefer protocol-agnostic abstraction layers over specific protocols like MCP or A2A according to Stack Overflow Developer Survey 2024",
+      "Number of distinct capability discovery mechanisms defined in the A2A Agent Card specification compared to MCP tool listing endpoints",
+      "Percentage change in average inference cost per successful multi-agent task completion when using A2A vs. proprietary vendor-specific agent APIs",
+      "Count of documented use cases for cross-domain data sharing between financial and healthcare agents enabled by the A2A privacy-preserving features"
+    ],
+    "source": "plan-subquestions",
+    "figure_specifiers": [
+      "2"
+    ]
+  }
+}

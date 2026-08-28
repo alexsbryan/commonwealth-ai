@@ -72,6 +72,38 @@ pub fn total_model_bytes(model_path: &Path) -> u64 {
     total
 }
 
+/// The shards of a split GGUF that are NOT on disk beside `model_path`.
+///
+/// Empty for a single-file model, and empty for a complete split — so a
+/// non-empty result is always a real, actionable problem.
+///
+/// This exists because of what the operator actually does with a split model:
+/// point `[models].primary` at shard `00001` and expect it to work. That IS the
+/// supported gesture — llama.cpp resolves the siblings itself — but it fails
+/// confusingly when a sibling is absent, because shard `00001` is often a
+/// ~10 MB header-only file. The load then dies inside llama.cpp, and every
+/// size-derived diagnostic above it reports ~0 GB, which reads as "your model is
+/// corrupt" or "it didn't fit" when the truth is "you are missing two files".
+/// `total_model_bytes` already refuses to guess in this case; this names WHAT is
+/// missing so the message can say so (ARCH §18.3 — absence is reported, never
+/// defaulted).
+pub fn missing_shards(model_path: &Path) -> Vec<String> {
+    let Some(name) = model_path.file_name().and_then(|n| n.to_str()) else {
+        return Vec::new();
+    };
+    let Some(dir) = model_path.parent() else {
+        return Vec::new();
+    };
+    // The one shard-name parser, shared with `shard_files` / `total_model_bytes`.
+    let Some(names) = super::rpc_warm_cache::split_shard_names(name) else {
+        return Vec::new(); // not a split — nothing can be missing
+    };
+    names
+        .into_iter()
+        .filter(|n| !dir.join(n).exists())
+        .collect()
+}
+
 // ─── ModelSlot ─────────────────────────────────────────────────
 
 /// Per-slot inference mode. A sum type so the illegal hybrid state
@@ -755,6 +787,79 @@ pub(crate) use sovereign_core::time::unix_millis as now_millis;
 /// (~60-160s observed worst-case under heavy grammar) finishes
 /// with margin, short enough that a runaway mask-state is killed
 /// before it pins the daemon for ~30 min and starves the mesh.
+/// Parse `SOVEREIGN_TENSOR_BUFT_OVERRIDE` into llama.cpp `-ot` overrides.
+///
+/// Syntax is llama.cpp's own: `<regex>=<buffer-type>[,<regex>=<buffer-type>...]`.
+/// `CPU` is the only buffer type resolved here, because it is the one that
+/// changes RESIDENCY: a tensor assigned to the CPU buffer type is left pointing
+/// into the mmap'd GGUF instead of being copied into a device buffer
+/// (`llama-model-loader.cpp` -> `ggml_backend_tensor_alloc(buf_mmap, cur, data)`).
+/// It is then demand-paged from disk and, the actual point, EVICTABLE under
+/// memory pressure rather than pinned — so pressure costs a page fault instead
+/// of an OOM kill on a host where the daemon is the designated victim.
+///
+/// Motivating case: Qwen3.8-Flash-Next's `per_layer_token_embd`, a single
+/// 26.8 GiB IQ4_NL n-gram table read 16 rows (1440 B) per token. Measured NVMe
+/// marginal cost on this host is ~92 us against a ~25.6 ms token budget, so the
+/// gather is ~0.4% of a decode step even stone cold.
+///
+/// A malformed entry or an unresolvable buffer type REFUSES the whole variable
+/// (warn + return empty) rather than applying the half it understood. A
+/// placement rule that silently half-applies is indistinguishable from one that
+/// worked, which is the failure ARCH_PRINCIPLES §18.3 exists to prevent.
+fn env_tensor_buft_overrides() -> Vec<(
+    std::ffi::CString,
+    crate::llama::sys::ggml_backend_buffer_type_t,
+)> {
+    let Ok(spec) = std::env::var("SOVEREIGN_TENSOR_BUFT_OVERRIDE") else {
+        return Vec::new();
+    };
+    if spec.trim().is_empty() {
+        return Vec::new();
+    }
+    let mut out = Vec::new();
+    for entry in spec.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+        let Some((pattern, buft_name)) = entry.rsplit_once('=') else {
+            tracing::warn!(
+                %entry,
+                "SOVEREIGN_TENSOR_BUFT_OVERRIDE: entry is not `<regex>=<buffer-type>` — \
+                 refusing the whole variable, no tensor placement applied"
+            );
+            return Vec::new();
+        };
+        let buft = match buft_name.trim().to_ascii_uppercase().as_str() {
+            "CPU" => unsafe { crate::llama::sys::ggml_backend_cpu_buffer_type() },
+            other => {
+                tracing::warn!(
+                    buffer_type = %other,
+                    "SOVEREIGN_TENSOR_BUFT_OVERRIDE: only CPU is resolvable here — \
+                     refusing the whole variable, no tensor placement applied"
+                );
+                return Vec::new();
+            }
+        };
+        if buft.is_null() {
+            tracing::warn!(
+                "SOVEREIGN_TENSOR_BUFT_OVERRIDE: ggml returned a null CPU buffer type — \
+                 refusing the whole variable"
+            );
+            return Vec::new();
+        }
+        match std::ffi::CString::new(pattern.trim()) {
+            Ok(c) => out.push((c, buft)),
+            Err(_) => {
+                tracing::warn!(
+                    %pattern,
+                    "SOVEREIGN_TENSOR_BUFT_OVERRIDE: pattern contains an interior NUL — \
+                     refusing the whole variable"
+                );
+                return Vec::new();
+            }
+        }
+    }
+    out
+}
+
 fn inference_deadline_secs() -> u64 {
     use std::sync::OnceLock;
     static DEADLINE: OnceLock<u64> = OnceLock::new();
@@ -1432,11 +1537,39 @@ impl ModelSlot {
         let mtp_disabled_at_load = std::env::var("SOVEREIGN_MTP_DISABLE")
             .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
             .unwrap_or(false);
+        // Bypass the device HOST buffer type on the same population the fit gate
+        // discounts mmap-resident weights for. These MUST agree: the gate only
+        // subtracts those bytes because this flag makes them pageable, so a load
+        // that forgot it would be admitted on a promise it did not keep.
+        // ONE decider for both — `wants_no_host`.
+        let no_host = super::rpc_distribution::wants_no_host(model_path, model_bytes, context_size);
         let mut model_params = LlamaModelParams::default()
+            .with_no_host(no_host)
             .with_n_gpu_layers(effective_gpu_layers)
             .with_load_mtp(!mtp_disabled_at_load);
         match &placement {
             LoadPlacement::LocalOnly => {
+                // Ask for mmap EXPLICITLY rather than leaving it to AUTO.
+                //
+                // Under AUTO, llama.cpp walks every registered device and turns
+                // mmap off for the WHOLE model the moment one of them lacks
+                // `caps.mmap_support` (llama-model.cpp:1388). This daemon
+                // registers RPC devices for distributed inference, and a remote
+                // device cannot mmap — so a purely LOCAL load silently lost its
+                // mapping and every weight was COPIED into anonymous memory.
+                //
+                // Measured on RuggedFox 2026-08-26, same model, same binary:
+                //   standalone (no RPC devices):  loads, 79.3 GiB GTT
+                //   daemon (RPC devices present): RssAnon -> 18.5 GiB,
+                //                                 RssFile flat at 0.29 GiB, OOM
+                //
+                // Anonymous pages are unreclaimable, so this also invalidated
+                // the local-fit gate's whole premise that mmap-resident weights
+                // are evictable. Explicit MMAP skips the device-caps loop; the
+                // distributed arms below keep AUTO, where the check is correct
+                // because those loads really do span a device that cannot map.
+                model_params = model_params
+                    .with_load_mode(crate::llama::cpp::model::params::LlamaLoadMode::Mmap);
                 // Load on the local GPU only, excluding any RPC device a prior
                 // (smaller) load left in ggml's global registry.
                 let local = local_gpu_device_list();
@@ -1507,8 +1640,10 @@ impl ModelSlot {
                 return Err(Error::Inference(format!(
                     "local-fit gate: {} needs ~{need_mb} MiB (weights + KV + scratch) but only \
                      ~{usable_mb} MiB of system memory is usable after the host reserve — not \
-                     loading locally; retries as workers rejoin. \
-                     SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1 overrides.",
+                     loading locally; retries as workers rejoin. You are seeing this because \
+                     SOVEREIGN_LOCAL_FIT_ENFORCE is set: UNSET IT and the daemon will attempt \
+                     the load and, if it fails, say why. The estimate is conservative for models \
+                     that leave large tensors in the mmap.",
                     model_path.display()
                 )));
             }
@@ -1524,6 +1659,41 @@ impl ModelSlot {
                     model_path.display(),
                     overflow.refusal()
                 )));
+            }
+        }
+
+        // Operator-declared per-tensor placement, applied only where nothing
+        // else already owns placement. `OwnedOverrides` derives its `-ot` set
+        // from the distribution plan; merging a second source would let the two
+        // disagree with no way to tell which won, so we refuse and SAY SO
+        // rather than silently merging.
+        let env_overrides = env_tensor_buft_overrides();
+        if !env_overrides.is_empty() {
+            match &placement {
+                LoadPlacement::OwnedOverrides(_) => {
+                    tracing::warn!(
+                        count = env_overrides.len(),
+                        "SOVEREIGN_TENSOR_BUFT_OVERRIDE is set, but this slot loads with \
+                         distributed -ot overrides that own placement — the env overrides \
+                         are NOT applied"
+                    );
+                }
+                _ => {
+                    for (pattern, _) in &env_overrides {
+                        tracing::info!(
+                            pattern = %pattern.to_string_lossy(),
+                            no_host,
+                            "tensor placement overridden via SOVEREIGN_TENSOR_BUFT_OVERRIDE. \
+                             NOTE: `=CPU` resolves through the CPU buft LIST, whose first \
+                             entry is the device's PINNED host buffer (Vulkan_Host) — it is \
+                             plain pageable CPU only when this load sets no_host, or when \
+                             the tensor's quant is unsupported there. Weights are also \
+                             PREFETCHED, not demand-paged: llama.cpp mmaps with MAP_POPULATE \
+                             + MADV_WILLNEED (llama-mmap.cpp:455/463)"
+                        );
+                    }
+                    model_params = model_params.with_tensor_buft_overrides(&env_overrides);
+                }
             }
         }
 
@@ -3466,9 +3636,43 @@ impl ModelSlot {
         // back below.
         let prefill_capacity = tokens.len().max(n_batch_max);
         let mut prefill = LlamaBatch::new(prefill_capacity, 1);
+        // THE FLAG ABOVE IS NOT NEEDED, AND IT IS THE DAEMON'S LARGEST
+        // UNRECLAIMABLE ALLOCATION. Flagging every position makes
+        // `n_outputs_all` the whole prompt (llama-context.cpp:1700), so
+        // `output_reserve` sizes the logits buffer at
+        // `n_vocab * n_prompt_tokens * 4` — 993,280 bytes PER PROMPT TOKEN at
+        // this family's 248,320 vocab. Past ~3,650 tokens that exceeds the
+        // device's 4 GiB maxBufferSize, fails to pin, and falls back to host
+        // memory that is retained at high-water until the process exits
+        // (ggml-vulkan.cpp:16191; llama-context.cpp:2092 grows and never
+        // shrinks). ~19.9 GB from one 20k-token request.
+        //
+        // The comment above justifies it as an upstream invariant. MEASURED
+        // 2026-08-27 (`tests/mtp_prefill_logits_spike.rs`), that is false: the
+        // error it cites comes from `output_resolve_row`, which
+        // `get_embeddings_nextn_ith` calls only on the MASKED path, and
+        // `common_speculative` initialises the TARGET unmasked
+        // (speculative.cpp:1371; the daemon logs `masked = 0`). On a 681-token
+        // prompt the pre-norm hidden states are BIT-IDENTICAL at every
+        // position either way, against a floor of 0e0, and 128 greedy tokens
+        // generate identically.
+        //
+        // DEFAULT OFF anyway, because the spike also found what a source
+        // reading would not: the next-token logits shift by 1.46e-1 against a
+        // ZERO floor, since `n_outputs_all` going n -> 1 changes the
+        // output-gathering graph and hence the float accumulation order. That
+        // is small and did not flip a greedy decision in 128 tokens, but it is
+        // not nothing, and it makes this a change that has to earn a
+        // byte-identity arm on a real composed report before it becomes the
+        // default. `the_mtp_target_context_is_still_initialised_unmasked` is
+        // the tripwire for the vendored precondition.
+        let tail_logits_only = mtp_prefill_tail_logits_only();
+        let last_idx = tokens.len().saturating_sub(1);
         for (i, &tok) in tokens[prefix_base..].iter().enumerate() {
+            let pos = prefix_base + i;
+            let want_logits = !tail_logits_only || pos == last_idx;
             prefill
-                .add(tok, (prefix_base + i) as i32, &[0], true)
+                .add(tok, pos as i32, &[0], want_logits)
                 .map_err(|e| Error::Inference(format!("MTP prefill batch add failed: {e}")))?;
         }
         session
@@ -5538,7 +5742,37 @@ mod queue_gauge_tests {
 
 #[cfg(test)]
 mod total_model_bytes_tests {
-    use super::total_model_bytes;
+    use super::{missing_shards, total_model_bytes};
+
+    #[test]
+    fn a_complete_split_is_missing_nothing() {
+        let d = tempfile::tempdir().unwrap();
+        for i in 1..=3 {
+            std::fs::write(d.path().join(format!("m-0000{i}-of-00003.gguf")), b"x").unwrap();
+        }
+        assert!(missing_shards(&d.path().join("m-00001-of-00003.gguf")).is_empty());
+    }
+
+    #[test]
+    fn missing_siblings_are_named_not_merely_counted() {
+        // The operator copied only shard 1 — the exact shape this exists for.
+        let d = tempfile::tempdir().unwrap();
+        std::fs::write(d.path().join("m-00001-of-00004.gguf"), b"x").unwrap();
+        std::fs::write(d.path().join("m-00003-of-00004.gguf"), b"x").unwrap();
+        assert_eq!(
+            missing_shards(&d.path().join("m-00001-of-00004.gguf")),
+            vec!["m-00002-of-00004.gguf", "m-00004-of-00004.gguf"]
+        );
+    }
+
+    #[test]
+    fn a_single_file_model_can_never_be_missing_a_shard() {
+        let d = tempfile::tempdir().unwrap();
+        let only = d.path().join("solo.gguf");
+        std::fs::write(&only, b"x").unwrap();
+        assert!(missing_shards(&only).is_empty());
+    }
+
     use std::path::PathBuf;
 
     /// Write a file of `len` bytes and return its path.

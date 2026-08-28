@@ -877,11 +877,11 @@ pub fn last_device_memory() -> Option<DeviceMemorySnapshot> {
 /// because the projection is deterministic in those inputs; failures are NOT
 /// cached, so a transient error (backend not ready yet) is retried on the
 /// next plan rather than pinning "no projection" for the daemon's life.
-pub fn projected_overheads(model_path: &Path, n_ctx: u32) -> Option<PlanOverheads> {
+pub fn projected_overheads(model_path: &Path, n_ctx: u32, no_host: bool) -> Option<PlanOverheads> {
     use std::collections::HashMap;
     use std::path::PathBuf;
     static CACHE: std::sync::OnceLock<
-        std::sync::Mutex<HashMap<(PathBuf, u32, u32), PlanOverheads>>,
+        std::sync::Mutex<HashMap<(PathBuf, u32, u32, bool), PlanOverheads>>,
     > = std::sync::OnceLock::new();
     let cache = CACHE.get_or_init(Default::default);
 
@@ -889,13 +889,17 @@ pub fn projected_overheads(model_path: &Path, n_ctx: u32) -> Option<PlanOverhead
     // scales with it, so projecting at a different ubatch would size the
     // margin for a load that never happens.
     let n_ubatch = super::prompt_helpers::chat_slot_n_ubatch();
-    let key = (model_path.to_path_buf(), n_ctx, n_ubatch);
+    // `no_host` is part of the key: it CHANGES where weights land, so a
+    // projection taken under the other setting answers a different question.
+    let key = (model_path.to_path_buf(), n_ctx, n_ubatch, no_host);
     if let Some(hit) = cache.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
         return Some(*hit);
     }
 
     let t0 = std::time::Instant::now();
-    let mparams = LlamaModelParams::default().with_n_gpu_layers(999);
+    let mparams = LlamaModelParams::default()
+        .with_n_gpu_layers(999)
+        .with_no_host(no_host);
     let cparams = LlamaContextParams::default()
         .with_n_ctx(NonZeroU32::new(n_ctx.max(1)))
         .with_n_ubatch(n_ubatch);
@@ -935,10 +939,14 @@ pub fn projected_overheads(model_path: &Path, n_ctx: u32) -> Option<PlanOverhead
         .max()
         .unwrap_or(0);
     let compute_host = report.entries.last().map(|e| e.compute as u64).unwrap_or(0);
+    // Weight bytes on that same host entry. Meaningful as "reclaimable" ONLY
+    // under no_host; the caller is responsible for that pairing.
+    let model_host = report.entries.last().map(|e| e.model as u64).unwrap_or(0);
     let overheads = PlanOverheads {
         context_total_bytes: context_total,
         compute_accel_bytes: compute_accel,
         compute_host_bytes: compute_host,
+        model_host_bytes: model_host,
     };
     const MIB: u64 = 1024 * 1024;
     tracing::info!(
@@ -950,6 +958,8 @@ pub fn projected_overheads(model_path: &Path, n_ctx: u32) -> Option<PlanOverhead
         context_total_mb = context_total / MIB,
         compute_accel_mb = compute_accel / MIB,
         compute_host_mb = compute_host / MIB,
+        model_host_mb = model_host / MIB,
+        no_host,
         devices = n,
         "projected_overheads: llama.cpp three-term projection (KV + compute per device)"
     );
@@ -1011,7 +1021,9 @@ fn plan_distribution(model_path: &Path, n_ctx: u32) -> Option<DistributionPlan> 
     // device to a capacity the KV + compute buffers will then fight for) and
     // the per-device fit gate (which used to pass 0.07 GiB margins that died
     // on first inference).
-    let overheads = projected_overheads(model_path, n_ctx);
+    // `false`: the distributed load owns placement through OwnedOverrides and
+    // does not bypass the host buffer, so project it the way it will load.
+    let overheads = projected_overheads(model_path, n_ctx, false);
 
     // The model's byte mass — a GGUF header-table parse, no weight load. Read
     // BEFORE the plan-cache branch so a cache hit and a cache miss are judged
@@ -1488,8 +1500,97 @@ fn local_fit_min_bytes() -> u64 {
         .unwrap_or(32 * 1024 * 1024 * 1024)
 }
 
+/// Does this load bypass the device HOST buffer type?
+///
+/// ONE decider, read by both the fit gate and the slot loader, because the
+/// projection and the real load must not disagree about placement (same rule
+/// the ubatch already follows in `projected_overheads`).
+///
+/// `make_cpu_buft_list` puts the PINNED host buffer type ahead of plain CPU
+/// (`llama-model.cpp:1033`), so CPU-placed weights land in unreclaimable
+/// memory and the fit gate is right to charge them. Bypassing it makes those
+/// weights pageable — which is what LICENSES the gate's discount, and is also
+/// a real trade: a token embedding in pageable memory gathers slower than one
+/// in the pinned buffer.
+///
+/// So this returns true only when the STOCK placement would be REFUSED. A
+/// model that loads today is untouched; a model that does not load at all
+/// trades some gather speed for existing at all.
+pub(crate) fn wants_no_host(model_path: &Path, model_bytes: u64, n_ctx: u32) -> bool {
+    // DEFAULT OFF — measured harmful on the case it was written for.
+    //
+    // The theory was: bypass the pinned host buffer so CPU-placed weights are
+    // pageable, which LICENSES the gate discounting them. The measurement says
+    // it does the opposite. Qwen3.8-Flash-Next on RuggedFox 2026-08-26,
+    // sampling /proc/<pid>/status through the load:
+    //
+    //   no_host = true    RssAnon 8.85 -> 21.47 GiB,  RssFile 0.29 -> 0.06 GiB
+    //
+    // The engram stops being a mapping and becomes an anonymous COPY. Anonymous
+    // pages cannot be reclaimed, so the flag converts 27.5 GiB of evictable
+    // file-backed cache into 27.5 GiB the kernel must either keep or OOM on —
+    // and it OOM'd (status=137), twice.
+    //
+    // Without the flag the same tensor lands on plain CPU anyway, from the
+    // mapping, because iq4_nl is unsupported by Vulkan_Host. That path loads
+    // and generates (standalone, 79.3 GiB GTT, 12.2 tok/s at n_ctx 4096).
+    //
+    // Kept as an opt-in rather than deleted: on a backend whose host buffer DOES
+    // accept the quant, the pinned-vs-pageable problem this was written for is
+    // real. It just is not this model's problem, and shipping it on by default
+    // would trade a working load for a theory.
+    if !std::env::var("SOVEREIGN_TENSOR_NO_HOST")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+    {
+        return false;
+    }
+    if model_bytes < local_fit_min_bytes() || local_fit_skip() {
+        return false;
+    }
+    let (available, total) = system_memory_bytes();
+    if available == 0 || total == 0 {
+        return false;
+    }
+    let reserve = host_reserve_bytes_detected(total);
+    // Project the STOCK placement — the one a load would get today.
+    let overhead = projected_overheads(model_path, n_ctx, false)
+        .map(|o| o.context_total_bytes + o.compute_accel_bytes + o.compute_host_bytes);
+    // Engage ONLY where the stock answer is already "refuse". A model that
+    // loads fine today keeps its exact placement, including a token embedding
+    // in the fast pinned host buffer; we do not trade a working config's
+    // prompt-processing speed for headroom it does not need.
+    local_fit_verdict(model_bytes, overhead, available, reserve).is_some()
+}
+
 /// Operator escape hatch: `SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1` disables the
 /// gate entirely (mirrors `SOVEREIGN_SKIP_VRAM_CHECK` for the preflight).
+/// Does a predicted local shortfall REFUSE the load, or merely warn about it?
+///
+/// **Default: warn.** Operator direction 2026-08-27, and it reverses this gate's
+/// original posture deliberately. The gate predicts; it does not know. Its
+/// estimate is weights + a projection of KV/scratch against `MemAvailable` minus
+/// a heuristic reserve, and every one of those terms can be conservative — most
+/// sharply for a model that leaves a large tensor in the mmap, which is exactly
+/// the shape (Qwen3.8-Flash-Next) that made this gate refuse a model that then
+/// loaded and served fine.
+///
+/// The failure modes are not symmetric. A wrong REFUSAL is silent and total: the
+/// daemon reports the model unavailable, the operator has a valid configuration
+/// and no way forward unless they happen to know an env var name that appears
+/// only in a log line they never see. A wrong ADMISSION is loud and bounded: the
+/// load fails or the process dies, with this gate's full arithmetic already in
+/// the log immediately above it. Prefer the loud one.
+///
+/// `SOVEREIGN_LOCAL_FIT_ENFORCE=1` restores refusal for a host that would rather
+/// stay up than crash — the right choice for an unattended server, and the wrong
+/// default for someone trying to run a model on their own machine.
+fn local_fit_enforce() -> bool {
+    std::env::var("SOVEREIGN_LOCAL_FIT_ENFORCE")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
+}
+
 fn local_fit_skip() -> bool {
     std::env::var("SOVEREIGN_LOCAL_FIT_CHECK_SKIP")
         .or_else(|_| std::env::var("SOVEREIGN_SKIP_LOCAL_FIT_CHECK"))
@@ -1656,20 +1757,83 @@ fn gate_local(model_path: &Path, model_bytes: u64, cpu_only: bool, n_ctx: u32) -
     let reserve = host_reserve_bytes_detected(total);
     // Everything lands locally on this path, so the whole projected overhead
     // (KV total + accelerator scratch + host scheduler buffer) is the term.
-    let overhead = projected_overheads(model_path, n_ctx)
-        .map(|o| o.context_total_bytes + o.compute_accel_bytes + o.compute_host_bytes);
-    match local_fit_verdict(model_bytes, overhead, available, reserve) {
+    let no_host = wants_no_host(model_path, model_bytes, n_ctx);
+    let projected = projected_overheads(model_path, n_ctx, no_host);
+    let overhead =
+        projected.map(|o| o.context_total_bytes + o.compute_accel_bytes + o.compute_host_bytes);
+
+    // Weights llama.cpp will LEAVE IN THE MMAP are not demand against system
+    // memory: they are file-backed pages the kernel reclaims under pressure.
+    // This is the same reasoning the `cpu_only` arm above already applies to a
+    // whole model, at per-tensor granularity instead of all-or-nothing — a
+    // hybrid that puts a large embedding table on the CPU and everything else
+    // on the GPU sits between those two cases and was previously charged as if
+    // every byte were pinned.
+    //
+    // Not gated on `no_host` — that pairing was WRONG and the measurement said
+    // so. The worry was that these bytes might be the device's pinned host
+    // buffer. They are not: llama.cpp reports them on the CPU device entry, and
+    // on the model this was built for it says so out loud —
+    //   "tensor 'per_layer_token_embd.weight' (iq4_nl) ... cannot be used with
+    //    preferred buffer type Vulkan_Host, using CPU instead"
+    // — with `model_host_mb=28110` matching that tensor's 27.5 GiB. Bytes that
+    // DO land in the pinned host buffer are charged under the accelerator entry
+    // where they belong.
+    //
+    // Forcing `no_host` to "make this true" made it false: it turned the
+    // mapping into an anonymous copy (RssAnon 8.85 -> 21.47 GiB, RssFile
+    // 0.29 -> 0.06) and OOM'd. See `wants_no_host`.
+    let host_resident = projected.map(|o| o.model_host_bytes).unwrap_or(0);
+    let chargeable = model_bytes.saturating_sub(host_resident);
+    if host_resident > 0 {
+        tracing::info!(
+            target: "placement",
+            model_mb = model_bytes / (1024 * 1024),
+            host_resident_mb = host_resident / (1024 * 1024),
+            chargeable_mb = chargeable / (1024 * 1024),
+            no_host,
+            "local-fit gate: discounting mmap-resident weights (llama.cpp reports \
+             them on the CPU device entry — file-backed, reclaimable) from the \
+             demand estimate. NOT conditioned on no_host; see the comment above."
+        );
+    }
+
+    match local_fit_verdict(chargeable, overhead, available, reserve) {
         None => LoadPlacement::LocalOnly,
         Some(shortfall) => {
+            if !local_fit_enforce() {
+                // ADVISORY (the default). Everything the refusal would have
+                // known is here, BEFORE the load, so that if the host does die
+                // the last thing in the log is the prediction and its terms —
+                // "crash with a good log" beats "blocked with no way round".
+                tracing::warn!(
+                    model_mb = model_bytes / (1024 * 1024),
+                    chargeable_mb = chargeable / (1024 * 1024),
+                    host_resident_mb = host_resident / (1024 * 1024),
+                    need_mb = shortfall.need_mb,
+                    usable_mb = shortfall.usable_mb,
+                    available_mb = available / (1024 * 1024),
+                    reserve_mb = reserve / (1024 * 1024),
+                    "local-fit gate: PREDICTS a shortfall and is LOADING ANYWAY (advisory by \
+                     default). If the daemon dies during this load, this line is why and these \
+                     are the numbers. The estimate is conservative for models that leave large \
+                     tensors in the mmap, so a prediction of unfit is not proof of unfit. \
+                     SOVEREIGN_LOCAL_FIT_ENFORCE=1 makes this a refusal instead."
+                );
+                return LoadPlacement::LocalOnly;
+            }
             tracing::warn!(
                 model_mb = model_bytes / (1024 * 1024),
+                chargeable_mb = chargeable / (1024 * 1024),
+                host_resident_mb = host_resident / (1024 * 1024),
                 need_mb = shortfall.need_mb,
                 usable_mb = shortfall.usable_mb,
                 available_mb = available / (1024 * 1024),
                 reserve_mb = reserve / (1024 * 1024),
                 "local-fit gate: refusing local fallback load — model would starve \
                  the host (2026-07-27 session-kill class); staying unavailable until \
-                 the cluster re-forms. SOVEREIGN_SKIP_LOCAL_FIT_CHECK=1 overrides."
+                 the cluster re-forms. Refusal is OPT-IN via SOVEREIGN_LOCAL_FIT_ENFORCE; \
+                 unset it to load anyway."
             );
             LoadPlacement::LocalUnfit {
                 need_mb: shortfall.need_mb,
@@ -2480,6 +2644,86 @@ mod rpc_prune_tests {
             classify_placement(true, true, large, safe, false, false),
             LocalOnly
         );
+    }
+
+    #[test]
+    fn mmap_resident_weights_are_not_charged_but_the_incident_still_refuses() {
+        const GIB: u64 = 1024 * 1024 * 1024;
+        // Qwen3.8-Flash-Next as MEASURED on RuggedFox 2026-08-26:
+        //   103.7 GiB of weights, of which the 26.8 GiB engram
+        //   (per_layer_token_embd, iq4_nl) is left resident in the mmap and
+        //   never copied to a device buffer; ~2.8 GiB of KV+RS+compute at
+        //   n_ctx 65536. Host had ~90 GiB usable after an 8 GiB reserve.
+        let model = 103_700 * GIB / 1000;
+        let host_resident = 26_800 * GIB / 1000;
+        let overhead = Some(2_800 * GIB / 1000);
+        let available = 98 * GIB;
+        let reserve = 8 * GIB;
+
+        // Charging every byte refuses it — this is the bug: 26.8 GiB of
+        // reclaimable page cache counted as if it were pinned.
+        assert!(
+            local_fit_verdict(model, overhead, available, reserve).is_some(),
+            "undiscounted, the measured Flash-Next load is refused"
+        );
+
+        // Charging only what actually lands in a device buffer admits it.
+        assert_eq!(
+            local_fit_verdict(model - host_resident, overhead, available, reserve),
+            None,
+            "discounting mmap-resident weights must admit a load that genuinely fits"
+        );
+
+        // The discount must NOT become a way to smuggle the incident through.
+        // The 2026-07-27 load was a dense GGUF with nothing left in the mmap,
+        // so its discount is zero and the refusal is unchanged.
+        assert!(
+            local_fit_verdict(84 * GIB - 0, None, 110 * GIB, 16 * GIB).is_some(),
+            "a load with no mmap-resident weights is charged in full, as before"
+        );
+    }
+
+    #[test]
+    fn small_models_never_leave_the_stock_placement() {
+        // `wants_no_host` is consulted by BOTH the fit gate (to license its
+        // discount) and the slot loader (to make the discount true). Its
+        // above-threshold answer depends on live host memory, so only the
+        // sub-threshold arm is deterministic — and that is the arm that
+        // matters for "no existing install changes behaviour": below the gate
+        // size nothing is ever moved off the pinned host buffer.
+        let min = local_fit_min_bytes();
+        let path = std::path::Path::new("/nonexistent/model.gguf");
+        assert!(
+            !wants_no_host(path, min - 1, 4096),
+            "a sub-threshold model keeps the stock placement unconditionally"
+        );
+        assert!(
+            !wants_no_host(path, 0, 4096),
+            "and so does a zero-byte / unreadable one"
+        );
+    }
+
+    #[test]
+    fn the_local_fit_gate_is_advisory_by_default() {
+        // Operator direction 2026-08-27. The two failure modes are not
+        // symmetric: a wrong REFUSAL is silent and total (the model is simply
+        // unavailable, and the override appears only in a log line the operator
+        // never sees), while a wrong ADMISSION is loud and bounded (the load
+        // fails, with the gate's arithmetic logged immediately above it).
+        // Default to the loud one. Enforcement is for hosts that would rather
+        // stay up than crash, and it must be asked for.
+        assert!(
+            !local_fit_enforce(),
+            "refusal must be OPT-IN — a valid configuration must never be blocked \
+             by a prediction with no roundabout"
+        );
+
+        // The PREDICATE is unchanged by that flip: the 2026-07-27 numbers still
+        // register as a shortfall. They just no longer veto the load — the
+        // difference is what the placement DOES with the verdict, not the
+        // arithmetic, so the incident replay below still means what it meant.
+        const GIB: u64 = 1024 * 1024 * 1024;
+        assert!(local_fit_verdict(84 * GIB, None, 110 * GIB, 16 * GIB).is_some());
     }
 
     #[test]

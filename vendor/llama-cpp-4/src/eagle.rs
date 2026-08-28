@@ -56,9 +56,10 @@
 //!
 //! EAGLE-3 needs the target model to expose internal hidden states. The
 //! session configures the required extraction on both contexts at construction
-//! time; [`need_embd`](Eagle3Session::need_embd) and
-//! [`need_embd_pre_norm`](Eagle3Session::need_embd_pre_norm) report which kind
-//! the active backend requested (rarely needed by callers).
+//! time, so callers do not set it themselves. There is no longer an accessor
+//! reporting which kind the backend requested: upstream removed
+//! `common_speculative_need_embd`/`_nextn` along with the `need_embd()` virtual
+//! it read, so the property is no longer observable from outside the impl.
 
 use std::marker::PhantomData;
 use std::ptr::NonNull;
@@ -293,23 +294,6 @@ impl<'ctx, 'target_model, 'draft_model> Eagle3Session<'ctx, 'target_model, 'draf
     #[must_use]
     pub fn config(&self) -> Eagle3SessionConfig {
         self.config
-    }
-
-    /// True when the speculative backend needs post-norm embeddings on the
-    /// target context (`llama_set_embeddings`).
-    #[must_use]
-    pub fn need_embd(&self) -> bool {
-        unsafe { llama_cpp_sys_4::mtp_session_need_embd(self.raw.as_ptr()) }
-    }
-
-    /// True when the speculative backend needs pre-norm hidden states on the
-    /// target context (`llama_set_embeddings_pre_norm`).
-    ///
-    /// Configured automatically during session init; callers normally do not
-    /// need to set it manually.
-    #[must_use]
-    pub fn need_embd_pre_norm(&self) -> bool {
-        unsafe { llama_cpp_sys_4::mtp_session_need_embd_pre_norm(self.raw.as_ptr()) }
     }
 
     /// Configured maximum number of tokens drafted per [`draft`](Self::draft) call.

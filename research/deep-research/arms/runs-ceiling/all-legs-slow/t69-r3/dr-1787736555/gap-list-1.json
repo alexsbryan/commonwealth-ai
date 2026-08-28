@@ -1,0 +1,540 @@
+{
+  "icd": "gap_list",
+  "version": 1,
+  "run_id": "dr-1787736555",
+  "charter_hash": "3fb8f8015b957249",
+  "round": 1,
+  "claims": [
+    {
+      "id": "c1",
+      "text": "Based on the provided evidence, here is a synthesis of the current state and development of the Agent2Agent (A2A) protocol:\n\n**Overview and Governance**\nThe A2A Protocol was launched by Google in April 2025 as an open standard designed to enable seamless communication and collaboration between AI agents [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c2",
+      "text": "On June 23, 2025, Google announced at the North American Open Source Summit that it would donate the A2A project to the Linux Foundation to ensure neutral governance and prevent vendor lock-in [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c3",
+      "text": "This move aims to promote industry collaboration and broader adoption of a common \"language\" for agent interoperability [Source: estate-1] [Source: estate-2].",
+      "verdict": "passed",
+      "evidence_ids": [
+        "estate-2",
+        "estate-2"
+      ],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "industry collaboration",
+          "common \"language\" for agent interoperability"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "citation_grounded",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [
+          "https://arxiv.org/html/2505.12490v3",
+          "https://codilime.com/blog/a2a-protocol-explained"
+        ],
+        "support_chunks": 2,
+        "floor": 2,
+        "passes_floor": true
+      }
+    },
+    {
+      "id": "c4",
+      "text": "**Adoption and Ecosystem Growth**\nSince its launch, A2A has seen significant growth in support. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c5",
+      "text": "Initially backed by over 50 technology partners including Atlassian, Box, LangChain, Salesforce, and ServiceNow [Source: estate-1], the number of supporting organizations surpassed 150 by April 9, 2026 [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 9"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c6",
+      "text": "Major cloud providers have integrated A2A into their platforms; Microsoft embedded it into Azure AI Foundry and Copilot Studio, while AWS added support through Amazon Bedrock AgentCore Runtime [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c7",
+      "text": "The protocol’s core repository on GitHub has garnered approximately 25.5k stars and 2.6k forks as of recent data points in the evidence [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2.6"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c8",
+      "text": "**Technical Architecture and Functionality**\nA2A operates as a peer-to-peer framework that allows agents to discover each other's capabilities via \"Agent Cards,\" which are JSON metadata documents published at well-known URIs (e.g., `/.well-known/agent.json`) [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c9",
+      "text": "These cards describe an agent's identity, skills, and authentication requirements [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": false,
+        "specifics": [],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c10",
+      "text": "The protocol uses JSON-RPC 2.0 over HTTP(S) for communication, supporting multiple interaction modes including synchronous request/response, streaming via Server-Sent Events (SSE), and asynchronous push notifications for long-running tasks [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2.0"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c11",
+      "text": "A central concept in A2A is the \"Task,\" representing a unit of work or conversation between agents [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c12",
+      "text": "**Relationship with MCP**\nThe evidence consistently describes A2A as complementary to Anthropic’s Model Context Protocol (MCP) rather than competing with it [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c13",
+      "text": "While MCP focuses on connecting AI models/agents to external tools and data sources (the \"model-to-world interface\"), A2A standardizes how agents communicate and coordinate actions with one another (the \"agent-to-agent collaboration framework\") [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2, 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c14",
+      "text": "For instance, an agent might use MCP to access a database tool and then use A2A to delegate the resulting analysis to another specialized agent [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c15",
+      "text": "**Security Considerations and Challenges**\nResearch highlights several security vulnerabilities in the original A2A specification when handling sensitive data. [Source: estate-1]",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c16",
+      "text": "Identified weaknesses include insufficient token lifetime control, lack of strong customer authentication (SCA), overbroad access scopes, and missing explicit user consent flows [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "estate-2",
+          "insufficient token lifetime control",
+          "lack of strong customer authentication (SCA)",
+          "overbroad access scopes"
+        ],
+        "all_absent": true,
+        "reason": "all extracted specifics absent from the evidence (containment witness)"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c17",
+      "text": "These gaps can lead to risks such as unauthorized disclosure, privilege escalation, and prompt injection attacks that leak private data across agents [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "unauthorized disclosure",
+          "privilege escalation",
+          "prompt injection attacks",
+          "private data"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c18",
+      "text": "Proposed enhancements involve implementing ephemeral scoped tokens, direct user-to-service data channels, and explicit consent orchestration to mitigate these harms [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "ephemeral scoped tokens",
+          "direct user-to-service data channels",
+          "explicit consent orchestration"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c19",
+      "text": "Additionally, industry analysis notes potential challenges regarding slower decision-making due to multi-party governance and possible conflicts of interest among contributing companies [Source: estate-1] [Source: estate-2].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [
+          "multi-party governance",
+          "conflicts of interest"
+        ],
+        "all_absent": false,
+        "reason": null
+      },
+      "action": "corroboration_floor",
+      "empty_evidence_window": false,
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "c20",
+      "text": "**Recent Developments (Version 1.0)**\nIn April 2026, the A2A project announced version 1.0, its first stable specification [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 1.0, 2, 1"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c21",
+      "text": "This update introduced features such as Signed Agent Cards for cryptographic identity verification, enterprise-grade multi-tenancy, modernized security flows, and support for five production-ready SDK languages (Python, Go, JavaScript, Java, and .NET) [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 5"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    },
+    {
+      "id": "c22",
+      "text": "The protocol has also expanded into economic coordination through the introduction of the Agent Payments Protocol (AP2), which supports secure agent-driven transactions with over 60 organizations already supporting the initiative [Source: estate-1].",
+      "verdict": "could-not-judge",
+      "evidence_ids": [],
+      "witness": {
+        "ran": true,
+        "specifics": [],
+        "all_absent": true,
+        "reason": "claim figures absent from the evidence — untraced: 2"
+      },
+      "action": "abstained_decline",
+      "empty_evidence_window": false,
+      "corroboration": null
+    }
+  ],
+  "gaps": [
+    {
+      "id": "g1",
+      "text": "Based on the provided evidence, here is a synthesis of the current state and development of the Agent2Agent (A2A) protocol:\n\n**Overview and Governance**\nThe A2A Protocol was launched by Google in April 2025 as an open standard designed to enable seamless communication and collaboration between AI agents [Source: estate-1] [Source: estate-2].",
+      "actionable_query": "A Protocol was launched by Google in April as an open standard designed to enable seamless communication and collaboration between AI agents (2)",
+      "from_claim_id": "c2",
+      "corroboration": null
+    },
+    {
+      "id": "g2",
+      "text": "**Adoption and Ecosystem Growth**\nSince its launch, A2A has seen significant growth in support. [Source: estate-1]",
+      "actionable_query": "A has seen significant growth in support. (2)",
+      "from_claim_id": "c4",
+      "corroboration": null
+    },
+    {
+      "id": "g3",
+      "text": "Initially backed by over 50 technology partners including Atlassian, Box, LangChain, Salesforce, and ServiceNow [Source: estate-1], the number of supporting organizations surpassed 150 by April 9, 2026 [Source: estate-1].",
+      "actionable_query": "Initially backed by over technology partners including Atlassian, Box, LangChain, Salesforce, and ServiceNow , the number of supporting orga",
+      "from_claim_id": "c20",
+      "corroboration": null
+    },
+    {
+      "id": "g4",
+      "text": "Major cloud providers have integrated A2A into their platforms; Microsoft embedded it into Azure AI Foundry and Copilot Studio, while AWS added support through Amazon Bedrock AgentCore Runtime [Source: estate-1].",
+      "actionable_query": "A into their platforms; Microsoft embedded it into Azure AI Foundry and Copilot Studio, while AWS added support through Amazon Bedrock Agent (2)",
+      "from_claim_id": "c6",
+      "corroboration": null
+    },
+    {
+      "id": "g5",
+      "text": "The protocol’s core repository on GitHub has garnered approximately 25.5k stars and 2.6k forks as of recent data points in the evidence [Source: estate-1].",
+      "actionable_query": "The protocol’s core repository on GitHub has garnered approximately k stars and k forks as of recent data points in the evidence . (2)",
+      "from_claim_id": "c7",
+      "corroboration": null
+    },
+    {
+      "id": "g6",
+      "text": "**Technical Architecture and Functionality**\nA2A operates as a peer-to-peer framework that allows agents to discover each other's capabilities via \"Agent Cards,\" which are JSON metadata documents published at well-known URIs (e.g., `/.well-known/agent.json`) [Source: estate-1] [Source: estate-2].",
+      "actionable_query": "A operates as a peer-to-peer framework that allows agents to discover each other's capabilities via \"Agent Cards,\" which are JSON metadata d (2)",
+      "from_claim_id": "c8",
+      "corroboration": null
+    },
+    {
+      "id": "g7",
+      "text": "These cards describe an agent's identity, skills, and authentication requirements [Source: estate-1].",
+      "actionable_query": "cards describe agent's identity skills authentication requirements",
+      "from_claim_id": "c9",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g8",
+      "text": "The protocol uses JSON-RPC 2.0 over HTTP(S) for communication, supporting multiple interaction modes including synchronous request/response, streaming via Server-Sent Events (SSE), and asynchronous push notifications for long-running tasks [Source: estate-1] [Source: estate-2].",
+      "actionable_query": "The protocol uses JSON-RPC over HTTP(S) for communication, supporting multiple interaction modes including synchronous request/response, str (2)",
+      "from_claim_id": "c10",
+      "corroboration": null
+    },
+    {
+      "id": "g9",
+      "text": "A central concept in A2A is the \"Task,\" representing a unit of work or conversation between agents [Source: estate-1].",
+      "actionable_query": "A is the \"Task,\" representing a unit of work or conversation between agents . (2)",
+      "from_claim_id": "c11",
+      "corroboration": null
+    },
+    {
+      "id": "g10",
+      "text": "**Relationship with MCP**\nThe evidence consistently describes A2A as complementary to Anthropic’s Model Context Protocol (MCP) rather than competing with it [Source: estate-1] [Source: estate-2].",
+      "actionable_query": "A as complementary to Anthropic’s Model Context Protocol (MCP) rather than competing with it . (2)",
+      "from_claim_id": "c12",
+      "corroboration": null
+    },
+    {
+      "id": "g11",
+      "text": "While MCP focuses on connecting AI models/agents to external tools and data sources (the \"model-to-world interface\"), A2A standardizes how agents communicate and coordinate actions with one another (the \"agent-to-agent collaboration framework\") [Source: estate-1] [Source: estate-2].",
+      "actionable_query": "A standardizes how agents communicate and coordinate actions with another (the \"agent-to-agent collaboration framework\") . (2)",
+      "from_claim_id": "c13",
+      "corroboration": null
+    },
+    {
+      "id": "g12",
+      "text": "For instance, an agent might use MCP to access a database tool and then use A2A to delegate the resulting analysis to another specialized agent [Source: estate-1].",
+      "actionable_query": "A to delegate the resulting analysis to another specialized agent . (2)",
+      "from_claim_id": "c14",
+      "corroboration": null
+    },
+    {
+      "id": "g13",
+      "text": "**Security Considerations and Challenges**\nResearch highlights several security vulnerabilities in the original A2A specification when handling sensitive data. [Source: estate-1]",
+      "actionable_query": "A specification when handling sensitive data. (2)",
+      "from_claim_id": "c15",
+      "corroboration": null
+    },
+    {
+      "id": "g14",
+      "text": "Identified weaknesses include insufficient token lifetime control, lack of strong customer authentication (SCA), overbroad access scopes, and missing explicit user consent flows [Source: estate-2].",
+      "actionable_query": "Identified weaknesses include insufficient token lifetime control lack strong customer authentication SCA overbroad access scopes missing explicit user consent flows",
+      "from_claim_id": "c18",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g15",
+      "text": "These gaps can lead to risks such as unauthorized disclosure, privilege escalation, and prompt injection attacks that leak private data across agents [Source: estate-2].",
+      "actionable_query": "gaps can lead risks unauthorized disclosure privilege escalation prompt injection attacks leak private data across agents",
+      "from_claim_id": "c17",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g16",
+      "text": "Additionally, industry analysis notes potential challenges regarding slower decision-making due to multi-party governance and possible conflicts of interest among contributing companies [Source: estate-1] [Source: estate-2].",
+      "actionable_query": "Additionally industry analysis notes potential challenges regarding slower decision-making due multi-party governance possible conflicts interest among contributing companies",
+      "from_claim_id": "c19",
+      "corroboration": {
+        "origins": [],
+        "support_chunks": 0,
+        "floor": 2,
+        "passes_floor": false
+      }
+    },
+    {
+      "id": "g17",
+      "text": "This update introduced features such as Signed Agent Cards for cryptographic identity verification, enterprise-grade multi-tenancy, modernized security flows, and support for five production-ready SDK languages (Python, Go, JavaScript, Java, and .NET) [Source: estate-1].",
+      "actionable_query": "This update introduced features such as Signed Agent Cards for cryptographic identity verification, enterprise-grade multi-tenancy, moderniz (2)",
+      "from_claim_id": "c21",
+      "corroboration": null
+    },
+    {
+      "id": "g18",
+      "text": "The protocol has also expanded into economic coordination through the introduction of the Agent Payments Protocol (AP2), which supports secure agent-driven transactions with over 60 organizations already supporting the initiative [Source: estate-1].",
+      "actionable_query": "), which supports secure agent-driven transactions with over organizations already supporting the initiative . (2)",
+      "from_claim_id": "c22",
+      "corroboration": null
+    }
+  ],
+  "empty_evidence_windows": [],
+  "strict_subset_of_prior": true
+}
